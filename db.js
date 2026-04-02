@@ -421,18 +421,9 @@ function writeAll(db, incoming) {
   tx();
 }
 
-// ── Import from JSON (used by migration) ─────────────────────
-function importFromJson(db, data) {
-  writeAll(db, data);
-  // Also handle the 'movements' alias if present
-  if (data.movements && !data.scanLog) {
-    writeAll(db, { scanLog: data.movements });
-  }
-}
-
 // ── Backup ───────────────────────────────────────────────────
 function backupDb(db, destPath) {
   return db.backup(destPath);
 }
 
-module.exports = { openDb, readAll, writeAll, importFromJson, backupDb };
+module.exports = { openDb, readAll, writeAll, backupDb };
