@@ -1763,6 +1763,29 @@ const si=document.getElementById('scan-inp');
 si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
 si.addEventListener('input',()=>{if(si.value.endsWith('\n')||si.value.endsWith('\r')){processScan(si.value);si.value=''}});
 
+// ─── CAMERA SCAN ────────────────────────────────────────────
+let camScanner=null;
+function openCamScan(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setFb('err','Camera not available in this browser. Use HTTPS or localhost.');return}
+  document.getElementById('m-camscan').classList.add('open');
+  camScanner=new Html5Qrcode('cam-reader');
+  camScanner.start(
+    {facingMode:'environment'},
+    {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128]},
+    function(decodedText){if(navigator.vibrate)navigator.vibrate(100);closeCamScan();processScan(decodedText)},
+    function(){}
+  ).catch(function(err){
+    closeCamScan();
+    if(err.name==='NotAllowedError')setFb('err','Camera permission denied. Check browser settings.');
+    else setFb('err','Camera error: '+(err.message||err));
+  });
+}
+function closeCamScan(){
+  document.getElementById('m-camscan').classList.remove('open');
+  if(camScanner){camScanner.stop().catch(function(){});camScanner.clear();camScanner=null}
+}
+document.addEventListener('visibilitychange',function(){if(document.hidden&&camScanner)closeCamScan()});
+
 // Only steal focus for scan input when user is NOT in a form field
 function isInFormField(){
   const tag=document.activeElement?.tagName?.toLowerCase();
