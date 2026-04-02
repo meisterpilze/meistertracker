@@ -629,6 +629,27 @@ function handlePut(parts, body, req, res) {
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
     const existed = fs.existsSync(filePath);
+
+    // If-None-Match: * means "create only, fail if exists"
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch === '*' && existed) {
+      res.writeHead(412);
+      res.end('Precondition Failed');
+      return;
+    }
+
+    // If-Match: check etag matches current version (conflict detection)
+    const ifMatch = req.headers['if-match'];
+    if (ifMatch && existed) {
+      const stat = fs.statSync(filePath);
+      const currentEtag = '"' + stat.mtimeMs.toString(36) + '"';
+      if (ifMatch !== currentEtag) {
+        res.writeHead(412);
+        res.end('Precondition Failed');
+        return;
+      }
+    }
+
     fs.writeFileSync(filePath, body, 'utf8');
     const stat = fs.statSync(filePath);
     const etag = '"' + stat.mtimeMs.toString(36) + '"';
