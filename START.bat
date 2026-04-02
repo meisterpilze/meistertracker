@@ -4,12 +4,30 @@ cd /d "%~dp0"
 title Meisterpilze Lab Tracker
 
 REM ============================================================
-REM  Self-relaunch guard: git reset overwrites this file mid-run,
-REM  which corrupts the batch interpreter on Windows. We copy
-REM  ourselves to a temp file and re-execute from there so the
-REM  running script is never modified.
+REM  Phase 1 (outer wrapper): Update code from git FIRST, then
+REM  copy the now-updated START.bat to a temp file and re-execute
+REM  from there. This ensures the temp copy always has the latest
+REM  code, and git reset can never corrupt the running script.
 REM ============================================================
 if not "%~1"=="--relaunched" (
+    echo.
+    echo  ========================================
+    echo    Meisterpilze Lab Tracker
+    echo  ========================================
+    echo.
+    echo [1/5] Updating code from git...
+    where git >nul 2>&1
+    if !errorlevel! equ 0 (
+        git fetch origin >nul 2>&1
+        if !errorlevel! equ 0 (
+            git reset --hard origin/main
+        ) else (
+            echo  WARNING: git fetch failed. Continuing with local code.
+        )
+    ) else (
+        echo  WARNING: Git not found, skipping code update.
+    )
+    REM Now copy the (possibly updated) START.bat to temp and run from there
     set "TMPBAT=%TEMP%\meisterpilze_start_%RANDOM%.bat"
     copy /y "%~f0" "!TMPBAT!" >nul
     cmd /c ""!TMPBAT!" --relaunched "%~dp0""
@@ -19,14 +37,10 @@ if not "%~1"=="--relaunched" (
     exit /b !RC!
 )
 
-REM When relaunched, the second argument is the original directory
+REM ============================================================
+REM  Phase 2 (temp copy): Everything after git update
+REM ============================================================
 cd /d "%~2"
-
-echo.
-echo  ========================================
-echo    Meisterpilze Lab Tracker
-echo  ========================================
-echo.
 
 REM ---- Configuration ----
 set "PM2_PROCESS_NAME=meisterpilze"
@@ -36,7 +50,6 @@ REM ============================================================
 REM  Check and auto-install prerequisites
 REM ============================================================
 
-REM ---- Check winget availability (needed for auto-install) ----
 where winget >nul 2>&1
 if %errorlevel% neq 0 (
     set "HAS_WINGET=0"
@@ -86,7 +99,7 @@ if %errorlevel% neq 0 (
         )
         set "NEED_PATH_REFRESH=1"
     ) else (
-        echo  WARNING: Git not available. Skipping code update.
+        echo  WARNING: Git not available.
     )
 )
 
@@ -127,29 +140,8 @@ if %errorlevel% neq 0 (
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
     exit /b 1
 )
-for /f "tokens=*" %%v in ('pm2 --version 2^>nul') do set "PM2_VER=%%v"
+for /f "tokens=*" %%v in ('call pm2 --version 2^>nul') do set "PM2_VER=%%v"
 echo  -^> PM2 %PM2_VER% found.
-
-REM ============================================================
-REM  Step 1: Update code from git
-REM ============================================================
-echo.
-echo [1/5] Updating code from git...
-call :check_git
-if %errorlevel% neq 0 (
-    echo  WARNING: Git not found, skipping code update.
-    goto :skip_git
-)
-git fetch origin
-if %errorlevel% neq 0 (
-    echo  WARNING: git fetch failed ^(no network?^). Continuing with local code.
-    goto :skip_git
-)
-git reset --hard origin/main
-if %errorlevel% neq 0 (
-    echo  WARNING: git reset failed. Continuing with local code.
-)
-:skip_git
 
 REM ============================================================
 REM  Step 2: Install dependencies
@@ -169,7 +161,6 @@ echo.
 echo [3/5] Backing up data...
 if not exist "backups" mkdir "backups"
 if exist "data.json" (
-    REM Use PowerShell for reliable timestamp (wmic is deprecated on Windows 11)
     for /f "tokens=*" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TIMESTAMP=%%T"
     if not defined TIMESTAMP set "TIMESTAMP=backup"
     copy /y "data.json" "backups\data_!TIMESTAMP!.json" >nul
@@ -197,30 +188,30 @@ for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:3000.*LIST
     taskkill /PID %%P /F >nul 2>&1
 )
 
-pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
+call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
 if %errorlevel% equ 0 (
     echo  -^> Process found, restarting...
-    pm2 restart %PM2_PROCESS_NAME%
+    call pm2 restart %PM2_PROCESS_NAME%
     if !errorlevel! neq 0 (
         echo  -^> Restart failed, deleting and re-creating...
-        pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
-        pm2 start server.js --name %PM2_PROCESS_NAME%
+        call pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
+        call pm2 start server.js --name %PM2_PROCESS_NAME%
     )
 ) else (
     echo  -^> Starting new instance...
-    pm2 start server.js --name %PM2_PROCESS_NAME%
+    call pm2 start server.js --name %PM2_PROCESS_NAME%
 )
-pm2 save >nul 2>&1
+call pm2 save >nul 2>&1
 
 REM Wait briefly for the process to initialize, then verify it stayed up
 ping -n 4 127.0.0.1 >nul 2>&1
-pm2 show %PM2_PROCESS_NAME% 2>nul | findstr /i /c:"online" >nul 2>&1
+call pm2 show %PM2_PROCESS_NAME% 2>nul | findstr /i /c:"online" >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo  ERROR: Server process crashed on startup.
     echo.
     echo  Recent error log:
-    pm2 logs %PM2_PROCESS_NAME% --lines 15 --nostream --err 2>nul
+    call pm2 logs %PM2_PROCESS_NAME% --lines 15 --nostream --err 2>nul
     echo.
     exit /b 1
 )
@@ -259,72 +250,22 @@ if exist "certs\server.key" if exist "certs\server.crt" (
     echo  -^> TLS certificates found.
     exit /b 0
 )
-REM Try openssl first (ships with Git for Windows)
-where openssl >nul 2>&1
-if %errorlevel% equ 0 (
-    echo  -^> TLS certificates missing, generating with openssl...
-    if not exist "certs" mkdir "certs"
-    REM Detect LAN IP via PowerShell
-    set "LAN_IP=192.168.1.100"
-    for /f "tokens=*" %%I in ('powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' -and $_.IPAddress -notmatch '^169\.' -and $_.IPAddress -ne '127.0.0.1' } | Select-Object -First 1).IPAddress"') do set "LAN_IP=%%I"
-    echo  -^> LAN IP: !LAN_IP!
-    REM Write temp openssl config
-    (
-        echo [req]
-        echo default_bits = 2048
-        echo prompt = no
-        echo default_md = sha256
-        echo distinguished_name = dn
-        echo x509_extensions = v3_ext
-        echo.
-        echo [dn]
-        echo CN = Meisterpilze Lab Tracker
-        echo.
-        echo [v3_ext]
-        echo subjectAltName = DNS:localhost,IP:127.0.0.1,IP:!LAN_IP!
-        echo basicConstraints = CA:FALSE
-        echo keyUsage = digitalSignature, keyEncipherment
-    ) > "%TEMP%\meisterpilze_cert.cnf"
-    openssl req -x509 -newkey rsa:2048 -nodes -keyout "certs\server.key" -out "certs\server.crt" -days 365 -config "%TEMP%\meisterpilze_cert.cnf"
+if exist "gen-cert.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "gen-cert.ps1"
+    exit /b 0
+)
+if exist "gen-cert.sh" (
+    where bash >nul 2>&1
     if !errorlevel! equ 0 (
-        del "%TEMP%\meisterpilze_cert.cnf" >nul 2>&1
-        echo  -^> TLS certificate generated.
-    ) else (
-        del "%TEMP%\meisterpilze_cert.cnf" >nul 2>&1
-        echo  -^> WARNING: Certificate generation failed. Server will start in HTTP-only mode.
+        bash gen-cert.sh
+        exit /b 0
     )
-    exit /b 0
 )
-REM Fallback: try PowerShell New-SelfSignedCertificate + export to PEM
-powershell -NoProfile -Command "Get-Command New-SelfSignedCertificate" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo  -^> TLS certificates missing, generating with PowerShell...
-    if not exist "certs" mkdir "certs"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "$lanIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' -and $_.IPAddress -notmatch '^169\.' -and $_.IPAddress -ne '127.0.0.1' } | Select-Object -First 1).IPAddress; " ^
-        "if (-not $lanIp) { $lanIp = '192.168.1.100' }; " ^
-        "Write-Host \"  -> LAN IP: $lanIp\"; " ^
-        "$cert = New-SelfSignedCertificate -DnsName 'localhost','Meisterpilze Lab Tracker' -TextExtension @(\"2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1&IPAddress=$lanIp\") -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddDays(365); " ^
-        "$keyBytes = $cert.PrivateKey.ExportRSAPrivateKey(); " ^
-        "$keyPem = '-----BEGIN RSA PRIVATE KEY-----' + [Environment]::NewLine + [Convert]::ToBase64String($keyBytes, 'InsertLineBreaks') + [Environment]::NewLine + '-----END RSA PRIVATE KEY-----'; " ^
-        "Set-Content -Path 'certs\server.key' -Value $keyPem -NoNewline; " ^
-        "$certPem = '-----BEGIN CERTIFICATE-----' + [Environment]::NewLine + [Convert]::ToBase64String($cert.RawData, 'InsertLineBreaks') + [Environment]::NewLine + '-----END CERTIFICATE-----'; " ^
-        "Set-Content -Path 'certs\server.crt' -Value $certPem -NoNewline; " ^
-        "Remove-Item -Path \"Cert:\CurrentUser\My\$($cert.Thumbprint)\" -ErrorAction SilentlyContinue; " ^
-        "Write-Host '  -> TLS certificate generated.'"
-    if !errorlevel! neq 0 (
-        echo  -^> WARNING: Certificate generation failed. Server will start in HTTP-only mode.
-    )
-    exit /b 0
-)
-echo  -^> WARNING: Neither openssl nor PowerShell cert tools available.
+echo  -^> WARNING: No cert generation script found.
 echo     Server will start in HTTP-only mode ^(iOS camera will not work^).
-echo     Install Git for Windows to get openssl, then run START.bat again.
 exit /b 0
 
 :refresh_path
-REM Rebuild PATH from registry (Machine + User) so newly installed tools are found
-REM without needing to restart the terminal
 set "NEWPATH="
 for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "NEWPATH=%%B"
 for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do (
@@ -337,7 +278,6 @@ for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do (
 if defined NEWPATH (
     set "PATH=!NEWPATH!;%SystemRoot%\system32;%SystemRoot%"
 )
-REM Also add common Node.js and Git paths directly as fallback
 if exist "%ProgramFiles%\nodejs" set "PATH=!PATH!;%ProgramFiles%\nodejs"
 if exist "%ProgramFiles%\Git\cmd" set "PATH=!PATH!;%ProgramFiles%\Git\cmd"
 if exist "%ProgramFiles%\Git\usr\bin" set "PATH=!PATH!;%ProgramFiles%\Git\usr\bin"
