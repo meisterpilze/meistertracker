@@ -25,6 +25,20 @@ ensure_pm2() {
     echo "  -> PM2 $(pm2 --version) found."
 }
 
+ensure_certs() {
+    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
+        echo "  -> TLS certificates found."
+        return
+    fi
+    if command -v openssl &> /dev/null; then
+        echo "  -> TLS certificates missing, generating..."
+        bash gen-cert.sh
+    else
+        echo "  ⚠ OpenSSL not installed — cannot generate TLS certificates."
+        echo "    Server will start in HTTP mode (iOS camera will not work)."
+    fi
+}
+
 backup_data() {
     BACKUP_DIR="backups"
     mkdir -p "$BACKUP_DIR"
@@ -52,13 +66,16 @@ do_update() {
         exit 1
     fi
 
-    echo "[2/4] Installing dependencies..."
+    echo "[2/5] Installing dependencies..."
     npm install --production
 
-    echo "[3/4] Backing up data..."
+    echo "[3/5] Backing up data..."
     backup_data
 
-    echo "[4/4] Restarting server..."
+    echo "[4/5] Ensuring TLS certificates..."
+    ensure_certs
+
+    echo "[5/5] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "  -> Process found, attempting reload..."
         pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
@@ -82,6 +99,8 @@ do_start() {
         echo "Installing dependencies..."
         npm install --production
     fi
+
+    ensure_certs
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "Process already exists in PM2, restarting..."
