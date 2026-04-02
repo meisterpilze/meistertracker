@@ -426,6 +426,13 @@ function backupDb(db, destPath) {
   return db.backup(destPath);
 }
 
+// ── Update CalDAV UID on a task after sync ──
+function updateTaskCaldavUid(db, text, created, uid, synced) {
+  db.prepare(
+    'UPDATE manual_tasks SET caldav_uid = ?, caldav_synced = ? WHERE text = ? AND created = ?'
+  ).run(uid, synced, text, created);
+}
+
 // ── Read only CalDAV config (lightweight, for auth checks) ──
 function readCaldavConfig(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
@@ -437,4 +444,4 @@ function readCaldavConfig(db) {
   };
 }
 
-module.exports = { openDb, readAll, writeAll, backupDb, readCaldavConfig };
+module.exports = { openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid };
