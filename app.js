@@ -1,16 +1,4 @@
-// ─── HTML ESCAPING ──────────────────────────────────────────
-// Prevent XSS by escaping user-supplied strings before inserting into HTML
-function esc(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 5000;       // How often to poll server for changes
-const MAX_LOG_DISPLAY = 200;         // Max rows shown in log/harvest tables
-const MAX_RACK_CAPACITY = 20;        // Estimated max bags per rack (for progress bar)
-const MS_PER_DAY = 86400000;         // 24*60*60*1000
-
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
 const ZONES=['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM'];
 const SPAWN_RACKS=['SPAWN_R1','SPAWN_R2'];
@@ -31,7 +19,7 @@ const REF_GROUPS=[
 ];
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={};
+let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
 let spMap={};
@@ -42,19 +30,17 @@ const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
 async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
-    const r=await fetch('/api/data');
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const d=await r.json();
+    const d=await fetch('/api/data').then(r=>r.json());
     applyData(d);
     setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
     refresh();
-  }catch(e){setSyncStatus('err','Sync error: '+(e.message||'offline'))}
+  }catch{setSyncStatus('err','Sync error')}
 }
 function applyData(d){
-  batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];
+  batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
-  teamMembers=d.teamMembers||[];caldav=d.caldav||{};
+  teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -71,27 +57,18 @@ function defaultInventory(){
 async function saveData(){
   if(saving)return;saving=true;setSyncStatus('busy','Saving...');
   try{
-    const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
-    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
+    await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,movements,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets})});
     setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
-  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
+  }catch{setSyncStatus('err','Save error — check server is running')}
   finally{saving=false}
 }
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
 async function pollSync(){
-  // Skip sync while a save is in progress to avoid overwriting pending changes
-  if(saving)return;
-  try{
-    const r=await fetch('/api/data');
-    if(!r.ok)return;
-    const d=await r.json();
-    const h=JSON.stringify(d);
-    if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}
-  }catch{}
+  try{const d=await fetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
-const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',print:'n-print',todo:'n-todo',settings:'n-settings'};
+const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',todo:'n-todo',settings:'n-settings'};
 function go(page,btnId){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
@@ -101,6 +78,7 @@ function go(page,btnId){
   if(page==='batch')renderBatches();
   if(page==='lab')renderCultures();
   if(page==='inv'){renderInvStock();}
+  if(page==='assets')renderAssets();
   if(page==='print'){fillBatchSelect();renderLabList();}
   if(page==='todo')renderTodo();
   if(page==='settings')renderLog();
@@ -119,6 +97,10 @@ function openStab(page,sub){
   if(page==='inv'&&sub==='stock')renderInvStock();
   if(page==='inv'&&sub==='delivery'){delMatChange();adjMatChange();}
   if(page==='inv'&&sub==='log')renderInvLog();
+  if(page==='assets'&&sub==='list')renderAssets();
+  if(page==='assets'&&sub==='add')resetAssetForm();
+  if(page==='assets'&&sub==='export')initExportTab();
+  if(page==='assets'&&sub==='labels')renderAssetLabelList();
   if(page==='print'&&sub==='bags')fillBatchSelect();
   if(page==='print'&&sub==='lab'){renderLabList();renderLabPreview();}
   if(page==='print'&&sub==='ref')renderRefBarcodes();
@@ -134,6 +116,7 @@ function refresh(){
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
+  if(id==='assets')renderAssets();
   if(id==='todo')renderTodo();
   updateTodoBadge();
 }
@@ -151,7 +134,7 @@ document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id===
 // Batch-add modal
 function openBatchAdd(){
   const bs=document.getElementById('ba-batch');
-  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
+  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species})</option>`).join('');
   const ls=document.getElementById('ba-loc');
   ls.innerHTML=[...ZONES,...ALL_RACKS].map(l=>`<option value="${l}">${l}</option>`).join('');
   bs.onchange=baPreview;ls.onchange=baPreview;
@@ -170,8 +153,6 @@ function confirmBatchAdd(){
 
 // ─── HELPERS ─────────────────────────────────────────────────
 const abbrev=s=>{if(!s)return'BAG';const u=s.toLowerCase();for(const k in ABBR)if(k.toLowerCase()===u)return ABBR[k];return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
-// Date string used in batch/culture IDs: DDMMYY format (e.g. "020426" for 2 Apr 2026)
-// Barcode scanning decodes this via spAbbrev_strain_MMDD_bagNum format — see processScan()
 const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
 const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
 const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
@@ -284,9 +265,9 @@ function renderStatusCards(){
     return`<div style="border:1px solid ${ov?'#fecaca':'#e5e3dd'};border-radius:10px;padding:12px;background:${ov?'#fff5f5':'#fff'}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
         <div>
-          <div style="font-size:11px;font-family:monospace;color:#888">${esc(b.batchId)}</div>
-          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${esc(b.species)}</div>
-          <div style="font-size:11px;color:#888">${esc(b.strain)}</div>
+          <div style="font-size:11px;font-family:monospace;color:#888">${b.batchId}</div>
+          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${b.species}</div>
+          <div style="font-size:11px;color:#888">${b.strain}</div>
         </div>
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${statusColors[status]||'#f5f4f0'};color:#555;flex-shrink:0;margin-left:4px">${status}</span>
       </div>
@@ -308,7 +289,7 @@ function renderStatus(){
     const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
     const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
     const harv=getHarvested(b.batchId);
-    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
   });
   body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">No matches.</td></tr>';
   renderMetrics(batches.length,ti,tt,tc);
@@ -322,7 +303,7 @@ function renderDashAlerts(){
   const all=[...invAlerts,...tasks];
   const el=document.getElementById('dash-alerts');
   if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">No urgent tasks right now.</div>';return}
-  el.innerHTML=all.slice(0,8).map(t=>`<div class="todo-row ${t.urgent?'urgent':'warn'}"><span class="pdot ${t.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${t.species?spDot(t.species):''}${esc(t.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(t.detail)}</div></div>${t.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">Stock</button>`}</div>`).join('');
+  el.innerHTML=all.slice(0,8).map(t=>`<div class="todo-row ${t.urgent?'urgent':'warn'}"><span class="pdot ${t.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${t.species?spDot(t.species):''}${t.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${t.detail}</div></div>${t.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">Stock</button>`}</div>`).join('');
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -343,8 +324,8 @@ function renderRacks(){
       const label=id.replace(/_/g,' ');
       return`<div class="rack-card" onclick="showRack('${id}')">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${count} bag${count!==1?'s':''}</span></div>
-        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/MAX_RACK_CAPACITY*100))}%"></div></div>
-        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${esc(bid)}</span>(${d.c})`).join(' '):'Empty'}</div>
+        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
+        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${bid}</span>(${d.c})`).join(' '):'Empty'}</div>
       </div>`;
     }).join('');
   };
@@ -356,7 +337,7 @@ function showRack(id){
   document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' — '+entries.length+' bag'+(entries.length!==1?'s':'');
   if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">No bags on this rack.</div>';el.style.display='block';return}
   const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push(bagId)});
-  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${esc(bid)} — ${esc(d.sp)}/${esc(d.st)} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${esc(b)}</span>`).join('')}</div></div>`).join('');
+  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${bid} — ${d.sp}/${d.st} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
   el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
@@ -454,7 +435,7 @@ function renderLocBody(){
   Object.values(byBatch).forEach(d=>d.bags.sort((a,b)=>{const na=parseInt(a.id.split('-').pop())||0,nb=parseInt(b.id.split('-').pop())||0;return na-nb}));
   const n=selectedLocBags.size;
   el.innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:12px">
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${esc(bid)} <span style="font-weight:400;color:#888">— ${esc(d.sp)}/${esc(d.st)}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${bid} <span style="font-weight:400;color:#888">— ${d.sp}/${d.st}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
     <div style="display:flex;flex-wrap:wrap;gap:5px">${d.bags.map(b=>{
       const sel=selectedLocBags.has(b.id);
       return`<span id="lb-${b.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${b.id}" data-batch="${bid}" data-loc="${b.loc}" style="font-size:11px;font-family:monospace;padding:4px 8px;border-radius:6px;cursor:pointer;${sel?'background:#1a1a1a;color:#fff;border:1px solid #1a1a1a':'background:#fff;border:1px solid #e5e3dd;color:#333'}">
@@ -483,7 +464,8 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);    scan.count++;
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -496,7 +478,8 @@ function locRemoveSelected(){
   if(!confirm('Remove '+n+' bag'+(n!==1?'s':'')+'?'))return;
   const now=new Date().toISOString();
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);    scan.count++;
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -619,7 +602,7 @@ function createBatch(){
   }
 
   saveData();
-  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${esc(b)}</span>`).join('');
+  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
   document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
   document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
@@ -633,9 +616,9 @@ function renderBatches(){
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
-    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${esc(b.batchId)}')">${esc(b.notes.length>22?b.notes.slice(0,22)+'…':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${esc(b.batchId)}')">Add note</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">Del</button></td></tr>`;
+    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${b.sourceId}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
+    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'…':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">Add note</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">Del</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">No matches.</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
@@ -713,8 +696,8 @@ function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-p
 document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
-  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,MAX_LOG_DISPLAY);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString('de-DE')}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'—'}</td><td>${h.species?spDot(h.species)+esc(h.species):'—'}</td><td>${esc(h.strain)||'—'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No harvests yet. Scan HARVEST then a bag.</td></tr>';
+  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString('de-DE')}</td><td style="font-family:monospace;font-size:10px">${h.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'—'}</td><td>${h.species?spDot(h.species)+h.species:'—'}</td><td>${h.strain||'—'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No harvests yet. Scan HARVEST then a bag.</td></tr>';
 
   const byBatch={};
   harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
@@ -771,7 +754,7 @@ function renderHarvests(){
   const max=byBatch[ids[0]].total;
   document.getElementById('harvest-totals').innerHTML=ids.map(id=>{
     const d=byBatch[id],pct=Math.round((d.total/max)*100);
-    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
+    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${id}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
   }).join('');
 }
 
@@ -781,14 +764,14 @@ function buildAutoTasks(){
   batches.forEach(b=>{
     const{status,action}=getStatus(b.batchId);if(status==='DONE'||status==='EMPTY')return;
     const due=new Date(b.due);due.setHours(0,0,0,0);
-    const dl=Math.round((due-today)/(MS_PER_DAY));
+    const dl=Math.round((due-today)/(864e5));
     let urgent=false,warn=false,text='',detail='';
     if(status==='INCUBATING'||status==='SPAWN RUN'){
-      if(dl<0){urgent=true;text=`${esc(b.batchId)} — ${action}`;detail=`Due ${Math.abs(dl)} day(s) ago`}
-      else if(dl<=2){warn=true;text=`${esc(b.batchId)} — ${action}`;detail=`Due in ${dl} day(s)`}
-      else{text=`${esc(b.batchId)} — ${action}`;detail=`Due in ${dl} days`}
-    }else if(status==='FRUITING'){text=`${esc(b.batchId)} — Harvest / check`;detail=`${esc(b.species)}/${esc(b.strain)} fruiting`;warn=true}
-    else if(status==='CONTAM'){text=`${esc(b.batchId)} — Discard bags`;detail=`${esc(b.species)}/${esc(b.strain)}`;urgent=true}
+      if(dl<0){urgent=true;text=`${b.batchId} — ${action}`;detail=`Due ${Math.abs(dl)} day(s) ago`}
+      else if(dl<=2){warn=true;text=`${b.batchId} — ${action}`;detail=`Due in ${dl} day(s)`}
+      else{text=`${b.batchId} — ${action}`;detail=`Due in ${dl} days`}
+    }else if(status==='FRUITING'){text=`${b.batchId} — Harvest / check`;detail=`${b.species}/${b.strain} fruiting`;warn=true}
+    else if(status==='CONTAM'){text=`${b.batchId} — Discard bags`;detail=`${b.species}/${b.strain}`;urgent=true}
     if(text)tasks.push({text,detail,urgent,warn,species:b.species});
   });
   return tasks;
@@ -805,11 +788,11 @@ function renderManualTasks(){
   const el=document.getElementById('todo-manual');
   if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
   el.innerHTML=manualTasks.map((t,i)=>{
-    const assignTag=t.assignee?`<span class="tag tag-assignee">${esc(t.assignee)}</span>`:'<span class="tag tag-company">Everyone</span>';
+    const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Everyone</span>';
     const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
-    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${esc(t.description)}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${esc(t.text)}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
+    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
   }).join('');
 }
 function addTask(){
@@ -819,7 +802,7 @@ function addTask(){
 }
 function fillAssigneeSelect(){
   const sel=document.getElementById('task-assignee');
-  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${m.name}">${m.name}</option>`).join('');
 }
 function saveTask(){
   const text=document.getElementById('task-text').value.trim();if(!text)return;
@@ -840,7 +823,7 @@ function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).
 function renderTeam(){
   const el=document.getElementById('team-list');
   if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
-  el.innerHTML=teamMembers.map((m,i)=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:#888">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${i})">×</button></div>`).join('');
+  el.innerHTML=teamMembers.map((m,i)=>`<div class="member-row"><span class="name">${m.name}</span>${m.role?`<span style="font-size:11px;color:#888">${m.role}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${i})">×</button></div>`).join('');
 }
 function addMember(){
   const name=document.getElementById('member-name').value.trim();if(!name)return;
@@ -898,7 +881,7 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,MAX_LOG_DISPLAY);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'—'}</td><td>${esc(e.from)||'—'}</td><td>${esc(e.to)||'—'}</td><td>${e.species?spDot(e.species)+esc(e.species):'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
+function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'—'}</td><td>${e.from||'—'}</td><td>${e.to||'—'}</td><td>${e.species?spDot(e.species)+e.species:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
 function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];saveData();renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
@@ -1123,7 +1106,7 @@ function renderInvLog(){
   const filter=document.getElementById('inv-log-filter').value;
   const body=document.getElementById('inv-log-body');
   if(!inventory.log||!inventory.log.length){body.innerHTML='<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';return}
-  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,MAX_LOG_DISPLAY);
+  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
   // Build running totals per material going forwards for display
   body.innerHTML=rows.map(e=>`<tr>
     <td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td>
@@ -1131,7 +1114,7 @@ function renderInvLog(){
     <td style="font-weight:600;color:${e.deltaKg<0?'#991b1b':'#166534'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
     <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
     <td><span class="badge ${e.type==='delivery'?'b-add':e.type==='adjustment'?'b-move':'b-harvest'}">${e.type}</span></td>
-    <td style="font-size:11px;color:#666">${esc(e.ref)||'—'}</td>
+    <td style="font-size:11px;color:#666">${e.ref||'—'}</td>
   </tr>`).join('');
 }
 
@@ -1151,19 +1134,279 @@ function getInvAlerts(){
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:7,batches,scanLog,manualTasks,harvests,cultures,inventory},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
+function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
 function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();batches.forEach(b=>spColor(b.species));saveData();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));saveData();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+
+// ─── ASSETS (Anlageinventar) ────────────────────────────────
+let editingAssetId=null;
+let selectedAssetIds=new Set();
+
+function formatEur(n){return n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'}
+
+function computeDepreciation(asset,refDate){
+  const ref=refDate?new Date(refDate):new Date();
+  const entry=new Date(asset.entryDate);
+  const isGwg=asset.purchasePrice<=800;
+  if(asset.purchasePrice<=0||asset.usefulLife<=0)return{annualDepr:0,accumulated:0,bookValue:asset.purchasePrice,isGwg};
+  const annualDepr=asset.purchasePrice/asset.usefulLife;
+  // Calculate elapsed days for prorated depreciation
+  let msElapsed=ref.getTime()-entry.getTime();
+  if(msElapsed<0)msElapsed=0;
+  const yearsElapsed=msElapsed/(365.25*24*60*60*1000);
+  let accumulated=Math.min(annualDepr*yearsElapsed,asset.purchasePrice);
+  accumulated=Math.round(accumulated*100)/100;
+  let bookValue=asset.purchasePrice-accumulated;
+  // Erinnerungswert: 1€ if fully depreciated but still active
+  if(bookValue<1&&asset.status==='aktiv'&&asset.purchasePrice>0)bookValue=1;
+  if(bookValue<0)bookValue=0;
+  bookValue=Math.round(bookValue*100)/100;
+  return{annualDepr:Math.round(annualDepr*100)/100,accumulated,bookValue,isGwg};
+}
+
+function nextAssetId(){
+  let max=0;
+  assets.forEach(a=>{const m=a.assetId.match(/^INV-(\d+)$/);if(m)max=Math.max(max,parseInt(m[1]))});
+  return'INV-'+String(max+1).padStart(4,'0');
+}
+
+function assetStatusBadge(s){return`<span class="badge badge-${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`}
+
+function renderAssets(){
+  const cat=document.getElementById('asset-cat-filter').value;
+  const stat=document.getElementById('asset-stat-filter').value;
+  const q=(document.getElementById('asset-search').value||'').toLowerCase().trim();
+  const now=new Date();
+
+  let rows=assets.filter(a=>{
+    if(cat!=='all'&&a.category!==cat)return false;
+    if(stat!=='all'&&a.status!==stat)return false;
+    if(q){const hay=(a.assetId+' '+a.name+' '+(a.supplier||'')+' '+(a.serialNumber||'')+' '+(a.location||'')).toLowerCase();if(!hay.includes(q))return false}
+    return true;
+  }).sort((a,b)=>b.assetId.localeCompare(a.assetId));
+
+  // Stats
+  const aktiv=assets.filter(a=>a.status==='aktiv');
+  const totalPurchase=aktiv.reduce((s,a)=>s+a.purchasePrice,0);
+  const totalBook=aktiv.reduce((s,a)=>s+computeDepreciation(a).bookValue,0);
+  const gwgCount=aktiv.filter(a=>a.purchasePrice<=800).length;
+  document.getElementById('asset-stats').innerHTML=
+    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">Gesamt</div></div>`+
+    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">Anschaffungswert (aktiv)</div></div>`+
+    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">Buchwert heute (aktiv)</div></div>`+
+    `<div class="met"><div class="met-v">${gwgCount}</div><div class="met-l">GWG (≤ 800 €)</div></div>`;
+
+  // Table
+  const body=document.getElementById('assets-body');
+  if(!rows.length){body.innerHTML='<tr><td colspan="8" class="empty">Keine Anlagen erfasst. Klicke auf "Hinzufügen" um loszulegen.</td></tr>';return}
+  body.innerHTML=rows.map(a=>{
+    const d=computeDepreciation(a);
+    const gwg=d.isGwg?'<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>':'';
+    return`<tr>
+      <td style="font-family:monospace;font-size:11px;font-weight:500">${a.assetId}</td>
+      <td>${a.name}${gwg}</td>
+      <td>${a.category}</td>
+      <td style="text-align:right">${formatEur(a.purchasePrice)}</td>
+      <td style="text-align:right">${formatEur(d.bookValue)}</td>
+      <td>${assetStatusBadge(a.status)}</td>
+      <td style="font-size:11px;color:#555">${a.location||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="editAsset('${a.assetId}')" style="padding:2px 6px">Bearb.</button>
+        <button class="btn btn-sm" onclick="quickPrintAsset('${a.assetId}')" style="padding:2px 6px">Druck</button>
+        <button class="btn btn-sm" onclick="deleteAsset('${a.assetId}')" style="padding:2px 6px;color:#991b1b">×</button>
+      </td>
+    </tr>`}).join('');
+}
+
+function resetAssetForm(){
+  editingAssetId=null;
+  document.getElementById('asset-name').value='';
+  document.getElementById('asset-category').value='Maschinen';
+  document.getElementById('asset-entry-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('asset-price').value='';
+  document.getElementById('asset-life').value='5';
+  document.getElementById('asset-depr-method').value='linear';
+  document.getElementById('asset-supplier').value='';
+  document.getElementById('asset-invoice').value='';
+  document.getElementById('asset-serial').value='';
+  document.getElementById('asset-location').value='';
+  document.getElementById('asset-status').value='aktiv';
+  document.getElementById('asset-exit-date').value='';
+  document.getElementById('asset-exit-row').style.display='none';
+  document.getElementById('asset-notes').value='';
+  document.getElementById('asset-id-preview').textContent='Neue ID: '+nextAssetId();
+  // Fill location datalist
+  const locs=[...new Set(assets.map(a=>a.location).filter(Boolean))];
+  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${l}">`).join('');
+}
+
+function assetStatusChange(){
+  const s=document.getElementById('asset-status').value;
+  document.getElementById('asset-exit-row').style.display=s==='aktiv'?'none':'block';
+}
+
+function editAsset(id){
+  const a=assets.find(x=>x.assetId===id);if(!a)return;
+  editingAssetId=id;
+  document.getElementById('asset-name').value=a.name;
+  document.getElementById('asset-category').value=a.category;
+  document.getElementById('asset-entry-date').value=a.entryDate;
+  document.getElementById('asset-price').value=a.purchasePrice;
+  document.getElementById('asset-life').value=a.usefulLife;
+  document.getElementById('asset-depr-method').value=a.depreciationMethod||'linear';
+  document.getElementById('asset-supplier').value=a.supplier||'';
+  document.getElementById('asset-invoice').value=a.invoiceNumber||'';
+  document.getElementById('asset-serial').value=a.serialNumber||'';
+  document.getElementById('asset-location').value=a.location||'';
+  document.getElementById('asset-status').value=a.status;
+  document.getElementById('asset-exit-date').value=a.exitDate||'';
+  document.getElementById('asset-exit-row').style.display=a.status==='aktiv'?'none':'block';
+  document.getElementById('asset-notes').value=a.notes||'';
+  document.getElementById('asset-id-preview').textContent='Bearbeiten: '+id;
+  openStab('assets','add');
+}
+
+function saveAsset(){
+  const name=document.getElementById('asset-name').value.trim();
+  const category=document.getElementById('asset-category').value;
+  const entryDate=document.getElementById('asset-entry-date').value;
+  const price=parseFloat(document.getElementById('asset-price').value);
+  const life=parseInt(document.getElementById('asset-life').value);
+  if(!name||!entryDate||isNaN(price)||price<0||isNaN(life)||life<1){alert('Bitte alle Pflichtfelder ausfüllen.');return}
+  const status=document.getElementById('asset-status').value;
+  const obj={
+    assetId:editingAssetId||nextAssetId(),
+    name,category,entryDate,
+    exitDate:status!=='aktiv'?document.getElementById('asset-exit-date').value||null:null,
+    purchasePrice:price,usefulLife:life,
+    depreciationMethod:document.getElementById('asset-depr-method').value,
+    supplier:document.getElementById('asset-supplier').value.trim()||null,
+    invoiceNumber:document.getElementById('asset-invoice').value.trim()||null,
+    serialNumber:document.getElementById('asset-serial').value.trim()||null,
+    location:document.getElementById('asset-location').value.trim()||null,
+    status,
+    notes:document.getElementById('asset-notes').value.trim(),
+    created:editingAssetId?(assets.find(a=>a.assetId===editingAssetId)||{}).created||new Date().toISOString():new Date().toISOString()
+  };
+  if(editingAssetId){const i=assets.findIndex(a=>a.assetId===editingAssetId);if(i>=0)assets[i]=obj;else assets.push(obj)}
+  else assets.push(obj);
+  saveData();editingAssetId=null;
+  openStab('assets','list');
+}
+
+function deleteAsset(id){
+  confirm2('Anlage löschen?','Die Anlage '+id+' wird unwiderruflich gelöscht.','Ja, löschen',()=>{
+    assets=assets.filter(a=>a.assetId!==id);saveData();renderAssets();
+  });
+}
+
+// ─── ASSET EXPORT ───────────────────────────────────────────
+function initExportTab(){
+  const y=new Date().getFullYear();
+  document.getElementById('stichtag-date').value=y+'-12-31';
+}
+
+function exportAssetCSV(){
+  const hdr=['Inventar-Nr','Bezeichnung','Kategorie','Anschaffungsdatum','Anschaffungskosten','Nutzungsdauer (J.)','Jahres-AfA','Kumulierte AfA','Buchwert','GWG','Status','Lieferant','Rechnungsnr','Seriennr','Standort','Abgangsdatum','Bemerkungen'];
+  const rows=assets.map(a=>{
+    const d=computeDepreciation(a);
+    return[a.assetId,a.name,a.category,fmtDE(a.entryDate),fmtNum(a.purchasePrice),a.usefulLife,fmtNum(d.annualDepr),fmtNum(d.accumulated),fmtNum(d.bookValue),d.isGwg?'Ja':'Nein',a.status,a.supplier||'',a.invoiceNumber||'',a.serialNumber||'',a.location||'',a.exitDate?fmtDE(a.exitDate):'',a.notes||''];
+  });
+  const csv='\uFEFF'+[hdr,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventar_'+todayStr()+'.csv';a.click();
+}
+
+function fmtDE(iso){if(!iso)return'';const d=new Date(iso);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear()}
+function fmtNum(n){return String(Math.round(n*100)/100).replace('.',',')}
+
+function renderStichtagReport(){
+  const ref=document.getElementById('stichtag-date').value;
+  if(!ref){alert('Bitte Stichtag wählen.');return}
+  const aktiv=assets.filter(a=>a.status==='aktiv'||(a.exitDate&&a.exitDate>ref));
+  let totalPurchase=0,totalBook=0,totalAccum=0;
+  const rows=aktiv.map(a=>{
+    const d=computeDepreciation(a,ref);
+    totalPurchase+=a.purchasePrice;totalBook+=d.bookValue;totalAccum+=d.accumulated;
+    return`<tr><td style="font-family:monospace;font-size:11px">${a.assetId}</td><td>${a.name}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
+  });
+  document.getElementById('stichtag-result').innerHTML=
+    `<div style="font-size:12px;color:#555;margin-bottom:6px">Stichtag: ${fmtDE(ref)} — ${aktiv.length} aktive Anlagen</div>`+
+    `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>`+
+    rows.join('')+
+    `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>`+
+    `</tbody></table></div>`;
+}
+
+// ─── ASSET LABELS ───────────────────────────────────────────
+function renderAssetLabelList(){
+  const el=document.getElementById('asset-label-list');
+  if(!assets.length){el.innerHTML='<div class="empty">Keine Anlagen vorhanden.</div>';return}
+  el.innerHTML=assets.filter(a=>a.status==='aktiv').map(a=>{
+    const chk=selectedAssetIds.has(a.assetId)?'checked':'';
+    return`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
+      <input type="checkbox" ${chk} onchange="toggleAssetLabel('${a.assetId}',this.checked)">
+      <span style="font-family:monospace;font-weight:500">${a.assetId}</span>
+      <span style="color:#555">${a.name}</span>
+      <span style="color:#999;font-size:11px">${a.category}</span>
+    </label>`;
+  }).join('');
+}
+
+function toggleAssetLabel(id,on){if(on)selectedAssetIds.add(id);else selectedAssetIds.delete(id)}
+function toggleAllAssetLabels(on){
+  if(on)assets.filter(a=>a.status==='aktiv').forEach(a=>selectedAssetIds.add(a.assetId));
+  else selectedAssetIds.clear();
+  renderAssetLabelList();
+}
+
+function makeAssetZPL(ids){
+  return ids.map(id=>{
+    const a=assets.find(x=>x.assetId===id);if(!a)return'';
+    const bcVal=id.replace(/-/g,'_');
+    const loc=(a.category||'')+(a.location?' / '+a.location:'');
+    const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
+    return'^XA^PW400^LL240^CI28^LH0,0'+
+      '^FO20,10^BY2,2.0,60^BCN,60,N,N,N^FD'+bcVal+'^FS'+
+      '^FO8,78^A0N,28,28^FD'+id+'^FS'+
+      '^FO8,110^A0N,20,20^FD'+nameTrunc+'^FS'+
+      '^FO8,135^A0N,16,16^FD'+loc.slice(0,36)+'^FS'+
+      '^XZ';
+  }).filter(Boolean).join('\n');
+}
+
+async function printAssetLabels(){
+  const ids=[...selectedAssetIds];
+  if(!ids.length){alert('Bitte mindestens eine Anlage auswählen.');return}
+  const zpl=makeAssetZPL(ids);
+  const err=await sendToPrinter(zpl);
+  if(err)alert('Druckfehler: '+err);
+  else setFb('ok',ids.length+' Inventar-Etikett'+(ids.length!==1?'en':'')+' gedruckt');
+}
+
+function downloadAssetZPL(){
+  const ids=[...selectedAssetIds];
+  if(!ids.length){alert('Bitte mindestens eine Anlage auswählen.');return}
+  const zpl=makeAssetZPL(ids);
+  const blob=new Blob([zpl],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventar_labels.zpl';a.click();
+}
+
+async function quickPrintAsset(id){
+  const zpl=makeAssetZPL([id]);
+  const err=await sendToPrinter(zpl);
+  if(err){const blob=new Blob([zpl],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+'_label.zpl';a.click()}
+}
 
 // ─── CULTURES ────────────────────────────────────────────────
 const ctBadge=t=>{const m={MC:'badge-mc',PD:'badge-pd',LC:'badge-lc',G2G:'badge-g2g'};return`<span class="badge ${m[t]||''}">${t}</span>`}
 const csBadge=s=>{const m={active:'badge-active',stored:'badge-stored',used:'badge-used',contam:'badge-contam'};return`<span class="badge ${m[s]||''}">${s}</span>`}
-function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
+function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain} (${c.type})</option>`).join('');if(cur)s.value=cur}
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">No cultures yet. Use Lab → Log work to register them.</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'—'}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'—'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'—'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>Active</option><option value="stored" ${c.status==='stored'?'selected':''}>Stored</option><option value="used" ${c.status==='used'?'selected':''}>Used up</option><option value="contam" ${c.status==='contam'?'selected':''}>Contaminated</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="Print label" style="padding:2px 6px">Print</button></td></tr>`).join('');
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'—'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'—'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>Active</option><option value="stored" ${c.status==='stored'?'selected':''}>Stored</option><option value="used" ${c.status==='used'?'selected':''}>Used up</option><option value="contam" ${c.status==='contam'?'selected':''}>Contaminated</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="Print label" style="padding:2px 6px">Print</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;saveData();renderCultures()}}
 
@@ -1179,7 +1422,7 @@ function lwUpdate(){
   else{pr.style.display='none';sr.style.display='none';ql.textContent='Number of bags'}
   lwPreview();
 }
-function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)}</option>`).join('');if(cur)s.value=cur}
+function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
@@ -1209,10 +1452,10 @@ function logLabWork(){
     setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'—'}</td><td>${spDot(c.species)}${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No lab work logged yet.</td></tr>'}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No lab work logged yet.</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
-function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
+function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${c.id}">${c.id} (${c.type} — ${c.species})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${b.batchId}">${b.batchId} (${b.species})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
 function buildTree(rootId,rootType){
   const getAnc=id=>{const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
   const getDesc=(id,depth)=>{if(depth>6)return[];const ch=[];cultures.filter(c=>c.parentId===id).forEach(c=>ch.push({...c,harvest:0,children:getDesc(c.id,depth+1)}));batches.filter(b=>b.sourceId===id).forEach(b=>{const{status}=getStatus(b.batchId);ch.push({id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]})});return ch};
@@ -1221,7 +1464,7 @@ function buildTree(rootId,rootType){
 }
 const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
 const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
-function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:#666">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:#888">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?new Date(node.created).toLocaleDateString('de-DE'):''}</span></div>${ch}</div>`}
+function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${node.type}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${node.id}</span><span style="font-size:11px;color:#666">${node.species||''}${node.strain?' / '+node.strain:''}</span><span style="font-size:10px;color:#888">${node.status||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?new Date(node.created).toLocaleDateString('de-DE'):''}</span></div>${ch}</div>`}
 function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">Select a culture or batch above.</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">No lineage data found.</div>'}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
@@ -1230,7 +1473,7 @@ function openBagInfo(bagId,batchId,batch){
   biBagId=bagId;biBatchId=batchId;
   const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
   const el=document.getElementById('bi-body');
-  if(!b){el.innerHTML='<p style="color:#b91c1c">Batch not found: '+esc(batchId)+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
+  if(!b){el.innerHTML='<p style="color:#b91c1c">Batch not found: '+batchId+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
   document.getElementById('bi-title').textContent=bagId;
   // Current location
   const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
@@ -1245,12 +1488,12 @@ function openBagInfo(bagId,batchId,batch){
   const totalHarv=bagHarvests.reduce((s,h)=>s+(h.grams||0),0);
   el.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div class="met"><div class="met-l">Species</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">Strain</div><div style="font-size:15px;font-weight:600">${esc(b.strain)||'—'}</div></div>
+      <div class="met"><div class="met-l">Species</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${b.species}</div></div>
+      <div class="met"><div class="met-l">Strain</div><div style="font-size:15px;font-weight:600">${b.strain||'—'}</div></div>
       <div class="met"><div class="met-l">Current location</div><div style="font-size:15px;font-weight:600;color:#1e40af">${currentLoc}</div></div>
       <div class="met"><div class="met-l">Harvested</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':'None yet'}</div></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Batch ${esc(b.batchId)} — all bags</div>
+    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Batch ${b.batchId} — all bags</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags.map(bag=>{
         const isThis=bag.toUpperCase()===bagId.toUpperCase();
@@ -1274,7 +1517,8 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);    scan.count++;saveData();updateSD();
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;saveData();updateSD();
     setFb('ok','REMOVE logged: '+biBagId);
   }else{
     setFb('ok',action+' ready — now scan a location, then scan more bags');
@@ -1402,12 +1646,12 @@ async function sendToPrinter(zpl){
 
 
 
-function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
+function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species} / ${b.strain})</option>`).join('');if(cur)s.value=cur}
 
 function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview');if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;aspect-ratio:2/1;display:flex;align-items:center;justify-content:center;overflow:hidden';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:56px';cell.appendChild(svg);wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bagId,{format:'CODE128',width:1.4,height:32,displayValue:true,fontSize:10,margin:6,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
-function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
+function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${c.id}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${c.id}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${c.type}</span><span style="color:#888">${c.species}${c.strain?' / '+c.strain:''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
 function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id,{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=new Date(c.created).toLocaleDateString('de-DE');left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
@@ -1473,7 +1717,8 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);    scan.count++;saveData();
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
+    scan.count++;saveData();
     setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
     updateSD();return;
   }
@@ -1499,7 +1744,7 @@ document.addEventListener('keydown',e=>{
 
 // ─── INIT ────────────────────────────────────────────────────
 loadData();
-setInterval(pollSync,SYNC_INTERVAL_MS);
+setInterval(pollSync,5000);
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){

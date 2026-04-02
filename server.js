@@ -23,8 +23,8 @@ process.on('SIGTERM', () => { database.close(); process.exit(); });
 
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
-  '.js':'application/javascript','.png':'image/png',
-  '.ico':'image/x-icon','.svg':'image/svg+xml',
+  '.js':'application/javascript','.css':'text/css; charset=utf-8',
+  '.png':'image/png','.ico':'image/x-icon','.svg':'image/svg+xml',
 };
 
 function getLocalIP(){
@@ -872,6 +872,9 @@ const server=http.createServer((req,res)=>{
   let filePath;
   const url=req.url.split('?')[0];
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
+  else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
+  else if(url==='/app.js')filePath=path.join(DIR,'app.js');
+  else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');
   else if(url==='/manifest.json')filePath=path.join(DIR,'manifest.json');
   else if(url.startsWith('/lib/'))filePath=path.join(DIR,'lib',path.basename(url));
   else if(url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg)$/))filePath=path.join(DIR,url.slice(1));
