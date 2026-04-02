@@ -1282,6 +1282,13 @@ const LANG = {
     'lab.enterSpecies': 'Please enter a species',
     'lab.g2gNote': 'G2G is recorded via the scan bar \u2014 use ADD to move grain bags.',
     'lab.printNow': 'Print labels now?',
+    'lab.qtyDishes': 'Number of dishes',
+    'lab.qtyFlasks': 'Number of flasks',
+    'lab.qtyBags': 'Number of bags',
+    'lab.parentMcPdLc': 'Parent (MC, PD or LC)',
+    'lab.sourcePdMc': 'Source (petri dish or MC)',
+    'lab.logged': 'Logged: {n} {type} created',
+    'lab.noLabWork': 'No lab work logged yet.',
     'lab.geneticLineage': 'Genetic lineage',
     'lab.selectCultureBatch': '\u2014 select a culture or batch \u2014',
     'lab.selectAbove': 'Select a culture or batch above to trace its lineage.',
@@ -1352,6 +1359,9 @@ const LANG = {
     'todo.comingUp': 'Coming up',
     'todo.noTasks': 'No tasks right now!',
     'todo.noManualTasks': 'No manual tasks.',
+    'todo.dueAgo': 'Due {n} day(s) ago',
+    'todo.dueIn': 'Due in {n} day(s)',
+    'todo.fruiting': 'fruiting',
     'todo.deleteTask': 'Delete task?',
     'todo.deleteTaskMsg': 'This task will be permanently removed.',
     'todo.delete': 'Delete',
@@ -1917,6 +1927,13 @@ const LANG = {
     'lab.enterSpecies': 'Bitte eine Art eingeben',
     'lab.g2gNote': 'G2G wird \u00fcber die Scan-Leiste erfasst \u2014 verwende ADD.',
     'lab.printNow': 'Etiketten jetzt drucken?',
+    'lab.qtyDishes': 'Anzahl Schalen',
+    'lab.qtyFlasks': 'Anzahl Kolben',
+    'lab.qtyBags': 'Anzahl Beutel',
+    'lab.parentMcPdLc': 'Eltern (MC, PD oder LC)',
+    'lab.sourcePdMc': 'Quelle (Petrischale oder MC)',
+    'lab.logged': 'Erfasst: {n} {type} erstellt',
+    'lab.noLabWork': 'Noch keine Laborarbeit erfasst.',
     'lab.geneticLineage': 'Genetische Abstammung',
     'lab.selectCultureBatch': '\u2014 Kultur oder Charge w\u00e4hlen \u2014',
     'lab.selectAbove': 'W\u00e4hle oben eine Kultur oder Charge zur Abstammungsverfolgung.',
@@ -1987,6 +2004,9 @@ const LANG = {
     'todo.comingUp': 'Anstehend',
     'todo.noTasks': 'Keine Aufgaben!',
     'todo.noManualTasks': 'Keine manuellen Aufgaben.',
+    'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
+    'todo.dueIn': 'F\u00e4llig in {n} Tag(en)',
+    'todo.fruiting': 'fruchtet',
     'todo.deleteTask': 'Aufgabe l\u00f6schen?',
     'todo.deleteTaskMsg': 'Diese Aufgabe wird dauerhaft gel\u00f6scht.',
     'todo.delete': 'L\u00f6schen',
@@ -2552,6 +2572,13 @@ const LANG = {
     'lab.enterSpecies': 'Insira uma esp\u00e9cie',
     'lab.g2gNote': 'G2G \u00e9 registrado pela barra de scan \u2014 use ADD.',
     'lab.printNow': 'Imprimir etiquetas agora?',
+    'lab.qtyDishes': 'N\u00famero de placas',
+    'lab.qtyFlasks': 'N\u00famero de frascos',
+    'lab.qtyBags': 'N\u00famero de sacos',
+    'lab.parentMcPdLc': 'Origem (MC, PD ou LC)',
+    'lab.sourcePdMc': 'Fonte (placa de Petri ou MC)',
+    'lab.logged': 'Registrado: {n} {type} criado(s)',
+    'lab.noLabWork': 'Nenhum trabalho de laborat\u00f3rio registrado.',
     'lab.geneticLineage': 'Linhagem gen\u00e9tica',
     'lab.selectCultureBatch': '\u2014 selecionar cultura ou lote \u2014',
     'lab.selectAbove': 'Selecione uma cultura ou lote acima para rastrear linhagem.',
@@ -2622,6 +2649,9 @@ const LANG = {
     'todo.comingUp': 'Pr\u00f3ximas',
     'todo.noTasks': 'Nenhuma tarefa!',
     'todo.noManualTasks': 'Nenhuma tarefa manual.',
+    'todo.dueAgo': 'Vencido h\u00e1 {n} dia(s)',
+    'todo.dueIn': 'Vence em {n} dia(s)',
+    'todo.fruiting': 'frutificando',
     'todo.deleteTask': 'Excluir tarefa?',
     'todo.deleteTaskMsg': 'Esta tarefa ser\u00e1 removida permanentemente.',
     'todo.delete': 'Excluir',
@@ -3587,14 +3617,14 @@ function createBatch(){
 function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const s=document.getElementById('print-batch'),last=batches[batches.length-1];if(last){s.value=last.batchId;renderBagPreview()}},100)}
 function renderBatches(){
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
-  if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">No batches yet.</td></tr>';return}
+  if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${b.sourceId}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'…':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">Add note</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">Del</button></td></tr>`;
-  }).join('')||'<tr><td colspan="12" class="empty">No matches.</td></tr>';
+    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">${t('batch.addNote')}</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString(loc())}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString(loc())}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">${t('batch.del')}</button></td></tr>`;
+  }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
 function toggleBatchBags(batchId){
@@ -3609,7 +3639,7 @@ function toggleBatchBags(batchId){
     const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
     let loc='—',color='#aaa';
     if(last){
-      if(last.action==='REMOVE'){loc='Removed';color='#999'}
+      if(last.action==='REMOVE'){loc=t('bagInfo.removed');color='#999'}
       else if(last.to){loc=last.to;const z=toZone(last.to);color=locColor[z]||'#888'}
     }
     const num=bag.split('-').pop();
@@ -3624,7 +3654,7 @@ function openAddBags(batchId){
   const b=batches.find(x=>x.batchId===batchId);
   if(!b)return;
   addBagsBatchId=batchId;
-  document.getElementById('ab-info').textContent=batchId+' currently has '+b.bags.length+' bags ('+b.bags[b.bags.length-1]+' is last)';
+  document.getElementById('ab-info').textContent=t('addBags.info',{id:batchId,n:b.bags.length,last:b.bags[b.bags.length-1]});
   document.getElementById('ab-qty').value=1;
   document.getElementById('ab-preview').style.display='none';
   document.getElementById('m-addbags').classList.add('open');
@@ -3634,7 +3664,7 @@ function confirmAddBags(){
   const b=batches.find(x=>x.batchId===addBagsBatchId);
   if(!b)return;
   const qty=parseInt(document.getElementById('ab-qty').value)||0;
-  if(qty<1){alert('Enter at least 1');return}
+  if(qty<1){alert(t('addBags.enterQty'));return}
   const lastNum=parseInt(b.bags[b.bags.length-1].split('-').pop())||b.bags.length;
   const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
   b.bags=[...b.bags,...newBags];
@@ -3642,50 +3672,50 @@ function confirmAddBags(){
   saveData();
   document.getElementById('m-addbags').classList.remove('open');
   renderBatches();
-  setFb('ok','Added '+qty+' bag'+(qty!==1?'s':'')+' to '+b.batchId+' (now '+b.bags.length+' total)');
+  setFb('ok',t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length}));
 }
 document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
 
-function delBatch(id){confirm2('Delete batch '+id+'?','Permanently deletes the batch record. Scan log and harvest entries remain.','Delete batch',()=>{batches=batches.filter(b=>b.batchId!==id);saveData();renderBatches();renderStatus()})}
+function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{batches=batches.filter(b=>b.batchId!==id);saveData();renderBatches();renderStatus()})}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
   const b=batches.find(x=>x.batchId===batchId);
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
-  document.getElementById('hp-lbl').textContent='Log harvest — '+bagId;
+  document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter');
+  setFb('harvest',t('harvest.bagScanned',{bag:bagId}));
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
-  if(!g||g<=0){alert('Enter a weight in grams');return}
+  if(!g||g<=0){alert(t('harvest.enterWeight'));return}
   const p=scan.harvestBag;
   harvests.push({time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f});
   saveData();scan.harvestBag=null;scan.count++;
   document.getElementById('harvest-panel').style.display='none';
-  setFb('ok',`Harvest logged: ${p.bagId} → ${g}g (flush ${f})`);updateSD();
+  setFb('ok',t('harvest.logged',{bag:p.bagId,g:g,f:f}));updateSD();
 }
-function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-panel').style.display='none';setFb('info','Harvest cancelled.')}
+function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-panel').style.display='none';setFb('info',t('harvest.cancelled'))}
 document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
   const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString('de-DE')}</td><td style="font-family:monospace;font-size:10px">${h.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'—'}</td><td>${h.species?spDot(h.species)+h.species:'—'}</td><td>${h.strain||'—'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No harvests yet. Scan HARVEST then a bag.</td></tr>';
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString(loc())}</td><td style="font-family:monospace;font-size:10px">${h.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'\u2014'}</td><td>${h.species?spDot(h.species)+h.species:'\u2014'}</td><td>${h.strain||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
 
   const byBatch={};
   harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
   const ids=Object.keys(byBatch).sort((a,b)=>byBatch[b].total-byBatch[a].total);
   const tot=harvests.reduce((s,h)=>s+h.grams,0);
   document.getElementById('harvest-metrics').innerHTML=ids.length?[
-    ['Total harvested',tot>=1000?(tot/1000).toFixed(1)+'kg':tot+'g'],
-    ['Batches with yield',ids.length],
-    ['Top batch',ids[0]?byBatch[ids[0]].total+'g':'—']
+    [t('harvest.totalHarvested'),tot>=1000?(tot/1000).toFixed(1)+'kg':tot+'g'],
+    [t('harvest.batchesWithYield'),ids.length],
+    [t('harvest.topBatch'),ids[0]?byBatch[ids[0]].total+'g':'\u2014']
   ].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:#92400e">${v}</div></div>`).join(''):'';
 
   if(!ids.length){
-    document.getElementById('harvest-totals').innerHTML='<div class="empty">No harvest data yet.</div>';
+    document.getElementById('harvest-totals').innerHTML='<div class="empty">'+t('harvest.noData')+'</div>';
     return;
   }
 
@@ -3718,7 +3748,7 @@ function renderHarvests(){
     timelineInst=new Chart(timelineCanvas,{
       type:'line',
       data:{
-        labels:weekKeys.map(k=>{const d=new Date(k);return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}),
+        labels:weekKeys.map(k=>{const d=new Date(k);return d.toLocaleDateString(loc(),{day:'2-digit',month:'2-digit'})}),
         datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f39c12',backgroundColor:'rgba(243,156,18,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f39c12'}]
       },
       options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}}}}
@@ -3742,11 +3772,11 @@ function buildAutoTasks(){
     const dl=Math.round((due-today)/(864e5));
     let urgent=false,warn=false,text='',detail='';
     if(status==='INCUBATING'||status==='SPAWN RUN'){
-      if(dl<0){urgent=true;text=`${b.batchId} — ${action}`;detail=`Due ${Math.abs(dl)} day(s) ago`}
-      else if(dl<=2){warn=true;text=`${b.batchId} — ${action}`;detail=`Due in ${dl} day(s)`}
-      else{text=`${b.batchId} — ${action}`;detail=`Due in ${dl} days`}
-    }else if(status==='FRUITING'){text=`${b.batchId} — Harvest / check`;detail=`${b.species}/${b.strain} fruiting`;warn=true}
-    else if(status==='CONTAM'){text=`${b.batchId} — Discard bags`;detail=`${b.species}/${b.strain}`;urgent=true}
+      if(dl<0){urgent=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueAgo',{n:Math.abs(dl)})}
+      else if(dl<=2){warn=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl})}
+      else{text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl})}
+    }else if(status==='FRUITING'){text=`${b.batchId} \u2014 ${t('status.action.harvest')}`;detail=`${b.species}/${b.strain} ${t('todo.fruiting')}`;warn=true}
+    else if(status==='CONTAM'){text=`${b.batchId} \u2014 ${t('status.action.discard')}`;detail=`${b.species}/${b.strain}`;urgent=true}
     if(text)tasks.push({text,detail,urgent,warn,species:b.species});
   });
   return tasks;
@@ -3856,8 +3886,8 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'—'}</td><td>${e.from||'—'}</td><td>${e.to||'—'}</td><td>${e.species?spDot(e.species)+e.species:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
-function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];saveData();renderLog()})}
+function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString(loc())}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('settings.noScans')+'</td></tr>'}
+function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),()=>{scanLog=[];saveData();renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
 const MAT_LABELS={hardwood:'Hardwood pellets',wheatbran:'Wheat bran',gypsum:'Gypsum',grain:'Grain'};
@@ -4380,8 +4410,8 @@ function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)r
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
-  if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">No cultures yet. Use Lab → Log work to register them.</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'—'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'—'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>Active</option><option value="stored" ${c.status==='stored'?'selected':''}>Stored</option><option value="used" ${c.status==='used'?'selected':''}>Used up</option><option value="contam" ${c.status==='contam'?'selected':''}>Contaminated</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="Print label" style="padding:2px 6px">Print</button></td></tr>`).join('');
+  if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString(loc())}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;saveData();renderCultures()}}
 
@@ -4391,10 +4421,10 @@ function lwUpdate(){
   const dl=document.getElementById('sp-list');
   dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${s}">`).join('');
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
-  if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent='Quantity (tubes/dishes)'}
-  else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent='Parent (MC, PD or LC)';fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent='Number of dishes'}
-  else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent='Source (petri dish or MC)';fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent='Number of flasks'}
-  else{pr.style.display='none';sr.style.display='none';ql.textContent='Number of bags'}
+  if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
+  else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
+  else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.sourcePdMc');fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent=t('lab.qtyFlasks')}
+  else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
   lwPreview();
 }
 function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain}</option>`).join('');if(cur)s.value=cur}
@@ -4412,8 +4442,8 @@ document.getElementById('lw-qty').addEventListener('input',lwPreview);
 function logLabWork(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),st=document.getElementById('lw-st').value.trim();
   const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
-  if(!sp){alert('Please enter a species');return}
-  if(type==='G2G'){alert('G2G is recorded via the scan bar — use ADD to move grain bags.');return}
+  if(!sp){alert(t('lab.enterSpecies'));return}
+  if(type==='G2G'){alert(t('lab.g2gNote'));return}
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
   const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
@@ -4422,12 +4452,12 @@ function logLabWork(){
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
   renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);lwPreview();
   const ids=newC.map(c=>c.id).join(', ');
-  if(confirm(`Logged: ${newC.length} ${type} created\n${ids}\n\nPrint labels now?`)){
+  if(confirm(t('lab.logged',{n:newC.length,type:type})+'\n'+ids+'\n\n'+t('lab.printNow'))){
     selectedLabIds=new Set(newC.map(c=>c.id));go('print','n-print');
     setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No lab work logged yet.</td></tr>'}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString(loc())}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
 function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${c.id}">${c.id} (${c.type} — ${c.species})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${b.batchId}">${b.batchId} (${b.species})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
