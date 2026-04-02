@@ -847,6 +847,8 @@ const server=http.createServer((req,res)=>{
           calName='meisterpilze-'+slug;
         }
         const uid=writeTaskToCalendar(task,calName);
+        const synced=task.caldavSynced||new Date().toISOString();
+        db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
