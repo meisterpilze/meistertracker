@@ -7,22 +7,11 @@ const db = require('./db.js');
 
 const PORT = 3000;
 const DIR = __dirname;
-const DATA_FILE = path.join(DIR, 'data.json');
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
 const PRINTER_NAME = 'ZDesigner GK420d';
-
-// ── Auto-migrate from data.json on first run ─────────────────
-if (!fs.existsSync(DB_FILE) && fs.existsSync(DATA_FILE)) {
-  console.log('  Migrating data.json → SQLite...');
-  const tmpDb = db.openDb(DB_FILE);
-  const jsonData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  db.importFromJson(tmpDb, jsonData);
-  tmpDb.close();
-  console.log('  Migration complete. data.json preserved as backup.');
-}
 
 const database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
