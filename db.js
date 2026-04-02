@@ -120,6 +120,24 @@ CREATE TABLE IF NOT EXISTS caldav_config (
   caldav_password      TEXT DEFAULT '',
   per_person_calendars INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS assets (
+  asset_id            TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  category            TEXT NOT NULL,
+  entry_date          TEXT NOT NULL,
+  exit_date           TEXT,
+  purchase_price      REAL NOT NULL,
+  useful_life         INTEGER NOT NULL,
+  depreciation_method TEXT DEFAULT 'linear',
+  supplier            TEXT,
+  invoice_number      TEXT,
+  serial_number       TEXT,
+  location            TEXT,
+  status              TEXT DEFAULT 'aktiv',
+  notes               TEXT DEFAULT '',
+  created             TEXT NOT NULL
+);
 `;
 
 // ── Open / Init ──────────────────────────────────────────────
@@ -258,7 +276,26 @@ function readAll(db) {
     perPersonCalendars: cal.per_person_calendars === 1 ? true : false
   };
 
-  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav };
+  // Assets
+  const assets = db.prepare('SELECT * FROM assets ORDER BY asset_id').all().map(r => ({
+    assetId: r.asset_id,
+    name: r.name,
+    category: r.category,
+    entryDate: r.entry_date,
+    exitDate: r.exit_date,
+    purchasePrice: r.purchase_price,
+    usefulLife: r.useful_life,
+    depreciationMethod: r.depreciation_method,
+    supplier: r.supplier,
+    invoiceNumber: r.invoice_number,
+    serialNumber: r.serial_number,
+    location: r.location,
+    status: r.status,
+    notes: r.notes,
+    created: r.created
+  }));
+
+  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets };
 }
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
@@ -399,6 +436,37 @@ function writeAll(db, incoming) {
         for (const e of inv.log) {
           ins.run(e.time, e.mat, e.deltaKg, e.running || 0, e.type || null, e.ref || null);
         }
+      }
+    }
+
+    // ── Assets ──
+    if (incoming.assets) {
+      const existingIds = new Set(db.prepare('SELECT asset_id FROM assets').all().map(r => r.asset_id));
+      const incomingIds = new Set(incoming.assets.map(a => a.assetId));
+
+      for (const id of existingIds) {
+        if (!incomingIds.has(id)) {
+          db.prepare('DELETE FROM assets WHERE asset_id = ?').run(id);
+        }
+      }
+
+      const upsert = db.prepare(`
+        INSERT INTO assets(asset_id, name, category, entry_date, exit_date, purchase_price, useful_life,
+          depreciation_method, supplier, invoice_number, serial_number, location, status, notes, created)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(asset_id) DO UPDATE SET
+          name=excluded.name, category=excluded.category, entry_date=excluded.entry_date,
+          exit_date=excluded.exit_date, purchase_price=excluded.purchase_price,
+          useful_life=excluded.useful_life, depreciation_method=excluded.depreciation_method,
+          supplier=excluded.supplier, invoice_number=excluded.invoice_number,
+          serial_number=excluded.serial_number, location=excluded.location,
+          status=excluded.status, notes=excluded.notes, created=excluded.created
+      `);
+      for (const a of incoming.assets) {
+        upsert.run(a.assetId, a.name, a.category, a.entryDate, a.exitDate || null,
+          a.purchasePrice, a.usefulLife, a.depreciationMethod || 'linear',
+          a.supplier || null, a.invoiceNumber || null, a.serialNumber || null,
+          a.location || null, a.status || 'aktiv', a.notes || '', a.created);
       }
     }
 
