@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meisterpilze – Login</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f4f0;color:#1a1a1a;font-size:14px;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-card{background:#fff;border:1px solid #e5e3dd;border-radius:12px;padding:32px;width:100%;max-width:360px;margin:16px}
+h1{font-size:18px;font-weight:600;margin-bottom:4px;text-align:center}
+.subtitle{color:#888;font-size:13px;text-align:center;margin-bottom:24px}
+label{display:block;font-size:12px;font-weight:500;color:#666;margin-bottom:4px;margin-top:14px}
+input[type="text"],input[type="password"]{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:inherit;background:#fafaf8}
+input:focus{outline:none;border-color:#1a1a1a}
+.btn{width:100%;padding:10px;border:none;border-radius:8px;background:#1a1a1a;color:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:20px}
+.btn:hover{background:#333}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.error{background:#fee2e2;color:#991b1b;padding:8px 10px;border-radius:6px;font-size:12px;margin-top:14px;display:none}
+.confirm-row{display:none}
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h1 id="title">Login</h1>
+  <p class="subtitle" id="subtitle">Meisterpilze Lab Tracker</p>
+  <form id="form" autocomplete="on">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <div class="confirm-row" id="confirm-row">
+      <label for="confirm">Confirm Password</label>
+      <input type="password" id="confirm" name="confirm" autocomplete="new-password">
+    </div>
+    <div class="error" id="error"></div>
+    <button type="submit" class="btn" id="submit-btn">Login</button>
+  </form>
+</div>
+<script>
+(async()=>{
+  const form=document.getElementById('form');
+  const title=document.getElementById('title');
+  const subtitle=document.getElementById('subtitle');
+  const confirmRow=document.getElementById('confirm-row');
+  const errorEl=document.getElementById('error');
+  const submitBtn=document.getElementById('submit-btn');
+  const passwordInput=document.getElementById('password');
+
+  // Already logged in?
+  try{
+    const me=await fetch('/api/auth/me');
+    if(me.ok){window.location.href='/';return;}
+  }catch{}
+
+  // Setup mode?
+  let setupMode=false;
+  try{
+    const r=await fetch('/api/auth/setup-required');
+    const d=await r.json();
+    if(d.setupRequired){
+      setupMode=true;
+      title.textContent='Create Admin Account';
+      subtitle.textContent='First-time setup — create your admin user';
+      confirmRow.style.display='block';
+      submitBtn.textContent='Create Account';
+      passwordInput.autocomplete='new-password';
+    }
+  }catch{}
+
+  function showError(msg){
+    errorEl.textContent=msg;
+    errorEl.style.display='block';
+  }
+
+  form.addEventListener('submit',async(e)=>{
+    e.preventDefault();
+    errorEl.style.display='none';
+    const username=document.getElementById('username').value.trim();
+    const password=document.getElementById('password').value;
+
+    if(!username||!password){showError('Please fill in all fields.');return;}
+
+    if(setupMode){
+      const confirm=document.getElementById('confirm').value;
+      if(password!==confirm){showError('Passwords do not match.');return;}
+    }
+
+    submitBtn.disabled=true;
+    submitBtn.textContent=setupMode?'Creating...':'Logging in...';
+
+    try{
+      const endpoint=setupMode?'/api/auth/setup':'/api/auth/login';
+      const r=await fetch(endpoint,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username,password})
+      });
+      const d=await r.json();
+      if(!r.ok){
+        showError(d.error||'Login failed');
+        submitBtn.disabled=false;
+        submitBtn.textContent=setupMode?'Create Account':'Login';
+        return;
+      }
+      window.location.href='/';
+    }catch(err){
+      showError('Connection error');
+      submitBtn.disabled=false;
+      submitBtn.textContent=setupMode?'Create Account':'Login';
+    }
+  });
+})();
+</script>
+</body>
+</html>

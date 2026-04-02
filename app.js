@@ -37,17 +37,28 @@ let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
 const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
 
+// ─── AUTH ────────────────────────────────────────────────────
+let currentUser=null;
+async function authFetch(url,opts){
+  const r=await fetch(url,opts);
+  if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
+  return r;
+}
+async function loadCurrentUser(){
+  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch{}
+}
+
 // ─── SYNC ────────────────────────────────────────────────────
 async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
-    const r=await fetch('/api/data');
+    const r=await authFetch('/api/data');
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     applyData(d);
     setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
     refresh();
-  }catch(e){setSyncStatus('err','Sync error: '+(e.message||'offline'))}
+  }catch(e){if(e.message==='unauthorized')return;setSyncStatus('err','Sync error: '+(e.message||'offline'))}
 }
 function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];
@@ -70,7 +81,7 @@ function defaultInventory(){
 async function saveData(){
   if(saving)return;saving=true;setSyncStatus('busy','Saving...');
   try{
-    const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets})});
+    const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
     setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
@@ -79,7 +90,7 @@ async function saveData(){
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
 async function pollSync(){
   if(saving)return;
-  try{const r=await fetch('/api/data');
+  try{const r=await authFetch('/api/data');
   if(!r.ok)return;
   const d=await r.json();const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
 }
@@ -880,7 +891,7 @@ async function syncCaldavNow(){
   const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
-    const r=await fetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
+    const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
     if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
     else{
       showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
@@ -892,7 +903,7 @@ async function syncCaldavNow(){
 async function pushTaskCaldav(task){
   if(!caldav.enabled)return;
   try{
-    const r=await fetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
+    const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
     if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
   }catch(e){console.error('CalDAV push error:',e)}
 }
@@ -1673,7 +1684,7 @@ async function quickPrintCulture(id){
 
 async function sendToPrinter(zpl){
   try{
-    const r=await fetch('/api/print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zpl})});
+    const r=await authFetch('/api/print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zpl})});
     const d=await r.json();
     if(d.ok)return null;
     return d.error||'Print failed';
@@ -1800,7 +1811,59 @@ document.addEventListener('keydown',e=>{
   if(document.activeElement!==si&&!isInFormField()&&!e.target.closest('.modal-bg')&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey)si.focus();
 });
 
+// ─── USER MANAGEMENT ─────────────────────────────────────────
+async function doLogout(){
+  try{await authFetch('/api/auth/logout',{method:'POST'});}catch{}
+  window.location.href='/login.html';
+}
+
+async function loadUsersTab(){
+  const c=document.getElementById('sp-settings-users');
+  if(!c)return;
+  const acct=document.getElementById('users-account');
+  if(acct&&currentUser)acct.innerHTML=`Logged in as <b>${esc(currentUser.username)}</b> (${esc(currentUser.role)})`;
+  if(!currentUser||currentUser.role!=='admin'){
+    const tbl=document.getElementById('users-table');
+    if(tbl)tbl.innerHTML='<p style="color:#888">Admin access required to manage users.</p>';
+    return;
+  }
+  try{
+    const r=await authFetch('/api/users');
+    const users=await r.json();
+    const tbl=document.getElementById('users-table');
+    if(!tbl)return;
+    tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Created</th><th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
+      users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?new Date(u.created).toLocaleDateString('de-DE'):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
+      '</tbody></table>';
+  }catch{}
+}
+
+async function addUser(){
+  const u=document.getElementById('new-username').value.trim();
+  const p=document.getElementById('new-password').value;
+  const role=document.getElementById('new-role').value;
+  if(!u||!p){alert('Username and password required');return;}
+  if(p.length<4){alert('Password must be at least 4 characters');return;}
+  try{
+    const r=await authFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role})});
+    if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
+    document.getElementById('new-username').value='';
+    document.getElementById('new-password').value='';
+    loadUsersTab();
+  }catch(e){alert(e.message)}
+}
+
+async function deleteUser(id){
+  if(!confirm('Delete this user?'))return;
+  try{
+    const r=await authFetch('/api/users/'+id,{method:'DELETE'});
+    if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
+    loadUsersTab();
+  }catch(e){alert(e.message)}
+}
+
 // ─── INIT ────────────────────────────────────────────────────
+loadCurrentUser();
 loadData();
 setInterval(pollSync,SYNC_INTERVAL_MS);
 

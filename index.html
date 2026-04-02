@@ -652,6 +652,7 @@
   <div class="stabs">
     <button class="stab active" id="st-settings-log" onclick="openStab('settings','log')" data-i18n="settings.scanLog">Scan log</button>
     <button class="stab" id="st-settings-backup" onclick="openStab('settings','backup')" data-i18n="settings.backup">Backup</button>
+    <button class="stab" id="st-settings-users" onclick="openStab('settings','users');loadUsersTab()">Users</button>
   </div>
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
@@ -688,6 +689,24 @@
     <div class="card">
       <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
       <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+    </div>
+  </div>
+  <!-- Users -->
+  <div class="sp" id="sp-settings-users">
+    <div class="card">
+      <div class="sec">Account</div>
+      <p id="users-account" style="font-size:13px;color:#555;margin-bottom:8px"></p>
+      <button class="btn btn-r" onclick="doLogout()" style="margin-top:4px">Logout</button>
+    </div>
+    <div class="card">
+      <div class="sec">Manage users</div>
+      <div id="users-table" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #eee">
+        <div><label style="font-size:11px;color:#888">Username</label><input type="text" id="new-username" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:#888">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:#888">Role</label><select id="new-role" style="font-size:13px;padding:6px"><option value="user">user</option><option value="admin">admin</option></select></div>
+        <button class="btn btn-p" onclick="addUser()" style="font-size:12px">Add user</button>
+      </div>
     </div>
   </div>
 </div>
