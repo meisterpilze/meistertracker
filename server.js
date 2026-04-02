@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const db = require('./db.js');
 
@@ -221,6 +222,19 @@ function listIcsFiles(calName) {
   return fs.readdirSync(dir).filter(f => f.endsWith('.ics'));
 }
 
+// Compute a stable ctag for a calendar based on file contents
+function computeCtag(calName) {
+  const dir = path.join(CAL_DIR, calName);
+  if (!fs.existsSync(dir)) return '0';
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.ics')).sort();
+  const hash = crypto.createHash('md5');
+  for (const f of files) {
+    const stat = fs.statSync(path.join(dir, f));
+    hash.update(f + ':' + stat.mtimeMs + ':' + stat.size + '\n');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
 // Convert a task object to VTODO .ics content
 function taskToVTODO(task) {
   const uid = task.caldavUid || generateUID();
@@ -420,7 +434,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(cal)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -454,7 +468,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(calName)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
