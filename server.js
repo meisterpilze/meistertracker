@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -29,7 +30,10 @@ function log(level, msg, meta) {
 }
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
+const HTTPS_PORT = parseInt(process.env.HTTPS_PORT, 10) || 3443;
 const DIR = __dirname;
+const CERT_KEY = path.join(DIR, 'certs', 'server.key');
+const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
@@ -809,7 +813,7 @@ setInterval(() => {
   }
 }, RATE_WINDOW_MS);
 
-const server=http.createServer((req,res)=>{
+function handleRequest(req,res){
   const clientIP = req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(clientIP)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
@@ -1124,15 +1128,35 @@ const server=http.createServer((req,res)=>{
     res.writeHead(200,{'Content-Type':MIME[path.extname(filePath)]||'application/octet-stream'});
     res.end(data);
   });
-});
+}
+
+const server=http.createServer(handleRequest);
+
+// ── HTTPS SERVER (for iOS camera support) ───────────────────
+let httpsServer=null;
+if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
+  const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
+  httpsServer=https.createServer(tlsOpts,handleRequest);
+}
 
 server.listen(PORT,'0.0.0.0',()=>{
   const ip=getLocalIP();
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
   console.log('');
-  console.log('  Open on this PC:      http://localhost:'+PORT);
-  console.log('  Open on phone/tablet: http://'+ip+':'+PORT);
+  console.log('  HTTP:');
+  console.log('    Open on this PC:      http://localhost:'+PORT);
+  console.log('    Open on phone/tablet: http://'+ip+':'+PORT);
+  if(httpsServer){
+    httpsServer.listen(HTTPS_PORT,'0.0.0.0',()=>{
+      console.log('');
+      console.log('  HTTPS (required for iOS camera):');
+      console.log('    Open on phone/tablet: https://'+ip+':'+HTTPS_PORT);
+    });
+  }else{
+    console.log('');
+    console.log('  HTTPS: not available (run bash gen-cert.sh to enable)');
+  }
   console.log('');
   console.log('  CalDAV server:        http://'+ip+':'+PORT+'/caldav/calendars/');
   console.log('');
@@ -1146,6 +1170,7 @@ server.listen(PORT,'0.0.0.0',()=>{
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
 function shutdown(signal) {
   log('info', 'Received ' + signal + ', shutting down...');
+  if(httpsServer)httpsServer.close();
   server.close(() => {
     database.close();
     log('info', 'Server closed');

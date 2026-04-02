@@ -17,5 +17,8 @@ data.json
 # Calendars
 calendars/
 
+# TLS certificates
+certs/
+
 # Environment
 .env
