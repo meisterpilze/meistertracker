@@ -6,59 +6,124 @@ set -e
 # Configuration
 PM2_PROCESS_NAME="meisterpilze"
 
-echo "==== Starting Meisterpilze Server Setup & Update ===="
+# ---- Helper functions ----
 
-# 0. Check for Node.js
-if ! command -v node &> /dev/null; then
-    echo "Error: Node.js is not installed or not in PATH."
-    echo "Install it from https://nodejs.org/ or via your package manager."
-    exit 1
-fi
-echo "  -> Node.js $(node --version) found."
+check_node() {
+    if ! command -v node &> /dev/null; then
+        echo "Error: Node.js is not installed or not in PATH."
+        echo "Install it from https://nodejs.org/ or via your package manager."
+        exit 1
+    fi
+    echo "  -> Node.js $(node --version) found."
+}
 
-# 1. Install PM2 if not present
-if ! command -v pm2 &> /dev/null; then
-    echo "[0/3] PM2 not found, installing globally..."
-    npm install -g pm2
-fi
-echo "  -> PM2 $(pm2 --version) found."
+ensure_pm2() {
+    if ! command -v pm2 &> /dev/null; then
+        echo "PM2 not found, installing globally..."
+        npm install -g pm2
+    fi
+    echo "  -> PM2 $(pm2 --version) found."
+}
 
-# 2. Sync to latest remote main (force local to match GitHub)
-echo "[1/3] Updating code from git (reset to origin/main)..."
+backup_data() {
+    BACKUP_DIR="backups"
+    mkdir -p "$BACKUP_DIR"
+    chmod u+w "$BACKUP_DIR"
+    if [ -f data.json ]; then
+        cp data.json "$BACKUP_DIR/data_$(date +%Y%m%d_%H%M%S).json"
+        echo "  -> data.json backed up."
+    else
+        echo "  -> No data.json found, skipping backup."
+    fi
+}
 
-if ! git fetch origin; then
-    echo "Error: git fetch failed."
-    exit 1
-fi
+do_update() {
+    echo "==== Meisterpilze Server — Update & Restart ===="
+    check_node
+    ensure_pm2
 
-if ! git reset --hard origin/main; then
-    echo "Error: git reset --hard origin/main failed."
-    exit 1
-fi
+    echo "[1/3] Updating code from git (reset to origin/main)..."
+    if ! git fetch origin; then
+        echo "Error: git fetch failed."
+        exit 1
+    fi
+    if ! git reset --hard origin/main; then
+        echo "Error: git reset --hard origin/main failed."
+        exit 1
+    fi
 
-# 3. Back up data.json before restart (safety measure)
-echo "[2/3] Backing up data..."
-BACKUP_DIR="backups"
-mkdir -p "$BACKUP_DIR"
-chmod u+w "$BACKUP_DIR"
-if [ -f data.json ]; then
-    cp data.json "$BACKUP_DIR/data_$(date +%Y%m%d_%H%M%S).json"
-    echo "  -> data.json backed up."
-else
-    echo "  -> No data.json found, skipping backup."
-fi
+    echo "[2/3] Backing up data..."
+    backup_data
 
-# 4. Restart or Start Server Process
-echo "[3/3] Restarting Server Process..."
-if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
-    echo "  -> Process found, attempting reload..."
-    pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
-else
-    echo "  -> Process not found in PM2, starting new instance..."
-    pm2 start server.js --name "$PM2_PROCESS_NAME"
-    pm2 save
-fi
+    echo "[3/3] Restarting server..."
+    if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
+        echo "  -> Process found, attempting reload..."
+        pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
+    else
+        echo "  -> Process not found in PM2, starting new instance..."
+        pm2 start server.js --name "$PM2_PROCESS_NAME"
+        pm2 save
+    fi
 
-echo "==== Update Completed Successfully ===="
-echo "The server is now running the latest version."
-echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
+    echo "==== Update Completed Successfully ===="
+    echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
+}
+
+do_start() {
+    echo "==== Meisterpilze Server — Start ===="
+    check_node
+    ensure_pm2
+
+    if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
+        echo "Process already exists in PM2, restarting..."
+        pm2 restart "$PM2_PROCESS_NAME"
+    else
+        echo "Starting new instance..."
+        pm2 start server.js --name "$PM2_PROCESS_NAME"
+        pm2 save
+    fi
+    echo "==== Server Started ===="
+}
+
+do_stop() {
+    echo "==== Meisterpilze Server — Stop ===="
+    ensure_pm2
+
+    if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
+        pm2 stop "$PM2_PROCESS_NAME"
+        echo "Server stopped."
+    else
+        echo "Process '$PM2_PROCESS_NAME' not found in PM2 — nothing to stop."
+    fi
+}
+
+do_status() {
+    ensure_pm2
+    pm2 status
+}
+
+show_usage() {
+    echo "Usage: bash update_server.sh [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (no command)   Update code from GitHub, back up data, restart server"
+    echo "  start          Start the server (without pulling updates)"
+    echo "  stop           Stop the server"
+    echo "  status         Show PM2 process status"
+    echo "  help           Show this help message"
+}
+
+# ---- Main ----
+
+case "${1:-update}" in
+    update)  do_update  ;;
+    start)   do_start   ;;
+    stop)    do_stop    ;;
+    status)  do_status  ;;
+    help|-h|--help)  show_usage ;;
+    *)
+        echo "Unknown command: $1"
+        show_usage
+        exit 1
+        ;;
+esac
