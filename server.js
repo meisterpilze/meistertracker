@@ -728,6 +728,12 @@ function handleProppatch(parts, body, req, res) {
 // ══════════════════════════════════════════════════════════════
 
 const server=http.createServer((req,res)=>{
+  // ── Well-known CalDAV discovery (RFC 6764) ──
+  if(req.url.startsWith('/.well-known/caldav')){
+    res.writeHead(301,{'Location':'/caldav/'});
+    res.end();return;
+  }
+
   // ── CalDAV requests ──
   if(req.url.startsWith('/caldav')){
     return handleCaldav(req,res);
