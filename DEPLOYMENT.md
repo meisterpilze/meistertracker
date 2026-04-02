@@ -28,9 +28,21 @@ The script will:
 Once running, open **http://localhost:3000** in your browser.
 For other devices on the same network, use **http://\<your-ip\>:3000**.
 
+## Server Management
+
+`update_server.sh` supports the following commands:
+
+```bash
+bash update_server.sh            # Update code from GitHub, back up data, restart server
+bash update_server.sh start      # Start the server (without pulling updates)
+bash update_server.sh stop       # Stop the server
+bash update_server.sh status     # Show PM2 process status
+bash update_server.sh help       # Show usage info
+```
+
 ## Updating
 
-Run the same script again:
+Run the script without arguments:
 
 ```bash
 bash update_server.sh
@@ -41,11 +53,7 @@ It pulls the latest code and restarts the server. Data in `data.json` is backed 
 ## Useful PM2 Commands
 
 ```bash
-pm2 status                # show app status
 pm2 logs meisterpilze     # show live logs
-pm2 restart meisterpilze  # restart the app
-pm2 stop meisterpilze     # stop the app
-pm2 start meisterpilze    # start it again
 ```
 
 ## Raspberry Pi — First-Time Setup
