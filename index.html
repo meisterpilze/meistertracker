@@ -1117,6 +1117,25 @@ const LANG = {
     'dash.noUrgent': 'No urgent tasks right now.',
     'dash.view': 'View',
     'dash.stock': 'Stock',
+    'dash.noMatches': 'No batches match.',
+    'dash.noBatches': 'No batches yet. Create one in Batches \u2192 New batch.',
+    'dash.harvestedAmount': '{g}g harvested',
+    'dash.due': 'Due',
+    'dash.bags.one': '{n} bag',
+    'dash.bags.other': '{n} bags',
+    'dash.empty': 'Empty',
+    'dash.noBagsOnRack': 'No bags on this rack.',
+    'dash.noBagsIn': 'No bags in {loc}.',
+    'dash.bagsSelected.one': '{n} bag selected',
+    'dash.bagsSelected.other': '{n} bags selected',
+    'dash.selectAll': 'Select all',
+    'dash.clear': 'Clear',
+    'dash.move': 'Move',
+    'dash.remove': 'Remove',
+    'dash.currentlyIn': 'Currently in {loc}',
+    'dash.zones': 'Zones',
+    'dash.racks': 'Racks',
+    'dash.moveBags': 'Move {n} bag(s)',
     // Status
     'status.INCUBATING': 'INCUBATING',
     'status.FRUITING': 'FRUITING',
@@ -1607,6 +1626,8 @@ const LANG = {
     // Static HTML keys
     'batch.batchId': 'Batch ID',
     'batch.species': 'Species',
+    'batch.strain': 'Strain',
+    'batch.notFound': 'Batch not found',
     'nav.cancel': 'Cancel',
     'settings.time': 'Time',
     'settings.action': 'Action',
@@ -1731,6 +1752,25 @@ const LANG = {
     'dash.noUrgent': 'Keine dringenden Aufgaben.',
     'dash.view': 'Ansehen',
     'dash.stock': 'Lager',
+    'dash.noMatches': 'Keine Chargen gefunden.',
+    'dash.noBatches': 'Noch keine Chargen. Erstelle eine unter Chargen \u2192 Neue Charge.',
+    'dash.harvestedAmount': '{g}g geerntet',
+    'dash.due': 'F\u00e4llig',
+    'dash.bags.one': '{n} Beutel',
+    'dash.bags.other': '{n} Beutel',
+    'dash.empty': 'Leer',
+    'dash.noBagsOnRack': 'Keine Beutel auf diesem Regal.',
+    'dash.noBagsIn': 'Keine Beutel in {loc}.',
+    'dash.bagsSelected.one': '{n} Beutel ausgew\u00e4hlt',
+    'dash.bagsSelected.other': '{n} Beutel ausgew\u00e4hlt',
+    'dash.selectAll': 'Alle ausw\u00e4hlen',
+    'dash.clear': 'Zur\u00fccksetzen',
+    'dash.move': 'Verschieben',
+    'dash.remove': 'Entfernen',
+    'dash.currentlyIn': 'Aktuell in {loc}',
+    'dash.zones': 'Zonen',
+    'dash.racks': 'Regale',
+    'dash.moveBags': '{n} Beutel verschieben',
     // Status
     'status.INCUBATING': 'INKUBATION',
     'status.FRUITING': 'FRUCHTEND',
@@ -2221,6 +2261,8 @@ const LANG = {
     // Static HTML keys
     'batch.batchId': 'Chargen-ID',
     'batch.species': 'Art',
+    'batch.strain': 'Stamm',
+    'batch.notFound': 'Charge nicht gefunden',
     'nav.cancel': 'Abbrechen',
     'settings.time': 'Zeit',
     'settings.action': 'Aktion',
@@ -2345,6 +2387,25 @@ const LANG = {
     'dash.noUrgent': 'Nenhuma tarefa urgente no momento.',
     'dash.view': 'Ver',
     'dash.stock': 'Estoque',
+    'dash.noMatches': 'Nenhum lote encontrado.',
+    'dash.noBatches': 'Nenhum lote ainda. Crie um em Lotes \u2192 Novo lote.',
+    'dash.harvestedAmount': '{g}g colhido',
+    'dash.due': 'Vencimento',
+    'dash.bags.one': '{n} saco',
+    'dash.bags.other': '{n} sacos',
+    'dash.empty': 'Vazio',
+    'dash.noBagsOnRack': 'Nenhum saco nesta estante.',
+    'dash.noBagsIn': 'Nenhum saco em {loc}.',
+    'dash.bagsSelected.one': '{n} saco selecionado',
+    'dash.bagsSelected.other': '{n} sacos selecionados',
+    'dash.selectAll': 'Selecionar todos',
+    'dash.clear': 'Limpar',
+    'dash.move': 'Mover',
+    'dash.remove': 'Remover',
+    'dash.currentlyIn': 'Atualmente em {loc}',
+    'dash.zones': 'Zonas',
+    'dash.racks': 'Estantes',
+    'dash.moveBags': 'Mover {n} saco(s)',
     // Status
     'status.INCUBATING': 'INCUBANDO',
     'status.FRUITING': 'FRUTIFICANDO',
@@ -2835,6 +2896,8 @@ const LANG = {
     // Static HTML keys
     'batch.batchId': 'ID do lote',
     'batch.species': 'Esp\u00e9cie',
+    'batch.strain': 'Cepa',
+    'batch.notFound': 'Lote n\u00e3o encontrado',
     'nav.cancel': 'Cancelar',
     'settings.time': 'Hora',
     'settings.action': 'A\u00e7\u00e3o',
@@ -3080,10 +3143,10 @@ function getStatus(id){
   });
   const total=Object.values(c).reduce((a,b)=>a+b,0);
   let status='EMPTY',action='';
-  if(c.TENT1+c.TENT2+c.TENT3>0){status='FRUITING';action='Harvest / check'}
-  else if(c.INC>0){status='INCUBATING';action='Move to tent when ready'}
-  else if(c.SPAWN>0){status='SPAWN RUN';action='Monitor spawn run'}
-  else if(c.CONTAM>0){status='CONTAM';action='Discard bags'}
+  if(c.TENT1+c.TENT2+c.TENT3>0){status='FRUITING';action=t('status.action.harvest')}
+  else if(c.INC>0){status='INCUBATING';action=t('status.action.moveTent')}
+  else if(c.SPAWN>0){status='SPAWN RUN';action=t('status.action.monitorSpawn')}
+  else if(c.CONTAM>0){status='CONTAM';action=t('status.action.discard')}
   else if(total===0&&scanLog.some(e=>e.batch===id)){status='DONE'}
   return{c,total,status,action};
 }
@@ -3096,10 +3159,10 @@ function renderMetrics(tot,inc,tent,contam){
   const totalHarv=harvests.reduce((s,h)=>s+(h.grams||0),0);
   const contamRate=tot>0?Math.round((contam/tot)*100):0;
   document.getElementById('metrics').innerHTML=[
-    ['Total batches',tot,'#1a1a1a'],
-    ['In incubation',inc,'#1e40af'],
-    ['In tents / fruiting',tent,'#166534'],
-    ['Total harvested',totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—','#92400e']
+    [t('dash.totalBatches'),tot,'#1a1a1a'],
+    [t('dash.inIncubation'),inc,'#1e40af'],
+    [t('dash.inTents'),tent,'#166534'],
+    [t('dash.totalHarvested'),totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—','#92400e']
   ].map(([l,v,c])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${c}">${v}</div></div>`).join('');
 }
 
@@ -3145,7 +3208,7 @@ function renderHarvestChart(){
   const data=labels.map(s=>bySpecies[s]);
   const colors=labels.map(s=>spColor(s));
   if(harvestChartInst){harvestChartInst.destroy();harvestChartInst=null}
-  if(!labels.length){canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText('No harvest data yet',canvas.width/2,80);return}
+  if(!labels.length){canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('harvest.noData'),canvas.width/2,80);return}
   harvestChartInst=new Chart(canvas,{
     type:'bar',
     data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
@@ -3158,7 +3221,7 @@ function toggleStatusView(){
   statusCardMode=!statusCardMode;
   document.getElementById('status-table-view').style.display=statusCardMode?'none':'block';
   document.getElementById('status-card-view').style.display=statusCardMode?'block':'none';
-  document.getElementById('status-view-btn').textContent=statusCardMode?'Table':'Cards';
+  document.getElementById('status-view-btn').textContent=statusCardMode?t('dash.table'):t('dash.cards');
   if(statusCardMode)renderStatusCards();
 }
 
@@ -3166,7 +3229,7 @@ function renderStatusCards(){
   const q=(document.getElementById('status-q').value||'').toLowerCase();
   const el=document.getElementById('status-card-view');
   const filtered=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q));
-  if(!filtered.length){el.innerHTML='<div class="empty">No batches match.</div>';return}
+  if(!filtered.length){el.innerHTML='<div class="empty">'+t('dash.noMatches')+'</div>';return}
   el.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px';
   el.innerHTML=filtered.map(b=>{
     const{c,status,action}=getStatus(b.batchId);
@@ -3186,8 +3249,8 @@ function renderStatusCards(){
       <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
         ${stages.map(([l,n,col])=>`<span style="font-size:11px;font-weight:600;background:${col}22;color:${col};border:1px solid ${col}44;padding:1px 7px;border-radius:99px">${l}: ${n}</span>`).join('')}
       </div>
-      ${harv>0?`<div style="font-size:11px;color:#92400e;font-weight:500;margin-bottom:4px">Harvest ${harv}g harvested</div>`:''}
-      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">Due: ${due.toLocaleDateString('de-DE')}${ov?' ⚠':''}</div>
+      ${harv>0?`<div style="font-size:11px;color:#92400e;font-weight:500;margin-bottom:4px">${t('dash.harvestedAmount',{g:harv})}</div>`:''}
+      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">${t('dash.due')}: ${due.toLocaleDateString(loc())}${ov?' ⚠':''}</div>
       ${action?`<div style="font-size:11px;color:#666;margin-top:4px;font-style:italic">${action}</div>`:''}
     </div>`;
   }).join('');
@@ -3195,15 +3258,15 @@ function renderStatusCards(){
 
 function renderStatus(){
   const q=(document.getElementById('status-q').value||'').toLowerCase(),body=document.getElementById('status-body');
-  if(!batches.length){body.innerHTML='<tr><td colspan="14" class="empty">No batches yet. Create one in Batches → New batch.</td></tr>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
+  if(!batches.length){body.innerHTML='<tr><td colspan="14" class="empty">'+t('dash.noBatches')+'</td></tr>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
   let ti=0,tt=0,tc=0;
   const rows=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
     const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
     const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
     const harv=getHarvested(b.batchId);
-    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString(loc())}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
   });
-  body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">No matches.</td></tr>';
+  body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">'+t('dash.noMatches')+'</td></tr>';
   renderMetrics(batches.length,ti,tt,tc);
   renderPipelineChart();
   renderHarvestChart();
@@ -3214,8 +3277,8 @@ function renderDashAlerts(){
   const invAlerts=getInvAlerts();
   const all=[...invAlerts,...tasks];
   const el=document.getElementById('dash-alerts');
-  if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">No urgent tasks right now.</div>';return}
-  el.innerHTML=all.slice(0,8).map(t=>`<div class="todo-row ${t.urgent?'urgent':'warn'}"><span class="pdot ${t.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${t.species?spDot(t.species):''}${t.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${t.detail}</div></div>${t.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">Stock</button>`}</div>`).join('');
+  if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">'+t('dash.noUrgent')+'</div>';return}
+  el.innerHTML=all.slice(0,8).map(tk=>`<div class="todo-row ${tk.urgent?'urgent':'warn'}"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${tk.species?spDot(tk.species):''}${tk.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${tk.detail}</div></div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">${t('inv.stock')}</button>`}</div>`).join('');
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -3235,9 +3298,9 @@ function renderRacks(){
       const byBatch={};Object.values(bags).forEach(b=>{if(!byBatch[b.batchId])byBatch[b.batchId]={c:0,sp:b.species};byBatch[b.batchId].c++});
       const label=id.replace(/_/g,' ');
       return`<div class="rack-card" onclick="showRack('${id}')">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${count} bag${count!==1?'s':''}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${tp('dash.bags',count)}</span></div>
         <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
-        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${bid}</span>(${d.c})`).join(' '):'Empty'}</div>
+        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${bid}</span>(${d.c})`).join(' '):t('dash.empty')}</div>
       </div>`;
     }).join('');
   };
@@ -3246,8 +3309,8 @@ function renderRacks(){
 function showRack(id){
   const bags=getRackBags(id),entries=Object.entries(bags);
   const el=document.getElementById('rack-detail');
-  document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' — '+entries.length+' bag'+(entries.length!==1?'s':'');
-  if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">No bags on this rack.</div>';el.style.display='block';return}
+  document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' \u2014 '+tp('dash.bags',entries.length);
+  if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">'+t('dash.noBagsOnRack')+'</div>';el.style.display='block';return}
   const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push(bagId)});
   document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${bid} — ${d.sp}/${d.st} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
   el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -3293,11 +3356,11 @@ function toggleLocBag(bagId,batchId,loc){
   const n=selectedLocBags.size;
   if(n>0){
     bar.style.display='flex';
-    bar.innerHTML=`<span style="font-size:12px;font-weight:600">${n} bag${n!==1?'s':''} selected</span><span style="flex:1"></span>
-      <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">Select all</button>
-      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">Clear</button>
-      <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">Move</button>
-      <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">Remove</button>`;
+    bar.innerHTML=`<span style="font-size:12px;font-weight:600">${tp('dash.bagsSelected',n)}</span><span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">${t('dash.selectAll')}</button>
+      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">${t('dash.clear')}</button>
+      <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
+      <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>`;
   }else{
     bar.style.display='none';
   }
@@ -3312,14 +3375,14 @@ function openLocMovePopup(){
   const n=selectedLocBags.size;
   const fromLoc=activeLocTab;
   const m=document.getElementById('m-locmove');
-  document.getElementById('lm-title').textContent=n+' bag'+(n!==1?'s':'');
-  document.getElementById('lm-info').textContent='Currently in '+fromLoc;
+  document.getElementById('lm-title').textContent=tp('dash.bags',n);
+  document.getElementById('lm-info').textContent=t('dash.currentlyIn',{loc:fromLoc});
   document.getElementById('lm-confirm').style.display='none';
   const grid=document.getElementById('lm-grid');
   grid.style.display='flex';
-  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">Zones</div>'
+  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">'+t('dash.zones')+'</div>'
     +ZONES.filter(z=>z!==fromLoc).map(z=>`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px">${z}</button>`).join('')
-    +'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">Racks</div>'
+    +'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>'
     +ALL_RACKS.filter(r=>r!==fromLoc).map(r=>`<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${r.replace(/_/g,' ')}</button>`).join('');
   m.classList.add('open');
 }
@@ -3331,18 +3394,18 @@ function locPreConfirm(toLoc){
   const ids=[...selectedLocBags.keys()];
   const preview=ids.length<=6?ids.map(id=>id.split('-').pop()).join(', '):ids.slice(0,5).map(id=>id.split('-').pop()).join(', ')+' + '+(ids.length-5)+' more';
   c.innerHTML=`<div style="text-align:center;padding:12px 0">
-    <div style="font-size:14px;margin-bottom:8px">Move <strong>${n} bag${n!==1?'s':''}</strong></div>
+    <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags',{n:n})}</div>
     <div style="font-size:11px;color:#888;margin-bottom:8px;font-family:monospace">${preview}</div>
-    <div style="font-size:20px;margin-bottom:16px">${activeLocTab} → <strong>${toLoc}</strong></div>
+    <div style="font-size:20px;margin-bottom:16px">${activeLocTab} \u2192 <strong>${toLoc}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">Cancel</button>
-      <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">Confirm</button>
+      <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">${t('nav.cancel')}</button>
+      <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">${t('confirm.confirm')}</button>
     </div>
   </div>`;
 }
 function renderLocBody(){
   const bags=getZoneBags(activeLocTab),entries=Object.entries(bags),el=document.getElementById('loc-body');
-  if(!entries.length){selectedLocBags.clear();el.innerHTML='<div class="empty" style="font-size:12px">No bags in '+activeLocTab+'.</div><div id="loc-action-bar" style="display:none"></div>';return}
+  if(!entries.length){selectedLocBags.clear();el.innerHTML='<div class="empty" style="font-size:12px">'+t('dash.noBagsIn',{loc:activeLocTab})+'</div><div id="loc-action-bar" style="display:none"></div>';return}
   const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push({id:bagId,loc:d.loc})});
   Object.values(byBatch).forEach(d=>d.bags.sort((a,b)=>{const na=parseInt(a.id.split('-').pop())||0,nb=parseInt(b.id.split('-').pop())||0;return na-nb}));
   const n=selectedLocBags.size;
@@ -3356,11 +3419,11 @@ function renderLocBody(){
     }).join('')}</div>
   </div>`).join('')
   +`<div id="loc-action-bar" style="${n>0?'display:flex':'display:none'};align-items:center;gap:8px;flex-wrap:wrap;background:#f9f8f5;border:1px solid #e5e3dd;border-radius:8px;padding:8px 12px;margin-top:8px">
-    <span style="font-size:12px;font-weight:600">${n} bag${n!==1?'s':''} selected</span><span style="flex:1"></span>
-    <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">Select all</button>
-    <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">Clear</button>
-    <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">Move</button>
-    <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">Remove</button>
+    <span style="font-size:12px;font-weight:600">${tp('dash.bagsSelected',n)}</span><span style="flex:1"></span>
+    <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">${t('dash.selectAll')}</button>
+    <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">${t('dash.clear')}</button>
+    <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
+    <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>
   </div>`;
 }
 // Event delegation — no inline onclick, prevents scroll
@@ -3382,12 +3445,12 @@ function locMoveTo(toLoc){
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
   saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
-  setLocFb('Moved '+n+' bag'+(n!==1?'s':'')+' → '+toLoc);
+  setLocFb(t('scanFb.moved',{n:n,loc:toLoc}));
 }
 function locRemoveSelected(){
   if(!selectedLocBags.size)return;
   const n=selectedLocBags.size;
-  if(!confirm('Remove '+n+' bag'+(n!==1?'s':'')+'?'))return;
+  if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
   const now=new Date().toISOString();
   selectedLocBags.forEach((d,bagId)=>{
     const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);
@@ -3396,7 +3459,7 @@ function locRemoveSelected(){
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
   saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
-  setLocFb('Removed '+n+' bag'+(n!==1?'s':''));
+  setLocFb(t('scanFb.removed',{n:n}));
 }
 function setLocFb(msg){
   const el=document.getElementById('scan-fb');
@@ -4385,14 +4448,14 @@ function openBagInfo(bagId,batchId,batch){
   biBagId=bagId;biBatchId=batchId;
   const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
   const el=document.getElementById('bi-body');
-  if(!b){el.innerHTML='<p style="color:#b91c1c">Batch not found: '+batchId+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
+  if(!b){el.innerHTML='<p style="color:#b91c1c">'+t('batch.notFound')+': '+batchId+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
   document.getElementById('bi-title').textContent=bagId;
   // Current location
   const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
-  let currentLoc='Not placed yet';
+  let currentLoc=t('bagInfo.notPlaced');
   if(bagLogs.length){
     const last=bagLogs[bagLogs.length-1];
-    if(last.action==='REMOVE')currentLoc='Removed';
+    if(last.action==='REMOVE')currentLoc=t('bagInfo.removed');
     else if(last.action==='ADD'||last.action==='MOVE')currentLoc=last.to||'Unknown';
   }
   // Harvests for this bag
@@ -4400,12 +4463,12 @@ function openBagInfo(bagId,batchId,batch){
   const totalHarv=bagHarvests.reduce((s,h)=>s+(h.grams||0),0);
   el.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div class="met"><div class="met-l">Species</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${b.species}</div></div>
-      <div class="met"><div class="met-l">Strain</div><div style="font-size:15px;font-weight:600">${b.strain||'—'}</div></div>
-      <div class="met"><div class="met-l">Current location</div><div style="font-size:15px;font-weight:600;color:#1e40af">${currentLoc}</div></div>
-      <div class="met"><div class="met-l">Harvested</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':'None yet'}</div></div>
+      <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${b.species}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strain||'\u2014'}</div></div>
+      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:#1e40af">${currentLoc}</div></div>
+      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Batch ${b.batchId} — all bags</div>
+    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${b.batchId} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags.map(bag=>{
         const isThis=bag.toUpperCase()===bagId.toUpperCase();
@@ -4417,10 +4480,10 @@ function openBagInfo(bagId,batchId,batch){
         </span>`;
       }).join('')}
     </div>
-    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>Harvests:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' · ')}</div>`:''}
+    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info','Bag info: '+bagId+' — choose an action below or close');
+  setFb('info',t('scanFb.bagInfo',{bag:bagId}));
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -4431,9 +4494,9 @@ function biSetAction(action){
   }else if(action==='REMOVE'){
     const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
     scan.count++;saveData();updateSD();
-    setFb('ok','REMOVE logged: '+biBagId);
+    setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
   }else{
-    setFb('ok',action+' ready — now scan a location, then scan more bags');
+    setFb('ok',t('scanFb.actionReady',{action:action}));
   }
 }
 document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id==='m-baginfo')document.getElementById('m-baginfo').classList.remove('open')});
@@ -4577,7 +4640,7 @@ async function printRef(){const sheet=document.getElementById('ref-print-sheet')
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 function setFb(type,msg){const el=document.getElementById('scan-fb');el.className='fb-'+type;el.textContent=msg}
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
-function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
+function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
 function processScan(raw){
   // Replace _ with - (German HID keyboard fix)
   let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
@@ -4599,27 +4662,27 @@ function processScan(raw){
     });
     if(matchBatch){
       val=matchBatch.batchId+'-'+scannedBag;
-      setFb('info','Matched: '+val+' from '+matchBatch.batchId);
+      setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
     }else{
-      setFb('err','No batch found for '+val+' — check species/strain/date match');
+      setFb('err',t('scanFb.noBatchFound',{val:val}));
       return;
     }
   }
   if(ACTIONS.includes(val)){
     scan.action=val;scan.from=null;scan.to=null;scan.harvestBag=null;
     document.getElementById('harvest-panel').style.display='none';updateSD();
-    setFb('ok',{ADD:'Action: ADD → scan location or rack, then bags',MOVE:'Action: MOVE → scan FROM location',REMOVE:'Action: REMOVE → scan bags',HARVEST:'Action: HARVEST → scan a bag to log its weight'}[val]);return;
+    setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
   }
   if(LOCS.includes(val)){
-    if(scan.action==='ADD'){scan.to=val;updateSD();setFb('ok','Location: '+val+' → now scan bags (location stays until you change it)');return}
-    if(scan.action==='MOVE'&&!scan.from){scan.from=val;updateSD();setFb('ok','From: '+val+' → scan the TO location');return}
-    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb('ok','To: '+val+' → now scan bags');return}
-    setFb('err','Set an action first — scan ADD, MOVE, REMOVE or HARVEST.');return;
+    if(scan.action==='ADD'){scan.to=val;updateSD();setFb('ok',t('scanFb.location',{loc:val}));return}
+    if(scan.action==='MOVE'&&!scan.from){scan.from=val;updateSD();setFb('ok',t('scanFb.from',{loc:val}));return}
+    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb('ok',t('scanFb.to',{loc:val}));return}
+    setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
   if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val)){
     const c=cultures.find(x=>x.id.toUpperCase()===val);
-    if(c){go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok','Culture scanned: '+val+' → lineage view');return}
+    if(c){go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok',t('scanFb.cultureScanned',{val:val}));return}
   }
   const isBag=/-\d{2}$/.test(val);
   const batchId=isBag?val.split('-').slice(0,-1).join('-'):val;
@@ -4627,14 +4690,14 @@ function processScan(raw){
   if(batch||isBag){
     if(!scan.action){openBagInfo(val,batchId,batch);return}
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
-    if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
-    if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
+    if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
+    if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err',t('scanFb.scanFromTo'));return}
     const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
     scan.count++;saveData();
-    setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
+    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}));
     updateSD();return;
   }
-  setFb('err','Unknown barcode: '+val+'. Check the batch exists first.');
+  setFb('err',t('scanFb.unknown',{val:val}));
 }
 const si=document.getElementById('scan-inp');
 si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
