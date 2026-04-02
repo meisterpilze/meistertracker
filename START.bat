@@ -2,6 +2,26 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Meisterpilze Lab Tracker
+
+REM ============================================================
+REM  Self-relaunch guard: git reset overwrites this file mid-run,
+REM  which corrupts the batch interpreter on Windows. We copy
+REM  ourselves to a temp file and re-execute from there so the
+REM  running script is never modified.
+REM ============================================================
+if not "%~1"=="--relaunched" (
+    set "TMPBAT=%TEMP%\meisterpilze_start_%RANDOM%.bat"
+    copy /y "%~f0" "!TMPBAT!" >nul
+    cmd /c ""!TMPBAT!" --relaunched "%~dp0""
+    set "RC=!errorlevel!"
+    del "!TMPBAT!" >nul 2>&1
+    if !RC! neq 0 ( pause )
+    exit /b !RC!
+)
+
+REM When relaunched, the second argument is the original directory
+cd /d "%~2"
+
 echo.
 echo  ========================================
 echo    Meisterpilze Lab Tracker
@@ -37,7 +57,6 @@ if %errorlevel% neq 0 (
             echo.
             echo  ERROR: Automatic Node.js installation failed.
             echo  Please install manually from https://nodejs.org
-            pause
             exit /b 1
         )
         set "NEED_PATH_REFRESH=1"
@@ -46,7 +65,6 @@ if %errorlevel% neq 0 (
         echo  Please install Node.js manually from https://nodejs.org
         echo  Then run this script again.
         echo.
-        pause
         exit /b 1
     )
 )
@@ -64,7 +82,6 @@ if %errorlevel% neq 0 (
             echo.
             echo  ERROR: Automatic Git installation failed.
             echo  Please install manually from https://git-scm.com
-            pause
             exit /b 1
         )
         set "NEED_PATH_REFRESH=1"
@@ -88,7 +105,6 @@ if %errorlevel% neq 0 (
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
     echo  ^(Windows needs a new terminal to pick up the new PATH.^)
     echo.
-    pause
     exit /b 1
 )
 for /f "tokens=*" %%v in ('node --version') do set "NODE_VER=%%v"
@@ -101,7 +117,6 @@ if %errorlevel% neq 0 (
     call npm install -g pm2
     if !errorlevel! neq 0 (
         echo  ERROR: Failed to install PM2.
-        pause
         exit /b 1
     )
     call :refresh_path
@@ -110,7 +125,6 @@ call :check_pm2
 if %errorlevel% neq 0 (
     echo  ERROR: PM2 is still not found after installation.
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
-    pause
     exit /b 1
 )
 for /f "tokens=*" %%v in ('pm2 --version 2^>nul') do set "PM2_VER=%%v"
@@ -142,10 +156,9 @@ REM  Step 2: Install dependencies
 REM ============================================================
 echo.
 echo [2/5] Installing dependencies...
-call npm install --production
+call npm install --omit=dev
 if %errorlevel% neq 0 (
     echo  ERROR: npm install failed.
-    pause
     exit /b 1
 )
 
@@ -177,6 +190,13 @@ REM  Step 5: Start / Restart server via PM2
 REM ============================================================
 echo.
 echo [5/5] Starting server...
+
+REM Kill any stale node processes on our port before starting
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:3000.*LISTENING"') do (
+    echo  -^> Killing stale process on port 3000 ^(PID %%P^)...
+    taskkill /PID %%P /F >nul 2>&1
+)
+
 pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
 if %errorlevel% equ 0 (
     echo  -^> Process found, restarting...
@@ -199,10 +219,9 @@ if %errorlevel% neq 0 (
     echo.
     echo  ERROR: Server process crashed on startup.
     echo.
-    echo  To see the error run:
-    echo    pm2 logs %PM2_PROCESS_NAME%
+    echo  Recent error log:
+    pm2 logs %PM2_PROCESS_NAME% --lines 15 --nostream --err 2>nul
     echo.
-    pause
     exit /b 1
 )
 
