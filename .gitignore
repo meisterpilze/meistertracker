@@ -16,3 +16,6 @@ data.json
 
 # Calendars
 calendars/
+
+# Environment
+.env
