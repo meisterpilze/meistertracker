@@ -706,6 +706,7 @@ const server=http.createServer((req,res)=>{
           ['scanLog', existing.scanLog, incoming.scanLog],
           ['harvests', existing.harvests, incoming.harvests],
           ['cultures', existing.cultures, incoming.cultures],
+          ['assets', existing.assets, incoming.assets],
         ];
         for(const [name, old, inc] of checks){
           if(old && old.length > 0 && (!inc || inc.length === 0)){
