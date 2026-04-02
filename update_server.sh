@@ -6,16 +6,24 @@ set -e
 # Configuration
 PM2_PROCESS_NAME="meisterpilze"
 
-echo "==== Starting Meisterpilze Server Update ===="
+echo "==== Starting Meisterpilze Server Setup & Update ===="
 
-# 0. Check for PM2
-if ! command -v pm2 &> /dev/null; then
-    echo "Error: pm2 is not installed or not in PATH."
-    echo "This script is intended for the production server environment."
+# 0. Check for Node.js
+if ! command -v node &> /dev/null; then
+    echo "Error: Node.js is not installed or not in PATH."
+    echo "Install it from https://nodejs.org/ or via your package manager."
     exit 1
 fi
+echo "  -> Node.js $(node --version) found."
 
-# 1. Sync to latest remote main (force server to match GitHub)
+# 1. Install PM2 if not present
+if ! command -v pm2 &> /dev/null; then
+    echo "[0/3] PM2 not found, installing globally..."
+    npm install -g pm2
+fi
+echo "  -> PM2 $(pm2 --version) found."
+
+# 2. Sync to latest remote main (force local to match GitHub)
 echo "[1/3] Updating code from git (reset to origin/main)..."
 
 if ! git fetch origin; then
@@ -28,7 +36,7 @@ if ! git reset --hard origin/main; then
     exit 1
 fi
 
-# 2. Back up data.json before restart (safety measure)
+# 3. Back up data.json before restart (safety measure)
 echo "[2/3] Backing up data..."
 BACKUP_DIR="backups"
 mkdir -p "$BACKUP_DIR"
@@ -39,7 +47,7 @@ else
     echo "  -> No data.json found, skipping backup."
 fi
 
-# 3. Restart Server Process
+# 4. Restart or Start Server Process
 echo "[3/3] Restarting Server Process..."
 if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
     echo "  -> Process found, attempting reload..."
@@ -52,3 +60,4 @@ fi
 
 echo "==== Update Completed Successfully ===="
 echo "The server is now running the latest version."
+echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
