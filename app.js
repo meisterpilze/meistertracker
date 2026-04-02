@@ -26,7 +26,7 @@ const REF_GROUPS=[
 ];
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={};
+let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={};
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
 let spMap={};
@@ -44,7 +44,7 @@ async function loadData(){
   }catch{setSyncStatus('err','Sync error')}
 }
 function applyData(d){
-  batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
+  batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};
@@ -64,7 +64,7 @@ function defaultInventory(){
 async function saveData(){
   if(saving)return;saving=true;setSyncStatus('busy','Saving...');
   try{
-    await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,movements,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
+    await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
     setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
   }catch{setSyncStatus('err','Save error — check server is running')}
   finally{saving=false}
@@ -465,8 +465,7 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);
-    scan.count++;
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);    scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -479,8 +478,7 @@ function locRemoveSelected(){
   if(!confirm('Remove '+n+' bag'+(n!==1?'s':'')+'?'))return;
   const now=new Date().toISOString();
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);
-    scan.count++;
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);    scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -1258,8 +1256,7 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
-    scan.count++;saveData();updateSD();
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);    scan.count++;saveData();updateSD();
     setFb('ok','REMOVE logged: '+biBagId);
   }else{
     setFb('ok',action+' ready — now scan a location, then scan more bags');
@@ -1458,8 +1455,7 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
-    scan.count++;saveData();
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);    scan.count++;saveData();
     setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
     updateSD();return;
   }
