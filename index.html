@@ -1,0 +1,2405 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meisterpilze Lab Tracker</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a1a1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meisterpilze">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f4f0;color:#1a1a1a;font-size:14px}
+
+/* -- Top bar -- */
+.topbar{background:#fff;border-bottom:1px solid #e5e3dd;padding:0 16px;display:flex;align-items:center;gap:12px;height:50px;position:sticky;top:0;z-index:100}
+.logo{font-size:14px;font-weight:600;white-space:nowrap}
+.logo span{color:#888;font-weight:400;font-size:12px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#ddd;cursor:pointer;flex-shrink:0}
+.sync-dot.ok{background:#4ade80}.sync-dot.err{background:#f87171}.sync-dot.busy{background:#fbbf24}
+#sync-label{font-size:10px;color:#aaa}
+.nav{display:flex;gap:2px;margin-left:auto}
+.nav button{padding:6px 14px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#666;font-family:inherit;transition:background .1s,color .1s}
+.nav button.active{background:#1a1a1a;color:#fff}
+.nav button:hover:not(.active){background:#f0ede8}
+.nav button.alert::after{content:'';position:absolute;top:4px;right:4px;width:7px;height:7px;background:#e74c3c;border-radius:50%;border:1.5px solid #fff}
+.nav button{position:relative}
+
+/* -- Scan strip -- */
+.scanstrip{background:#fff;border-bottom:1px solid #e5e3dd;padding:7px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.scan-inp{font-size:15px;font-family:ui-monospace,monospace;border:2px solid #ddd;border-radius:7px;padding:7px 12px;flex:1;min-width:200px}
+.scan-inp:focus{border-color:#1a1a1a;outline:none}
+.chips{display:flex;gap:4px;flex-shrink:0}
+.chip{background:#f5f4f0;border-radius:6px;padding:4px 8px;text-align:center;min-width:54px}
+.chip-l{font-size:9px;color:#999;line-height:1}
+.chip-v{font-size:12px;font-weight:600;color:#1a1a1a;margin-top:1px}
+.btn-xs{padding:4px 10px;font-size:11px;font-weight:500;border-radius:6px;cursor:pointer;border:1px solid #ddd;background:#fff;font-family:inherit;white-space:nowrap}
+.btn-xs:hover{background:#f5f4f0}
+.btn-xs.green{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+
+/* -- Feedback bar -- */
+#scan-fb{padding:5px 16px;font-size:12px;min-height:26px;display:flex;align-items:center;border-bottom:1px solid #f0ede8}
+.fb-ok{background:#dcfce7;color:#166534}
+.fb-err{background:#fee2e2;color:#991b1b}
+.fb-info{background:#f9f8f5;color:#666}
+.fb-harvest{background:#fef3c7;color:#92400e}
+
+/* -- Harvest panel -- */
+#harvest-panel{padding:10px 16px;background:#fffbeb;border-bottom:1px solid #fde68a;display:none}
+#harvest-panel .inner{max-width:980px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+
+/* -- Layout -- */
+.main{padding:14px;max-width:980px;margin:0 auto}
+.page{display:none}.page.active{display:block}
+.card{background:#fff;border:1px solid #e5e3dd;border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.sec{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#999;margin-bottom:8px}
+
+/* -- Sub-tabs -- */
+.stabs{display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid #e5e3dd;padding-bottom:8px}
+.stab{padding:5px 14px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#666;font-family:inherit}
+.stab.active{background:#1a1a1a;color:#fff}
+.stab:hover:not(.active){background:#f0ede8}
+.sp{display:none}.sp.active{display:block}
+
+/* -- Forms -- */
+label{font-size:12px;color:#666;display:block;margin-bottom:3px}
+input,select,textarea{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;background:#fff;color:#1a1a1a;font-family:inherit}
+textarea{resize:vertical;min-height:58px;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1a1a1a;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
+.btn{padding:7px 14px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-family:inherit;transition:background .1s}
+.btn:hover{background:#f5f4f0}
+.btn-p{background:#1a1a1a;color:#fff;border-color:transparent}.btn-p:hover{background:#333}
+.btn-r{background:#fff5f5;color:#b91c1c;border-color:#fecaca}.btn-r:hover{background:#fee2e2}
+.btn-sm{padding:3px 9px;font-size:11px}
+
+/* -- Grid -- */
+.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+
+/* -- Metric cards -- */
+.met{background:#f5f4f0;border-radius:8px;padding:10px 12px}
+.met-l{font-size:11px;color:#888;margin-bottom:2px}
+.met-v{font-size:20px;font-weight:600}
+
+/* -- Badges -- */
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px}
+.b-inc{background:#dbeafe;color:#1e40af}.b-tent{background:#dcfce7;color:#166534}
+.b-spawn{background:#f3e8ff;color:#6b21a8}.b-contam{background:#fee2e2;color:#991b1b}
+.b-done{background:#f5f4f0;color:#888}
+.b-add{background:#dcfce7;color:#166534}.b-move{background:#dbeafe;color:#1e40af}
+.b-remove{background:#fee2e2;color:#991b1b}.b-harvest{background:#fef3c7;color:#92400e}
+.badge-mc{background:#f3e8ff;color:#6b21a8}.badge-pd{background:#dbeafe;color:#1e40af}
+.badge-lc{background:#dcfce7;color:#166534}.badge-g2g{background:#fef3c7;color:#92400e}
+.badge-active{background:#dcfce7;color:#166534}.badge-stored{background:#dbeafe;color:#1e40af}
+.badge-used{background:#f5f4f0;color:#888}.badge-contam{background:#fee2e2;color:#991b1b}
+
+/* -- Tables -- */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#999;text-align:left;padding:5px 8px;border-bottom:1px solid #e5e3dd}
+td{padding:6px 8px;border-bottom:1px solid #f0ede8;color:#1a1a1a;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f9f8f5}
+.alert-tr td{background:#fffbeb!important}
+
+/* -- Misc -- */
+.empty{text-align:center;color:#aaa;font-size:12px;padding:2rem}
+.sp-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.sub-tag{font-size:10px;background:#f5f4f0;color:#666;padding:2px 6px;border-radius:99px;margin-right:2px}
+.harvest-bar{height:4px;border-radius:2px;background:#e5e3dd;overflow:hidden;margin-top:3px}
+.harvest-bar-fill{height:100%;border-radius:2px;background:#f39c12}
+.todo-row{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:8px;margin-bottom:6px;border:1px solid #e5e3dd;background:#fff}
+.todo-row.urgent{border-color:#fecaca;background:#fff5f5}
+.todo-row.warn{border-color:#fde68a;background:#fffbeb}
+.todo-row input[type=checkbox]{width:15px;height:15px;margin-top:2px;flex-shrink:0;cursor:pointer}
+.done-text{text-decoration:line-through;color:#aaa}
+.pdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.pdot.high{background:#e74c3c}.pdot.med{background:#f39c12}.pdot.low{background:#2ecc71}
+.bc-cell{border:1px solid #e5e3dd;border-radius:7px;padding:6px;text-align:center;background:#fff}
+.rack-card{border:1px solid #e5e3dd;border-radius:9px;padding:10px 12px;cursor:pointer;background:#fff}
+.rack-card:hover{background:#f9f8f5}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:99px;margin-left:4px;vertical-align:middle}
+.tag-assignee{background:#e0e7ff;color:#3730a3}
+.tag-company{background:#fef3c7;color:#92400e}
+.tag-due{background:#f0fdf4;color:#166534}
+.caldav-status{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:6px;vertical-align:middle}
+.caldav-status.synced{background:#4ade80}
+.caldav-status.pending{background:#fbbf24}
+.caldav-status.error{background:#f87171}
+.member-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;border:1px solid #e5e3dd;margin-bottom:4px;background:#fff}
+.member-row .name{flex:1;font-size:13px;font-weight:500}
+
+/* -- Modals -- */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:22px;width:92%;max-width:460px;max-height:92vh;overflow-y:auto}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:8px}
+.modal p{font-size:13px;color:#555;margin-bottom:12px;line-height:1.6}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+
+@media print{
+  .topbar,.scanstrip,#scan-fb,#harvest-panel,.no-print{display:none!important}
+  .main{padding:0;max-width:100%}
+  .page,.sp{display:none!important}
+  #print-sheet,#ref-print-sheet{display:block!important;padding:10px}
+  body{background:#fff}.card{border:none;padding:0}
+}
+#print-sheet,#ref-print-sheet{display:none}
+</style>
+<script src="/lib/jsbarcode.min.js"></script>
+<script src="/lib/qrcode.min.js"></script>
+<script src="/lib/chart.min.js"></script>
+</head>
+<body>
+
+<!-- Add bags modal -->
+<div class="modal-bg" id="m-addbags">
+  <div class="modal">
+    <h3>Add bags to batch</h3>
+    <p id="ab-info" style="font-size:13px;color:#555;margin-bottom:12px"></p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label>How many bags to add</label>
+        <input type="number" id="ab-qty" value="1" min="1" max="200" style="width:100px" />
+      </div>
+      <div id="ab-preview" style="font-size:12px;color:#666;background:#f9f8f5;border-radius:7px;padding:8px 10px;display:none"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="document.getElementById('m-addbags').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p" onclick="confirmAddBags()">Add bags</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal-bg" id="m-confirm">
+  <div class="modal"><h3 id="m-title"></h3><p id="m-body"></p>
+    <div class="modal-btns"><button class="btn" onclick="closeConfirm()">Cancel</button><button class="btn btn-r" id="m-ok">Confirm</button></div>
+  </div>
+</div>
+<!-- Note modal -->
+<div class="modal-bg" id="m-note">
+  <div class="modal"><h3 id="m-note-title">Edit note</h3>
+    <textarea id="m-note-text" rows="4" placeholder="Type your note here..."></textarea>
+    <div class="modal-btns"><button class="btn" onclick="closeNote()">Cancel</button><button class="btn btn-p" onclick="saveNote()">Save</button></div>
+  </div>
+</div>
+<!-- Batch-add modal -->
+<div class="modal-bg" id="m-batchadd">
+  <div class="modal"><h3>Add entire batch to location</h3>
+    <p>All bags will be logged as ADD in one step.</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div><label>Batch</label><select id="ba-batch" onchange="baPreview()"><option value="">— choose batch —</option></select></div>
+      <div><label>Location / rack</label><select id="ba-loc" onchange="baPreview()"></select></div>
+      <div id="ba-prev" style="font-size:12px;color:#666;min-height:16px"></div>
+    </div>
+    <div class="modal-btns"><button class="btn" onclick="closeBatchAdd()">Cancel</button><button class="btn btn-p" onclick="confirmBatchAdd()">Add all bags</button></div>
+  </div>
+</div>
+
+<!-- Move bag modal -->
+<div class="modal-bg" id="m-locmove" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:420px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h3 id="lm-title" style="font-family:monospace;font-size:15px">Bag</h3>
+      <button class="btn btn-sm" onclick="document.getElementById('m-locmove').classList.remove('open')">Close</button>
+    </div>
+    <div id="lm-info" style="font-size:12px;color:#888;margin-bottom:12px"></div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Move to:</div>
+    <div id="lm-grid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    <div id="lm-confirm" style="display:none"></div>
+    <div style="border-top:1px solid #e5e3dd;margin-top:14px;padding-top:12px">
+      <button class="btn btn-sm btn-r" onclick="locRemoveBag()" style="width:100%">Remove this bag</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bag info modal — opens when scanning a bag with no action set -->
+<div class="modal-bg" id="m-baginfo">
+  <div class="modal" style="max-width:540px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 id="bi-title">Bag info</h3>
+      <button class="btn btn-sm" onclick="document.getElementById('m-baginfo').classList.remove('open')">X Close</button>
+    </div>
+    <div id="bi-body"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn btn-sm btn-p" onclick="biSetAction('ADD')">+ ADD this bag</button>
+      <button class="btn btn-sm btn-p" onclick="biSetAction('MOVE')">Move MOVE this bag</button>
+      <button class="btn btn-sm btn-p" onclick="biSetAction('HARVEST')">Harvest HARVEST this bag</button>
+      <button class="btn btn-sm btn-r" onclick="biSetAction('REMOVE')">X REMOVE this bag</button>
+    </div>
+  </div>
+</div>
+<div class="topbar no-print">
+  <div class="logo">Meisterpilze <span>lab</span></div>
+  <span class="sync-dot" id="sync-dot" title="Click to sync" onclick="loadData()"></span>
+  <span id="sync-label"></span>
+  <nav class="nav">
+    <button class="active" id="n-dash" onclick="go('dash','n-dash')">Dashboard</button>
+    <button id="n-batch" onclick="go('batch','n-batch')">Batches</button>
+    <button id="n-lab" onclick="go('lab','n-lab')">Lab</button>
+    <button id="n-inv" onclick="go('inv','n-inv')">Inventory</button>
+    <button id="n-print" onclick="go('print','n-print')">Print</button>
+    <button id="n-todo" onclick="go('todo','n-todo')">To-do</button>
+    <button id="n-settings" onclick="go('settings','n-settings')">More</button>
+  </nav>
+</div>
+
+<!-- Global scan strip -->
+<div class="scanstrip no-print">
+  <input type="text" id="scan-inp" class="scan-inp" placeholder="Scan barcode here — works on every tab..." autocomplete="off" />
+  <div class="chips">
+    <div class="chip"><div class="chip-l">Action</div><div class="chip-v" id="s-action">—</div></div>
+    <div class="chip"><div class="chip-l">From</div><div class="chip-v" id="s-from">—</div></div>
+    <div class="chip"><div class="chip-l">To</div><div class="chip-v" id="s-to">—</div></div>
+    <div class="chip"><div class="chip-l">Count</div><div class="chip-v" id="s-count">0</div></div>
+  </div>
+  <button class="btn-xs" onclick="resetScan()">Reset</button>
+  <button class="btn-xs green" onclick="openBatchAdd()">Add batch</button>
+</div>
+<div id="harvest-panel">
+  <div class="inner">
+    <div><div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:3px" id="hp-lbl">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:#fff8e7" /></div>
+    <div><label style="color:#92400e;font-size:11px">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
+    <div><label style="color:#92400e;font-size:11px">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
+    <button class="btn btn-p btn-sm" onclick="confirmHarvest()">Log harvest</button>
+    <button class="btn btn-sm" onclick="cancelHarvest()">Cancel</button>
+  </div>
+</div>
+<div id="scan-fb" class="fb-info">Ready — scan ADD, MOVE, REMOVE or HARVEST to begin</div>
+
+<div class="main">
+
+<!-- ══ DASHBOARD ══ -->
+<div class="page active" id="p-dash">
+  <!-- KPI strip -->
+  <div id="metrics" class="g4" style="margin-bottom:10px"></div>
+
+  <!-- Alerts -->
+  <div class="card" id="dash-alerts-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin:0">Alerts &amp; tasks</div>
+      <button class="btn btn-sm" onclick="go('todo','n-todo');openStab('todo','todo')">See all</button>
+    </div>
+    <div id="dash-alerts"></div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="g2" style="margin-bottom:10px">
+    <!-- Pipeline funnel -->
+    <div class="card">
+      <div class="sec">Production pipeline</div>
+      <div id="pipeline-chart"></div>
+    </div>
+    <!-- Harvest by species -->
+    <div class="card">
+      <div class="sec">Harvest by species (g)</div>
+      <canvas id="harvest-chart" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- Batch status -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin:0">Live batch status</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" id="status-q" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
+        <button class="btn btn-sm" id="status-view-btn" onclick="toggleStatusView()">Cards</button>
+      </div>
+    </div>
+    <!-- Table view (default) -->
+    <div id="status-table-view" style="overflow-x:auto"><table>
+      <thead><tr><th>Batch ID</th><th>Species</th><th>Strain</th><th>SPAWN</th><th>INC</th><th>T1</th><th>T2</th><th>T3</th><th>CONTAM</th><th>Total</th><th>Harvested</th><th>Due</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody id="status-body"></tbody>
+    </table></div>
+    <!-- Card view (toggle) -->
+    <div id="status-card-view" style="display:none;display:none"></div>
+  </div>
+
+  <!-- Racks -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin:0">Rack occupancy</div>
+      <span style="font-size:11px;color:#aaa">Click a rack to see contents</span>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="sec" style="margin-bottom:6px">SPAWN — 2 racks</div>
+      <div id="racks-spawn" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+    </div>
+    <div>
+      <div class="sec" style="margin-bottom:6px">INC — 10 racks</div>
+      <div id="racks-inc" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
+    </div>
+    <div id="rack-detail" style="display:none;margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0" id="rack-detail-title">Rack</div>
+        <button class="btn btn-sm" onclick="document.getElementById('rack-detail').style.display='none'">Close</button>
+      </div>
+      <div id="rack-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Location tabs -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin:0">Bags by location</div>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px" id="loc-tabs"></div>
+    <div id="loc-body"></div>
+  </div>
+</div>
+
+<!-- ══ BATCHES ══ -->
+<div class="page" id="p-batch">
+  <div class="stabs">
+    <button class="stab active" id="st-batch-list" onclick="openStab('batch','list')">All batches</button>
+    <button class="stab" id="st-batch-new" onclick="openStab('batch','new')">New batch</button>
+    <button class="stab" id="st-batch-harvest" onclick="openStab('batch','harvest')">Harvests</button>
+  </div>
+  <!-- All batches -->
+  <div class="sp active" id="sp-batch-list">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">All batches</div>
+        <input type="text" id="batch-q" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderBatches()" />
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Batch ID</th><th>Species</th><th>Strain</th><th>Qty</th><th>Inc</th><th>Substrate</th><th>Source</th><th>Created</th><th>Due</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="batches-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <!-- New batch -->
+  <div class="sp" id="sp-batch-new">
+    <div class="g2">
+      <div class="card">
+        <div class="sec">Create new batch</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div class="g2">
+            <div><label>Batch type</label>
+              <select id="nb-type" onchange="nbTypeChange()">
+                <option value="block">Fruiting block</option>
+                <option value="grain">Grain spawn bag</option>
+              </select>
+            </div>
+            <div><label>Bag weight</label>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px" id="nb-weight-btns">
+                <button type="button" class="btn btn-sm btn-p" id="wbtn-3" onclick="setBagWeight(3)">3 kg</button>
+                <button type="button" class="btn btn-sm" id="wbtn-5" onclick="setBagWeight(5)">5 kg</button>
+                <button type="button" class="btn btn-sm" id="wbtn-07" onclick="setBagWeight(0.7)" style="display:none">0.7 kg</button>
+                <button type="button" class="btn btn-sm" id="wbtn-1" onclick="setBagWeight(1)" style="display:none">1 kg</button>
+                <button type="button" class="btn btn-sm" id="wbtn-2" onclick="setBagWeight(2)" style="display:none">2 kg</button>
+                <button type="button" class="btn btn-sm" id="wbtn-5g" onclick="setBagWeight(5)" style="display:none">5 kg</button>
+              </div>
+              <input type="text" inputmode="decimal" id="nb-weight" value="3" style="margin-top:6px;width:100px" oninput="nbPreview()" autocomplete="off" />
+            </div>
+          </div>
+          <div class="g2">
+            <div><label>Species</label><input type="text" id="nb-sp" placeholder="e.g. Kings, Oyster" oninput="nbPreview()" /></div>
+            <div><label>Strain</label><input type="text" id="nb-st" placeholder="e.g. Erl, XK5" oninput="nbPreview()" /></div>
+          </div>
+          <div class="g2">
+            <div><label>Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" oninput="nbPreview()" /></div>
+            <div><label>Incubation days</label><input type="number" id="nb-days" value="14" min="1" max="90" /></div>
+          </div>
+          <details style="background:#f9f8f5;border-radius:8px;padding:10px">
+            <summary style="font-size:12px;color:#666;cursor:pointer">Substrate (optional)</summary>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+              <div class="g2">
+                <div><label>Hardwood %</label><input type="number" id="nb-hw" placeholder="80" min="0" max="100" oninput="nbSubSum()" /></div>
+                <div><label>Wheat bran %</label><input type="number" id="nb-wb" placeholder="20" min="0" max="100" oninput="nbSubSum()" /></div>
+              </div>
+              <div class="g2">
+                <div><label>Field capacity %RH</label><input type="number" id="nb-rh" placeholder="65" min="0" max="100" oninput="nbPreview()" /></div>
+                <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
+                  <input type="checkbox" id="nb-gyp" style="width:16px;height:16px;margin:0" />
+                  <label style="margin:0;font-size:13px;color:#444;cursor:pointer" for="nb-gyp">Gypsum added</label>
+                </div>
+              </div>
+              <div id="nb-subsum" style="font-size:11px;color:#888"></div>
+            </div>
+          </details>
+          <div><label>Source culture (optional)</label><select id="nb-culture"><option value="">— none —</option></select><div style="font-size:11px;color:#aaa;margin-top:3px">Link to the PD or LC used to inoculate this batch</div></div>
+          <div><label>Notes (optional)</label><textarea id="nb-notes" rows="2" placeholder="Any notes..."></textarea></div>
+          <div class="met"><div class="met-l">Batch ID preview</div><div id="nb-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
+          <div id="nb-mat-preview" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#166534;line-height:1.8"></div>
+          <button class="btn btn-p" onclick="createBatch()">Create batch</button>
+        </div>
+      </div>
+      <div class="card" id="nb-result" style="display:none">
+        <div class="sec">Generated bag IDs</div>
+        <div id="nb-bags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:250px;overflow-y:auto"></div>
+        <div style="border-top:1px solid #e5e3dd;margin-top:12px;padding-top:12px">
+          <button class="btn btn-p" style="width:100%" onclick="goToPrintBatch()">Print labels for this batch</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Harvests -->
+  <div class="sp" id="sp-batch-harvest">
+    <div class="g3" id="harvest-metrics" style="margin-bottom:10px"></div>
+    <!-- Harvest charts row -->
+    <div class="g2" style="margin-bottom:10px">
+      <div class="card">
+        <div class="sec">Total yield per batch (g)</div>
+        <canvas id="batch-yield-chart" height="180"></canvas>
+      </div>
+      <div class="card">
+        <div class="sec">Harvest over time (weekly, g)</div>
+        <canvas id="harvest-timeline-chart" height="180"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Per batch totals</div>
+      </div>
+      <div id="harvest-totals"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Harvest log</div>
+        <input type="text" id="harvest-q" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderHarvests()" />
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Date</th><th>Batch</th><th>Bag</th><th>Species</th><th>Strain</th><th>Flush</th><th>Grams</th></tr></thead>
+        <tbody id="harvest-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LAB ══ -->
+<div class="page" id="p-lab">
+  <div class="stabs">
+    <button class="stab active" id="st-lab-cultures" onclick="openStab('lab','cultures')">Cultures</button>
+    <button class="stab" id="st-lab-work" onclick="openStab('lab','work')">Log work</button>
+    <button class="stab" id="st-lab-lineage" onclick="openStab('lab','lineage')">Lineage</button>
+  </div>
+  <!-- Cultures -->
+  <div class="sp active" id="sp-lab-cultures">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Culture library</div>
+        <div style="display:flex;gap:6px">
+          <select id="cult-type" onchange="renderCultures()" style="width:auto;font-size:12px;padding:4px 8px">
+            <option value="all">All types</option><option value="MC">Mother cultures</option>
+            <option value="PD">Petri dishes</option><option value="LC">Liquid cultures</option>
+          </select>
+          <select id="cult-stat" onchange="renderCultures()" style="width:auto;font-size:12px;padding:4px 8px">
+            <option value="all">All statuses</option><option value="active">Active</option>
+            <option value="stored">Stored</option><option value="used">Used up</option><option value="contam">Contaminated</option>
+          </select>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>ID</th><th>Type</th><th>Species</th><th>Strain</th><th>Parent</th><th>Created</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="cultures-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <!-- Log work -->
+  <div class="sp" id="sp-lab-work">
+    <div class="g2">
+      <div class="card">
+        <div class="sec">Log clean room work</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div class="g2">
+            <div><label>Work type</label>
+              <select id="lw-type" onchange="lwUpdate()">
+                <option value="MC">Register mother culture</option>
+                <option value="PD">Petri dish transfer</option>
+                <option value="LC">Liquid culture prep</option>
+                <option value="G2G">Grain-to-grain (G2G)</option>
+              </select>
+            </div>
+            <div><label>Species</label>
+              <input type="text" id="lw-sp" placeholder="e.g. Kings" list="sp-list" oninput="lwPreview()" />
+              <datalist id="sp-list"></datalist>
+            </div>
+          </div>
+          <div><label>Strain</label><input type="text" id="lw-st" placeholder="e.g. Erl, XK5" /></div>
+          <div id="lw-parent-row">
+            <label id="lw-parent-lbl">Parent culture</label>
+            <select id="lw-parent"><option value="">— none / new isolation —</option></select>
+          </div>
+          <div id="lw-source-row" style="display:none">
+            <label>Source (e.g. clone, spore print, wild)</label>
+            <input type="text" id="lw-source" placeholder="e.g. Clone from KINGS-250101-01-03" />
+          </div>
+          <div><label id="lw-qty-lbl">Quantity made</label><input type="number" id="lw-qty" value="1" min="1" max="50" oninput="lwPreview()" /></div>
+          <div><label>Notes (optional)</label><textarea id="lw-notes" rows="2" placeholder="Observations, conditions..."></textarea></div>
+          <div id="lw-prev-box" style="display:none;background:#f9f8f5;border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;color:#999;margin-bottom:3px">IDs that will be created</div>
+            <div id="lw-prev" style="font-family:monospace;font-size:12px;line-height:1.8"></div>
+          </div>
+          <button class="btn btn-p" onclick="logLabWork()">Log work</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="sec">Recent lab entries</div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Date</th><th>Type</th><th>ID created</th><th>Parent</th><th>Species</th></tr></thead>
+          <tbody id="lab-log-body"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+  <!-- Lineage -->
+  <div class="sp" id="sp-lab-lineage">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="sec" style="margin:0">Genetic lineage</div>
+        <select id="lineage-sel" onchange="renderLineage()" style="font-size:12px;padding:4px 8px;min-width:220px;width:auto">
+          <option value="">— select a culture or batch —</option>
+        </select>
+      </div>
+      <div id="lineage-body"><div class="empty">Select a culture or batch above to trace its lineage.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PRINT ══ -->
+<div class="page" id="p-print">
+  <!-- Printer status — always shown at top -->
+  <div class="card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:10px">
+    <div style="font-size:12px;color:#166534;line-height:1.7">
+      <strong>Printing directly to ZDesigner GK420d</strong> via the server — no dialog needed. Make sure the server is running and the printer is on.
+      <br><br>
+    </div>
+  </div>
+  <div class="stabs">
+    <button class="stab active" id="st-print-bags" onclick="openStab('print','bags')">Bag labels</button>
+    <button class="stab" id="st-print-lab" onclick="openStab('print','lab')">Lab labels</button>
+    <button class="stab" id="st-print-ref" onclick="openStab('print','ref')">Reference barcodes</button>
+  </div>
+  <!-- Bag labels -->
+  <div class="sp active" id="sp-print-bags">
+    <div class="card">
+      <div class="g2" style="margin-bottom:12px">
+        <div><label>Select batch</label><select id="print-batch" onchange="renderBagPreview()"><option value="">— choose batch —</option></select></div>
+        <div><label>Label content</label>
+          <select id="print-mode" onchange="renderBagPreview()">
+            <option value="id">Barcode + ID only</option>
+            <option value="full" selected>Barcode + ID + species/strain</option>
+            <option value="date">Barcode + ID + species + due date</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label>Print range</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="print-range" onchange="toggleBagRange()" style="min-width:140px">
+            <option value="all">All bags</option>
+            <option value="range">Bag range (from–to)</option>
+          </select>
+          <span id="bag-range-inputs" style="display:none;gap:6px;align-items:center">
+            <input type="number" id="bag-from" min="1" style="width:60px" placeholder="from" />
+            <span>–</span>
+            <input type="number" id="bag-to" min="1" style="width:60px" placeholder="to" />
+          </span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="printBagLabels()">Print labels (direct)</button>
+      </div>
+      <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 · GK420d 203dpi</p>
+    </div>
+    <div class="card"><div class="sec">Preview</div><div id="bag-preview" style="margin-top:8px"></div></div>
+  </div>
+  <!-- Lab labels -->
+  <div class="sp" id="sp-print-lab">
+    <div class="card">
+      <div class="g2" style="margin-bottom:12px">
+        <div>
+          <label>Filter cultures</label>
+          <select id="lab-filter" onchange="renderLabList()" style="margin-bottom:6px">
+            <option value="all">All active cultures</option>
+            <option value="MC">Mother cultures</option>
+            <option value="PD">Petri dishes</option>
+            <option value="LC">Liquid cultures</option>
+            <option value="today">Created today</option>
+          </select>
+          <div id="lab-list" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:7px;padding:6px"></div>
+        </div>
+        <div>
+          <label>Label includes</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:3px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-bc" checked style="width:auto;margin:0" onchange="renderLabPreview()"> Code 128 barcode</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-qr" checked style="width:auto;margin:0" onchange="renderLabPreview()"> QR code</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-sp" checked style="width:auto;margin:0"> Species + strain</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-par" checked style="width:auto;margin:0"> Parent ID</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-dt" checked style="width:auto;margin:0"> Date created</label>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-p" onclick="printLabLabels()">Print labels (direct)</button>
+          </div>
+          <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 + QR · 203dpi</p>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="sec">Preview</div><div id="lab-preview" style="margin-top:8px"></div></div>
+  </div>
+  <!-- Reference barcodes -->
+  <div class="sp" id="sp-print-ref">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Reference barcodes — print &amp; hang on wall</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:#444;margin:0">
+            <input type="checkbox" id="ref-qr" onchange="renderRefBarcodes()" style="width:auto;margin:0" /> QR codes
+          </label>
+          <button class="btn btn-sm btn-p" onclick="printRef()">Print sheet</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#666">Scanning works on every tab — just scan from this sheet at any time.</p>
+    </div>
+    <div id="ref-grid"></div>
+  </div>
+</div>
+
+<!-- ══ TO-DO ══ -->
+<div class="page" id="p-todo">
+  <div class="stabs">
+    <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')">Tasks</button>
+    <button class="stab" id="st-todo-team" onclick="openStab('todo','team')">Team</button>
+    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')">Calendar</button>
+  </div>
+  <!-- To-do -->
+  <div class="sp active" id="sp-todo-todo">
+    <div class="g3" id="todo-metrics" style="margin-bottom:10px"></div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Batch tasks</div>
+        <select id="todo-filter" onchange="renderTodo()" style="width:auto;font-size:12px;padding:4px 8px">
+          <option value="all">All</option><option value="urgent">Urgent only</option>
+        </select>
+      </div>
+      <div id="todo-auto"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Manual tasks</div>
+        <button class="btn btn-sm btn-p" onclick="addTask()">+ Add</button>
+      </div>
+      <div id="todo-manual"></div>
+      <div id="task-form" style="display:none;margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
+        <div class="g2" style="margin-bottom:8px">
+          <div><label>Task</label><input type="text" id="task-text" placeholder="e.g. Clean humidity tent" /></div>
+          <div><label>Priority</label><select id="task-prio"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High</option></select></div>
+        </div>
+        <div class="g2" style="margin-bottom:8px">
+          <div><label>Assign to</label><select id="task-assignee"><option value="">Everyone (company)</option></select></div>
+          <div><label>Due date (optional)</label><input type="date" id="task-due" /></div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label>Description (optional)</label><textarea id="task-desc" rows="2" placeholder="Additional details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-p btn-sm" onclick="saveTask()">Save</button>
+          <button class="btn btn-sm" onclick="document.getElementById('task-form').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Team -->
+  <div class="sp" id="sp-todo-team">
+    <div class="card">
+      <div class="sec">Team members</div>
+      <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.</p>
+      <div id="team-list"></div>
+      <div id="team-form" style="margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
+        <div class="g2" style="margin-bottom:8px">
+          <div><label>Name</label><input type="text" id="member-name" placeholder="e.g. Jonas" /></div>
+          <div><label>Role (optional)</label><input type="text" id="member-role" placeholder="e.g. Lab manager" /></div>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="addMember()">+ Add member</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CalDAV Calendar Sync -->
+  <div class="sp" id="sp-todo-caldav">
+    <div class="card">
+      <div class="sec">CalDAV calendar server</div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (use this in your calendar app)</div>
+        <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="sec" style="font-size:12px;margin:0">Optional: protect with password</div>
+        <div class="g2">
+          <div><label>Username</label><input type="text" id="caldav-user" placeholder="leave empty for open access" autocomplete="off" /></div>
+          <div><label>Password</label><input type="password" id="caldav-pass" placeholder="leave empty for open access" autocomplete="off" /></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+            <input type="checkbox" id="caldav-enabled" style="width:auto" /> Enable sync (push tasks to calendars)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;margin-left:16px">
+            <input type="checkbox" id="caldav-per-person" style="width:auto" /> Separate calendar per person
+          </label>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()">Save settings</button>
+          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn">Sync all tasks now</button>
+        </div>
+        <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec">How to connect</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">
+        <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
+        <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
+        <p style="margin-top:6px"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec">How it works</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">
+        <p><strong>Base calendar:</strong> All tasks go to a shared <code>meisterpilze-tasks</code> calendar.</p>
+        <p style="margin-top:6px"><strong>Per-person calendars:</strong> When enabled, tasks assigned to a team member get their own calendar (e.g. <code>meisterpilze-jonas</code>). Unassigned / company-wide tasks stay in the shared calendar.</p>
+        <p style="margin-top:6px"><strong>Two-way:</strong> Tasks are written to calendar files on this server. Calendar clients can read them via CalDAV. Changes made in calendar apps (marking done, editing) are saved back to the .ics files.</p>
+        <p style="margin-top:6px"><strong>Calendars on disk:</strong> Stored in <code>/calendars/</code> folder next to data.json. Each calendar is a folder with .ics files inside.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ MORE ══ -->
+<div class="page" id="p-settings">
+  <div class="stabs">
+    <button class="stab active" id="st-settings-log" onclick="openStab('settings','log')">Scan log</button>
+    <button class="stab" id="st-settings-backup" onclick="openStab('settings','backup')">Backup</button>
+  </div>
+  <!-- Scan log -->
+  <div class="sp active" id="sp-settings-log">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Scan log</div>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="log-q" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
+          <button class="btn btn-sm btn-r" onclick="clearLog()">Clear</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Time</th><th>Action</th><th>Batch</th><th>Bag</th><th>From</th><th>To</th><th>Species</th></tr></thead>
+        <tbody id="log-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <!-- Backup -->
+  <div class="sp" id="sp-settings-backup">
+    <div class="card">
+      <div class="sec">Export backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6">Download all data as a JSON file. Save to USB, cloud or email it to yourself.</p>
+      <button class="btn btn-p" onclick="exportBackup()">Download backup (.json)</button>
+    </div>
+    <div class="card">
+      <div class="sec">Import / restore backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6">Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="import-file" accept=".json" style="width:auto;flex:1" onchange="previewImport()" />
+        <button class="btn btn-r" id="import-btn" style="display:none" onclick="importBackup()">Restore</button>
+      </div>
+      <div id="import-preview" style="margin-top:8px;font-size:12px;color:#666"></div>
+    </div>
+    <div class="card">
+      <div class="sec">Sync info</div>
+      <p style="font-size:12px;color:#888;line-height:1.7">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ INVENTORY ══ -->
+<div class="page" id="p-inv">
+  <div class="stabs">
+    <button class="stab active" id="st-inv-stock" onclick="openStab('inv','stock')">Stock</button>
+    <button class="stab" id="st-inv-delivery" onclick="openStab('inv','delivery')">Log delivery</button>
+    <button class="stab" id="st-inv-log" onclick="openStab('inv','log')">Usage log</button>
+  </div>
+
+  <!-- Stock overview -->
+  <div class="sp active" id="sp-inv-stock">
+    <div id="inv-cards" class="g3" style="margin-bottom:10px"></div>
+    <div class="card">
+      <div class="sec">Alert thresholds</div>
+      <p style="font-size:12px;color:#888;margin-bottom:10px">Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".</p>
+      <div id="inv-thresholds"></div>
+    </div>
+  </div>
+
+  <!-- Log delivery -->
+  <div class="sp" id="sp-inv-delivery">
+    <div class="g2">
+      <div class="card">
+        <div class="sec">Log incoming delivery</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div><label>Material</label>
+            <select id="del-mat" onchange="delMatChange()">
+              <option value="hardwood">Hardwood pellets</option>
+              <option value="wheatbran">Wheat bran</option>
+              <option value="gypsum">Gypsum</option>
+              <option value="grain">Grain</option>
+            </select>
+          </div>
+          <div id="del-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
+          <div><label>Amount received (kg)</label>
+            <input type="text" inputmode="decimal" id="del-kg" placeholder="e.g. 1000 or 847.5" style="font-size:16px;padding:10px 12px" oninput="delPreview()" autocomplete="off" />
+          </div>
+          <div id="del-preview" style="display:none;font-size:12px;color:#166534;background:#f0fdf4;border-radius:7px;padding:8px 10px"></div>
+          <div><label>Supplier / note (optional)</label><input type="text" id="del-note" placeholder="e.g. Agrobs, batch 2025-03" /></div>
+          <button class="btn btn-p" onclick="logDelivery()">Add to stock</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="sec">Manual adjustment</div>
+        <p style="font-size:12px;color:#888;margin-bottom:10px">Use this to correct stock after a physical count, spoilage, or any discrepancy.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div><label>Material</label>
+            <select id="adj-mat" onchange="adjMatChange()">
+              <option value="hardwood">Hardwood pellets</option>
+              <option value="wheatbran">Wheat bran</option>
+              <option value="gypsum">Gypsum</option>
+              <option value="grain">Grain</option>
+            </select>
+          </div>
+          <div id="adj-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
+          <div class="g2">
+            <div><label>Set stock to (kg)</label>
+              <input type="text" inputmode="decimal" id="adj-absolute" placeholder="e.g. 847.5" style="font-size:15px;padding:9px 12px" oninput="adjPreview('absolute')" autocomplete="off" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:#aaa;font-style:italic">or add / subtract</div>
+          </div>
+          <div><label>Adjust by (kg) — negative to subtract</label>
+            <input type="text" inputmode="decimal" id="adj-delta" placeholder="e.g. -5  or  +20" style="font-size:15px;padding:9px 12px" oninput="adjPreview('delta')" autocomplete="off" />
+          </div>
+          <div id="adj-preview" style="display:none;font-size:12px;background:#f9f8f5;border-radius:7px;padding:8px 10px"></div>
+          <div><label>Reason</label><input type="text" id="adj-reason" placeholder="e.g. Spoilage, stock count" /></div>
+          <button class="btn btn-sm btn-p" onclick="logAdjustment()">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage log -->
+  <div class="sp" id="sp-inv-log">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0">Material usage history</div>
+        <select id="inv-log-filter" onchange="renderInvLog()" style="width:auto;font-size:12px;padding:4px 8px">
+          <option value="all">All materials</option>
+          <option value="hardwood">Hardwood</option>
+          <option value="wheatbran">Wheat bran</option>
+          <option value="gypsum">Gypsum</option>
+          <option value="grain">Grain</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Date</th><th>Material</th><th>Change (kg)</th><th>Running total</th><th>Type</th><th>Reference</th></tr></thead>
+        <tbody id="inv-log-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+<div id="print-sheet"></div>
+<div id="ref-print-sheet"></div>
+
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────
+const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
+const ZONES=['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM'];
+const SPAWN_RACKS=['SPAWN_R1','SPAWN_R2'];
+const INC_RACKS=['INC_R1','INC_R2','INC_R3','INC_R4','INC_R5','INC_R6','INC_R7','INC_R8','INC_R9','INC_R10'];
+const ALL_RACKS=[...SPAWN_RACKS,...INC_RACKS];
+const LOCS=[...ZONES,...ALL_RACKS];
+const RACK_ZONE=Object.fromEntries([...SPAWN_RACKS.map(r=>[r,'SPAWN']),...INC_RACKS.map(r=>[r,'INC'])]);
+const toZone=loc=>RACK_ZONE[loc]||loc;
+const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
+const SP_COLORS=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a'];
+const REF_GROUPS=[
+  {g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},
+  {g:'Zones',items:['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM']},
+  {g:'SPAWN racks',items:['SPAWN_R1','SPAWN_R2']},
+  {g:'INC racks 1–5',items:['INC_R1','INC_R2','INC_R3','INC_R4','INC_R5']},
+  {g:'INC racks 6–10',items:['INC_R6','INC_R7','INC_R8','INC_R9','INC_R10']},
+  {g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10']}
+];
+
+// ─── DATA ────────────────────────────────────────────────────
+let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={};
+let scan={action:null,from:null,to:null,count:0,harvestBag:null};
+let confirmCb=null,noteId=null,saving=false,lastHash='';
+let spMap={};
+const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
+const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
+
+// ─── SYNC ────────────────────────────────────────────────────
+async function loadData(){
+  setSyncStatus('busy','Syncing...');
+  try{
+    const d=await fetch('/api/data').then(r=>r.json());
+    applyData(d);
+    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
+    refresh();
+  }catch{setSyncStatus('err','Sync error')}
+}
+function applyData(d){
+  batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
+  harvests=d.harvests||[];cultures=d.cultures||[];
+  inventory=d.inventory||defaultInventory();
+  teamMembers=d.teamMembers||[];caldav=d.caldav||{};
+  batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
+  fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
+}
+function defaultInventory(){
+  return{
+    stock:{hardwood:0,wheatbran:0,gypsum:0,grain:0},
+    thresholds:{hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}},
+    // Average substrate composition used for "~X bags" estimates
+    // These are editable in the Inventory → Stock tab
+    avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},
+    log:[]
+  };
+}
+async function saveData(){
+  if(saving)return;saving=true;setSyncStatus('busy','Saving...');
+  try{
+    await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,movements,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
+    setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
+  }catch{setSyncStatus('err','Save error — check server is running')}
+  finally{saving=false}
+}
+function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
+async function pollSync(){
+  try{const d=await fetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+}
+
+// ─── NAV ─────────────────────────────────────────────────────
+const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',print:'n-print',todo:'n-todo',settings:'n-settings'};
+function go(page,btnId){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('p-'+page).classList.add('active');
+  document.getElementById(btnId).classList.add('active');
+  if(page==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
+  if(page==='batch')renderBatches();
+  if(page==='lab')renderCultures();
+  if(page==='inv'){renderInvStock();}
+  if(page==='print'){fillBatchSelect();renderLabList();}
+  if(page==='todo')renderTodo();
+  if(page==='settings')renderLog();
+  updateTodoBadge();
+}
+function openStab(page,sub){
+  document.querySelectorAll(`#p-${page} .stab`).forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll(`#p-${page} .sp`).forEach(p=>p.classList.remove('active'));
+  document.getElementById(`st-${page}-${sub}`).classList.add('active');
+  document.getElementById(`sp-${page}-${sub}`).classList.add('active');
+  if(page==='batch'&&sub==='list')renderBatches();
+  if(page==='batch'&&sub==='harvest')renderHarvests();
+  if(page==='lab'&&sub==='cultures')renderCultures();
+  if(page==='lab'&&sub==='work'){lwUpdate();renderLabLog();}
+  if(page==='lab'&&sub==='lineage')fillLineageSelect();
+  if(page==='inv'&&sub==='stock')renderInvStock();
+  if(page==='inv'&&sub==='delivery'){delMatChange();adjMatChange();}
+  if(page==='inv'&&sub==='log')renderInvLog();
+  if(page==='print'&&sub==='bags')fillBatchSelect();
+  if(page==='print'&&sub==='lab'){renderLabList();renderLabPreview();}
+  if(page==='print'&&sub==='ref')renderRefBarcodes();
+  if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
+  if(page==='todo'&&sub==='team')renderTeam();
+  if(page==='todo'&&sub==='caldav')loadCaldavSettings();
+  if(page==='settings'&&sub==='log')renderLog();
+}
+function refresh(){
+  const active=document.querySelector('.page.active');if(!active)return;
+  const id=active.id.replace('p-','');
+  if(id==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
+  if(id==='batch')renderBatches();
+  if(id==='lab')renderCultures();
+  if(id==='inv')renderInvStock();
+  if(id==='todo')renderTodo();
+  updateTodoBadge();
+}
+
+// ─── MODALS ──────────────────────────────────────────────────
+function confirm2(title,body,label,cb){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;document.getElementById('m-ok').textContent=label||'Confirm';confirmCb=cb;document.getElementById('m-confirm').classList.add('open')}
+function closeConfirm(){document.getElementById('m-confirm').classList.remove('open');confirmCb=null}
+document.getElementById('m-ok').onclick=()=>{if(confirmCb)confirmCb();closeConfirm()};
+document.getElementById('m-confirm').addEventListener('click',e=>{if(e.target.id==='m-confirm')closeConfirm()});
+function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent='Note — '+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
+function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
+function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();saveData();renderBatches()}closeNote()}
+document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
+
+// Batch-add modal
+function openBatchAdd(){
+  const bs=document.getElementById('ba-batch');
+  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species})</option>`).join('');
+  const ls=document.getElementById('ba-loc');
+  ls.innerHTML=[...ZONES,...ALL_RACKS].map(l=>`<option value="${l}">${l}</option>`).join('');
+  bs.onchange=baPreview;ls.onchange=baPreview;
+  document.getElementById('m-batchadd').classList.add('open');
+}
+function closeBatchAdd(){document.getElementById('m-batchadd').classList.remove('open')}
+function baPreview(){const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,b=batches.find(x=>x.batchId===id);document.getElementById('ba-prev').textContent=b?`Will log ${b.bags.length} bags → ${loc}`:'';}
+document.getElementById('m-batchadd').addEventListener('click',e=>{if(e.target.id==='m-batchadd')closeBatchAdd()});
+function confirmBatchAdd(){
+  const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
+  if(!id||!batch){alert('Select a batch first');return}
+  const now=new Date().toISOString();
+  batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);movements.push(entry);scan.count++;});
+  saveData();updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────
+const abbrev=s=>{if(!s)return'BAG';const u=s.toLowerCase();for(const k in ABBR)if(k.toLowerCase()===u)return ABBR[k];return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
+const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
+const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
+const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
+
+// ─── STATUS CALC ─────────────────────────────────────────────
+function getStatus(id){
+  const c={SPAWN:0,INC:0,TENT1:0,TENT2:0,TENT3:0,CONTAM:0};
+  scanLog.filter(e=>e.batch===id).forEach(e=>{
+    const tz=toZone(e.to),fz=toZone(e.from);
+    if(e.action==='ADD'&&e.to&&c[tz]!==undefined)c[tz]=Math.max(0,c[tz]+1);
+    if(e.action==='MOVE'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
+    if(e.action==='REMOVE'&&e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);
+  });
+  const total=Object.values(c).reduce((a,b)=>a+b,0);
+  let status='EMPTY',action='';
+  if(c.TENT1+c.TENT2+c.TENT3>0){status='FRUITING';action='Harvest / check'}
+  else if(c.INC>0){status='INCUBATING';action='Move to tent when ready'}
+  else if(c.SPAWN>0){status='SPAWN RUN';action='Monitor spawn run'}
+  else if(c.CONTAM>0){status='CONTAM';action='Discard bags'}
+  else if(total===0&&scanLog.some(e=>e.batch===id)){status='DONE'}
+  return{c,total,status,action};
+}
+const getHarvested=id=>harvests.filter(h=>h.batch===id).reduce((s,h)=>s+(h.grams||0),0);
+
+// ─── DASHBOARD ───────────────────────────────────────────────
+let harvestChartInst=null,batchYieldInst=null,timelineInst=null;
+
+function renderMetrics(tot,inc,tent,contam){
+  const totalHarv=harvests.reduce((s,h)=>s+(h.grams||0),0);
+  const contamRate=tot>0?Math.round((contam/tot)*100):0;
+  document.getElementById('metrics').innerHTML=[
+    ['Total batches',tot,'#1a1a1a'],
+    ['In incubation',inc,'#1e40af'],
+    ['In tents / fruiting',tent,'#166534'],
+    ['Total harvested',totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—','#92400e']
+  ].map(([l,v,c])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${c}">${v}</div></div>`).join('');
+}
+
+function renderPipelineChart(){
+  const stages=[
+    {label:'SPAWN',color:'#9b59b6'},
+    {label:'INC',color:'#3498db'},
+    {label:'TENT',color:'#2ecc71'},
+    {label:'DONE',color:'#e5e3dd'},
+    {label:'CONTAM',color:'#e74c3c'}
+  ];
+  const counts={SPAWN:0,INC:0,TENT:0,DONE:0,CONTAM:0};
+  batches.forEach(b=>{
+    const{c,status}=getStatus(b.batchId);
+    counts.SPAWN+=c.SPAWN;counts.INC+=c.INC;
+    counts.TENT+=c.TENT1+c.TENT2+c.TENT3;counts.CONTAM+=c.CONTAM;
+    if(status==='DONE')counts.DONE++;
+  });
+  const max=Math.max(1,...Object.values(counts));
+  const el=document.getElementById('pipeline-chart');
+  el.innerHTML=stages.map(s=>{
+    const v=counts[s.label]||0;
+    const pct=Math.round((v/max)*100);
+    return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="width:52px;font-size:11px;font-weight:600;color:#555;text-align:right;flex-shrink:0">${s.label}</div>
+      <div style="flex:1;height:22px;background:#f0ede8;border-radius:4px;overflow:hidden">
+        <div style="height:100%;background:${s.color};width:${pct}%;border-radius:4px;transition:width .4s;display:flex;align-items:center;padding-left:8px">
+          ${v>0?`<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,.9)">${v}</span>`:''}
+        </div>
+      </div>
+      <div style="width:28px;font-size:11px;color:#888;text-align:right;flex-shrink:0">${v}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHarvestChart(){
+  const canvas=document.getElementById('harvest-chart');
+  if(!canvas)return;
+  // Group by species
+  const bySpecies={};
+  harvests.forEach(h=>{if(!bySpecies[h.species])bySpecies[h.species]=0;bySpecies[h.species]+=h.grams||0});
+  const labels=Object.keys(bySpecies);
+  const data=labels.map(s=>bySpecies[s]);
+  const colors=labels.map(s=>spColor(s));
+  if(harvestChartInst){harvestChartInst.destroy();harvestChartInst=null}
+  if(!labels.length){canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText('No harvest data yet',canvas.width/2,80);return}
+  harvestChartInst=new Chart(canvas,{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
+    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{grid:{display:false}}}}
+  });
+}
+
+let statusCardMode=false;
+function toggleStatusView(){
+  statusCardMode=!statusCardMode;
+  document.getElementById('status-table-view').style.display=statusCardMode?'none':'block';
+  document.getElementById('status-card-view').style.display=statusCardMode?'block':'none';
+  document.getElementById('status-view-btn').textContent=statusCardMode?'Table':'Cards';
+  if(statusCardMode)renderStatusCards();
+}
+
+function renderStatusCards(){
+  const q=(document.getElementById('status-q').value||'').toLowerCase();
+  const el=document.getElementById('status-card-view');
+  const filtered=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q));
+  if(!filtered.length){el.innerHTML='<div class="empty">No batches match.</div>';return}
+  el.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px';
+  el.innerHTML=filtered.map(b=>{
+    const{c,status,action}=getStatus(b.batchId);
+    const harv=getHarvested(b.batchId);
+    const due=new Date(b.due);const ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
+    const stages=[['S',c.SPAWN,'#9b59b6'],['I',c.INC,'#3498db'],['T',c.TENT1+c.TENT2+c.TENT3,'#2ecc71'],['!',c.CONTAM,'#e74c3c']].filter(x=>x[1]>0);
+    const statusColors={INCUBATING:'#dbeafe',FRUITING:'#dcfce7','SPAWN RUN':'#f3e8ff',CONTAM:'#fee2e2',DONE:'#f5f4f0',EMPTY:'#f5f4f0'};
+    return`<div style="border:1px solid ${ov?'#fecaca':'#e5e3dd'};border-radius:10px;padding:12px;background:${ov?'#fff5f5':'#fff'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
+        <div>
+          <div style="font-size:11px;font-family:monospace;color:#888">${b.batchId}</div>
+          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${b.species}</div>
+          <div style="font-size:11px;color:#888">${b.strain}</div>
+        </div>
+        <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${statusColors[status]||'#f5f4f0'};color:#555;flex-shrink:0;margin-left:4px">${status}</span>
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+        ${stages.map(([l,n,col])=>`<span style="font-size:11px;font-weight:600;background:${col}22;color:${col};border:1px solid ${col}44;padding:1px 7px;border-radius:99px">${l}: ${n}</span>`).join('')}
+      </div>
+      ${harv>0?`<div style="font-size:11px;color:#92400e;font-weight:500;margin-bottom:4px">Harvest ${harv}g harvested</div>`:''}
+      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">Due: ${due.toLocaleDateString('de-DE')}${ov?' ⚠':''}</div>
+      ${action?`<div style="font-size:11px;color:#666;margin-top:4px;font-style:italic">${action}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderStatus(){
+  const q=(document.getElementById('status-q').value||'').toLowerCase(),body=document.getElementById('status-body');
+  if(!batches.length){body.innerHTML='<tr><td colspan="14" class="empty">No batches yet. Create one in Batches → New batch.</td></tr>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
+  let ti=0,tt=0,tc=0;
+  const rows=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
+    const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
+    const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
+    const harv=getHarvested(b.batchId);
+    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+  });
+  body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">No matches.</td></tr>';
+  renderMetrics(batches.length,ti,tt,tc);
+  renderPipelineChart();
+  renderHarvestChart();
+  if(statusCardMode)renderStatusCards();
+}
+function renderDashAlerts(){
+  const tasks=buildAutoTasks().filter(t=>t.urgent||t.warn);
+  const invAlerts=getInvAlerts();
+  const all=[...invAlerts,...tasks];
+  const el=document.getElementById('dash-alerts');
+  if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">No urgent tasks right now.</div>';return}
+  el.innerHTML=all.slice(0,8).map(t=>`<div class="todo-row ${t.urgent?'urgent':'warn'}"><span class="pdot ${t.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${t.species?spDot(t.species):''}${t.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${t.detail}</div></div>${t.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">Stock</button>`}</div>`).join('');
+}
+
+// ─── RACKS ───────────────────────────────────────────────────
+function getRackBags(rackId){
+  const bags={};
+  scanLog.forEach(e=>{
+    if(e.action==='ADD'&&e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};
+    if(e.action==='MOVE'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
+    if(e.action==='REMOVE'&&e.from===rackId&&e.bag)delete bags[e.bag];
+  });
+  return bags;
+}
+function renderRacks(){
+  const render=(ids,elId)=>{
+    document.getElementById(elId).innerHTML=ids.map(id=>{
+      const bags=getRackBags(id),count=Object.keys(bags).length;
+      const byBatch={};Object.values(bags).forEach(b=>{if(!byBatch[b.batchId])byBatch[b.batchId]={c:0,sp:b.species};byBatch[b.batchId].c++});
+      const label=id.replace(/_/g,' ');
+      return`<div class="rack-card" onclick="showRack('${id}')">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${count} bag${count!==1?'s':''}</span></div>
+        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
+        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${bid}</span>(${d.c})`).join(' '):'Empty'}</div>
+      </div>`;
+    }).join('');
+  };
+  render(SPAWN_RACKS,'racks-spawn');render(INC_RACKS,'racks-inc');
+}
+function showRack(id){
+  const bags=getRackBags(id),entries=Object.entries(bags);
+  const el=document.getElementById('rack-detail');
+  document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' — '+entries.length+' bag'+(entries.length!==1?'s':'');
+  if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">No bags on this rack.</div>';el.style.display='block';return}
+  const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push(bagId)});
+  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${bid} — ${d.sp}/${d.st} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
+  el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ─── LOCATION TABS ──────────────────────────────────────────
+let activeLocTab='SPAWN';
+const selectedLocBags=new Map(); // bagId → {batchId, loc}
+function getZoneBags(zone){
+  const bags={};
+  scanLog.forEach(e=>{
+    const tz=toZone(e.to),fz=toZone(e.from);
+    if(e.action==='ADD'&&tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
+    if(e.action==='MOVE'){
+      if(tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
+      if(fz===zone&&e.bag)delete bags[e.bag];
+    }
+    if(e.action==='REMOVE'&&e.bag&&bags[e.bag])delete bags[e.bag];
+  });
+  return bags;
+}
+function renderLocTabs(){
+  const tabs=document.getElementById('loc-tabs');
+  tabs.innerHTML=ZONES.map(z=>{
+    const count=Object.keys(getZoneBags(z)).length;
+    return`<button class="btn btn-sm${activeLocTab===z?' btn-p':''}" onclick="activeLocTab='${z}';selectedLocBags.clear();renderLocTabs()" style="font-size:11px">${z} <span style="font-size:10px;opacity:.7">(${count})</span></button>`;
+  }).join('');
+  renderLocBody();
+}
+function toggleLocBag(bagId,batchId,loc){
+  if(selectedLocBags.has(bagId))selectedLocBags.delete(bagId);
+  else selectedLocBags.set(bagId,{batchId,loc});
+  // Update chip style
+  const el=document.getElementById('lb-'+bagId.replace(/[^a-zA-Z0-9]/g,'_'));
+  if(el){
+    const sel=selectedLocBags.has(bagId);
+    el.style.background=sel?'#1a1a1a':'#fff';
+    el.style.color=sel?'#fff':'#333';
+    el.style.border=sel?'1px solid #1a1a1a':'1px solid #e5e3dd';
+  }
+  // Update action bar
+  const bar=document.getElementById('loc-action-bar');
+  const n=selectedLocBags.size;
+  if(n>0){
+    bar.style.display='flex';
+    bar.innerHTML=`<span style="font-size:12px;font-weight:600">${n} bag${n!==1?'s':''} selected</span><span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">Select all</button>
+      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">Clear</button>
+      <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">Move</button>
+      <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">Remove</button>`;
+  }else{
+    bar.style.display='none';
+  }
+}
+function locSelectAll(){
+  const bags=getZoneBags(activeLocTab);
+  Object.entries(bags).forEach(([bagId,d])=>selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc}));
+  renderLocBody();
+}
+function openLocMovePopup(){
+  if(!selectedLocBags.size)return;
+  const n=selectedLocBags.size;
+  const fromLoc=activeLocTab;
+  const m=document.getElementById('m-locmove');
+  document.getElementById('lm-title').textContent=n+' bag'+(n!==1?'s':'');
+  document.getElementById('lm-info').textContent='Currently in '+fromLoc;
+  document.getElementById('lm-confirm').style.display='none';
+  const grid=document.getElementById('lm-grid');
+  grid.style.display='flex';
+  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">Zones</div>'
+    +ZONES.filter(z=>z!==fromLoc).map(z=>`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px">${z}</button>`).join('')
+    +'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">Racks</div>'
+    +ALL_RACKS.filter(r=>r!==fromLoc).map(r=>`<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${r.replace(/_/g,' ')}</button>`).join('');
+  m.classList.add('open');
+}
+function locPreConfirm(toLoc){
+  document.getElementById('lm-grid').style.display='none';
+  const c=document.getElementById('lm-confirm');
+  c.style.display='block';
+  const n=selectedLocBags.size;
+  const ids=[...selectedLocBags.keys()];
+  const preview=ids.length<=6?ids.map(id=>id.split('-').pop()).join(', '):ids.slice(0,5).map(id=>id.split('-').pop()).join(', ')+' + '+(ids.length-5)+' more';
+  c.innerHTML=`<div style="text-align:center;padding:12px 0">
+    <div style="font-size:14px;margin-bottom:8px">Move <strong>${n} bag${n!==1?'s':''}</strong></div>
+    <div style="font-size:11px;color:#888;margin-bottom:8px;font-family:monospace">${preview}</div>
+    <div style="font-size:20px;margin-bottom:16px">${activeLocTab} → <strong>${toLoc}</strong></div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">Cancel</button>
+      <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">Confirm</button>
+    </div>
+  </div>`;
+}
+function renderLocBody(){
+  const bags=getZoneBags(activeLocTab),entries=Object.entries(bags),el=document.getElementById('loc-body');
+  if(!entries.length){selectedLocBags.clear();el.innerHTML='<div class="empty" style="font-size:12px">No bags in '+activeLocTab+'.</div><div id="loc-action-bar" style="display:none"></div>';return}
+  const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push({id:bagId,loc:d.loc})});
+  Object.values(byBatch).forEach(d=>d.bags.sort((a,b)=>{const na=parseInt(a.id.split('-').pop())||0,nb=parseInt(b.id.split('-').pop())||0;return na-nb}));
+  const n=selectedLocBags.size;
+  el.innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:12px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${bid} <span style="font-weight:400;color:#888">— ${d.sp}/${d.st}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px">${d.bags.map(b=>{
+      const sel=selectedLocBags.has(b.id);
+      return`<span id="lb-${b.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${b.id}" data-batch="${bid}" data-loc="${b.loc}" style="font-size:11px;font-family:monospace;padding:4px 8px;border-radius:6px;cursor:pointer;${sel?'background:#1a1a1a;color:#fff;border:1px solid #1a1a1a':'background:#fff;border:1px solid #e5e3dd;color:#333'}">
+        ${b.id.split('-').pop()}${b.loc!==activeLocTab?` <span style="font-size:9px;color:${sel?'#aaa':'#999'}">${b.loc}</span>`:''}
+      </span>`;
+    }).join('')}</div>
+  </div>`).join('')
+  +`<div id="loc-action-bar" style="${n>0?'display:flex':'display:none'};align-items:center;gap:8px;flex-wrap:wrap;background:#f9f8f5;border:1px solid #e5e3dd;border-radius:8px;padding:8px 12px;margin-top:8px">
+    <span style="font-size:12px;font-weight:600">${n} bag${n!==1?'s':''} selected</span><span style="flex:1"></span>
+    <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">Select all</button>
+    <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">Clear</button>
+    <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">Move</button>
+    <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">Remove</button>
+  </div>`;
+}
+// Event delegation — no inline onclick, prevents scroll
+document.getElementById('loc-body').addEventListener('click',function(e){
+  const chip=e.target.closest('span[data-bag]');
+  if(!chip)return;
+  e.preventDefault();e.stopPropagation();
+  toggleLocBag(chip.dataset.bag,chip.dataset.batch,chip.dataset.loc);
+});
+let lastLocUndoCount=0;
+function locMoveTo(toLoc){
+  if(!selectedLocBags.size)return;
+  const now=new Date().toISOString();
+  const n=selectedLocBags.size;
+  selectedLocBags.forEach((d,bagId)=>{
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;
+  });
+  lastLocUndoCount=n;
+  selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
+  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  setLocFb('Moved '+n+' bag'+(n!==1?'s':'')+' → '+toLoc);
+}
+function locRemoveSelected(){
+  if(!selectedLocBags.size)return;
+  const n=selectedLocBags.size;
+  if(!confirm('Remove '+n+' bag'+(n!==1?'s':'')+'?'))return;
+  const now=new Date().toISOString();
+  selectedLocBags.forEach((d,bagId)=>{
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;
+  });
+  lastLocUndoCount=n;
+  selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
+  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  setLocFb('Removed '+n+' bag'+(n!==1?'s':''));
+}
+function setLocFb(msg){
+  const el=document.getElementById('scan-fb');
+  el.className='fb-ok';
+  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600">Undo</button>';
+}
+function locUndo(){
+  if(!lastLocUndoCount)return;
+  scanLog.splice(scanLog.length-lastLocUndoCount,lastLocUndoCount);
+  lastLocUndoCount=0;
+  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  setFb('ok','Undo successful');
+}
+
+// ─── BATCHES ─────────────────────────────────────────────────
+function nbTypeChange(){
+  const isGrain=document.getElementById('nb-type').value==='grain';
+  // Toggle weight buttons
+  document.getElementById('wbtn-3').style.display=isGrain?'none':'';
+  document.getElementById('wbtn-5').style.display=isGrain?'none':'';
+  document.getElementById('wbtn-07').style.display=isGrain?'':'none';
+  document.getElementById('wbtn-1').style.display=isGrain?'':'none';
+  document.getElementById('wbtn-2').style.display=isGrain?'':'none';
+  document.getElementById('wbtn-5g').style.display=isGrain?'':'none';
+  // Toggle substrate section (grain doesn't need it)
+  document.querySelector('details').style.display=isGrain?'none':'';
+  // Set default weight
+  document.getElementById('nb-weight').value=isGrain?'1':'3';
+  setBagWeight(isGrain?1:3);
+  nbPreview();
+}
+function setBagWeight(kg){
+  document.getElementById('nb-weight').value=kg;
+  // Highlight the active button
+  ['wbtn-3','wbtn-5','wbtn-07','wbtn-1','wbtn-2','wbtn-5g'].forEach(id=>{
+    const btn=document.getElementById(id);
+    if(!btn)return;
+    const btnKg=parseFloat(btn.textContent);
+    btn.className='btn btn-sm'+(btnKg===kg?' btn-p':'');
+  });
+  nbPreview();
+}
+function nbPreview(){
+  const sp=document.getElementById('nb-sp').value.trim(),st=document.getElementById('nb-st').value.trim();
+  const qty=parseInt(document.getElementById('nb-qty').value)||0;
+  document.getElementById('nb-prev').textContent=(sp&&st)?genBatchId(sp)+' ('+qty+' bags)':'—';
+  const isGrain=document.getElementById('nb-type').value==='grain';
+  const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
+  if(!qty||!bagKg){document.getElementById('nb-mat-preview').style.display='none';return}
+  let lines=[];
+  if(isGrain){
+    const totalGrain=qty*bagKg;
+    const avail=inventory.stock?.grain||0;
+    const enough=avail>=totalGrain;
+    lines.push(`<strong>Grain needed:</strong> ${totalGrain.toFixed(2)} kg (${qty} × ${bagKg} kg)`);
+    lines.push(`In stock: ${avail.toFixed(2)} kg → ${enough?'✓ sufficient':'⚠ only enough for '+Math.floor(avail/bagKg)+' bags'}`);
+  }else{
+    const hw=parseFloat(document.getElementById('nb-hw').value)||0;
+    const wb=parseFloat(document.getElementById('nb-wb').value)||0;
+    const rh=parseFloat(document.getElementById('nb-rh').value)||0;
+    const gyp=document.getElementById('nb-gyp').checked;
+    if(hw||wb){
+      // Correct calculation: subtract water first, then split dry matter
+      // dryKg = bagKg × (1 - rh/100)
+      const dryKg = rh>0 ? bagKg*(1-rh/100) : bagKg;
+      const hwKg=qty*dryKg*(hw/100);
+      const wbKg=qty*dryKg*(wb/100);
+      const gypKg=gyp?qty*dryKg*0.01:0;
+      const hwStock=inventory.stock?.hardwood||0;
+      const wbStock=inventory.stock?.wheatbran||0;
+      const gypStock=inventory.stock?.gypsum||0;
+      if(rh>0) lines.push(`<strong>Bag:</strong> ${bagKg}kg total → ${dryKg.toFixed(3)}kg dry matter per bag (${rh}% water removed)`);
+      if(hw) lines.push(`<strong>Hardwood (${hw}%):</strong> ${hwKg.toFixed(3)} kg needed — ${hwStock.toFixed(2)} kg in stock ${hwStock>=hwKg?'✓':'⚠ short by '+(hwKg-hwStock).toFixed(2)+'kg'}`);
+      if(wb) lines.push(`<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock>=wbKg?'✓':'⚠ short by '+(wbKg-wbStock).toFixed(2)+'kg'}`);
+      if(gyp) lines.push(`<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock>=gypKg?'✓':'⚠'}`);
+      lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
+    }
+  }
+  const el=document.getElementById('nb-mat-preview');
+  if(lines.length){el.innerHTML=lines.join('<br>');el.style.display='block';}
+  else el.style.display='none';
+}
+function nbSubSum(){const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0,s=hw+wb;document.getElementById('nb-subsum').textContent=(hw||wb)?'Total: '+s+'%'+(s!==100?' — should add up to 100%':''):'';nbPreview()}
+function createBatch(){
+  const sp=document.getElementById('nb-sp').value.trim(),st=document.getElementById('nb-st').value.trim();
+  const qty=parseInt(document.getElementById('nb-qty').value)||0,days=parseInt(document.getElementById('nb-days').value)||14;
+  const isGrain=document.getElementById('nb-type').value==='grain';
+  const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
+  if(!sp||!st||qty<1){alert('Please fill in species, strain and quantity');return}
+  if(!bagKg){alert('Please enter a bag weight');return}
+  const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
+  const substrate=(!isGrain&&(hw||wb))?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
+  const batchId=genBatchId(sp);spColor(sp);
+  const due=new Date();due.setDate(due.getDate()+days);
+  const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
+  const batchType=isGrain?'grain':'block';
+  batches.push({batchId,species:sp,strain:st,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+
+  // Auto-deduct materials from inventory
+  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
+  const now=new Date().toISOString();
+  if(isGrain){
+    const grainUsed=qty*bagKg;
+    inventory.stock.grain=Math.max(0,inventory.stock.grain-grainUsed);
+    invLog('grain',-grainUsed,'batch',batchId,now);
+  }else if(substrate){
+    // Subtract water first: dry matter = bagKg × (1 - rh/100)
+    const rh=parseFloat(document.getElementById('nb-rh').value)||0;
+    const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
+    const hwUsed=qty*dryKgPerBag*(hw/100);
+    const wbUsed=qty*dryKgPerBag*(wb/100);
+    if(hwUsed>0){inventory.stock.hardwood=Math.max(0,inventory.stock.hardwood-hwUsed);invLog('hardwood',-hwUsed,'batch',batchId,now)}
+    if(wbUsed>0){inventory.stock.wheatbran=Math.max(0,inventory.stock.wheatbran-wbUsed);invLog('wheatbran',-wbUsed,'batch',batchId,now)}
+    if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);invLog('gypsum',-gypUsed,'batch',batchId,now)}
+  }
+
+  saveData();
+  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
+  document.getElementById('nb-result').style.display='block';
+  document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
+  document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
+  document.getElementById('nb-notes').value='';document.getElementById('nb-mat-preview').style.display='none';
+  nbPreview();updateTodoBadge();
+}
+function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const s=document.getElementById('print-batch'),last=batches[batches.length-1];if(last){s.value=last.batchId;renderBagPreview()}},100)}
+function renderBatches(){
+  const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
+  if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">No batches yet.</td></tr>';return}
+  body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
+    const{status}=getStatus(b.batchId);
+    const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
+    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${b.sourceId}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
+    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'…':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">Add note</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">Del</button></td></tr>`;
+  }).join('')||'<tr><td colspan="12" class="empty">No matches.</td></tr>';
+}
+const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
+function toggleBatchBags(batchId){
+  const existing=document.getElementById('brow-'+batchId);
+  if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
+  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
+  document.getElementById('btog-'+batchId).innerHTML='&#9660;';
+  const parentRow=document.getElementById('btog-'+batchId).closest('tr');
+  const tr=document.createElement('tr');tr.id='brow-'+batchId;
+  const td=document.createElement('td');td.colSpan=12;td.style.cssText='background:#f9f8f5;padding:8px 12px';
+  td.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px">'+b.bags.map(bag=>{
+    const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
+    let loc='—',color='#aaa';
+    if(last){
+      if(last.action==='REMOVE'){loc='Removed';color='#999'}
+      else if(last.to){loc=last.to;const z=toZone(last.to);color=locColor[z]||'#888'}
+    }
+    const num=bag.split('-').pop();
+    return`<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid #e5e3dd;display:inline-flex;align-items:center;gap:3px${last&&last.action==='REMOVE'?';text-decoration:line-through;opacity:.5':''}">
+      ${num} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
+    </span>`;
+  }).join('')+'</div>';
+  tr.appendChild(td);parentRow.after(tr);
+}
+let addBagsBatchId=null;
+function openAddBags(batchId){
+  const b=batches.find(x=>x.batchId===batchId);
+  if(!b)return;
+  addBagsBatchId=batchId;
+  document.getElementById('ab-info').textContent=batchId+' currently has '+b.bags.length+' bags ('+b.bags[b.bags.length-1]+' is last)';
+  document.getElementById('ab-qty').value=1;
+  document.getElementById('ab-preview').style.display='none';
+  document.getElementById('m-addbags').classList.add('open');
+  setTimeout(()=>document.getElementById('ab-qty').focus(),80);
+}
+function confirmAddBags(){
+  const b=batches.find(x=>x.batchId===addBagsBatchId);
+  if(!b)return;
+  const qty=parseInt(document.getElementById('ab-qty').value)||0;
+  if(qty<1){alert('Enter at least 1');return}
+  const lastNum=parseInt(b.bags[b.bags.length-1].split('-').pop())||b.bags.length;
+  const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
+  b.bags=[...b.bags,...newBags];
+  b.qty=b.bags.length;
+  saveData();
+  document.getElementById('m-addbags').classList.remove('open');
+  renderBatches();
+  setFb('ok','Added '+qty+' bag'+(qty!==1?'s':'')+' to '+b.batchId+' (now '+b.bags.length+' total)');
+}
+document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
+
+function delBatch(id){confirm2('Delete batch '+id+'?','Permanently deletes the batch record. Scan log and harvest entries remain.','Delete batch',()=>{batches=batches.filter(b=>b.batchId!==id);saveData();renderBatches();renderStatus()})}
+
+// ─── HARVESTS ────────────────────────────────────────────────
+function showHarvestPanel(bagId,batchId){
+  const b=batches.find(x=>x.batchId===batchId);
+  scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
+  document.getElementById('hp-lbl').textContent='Log harvest — '+bagId;
+  document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  document.getElementById('harvest-panel').style.display='block';
+  setTimeout(()=>document.getElementById('hp-grams').focus(),80);
+  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter');
+}
+function confirmHarvest(){
+  const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
+  if(!g||g<=0){alert('Enter a weight in grams');return}
+  const p=scan.harvestBag;
+  harvests.push({time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f});
+  saveData();scan.harvestBag=null;scan.count++;
+  document.getElementById('harvest-panel').style.display='none';
+  setFb('ok',`Harvest logged: ${p.bagId} → ${g}g (flush ${f})`);updateSD();
+}
+function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-panel').style.display='none';setFb('info','Harvest cancelled.')}
+document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
+function renderHarvests(){
+  const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
+  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString('de-DE')}</td><td style="font-family:monospace;font-size:10px">${h.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'—'}</td><td>${h.species?spDot(h.species)+h.species:'—'}</td><td>${h.strain||'—'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No harvests yet. Scan HARVEST then a bag.</td></tr>';
+
+  const byBatch={};
+  harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
+  const ids=Object.keys(byBatch).sort((a,b)=>byBatch[b].total-byBatch[a].total);
+  const tot=harvests.reduce((s,h)=>s+h.grams,0);
+  document.getElementById('harvest-metrics').innerHTML=ids.length?[
+    ['Total harvested',tot>=1000?(tot/1000).toFixed(1)+'kg':tot+'g'],
+    ['Batches with yield',ids.length],
+    ['Top batch',ids[0]?byBatch[ids[0]].total+'g':'—']
+  ].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:#92400e">${v}</div></div>`).join(''):'';
+
+  if(!ids.length){
+    document.getElementById('harvest-totals').innerHTML='<div class="empty">No harvest data yet.</div>';
+    return;
+  }
+
+  // Bar chart: yield per batch
+  const batchYieldCanvas=document.getElementById('batch-yield-chart');
+  if(batchYieldCanvas){
+    if(batchYieldInst){batchYieldInst.destroy();batchYieldInst=null}
+    batchYieldInst=new Chart(batchYieldCanvas,{
+      type:'bar',
+      data:{
+        labels:ids.slice(0,12),
+        datasets:[{label:'Grams',data:ids.slice(0,12).map(id=>byBatch[id].total),backgroundColor:ids.slice(0,12).map(id=>spColor(byBatch[id].species)),borderRadius:5,borderSkipped:false}]
+      },
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9}},grid:{display:false}}}}
+    });
+  }
+
+  // Line chart: harvest over time by week
+  const byWeek={};
+  harvests.forEach(h=>{
+    const d=new Date(h.time);
+    const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
+    const key=mon.toISOString().slice(0,10);
+    byWeek[key]=(byWeek[key]||0)+h.grams;
+  });
+  const weekKeys=Object.keys(byWeek).sort();
+  const timelineCanvas=document.getElementById('harvest-timeline-chart');
+  if(timelineCanvas){
+    if(timelineInst){timelineInst.destroy();timelineInst=null}
+    timelineInst=new Chart(timelineCanvas,{
+      type:'line',
+      data:{
+        labels:weekKeys.map(k=>{const d=new Date(k);return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}),
+        datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f39c12',backgroundColor:'rgba(243,156,18,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f39c12'}]
+      },
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}}}}
+    });
+  }
+
+  // Per-batch totals with flush breakdown
+  const max=byBatch[ids[0]].total;
+  document.getElementById('harvest-totals').innerHTML=ids.map(id=>{
+    const d=byBatch[id],pct=Math.round((d.total/max)*100);
+    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${id}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
+  }).join('');
+}
+
+// ─── TO-DO ───────────────────────────────────────────────────
+function buildAutoTasks(){
+  const tasks=[],today=new Date();today.setHours(0,0,0,0);
+  batches.forEach(b=>{
+    const{status,action}=getStatus(b.batchId);if(status==='DONE'||status==='EMPTY')return;
+    const due=new Date(b.due);due.setHours(0,0,0,0);
+    const dl=Math.round((due-today)/(864e5));
+    let urgent=false,warn=false,text='',detail='';
+    if(status==='INCUBATING'||status==='SPAWN RUN'){
+      if(dl<0){urgent=true;text=`${b.batchId} — ${action}`;detail=`Due ${Math.abs(dl)} day(s) ago`}
+      else if(dl<=2){warn=true;text=`${b.batchId} — ${action}`;detail=`Due in ${dl} day(s)`}
+      else{text=`${b.batchId} — ${action}`;detail=`Due in ${dl} days`}
+    }else if(status==='FRUITING'){text=`${b.batchId} — Harvest / check`;detail=`${b.species}/${b.strain} fruiting`;warn=true}
+    else if(status==='CONTAM'){text=`${b.batchId} — Discard bags`;detail=`${b.species}/${b.strain}`;urgent=true}
+    if(text)tasks.push({text,detail,urgent,warn,species:b.species});
+  });
+  return tasks;
+}
+function renderTodo(){
+  const filter=document.getElementById('todo-filter').value,tasks=buildAutoTasks();
+  const shown=filter==='urgent'?tasks.filter(t=>t.urgent||t.warn):tasks;
+  const urgent=tasks.filter(t=>t.urgent).length,warn=tasks.filter(t=>t.warn).length;
+  document.getElementById('todo-metrics').innerHTML=[['Open tasks',tasks.length],['Urgent',urgent],['Coming up',warn]].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${l==='Urgent'&&v>0?'#b91c1c':l==='Coming up'&&v>0?'#92400e':'#1a1a1a'}">${v}</div></div>`).join('');
+  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}"><span class="pdot ${t.urgent?'high':t.warn?'med':'low'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${t.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${t.detail}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
+  renderManualTasks();updateTodoBadge();
+}
+function renderManualTasks(){
+  const el=document.getElementById('todo-manual');
+  if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
+  el.innerHTML=manualTasks.map((t,i)=>{
+    const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Everyone</span>';
+    const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
+    const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
+    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
+  }).join('');
+}
+function addTask(){
+  document.getElementById('task-form').style.display='block';
+  fillAssigneeSelect();
+  document.getElementById('task-text').focus();
+}
+function fillAssigneeSelect(){
+  const sel=document.getElementById('task-assignee');
+  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${m.name}">${m.name}</option>`).join('');
+}
+function saveTask(){
+  const text=document.getElementById('task-text').value.trim();if(!text)return;
+  const assignee=document.getElementById('task-assignee').value;
+  const dueDate=document.getElementById('task-due').value||null;
+  const description=document.getElementById('task-desc').value.trim()||null;
+  manualTasks.push({text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null});
+  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';
+  document.getElementById('task-form').style.display='none';
+  saveData();renderManualTasks();updateTodoBadge();
+  if(caldav.enabled)pushTaskCaldav(manualTasks[manualTasks.length-1]);
+}
+function toggleTask(i){manualTasks[i].done=!manualTasks[i].done;manualTasks[i].caldavSynced=null;saveData();renderManualTasks();updateTodoBadge();if(caldav.enabled&&manualTasks[i].caldavUid)pushTaskCaldav(manualTasks[i])}
+function deleteTask(i){confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks.splice(i,1);saveData();renderManualTasks();updateTodoBadge()})}
+function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).length+manualTasks.filter(t=>!t.done).length+getInvAlerts().length;document.getElementById('n-todo').classList.toggle('alert',n>0)}
+
+// ─── TEAM MEMBERS ───────────────────────────────────────────
+function renderTeam(){
+  const el=document.getElementById('team-list');
+  if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
+  el.innerHTML=teamMembers.map((m,i)=>`<div class="member-row"><span class="name">${m.name}</span>${m.role?`<span style="font-size:11px;color:#888">${m.role}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${i})">×</button></div>`).join('');
+}
+function addMember(){
+  const name=document.getElementById('member-name').value.trim();if(!name)return;
+  const role=document.getElementById('member-role').value.trim();
+  if(teamMembers.some(m=>m.name.toLowerCase()===name.toLowerCase()))return;
+  teamMembers.push({name,role:role||null,added:new Date().toISOString()});
+  document.getElementById('member-name').value='';document.getElementById('member-role').value='';
+  saveData();renderTeam();
+}
+function removeMember(i){confirm2('Remove member?','Remove '+teamMembers[i].name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers.splice(i,1);saveData();renderTeam()})}
+
+// ─── CalDAV SYNC ────────────────────────────────────────────
+function loadCaldavSettings(){
+  // Show the CalDAV URL for this server
+  const url=location.protocol+'//'+location.hostname+':'+location.port+'/caldav/calendars/';
+  document.getElementById('caldav-url-display').textContent=url;
+  document.getElementById('caldav-user').value=caldav.caldavUsername||'';
+  document.getElementById('caldav-pass').value=caldav.caldavPassword||'';
+  document.getElementById('caldav-enabled').checked=!!caldav.enabled;
+  document.getElementById('caldav-per-person').checked=!!caldav.perPersonCalendars;
+}
+function saveCaldavSettings(){
+  caldav.caldavUsername=document.getElementById('caldav-user').value.trim();
+  caldav.caldavPassword=document.getElementById('caldav-pass').value;
+  caldav.enabled=document.getElementById('caldav-enabled').checked;
+  caldav.perPersonCalendars=document.getElementById('caldav-per-person').checked;
+  saveData();
+  showCaldavStatus('Settings saved.','#166534');
+}
+function showCaldavStatus(msg,color){
+  const el=document.getElementById('caldav-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},8000);
+}
+async function syncCaldavNow(){
+  if(!caldav.enabled){showCaldavStatus('Enable sync first, then save settings.','#92400e');return}
+  const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
+  showCaldavStatus('Writing tasks to calendar files...','#888');
+  try{
+    const r=await fetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
+    if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
+    else{
+      showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
+      await loadData();renderManualTasks();
+    }
+  }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
+  finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
+}
+async function pushTaskCaldav(task){
+  if(!caldav.enabled)return;
+  try{
+    const r=await fetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
+    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
+  }catch(e){console.error('CalDAV push error:',e)}
+}
+
+// ─── SCAN LOG ────────────────────────────────────────────────
+function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'—'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'—'}</td><td>${e.from||'—'}</td><td>${e.to||'—'}</td><td>${e.species?spDot(e.species)+e.species:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
+function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];saveData();renderLog()})}
+
+// ─── INVENTORY ───────────────────────────────────────────────
+const MAT_LABELS={hardwood:'Hardwood pellets',wheatbran:'Wheat bran',gypsum:'Gypsum',grain:'Grain'};
+const MAT_COLORS={hardwood:'#92400e',wheatbran:'#166534',gypsum:'#1e40af',grain:'#6b21a8'};
+const MAT_BG={hardwood:'#fff7ed',wheatbran:'#f0fdf4',gypsum:'#eff6ff',grain:'#faf5ff'};
+const MAT_BORDER={hardwood:'#fed7aa',wheatbran:'#bbf7d0',gypsum:'#bfdbfe',grain:'#e9d5ff'};
+
+function invLog(mat,deltaKg,type,ref,time){
+  if(!inventory.log)inventory.log=[];
+  const running=inventory.stock[mat]||0;
+  inventory.log.push({time:time||new Date().toISOString(),mat,deltaKg,running,type,ref});
+}
+
+function getAvgComp(){
+  // Returns the average composition settings, with fallback defaults
+  const a=inventory.avgComposition||{};
+  return{
+    hwPct:a.hwPct??75,
+    wbPct:a.wbPct??25,
+    rhPct:a.rhPct??63,
+    bagKg:a.bagKg??3,
+    grainBagKg:a.grainBagKg??1
+  };
+}
+
+function estBagsFromMat(mat,stockKg){
+  // Estimate how many fruiting blocks (or grain bags) can be made from this material
+  // For HW/WB: dry matter per bag = bagKg × (1 − rh/100), split by avg %
+  // For grain: simply stockKg / grainBagKg
+  const c=getAvgComp();
+  if(mat==='grain'){
+    return{bags:c.grainBagKg>0?Math.floor(stockKg/c.grainBagKg):0,bagKg:c.grainBagKg,isGrain:true};
+  }
+  const dryPerBag=c.bagKg*(1-c.rhPct/100);  // dry matter per bag
+  let matPerBag=0;
+  if(mat==='hardwood') matPerBag=dryPerBag*(c.hwPct/100);
+  if(mat==='wheatbran') matPerBag=dryPerBag*(c.wbPct/100);
+  if(mat==='gypsum') matPerBag=dryPerBag*0.01;
+  const bags=matPerBag>0?Math.floor(stockKg/matPerBag):0;
+  return{bags,matPerBag,bagKg:c.bagKg,isGrain:false};
+}
+
+function renderInvStock(){
+  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
+  if(!inventory.thresholds)inventory.thresholds={hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}};
+  if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
+
+  const cards=document.getElementById('inv-cards');
+  cards.innerHTML=Object.keys(MAT_LABELS).map(mat=>{
+    const stock=inventory.stock[mat]||0;
+    const thresh=inventory.thresholds[mat]||{minKg:0};
+    const low=thresh.minKg>0&&stock<thresh.minKg;
+    const {bags,bagKg,matPerBag,isGrain}=estBagsFromMat(mat,stock);
+    const pct=thresh.minKg>0?Math.min(100,Math.round((stock/Math.max(stock,thresh.minKg*3))*100)):Math.min(100,Math.round((stock/Math.max(stock,100))*100));
+    const estNote=isGrain
+      ? `≈ ${bags} grain bags @ ${bagKg}kg each`
+      : `≈ <strong>${bags}</strong> × ${bagKg}kg blocks <span style="font-size:10px;color:#aaa">(avg estimate)</span>`;
+    return`<div style="background:${MAT_BG[mat]};border:1px solid ${low?'#f87171':MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
+        ${low?`<span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:99px;font-weight:600">LOW STOCK</span>`:''}
+      </div>
+      <div style="font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:#888">kg</span></div>
+      <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
+        <div style="height:100%;border-radius:3px;background:${low?'#f87171':MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
+      </div>
+      <div style="font-size:12px;color:#555;line-height:1.6">${estNote}</div>
+      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'#b91c1c':'#aaa'};margin-top:2px">Alert below ${thresh.minKg}kg</div>`:''}
+      <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">+ Log delivery</button>
+    </div>`;
+  }).join('');
+  renderThresholds();
+}
+
+function renderThresholds(){
+  const el=document.getElementById('inv-thresholds');
+  if(!el)return;
+  const c=getAvgComp();
+
+  // Per-material alert thresholds
+  const threshHtml=`<div style="overflow-x:auto;margin-bottom:16px"><table>
+    <thead><tr><th>Material</th><th>In stock</th><th>Alert below (kg)</th><th>Est. bags (avg)</th></tr></thead>
+    <tbody>
+    ${Object.keys(MAT_LABELS).map(mat=>{
+      const stock=inventory.stock[mat]||0;
+      const t=inventory.thresholds[mat]||{minKg:0};
+      const {bags}=estBagsFromMat(mat,stock);
+      return`<tr>
+        <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
+        <td style="font-weight:600">${stock.toFixed(2)} kg</td>
+        <td><input type="text" inputmode="decimal" value="${t.minKg}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
+        <td style="font-size:12px;color:#666">~${bags} bags <span style="font-size:10px;color:#aaa">(avg)</span></td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+
+  // Average composition settings
+  const compHtml=`<div style="background:#f9f8f5;border-radius:8px;padding:12px">
+    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
+      Average composition used for estimates
+    </div>
+    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">
+      These averages are used to calculate "~X bags" on the stock cards. 
+      They are <strong>estimates only</strong> — exact usage is tracked when you create a batch with a specific substrate recipe.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+      <div><label style="font-size:11px">Hardwood %</label>
+        <input type="text" inputmode="decimal" value="${c.hwPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
+      <div><label style="font-size:11px">Wheat bran %</label>
+        <input type="text" inputmode="decimal" value="${c.wbPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
+      <div><label style="font-size:11px">Water % (RH)</label>
+        <input type="text" inputmode="decimal" value="${c.rhPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
+      <div><label style="font-size:11px">Block weight (kg)</label>
+        <input type="text" inputmode="decimal" value="${c.bagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
+      <div><label style="font-size:11px">Grain bag (kg)</label>
+        <input type="text" inputmode="decimal" value="${c.grainBagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#aaa">
+      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg*(1-c.rhPct/100)*(c.hwPct/100)).toFixed(3)}kg hardwood + ~${(c.bagKg*(1-c.rhPct/100)*(c.wbPct/100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
+    </div>
+  </div>`;
+
+  el.innerHTML=threshHtml+compHtml;
+}
+
+function updateAvgComp(key,val){
+  if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
+  inventory.avgComposition[key]=parseFloat(val)||0;
+  saveData();renderInvStock();
+}
+
+function updateThreshold(mat,key,val){
+  if(!inventory.thresholds)inventory.thresholds={};
+  if(!inventory.thresholds[mat])inventory.thresholds[mat]={minKg:0};
+  inventory.thresholds[mat][key]=parseFloat(val)||0;
+  saveData();renderInvStock();
+}
+
+function delMatChange(){
+  const mat=document.getElementById('del-mat').value;
+  const stock=inventory.stock?.[mat]||0;
+  document.getElementById('del-current').textContent='Current stock: '+stock.toFixed(2)+' kg';
+  document.getElementById('del-kg').value='';
+  document.getElementById('del-preview').style.display='none';
+}
+function delPreview(){
+  const mat=document.getElementById('del-mat').value;
+  const kg=parseFloat(document.getElementById('del-kg').value)||0;
+  const el=document.getElementById('del-preview');
+  if(!kg){el.style.display='none';return}
+  const cur=inventory.stock?.[mat]||0;
+  el.innerHTML='After delivery: <strong>'+(cur+kg).toFixed(2)+' kg</strong> ('+cur.toFixed(2)+' + '+kg+' kg)';
+  el.style.display='block';
+}
+function adjMatChange(){
+  const mat=document.getElementById('adj-mat').value;
+  const stock=inventory.stock?.[mat]||0;
+  document.getElementById('adj-current').textContent='Current stock: '+stock.toFixed(2)+' kg';
+  document.getElementById('adj-absolute').value='';
+  document.getElementById('adj-delta').value='';
+  document.getElementById('adj-preview').style.display='none';
+}
+function adjPreview(mode){
+  const mat=document.getElementById('adj-mat').value;
+  const cur=inventory.stock?.[mat]||0;
+  const el=document.getElementById('adj-preview');
+  let newVal,diff;
+  if(mode==='absolute'){
+    const abs=parseFloat(document.getElementById('adj-absolute').value);
+    if(isNaN(abs)){el.style.display='none';return}
+    document.getElementById('adj-delta').value='';
+    newVal=Math.max(0,abs);diff=newVal-cur;
+    el.innerHTML='Set to <strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg from current '+cur.toFixed(2)+' kg)';
+  }else{
+    const delta=parseFloat(document.getElementById('adj-delta').value);
+    if(isNaN(delta)){el.style.display='none';return}
+    document.getElementById('adj-absolute').value='';
+    newVal=Math.max(0,cur+delta);diff=delta;
+    el.innerHTML='New total: <strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg)';
+  }
+  el.style.display='block';
+}
+function logDelivery(){
+  const mat=document.getElementById('del-mat').value;
+  const kg=parseFloat(document.getElementById('del-kg').value)||0;
+  const note=document.getElementById('del-note').value.trim();
+  if(kg<=0){alert('Enter a quantity greater than 0');return}
+  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
+  inventory.stock[mat]=(inventory.stock[mat]||0)+kg;
+  invLog(mat,kg,'delivery',note||'delivery');
+  saveData();
+  document.getElementById('del-kg').value='';document.getElementById('del-note').value='';
+  document.getElementById('del-preview').style.display='none';
+  openStab('inv','stock');renderInvStock();
+  setFb('ok','Delivery logged: +'+kg+'kg '+MAT_LABELS[mat]+' now '+inventory.stock[mat].toFixed(2)+'kg total');
+}
+function logAdjustment(){
+  const mat=document.getElementById('adj-mat').value;
+  const absVal=document.getElementById('adj-absolute').value;
+  const deltaVal=document.getElementById('adj-delta').value;
+  const reason=document.getElementById('adj-reason').value.trim()||'Manual adjustment';
+  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
+  const cur=inventory.stock[mat]||0;
+  let newStock,delta;
+  if(absVal!==''){
+    newStock=Math.max(0,parseFloat(absVal)||0);delta=newStock-cur;
+  }else if(deltaVal!==''){
+    delta=parseFloat(deltaVal)||0;newStock=Math.max(0,cur+delta);
+  }else{alert('Enter either a new total or an adjustment amount');return}
+  inventory.stock[mat]=newStock;
+  invLog(mat,delta,'adjustment',reason);
+  saveData();
+  document.getElementById('adj-absolute').value='';document.getElementById('adj-delta').value='';
+  document.getElementById('adj-reason').value='';document.getElementById('adj-preview').style.display='none';
+  openStab('inv','stock');renderInvStock();
+  setFb('ok','Adjusted '+MAT_LABELS[mat]+': '+(delta>=0?'+':'')+delta.toFixed(2)+'kg now '+newStock.toFixed(2)+'kg');
+}
+
+function renderInvLog(){
+  const filter=document.getElementById('inv-log-filter').value;
+  const body=document.getElementById('inv-log-body');
+  if(!inventory.log||!inventory.log.length){body.innerHTML='<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';return}
+  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
+  // Build running totals per material going forwards for display
+  body.innerHTML=rows.map(e=>`<tr>
+    <td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td>
+    <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
+    <td style="font-weight:600;color:${e.deltaKg<0?'#991b1b':'#166534'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
+    <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
+    <td><span class="badge ${e.type==='delivery'?'b-add':e.type==='adjustment'?'b-move':'b-harvest'}">${e.type}</span></td>
+    <td style="font-size:11px;color:#666">${e.ref||'—'}</td>
+  </tr>`).join('');
+}
+
+// Show low-stock alerts in dashboard
+function getInvAlerts(){
+  if(!inventory.stock||!inventory.thresholds)return[];
+  return Object.keys(MAT_LABELS).filter(mat=>{
+    const stock=inventory.stock[mat]||0;
+    const thresh=(inventory.thresholds[mat]||{}).minKg||0;
+    return thresh>0&&stock<thresh;
+  }).map(mat=>{
+    const stock=inventory.stock[mat]||0;
+    const thresh=inventory.thresholds[mat].minKg;
+    const {bags}=estBagsFromMat(mat,stock);
+    return{text:`Low stock: ${MAT_LABELS[mat]}`,detail:`${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold`,urgent:stock<thresh*0.5,warn:true,species:null};
+  });
+}
+
+// ─── BACKUP ──────────────────────────────────────────────────
+function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:7,batches,scanLog,manualTasks,harvests,cultures,inventory},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
+function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
+function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();batches.forEach(b=>spColor(b.species));saveData();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+
+// ─── CULTURES ────────────────────────────────────────────────
+const ctBadge=t=>{const m={MC:'badge-mc',PD:'badge-pd',LC:'badge-lc',G2G:'badge-g2g'};return`<span class="badge ${m[t]||''}">${t}</span>`}
+const csBadge=s=>{const m={active:'badge-active',stored:'badge-stored',used:'badge-used',contam:'badge-contam'};return`<span class="badge ${m[s]||''}">${s}</span>`}
+function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain} (${c.type})</option>`).join('');if(cur)s.value=cur}
+function renderCultures(){
+  const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
+  const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
+  if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">No cultures yet. Use Lab → Log work to register them.</td></tr>';return}
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'—'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'—'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>Active</option><option value="stored" ${c.status==='stored'?'selected':''}>Stored</option><option value="used" ${c.status==='used'?'selected':''}>Used up</option><option value="contam" ${c.status==='contam'?'selected':''}>Contaminated</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="Print label" style="padding:2px 6px">Print</button></td></tr>`).join('');
+}
+function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;saveData();renderCultures()}}
+
+// ─── LAB WORK ────────────────────────────────────────────────
+function lwUpdate(){
+  const type=document.getElementById('lw-type').value;
+  const dl=document.getElementById('sp-list');
+  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${s}">`).join('');
+  const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
+  if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent='Quantity (tubes/dishes)'}
+  else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent='Parent (MC, PD or LC)';fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent='Number of dishes'}
+  else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent='Source (petri dish or MC)';fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent='Number of flasks'}
+  else{pr.style.display='none';sr.style.display='none';ql.textContent='Number of bags'}
+  lwPreview();
+}
+function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain}</option>`).join('');if(cur)s.value=cur}
+function lwPreview(){
+  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
+  const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
+  if(!sp||type==='G2G'){box.style.display='none';return}
+  const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
+  const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
+  prev.textContent=Array.from({length:qty},(_,i)=>prefix+String(existing+i+1).padStart(2,'0')).join('\n');
+  box.style.display='block';
+}
+document.getElementById('lw-sp').addEventListener('input',lwPreview);
+document.getElementById('lw-qty').addEventListener('input',lwPreview);
+function logLabWork(){
+  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),st=document.getElementById('lw-st').value.trim();
+  const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
+  if(!sp){alert('Please enter a species');return}
+  if(type==='G2G'){alert('G2G is recorded via the scan bar — use ADD to move grain bags.');return}
+  const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
+  const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
+  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
+  cultures.push(...newC);saveData();
+  document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
+  if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
+  renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);lwPreview();
+  const ids=newC.map(c=>c.id).join(', ');
+  if(confirm(`Logged: ${newC.length} ${type} created\n${ids}\n\nPrint labels now?`)){
+    selectedLabIds=new Set(newC.map(c=>c.id));go('print','n-print');
+    setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
+  }
+}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'—'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No lab work logged yet.</td></tr>'}
+
+// ─── LINEAGE ─────────────────────────────────────────────────
+function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${c.id}">${c.id} (${c.type} — ${c.species})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${b.batchId}">${b.batchId} (${b.species})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
+function buildTree(rootId,rootType){
+  const getAnc=id=>{const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
+  const getDesc=(id,depth)=>{if(depth>6)return[];const ch=[];cultures.filter(c=>c.parentId===id).forEach(c=>ch.push({...c,harvest:0,children:getDesc(c.id,depth+1)}));batches.filter(b=>b.sourceId===id).forEach(b=>{const{status}=getStatus(b.batchId);ch.push({id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]})});return ch};
+  if(rootType==='C'){const anc=getAnc(rootId);const c=cultures.find(x=>x.id===rootId);if(!c)return null;const root={...anc[anc.length-1]||{id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created}};root.children=getDesc(rootId,0);if(anc.length>1){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=i===anc.length-1?root.children:[];cur.children=[anc[i]];cur=anc[i]}return tree}return root}
+  else{const b=batches.find(x=>x.batchId===rootId);if(!b)return null;const{status}=getStatus(b.batchId);const bn={id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]};if(b.sourceId){const anc=getAnc(b.sourceId);if(anc.length){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=[];cur.children=[anc[i]];cur=anc[i]}cur.children=[bn];return tree}}return bn}
+}
+const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
+const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
+function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${node.type}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${node.id}</span><span style="font-size:11px;color:#666">${node.species||''}${node.strain?' / '+node.strain:''}</span><span style="font-size:10px;color:#888">${node.status||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?new Date(node.created).toLocaleDateString('de-DE'):''}</span></div>${ch}</div>`}
+function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">Select a culture or batch above.</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">No lineage data found.</div>'}
+
+// ─── BAG INFO MODAL ──────────────────────────────────────────
+let biBagId=null,biBatchId=null;
+function openBagInfo(bagId,batchId,batch){
+  biBagId=bagId;biBatchId=batchId;
+  const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
+  const el=document.getElementById('bi-body');
+  if(!b){el.innerHTML='<p style="color:#b91c1c">Batch not found: '+batchId+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
+  document.getElementById('bi-title').textContent=bagId;
+  // Current location
+  const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
+  let currentLoc='Not placed yet';
+  if(bagLogs.length){
+    const last=bagLogs[bagLogs.length-1];
+    if(last.action==='REMOVE')currentLoc='Removed';
+    else if(last.action==='ADD'||last.action==='MOVE')currentLoc=last.to||'Unknown';
+  }
+  // Harvests for this bag
+  const bagHarvests=harvests.filter(h=>(h.bag||'').toUpperCase()===bagId.toUpperCase());
+  const totalHarv=bagHarvests.reduce((s,h)=>s+(h.grams||0),0);
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="met"><div class="met-l">Species</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${b.species}</div></div>
+      <div class="met"><div class="met-l">Strain</div><div style="font-size:15px;font-weight:600">${b.strain||'—'}</div></div>
+      <div class="met"><div class="met-l">Current location</div><div style="font-size:15px;font-weight:600;color:#1e40af">${currentLoc}</div></div>
+      <div class="met"><div class="met-l">Harvested</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':'None yet'}</div></div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Batch ${b.batchId} — all bags</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
+      ${b.bags.map(bag=>{
+        const isThis=bag.toUpperCase()===bagId.toUpperCase();
+        const bagNum=bag.split('-').pop();
+        const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
+        const loc=!bagLast?'—':bagLast.action==='REMOVE'?'✗':bagLast.to||'?';
+        return`<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis?'#1a1a1a':'#f5f4f0'};color:${isThis?'#fff':'#555'};border:1px solid ${isThis?'#1a1a1a':'#e5e3dd'}" title="${loc}">
+          ${bagNum} <span style="font-size:9px;color:${isThis?'#aaa':'#bbb'}">${loc}</span>
+        </span>`;
+      }).join('')}
+    </div>
+    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>Harvests:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' · ')}</div>`:''}
+  `;
+  document.getElementById('m-baginfo').classList.add('open');
+  setFb('info','Bag info: '+bagId+' — choose an action below or close');
+}
+function biSetAction(action){
+  document.getElementById('m-baginfo').classList.remove('open');
+  scan.action=action;scan.from=null;scan.to=null;scan.harvestBag=null;
+  updateSD();
+  if(action==='HARVEST'){
+    showHarvestPanel(biBagId,biBatchId);
+  }else if(action==='REMOVE'){
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
+    scan.count++;saveData();updateSD();
+    setFb('ok','REMOVE logged: '+biBagId);
+  }else{
+    setFb('ok',action+' ready — now scan a location, then scan more bags');
+  }
+}
+document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id==='m-baginfo')document.getElementById('m-baginfo').classList.remove('open')});
+
+// ─── PRINT — BAG LABELS ──────────────────────────────────────
+// ─── PRINT via server → ZPL → Windows spooler → GK420d ──────
+// Correct size/orientation automatically — no browser dialog issues.
+// Hyphens encoded as underscores in barcode to fix German keyboard scanning.
+
+// Species abbreviation: 1 word → first 2 letters (CH), 2+ words → first letter each (BO, BK)
+function spAbbrev(species){
+  if(!species)return'XX';
+  const words=species.trim().split(/\s+/);
+  if(words.length===1)return words[0].slice(0,2).toUpperCase();
+  return(words[0][0]+words[1][0]).toUpperCase();
+}
+
+function makeBagZPL(bags,batch,mode){
+  return bags.map(bagId=>{
+    let z='^XA^PW400^LL240^CI28^LH0,0';
+    // Format: CH_ERL_0327_4 (max 13 chars)
+    // species abbrev _ strain 3 chars _ MMDD _ bag number (no leading zero)
+    const parts=bagId.split('-');
+    let bcVal;
+    if(parts.length===4){
+      const sp=spAbbrev(batch.species);
+      const st=(batch.strain||'000').slice(0,3).toUpperCase();
+      const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY '020426' → MMDD '0402'
+      const bagNum=parseInt(parts[3],10);    // '04' → 4 (no leading zero)
+      bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum;   // CH_ERL_0327_4
+    }else{
+      bcVal=bagId.replace(/-/g,'_');
+    }
+    z+='^FO10,5^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
+    z+='^FO0,84^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
+    if(mode==='full'||mode==='date'){
+      // Strain + substrate on one line
+      let infoLine=batch.strain||'';
+      if(batch.substrate){
+        const hw=batch.substrate.hardwood||0;
+        const wb=batch.substrate.wheatbran||0;
+        const rh=batch.substrate.rh||0;
+        const subStr=(hw?'HW'+hw+'%':'')+( wb?' WB'+wb+'%':'')+( rh?' RH'+rh+'%':'');
+        if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
+      }
+      if(infoLine) z+='^FO0,130^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
+    }
+    if(mode==='date'){
+      const due=new Date(batch.due);
+      const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
+      z+='^FO0,168^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
+    }
+    z+='^XZ';
+    return z;
+  }).join('\n');
+}
+
+function makeLabZPL(ids,opts){
+  return ids.map(id=>{
+    const c=cultures.find(x=>x.id===id);if(!c)return'';
+    const sp=(c.species||'')+(c.strain?' / '+c.strain:'');
+    const ds=new Date(c.created).toLocaleDateString('de-DE');
+    const bcVal=id.replace(/-/g,'_');
+    let z='^XA^PW400^LL240^CI28^LH0,0';
+    if(opts.bc)z+='^FO20,10^BY2,2.0,60^BCN,60,N,N,N^FD'+bcVal+'^FS';
+    z+='^FO8,78^A0N,28,28^FD'+id+'^FS';
+    if(opts.sp&&sp)z+='^FO8,110^A0N,20,20^FD'+sp+'^FS';
+    if(opts.par&&c.parentId)z+='^FO8,135^A0N,17,17^FDParent: '+c.parentId+'^FS';
+    if(opts.dt)z+='^FO8,156^A0N,16,16^FD'+ds+'^FS';
+    if(opts.qr)z+='^FO272,10^BQN,2,3^FDMM,A'+id+'^FS';
+    return z+'^XZ';
+  }).filter(Boolean).join('\n');
+}
+
+
+
+function toggleBagRange(){document.getElementById('bag-range-inputs').style.display=document.getElementById('print-range').value==='range'?'inline-flex':'none'}
+
+async function printBagLabels(){
+  const b=batches.find(x=>x.batchId===document.getElementById('print-batch').value);
+  if(!b){alert('Select a batch first.');return}
+  let bags=b.bags;
+  if(document.getElementById('print-range').value==='range'){
+    const from=parseInt(document.getElementById('bag-from').value)||1;
+    const to=parseInt(document.getElementById('bag-to').value)||b.bags.length;
+    bags=b.bags.filter(bagId=>{const n=parseInt(bagId.split('-').pop());return n>=from&&n<=to});
+    if(!bags.length){alert('No bags in that range.');return}
+  }
+  const zpl=makeBagZPL(bags,b,document.getElementById('print-mode').value);
+  const err=await sendToPrinter(zpl);
+  if(err)alert('Print error: '+err);
+  else setFb('ok','Printed '+bags.length+' labels for '+b.batchId);
+}
+
+async function printLabLabels(){
+  const ids=[...selectedLabIds];
+  if(!ids.length){alert('Select at least one culture.');return}
+  const zpl=makeLabZPL(ids,getLabOpts());
+  const err=await sendToPrinter(zpl);
+  if(err)alert('Print error: '+err);
+  else setFb('ok','Printed '+ids.length+' lab label'+(ids.length!==1?'s':''));
+}
+
+async function quickPrintCulture(id){
+  const zpl=makeLabZPL([id],{bc:true,qr:false,sp:true,par:true,dt:true});
+  const err=await sendToPrinter(zpl);
+  if(err){
+    // fallback: download ZPL
+    const blob=new Blob([zpl],{type:'text/plain'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+'_label.zpl';a.click();
+  }
+}
+
+async function sendToPrinter(zpl){
+  try{
+    const r=await fetch('/api/print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zpl})});
+    const d=await r.json();
+    if(d.ok)return null;
+    return d.error||'Print failed';
+  }catch(e){return'Could not reach server: '+e.message;}
+}
+
+
+
+function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species} / ${b.strain})</option>`).join('');if(cur)s.value=cur}
+
+function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview');if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;aspect-ratio:2/1;display:flex;align-items:center;justify-content:center;overflow:hidden';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:56px';cell.appendChild(svg);wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bagId,{format:'CODE128',width:1.4,height:32,displayValue:true,fontSize:10,margin:6,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+
+let selectedLabIds=new Set();
+function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${c.id}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${c.id}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${c.type}</span><span style="color:#888">${c.species}${c.strain?' / '+c.strain:''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
+function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
+function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
+function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id,{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=new Date(c.created).toLocaleDateString('de-DE');left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
+
+// ─── REF BARCODES ────────────────────────────────────────────
+async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
+
+async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const val of group.items){const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:#555;margin-top:3px';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
+async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
+
+// ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
+function setFb(type,msg){const el=document.getElementById('scan-fb');el.className='fb-'+type;el.textContent=msg}
+function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
+function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
+function processScan(raw){
+  // Replace _ with - (German HID keyboard fix)
+  let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
+  // Decode new format: BO-ERL-0327-6 → full bag ID BLUES-260327-01-06
+  // Parts: [spAbbrev, strainPrefix, MMDD, bagNum]
+  const parts=val.split('-');
+  if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
+    const scannedSp=parts[0];   // e.g. BO
+    const scannedSt=parts[1];   // e.g. ERL
+    const scannedMmdd=parts[2]; // e.g. 0327
+    const scannedBag=parts[3].padStart(2,'0'); // 6→06
+    // Find matching batch by comparing species abbrev + strain prefix + date MMDD
+    const matchBatch=batches.find(b=>{
+      const bSp=spAbbrev(b.species);
+      const bSt=(b.strain||'000').slice(0,3).toUpperCase();
+      const bDateParts=b.batchId.split('-');
+      const bMmdd=bDateParts[1]?bDateParts[1].slice(2):'';
+      return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
+    });
+    if(matchBatch){
+      val=matchBatch.batchId+'-'+scannedBag;
+      setFb('info','Matched: '+val+' from '+matchBatch.batchId);
+    }else{
+      setFb('err','No batch found for '+val+' — check species/strain/date match');
+      return;
+    }
+  }
+  if(ACTIONS.includes(val)){
+    scan.action=val;scan.from=null;scan.to=null;scan.harvestBag=null;
+    document.getElementById('harvest-panel').style.display='none';updateSD();
+    setFb('ok',{ADD:'Action: ADD → scan location or rack, then bags',MOVE:'Action: MOVE → scan FROM location',REMOVE:'Action: REMOVE → scan bags',HARVEST:'Action: HARVEST → scan a bag to log its weight'}[val]);return;
+  }
+  if(LOCS.includes(val)){
+    if(scan.action==='ADD'){scan.to=val;updateSD();setFb('ok','Location: '+val+' → now scan bags (location stays until you change it)');return}
+    if(scan.action==='MOVE'&&!scan.from){scan.from=val;updateSD();setFb('ok','From: '+val+' → scan the TO location');return}
+    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb('ok','To: '+val+' → now scan bags');return}
+    setFb('err','Set an action first — scan ADD, MOVE, REMOVE or HARVEST.');return;
+  }
+  // Culture ID scan → open lineage
+  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val)){
+    const c=cultures.find(x=>x.id.toUpperCase()===val);
+    if(c){go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok','Culture scanned: '+val+' → lineage view');return}
+  }
+  const isBag=/-\d{2}$/.test(val);
+  const batchId=isBag?val.split('-').slice(0,-1).join('-'):val;
+  const batch=batches.find(b=>b.batchId.toUpperCase()===batchId.toUpperCase());
+  if(batch||isBag){
+    if(!scan.action){openBagInfo(val,batchId,batch);return}
+    if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
+    if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
+    if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
+    scan.count++;saveData();
+    setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
+    updateSD();return;
+  }
+  setFb('err','Unknown barcode: '+val+'. Check the batch exists first.');
+}
+const si=document.getElementById('scan-inp');
+si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
+si.addEventListener('input',()=>{if(si.value.endsWith('\n')||si.value.endsWith('\r')){processScan(si.value);si.value=''}});
+
+// Only steal focus for scan input when user is NOT in a form field
+function isInFormField(){
+  const tag=document.activeElement?.tagName?.toLowerCase();
+  return tag==='input'||tag==='select'||tag==='textarea';
+}
+document.addEventListener('click',e=>{
+  // Only refocus scan bar if clicking on blank space (not on any interactive element)
+  if(!e.target.closest('input,select,textarea,button,.modal-bg'))si.focus();
+});
+document.addEventListener('keydown',e=>{
+  // Redirect keystrokes to scan bar ONLY if user is not already in a form field
+  if(document.activeElement!==si&&!isInFormField()&&!e.target.closest('.modal-bg')&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey)si.focus();
+});
+
+// ─── INIT ────────────────────────────────────────────────────
+loadData();
+setInterval(pollSync,5000);
+
+// Register service worker for PWA / offline support
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
