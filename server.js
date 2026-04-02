@@ -6,25 +6,44 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 const db = require('./db.js');
 
-const PORT = 3000;
+// ── CONFIGURATION ────────────────────────────────────────────
+function loadEnv() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+      fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+        const match = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
+        if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
+      });
+    }
+  } catch (e) { /* .env is optional */ }
+}
+loadEnv();
+
+// ── LOGGING ──────────────────────────────────────────────────
+function log(level, msg, meta) {
+  const ts = new Date().toISOString();
+  const entry = `${ts} [${level.toUpperCase()}] ${msg}`;
+  if (level === 'error') console.error(entry, meta || '');
+  else console.log(entry, meta ? JSON.stringify(meta) : '');
+}
+
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 const DIR = __dirname;
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
-const PRINTER_NAME = 'ZDesigner GK420d';
+const PRINTER_NAME = process.env.PRINTER_NAME || 'ZDesigner GK420d';
+const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
 const database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
-// Graceful shutdown
-process.on('SIGINT', () => { database.close(); process.exit(); });
-process.on('SIGTERM', () => { database.close(); process.exit(); });
-
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
-  '.js':'application/javascript','.png':'image/png',
-  '.ico':'image/x-icon','.svg':'image/svg+xml',
+  '.js':'application/javascript','.css':'text/css; charset=utf-8',
+  '.png':'image/png','.ico':'image/x-icon','.svg':'image/svg+xml',
 };
 
 function getLocalIP(){
@@ -327,7 +346,7 @@ function syncAllTasksLocal(data) {
 function handleCaldav(req, res) {
   // CORS + DAV headers for all CalDAV responses
   res.setHeader('DAV', '1, 2, 3, calendar-access');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const caldavOrigin = req.headers.origin; if (caldavOrigin) res.setHeader('Access-Control-Allow-Origin', caldavOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -364,8 +383,8 @@ function handleCaldav(req, res) {
   }
 
   // Collect request body
-  let body = '';
-  req.on('data', c => body += c);
+  let body='';let bodySize=0;
+  req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
   req.on('end', () => {
     try {
       if (method === 'PROPFIND') return handlePropfind(parts, body, req, res);
@@ -732,7 +751,36 @@ function handleProppatch(parts, body, req, res) {
 // ── HTTP SERVER ──────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
+// ── RATE LIMITING ────────────────────────────────────────────
+const RATE_WINDOW_MS = 60000;
+const RATE_MAX_REQUESTS = 300;
+const rateLimits = new Map();
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = rateLimits.get(ip);
+  if (!entry || now - entry.start > RATE_WINDOW_MS) {
+    entry = { start: now, count: 0 };
+    rateLimits.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count <= RATE_MAX_REQUESTS;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimits) {
+    if (now - entry.start > RATE_WINDOW_MS) rateLimits.delete(ip);
+  }
+}, RATE_WINDOW_MS);
+
 const server=http.createServer((req,res)=>{
+  const clientIP = req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIP)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end('{"error":"Too many requests"}');
+    return;
+  }
   // ── Well-known CalDAV discovery (RFC 6764) ──
   if(req.url.startsWith('/.well-known/caldav')){
     res.writeHead(301,{'Location':'/caldav/'});
@@ -744,10 +792,17 @@ const server=http.createServer((req,res)=>{
     return handleCaldav(req,res);
   }
 
-  res.setHeader('Access-Control-Allow-Origin','*');
+  const origin = req.headers.origin; if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+
+  // GET /api/health
+  if(req.method==='GET'&&req.url==='/api/health'){
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({status:'ok',uptime:process.uptime(),version:require('./package.json').version}));
+    return;
+  }
 
   // GET /api/data
   if(req.method==='GET'&&req.url==='/api/data'){
@@ -757,11 +812,16 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/data
   if(req.method==='POST'&&req.url==='/api/data'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const incoming=JSON.parse(body);
+        if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end('{"error":"Expected a JSON object"}');
+          return;
+        }
         // Safety: never overwrite existing data with empty/smaller arrays
         // (protects against stale browser cache sending blank state)
         const existing=readData();
@@ -789,8 +849,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/print  —  body: { zpl: "^XA...^XZ" }
   if(req.method==='POST'&&req.url==='/api/print'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const{zpl}=JSON.parse(body);
@@ -811,8 +871,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/sync — write all tasks to local calendar files
   if(req.method==='POST'&&req.url==='/api/caldav/sync'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const data=readData();
@@ -835,8 +895,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/push-one — write a single task to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-one'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const{task}=JSON.parse(body);
@@ -872,6 +932,9 @@ const server=http.createServer((req,res)=>{
   let filePath;
   const url=req.url.split('?')[0];
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
+  else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
+  else if(url==='/app.js')filePath=path.join(DIR,'app.js');
+  else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');
   else if(url==='/manifest.json')filePath=path.join(DIR,'manifest.json');
   else if(url.startsWith('/lib/'))filePath=path.join(DIR,'lib',path.basename(url));
   else if(url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg)$/))filePath=path.join(DIR,url.slice(1));
@@ -900,3 +963,16 @@ server.listen(PORT,'0.0.0.0',()=>{
   console.log('  Data saved to: '+DB_FILE);
   console.log('  Press Ctrl+C to stop.');
 });
+
+// ── GRACEFUL SHUTDOWN ────────────────────────────────────────
+function shutdown(signal) {
+  log('info', 'Received ' + signal + ', shutting down...');
+  server.close(() => {
+    database.close();
+    log('info', 'Server closed');
+    process.exit(0);
+  });
+  setTimeout(() => { database.close(); process.exit(1); }, 5000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
