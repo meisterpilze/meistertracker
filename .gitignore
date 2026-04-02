@@ -1,0 +1,15 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Backups
+backups/
+
+# Data
+data.json
+
+# Calendars
+calendars/
