@@ -83,6 +83,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#1a1a1a;box-sh
 .badge-lc{background:#dcfce7;color:#166534}.badge-g2g{background:#fef3c7;color:#92400e}
 .badge-active{background:#dcfce7;color:#166534}.badge-stored{background:#dbeafe;color:#1e40af}
 .badge-used{background:#f5f4f0;color:#888}.badge-contam{background:#fee2e2;color:#991b1b}
+.badge-aktiv{background:#dcfce7;color:#166534}.badge-ausgeschieden{background:#f5f4f0;color:#888}
+.badge-verkauft{background:#dbeafe;color:#1e40af}.badge-verschrottet{background:#fee2e2;color:#991b1b}
+.badge-gwg{background:#fef3c7;color:#92400e}
 
 /* -- Tables -- */
 table{width:100%;border-collapse:collapse;font-size:12px}
