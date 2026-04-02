@@ -1,5 +1,5 @@
 'use strict';
-const Database = require('better-sqlite3');
+const { DatabaseSync: Database } = require('node:sqlite');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -161,8 +161,8 @@ CREATE TABLE IF NOT EXISTS assets (
 // ── Open / Init ──────────────────────────────────────────────
 function openDb(dbPath) {
   const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
   // Ensure singleton rows exist
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
@@ -318,7 +318,8 @@ function readAll(db) {
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
 function writeAll(db, incoming) {
-  const tx = db.transaction(() => {
+  db.exec('BEGIN');
+  try {
     // ── Batches ──
     if (incoming.batches) {
       const existingIds = new Set(db.prepare('SELECT batch_id FROM batches').all().map(r => r.batch_id));
@@ -502,14 +503,18 @@ function writeAll(db, incoming) {
         c.perPersonCalendars ? 1 : 0
       );
     }
-  });
-
-  tx();
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 // ── Backup ───────────────────────────────────────────────────
 function backupDb(db, destPath) {
-  return db.backup(destPath);
+  const escaped = destPath.replace(/'/g, "''");
+  db.exec(`VACUUM INTO '${escaped}'`);
+  return Promise.resolve();
 }
 
 // ── Update CalDAV UID on a task after sync ──
