@@ -1,6 +1,7 @@
 'use strict';
 const Database = require('better-sqlite3');
 const path = require('path');
+const crypto = require('crypto');
 
 // ── Schema ───────────────────────────────────────────────────
 const SCHEMA = `
@@ -120,6 +121,23 @@ CREATE TABLE IF NOT EXISTS caldav_config (
   caldav_password      TEXT DEFAULT '',
   per_person_calendars INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS users (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  hash     TEXT NOT NULL,
+  salt     TEXT NOT NULL,
+  role     TEXT DEFAULT 'user',
+  created  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token   TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created TEXT NOT NULL,
+  expires TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);
 
 CREATE TABLE IF NOT EXISTS assets (
   asset_id            TEXT PRIMARY KEY,
@@ -512,4 +530,64 @@ function readCaldavConfig(db) {
   };
 }
 
-module.exports = { openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid };
+// ── Auth helpers ────────────────────────────────────────────
+function createUser(db, username, password, role) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  const created = new Date().toISOString();
+  db.prepare('INSERT INTO users(username, hash, salt, role, created) VALUES(?, ?, ?, ?, ?)')
+    .run(username, hash, salt, role || 'user', created);
+  return { username, role: role || 'user', created };
+}
+
+function getUserByUsername(db, username) {
+  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+}
+
+function verifyPassword(storedHash, salt, password) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hash, 'hex'));
+}
+
+function createSession(db, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const created = new Date().toISOString();
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare('INSERT INTO sessions(token, user_id, created, expires) VALUES(?, ?, ?, ?)')
+    .run(token, userId, created, expires);
+  return token;
+}
+
+function getSession(db, token) {
+  return db.prepare(
+    `SELECT s.token, s.user_id, s.expires, u.username, u.role
+     FROM sessions s JOIN users u ON s.user_id = u.id
+     WHERE s.token = ? AND s.expires > datetime('now')`
+  ).get(token);
+}
+
+function deleteSession(db, token) {
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+}
+
+function deleteExpiredSessions(db) {
+  db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+}
+
+function countUsers(db) {
+  return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+}
+
+function listUsers(db) {
+  return db.prepare('SELECT id, username, role, created FROM users ORDER BY id').all();
+}
+
+function deleteUser(db, userId) {
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+}
+
+module.exports = {
+  openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid,
+  createUser, getUserByUsername, verifyPassword, createSession, getSession,
+  deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser
+};
