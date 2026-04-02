@@ -155,6 +155,7 @@ tr:hover td{background:#f9f8f5}
 <script src="/lib/jsbarcode.min.js"></script>
 <script src="/lib/qrcode.min.js"></script>
 <script src="/lib/chart.min.js"></script>
+<script src="/lib/html5-qrcode.min.js"></script>
 </head>
 <body>
 
@@ -235,6 +236,13 @@ tr:hover td{background:#f9f8f5}
     </div>
   </div>
 </div>
+<!-- Camera scan modal -->
+<div class="modal-bg" id="m-camscan" onclick="if(event.target===this)closeCamScan()" style="background:rgba(0,0,0,.85)">
+  <div style="position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px">
+    <div id="cam-reader" style="width:100%;max-width:500px;border-radius:12px;overflow:hidden;background:#000"></div>
+    <button class="btn btn-sm" onclick="closeCamScan()" style="margin-top:16px;background:#fff;padding:10px 28px;border-radius:99px;font-size:14px;font-weight:600">Close Camera</button>
+  </div>
+</div>
 <div class="topbar no-print">
   <div class="logo">Meisterpilze <span>lab</span></div>
   <span class="sync-dot" id="sync-dot" title="Click to sync" onclick="loadData()"></span>
@@ -254,6 +262,7 @@ tr:hover td{background:#f9f8f5}
 <!-- Global scan strip -->
 <div class="scanstrip no-print">
   <input type="text" id="scan-inp" class="scan-inp" placeholder="Scan barcode here — works on every tab..." autocomplete="off" />
+  <button class="btn-xs" id="cam-scan-btn" onclick="openCamScan()" title="Scan with camera" style="padding:6px 9px;line-height:1;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg></button>
   <div class="chips">
     <div class="chip"><div class="chip-l">Action</div><div class="chip-v" id="s-action">—</div></div>
     <div class="chip"><div class="chip-l">From</div><div class="chip-v" id="s-from">—</div></div>
@@ -2785,6 +2794,29 @@ function processScan(raw){
 const si=document.getElementById('scan-inp');
 si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
 si.addEventListener('input',()=>{if(si.value.endsWith('\n')||si.value.endsWith('\r')){processScan(si.value);si.value=''}});
+
+// ─── CAMERA SCAN ────────────────────────────────────────────
+let camScanner=null;
+function openCamScan(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setFb('err','Camera not available in this browser. Use HTTPS or localhost.');return}
+  document.getElementById('m-camscan').classList.add('open');
+  camScanner=new Html5Qrcode('cam-reader');
+  camScanner.start(
+    {facingMode:'environment'},
+    {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128]},
+    function(decodedText){if(navigator.vibrate)navigator.vibrate(100);closeCamScan();processScan(decodedText)},
+    function(){}
+  ).catch(function(err){
+    closeCamScan();
+    if(err.name==='NotAllowedError')setFb('err','Camera permission denied. Check browser settings.');
+    else setFb('err','Camera error: '+(err.message||err));
+  });
+}
+function closeCamScan(){
+  document.getElementById('m-camscan').classList.remove('open');
+  if(camScanner){camScanner.stop().catch(function(){});camScanner.clear();camScanner=null}
+}
+document.addEventListener('visibilitychange',function(){if(document.hidden&&camScanner)closeCamScan()});
 
 // Only steal focus for scan input when user is NOT in a form field
 function isInFormField(){
