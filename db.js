@@ -426,4 +426,15 @@ function backupDb(db, destPath) {
   return db.backup(destPath);
 }
 
-module.exports = { openDb, readAll, writeAll, backupDb };
+// ── Read only CalDAV config (lightweight, for auth checks) ──
+function readCaldavConfig(db) {
+  const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
+  return {
+    caldavUsername: cal.caldav_username,
+    caldavPassword: cal.caldav_password,
+    enabled: cal.enabled === 1,
+    perPersonCalendars: cal.per_person_calendars === 1
+  };
+}
+
+module.exports = { openDb, readAll, writeAll, backupDb, readCaldavConfig };

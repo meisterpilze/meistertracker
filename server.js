@@ -189,8 +189,7 @@ function escapeXml(s) {
 
 // Check CalDAV basic auth against stored credentials
 function checkCaldavAuth(req) {
-  const data = readData();
-  const cfg = data.caldav || {};
+  const cfg = db.readCaldavConfig(database);
   // If no credentials configured, allow all (open access on local network)
   if (!cfg.caldavUsername) return true;
   const authHeader = req.headers['authorization'] || '';
