@@ -25,6 +25,20 @@ ensure_pm2() {
     echo "  -> PM2 $(pm2 --version) found."
 }
 
+ensure_certs() {
+    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
+        echo "  -> TLS certificates found."
+        return
+    fi
+    if command -v openssl &> /dev/null; then
+        echo "  -> TLS certificates missing, generating..."
+        bash gen-cert.sh
+    else
+        echo "  ⚠ OpenSSL not installed — cannot generate TLS certificates."
+        echo "    Server will start in HTTP mode (iOS camera will not work)."
+    fi
+}
+
 backup_data() {
     BACKUP_DIR="backups"
     mkdir -p "$BACKUP_DIR"
