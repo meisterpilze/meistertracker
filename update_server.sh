@@ -42,7 +42,7 @@ do_update() {
     check_node
     ensure_pm2
 
-    echo "[1/3] Updating code from git (reset to origin/main)..."
+    echo "[1/5] Updating code from git (reset to origin/main)..."
     if ! git fetch origin; then
         echo "Error: git fetch failed."
         exit 1
@@ -52,13 +52,16 @@ do_update() {
         exit 1
     fi
 
-    echo "[2/4] Installing dependencies..."
+    echo "[2/5] Installing dependencies..."
     npm install --production
 
-    echo "[3/4] Backing up data..."
+    echo "[3/5] Backing up data..."
     backup_data
 
-    echo "[4/4] Restarting server..."
+    echo "[4/5] Ensuring TLS certificates..."
+    ensure_certs
+
+    echo "[5/5] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "  -> Process found, attempting reload..."
         pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
@@ -82,6 +85,9 @@ do_start() {
         echo "Installing dependencies..."
         npm install --production
     fi
+
+    echo "Ensuring TLS certificates..."
+    ensure_certs
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "Process already exists in PM2, restarting..."
@@ -111,8 +117,31 @@ do_status() {
     pm2 status
 }
 
+ensure_certs() {
+    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
+        echo "  -> TLS certificates found."
+        return
+    fi
+    echo "  -> TLS certificates not found, generating..."
+    if ! command -v openssl &> /dev/null; then
+        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
+        echo "     Camera scanning on iOS Safari requires HTTPS."
+        echo "     Install openssl and run: bash update_server.sh gen-cert"
+        return
+    fi
+    if [ -f gen-cert.sh ]; then
+        bash gen-cert.sh
+    else
+        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
+    fi
+}
+
 do_gen_cert() {
     echo "==== Generating TLS Certificate ===="
+    if ! command -v openssl &> /dev/null; then
+        echo "Error: openssl is not installed."
+        exit 1
+    fi
     if [ -f gen-cert.sh ]; then
         bash gen-cert.sh
         echo ""
