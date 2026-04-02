@@ -1771,7 +1771,7 @@ function openCamScan(){
   camScanner=new Html5Qrcode('cam-reader');
   camScanner.start(
     {facingMode:'environment'},
-    {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128]},
+    {fps:10,qrbox:{width:250,height:250},formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128]},
     function(decodedText){if(navigator.vibrate)navigator.vibrate(100);closeCamScan();processScan(decodedText)},
     function(){}
   ).catch(function(err){
