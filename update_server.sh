@@ -40,6 +40,7 @@ fi
 echo "[2/3] Backing up data..."
 BACKUP_DIR="backups"
 mkdir -p "$BACKUP_DIR"
+chmod u+w "$BACKUP_DIR"
 if [ -f data.json ]; then
     cp data.json "$BACKUP_DIR/data_$(date +%Y%m%d_%H%M%S).json"
     echo "  -> data.json backed up."
