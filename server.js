@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const db = require('./db.js');
 
@@ -176,14 +177,20 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Sanitize URL path parts to prevent directory traversal attacks
+function sanitizePart(s) {
+  const clean = path.basename(s);
+  if (!clean || clean === '.' || clean === '..') return null;
+  return clean;
+}
+
 function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // Check CalDAV basic auth against stored credentials
 function checkCaldavAuth(req) {
-  const data = readData();
-  const cfg = data.caldav || {};
+  const cfg = db.readCaldavConfig(database);
   // If no credentials configured, allow all (open access on local network)
   if (!cfg.caldavUsername) return true;
   const authHeader = req.headers['authorization'] || '';
@@ -213,6 +220,19 @@ function listIcsFiles(calName) {
   const dir = path.join(CAL_DIR, calName);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter(f => f.endsWith('.ics'));
+}
+
+// Compute a stable ctag for a calendar based on file contents
+function computeCtag(calName) {
+  const dir = path.join(CAL_DIR, calName);
+  if (!fs.existsSync(dir)) return '0';
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.ics')).sort();
+  const hash = crypto.createHash('md5');
+  for (const f of files) {
+    const stat = fs.statSync(path.join(dir, f));
+    hash.update(f + ':' + stat.mtimeMs + ':' + stat.size + '\n');
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 // Convert a task object to VTODO .ics content
@@ -324,6 +344,17 @@ function handleCaldav(req, res) {
   const parts = rawPath.replace(/^\/caldav\/?/, '').replace(/\/$/, '').split('/').filter(Boolean);
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
 
+  // Sanitize path parts to prevent directory traversal
+  for (let i = 1; i < parts.length; i++) {
+    const clean = sanitizePart(parts[i]);
+    if (!clean) {
+      res.writeHead(400);
+      res.end('Invalid path');
+      return;
+    }
+    parts[i] = clean;
+  }
+
   if (method === 'OPTIONS') {
     res.writeHead(200, {
       'Allow': 'OPTIONS, GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH',
@@ -403,7 +434,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(cal)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -437,7 +468,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(calName)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -524,7 +555,8 @@ function handleReport(parts, body, req, res) {
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
         const href = hrefTag.replace(/<\/?d:href>/gi, '');
-        const filename = decodeURIComponent(href.split('/').pop());
+        const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
+        if (!filename) continue;
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
@@ -597,6 +629,27 @@ function handlePut(parts, body, req, res) {
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
     const existed = fs.existsSync(filePath);
+
+    // If-None-Match: * means "create only, fail if exists"
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch === '*' && existed) {
+      res.writeHead(412);
+      res.end('Precondition Failed');
+      return;
+    }
+
+    // If-Match: check etag matches current version (conflict detection)
+    const ifMatch = req.headers['if-match'];
+    if (ifMatch && existed) {
+      const stat = fs.statSync(filePath);
+      const currentEtag = '"' + stat.mtimeMs.toString(36) + '"';
+      if (ifMatch !== currentEtag) {
+        res.writeHead(412);
+        res.end('Precondition Failed');
+        return;
+      }
+    }
+
     fs.writeFileSync(filePath, body, 'utf8');
     const stat = fs.statSync(filePath);
     const etag = '"' + stat.mtimeMs.toString(36) + '"';
@@ -643,7 +696,12 @@ function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    fs.unlinkSync(filePath);
     res.writeHead(204);
     res.end();
     return;
@@ -675,6 +733,12 @@ function handleProppatch(parts, body, req, res) {
 // ══════════════════════════════════════════════════════════════
 
 const server=http.createServer((req,res)=>{
+  // ── Well-known CalDAV discovery (RFC 6764) ──
+  if(req.url.startsWith('/.well-known/caldav')){
+    res.writeHead(301,{'Location':'/caldav/'});
+    res.end();return;
+  }
+
   // ── CalDAV requests ──
   if(req.url.startsWith('/caldav')){
     return handleCaldav(req,res);
@@ -784,6 +848,8 @@ const server=http.createServer((req,res)=>{
           calName='meisterpilze-'+slug;
         }
         const uid=writeTaskToCalendar(task,calName);
+        const synced=task.caldavSynced||new Date().toISOString();
+        db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
