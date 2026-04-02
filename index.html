@@ -245,39 +245,39 @@ tr:hover td{background:#f9f8f5}
     <option value="pt">PT</option>
   </select>
   <nav class="nav">
-    <button class="active" id="n-dash" onclick="go('dash','n-dash')">Dashboard</button>
-    <button id="n-batch" onclick="go('batch','n-batch')">Batches</button>
-    <button id="n-lab" onclick="go('lab','n-lab')">Lab</button>
-    <button id="n-inv" onclick="go('inv','n-inv')">Inventory</button>
-    <button id="n-assets" onclick="go('assets','n-assets')">Anlagen</button>
-    <button id="n-print" onclick="go('print','n-print')">Print</button>
-    <button id="n-todo" onclick="go('todo','n-todo')">To-do</button>
-    <button id="n-settings" onclick="go('settings','n-settings')">More</button>
+    <button class="active" id="n-dash" onclick="go('dash','n-dash')" data-i18n="nav.dashboard">Dashboard</button>
+    <button id="n-batch" onclick="go('batch','n-batch')" data-i18n="nav.batches">Batches</button>
+    <button id="n-lab" onclick="go('lab','n-lab')" data-i18n="nav.lab">Lab</button>
+    <button id="n-inv" onclick="go('inv','n-inv')" data-i18n="nav.inventory">Inventory</button>
+    <button id="n-assets" onclick="go('assets','n-assets')" data-i18n="nav.assets">Anlagen</button>
+    <button id="n-print" onclick="go('print','n-print')" data-i18n="nav.print">Print</button>
+    <button id="n-todo" onclick="go('todo','n-todo')" data-i18n="nav.todo">To-do</button>
+    <button id="n-settings" onclick="go('settings','n-settings')" data-i18n="nav.more">More</button>
   </nav>
 </div>
 
 <!-- Global scan strip -->
 <div class="scanstrip no-print">
-  <input type="text" id="scan-inp" class="scan-inp" placeholder="Scan barcode here — works on every tab..." autocomplete="off" />
+  <input type="text" id="scan-inp" class="scan-inp" data-i18n-placeholder="scan.placeholder" placeholder="Scan barcode here — works on every tab..." autocomplete="off" />
   <div class="chips">
-    <div class="chip"><div class="chip-l">Action</div><div class="chip-v" id="s-action">—</div></div>
-    <div class="chip"><div class="chip-l">From</div><div class="chip-v" id="s-from">—</div></div>
-    <div class="chip"><div class="chip-l">To</div><div class="chip-v" id="s-to">—</div></div>
-    <div class="chip"><div class="chip-l">Count</div><div class="chip-v" id="s-count">0</div></div>
+    <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+    <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+    <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+    <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
   </div>
-  <button class="btn-xs" onclick="resetScan()">Reset</button>
-  <button class="btn-xs green" onclick="openBatchAdd()">Add batch</button>
+  <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
+  <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">Add batch</button>
 </div>
 <div id="harvest-panel">
   <div class="inner">
-    <div><div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:3px" id="hp-lbl">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:#fff8e7" /></div>
-    <div><label style="color:#92400e;font-size:11px">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
-    <div><label style="color:#92400e;font-size:11px">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
-    <button class="btn btn-p btn-sm" onclick="confirmHarvest()">Log harvest</button>
-    <button class="btn btn-sm" onclick="cancelHarvest()">Cancel</button>
+    <div><div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:3px" id="hp-lbl" data-i18n="harvest.logHarvest">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:#fff8e7" /></div>
+    <div><label style="color:#92400e;font-size:11px" data-i18n="harvest.grams">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
+    <div><label style="color:#92400e;font-size:11px" data-i18n="harvest.flush">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
+    <button class="btn btn-p btn-sm" onclick="confirmHarvest()" data-i18n="harvest.logHarvest">Log harvest</button>
+    <button class="btn btn-sm" onclick="cancelHarvest()" data-i18n="harvest.cancel">Cancel</button>
   </div>
 </div>
-<div id="scan-fb" class="fb-info">Ready — scan ADD, MOVE, REMOVE or HARVEST to begin</div>
+<div id="scan-fb" class="fb-info" data-i18n="scan.ready">Ready — scan ADD, MOVE, REMOVE or HARVEST to begin</div>
 
 <div class="main">
 
@@ -289,8 +289,8 @@ tr:hover td{background:#f9f8f5}
   <!-- Alerts -->
   <div class="card" id="dash-alerts-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0">Alerts &amp; tasks</div>
-      <button class="btn btn-sm" onclick="go('todo','n-todo');openStab('todo','todo')">See all</button>
+      <div class="sec" style="margin:0" data-i18n="dash.alerts">Alerts &amp; tasks</div>
+      <button class="btn btn-sm" onclick="go('todo','n-todo');openStab('todo','todo')" data-i18n="dash.seeAll">See all</button>
     </div>
     <div id="dash-alerts"></div>
   </div>
@@ -299,12 +299,12 @@ tr:hover td{background:#f9f8f5}
   <div class="g2" style="margin-bottom:10px">
     <!-- Pipeline funnel -->
     <div class="card">
-      <div class="sec">Production pipeline</div>
+      <div class="sec" data-i18n="dash.pipeline">Production pipeline</div>
       <div id="pipeline-chart"></div>
     </div>
     <!-- Harvest by species -->
     <div class="card">
-      <div class="sec">Harvest by species (g)</div>
+      <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (g)</div>
       <canvas id="harvest-chart" height="160"></canvas>
     </div>
   </div>
@@ -312,15 +312,15 @@ tr:hover td{background:#f9f8f5}
   <!-- Batch status -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0">Live batch status</div>
+      <div class="sec" style="margin:0" data-i18n="dash.liveStatus">Live batch status</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" id="status-q" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
-        <button class="btn btn-sm" id="status-view-btn" onclick="toggleStatusView()">Cards</button>
+        <input type="text" id="status-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
+        <button class="btn btn-sm" id="status-view-btn" onclick="toggleStatusView()" data-i18n="dash.cards">Cards</button>
       </div>
     </div>
     <!-- Table view (default) -->
     <div id="status-table-view" style="overflow-x:auto"><table>
-      <thead><tr><th>Batch ID</th><th>Species</th><th>Strain</th><th>SPAWN</th><th>INC</th><th>T1</th><th>T2</th><th>T3</th><th>CONTAM</th><th>Total</th><th>Harvested</th><th>Due</th><th>Status</th><th>Action</th></tr></thead>
+      <thead><tr><th data-i18n="th.batchId">Batch ID</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th>SPAWN</th><th>INC</th><th>T1</th><th>T2</th><th>T3</th><th>CONTAM</th><th data-i18n="th.total">Total</th><th data-i18n="th.harvested">Harvested</th><th data-i18n="th.due">Due</th><th data-i18n="th.status">Status</th><th data-i18n="th.action">Action</th></tr></thead>
       <tbody id="status-body"></tbody>
     </table></div>
     <!-- Card view (toggle) -->
@@ -330,21 +330,21 @@ tr:hover td{background:#f9f8f5}
   <!-- Racks -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0">Rack occupancy</div>
-      <span style="font-size:11px;color:#aaa">Click a rack to see contents</span>
+      <div class="sec" style="margin:0" data-i18n="dash.rackOccupancy">Rack occupancy</div>
+      <span style="font-size:11px;color:#aaa" data-i18n="dash.clickRack">Click a rack to see contents</span>
     </div>
     <div style="margin-bottom:10px">
-      <div class="sec" style="margin-bottom:6px">SPAWN — 2 racks</div>
+      <div class="sec" style="margin-bottom:6px" data-i18n="dash.spawnRacks">SPAWN — 2 racks</div>
       <div id="racks-spawn" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
     </div>
     <div>
-      <div class="sec" style="margin-bottom:6px">INC — 10 racks</div>
+      <div class="sec" style="margin-bottom:6px" data-i18n="dash.incRacks">INC — 10 racks</div>
       <div id="racks-inc" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
     </div>
     <div id="rack-detail" style="display:none;margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0" id="rack-detail-title">Rack</div>
-        <button class="btn btn-sm" onclick="document.getElementById('rack-detail').style.display='none'">Close</button>
+        <div class="sec" style="margin:0" id="rack-detail-title" data-i18n="dash.rack">Rack</div>
+        <button class="btn btn-sm" onclick="document.getElementById('rack-detail').style.display='none'" data-i18n="dash.close">Close</button>
       </div>
       <div id="rack-detail-body"></div>
     </div>
@@ -353,7 +353,7 @@ tr:hover td{background:#f9f8f5}
   <!-- Location tabs -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0">Bags by location</div>
+      <div class="sec" style="margin:0" data-i18n="dash.bagsByLocation">Bags by location</div>
     </div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px" id="loc-tabs"></div>
     <div id="loc-body"></div>
@@ -363,19 +363,19 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ BATCHES ══ -->
 <div class="page" id="p-batch">
   <div class="stabs">
-    <button class="stab active" id="st-batch-list" onclick="openStab('batch','list')">All batches</button>
-    <button class="stab" id="st-batch-new" onclick="openStab('batch','new')">New batch</button>
-    <button class="stab" id="st-batch-harvest" onclick="openStab('batch','harvest')">Harvests</button>
+    <button class="stab active" id="st-batch-list" onclick="openStab('batch','list')" data-i18n="batch.allBatches">All batches</button>
+    <button class="stab" id="st-batch-new" onclick="openStab('batch','new')" data-i18n="batch.newBatch">New batch</button>
+    <button class="stab" id="st-batch-harvest" onclick="openStab('batch','harvest')" data-i18n="batch.harvests">Harvests</button>
   </div>
   <!-- All batches -->
   <div class="sp active" id="sp-batch-list">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">All batches</div>
-        <input type="text" id="batch-q" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderBatches()" />
+        <div class="sec" style="margin:0" data-i18n="batch.allBatches">All batches</div>
+        <input type="text" id="batch-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderBatches()" />
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Batch ID</th><th>Species</th><th>Strain</th><th>Qty</th><th>Inc</th><th>Substrate</th><th>Source</th><th>Created</th><th>Due</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="th.batchId">Batch ID</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.qty">Qty</th><th data-i18n="th.inc">Inc</th><th data-i18n="th.substrate">Substrate</th><th data-i18n="th.source">Source</th><th data-i18n="th.created">Created</th><th data-i18n="th.due">Due</th><th data-i18n="th.status">Status</th><th data-i18n="th.notes">Notes</th><th></th></tr></thead>
         <tbody id="batches-body"></tbody>
       </table></div>
     </div>
@@ -384,16 +384,16 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-batch-new">
     <div class="g2">
       <div class="card">
-        <div class="sec">Create new batch</div>
+        <div class="sec" data-i18n="batch.createNew">Create new batch</div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
           <div class="g2">
-            <div><label>Batch type</label>
+            <div><label data-i18n="batch.batchType">Batch type</label>
               <select id="nb-type" onchange="nbTypeChange()">
-                <option value="block">Fruiting block</option>
-                <option value="grain">Grain spawn bag</option>
+                <option value="block" data-i18n="batch.fruitingBlock">Fruiting block</option>
+                <option value="grain" data-i18n="batch.grainSpawnBag">Grain spawn bag</option>
               </select>
             </div>
-            <div><label>Bag weight</label>
+            <div><label data-i18n="batch.bagWeight">Bag weight</label>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px" id="nb-weight-btns">
                 <button type="button" class="btn btn-sm btn-p" id="wbtn-3" onclick="setBagWeight(3)">3 kg</button>
                 <button type="button" class="btn btn-sm" id="wbtn-5" onclick="setBagWeight(5)">5 kg</button>
@@ -406,42 +406,42 @@ tr:hover td{background:#f9f8f5}
             </div>
           </div>
           <div class="g2">
-            <div><label>Species</label><input type="text" id="nb-sp" placeholder="e.g. Kings, Oyster" oninput="nbPreview()" /></div>
-            <div><label>Strain</label><input type="text" id="nb-st" placeholder="e.g. Erl, XK5" oninput="nbPreview()" /></div>
+            <div><label data-i18n="th.species">Species</label><input type="text" id="nb-sp" placeholder="e.g. Kings, Oyster" oninput="nbPreview()" /></div>
+            <div><label data-i18n="th.strain">Strain</label><input type="text" id="nb-st" placeholder="e.g. Erl, XK5" oninput="nbPreview()" /></div>
           </div>
           <div class="g2">
-            <div><label>Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" oninput="nbPreview()" /></div>
-            <div><label>Incubation days</label><input type="number" id="nb-days" value="14" min="1" max="90" /></div>
+            <div><label data-i18n="batch.qty">Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" oninput="nbPreview()" /></div>
+            <div><label data-i18n="batch.incDays">Incubation days</label><input type="number" id="nb-days" value="14" min="1" max="90" /></div>
           </div>
           <details style="background:#f9f8f5;border-radius:8px;padding:10px">
-            <summary style="font-size:12px;color:#666;cursor:pointer">Substrate (optional)</summary>
+            <summary style="font-size:12px;color:#666;cursor:pointer" data-i18n="batch.substrate">Substrate (optional)</summary>
             <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
               <div class="g2">
-                <div><label>Hardwood %</label><input type="number" id="nb-hw" placeholder="80" min="0" max="100" oninput="nbSubSum()" /></div>
-                <div><label>Wheat bran %</label><input type="number" id="nb-wb" placeholder="20" min="0" max="100" oninput="nbSubSum()" /></div>
+                <div><label data-i18n="batch.hardwood">Hardwood %</label><input type="number" id="nb-hw" placeholder="80" min="0" max="100" oninput="nbSubSum()" /></div>
+                <div><label data-i18n="batch.wheatBran">Wheat bran %</label><input type="number" id="nb-wb" placeholder="20" min="0" max="100" oninput="nbSubSum()" /></div>
               </div>
               <div class="g2">
-                <div><label>Field capacity %RH</label><input type="number" id="nb-rh" placeholder="65" min="0" max="100" oninput="nbPreview()" /></div>
+                <div><label data-i18n="batch.fieldCapacity">Field capacity %RH</label><input type="number" id="nb-rh" placeholder="65" min="0" max="100" oninput="nbPreview()" /></div>
                 <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
                   <input type="checkbox" id="nb-gyp" style="width:16px;height:16px;margin:0" />
-                  <label style="margin:0;font-size:13px;color:#444;cursor:pointer" for="nb-gyp">Gypsum added</label>
+                  <label style="margin:0;font-size:13px;color:#444;cursor:pointer" for="nb-gyp" data-i18n="batch.gypsumAdded">Gypsum added</label>
                 </div>
               </div>
               <div id="nb-subsum" style="font-size:11px;color:#888"></div>
             </div>
           </details>
-          <div><label>Source culture (optional)</label><select id="nb-culture"><option value="">— none —</option></select><div style="font-size:11px;color:#aaa;margin-top:3px">Link to the PD or LC used to inoculate this batch</div></div>
-          <div><label>Notes (optional)</label><textarea id="nb-notes" rows="2" placeholder="Any notes..."></textarea></div>
-          <div class="met"><div class="met-l">Batch ID preview</div><div id="nb-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
+          <div><label data-i18n="batch.sourceCulture">Source culture (optional)</label><select id="nb-culture"><option value="" data-i18n="batch.none">— none —</option></select><div style="font-size:11px;color:#aaa;margin-top:3px" data-i18n="batch.sourceCultureHint">Link to the PD or LC used to inoculate this batch</div></div>
+          <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="nb-notes" rows="2" placeholder="Any notes..."></textarea></div>
+          <div class="met"><div class="met-l" data-i18n="batch.idPreview">Batch ID preview</div><div id="nb-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
           <div id="nb-mat-preview" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#166534;line-height:1.8"></div>
-          <button class="btn btn-p" onclick="createBatch()">Create batch</button>
+          <button class="btn btn-p" onclick="createBatch()" data-i18n="batch.create">Create batch</button>
         </div>
       </div>
       <div class="card" id="nb-result" style="display:none">
-        <div class="sec">Generated bag IDs</div>
+        <div class="sec" data-i18n="batch.generatedIds">Generated bag IDs</div>
         <div id="nb-bags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:250px;overflow-y:auto"></div>
         <div style="border-top:1px solid #e5e3dd;margin-top:12px;padding-top:12px">
-          <button class="btn btn-p" style="width:100%" onclick="goToPrintBatch()">Print labels for this batch</button>
+          <button class="btn btn-p" style="width:100%" onclick="goToPrintBatch()" data-i18n="batch.printLabels">Print labels for this batch</button>
         </div>
       </div>
     </div>
@@ -452,27 +452,27 @@ tr:hover td{background:#f9f8f5}
     <!-- Harvest charts row -->
     <div class="g2" style="margin-bottom:10px">
       <div class="card">
-        <div class="sec">Total yield per batch (g)</div>
+        <div class="sec" data-i18n="harvest.totalYieldPerBatch">Total yield per batch (g)</div>
         <canvas id="batch-yield-chart" height="180"></canvas>
       </div>
       <div class="card">
-        <div class="sec">Harvest over time (weekly, g)</div>
+        <div class="sec" data-i18n="harvest.overTime">Harvest over time (weekly, g)</div>
         <canvas id="harvest-timeline-chart" height="180"></canvas>
       </div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Per batch totals</div>
+        <div class="sec" style="margin:0" data-i18n="harvest.perBatchTotals">Per batch totals</div>
       </div>
       <div id="harvest-totals"></div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Harvest log</div>
-        <input type="text" id="harvest-q" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderHarvests()" />
+        <div class="sec" style="margin:0" data-i18n="harvest.log">Harvest log</div>
+        <input type="text" id="harvest-q" data-i18n-placeholder="harvest.searchBatch" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderHarvests()" />
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Date</th><th>Batch</th><th>Bag</th><th>Species</th><th>Strain</th><th>Flush</th><th>Grams</th></tr></thead>
+        <thead><tr><th data-i18n="th.date">Date</th><th data-i18n="th.batch">Batch</th><th data-i18n="th.bag">Bag</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.flush">Flush</th><th data-i18n="th.grams">Grams</th></tr></thead>
         <tbody id="harvest-body"></tbody>
       </table></div>
     </div>
@@ -482,28 +482,28 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ LAB ══ -->
 <div class="page" id="p-lab">
   <div class="stabs">
-    <button class="stab active" id="st-lab-cultures" onclick="openStab('lab','cultures')">Cultures</button>
-    <button class="stab" id="st-lab-work" onclick="openStab('lab','work')">Log work</button>
-    <button class="stab" id="st-lab-lineage" onclick="openStab('lab','lineage')">Lineage</button>
+    <button class="stab active" id="st-lab-cultures" onclick="openStab('lab','cultures')" data-i18n="lab.cultures">Cultures</button>
+    <button class="stab" id="st-lab-work" onclick="openStab('lab','work')" data-i18n="lab.logWork">Log work</button>
+    <button class="stab" id="st-lab-lineage" onclick="openStab('lab','lineage')" data-i18n="lab.lineage">Lineage</button>
   </div>
   <!-- Cultures -->
   <div class="sp active" id="sp-lab-cultures">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Culture library</div>
+        <div class="sec" style="margin:0" data-i18n="lab.cultureLibrary">Culture library</div>
         <div style="display:flex;gap:6px">
           <select id="cult-type" onchange="renderCultures()" style="width:auto;font-size:12px;padding:4px 8px">
-            <option value="all">All types</option><option value="MC">Mother cultures</option>
-            <option value="PD">Petri dishes</option><option value="LC">Liquid cultures</option>
+            <option value="all" data-i18n="lab.allTypes">All types</option><option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
+            <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option><option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
           </select>
           <select id="cult-stat" onchange="renderCultures()" style="width:auto;font-size:12px;padding:4px 8px">
-            <option value="all">All statuses</option><option value="active">Active</option>
-            <option value="stored">Stored</option><option value="used">Used up</option><option value="contam">Contaminated</option>
+            <option value="all" data-i18n="lab.allStatuses">All statuses</option><option value="active" data-i18n="lab.active">Active</option>
+            <option value="stored" data-i18n="lab.stored">Stored</option><option value="used" data-i18n="lab.usedUp">Used up</option><option value="contam" data-i18n="lab.contaminated">Contaminated</option>
           </select>
         </div>
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>ID</th><th>Type</th><th>Species</th><th>Strain</th><th>Parent</th><th>Created</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="th.id">ID</th><th data-i18n="th.type">Type</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.parent">Parent</th><th data-i18n="th.created">Created</th><th data-i18n="th.status">Status</th><th data-i18n="th.notes">Notes</th><th></th></tr></thead>
         <tbody id="cultures-body"></tbody>
       </table></div>
     </div>
@@ -512,44 +512,44 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-lab-work">
     <div class="g2">
       <div class="card">
-        <div class="sec">Log clean room work</div>
+        <div class="sec" data-i18n="lab.logCleanRoom">Log clean room work</div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
           <div class="g2">
-            <div><label>Work type</label>
+            <div><label data-i18n="lab.workType">Work type</label>
               <select id="lw-type" onchange="lwUpdate()">
-                <option value="MC">Register mother culture</option>
-                <option value="PD">Petri dish transfer</option>
-                <option value="LC">Liquid culture prep</option>
-                <option value="G2G">Grain-to-grain (G2G)</option>
+                <option value="MC" data-i18n="lab.registerMC">Register mother culture</option>
+                <option value="PD" data-i18n="lab.pdTransfer">Petri dish transfer</option>
+                <option value="LC" data-i18n="lab.lcPrep">Liquid culture prep</option>
+                <option value="G2G" data-i18n="lab.g2g">Grain-to-grain (G2G)</option>
               </select>
             </div>
-            <div><label>Species</label>
+            <div><label data-i18n="th.species">Species</label>
               <input type="text" id="lw-sp" placeholder="e.g. Kings" list="sp-list" oninput="lwPreview()" />
               <datalist id="sp-list"></datalist>
             </div>
           </div>
-          <div><label>Strain</label><input type="text" id="lw-st" placeholder="e.g. Erl, XK5" /></div>
+          <div><label data-i18n="th.strain">Strain</label><input type="text" id="lw-st" placeholder="e.g. Erl, XK5" /></div>
           <div id="lw-parent-row">
-            <label id="lw-parent-lbl">Parent culture</label>
-            <select id="lw-parent"><option value="">— none / new isolation —</option></select>
+            <label id="lw-parent-lbl" data-i18n="lab.parentCulture">Parent culture</label>
+            <select id="lw-parent"><option value="" data-i18n="lab.noneNewIsolation">— none / new isolation —</option></select>
           </div>
           <div id="lw-source-row" style="display:none">
-            <label>Source (e.g. clone, spore print, wild)</label>
+            <label data-i18n="lab.source">Source (e.g. clone, spore print, wild)</label>
             <input type="text" id="lw-source" placeholder="e.g. Clone from KINGS-250101-01-03" />
           </div>
-          <div><label id="lw-qty-lbl">Quantity made</label><input type="number" id="lw-qty" value="1" min="1" max="50" oninput="lwPreview()" /></div>
-          <div><label>Notes (optional)</label><textarea id="lw-notes" rows="2" placeholder="Observations, conditions..."></textarea></div>
+          <div><label id="lw-qty-lbl" data-i18n="lab.qtyMade">Quantity made</label><input type="number" id="lw-qty" value="1" min="1" max="50" oninput="lwPreview()" /></div>
+          <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="lw-notes" rows="2" data-i18n-placeholder="lab.observations" placeholder="Observations, conditions..."></textarea></div>
           <div id="lw-prev-box" style="display:none;background:#f9f8f5;border-radius:8px;padding:8px 10px">
-            <div style="font-size:10px;color:#999;margin-bottom:3px">IDs that will be created</div>
+            <div style="font-size:10px;color:#999;margin-bottom:3px" data-i18n="lab.idsCreated">IDs that will be created</div>
             <div id="lw-prev" style="font-family:monospace;font-size:12px;line-height:1.8"></div>
           </div>
-          <button class="btn btn-p" onclick="logLabWork()">Log work</button>
+          <button class="btn btn-p" onclick="logLabWork()" data-i18n="lab.logWorkBtn">Log work</button>
         </div>
       </div>
       <div class="card">
-        <div class="sec">Recent lab entries</div>
+        <div class="sec" data-i18n="lab.recentEntries">Recent lab entries</div>
         <div style="overflow-x:auto"><table>
-          <thead><tr><th>Date</th><th>Type</th><th>ID created</th><th>Parent</th><th>Species</th></tr></thead>
+          <thead><tr><th data-i18n="th.date">Date</th><th data-i18n="th.type">Type</th><th>ID</th><th data-i18n="th.parent">Parent</th><th data-i18n="th.species">Species</th></tr></thead>
           <tbody id="lab-log-body"></tbody>
         </table></div>
       </div>
@@ -559,12 +559,12 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-lab-lineage">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div class="sec" style="margin:0">Genetic lineage</div>
+        <div class="sec" style="margin:0" data-i18n="lab.geneticLineage">Genetic lineage</div>
         <select id="lineage-sel" onchange="renderLineage()" style="font-size:12px;padding:4px 8px;min-width:220px;width:auto">
-          <option value="">— select a culture or batch —</option>
+          <option value="" data-i18n="lab.selectCultureBatch">— select a culture or batch —</option>
         </select>
       </div>
-      <div id="lineage-body"><div class="empty">Select a culture or batch above to trace its lineage.</div></div>
+      <div id="lineage-body"><div class="empty" data-i18n="lab.selectAbove">Select a culture or batch above to trace its lineage.</div></div>
     </div>
   </div>
 </div>
@@ -574,34 +574,34 @@ tr:hover td{background:#f9f8f5}
   <!-- Printer status — always shown at top -->
   <div class="card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:10px">
     <div style="font-size:12px;color:#166534;line-height:1.7">
-      <strong>Printing directly to ZDesigner GK420d</strong> via the server — no dialog needed. Make sure the server is running and the printer is on.
+      <strong data-i18n="print.printerInfo">Printing directly to ZDesigner GK420d</strong> <span data-i18n="print.printerInfoDetail">via the server — no dialog needed. Make sure the server is running and the printer is on.</span>
       <br><br>
     </div>
   </div>
   <div class="stabs">
-    <button class="stab active" id="st-print-bags" onclick="openStab('print','bags')">Bag labels</button>
-    <button class="stab" id="st-print-lab" onclick="openStab('print','lab')">Lab labels</button>
-    <button class="stab" id="st-print-ref" onclick="openStab('print','ref')">Reference barcodes</button>
+    <button class="stab active" id="st-print-bags" onclick="openStab('print','bags')" data-i18n="print.bagLabels">Bag labels</button>
+    <button class="stab" id="st-print-lab" onclick="openStab('print','lab')" data-i18n="print.labLabels">Lab labels</button>
+    <button class="stab" id="st-print-ref" onclick="openStab('print','ref')" data-i18n="print.refBarcodes">Reference barcodes</button>
   </div>
   <!-- Bag labels -->
   <div class="sp active" id="sp-print-bags">
     <div class="card">
       <div class="g2" style="margin-bottom:12px">
-        <div><label>Select batch</label><select id="print-batch" onchange="renderBagPreview()"><option value="">— choose batch —</option></select></div>
-        <div><label>Label content</label>
+        <div><label data-i18n="print.selectBatch">Select batch</label><select id="print-batch" onchange="renderBagPreview()"><option value="" data-i18n="print.chooseBatch">— choose batch —</option></select></div>
+        <div><label data-i18n="print.labelContent">Label content</label>
           <select id="print-mode" onchange="renderBagPreview()">
-            <option value="id">Barcode + ID only</option>
-            <option value="full" selected>Barcode + ID + species/strain</option>
-            <option value="date">Barcode + ID + species + due date</option>
+            <option value="id" data-i18n="print.barcodeIdOnly">Barcode + ID only</option>
+            <option value="full" selected data-i18n="print.barcodeIdSpecies">Barcode + ID + species/strain</option>
+            <option value="date" data-i18n="print.barcodeIdDate">Barcode + ID + species + due date</option>
           </select>
         </div>
       </div>
       <div style="margin-bottom:10px">
-        <label>Print range</label>
+        <label data-i18n="print.printRange">Print range</label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select id="print-range" onchange="toggleBagRange()" style="min-width:140px">
-            <option value="all">All bags</option>
-            <option value="range">Bag range (from–to)</option>
+            <option value="all" data-i18n="print.allBags">All bags</option>
+            <option value="range" data-i18n="print.bagRange">Bag range (from–to)</option>
           </select>
           <span id="bag-range-inputs" style="display:none;gap:6px;align-items:center">
             <input type="number" id="bag-from" min="1" style="width:60px" placeholder="from" />
@@ -611,58 +611,58 @@ tr:hover td{background:#f9f8f5}
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-p" onclick="printBagLabels()">Print labels (direct)</button>
+        <button class="btn btn-p" onclick="printBagLabels()" data-i18n="print.printDirect">Print labels (direct)</button>
       </div>
       <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 · GK420d 203dpi</p>
     </div>
-    <div class="card"><div class="sec">Preview</div><div id="bag-preview" style="margin-top:8px"></div></div>
+    <div class="card"><div class="sec" data-i18n="print.preview">Preview</div><div id="bag-preview" style="margin-top:8px"></div></div>
   </div>
   <!-- Lab labels -->
   <div class="sp" id="sp-print-lab">
     <div class="card">
       <div class="g2" style="margin-bottom:12px">
         <div>
-          <label>Filter cultures</label>
+          <label data-i18n="print.filterCultures">Filter cultures</label>
           <select id="lab-filter" onchange="renderLabList()" style="margin-bottom:6px">
-            <option value="all">All active cultures</option>
-            <option value="MC">Mother cultures</option>
-            <option value="PD">Petri dishes</option>
-            <option value="LC">Liquid cultures</option>
-            <option value="today">Created today</option>
+            <option value="all" data-i18n="print.allActiveCultures">All active cultures</option>
+            <option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
+            <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option>
+            <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
+            <option value="today" data-i18n="print.createdToday">Created today</option>
           </select>
           <div id="lab-list" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:7px;padding:6px"></div>
         </div>
         <div>
-          <label>Label includes</label>
+          <label data-i18n="print.labelIncludes">Label includes</label>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:3px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-bc" checked style="width:auto;margin:0" onchange="renderLabPreview()"> Code 128 barcode</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-qr" checked style="width:auto;margin:0" onchange="renderLabPreview()"> QR code</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-sp" checked style="width:auto;margin:0"> Species + strain</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-par" checked style="width:auto;margin:0"> Parent ID</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-dt" checked style="width:auto;margin:0"> Date created</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-bc" checked style="width:auto;margin:0" onchange="renderLabPreview()"> <span data-i18n="print.code128barcode">Code 128 barcode</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-qr" checked style="width:auto;margin:0" onchange="renderLabPreview()"> <span data-i18n="print.qrCode">QR code</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-sp" checked style="width:auto;margin:0"> <span data-i18n="print.speciesStrain">Species + strain</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-par" checked style="width:auto;margin:0"> <span data-i18n="print.parentId">Parent ID</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-dt" checked style="width:auto;margin:0"> <span data-i18n="print.dateCreated">Date created</span></label>
           </div>
           <div style="margin-top:12px;display:flex;gap:8px">
-            <button class="btn btn-p" onclick="printLabLabels()">Print labels (direct)</button>
+            <button class="btn btn-p" onclick="printLabLabels()" data-i18n="print.printLabDirect">Print labels (direct)</button>
           </div>
           <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 + QR · 203dpi</p>
         </div>
       </div>
     </div>
-    <div class="card"><div class="sec">Preview</div><div id="lab-preview" style="margin-top:8px"></div></div>
+    <div class="card"><div class="sec" data-i18n="print.preview">Preview</div><div id="lab-preview" style="margin-top:8px"></div></div>
   </div>
   <!-- Reference barcodes -->
   <div class="sp" id="sp-print-ref">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Reference barcodes — print &amp; hang on wall</div>
+        <div class="sec" style="margin:0" data-i18n="print.refBarcodesTitle">Reference barcodes — print &amp; hang on wall</div>
         <div style="display:flex;gap:8px;align-items:center">
           <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:#444;margin:0">
-            <input type="checkbox" id="ref-qr" onchange="renderRefBarcodes()" style="width:auto;margin:0" /> QR codes
+            <input type="checkbox" id="ref-qr" onchange="renderRefBarcodes()" style="width:auto;margin:0" /> <span data-i18n="print.qrCodes">QR codes</span>
           </label>
-          <button class="btn btn-sm btn-p" onclick="printRef()">Print sheet</button>
+          <button class="btn btn-sm btn-p" onclick="printRef()" data-i18n="print.printSheet">Print sheet</button>
         </div>
       </div>
-      <p style="font-size:12px;color:#666">Scanning works on every tab — just scan from this sheet at any time.</p>
+      <p style="font-size:12px;color:#666" data-i18n="print.scanInfo">Scanning works on every tab — just scan from this sheet at any time.</p>
     </div>
     <div id="ref-grid"></div>
   </div>
@@ -671,43 +671,43 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ TO-DO ══ -->
 <div class="page" id="p-todo">
   <div class="stabs">
-    <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')">Tasks</button>
-    <button class="stab" id="st-todo-team" onclick="openStab('todo','team')">Team</button>
-    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')">Calendar</button>
+    <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')" data-i18n="todo.tasks">Tasks</button>
+    <button class="stab" id="st-todo-team" onclick="openStab('todo','team')" data-i18n="todo.team">Team</button>
+    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')" data-i18n="todo.calendar">Calendar</button>
   </div>
   <!-- To-do -->
   <div class="sp active" id="sp-todo-todo">
     <div class="g3" id="todo-metrics" style="margin-bottom:10px"></div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Batch tasks</div>
+        <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
         <select id="todo-filter" onchange="renderTodo()" style="width:auto;font-size:12px;padding:4px 8px">
-          <option value="all">All</option><option value="urgent">Urgent only</option>
+          <option value="all" data-i18n="todo.all">All</option><option value="urgent" data-i18n="todo.urgentOnly">Urgent only</option>
         </select>
       </div>
       <div id="todo-auto"></div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Manual tasks</div>
-        <button class="btn btn-sm btn-p" onclick="addTask()">+ Add</button>
+        <div class="sec" style="margin:0" data-i18n="todo.manualTasks">Manual tasks</div>
+        <button class="btn btn-sm btn-p" onclick="addTask()" data-i18n="todo.add">+ Add</button>
       </div>
       <div id="todo-manual"></div>
       <div id="task-form" style="display:none;margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
         <div class="g2" style="margin-bottom:8px">
-          <div><label>Task</label><input type="text" id="task-text" placeholder="e.g. Clean humidity tent" /></div>
-          <div><label>Priority</label><select id="task-prio"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High</option></select></div>
+          <div><label data-i18n="todo.task">Task</label><input type="text" id="task-text" data-i18n-placeholder="todo.taskPlaceholder" placeholder="e.g. Clean humidity tent" /></div>
+          <div><label data-i18n="todo.priority">Priority</label><select id="task-prio"><option value="low" data-i18n="todo.low">Low</option><option value="med" selected data-i18n="todo.medium">Medium</option><option value="high" data-i18n="todo.high">High</option></select></div>
         </div>
         <div class="g2" style="margin-bottom:8px">
-          <div><label>Assign to</label><select id="task-assignee"><option value="">Everyone (company)</option></select></div>
-          <div><label>Due date (optional)</label><input type="date" id="task-due" /></div>
+          <div><label data-i18n="todo.assignTo">Assign to</label><select id="task-assignee"><option value="" data-i18n="todo.everyone">Everyone (company)</option></select></div>
+          <div><label data-i18n="todo.dueDate">Due date (optional)</label><input type="date" id="task-due" /></div>
         </div>
         <div style="margin-bottom:8px">
-          <label>Description (optional)</label><textarea id="task-desc" rows="2" placeholder="Additional details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+          <label data-i18n="todo.description">Description (optional)</label><textarea id="task-desc" rows="2" data-i18n-placeholder="todo.descPlaceholder" placeholder="Additional details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-p btn-sm" onclick="saveTask()">Save</button>
-          <button class="btn btn-sm" onclick="document.getElementById('task-form').style.display='none'">Cancel</button>
+          <button class="btn btn-p btn-sm" onclick="saveTask()" data-i18n="todo.save">Save</button>
+          <button class="btn btn-sm" onclick="document.getElementById('task-form').style.display='none'" data-i18n="nav.cancel">Cancel</button>
         </div>
       </div>
     </div>
@@ -715,15 +715,15 @@ tr:hover td{background:#f9f8f5}
   <!-- Team -->
   <div class="sp" id="sp-todo-team">
     <div class="card">
-      <div class="sec">Team members</div>
-      <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.</p>
+      <div class="sec" data-i18n="team.members">Team members</div>
+      <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6" data-i18n="team.membersDesc">Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.</p>
       <div id="team-list"></div>
       <div id="team-form" style="margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
         <div class="g2" style="margin-bottom:8px">
-          <div><label>Name</label><input type="text" id="member-name" placeholder="e.g. Jonas" /></div>
-          <div><label>Role (optional)</label><input type="text" id="member-role" placeholder="e.g. Lab manager" /></div>
+          <div><label data-i18n="team.name">Name</label><input type="text" id="member-name" placeholder="e.g. Jonas" /></div>
+          <div><label data-i18n="team.role">Role (optional)</label><input type="text" id="member-role" placeholder="e.g. Lab manager" /></div>
         </div>
-        <button class="btn btn-p btn-sm" onclick="addMember()">+ Add member</button>
+        <button class="btn btn-p btn-sm" onclick="addMember()" data-i18n="team.addMember">+ Add member</button>
       </div>
     </div>
   </div>
@@ -731,35 +731,35 @@ tr:hover td{background:#f9f8f5}
   <!-- CalDAV Calendar Sync -->
   <div class="sp" id="sp-todo-caldav">
     <div class="card">
-      <div class="sec">CalDAV calendar server</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
+      <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (use this in your calendar app)</div>
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px" data-i18n="caldav.urlTitle">CalDAV URL (use this in your calendar app)</div>
         <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="sec" style="font-size:12px;margin:0">Optional: protect with password</div>
+        <div class="sec" style="font-size:12px;margin:0" data-i18n="caldav.password">Optional: protect with password</div>
         <div class="g2">
-          <div><label>Username</label><input type="text" id="caldav-user" placeholder="leave empty for open access" autocomplete="off" /></div>
-          <div><label>Password</label><input type="password" id="caldav-pass" placeholder="leave empty for open access" autocomplete="off" /></div>
+          <div><label data-i18n="caldav.username">Username</label><input type="text" id="caldav-user" data-i18n-placeholder="caldav.userPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
+          <div><label data-i18n="caldav.passwordLabel">Password</label><input type="password" id="caldav-pass" data-i18n-placeholder="caldav.passPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> Enable sync (push tasks to calendars)
+            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span data-i18n="caldav.enableSync">Enable sync (push tasks to calendars)</span>
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;margin-left:16px">
-            <input type="checkbox" id="caldav-per-person" style="width:auto" /> Separate calendar per person
+            <input type="checkbox" id="caldav-per-person" style="width:auto" /> <span data-i18n="caldav.perPerson">Separate calendar per person</span>
           </label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()">Save settings</button>
-          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn">Sync all tasks now</button>
+          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()" data-i18n="caldav.saveSettings">Save settings</button>
+          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
         </div>
         <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
       </div>
     </div>
     <div class="card">
-      <div class="sec">How to connect</div>
+      <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
       <div style="font-size:12px;color:#666;line-height:1.7">
         <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
         <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
@@ -767,7 +767,7 @@ tr:hover td{background:#f9f8f5}
       </div>
     </div>
     <div class="card">
-      <div class="sec">How it works</div>
+      <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
       <div style="font-size:12px;color:#666;line-height:1.7">
         <p><strong>Base calendar:</strong> All tasks go to a shared <code>meisterpilze-tasks</code> calendar.</p>
         <p style="margin-top:6px"><strong>Per-person calendars:</strong> When enabled, tasks assigned to a team member get their own calendar (e.g. <code>meisterpilze-jonas</code>). Unassigned / company-wide tasks stay in the shared calendar.</p>
@@ -782,21 +782,21 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ MORE ══ -->
 <div class="page" id="p-settings">
   <div class="stabs">
-    <button class="stab active" id="st-settings-log" onclick="openStab('settings','log')">Scan log</button>
-    <button class="stab" id="st-settings-backup" onclick="openStab('settings','backup')">Backup</button>
+    <button class="stab active" id="st-settings-log" onclick="openStab('settings','log')" data-i18n="settings.scanLog">Scan log</button>
+    <button class="stab" id="st-settings-backup" onclick="openStab('settings','backup')" data-i18n="settings.backup">Backup</button>
   </div>
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Scan log</div>
+        <div class="sec" style="margin:0" data-i18n="settings.scanLog">Scan log</div>
         <div style="display:flex;gap:6px">
-          <input type="text" id="log-q" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
-          <button class="btn btn-sm btn-r" onclick="clearLog()">Clear</button>
+          <input type="text" id="log-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
+          <button class="btn btn-sm btn-r" onclick="clearLog()" data-i18n="settings.clear">Clear</button>
         </div>
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Time</th><th>Action</th><th>Batch</th><th>Bag</th><th>From</th><th>To</th><th>Species</th></tr></thead>
+        <thead><tr><th data-i18n="settings.time">Time</th><th data-i18n="settings.action">Action</th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th></tr></thead>
         <tbody id="log-body"></tbody>
       </table></div>
     </div>
@@ -804,22 +804,22 @@ tr:hover td{background:#f9f8f5}
   <!-- Backup -->
   <div class="sp" id="sp-settings-backup">
     <div class="card">
-      <div class="sec">Export backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6">Download all data as a JSON file. Save to USB, cloud or email it to yourself.</p>
-      <button class="btn btn-p" onclick="exportBackup()">Download backup (.json)</button>
+      <div class="sec" data-i18n="settings.exportBackup">Export backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.exportDesc">Download all data as a JSON file. Save to USB, cloud or email it to yourself.</p>
+      <button class="btn btn-p" onclick="exportBackup()" data-i18n="settings.downloadBackup">Download backup (.json)</button>
     </div>
     <div class="card">
-      <div class="sec">Import / restore backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6">Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
+      <div class="sec" data-i18n="settings.importBackup">Import / restore backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.importDescHtml">Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="file" id="import-file" accept=".json" style="width:auto;flex:1" onchange="previewImport()" />
-        <button class="btn btn-r" id="import-btn" style="display:none" onclick="importBackup()">Restore</button>
+        <button class="btn btn-r" id="import-btn" style="display:none" onclick="importBackup()" data-i18n="settings.restore">Restore</button>
       </div>
       <div id="import-preview" style="margin-top:8px;font-size:12px;color:#666"></div>
     </div>
     <div class="card">
-      <div class="sec">Sync info</div>
-      <p style="font-size:12px;color:#888;line-height:1.7">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+      <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
+      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
     </div>
   </div>
 </div>
@@ -827,17 +827,17 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ INVENTORY ══ -->
 <div class="page" id="p-inv">
   <div class="stabs">
-    <button class="stab active" id="st-inv-stock" onclick="openStab('inv','stock')">Stock</button>
-    <button class="stab" id="st-inv-delivery" onclick="openStab('inv','delivery')">Log delivery</button>
-    <button class="stab" id="st-inv-log" onclick="openStab('inv','log')">Usage log</button>
+    <button class="stab active" id="st-inv-stock" onclick="openStab('inv','stock')" data-i18n="inv.stock">Stock</button>
+    <button class="stab" id="st-inv-delivery" onclick="openStab('inv','delivery')" data-i18n="inv.logDelivery">Log delivery</button>
+    <button class="stab" id="st-inv-log" onclick="openStab('inv','log')" data-i18n="inv.usageLog">Usage log</button>
   </div>
 
   <!-- Stock overview -->
   <div class="sp active" id="sp-inv-stock">
     <div id="inv-cards" class="g3" style="margin-bottom:10px"></div>
     <div class="card">
-      <div class="sec">Alert thresholds</div>
-      <p style="font-size:12px;color:#888;margin-bottom:10px">Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".</p>
+      <div class="sec" data-i18n="inv.alertThresholds">Alert thresholds</div>
+      <p style="font-size:12px;color:#888;margin-bottom:10px" data-i18n="inv.alertThresholdsDesc">Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".</p>
       <div id="inv-thresholds"></div>
     </div>
   </div>
@@ -846,50 +846,50 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-inv-delivery">
     <div class="g2">
       <div class="card">
-        <div class="sec">Log incoming delivery</div>
+        <div class="sec" data-i18n="inv.logIncoming">Log incoming delivery</div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-          <div><label>Material</label>
+          <div><label data-i18n="inv.material">Material</label>
             <select id="del-mat" onchange="delMatChange()">
-              <option value="hardwood">Hardwood pellets</option>
-              <option value="wheatbran">Wheat bran</option>
-              <option value="gypsum">Gypsum</option>
-              <option value="grain">Grain</option>
+              <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
+              <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
+              <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+              <option value="grain" data-i18n="inv.grain">Grain</option>
             </select>
           </div>
           <div id="del-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
-          <div><label>Amount received (kg)</label>
+          <div><label data-i18n="inv.amountReceived">Amount received (kg)</label>
             <input type="text" inputmode="decimal" id="del-kg" placeholder="e.g. 1000 or 847.5" style="font-size:16px;padding:10px 12px" oninput="delPreview()" autocomplete="off" />
           </div>
           <div id="del-preview" style="display:none;font-size:12px;color:#166534;background:#f0fdf4;border-radius:7px;padding:8px 10px"></div>
-          <div><label>Supplier / note (optional)</label><input type="text" id="del-note" placeholder="e.g. Agrobs, batch 2025-03" /></div>
-          <button class="btn btn-p" onclick="logDelivery()">Add to stock</button>
+          <div><label data-i18n="inv.supplierNote">Supplier / note (optional)</label><input type="text" id="del-note" placeholder="e.g. Agrobs, batch 2025-03" /></div>
+          <button class="btn btn-p" onclick="logDelivery()" data-i18n="inv.addToStock">Add to stock</button>
         </div>
       </div>
       <div class="card">
-        <div class="sec">Manual adjustment</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px">Use this to correct stock after a physical count, spoilage, or any discrepancy.</p>
+        <div class="sec" data-i18n="inv.manualAdj">Manual adjustment</div>
+        <p style="font-size:12px;color:#888;margin-bottom:10px" data-i18n="inv.manualAdjDesc">Use this to correct stock after a physical count, spoilage, or any discrepancy.</p>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <div><label>Material</label>
+          <div><label data-i18n="inv.material">Material</label>
             <select id="adj-mat" onchange="adjMatChange()">
-              <option value="hardwood">Hardwood pellets</option>
-              <option value="wheatbran">Wheat bran</option>
-              <option value="gypsum">Gypsum</option>
-              <option value="grain">Grain</option>
+              <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
+              <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
+              <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+              <option value="grain" data-i18n="inv.grain">Grain</option>
             </select>
           </div>
           <div id="adj-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
           <div class="g2">
-            <div><label>Set stock to (kg)</label>
+            <div><label data-i18n="inv.setStockTo">Set stock to (kg)</label>
               <input type="text" inputmode="decimal" id="adj-absolute" placeholder="e.g. 847.5" style="font-size:15px;padding:9px 12px" oninput="adjPreview('absolute')" autocomplete="off" />
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:#aaa;font-style:italic">or add / subtract</div>
+            <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:#aaa;font-style:italic" data-i18n="inv.orAddSubtract">or add / subtract</div>
           </div>
-          <div><label>Adjust by (kg) — negative to subtract</label>
+          <div><label data-i18n="inv.adjustBy">Adjust by (kg) — negative to subtract</label>
             <input type="text" inputmode="decimal" id="adj-delta" placeholder="e.g. -5  or  +20" style="font-size:15px;padding:9px 12px" oninput="adjPreview('delta')" autocomplete="off" />
           </div>
           <div id="adj-preview" style="display:none;font-size:12px;background:#f9f8f5;border-radius:7px;padding:8px 10px"></div>
-          <div><label>Reason</label><input type="text" id="adj-reason" placeholder="e.g. Spoilage, stock count" /></div>
-          <button class="btn btn-sm btn-p" onclick="logAdjustment()">Apply</button>
+          <div><label data-i18n="inv.reason">Reason</label><input type="text" id="adj-reason" placeholder="e.g. Spoilage, stock count" /></div>
+          <button class="btn btn-sm btn-p" onclick="logAdjustment()" data-i18n="inv.apply">Apply</button>
         </div>
       </div>
     </div>
@@ -899,17 +899,17 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-inv-log">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Material usage history</div>
+        <div class="sec" style="margin:0" data-i18n="inv.usageHistory">Material usage history</div>
         <select id="inv-log-filter" onchange="renderInvLog()" style="width:auto;font-size:12px;padding:4px 8px">
-          <option value="all">All materials</option>
-          <option value="hardwood">Hardwood</option>
-          <option value="wheatbran">Wheat bran</option>
-          <option value="gypsum">Gypsum</option>
-          <option value="grain">Grain</option>
+          <option value="all" data-i18n="inv.allMaterials">All materials</option>
+          <option value="hardwood" data-i18n="inv.hardwood">Hardwood</option>
+          <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
+          <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+          <option value="grain" data-i18n="inv.grain">Grain</option>
         </select>
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Date</th><th>Material</th><th>Change (kg)</th><th>Running total</th><th>Type</th><th>Reference</th></tr></thead>
+        <thead><tr><th data-i18n="inv.date">Date</th><th data-i18n="inv.material">Material</th><th data-i18n="inv.changeKg">Change (kg)</th><th data-i18n="inv.runningTotal">Running total</th><th data-i18n="inv.type">Type</th><th data-i18n="inv.reference">Reference</th></tr></thead>
         <tbody id="inv-log-body"></tbody>
       </table></div>
     </div>
@@ -919,10 +919,10 @@ tr:hover td{background:#f9f8f5}
 <!-- ══ ANLAGEN (Fixed Assets) ══ -->
 <div class="page" id="p-assets">
   <div class="stabs">
-    <button class="stab active" id="st-assets-list" onclick="openStab('assets','list')">Übersicht</button>
-    <button class="stab" id="st-assets-add" onclick="openStab('assets','add')">Hinzufügen</button>
-    <button class="stab" id="st-assets-export" onclick="openStab('assets','export')">Export</button>
-    <button class="stab" id="st-assets-labels" onclick="openStab('assets','labels')">Etiketten</button>
+    <button class="stab active" id="st-assets-list" onclick="openStab('assets','list')" data-i18n="asset.overview">Übersicht</button>
+    <button class="stab" id="st-assets-add" onclick="openStab('assets','add')" data-i18n="asset.addNew">Hinzufügen</button>
+    <button class="stab" id="st-assets-export" onclick="openStab('assets','export')" data-i18n="asset.export">Export</button>
+    <button class="stab" id="st-assets-labels" onclick="openStab('assets','labels')" data-i18n="asset.labels">Etiketten</button>
   </div>
 
   <!-- Übersicht -->
@@ -930,24 +930,24 @@ tr:hover td{background:#f9f8f5}
     <div class="g4" id="asset-stats"></div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
-        <div class="sec" style="margin:0">Anlageinventar</div>
+        <div class="sec" style="margin:0" data-i18n="asset.inventory">Anlageinventar</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <select id="asset-cat-filter" onchange="renderAssets()" style="width:auto;font-size:12px;padding:4px 8px">
-            <option value="all">Alle Kategorien</option>
-            <option value="Maschinen">Maschinen</option><option value="Büroausstattung">Büroausstattung</option>
-            <option value="EDV">EDV</option><option value="Labor">Labor</option>
-            <option value="Fahrzeuge">Fahrzeuge</option><option value="Sonstiges">Sonstiges</option>
+            <option value="all" data-i18n="asset.allCategories">Alle Kategorien</option>
+            <option value="Maschinen" data-i18n="asset.cat.machinery">Maschinen</option><option value="Büroausstattung" data-i18n="asset.cat.office">Büroausstattung</option>
+            <option value="EDV" data-i18n="asset.cat.it">EDV</option><option value="Labor" data-i18n="asset.cat.lab">Labor</option>
+            <option value="Fahrzeuge" data-i18n="asset.cat.vehicles">Fahrzeuge</option><option value="Sonstiges" data-i18n="asset.cat.other">Sonstiges</option>
           </select>
           <select id="asset-stat-filter" onchange="renderAssets()" style="width:auto;font-size:12px;padding:4px 8px">
-            <option value="all">Alle Status</option>
-            <option value="aktiv">Aktiv</option><option value="ausgeschieden">Ausgeschieden</option>
-            <option value="verkauft">Verkauft</option><option value="verschrottet">Verschrottet</option>
+            <option value="all" data-i18n="asset.allStatus">Alle Status</option>
+            <option value="aktiv" data-i18n="asset.status.aktiv">Aktiv</option><option value="ausgeschieden" data-i18n="asset.status.ausgeschieden">Ausgeschieden</option>
+            <option value="verkauft" data-i18n="asset.status.verkauft">Verkauft</option><option value="verschrottet" data-i18n="asset.status.verschrottet">Verschrottet</option>
           </select>
-          <input id="asset-search" oninput="renderAssets()" placeholder="Suche..." style="width:120px;font-size:12px;padding:4px 8px">
+          <input id="asset-search" oninput="renderAssets()" data-i18n-placeholder="dash.search" placeholder="Suche..." style="width:120px;font-size:12px;padding:4px 8px">
         </div>
       </div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Nr</th><th>Name</th><th>Kategorie</th><th>Kaufpreis</th><th>Buchwert</th><th>Status</th><th>Standort</th><th>Aktionen</th></tr></thead>
+        <thead><tr><th data-i18n="asset.nr">Nr</th><th data-i18n="asset.name">Name</th><th data-i18n="asset.category">Kategorie</th><th data-i18n="asset.purchasePrice">Kaufpreis</th><th data-i18n="asset.bookValue">Buchwert</th><th data-i18n="asset.status">Status</th><th data-i18n="asset.location">Standort</th><th data-i18n="asset.actions">Aktionen</th></tr></thead>
         <tbody id="assets-body"></tbody>
       </table></div>
     </div>
@@ -956,44 +956,44 @@ tr:hover td{background:#f9f8f5}
   <!-- Hinzufügen -->
   <div class="sp" id="sp-assets-add">
     <div class="card">
-      <div class="sec">Anlage erfassen</div>
+      <div class="sec" data-i18n="asset.recordAsset">Anlage erfassen</div>
       <div id="asset-id-preview" style="font-family:monospace;font-size:13px;margin-bottom:10px;color:#555"></div>
       <div class="g2">
-        <div><label>Bezeichnung *</label><input id="asset-name" placeholder="z.B. Autoklav 50L"></div>
-        <div><label>Kategorie *</label><select id="asset-category">
-          <option value="Maschinen">Maschinen</option><option value="Büroausstattung">Büroausstattung</option>
-          <option value="EDV">EDV</option><option value="Labor">Labor</option>
-          <option value="Fahrzeuge">Fahrzeuge</option><option value="Sonstiges">Sonstiges</option>
+        <div><label data-i18n="asset.designation">Bezeichnung *</label><input id="asset-name" data-i18n-placeholder="asset.designationPh" placeholder="z.B. Autoklav 50L"></div>
+        <div><label data-i18n="asset.category">Kategorie *</label><select id="asset-category">
+          <option value="Maschinen" data-i18n="asset.cat.machinery">Maschinen</option><option value="Büroausstattung" data-i18n="asset.cat.office">Büroausstattung</option>
+          <option value="EDV" data-i18n="asset.cat.it">EDV</option><option value="Labor" data-i18n="asset.cat.lab">Labor</option>
+          <option value="Fahrzeuge" data-i18n="asset.cat.vehicles">Fahrzeuge</option><option value="Sonstiges" data-i18n="asset.cat.other">Sonstiges</option>
         </select></div>
       </div>
       <div class="g2">
-        <div><label>Anschaffungsdatum *</label><input id="asset-entry-date" type="date"></div>
-        <div><label>Einkaufspreis (€ netto) *</label><input id="asset-price" type="number" step="0.01" min="0"></div>
+        <div><label data-i18n="asset.acquisitionDate">Anschaffungsdatum *</label><input id="asset-entry-date" type="date"></div>
+        <div><label data-i18n="asset.netPrice">Einkaufspreis (€ netto) *</label><input id="asset-price" type="number" step="0.01" min="0"></div>
       </div>
       <div class="g2">
-        <div><label>Nutzungsdauer (Jahre) *</label><input id="asset-life" type="number" min="1" value="5"></div>
-        <div><label>AfA-Methode</label><select id="asset-depr-method"><option value="linear">Linear</option></select></div>
+        <div><label data-i18n="asset.usefulLife">Nutzungsdauer (Jahre) *</label><input id="asset-life" type="number" min="1" value="5"></div>
+        <div><label data-i18n="asset.deprMethod">AfA-Methode</label><select id="asset-depr-method"><option value="linear" data-i18n="asset.linear">Linear</option></select></div>
       </div>
       <div class="g2">
-        <div><label>Lieferant</label><input id="asset-supplier" placeholder="Firmenname"></div>
-        <div><label>Rechnungsnummer</label><input id="asset-invoice"></div>
+        <div><label data-i18n="asset.supplier">Lieferant</label><input id="asset-supplier" data-i18n-placeholder="asset.supplierPh" placeholder="Firmenname"></div>
+        <div><label data-i18n="asset.invoiceNr">Rechnungsnummer</label><input id="asset-invoice"></div>
       </div>
       <div class="g2">
-        <div><label>Seriennummer</label><input id="asset-serial"></div>
-        <div><label>Standort</label><input id="asset-location" list="asset-loc-list" placeholder="z.B. Labor, Büro"></div>
+        <div><label data-i18n="asset.serialNr">Seriennummer</label><input id="asset-serial"></div>
+        <div><label data-i18n="asset.location">Standort</label><input id="asset-location" list="asset-loc-list" data-i18n-placeholder="asset.locationPh" placeholder="z.B. Labor, Büro"></div>
       </div>
       <datalist id="asset-loc-list"></datalist>
       <div class="g2">
-        <div><label>Status</label><select id="asset-status" onchange="assetStatusChange()">
-          <option value="aktiv">Aktiv</option><option value="ausgeschieden">Ausgeschieden</option>
-          <option value="verkauft">Verkauft</option><option value="verschrottet">Verschrottet</option>
+        <div><label data-i18n="asset.status">Status</label><select id="asset-status" onchange="assetStatusChange()">
+          <option value="aktiv" data-i18n="asset.status.aktiv">Aktiv</option><option value="ausgeschieden" data-i18n="asset.status.ausgeschieden">Ausgeschieden</option>
+          <option value="verkauft" data-i18n="asset.status.verkauft">Verkauft</option><option value="verschrottet" data-i18n="asset.status.verschrottet">Verschrottet</option>
         </select></div>
-        <div id="asset-exit-row" style="display:none"><label>Abgangsdatum</label><input id="asset-exit-date" type="date"></div>
+        <div id="asset-exit-row" style="display:none"><label data-i18n="asset.exitDate">Abgangsdatum</label><input id="asset-exit-date" type="date"></div>
       </div>
-      <div><label>Notizen</label><textarea id="asset-notes" rows="2"></textarea></div>
+      <div><label data-i18n="asset.notes">Notizen</label><textarea id="asset-notes" rows="2"></textarea></div>
       <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="btn btn-green" onclick="saveAsset()">Speichern</button>
-        <button class="btn" onclick="resetAssetForm()">Zurücksetzen</button>
+        <button class="btn btn-green" onclick="saveAsset()" data-i18n="asset.save">Speichern</button>
+        <button class="btn" onclick="resetAssetForm()" data-i18n="asset.reset">Zurücksetzen</button>
       </div>
     </div>
   </div>
@@ -1002,15 +1002,15 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-assets-export">
     <div class="g2">
       <div class="card">
-        <div class="sec">CSV-Export</div>
-        <p style="font-size:12px;color:#666;margin-bottom:10px">Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV für den Steuerberater.</p>
-        <button class="btn btn-green" onclick="exportAssetCSV()">CSV exportieren</button>
+        <div class="sec" data-i18n="asset.csvExport">CSV-Export</div>
+        <p style="font-size:12px;color:#666;margin-bottom:10px" data-i18n="asset.csvExportDesc">Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV für den Steuerberater.</p>
+        <button class="btn btn-green" onclick="exportAssetCSV()" data-i18n="asset.exportCsv">CSV exportieren</button>
       </div>
       <div class="card">
-        <div class="sec">Stichtags-Inventur</div>
+        <div class="sec" data-i18n="asset.cutoffInventory">Stichtags-Inventur</div>
         <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px">
-          <div><label>Stichtag</label><input id="stichtag-date" type="date"></div>
-          <button class="btn" onclick="renderStichtagReport()">Berechnen</button>
+          <div><label data-i18n="asset.cutoffDate">Stichtag</label><input id="stichtag-date" type="date"></div>
+          <button class="btn" onclick="renderStichtagReport()" data-i18n="asset.calculate">Berechnen</button>
         </div>
         <div id="stichtag-result"></div>
       </div>
@@ -1021,16 +1021,16 @@ tr:hover td{background:#f9f8f5}
   <div class="sp" id="sp-assets-labels">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0">Inventar-Etiketten drucken</div>
+        <div class="sec" style="margin:0" data-i18n="asset.printLabels">Inventar-Etiketten drucken</div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="toggleAllAssetLabels(true)">Alle</button>
-          <button class="btn btn-sm" onclick="toggleAllAssetLabels(false)">Keine</button>
+          <button class="btn btn-sm" onclick="toggleAllAssetLabels(true)" data-i18n="asset.selectAll">Alle</button>
+          <button class="btn btn-sm" onclick="toggleAllAssetLabels(false)" data-i18n="asset.selectNone">Keine</button>
         </div>
       </div>
       <div id="asset-label-list" style="max-height:400px;overflow-y:auto"></div>
       <div style="margin-top:10px">
-        <button class="btn btn-green" onclick="printAssetLabels()">Drucken</button>
-        <button class="btn" onclick="downloadAssetZPL()">ZPL herunterladen</button>
+        <button class="btn btn-green" onclick="printAssetLabels()" data-i18n="asset.print">Drucken</button>
+        <button class="btn" onclick="downloadAssetZPL()" data-i18n="asset.downloadZpl">ZPL herunterladen</button>
       </div>
     </div>
   </div>
@@ -1604,6 +1604,81 @@ const LANG = {
     'caldav.syncError': 'Sync error: {err}',
     // Backup validation
     'settings.valid': 'Valid: {date} \u2014 {batches} batches, {scans} scans, {cultures} cultures, inventory: {inv}.',
+    // Static HTML keys
+    'batch.batchId': 'Batch ID',
+    'batch.species': 'Species',
+    'nav.cancel': 'Cancel',
+    'settings.time': 'Time',
+    'settings.action': 'Action',
+    'settings.bag': 'Bag',
+    'settings.from': 'From',
+    'settings.to': 'To',
+    'settings.importDescHtml': 'Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'caldav.passwordLabel': 'Password',
+    'todo.taskPlaceholder': 'e.g. Clean humidity tent',
+    'todo.descPlaceholder': 'Additional details...',
+    'inv.hardwood': 'Hardwood pellets',
+    'inv.wheatBran': 'Wheat bran',
+    'inv.gypsum': 'Gypsum',
+    'inv.grain': 'Grain',
+    'inv.date': 'Date',
+    'inv.changeKg': 'Change (kg)',
+    'inv.runningTotal': 'Running total',
+    'inv.type': 'Type',
+    'inv.reference': 'Reference',
+    'asset.overview': 'Overview',
+    'asset.addNew': 'Add',
+    'asset.export': 'Export',
+    'asset.labels': 'Labels',
+    'asset.inventory': 'Asset inventory',
+    'asset.allCategories': 'All categories',
+    'asset.allStatus': 'All status',
+    'asset.cat.machinery': 'Machinery',
+    'asset.cat.office': 'Office equipment',
+    'asset.cat.it': 'IT equipment',
+    'asset.cat.lab': 'Laboratory',
+    'asset.cat.vehicles': 'Vehicles',
+    'asset.cat.other': 'Other',
+    'asset.status.aktiv': 'Active',
+    'asset.status.ausgeschieden': 'Retired',
+    'asset.status.verkauft': 'Sold',
+    'asset.status.verschrottet': 'Scrapped',
+    'asset.nr': 'Nr',
+    'asset.name': 'Name',
+    'asset.category': 'Category',
+    'asset.purchasePrice': 'Purchase price',
+    'asset.bookValue': 'Book value',
+    'asset.status': 'Status',
+    'asset.location': 'Location',
+    'asset.actions': 'Actions',
+    'asset.recordAsset': 'Record asset',
+    'asset.designation': 'Designation *',
+    'asset.designationPh': 'e.g. Autoclave 50L',
+    'asset.acquisitionDate': 'Acquisition date *',
+    'asset.netPrice': 'Purchase price (\u20ac net) *',
+    'asset.usefulLife': 'Useful life (years) *',
+    'asset.deprMethod': 'Depreciation method',
+    'asset.linear': 'Linear',
+    'asset.supplier': 'Supplier',
+    'asset.supplierPh': 'Company name',
+    'asset.invoiceNr': 'Invoice number',
+    'asset.serialNr': 'Serial number',
+    'asset.locationPh': 'e.g. Lab, Office',
+    'asset.exitDate': 'Exit date',
+    'asset.notes': 'Notes',
+    'asset.save': 'Save',
+    'asset.reset': 'Reset',
+    'asset.csvExport': 'CSV Export',
+    'asset.csvExportDesc': 'Complete inventory list with all fields and calculated depreciation values as CSV for the tax advisor.',
+    'asset.exportCsv': 'Export CSV',
+    'asset.cutoffInventory': 'Cut-off date inventory',
+    'asset.cutoffDate': 'Cut-off date',
+    'asset.calculate': 'Calculate',
+    'asset.printLabels': 'Print inventory labels',
+    'asset.selectAll': 'All',
+    'asset.selectNone': 'None',
+    'asset.print': 'Print',
+    'asset.downloadZpl': 'Download ZPL',
   },
   de: {
     // Nav
@@ -2143,6 +2218,81 @@ const LANG = {
     'caldav.syncError': 'Sync-Fehler: {err}',
     // Backup validation
     'settings.valid': 'G\u00fcltig: {date} \u2014 {batches} Chargen, {scans} Scans, {cultures} Kulturen, Inventar: {inv}.',
+    // Static HTML keys
+    'batch.batchId': 'Chargen-ID',
+    'batch.species': 'Art',
+    'nav.cancel': 'Abbrechen',
+    'settings.time': 'Zeit',
+    'settings.action': 'Aktion',
+    'settings.bag': 'Beutel',
+    'settings.from': 'Von',
+    'settings.to': 'Nach',
+    'settings.importDescHtml': 'Aus einem fr\u00fcheren Backup wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten f\u00fcr alle Nutzer.</strong>',
+    'caldav.passwordLabel': 'Passwort',
+    'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
+    'todo.descPlaceholder': 'Weitere Details...',
+    'inv.hardwood': 'Hartholzpellets',
+    'inv.wheatBran': 'Weizenkleie',
+    'inv.gypsum': 'Gips',
+    'inv.grain': 'Getreide',
+    'inv.date': 'Datum',
+    'inv.changeKg': '\u00c4nderung (kg)',
+    'inv.runningTotal': 'Laufende Summe',
+    'inv.type': 'Typ',
+    'inv.reference': 'Referenz',
+    'asset.overview': '\u00dcbersicht',
+    'asset.addNew': 'Hinzuf\u00fcgen',
+    'asset.export': 'Export',
+    'asset.labels': 'Etiketten',
+    'asset.inventory': 'Anlageinventar',
+    'asset.allCategories': 'Alle Kategorien',
+    'asset.allStatus': 'Alle Status',
+    'asset.cat.machinery': 'Maschinen',
+    'asset.cat.office': 'B\u00fcroausstattung',
+    'asset.cat.it': 'EDV',
+    'asset.cat.lab': 'Labor',
+    'asset.cat.vehicles': 'Fahrzeuge',
+    'asset.cat.other': 'Sonstiges',
+    'asset.status.aktiv': 'Aktiv',
+    'asset.status.ausgeschieden': 'Ausgeschieden',
+    'asset.status.verkauft': 'Verkauft',
+    'asset.status.verschrottet': 'Verschrottet',
+    'asset.nr': 'Nr',
+    'asset.name': 'Name',
+    'asset.category': 'Kategorie',
+    'asset.purchasePrice': 'Kaufpreis',
+    'asset.bookValue': 'Buchwert',
+    'asset.status': 'Status',
+    'asset.location': 'Standort',
+    'asset.actions': 'Aktionen',
+    'asset.recordAsset': 'Anlage erfassen',
+    'asset.designation': 'Bezeichnung *',
+    'asset.designationPh': 'z.B. Autoklav 50L',
+    'asset.acquisitionDate': 'Anschaffungsdatum *',
+    'asset.netPrice': 'Einkaufspreis (\u20ac netto) *',
+    'asset.usefulLife': 'Nutzungsdauer (Jahre) *',
+    'asset.deprMethod': 'AfA-Methode',
+    'asset.linear': 'Linear',
+    'asset.supplier': 'Lieferant',
+    'asset.supplierPh': 'Firmenname',
+    'asset.invoiceNr': 'Rechnungsnummer',
+    'asset.serialNr': 'Seriennummer',
+    'asset.locationPh': 'z.B. Labor, B\u00fcro',
+    'asset.exitDate': 'Abgangsdatum',
+    'asset.notes': 'Notizen',
+    'asset.save': 'Speichern',
+    'asset.reset': 'Zur\u00fccksetzen',
+    'asset.csvExport': 'CSV-Export',
+    'asset.csvExportDesc': 'Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV f\u00fcr den Steuerberater.',
+    'asset.exportCsv': 'CSV exportieren',
+    'asset.cutoffInventory': 'Stichtags-Inventur',
+    'asset.cutoffDate': 'Stichtag',
+    'asset.calculate': 'Berechnen',
+    'asset.printLabels': 'Inventar-Etiketten drucken',
+    'asset.selectAll': 'Alle',
+    'asset.selectNone': 'Keine',
+    'asset.print': 'Drucken',
+    'asset.downloadZpl': 'ZPL herunterladen',
   },
   pt: {
     // Nav
@@ -2682,6 +2832,81 @@ const LANG = {
     'caldav.syncError': 'Erro de sincroniza\u00e7\u00e3o: {err}',
     // Backup validation
     'settings.valid': 'V\u00e1lido: {date} \u2014 {batches} lotes, {scans} scans, {cultures} culturas, invent\u00e1rio: {inv}.',
+    // Static HTML keys
+    'batch.batchId': 'ID do lote',
+    'batch.species': 'Esp\u00e9cie',
+    'nav.cancel': 'Cancelar',
+    'settings.time': 'Hora',
+    'settings.action': 'A\u00e7\u00e3o',
+    'settings.bag': 'Saco',
+    'settings.from': 'De',
+    'settings.to': 'Para',
+    'settings.importDescHtml': 'Restaurar de um backup anterior. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usu\u00e1rios.</strong>',
+    'caldav.passwordLabel': 'Senha',
+    'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
+    'todo.descPlaceholder': 'Detalhes adicionais...',
+    'inv.hardwood': 'Pellets de madeira dura',
+    'inv.wheatBran': 'Farelo de trigo',
+    'inv.gypsum': 'Gesso',
+    'inv.grain': 'Gr\u00e3os',
+    'inv.date': 'Data',
+    'inv.changeKg': 'Altera\u00e7\u00e3o (kg)',
+    'inv.runningTotal': 'Total acumulado',
+    'inv.type': 'Tipo',
+    'inv.reference': 'Refer\u00eancia',
+    'asset.overview': 'Vis\u00e3o geral',
+    'asset.addNew': 'Adicionar',
+    'asset.export': 'Exportar',
+    'asset.labels': 'Etiquetas',
+    'asset.inventory': 'Invent\u00e1rio de ativos',
+    'asset.allCategories': 'Todas as categorias',
+    'asset.allStatus': 'Todos os status',
+    'asset.cat.machinery': 'M\u00e1quinas',
+    'asset.cat.office': 'Equipamento de escrit\u00f3rio',
+    'asset.cat.it': 'Equipamento de TI',
+    'asset.cat.lab': 'Laborat\u00f3rio',
+    'asset.cat.vehicles': 'Ve\u00edculos',
+    'asset.cat.other': 'Outros',
+    'asset.status.aktiv': 'Ativo',
+    'asset.status.ausgeschieden': 'Aposentado',
+    'asset.status.verkauft': 'Vendido',
+    'asset.status.verschrottet': 'Sucateado',
+    'asset.nr': 'Nr',
+    'asset.name': 'Nome',
+    'asset.category': 'Categoria',
+    'asset.purchasePrice': 'Pre\u00e7o de compra',
+    'asset.bookValue': 'Valor cont\u00e1bil',
+    'asset.status': 'Status',
+    'asset.location': 'Local',
+    'asset.actions': 'A\u00e7\u00f5es',
+    'asset.recordAsset': 'Registrar ativo',
+    'asset.designation': 'Designa\u00e7\u00e3o *',
+    'asset.designationPh': 'ex. Autoclave 50L',
+    'asset.acquisitionDate': 'Data de aquisi\u00e7\u00e3o *',
+    'asset.netPrice': 'Pre\u00e7o de compra (\u20ac l\u00edquido) *',
+    'asset.usefulLife': 'Vida \u00fatil (anos) *',
+    'asset.deprMethod': 'M\u00e9todo de deprecia\u00e7\u00e3o',
+    'asset.linear': 'Linear',
+    'asset.supplier': 'Fornecedor',
+    'asset.supplierPh': 'Nome da empresa',
+    'asset.invoiceNr': 'N\u00famero da fatura',
+    'asset.serialNr': 'N\u00famero de s\u00e9rie',
+    'asset.locationPh': 'ex. Laborat\u00f3rio, Escrit\u00f3rio',
+    'asset.exitDate': 'Data de sa\u00edda',
+    'asset.notes': 'Notas',
+    'asset.save': 'Salvar',
+    'asset.reset': 'Redefinir',
+    'asset.csvExport': 'Exportar CSV',
+    'asset.csvExportDesc': 'Lista completa de invent\u00e1rio com todos os campos e valores de deprecia\u00e7\u00e3o calculados como CSV para o contador.',
+    'asset.exportCsv': 'Exportar CSV',
+    'asset.cutoffInventory': 'Invent\u00e1rio de data de corte',
+    'asset.cutoffDate': 'Data de corte',
+    'asset.calculate': 'Calcular',
+    'asset.printLabels': 'Imprimir etiquetas de invent\u00e1rio',
+    'asset.selectAll': 'Todos',
+    'asset.selectNone': 'Nenhum',
+    'asset.print': 'Imprimir',
+    'asset.downloadZpl': 'Baixar ZPL',
   }
 };
 
