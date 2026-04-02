@@ -130,6 +130,16 @@ tr:hover td{background:#f9f8f5}
 .modal p{font-size:13px;color:#555;margin-bottom:12px;line-height:1.6}
 .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 
+/* -- Mobile responsive -- */
+@media(max-width:768px){
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px}
+  .nav{margin-left:0;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:2px}
+  .nav button{padding:5px 10px;font-size:11px;white-space:nowrap;flex-shrink:0}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .scanstrip{flex-wrap:wrap}
+  .scan-inp{min-width:0;width:100%}
+}
+
 @media print{
   .topbar,.scanstrip,#scan-fb,#harvest-panel,.no-print{display:none!important}
   .main{padding:0;max-width:100%}
