@@ -4,13 +4,36 @@ const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
 
-const PORT = 3000;
+// ── CONFIGURATION ────────────────────────────────────────────
+// Override via environment variables or .env file
+function loadEnv() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+      fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+        const match = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
+        if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
+      });
+    }
+  } catch (e) { /* .env is optional */ }
+}
+loadEnv();
+
+// ── LOGGING ──────────────────────────────────────────────────
+function log(level, msg, meta) {
+  const ts = new Date().toISOString();
+  const entry = `${ts} [${level.toUpperCase()}] ${msg}`;
+  if (level === 'error') console.error(entry, meta || '');
+  else console.log(entry, meta ? JSON.stringify(meta) : '');
+}
+
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 const DIR = __dirname;
 const DATA_FILE = path.join(DIR, 'data.json');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
-const PRINTER_NAME = 'ZDesigner GK420d';
+const PRINTER_NAME = process.env.PRINTER_NAME || 'ZDesigner GK420d';
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
 if (!fs.existsSync(DATA_FILE)) {
@@ -81,17 +104,17 @@ function runDailyBackup(){
     const dest=path.join(BACKUP_DIR,'meisterpilze_backup_'+stamp+'.json');
     if(!fs.existsSync(dest)){
       fs.copyFileSync(DATA_FILE, dest);
-      console.log('  Auto-backup saved: '+dest);
+      log('info', 'Auto-backup saved', { dest });
       // Keep last 30 daily backups
       const files=fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.json')).sort();
       if(files.length>30){
         files.slice(0,files.length-30).forEach(f=>{
           fs.unlinkSync(path.join(BACKUP_DIR,f));
-          console.log('  Old backup removed: '+f);
+          log('info', 'Old backup removed', { file: f });
         });
       }
     }
-  }catch(e){console.error('Auto-backup failed:',e.message);}
+  }catch(e){log('error', 'Auto-backup failed', { error: e.message });}
 }
 
 function scheduleDailyBackup(){
@@ -102,7 +125,7 @@ function scheduleDailyBackup(){
   const next=new Date(now);
   next.setHours(24,0,0,0); // next midnight
   const msUntil=next-now;
-  console.log('  Next auto-backup: '+next.toLocaleString('de-DE'));
+  log('info', 'Next auto-backup: ' + next.toISOString());
   setTimeout(()=>{
     runDailyBackup();
     setInterval(runDailyBackup, 24*60*60*1000); // then every 24h
@@ -180,10 +203,10 @@ public class DOCINFO {
         fs.unlink(tmp,()=>{});
         fs.unlink(psTmp,()=>{});
         if(e){
-          console.error('PowerShell print error:', stderr||e.message);
+          log('error', 'Print failed', { error: (stderr||e.message).trim() });
           callback('Print failed: '+(stderr||e.message).trim());
         }else{
-          console.log('Print OK:', stdout.trim());
+          log('info', 'Print OK', { output: stdout.trim() });
           callback(null);
         }
       });
@@ -384,7 +407,7 @@ function handleCaldav(req, res) {
       res.writeHead(405);
       res.end('Method not allowed');
     } catch (e) {
-      console.error('CalDAV error:', e);
+      log('error', 'CalDAV error', { error: e.message });
       res.writeHead(500);
       res.end('Internal server error');
     }
@@ -619,7 +642,7 @@ function handleMkcalendar(parts, body, req, res) {
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
-    console.log('  CalDAV: Calendar created:', calName);
+    log('info', 'CalDAV calendar created', { calendar: calName });
     return;
   }
   res.writeHead(403);
@@ -711,7 +734,39 @@ function handleProppatch(parts, body, req, res) {
 // ── HTTP SERVER ──────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
+// ── RATE LIMITING ────────────────────────────────────────────
+const RATE_WINDOW_MS = 60000; // 1 minute
+const RATE_MAX_REQUESTS = 300; // max requests per IP per minute
+const rateLimits = new Map();
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = rateLimits.get(ip);
+  if (!entry || now - entry.start > RATE_WINDOW_MS) {
+    entry = { start: now, count: 0 };
+    rateLimits.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count <= RATE_MAX_REQUESTS;
+}
+
+// Clean up rate limit entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimits) {
+    if (now - entry.start > RATE_WINDOW_MS) rateLimits.delete(ip);
+  }
+}, RATE_WINDOW_MS);
+
 const server=http.createServer((req,res)=>{
+  // Rate limiting
+  const clientIP = req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIP)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end('{"error":"Too many requests"}');
+    return;
+  }
+
   // ── CalDAV requests ──
   if(req.url.startsWith('/caldav')){
     return handleCaldav(req,res);
@@ -722,6 +777,13 @@ const server=http.createServer((req,res)=>{
   res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+
+  // GET /api/health — health check for monitoring
+  if(req.method==='GET'&&req.url==='/api/health'){
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({status:'ok',uptime:process.uptime(),version:require('./package.json').version}));
+    return;
+  }
 
   // GET /api/data
   if(req.method==='GET'&&req.url==='/api/data'){
@@ -736,6 +798,20 @@ const server=http.createServer((req,res)=>{
     req.on('end',()=>{
       try{
         const incoming=JSON.parse(body);
+        // Basic schema validation
+        if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end('{"error":"Expected a JSON object"}');
+          return;
+        }
+        const requiredArrays = ['batches', 'scanLog', 'harvests', 'cultures', 'manualTasks'];
+        for (const key of requiredArrays) {
+          if (incoming[key] !== undefined && !Array.isArray(incoming[key])) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: key + ' must be an array' }));
+            return;
+          }
+        }
         // Safety: never overwrite existing data with empty/smaller arrays
         // (protects against stale browser cache sending blank state)
         const existing=readData();
@@ -749,7 +825,7 @@ const server=http.createServer((req,res)=>{
         ];
         for(const [name, old, inc] of checks){
           if(old && old.length > 0 && (!inc || inc.length === 0)){
-            console.log('  BLOCKED: save rejected — would erase '+old.length+' '+name+' entries');
+            log('warn', 'Save rejected: would erase ' + old.length + ' ' + name + ' entries');
             res.writeHead(409,{'Content-Type':'application/json'});
             res.end(JSON.stringify({error:'blocked',reason:'Would erase existing '+name+'. Refresh your browser (Ctrl+Shift+R).'}));
             return;
@@ -772,7 +848,7 @@ const server=http.createServer((req,res)=>{
         if(!zpl){res.writeHead(400);res.end('{"error":"no zpl"}');return;}
         printZPL(zpl,err=>{
           if(err){
-            console.error('Print error:',err);
+            log('error', 'Print error', { error: err });
             res.writeHead(500,{'Content-Type':'application/json'});
             res.end(JSON.stringify({error:err}));
           }else{
@@ -801,7 +877,7 @@ const server=http.createServer((req,res)=>{
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify(result));
       }catch(e){
-        console.error('CalDAV sync error:',e);
+        log('error', 'CalDAV sync error', { error: e.message });
         res.writeHead(500,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:false,error:e.message}));
       }
@@ -860,19 +936,31 @@ const server=http.createServer((req,res)=>{
   });
 });
 
-server.listen(PORT,'0.0.0.0',()=>{
-  const ip=getLocalIP();
+server.listen(PORT, '0.0.0.0', () => {
+  const ip = getLocalIP();
+  log('info', 'Meisterpilze Lab Tracker started', { port: PORT, localIP: ip });
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
   console.log('');
-  console.log('  Open on this PC:      http://localhost:'+PORT);
-  console.log('  Open on phone/tablet: http://'+ip+':'+PORT);
+  console.log('  Open on this PC:      http://localhost:' + PORT);
+  console.log('  Open on phone/tablet: http://' + ip + ':' + PORT);
   console.log('');
-  console.log('  CalDAV server:        http://'+ip+':'+PORT+'/caldav/calendars/');
+  console.log('  CalDAV server:        http://' + ip + ':' + PORT + '/caldav/calendars/');
   console.log('');
-  console.log('  Printer: '+PRINTER_NAME);
-  console.log('  Printing via Windows spooler — works from any browser.');
-  console.log('');
-  console.log('  Data saved to: '+DATA_FILE);
+  console.log('  Printer: ' + PRINTER_NAME);
+  console.log('  Data saved to: ' + DATA_FILE);
   console.log('  Press Ctrl+C to stop.');
 });
+
+// ── GRACEFUL SHUTDOWN ────────────────────────────────────────
+function shutdown(signal) {
+  log('info', 'Received ' + signal + ', shutting down...');
+  server.close(() => {
+    log('info', 'Server closed');
+    process.exit(0);
+  });
+  // Force exit after 5 seconds if server.close hangs
+  setTimeout(() => process.exit(1), 5000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
