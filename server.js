@@ -696,7 +696,12 @@ function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    fs.unlinkSync(filePath);
     res.writeHead(204);
     res.end();
     return;
