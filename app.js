@@ -71,7 +71,13 @@ async function saveData(){
 }
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
 async function pollSync(){
-  try{const d=await fetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+  // Skip sync while a save is in progress to avoid overwriting pending changes
+  if(saving)return;
+  try{
+    const d=await fetch('/api/data').then(r=>r.json());
+    const h=JSON.stringify(d);
+    if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}
+  }catch{}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
