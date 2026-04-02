@@ -1130,13 +1130,17 @@ function handleRequest(req,res){
   });
 }
 
-const server=http.createServer(handleRequest);
-
-// ── HTTPS SERVER (for iOS camera support) ───────────────────
-let httpsServer=null;
+// ── SERVER CREATION (HTTPS-only, HTTP fallback if no certs) ──
+let server;
+let protocol;
 if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
   const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
-  httpsServer=https.createServer(tlsOpts,handleRequest);
+  server=https.createServer(tlsOpts,handleRequest);
+  protocol='https';
+}else{
+  log('warn','TLS certificates not found — falling back to HTTP. Run: bash gen-cert.sh');
+  server=http.createServer(handleRequest);
+  protocol='http';
 }
 
 server.listen(PORT,'0.0.0.0',()=>{
@@ -1144,21 +1148,15 @@ server.listen(PORT,'0.0.0.0',()=>{
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
   console.log('');
-  console.log('  HTTP:');
-  console.log('    Open on this PC:      http://localhost:'+PORT);
-  console.log('    Open on phone/tablet: http://'+ip+':'+PORT);
-  if(httpsServer){
-    httpsServer.listen(HTTPS_PORT,'0.0.0.0',()=>{
-      console.log('');
-      console.log('  HTTPS (required for iOS camera):');
-      console.log('    Open on phone/tablet: https://'+ip+':'+HTTPS_PORT);
-    });
-  }else{
+  console.log('  Open on this PC:      '+protocol+'://localhost:'+PORT);
+  console.log('  Open on phone/tablet: '+protocol+'://'+ip+':'+PORT);
+  if(protocol==='http'){
     console.log('');
-    console.log('  HTTPS: not available (run bash gen-cert.sh to enable)');
+    console.log('  ⚠ WARNING: Running without HTTPS — iOS camera will not work.');
+    console.log('  Run "bash gen-cert.sh" and restart to enable HTTPS.');
   }
   console.log('');
-  console.log('  CalDAV server:        http://'+ip+':'+PORT+'/caldav/calendars/');
+  console.log('  CalDAV server:        '+protocol+'://'+ip+':'+PORT+'/caldav/calendars/');
   console.log('');
   console.log('  Printer: '+PRINTER_NAME);
   console.log('  Printing via Windows spooler — works from any browser.');
@@ -1170,7 +1168,6 @@ server.listen(PORT,'0.0.0.0',()=>{
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
 function shutdown(signal) {
   log('info', 'Received ' + signal + ', shutting down...');
-  if(httpsServer)httpsServer.close();
   server.close(() => {
     database.close();
     log('info', 'Server closed');
