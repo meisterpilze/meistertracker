@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -30,6 +31,8 @@ function log(level, msg, meta) {
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const DIR = __dirname;
+const CERT_KEY = path.join(DIR, 'certs', 'server.key');
+const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
@@ -774,7 +777,7 @@ setInterval(() => {
   }
 }, RATE_WINDOW_MS);
 
-const server=http.createServer((req,res)=>{
+function handleRequest(req,res){
   const clientIP = req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(clientIP)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
@@ -945,17 +948,35 @@ const server=http.createServer((req,res)=>{
     res.writeHead(200,{'Content-Type':MIME[path.extname(filePath)]||'application/octet-stream'});
     res.end(data);
   });
-});
+}
+
+// ── SERVER CREATION (HTTPS-only, HTTP fallback if no certs) ──
+let server;
+let protocol;
+if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
+  const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
+  server=https.createServer(tlsOpts,handleRequest);
+  protocol='https';
+}else{
+  log('warn','TLS certificates not found — falling back to HTTP. Run: bash gen-cert.sh');
+  server=http.createServer(handleRequest);
+  protocol='http';
+}
 
 server.listen(PORT,'0.0.0.0',()=>{
   const ip=getLocalIP();
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
   console.log('');
-  console.log('  Open on this PC:      http://localhost:'+PORT);
-  console.log('  Open on phone/tablet: http://'+ip+':'+PORT);
+  console.log('  Open on this PC:      '+protocol+'://localhost:'+PORT);
+  console.log('  Open on phone/tablet: '+protocol+'://'+ip+':'+PORT);
+  if(protocol==='http'){
+    console.log('');
+    console.log('  ⚠ WARNING: Running without HTTPS — iOS camera will not work.');
+    console.log('  Run "bash gen-cert.sh" and restart to enable HTTPS.');
+  }
   console.log('');
-  console.log('  CalDAV server:        http://'+ip+':'+PORT+'/caldav/calendars/');
+  console.log('  CalDAV server:        '+protocol+'://'+ip+':'+PORT+'/caldav/calendars/');
   console.log('');
   console.log('  Printer: '+PRINTER_NAME);
   console.log('  Printing via Windows spooler — works from any browser.');
