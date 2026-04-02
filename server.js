@@ -11,6 +11,7 @@ const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
 const PRINTER_NAME = 'ZDesigner GK420d';
+const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify({
@@ -62,7 +63,11 @@ function readData(){
   }
 }
 
-function writeData(data){fs.writeFileSync(DATA_FILE,JSON.stringify(data,null,2));}
+function writeData(data){
+  const tmp = DATA_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, DATA_FILE);
+}
 
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
@@ -202,6 +207,12 @@ function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Sanitize CalDAV path segments to prevent directory traversal
+function sanitizePathSegment(segment) {
+  // Remove path separators and parent-directory references
+  return segment.replace(/[\/\\]/g, '').replace(/^\.+$/, '_');
+}
+
 // Check CalDAV basic auth against stored credentials
 function checkCaldavAuth(req) {
   const data = readData();
@@ -217,7 +228,10 @@ function checkCaldavAuth(req) {
 
 // Ensure a calendar directory exists
 function ensureCalDir(calName) {
+  calName = sanitizePathSegment(calName);
   const dir = path.join(CAL_DIR, calName);
+  // Verify resolved path is inside CAL_DIR
+  if (!dir.startsWith(CAL_DIR)) throw new Error('Invalid calendar name');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -329,7 +343,8 @@ function syncAllTasksLocal(data) {
 function handleCaldav(req, res) {
   // CORS + DAV headers for all CalDAV responses
   res.setHeader('DAV', '1, 2, 3, calendar-access');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -355,8 +370,8 @@ function handleCaldav(req, res) {
   }
 
   // Collect request body
-  let body = '';
-  req.on('data', c => body += c);
+  let body = '';let bodySize=0;
+  req.on('data', c => {bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body += c});
   req.on('end', () => {
     try {
       if (method === 'PROPFIND') return handlePropfind(parts, body, req, res);
@@ -444,7 +459,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/ — list items in a calendar
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = parts[1];
+    const calName = sanitizePathSegment(parts[1]);
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -496,7 +511,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/<file>.ics — single item props
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
@@ -530,7 +545,7 @@ function handlePropfind(parts, body, req, res) {
 function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = parts[1];
+    const calName = sanitizePathSegment(parts[1]);
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -546,7 +561,7 @@ function handleReport(parts, body, req, res) {
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
         const href = hrefTag.replace(/<\/?d:href>/gi, '');
-        const filename = decodeURIComponent(href.split('/').pop());
+        const filename = sanitizePathSegment(decodeURIComponent(href.split('/').pop()));
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
@@ -600,7 +615,7 @@ function handleReport(parts, body, req, res) {
 
 function handleMkcalendar(parts, body, req, res) {
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = parts[1];
+    const calName = sanitizePathSegment(parts[1]);
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
@@ -614,8 +629,8 @@ function handleMkcalendar(parts, body, req, res) {
 function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const calName = parts[1];
-    const fileName = parts[2];
+    const calName = sanitizePathSegment(parts[1]);
+    const fileName = sanitizePathSegment(parts[2]);
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
     const existed = fs.existsSync(filePath);
@@ -633,7 +648,7 @@ function handlePut(parts, body, req, res) {
 function handleGet(parts, req, res) {
   // GET /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
@@ -664,7 +679,7 @@ function handleGet(parts, req, res) {
 function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     res.writeHead(204);
     res.end();
@@ -702,7 +717,8 @@ const server=http.createServer((req,res)=>{
     return handleCaldav(req,res);
   }
 
-  res.setHeader('Access-Control-Allow-Origin','*');
+  const origin = req.headers.origin;
+  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
@@ -715,8 +731,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/data
   if(req.method==='POST'&&req.url==='/api/data'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const incoming=JSON.parse(body);
@@ -746,8 +762,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/print  —  body: { zpl: "^XA...^XZ" }
   if(req.method==='POST'&&req.url==='/api/print'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const{zpl}=JSON.parse(body);
@@ -768,8 +784,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/sync — write all tasks to local calendar files
   if(req.method==='POST'&&req.url==='/api/caldav/sync'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const data=readData();
@@ -792,8 +808,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/push-one — write a single task to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-one'){
-    let body='';
-    req.on('data',c=>body+=c);
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
     req.on('end',()=>{
       try{
         const{task}=JSON.parse(body);
