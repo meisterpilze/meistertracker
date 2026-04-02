@@ -111,6 +111,19 @@ do_status() {
     pm2 status
 }
 
+do_gen_cert() {
+    echo "==== Generating TLS Certificate ===="
+    if [ -f gen-cert.sh ]; then
+        bash gen-cert.sh
+        echo ""
+        echo "Restart the server for HTTPS to take effect:"
+        echo "  bash update_server.sh start"
+    else
+        echo "Error: gen-cert.sh not found."
+        exit 1
+    fi
+}
+
 show_usage() {
     echo "Usage: bash update_server.sh [command]"
     echo ""
@@ -119,16 +132,18 @@ show_usage() {
     echo "  start          Start the server (without pulling updates)"
     echo "  stop           Stop the server"
     echo "  status         Show PM2 process status"
+    echo "  gen-cert       Generate TLS certificate for HTTPS (iOS camera support)"
     echo "  help           Show this help message"
 }
 
 # ---- Main ----
 
 case "${1:-update}" in
-    update)  do_update  ;;
-    start)   do_start   ;;
-    stop)    do_stop    ;;
-    status)  do_status  ;;
+    update)   do_update   ;;
+    start)    do_start    ;;
+    stop)     do_stop     ;;
+    status)   do_status   ;;
+    gen-cert) do_gen_cert ;;
     help|-h|--help)  show_usage ;;
     *)
         echo "Unknown command: $1"
