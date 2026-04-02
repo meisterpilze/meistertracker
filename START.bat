@@ -189,6 +189,20 @@ if %errorlevel% equ 0 (
 )
 pm2 save >nul 2>&1
 
+REM Wait briefly for the process to initialize, then verify it stayed up
+timeout /t 3 /nobreak >nul
+pm2 describe %PM2_PROCESS_NAME% 2>nul | findstr /i "online" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo  ERROR: Server process crashed on startup.
+    echo.
+    echo  To see the error run:
+    echo    pm2 logs %PM2_PROCESS_NAME%
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
 echo  ========================================
 echo    Server started successfully!
