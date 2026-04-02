@@ -30,6 +30,7 @@ function log(level, msg, meta) {
 }
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
+const HTTPS_PORT = parseInt(process.env.HTTPS_PORT, 10) || 3443;
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
@@ -63,6 +64,41 @@ function readData(){
 function writeData(data){
   db.writeAll(database, data);
 }
+
+// ── AUTH HELPERS ─────────────────────────────────────────────
+function getSessionToken(req){
+  const cookies=req.headers.cookie||'';
+  const match=cookies.match(/(?:^|;\s*)session=([a-f0-9]+)/);
+  return match?match[1]:null;
+}
+
+function checkAuth(req){
+  const token=getSessionToken(req);
+  if(!token)return null;
+  return db.getSession(database,token)||null;
+}
+
+function sendUnauthorized(res,isApi){
+  if(isApi){
+    res.writeHead(401,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({error:'unauthorized'}));
+  }else{
+    res.writeHead(302,{'Location':'/login.html'});
+    res.end();
+  }
+}
+
+function setSessionCookie(res,token){
+  res.setHeader('Set-Cookie','session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000');
+}
+
+function clearSessionCookie(res){
+  res.setHeader('Set-Cookie','session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+}
+
+// Clean expired sessions on startup and hourly
+db.deleteExpiredSessions(database);
+setInterval(()=>db.deleteExpiredSessions(database),60*60*1000);
 
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
@@ -796,9 +832,153 @@ function handleRequest(req,res){
   }
 
   const origin = req.headers.origin; if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+
+  const url=req.url.split('?')[0];
+
+  // ── Auth endpoints (public) ───────────────────────────────
+  if(url==='/api/auth/setup-required'&&req.method==='GET'){
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({setupRequired:db.countUsers(database)===0}));return;
+  }
+
+  if(url==='/api/auth/setup'&&req.method==='POST'){
+    if(db.countUsers(database)>0){
+      res.writeHead(403,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'setup already completed'}));return;
+    }
+    let body='';
+    req.on('data',c=>body+=c);
+    req.on('end',()=>{
+      try{
+        const{username,password}=JSON.parse(body);
+        if(!username||!password||password.length<4){
+          res.writeHead(400,{'Content-Type':'application/json'});
+          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+        }
+        const user=db.createUser(database,username,password,'admin');
+        const dbUser=db.getUserByUsername(database,username);
+        const token=db.createSession(database,dbUser.id);
+        setSessionCookie(res,token);
+        res.writeHead(200,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:true,username:user.username,role:'admin'}));
+      }catch(e){
+        res.writeHead(400,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({error:e.message}));
+      }
+    });return;
+  }
+
+  if(url==='/api/auth/login'&&req.method==='POST'){
+    let body='';
+    req.on('data',c=>body+=c);
+    req.on('end',()=>{
+      try{
+        const{username,password}=JSON.parse(body);
+        const user=db.getUserByUsername(database,username);
+        if(!user||!db.verifyPassword(user.hash,user.salt,password)){
+          res.writeHead(401,{'Content-Type':'application/json'});
+          res.end(JSON.stringify({error:'Invalid credentials'}));return;
+        }
+        const token=db.createSession(database,user.id);
+        setSessionCookie(res,token);
+        res.writeHead(200,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:true,username:user.username,role:user.role}));
+      }catch(e){
+        res.writeHead(400,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({error:e.message}));
+      }
+    });return;
+  }
+
+  if(url==='/api/auth/logout'&&req.method==='POST'){
+    const token=getSessionToken(req);
+    if(token)db.deleteSession(database,token);
+    clearSessionCookie(res);
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({ok:true}));return;
+  }
+
+  if(url==='/api/auth/me'&&req.method==='GET'){
+    const session=checkAuth(req);
+    if(!session){sendUnauthorized(res,true);return;}
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({username:session.username,role:session.role}));return;
+  }
+
+  // ── Auth gate ─────────────────────────────────────────────
+  const isLoginPage=(url==='/login.html');
+  const isPublicAsset=!!url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg|manifest\.json|sw\.js)$/);
+
+  if(!isLoginPage&&!isPublicAsset){
+    if(db.countUsers(database)===0){
+      if(url.startsWith('/api/')){
+        res.writeHead(401,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({error:'setup_required'}));
+      }else{
+        res.writeHead(302,{'Location':'/login.html'});
+        res.end();
+      }
+      return;
+    }
+    const authUser=checkAuth(req);
+    if(!authUser){
+      sendUnauthorized(res,url.startsWith('/api/'));
+      return;
+    }
+    req.authUser=authUser;
+  }
+
+  // ── User management (admin only) ──────────────────────────
+  if(url==='/api/users'&&req.method==='GET'){
+    if(!req.authUser||req.authUser.role!=='admin'){
+      res.writeHead(403,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'admin required'}));return;
+    }
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify(db.listUsers(database)));return;
+  }
+
+  if(url==='/api/users'&&req.method==='POST'){
+    if(!req.authUser||req.authUser.role!=='admin'){
+      res.writeHead(403,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'admin required'}));return;
+    }
+    let body='';
+    req.on('data',c=>body+=c);
+    req.on('end',()=>{
+      try{
+        const{username,password,role}=JSON.parse(body);
+        if(!username||!password||password.length<4){
+          res.writeHead(400,{'Content-Type':'application/json'});
+          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+        }
+        const user=db.createUser(database,username,password,role||'user');
+        res.writeHead(200,{'Content-Type':'application/json'});
+        res.end(JSON.stringify(user));
+      }catch(e){
+        res.writeHead(400,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({error:e.message}));
+      }
+    });return;
+  }
+
+  if(url.match(/^\/api\/users\/\d+$/)&&req.method==='DELETE'){
+    if(!req.authUser||req.authUser.role!=='admin'){
+      res.writeHead(403,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'admin required'}));return;
+    }
+    const userId=parseInt(url.split('/').pop());
+    if(userId===req.authUser.user_id){
+      res.writeHead(400,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'Cannot delete yourself'}));return;
+    }
+    db.deleteUser(database,userId);
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({ok:true}));return;
+  }
 
   // GET /api/health
   if(req.method==='GET'&&req.url==='/api/health'){
@@ -933,8 +1113,8 @@ function handleRequest(req,res){
 
   // Static files
   let filePath;
-  const url=req.url.split('?')[0];
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
+  else if(url==='/login.html')filePath=path.join(DIR,'login.html');
   else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
   else if(url==='/app.js')filePath=path.join(DIR,'app.js');
   else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');

@@ -56,7 +56,7 @@ do_update() {
     check_node
     ensure_pm2
 
-    echo "[1/3] Updating code from git (reset to origin/main)..."
+    echo "[1/5] Updating code from git (reset to origin/main)..."
     if ! git fetch origin; then
         echo "Error: git fetch failed."
         exit 1
@@ -100,6 +100,7 @@ do_start() {
         npm install --production
     fi
 
+    echo "Ensuring TLS certificates..."
     ensure_certs
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
@@ -130,6 +131,42 @@ do_status() {
     pm2 status
 }
 
+ensure_certs() {
+    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
+        echo "  -> TLS certificates found."
+        return
+    fi
+    echo "  -> TLS certificates not found, generating..."
+    if ! command -v openssl &> /dev/null; then
+        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
+        echo "     Camera scanning on iOS Safari requires HTTPS."
+        echo "     Install openssl and run: bash update_server.sh gen-cert"
+        return
+    fi
+    if [ -f gen-cert.sh ]; then
+        bash gen-cert.sh
+    else
+        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
+    fi
+}
+
+do_gen_cert() {
+    echo "==== Generating TLS Certificate ===="
+    if ! command -v openssl &> /dev/null; then
+        echo "Error: openssl is not installed."
+        exit 1
+    fi
+    if [ -f gen-cert.sh ]; then
+        bash gen-cert.sh
+        echo ""
+        echo "Restart the server for HTTPS to take effect:"
+        echo "  bash update_server.sh start"
+    else
+        echo "Error: gen-cert.sh not found."
+        exit 1
+    fi
+}
+
 show_usage() {
     echo "Usage: bash update_server.sh [command]"
     echo ""
@@ -138,16 +175,18 @@ show_usage() {
     echo "  start          Start the server (without pulling updates)"
     echo "  stop           Stop the server"
     echo "  status         Show PM2 process status"
+    echo "  gen-cert       Generate TLS certificate for HTTPS (iOS camera support)"
     echo "  help           Show this help message"
 }
 
 # ---- Main ----
 
 case "${1:-update}" in
-    update)  do_update  ;;
-    start)   do_start   ;;
-    stop)    do_stop    ;;
-    status)  do_status  ;;
+    update)   do_update   ;;
+    start)    do_start    ;;
+    stop)     do_stop     ;;
+    status)   do_status   ;;
+    gen-cert) do_gen_cert ;;
     help|-h|--help)  show_usage ;;
     *)
         echo "Unknown command: $1"
