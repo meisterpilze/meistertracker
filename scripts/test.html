@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script>
+window.onerror = function(msg, src, line) {
+  document.body.innerHTML += '<p style="color:red">ERROR: ' + msg + ' in ' + src + ' line ' + line + '</p>';
+  return true;
+};
+</script>
+<script src="/lib/jsbarcode.min.js"></script>
+<script src="/lib/qrcode.min.js"></script>
+<script src="/lib/chart.min.js"></script>
+</head><body>
+<h2>Library load test</h2>
+<script>
+document.body.innerHTML += '<p>JsBarcode: ' + (typeof JsBarcode !== "undefined" ? "OK" : "MISSING") + '</p>';
+document.body.innerHTML += '<p>QRCode: ' + (typeof QRCode !== "undefined" ? "OK" : "MISSING") + '</p>';
+document.body.innerHTML += '<p>Chart: ' + (typeof Chart !== "undefined" ? "OK" : "MISSING") + '</p>';
+</script>
+</body></html>
