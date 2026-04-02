@@ -6,6 +6,11 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
+const SYNC_INTERVAL_MS = 5000;       // How often to poll server for changes
+const MAX_LOG_DISPLAY = 200;         // Max rows shown in log/harvest tables
+const MAX_RACK_CAPACITY = 20;        // Estimated max bags per rack (for progress bar)
+const MS_PER_DAY = 86400000;         // 24*60*60*1000
+
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
 const ZONES=['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM'];
 const SPAWN_RACKS=['SPAWN_R1','SPAWN_R2'];
@@ -37,11 +42,13 @@ const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
 async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
-    const d=await fetch('/api/data').then(r=>r.json());
+    const r=await fetch('/api/data');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
     applyData(d);
     setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
     refresh();
-  }catch{setSyncStatus('err','Sync error')}
+  }catch(e){setSyncStatus('err','Sync error: '+(e.message||'offline'))}
 }
 function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];
@@ -64,9 +71,10 @@ function defaultInventory(){
 async function saveData(){
   if(saving)return;saving=true;setSyncStatus('busy','Saving...');
   try{
-    await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
+    const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav})});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
     setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
-  }catch{setSyncStatus('err','Save error — check server is running')}
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
   finally{saving=false}
 }
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
@@ -74,7 +82,9 @@ async function pollSync(){
   // Skip sync while a save is in progress to avoid overwriting pending changes
   if(saving)return;
   try{
-    const d=await fetch('/api/data').then(r=>r.json());
+    const r=await fetch('/api/data');
+    if(!r.ok)return;
+    const d=await r.json();
     const h=JSON.stringify(d);
     if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}
   }catch{}
@@ -160,6 +170,8 @@ function confirmBatchAdd(){
 
 // ─── HELPERS ─────────────────────────────────────────────────
 const abbrev=s=>{if(!s)return'BAG';const u=s.toLowerCase();for(const k in ABBR)if(k.toLowerCase()===u)return ABBR[k];return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
+// Date string used in batch/culture IDs: DDMMYY format (e.g. "020426" for 2 Apr 2026)
+// Barcode scanning decodes this via spAbbrev_strain_MMDD_bagNum format — see processScan()
 const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
 const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
 const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
@@ -331,7 +343,7 @@ function renderRacks(){
       const label=id.replace(/_/g,' ');
       return`<div class="rack-card" onclick="showRack('${id}')">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${count} bag${count!==1?'s':''}</span></div>
-        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
+        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/MAX_RACK_CAPACITY*100))}%"></div></div>
         <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${esc(bid)}</span>(${d.c})`).join(' '):'Empty'}</div>
       </div>`;
     }).join('');
@@ -701,7 +713,7 @@ function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-p
 document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
-  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
+  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,MAX_LOG_DISPLAY);
   body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString('de-DE')}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'—'}</td><td>${h.species?spDot(h.species)+esc(h.species):'—'}</td><td>${esc(h.strain)||'—'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No harvests yet. Scan HARVEST then a bag.</td></tr>';
 
   const byBatch={};
@@ -769,7 +781,7 @@ function buildAutoTasks(){
   batches.forEach(b=>{
     const{status,action}=getStatus(b.batchId);if(status==='DONE'||status==='EMPTY')return;
     const due=new Date(b.due);due.setHours(0,0,0,0);
-    const dl=Math.round((due-today)/(864e5));
+    const dl=Math.round((due-today)/(MS_PER_DAY));
     let urgent=false,warn=false,text='',detail='';
     if(status==='INCUBATING'||status==='SPAWN RUN'){
       if(dl<0){urgent=true;text=`${esc(b.batchId)} — ${action}`;detail=`Due ${Math.abs(dl)} day(s) ago`}
@@ -886,7 +898,7 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'—'}</td><td>${esc(e.from)||'—'}</td><td>${esc(e.to)||'—'}</td><td>${e.species?spDot(e.species)+esc(e.species):'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
+function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,MAX_LOG_DISPLAY);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'—'}</td><td>${esc(e.from)||'—'}</td><td>${esc(e.to)||'—'}</td><td>${e.species?spDot(e.species)+esc(e.species):'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
 function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];saveData();renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
@@ -1111,7 +1123,7 @@ function renderInvLog(){
   const filter=document.getElementById('inv-log-filter').value;
   const body=document.getElementById('inv-log-body');
   if(!inventory.log||!inventory.log.length){body.innerHTML='<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';return}
-  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
+  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,MAX_LOG_DISPLAY);
   // Build running totals per material going forwards for display
   body.innerHTML=rows.map(e=>`<tr>
     <td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td>
@@ -1487,7 +1499,7 @@ document.addEventListener('keydown',e=>{
 
 // ─── INIT ────────────────────────────────────────────────────
 loadData();
-setInterval(pollSync,5000);
+setInterval(pollSync,SYNC_INTERVAL_MS);
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){
