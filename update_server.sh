@@ -52,10 +52,13 @@ do_update() {
         exit 1
     fi
 
-    echo "[2/3] Backing up data..."
+    echo "[2/4] Installing dependencies..."
+    npm install --production
+
+    echo "[3/4] Backing up data..."
     backup_data
 
-    echo "[3/3] Restarting server..."
+    echo "[4/4] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "  -> Process found, attempting reload..."
         pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
@@ -73,6 +76,12 @@ do_start() {
     echo "==== Meisterpilze Server — Start ===="
     check_node
     ensure_pm2
+
+    # Ensure dependencies are installed
+    if [ -f package.json ] && [ ! -d node_modules ]; then
+        echo "Installing dependencies..."
+        npm install --production
+    fi
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "Process already exists in PM2, restarting..."

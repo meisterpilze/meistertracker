@@ -10,6 +10,9 @@ backups/
 
 # Data
 data.json
+*.db
+*.db-wal
+*.db-shm
 
 # Calendars
 calendars/

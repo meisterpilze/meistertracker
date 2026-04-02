@@ -2,58 +2,29 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
+const db = require('./db.js');
 
-// ── CONFIGURATION ────────────────────────────────────────────
-// Override via environment variables or .env file
-function loadEnv() {
-  try {
-    const envPath = path.join(__dirname, '.env');
-    if (fs.existsSync(envPath)) {
-      fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-        const match = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
-        if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
-      });
-    }
-  } catch (e) { /* .env is optional */ }
-}
-loadEnv();
-
-// ── LOGGING ──────────────────────────────────────────────────
-function log(level, msg, meta) {
-  const ts = new Date().toISOString();
-  const entry = `${ts} [${level.toUpperCase()}] ${msg}`;
-  if (level === 'error') console.error(entry, meta || '');
-  else console.log(entry, meta ? JSON.stringify(meta) : '');
-}
-
-const PORT = parseInt(process.env.PORT, 10) || 3000;
+const PORT = 3000;
 const DIR = __dirname;
-const DATA_FILE = path.join(DIR, 'data.json');
+const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
-const PRINTER_NAME = process.env.PRINTER_NAME || 'ZDesigner GK420d';
-const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
+const PRINTER_NAME = 'ZDesigner GK420d';
 
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify({
-    batches:[], scanLog:[], manualTasks:[], harvests:[], cultures:[],
-    teamMembers:[], caldav:{},
-    inventory:{
-      stock:{hardwood:0,wheatbran:0,gypsum:0,grain:0},
-      thresholds:{hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}},
-      avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},
-      log:[]
-    }
-  }, null, 2));
-}
+const database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
+
+// Graceful shutdown
+process.on('SIGINT', () => { database.close(); process.exit(); });
+process.on('SIGTERM', () => { database.close(); process.exit(); });
 
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
-  '.js':'application/javascript','.css':'text/css; charset=utf-8',
-  '.png':'image/png','.ico':'image/x-icon','.svg':'image/svg+xml',
+  '.js':'application/javascript','.png':'image/png',
+  '.ico':'image/x-icon','.svg':'image/svg+xml',
 };
 
 function getLocalIP(){
@@ -64,32 +35,11 @@ function getLocalIP(){
 }
 
 function readData(){
-  try{
-    const d=JSON.parse(fs.readFileSync(DATA_FILE,'utf8'));
-    if(!d.cultures)d.cultures=[];
-    if(!d.teamMembers)d.teamMembers=[];
-    if(!d.caldav)d.caldav={};
-    if(!d.inventory)d.inventory={
-      stock:{hardwood:0,wheatbran:0,gypsum:0,grain:0},
-      thresholds:{hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}},
-      avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},log:[]
-    };
-    return d;
-  }catch{
-    return{batches:[],scanLog:[],manualTasks:[],harvests:[],cultures:[],
-      teamMembers:[],caldav:{},
-      inventory:{
-      stock:{hardwood:0,wheatbran:0,gypsum:0,grain:0},
-      thresholds:{hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}},
-      avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},log:[]
-    }};
-  }
+  return db.readAll(database);
 }
 
 function writeData(data){
-  const tmp = DATA_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, DATA_FILE);
+  db.writeAll(database, data);
 }
 
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
@@ -101,20 +51,21 @@ function runDailyBackup(){
   try{
     const d=new Date();
     const stamp=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const dest=path.join(BACKUP_DIR,'meisterpilze_backup_'+stamp+'.json');
+    const dest=path.join(BACKUP_DIR,'meisterpilze_backup_'+stamp+'.db');
     if(!fs.existsSync(dest)){
-      fs.copyFileSync(DATA_FILE, dest);
-      log('info', 'Auto-backup saved', { dest });
-      // Keep last 30 daily backups
-      const files=fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.json')).sort();
-      if(files.length>30){
-        files.slice(0,files.length-30).forEach(f=>{
-          fs.unlinkSync(path.join(BACKUP_DIR,f));
-          log('info', 'Old backup removed', { file: f });
-        });
-      }
+      db.backupDb(database, dest).then(()=>{
+        console.log('  Auto-backup saved: '+dest);
+        // Keep last 30 daily backups
+        const files=fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.db')).sort();
+        if(files.length>30){
+          files.slice(0,files.length-30).forEach(f=>{
+            fs.unlinkSync(path.join(BACKUP_DIR,f));
+            console.log('  Old backup removed: '+f);
+          });
+        }
+      }).catch(e=>console.error('Auto-backup failed:',e.message));
     }
-  }catch(e){log('error', 'Auto-backup failed', { error: e.message });}
+  }catch(e){console.error('Auto-backup failed:',e.message);}
 }
 
 function scheduleDailyBackup(){
@@ -125,7 +76,7 @@ function scheduleDailyBackup(){
   const next=new Date(now);
   next.setHours(24,0,0,0); // next midnight
   const msUntil=next-now;
-  log('info', 'Next auto-backup: ' + next.toISOString());
+  console.log('  Next auto-backup: '+next.toLocaleString('de-DE'));
   setTimeout(()=>{
     runDailyBackup();
     setInterval(runDailyBackup, 24*60*60*1000); // then every 24h
@@ -203,10 +154,10 @@ public class DOCINFO {
         fs.unlink(tmp,()=>{});
         fs.unlink(psTmp,()=>{});
         if(e){
-          log('error', 'Print failed', { error: (stderr||e.message).trim() });
+          console.error('PowerShell print error:', stderr||e.message);
           callback('Print failed: '+(stderr||e.message).trim());
         }else{
-          log('info', 'Print OK', { output: stdout.trim() });
+          console.log('Print OK:', stdout.trim());
           callback(null);
         }
       });
@@ -226,20 +177,20 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Sanitize URL path parts to prevent directory traversal attacks
+function sanitizePart(s) {
+  const clean = path.basename(s);
+  if (!clean || clean === '.' || clean === '..') return null;
+  return clean;
+}
+
 function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Sanitize CalDAV path segments to prevent directory traversal
-function sanitizePathSegment(segment) {
-  // Remove path separators and parent-directory references
-  return segment.replace(/[\/\\]/g, '').replace(/^\.+$/, '_');
-}
-
 // Check CalDAV basic auth against stored credentials
 function checkCaldavAuth(req) {
-  const data = readData();
-  const cfg = data.caldav || {};
+  const cfg = db.readCaldavConfig(database);
   // If no credentials configured, allow all (open access on local network)
   if (!cfg.caldavUsername) return true;
   const authHeader = req.headers['authorization'] || '';
@@ -251,10 +202,7 @@ function checkCaldavAuth(req) {
 
 // Ensure a calendar directory exists
 function ensureCalDir(calName) {
-  calName = sanitizePathSegment(calName);
   const dir = path.join(CAL_DIR, calName);
-  // Verify resolved path is inside CAL_DIR
-  if (!dir.startsWith(CAL_DIR)) throw new Error('Invalid calendar name');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -272,6 +220,19 @@ function listIcsFiles(calName) {
   const dir = path.join(CAL_DIR, calName);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter(f => f.endsWith('.ics'));
+}
+
+// Compute a stable ctag for a calendar based on file contents
+function computeCtag(calName) {
+  const dir = path.join(CAL_DIR, calName);
+  if (!fs.existsSync(dir)) return '0';
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.ics')).sort();
+  const hash = crypto.createHash('md5');
+  for (const f of files) {
+    const stat = fs.statSync(path.join(dir, f));
+    hash.update(f + ':' + stat.mtimeMs + ':' + stat.size + '\n');
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 // Convert a task object to VTODO .ics content
@@ -366,8 +327,7 @@ function syncAllTasksLocal(data) {
 function handleCaldav(req, res) {
   // CORS + DAV headers for all CalDAV responses
   res.setHeader('DAV', '1, 2, 3, calendar-access');
-  const origin = req.headers.origin;
-  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -384,6 +344,17 @@ function handleCaldav(req, res) {
   const parts = rawPath.replace(/^\/caldav\/?/, '').replace(/\/$/, '').split('/').filter(Boolean);
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
 
+  // Sanitize path parts to prevent directory traversal
+  for (let i = 1; i < parts.length; i++) {
+    const clean = sanitizePart(parts[i]);
+    if (!clean) {
+      res.writeHead(400);
+      res.end('Invalid path');
+      return;
+    }
+    parts[i] = clean;
+  }
+
   if (method === 'OPTIONS') {
     res.writeHead(200, {
       'Allow': 'OPTIONS, GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH',
@@ -393,8 +364,8 @@ function handleCaldav(req, res) {
   }
 
   // Collect request body
-  let body = '';let bodySize=0;
-  req.on('data', c => {bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body += c});
+  let body = '';
+  req.on('data', c => body += c);
   req.on('end', () => {
     try {
       if (method === 'PROPFIND') return handlePropfind(parts, body, req, res);
@@ -407,7 +378,7 @@ function handleCaldav(req, res) {
       res.writeHead(405);
       res.end('Method not allowed');
     } catch (e) {
-      log('error', 'CalDAV error', { error: e.message });
+      console.error('CalDAV error:', e);
       res.writeHead(500);
       res.end('Internal server error');
     }
@@ -463,7 +434,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(cal)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -482,7 +453,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/ — list items in a calendar
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = sanitizePathSegment(parts[1]);
+    const calName = parts[1];
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -497,7 +468,7 @@ function handlePropfind(parts, body, req, res) {
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
-        <cs:getctag>${Date.now()}</cs:getctag>
+        <cs:getctag>${computeCtag(calName)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -534,7 +505,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/<file>.ics — single item props
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
+    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
@@ -568,7 +539,7 @@ function handlePropfind(parts, body, req, res) {
 function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = sanitizePathSegment(parts[1]);
+    const calName = parts[1];
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -584,7 +555,8 @@ function handleReport(parts, body, req, res) {
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
         const href = hrefTag.replace(/<\/?d:href>/gi, '');
-        const filename = sanitizePathSegment(decodeURIComponent(href.split('/').pop()));
+        const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
+        if (!filename) continue;
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
@@ -638,11 +610,11 @@ function handleReport(parts, body, req, res) {
 
 function handleMkcalendar(parts, body, req, res) {
   if (parts.length === 2 && parts[0] === 'calendars') {
-    const calName = sanitizePathSegment(parts[1]);
+    const calName = parts[1];
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
-    log('info', 'CalDAV calendar created', { calendar: calName });
+    console.log('  CalDAV: Calendar created:', calName);
     return;
   }
   res.writeHead(403);
@@ -652,11 +624,32 @@ function handleMkcalendar(parts, body, req, res) {
 function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const calName = sanitizePathSegment(parts[1]);
-    const fileName = sanitizePathSegment(parts[2]);
+    const calName = parts[1];
+    const fileName = parts[2];
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
     const existed = fs.existsSync(filePath);
+
+    // If-None-Match: * means "create only, fail if exists"
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch === '*' && existed) {
+      res.writeHead(412);
+      res.end('Precondition Failed');
+      return;
+    }
+
+    // If-Match: check etag matches current version (conflict detection)
+    const ifMatch = req.headers['if-match'];
+    if (ifMatch && existed) {
+      const stat = fs.statSync(filePath);
+      const currentEtag = '"' + stat.mtimeMs.toString(36) + '"';
+      if (ifMatch !== currentEtag) {
+        res.writeHead(412);
+        res.end('Precondition Failed');
+        return;
+      }
+    }
+
     fs.writeFileSync(filePath, body, 'utf8');
     const stat = fs.statSync(filePath);
     const etag = '"' + stat.mtimeMs.toString(36) + '"';
@@ -671,7 +664,7 @@ function handlePut(parts, body, req, res) {
 function handleGet(parts, req, res) {
   // GET /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
+    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
@@ -702,8 +695,13 @@ function handleGet(parts, req, res) {
 function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, sanitizePathSegment(parts[1]), sanitizePathSegment(parts[2]));
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    fs.unlinkSync(filePath);
     res.writeHead(204);
     res.end();
     return;
@@ -734,37 +732,11 @@ function handleProppatch(parts, body, req, res) {
 // ── HTTP SERVER ──────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
-// ── RATE LIMITING ────────────────────────────────────────────
-const RATE_WINDOW_MS = 60000; // 1 minute
-const RATE_MAX_REQUESTS = 300; // max requests per IP per minute
-const rateLimits = new Map();
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  let entry = rateLimits.get(ip);
-  if (!entry || now - entry.start > RATE_WINDOW_MS) {
-    entry = { start: now, count: 0 };
-    rateLimits.set(ip, entry);
-  }
-  entry.count++;
-  return entry.count <= RATE_MAX_REQUESTS;
-}
-
-// Clean up rate limit entries every minute
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of rateLimits) {
-    if (now - entry.start > RATE_WINDOW_MS) rateLimits.delete(ip);
-  }
-}, RATE_WINDOW_MS);
-
 const server=http.createServer((req,res)=>{
-  // Rate limiting
-  const clientIP = req.socket.remoteAddress || 'unknown';
-  if (!checkRateLimit(clientIP)) {
-    res.writeHead(429, { 'Content-Type': 'application/json' });
-    res.end('{"error":"Too many requests"}');
-    return;
+  // ── Well-known CalDAV discovery (RFC 6764) ──
+  if(req.url.startsWith('/.well-known/caldav')){
+    res.writeHead(301,{'Location':'/caldav/'});
+    res.end();return;
   }
 
   // ── CalDAV requests ──
@@ -772,18 +744,10 @@ const server=http.createServer((req,res)=>{
     return handleCaldav(req,res);
   }
 
-  const origin = req.headers.origin;
-  if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Origin','*');
   res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
-
-  // GET /api/health — health check for monitoring
-  if(req.method==='GET'&&req.url==='/api/health'){
-    res.writeHead(200,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({status:'ok',uptime:process.uptime(),version:require('./package.json').version}));
-    return;
-  }
 
   // GET /api/data
   if(req.method==='GET'&&req.url==='/api/data'){
@@ -793,25 +757,11 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/data
   if(req.method==='POST'&&req.url==='/api/data'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';
+    req.on('data',c=>body+=c);
     req.on('end',()=>{
       try{
         const incoming=JSON.parse(body);
-        // Basic schema validation
-        if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end('{"error":"Expected a JSON object"}');
-          return;
-        }
-        const requiredArrays = ['batches', 'scanLog', 'harvests', 'cultures', 'manualTasks'];
-        for (const key of requiredArrays) {
-          if (incoming[key] !== undefined && !Array.isArray(incoming[key])) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: key + ' must be an array' }));
-            return;
-          }
-        }
         // Safety: never overwrite existing data with empty/smaller arrays
         // (protects against stale browser cache sending blank state)
         const existing=readData();
@@ -820,12 +770,11 @@ const server=http.createServer((req,res)=>{
           ['scanLog', existing.scanLog, incoming.scanLog],
           ['harvests', existing.harvests, incoming.harvests],
           ['cultures', existing.cultures, incoming.cultures],
-          ['manualTasks', existing.manualTasks, incoming.manualTasks],
-          ['teamMembers', existing.teamMembers, incoming.teamMembers],
+          ['assets', existing.assets, incoming.assets],
         ];
         for(const [name, old, inc] of checks){
           if(old && old.length > 0 && (!inc || inc.length === 0)){
-            log('warn', 'Save rejected: would erase ' + old.length + ' ' + name + ' entries');
+            console.log('  BLOCKED: save rejected — would erase '+old.length+' '+name+' entries');
             res.writeHead(409,{'Content-Type':'application/json'});
             res.end(JSON.stringify({error:'blocked',reason:'Would erase existing '+name+'. Refresh your browser (Ctrl+Shift+R).'}));
             return;
@@ -840,15 +789,15 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/print  —  body: { zpl: "^XA...^XZ" }
   if(req.method==='POST'&&req.url==='/api/print'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';
+    req.on('data',c=>body+=c);
     req.on('end',()=>{
       try{
         const{zpl}=JSON.parse(body);
         if(!zpl){res.writeHead(400);res.end('{"error":"no zpl"}');return;}
         printZPL(zpl,err=>{
           if(err){
-            log('error', 'Print error', { error: err });
+            console.error('Print error:',err);
             res.writeHead(500,{'Content-Type':'application/json'});
             res.end(JSON.stringify({error:err}));
           }else{
@@ -862,8 +811,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/sync — write all tasks to local calendar files
   if(req.method==='POST'&&req.url==='/api/caldav/sync'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';
+    req.on('data',c=>body+=c);
     req.on('end',()=>{
       try{
         const data=readData();
@@ -877,7 +826,7 @@ const server=http.createServer((req,res)=>{
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify(result));
       }catch(e){
-        log('error', 'CalDAV sync error', { error: e.message });
+        console.error('CalDAV sync error:',e);
         res.writeHead(500,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:false,error:e.message}));
       }
@@ -886,8 +835,8 @@ const server=http.createServer((req,res)=>{
 
   // POST /api/caldav/push-one — write a single task to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-one'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';
+    req.on('data',c=>body+=c);
     req.on('end',()=>{
       try{
         const{task}=JSON.parse(body);
@@ -899,6 +848,8 @@ const server=http.createServer((req,res)=>{
           calName='meisterpilze-'+slug;
         }
         const uid=writeTaskToCalendar(task,calName);
+        const synced=task.caldavSynced||new Date().toISOString();
+        db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
@@ -921,9 +872,6 @@ const server=http.createServer((req,res)=>{
   let filePath;
   const url=req.url.split('?')[0];
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
-  else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
-  else if(url==='/app.js')filePath=path.join(DIR,'app.js');
-  else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');
   else if(url==='/manifest.json')filePath=path.join(DIR,'manifest.json');
   else if(url.startsWith('/lib/'))filePath=path.join(DIR,'lib',path.basename(url));
   else if(url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg)$/))filePath=path.join(DIR,url.slice(1));
@@ -936,31 +884,19 @@ const server=http.createServer((req,res)=>{
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  const ip = getLocalIP();
-  log('info', 'Meisterpilze Lab Tracker started', { port: PORT, localIP: ip });
+server.listen(PORT,'0.0.0.0',()=>{
+  const ip=getLocalIP();
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
   console.log('');
-  console.log('  Open on this PC:      http://localhost:' + PORT);
-  console.log('  Open on phone/tablet: http://' + ip + ':' + PORT);
+  console.log('  Open on this PC:      http://localhost:'+PORT);
+  console.log('  Open on phone/tablet: http://'+ip+':'+PORT);
   console.log('');
-  console.log('  CalDAV server:        http://' + ip + ':' + PORT + '/caldav/calendars/');
+  console.log('  CalDAV server:        http://'+ip+':'+PORT+'/caldav/calendars/');
   console.log('');
-  console.log('  Printer: ' + PRINTER_NAME);
-  console.log('  Data saved to: ' + DATA_FILE);
+  console.log('  Printer: '+PRINTER_NAME);
+  console.log('  Printing via Windows spooler — works from any browser.');
+  console.log('');
+  console.log('  Data saved to: '+DB_FILE);
   console.log('  Press Ctrl+C to stop.');
 });
-
-// ── GRACEFUL SHUTDOWN ────────────────────────────────────────
-function shutdown(signal) {
-  log('info', 'Received ' + signal + ', shutting down...');
-  server.close(() => {
-    log('info', 'Server closed');
-    process.exit(0);
-  });
-  // Force exit after 5 seconds if server.close hangs
-  setTimeout(() => process.exit(1), 5000);
-}
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
