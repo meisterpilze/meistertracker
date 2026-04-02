@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 const db = require('./db.js');
 
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 const DIR = __dirname;
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
