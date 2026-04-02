@@ -2187,19 +2187,39 @@ function computeDepreciation(asset,refDate){
   const entry=new Date(asset.entryDate);
   const isGwg=asset.purchasePrice<=800;
   if(asset.purchasePrice<=0||asset.usefulLife<=0)return{annualDepr:0,accumulated:0,bookValue:asset.purchasePrice,isGwg};
-  const annualDepr=asset.purchasePrice/asset.usefulLife;
-  // Calculate elapsed days for prorated depreciation
-  let msElapsed=ref.getTime()-entry.getTime();
-  if(msElapsed<0)msElapsed=0;
-  const yearsElapsed=msElapsed/(365.25*24*60*60*1000);
-  let accumulated=Math.min(annualDepr*yearsElapsed,asset.purchasePrice);
-  accumulated=Math.round(accumulated*100)/100;
-  let bookValue=asset.purchasePrice-accumulated;
-  // Erinnerungswert: 1€ if fully depreciated but still active
+
+  // GWG (§6 Abs. 2 EStG): sofort voll abgeschrieben im Anschaffungsjahr
+  if(isGwg){
+    const refYear=ref.getFullYear(),entryYear=entry.getFullYear();
+    if(refYear>=entryYear){
+      const bv=asset.status==='aktiv'?1:0;
+      return{annualDepr:asset.purchasePrice,accumulated:asset.purchasePrice-bv,bookValue:bv,isGwg:true};
+    }
+    return{annualDepr:asset.purchasePrice,accumulated:0,bookValue:asset.purchasePrice,isGwg:true};
+  }
+
+  // Lineare AfA (§7 Abs. 1 EStG) — monatsweise pro rata temporis
+  // Anschaffungsmonat zählt als voller Monat
+  const annualDepr=Math.round(asset.purchasePrice/asset.usefulLife*100)/100;
+  const entryYear=entry.getFullYear(),entryMonth=entry.getMonth(); // 0-based
+  const refYear=ref.getFullYear(),refMonth=ref.getMonth();
+
+  if(ref<entry)return{annualDepr,accumulated:0,bookValue:asset.purchasePrice,isGwg:false};
+
+  let accumulated=0;
+  for(let y=entryYear;y<=refYear;y++){
+    // Determine months of depreciation in this year
+    const startM=(y===entryYear)?entryMonth:0;
+    const endM=(y===refYear)?refMonth:11;
+    const months=endM-startM+1;
+    accumulated+=annualDepr*months/12;
+  }
+  accumulated=Math.min(Math.round(accumulated*100)/100,asset.purchasePrice);
+  let bookValue=Math.round((asset.purchasePrice-accumulated)*100)/100;
+  // Erinnerungswert: 1€ wenn voll abgeschrieben + aktiv
   if(bookValue<1&&asset.status==='aktiv'&&asset.purchasePrice>0)bookValue=1;
   if(bookValue<0)bookValue=0;
-  bookValue=Math.round(bookValue*100)/100;
-  return{annualDepr:Math.round(annualDepr*100)/100,accumulated,bookValue,isGwg};
+  return{annualDepr,accumulated:Math.round((asset.purchasePrice-bookValue)*100)/100,bookValue,isGwg:false};
 }
 
 function nextAssetId(){
