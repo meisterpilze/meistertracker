@@ -176,6 +176,13 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Sanitize URL path parts to prevent directory traversal attacks
+function sanitizePart(s) {
+  const clean = path.basename(s);
+  if (!clean || clean === '.' || clean === '..') return null;
+  return clean;
+}
+
 function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -323,6 +330,17 @@ function handleCaldav(req, res) {
   const rawPath = decodeURIComponent(req.url.split('?')[0]).replace(/\/+/g, '/');
   const parts = rawPath.replace(/^\/caldav\/?/, '').replace(/\/$/, '').split('/').filter(Boolean);
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
+
+  // Sanitize path parts to prevent directory traversal
+  for (let i = 1; i < parts.length; i++) {
+    const clean = sanitizePart(parts[i]);
+    if (!clean) {
+      res.writeHead(400);
+      res.end('Invalid path');
+      return;
+    }
+    parts[i] = clean;
+  }
 
   if (method === 'OPTIONS') {
     res.writeHead(200, {
@@ -524,7 +542,8 @@ function handleReport(parts, body, req, res) {
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
         const href = hrefTag.replace(/<\/?d:href>/gi, '');
-        const filename = decodeURIComponent(href.split('/').pop());
+        const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
+        if (!filename) continue;
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
