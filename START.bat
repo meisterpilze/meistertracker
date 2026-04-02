@@ -213,7 +213,7 @@ if %errorlevel% equ 0 (
 pm2 save >nul 2>&1
 
 REM Wait briefly for the process to initialize, then verify it stayed up
-timeout /t 3 /nobreak >nul
+ping -n 4 127.0.0.1 >nul 2>&1
 pm2 show %PM2_PROCESS_NAME% 2>nul | findstr /i /c:"online" >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
