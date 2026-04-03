@@ -459,6 +459,116 @@ function deleteTaskFromCalendar(uid, calName) {
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
+// ── Auto CalDAV sync helpers ───────────────────────────────
+// Push a batch due-date VEVENT to CalDAV (server-side, called after mutations)
+function autoPushBatchCaldav(batch) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    if (!batch || !batch.due) return;
+    const dir = ensureCalDir('meisterpilze-dates');
+    const { uid, ics } = batchToVEVENT(batch);
+    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+  } catch (e) { console.error('autoPushBatchCaldav error:', e.message); }
+}
+
+// Remove a batch's CalDAV .ics file
+function autoDeleteBatchCaldav(batchId) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    const uid = 'batch-' + batchId + '@meisterpilze';
+    const file = path.join(CAL_DIR, 'meisterpilze-dates', uid + '.ics');
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch (e) { console.error('autoDeleteBatchCaldav error:', e.message); }
+}
+
+// Push a task's VTODO + due-date VEVENT to CalDAV
+function autoPushTaskCaldav(task) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    writeTaskToCalendar(task, 'meisterpilze-tasks');
+    if (task.dueDate) {
+      const dir = ensureCalDir('meisterpilze-dates');
+      const { uid, ics } = taskDueToVEVENT(task);
+      fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+    }
+  } catch (e) { console.error('autoPushTaskCaldav error:', e.message); }
+}
+
+// Remove a task's CalDAV files (VTODO + VEVENT)
+function autoDeleteTaskCaldav(taskId) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    const task = db.readTaskById(database, taskId);
+    if (task && task.caldavUid) {
+      deleteTaskFromCalendar(task.caldavUid, 'meisterpilze-tasks');
+      // Also remove VEVENT for due date
+      const eventFile = path.join(CAL_DIR, 'meisterpilze-dates', task.caldavUid + '-event.ics');
+      if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+    }
+  } catch (e) { console.error('autoDeleteTaskCaldav error:', e.message); }
+}
+
+// Push a custom calendar event to CalDAV
+function autoSyncCalendarEvent(ev) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    if (!ev.startDate && !ev.start_date) return;
+    const normalized = { id: ev.id, title: ev.title, startDate: ev.startDate || ev.start_date, endDate: ev.endDate || ev.end_date, allDay: ev.allDay != null ? ev.allDay : ev.all_day, startTime: ev.startTime || ev.start_time, endTime: ev.endTime || ev.end_time, category: ev.category, description: ev.description, caldavUid: ev.caldavUid || ev.caldav_uid };
+    const dir = ensureCalDir('meisterpilze-dates');
+    const { uid, ics } = customEventToVEVENT(normalized);
+    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+  } catch (e) { console.error('autoSyncCalendarEvent error:', e.message); }
+}
+
+// Remove a custom calendar event's CalDAV file
+function autoDeleteCalendarEventCaldav(eventId) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    const uid = 'cev-' + eventId + '@meisterpilze';
+    const file = path.join(CAL_DIR, 'meisterpilze-dates', uid + '.ics');
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch (e) { console.error('autoDeleteCalendarEventCaldav error:', e.message); }
+}
+
+// Lightweight CalDAV sync after full-state save — writes all due dates & events
+function autoSyncAllCaldav(data) {
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (!cfg.enabled) return;
+    const datesDir = ensureCalDir('meisterpilze-dates');
+    const writtenUids = new Set();
+    // Batch due dates
+    for (const b of (data.batches || [])) {
+      if (!b.due) continue;
+      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+    }
+    // Task due dates
+    for (const t of (data.manualTasks || [])) {
+      if (!t.dueDate) continue;
+      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+    }
+    // Custom events
+    for (const ev of (data.calendarEvents || [])) {
+      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+    }
+    // Clean orphaned meisterpilze-generated files
+    try {
+      const existing = fs.readdirSync(datesDir).filter(f => f.endsWith('.ics'));
+      for (const f of existing) {
+        const filePath = path.join(datesDir, f);
+        const content = fs.readFileSync(filePath, 'utf8');
+        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
+      }
+    } catch (e) { /* ignore */ }
+  } catch (e) { console.error('autoSyncAllCaldav error:', e.message); }
+}
+
 // Full sync: write all tasks to calendar directories
 function syncAllTasksLocal(data) {
   const cfg = data.caldav || {};
@@ -1197,7 +1307,7 @@ function handleRequest(req,res){
   if(req.method==='POST'&&req.url==='/api/data'){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
-      try{writeData(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{writeData(data);autoSyncAllCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
 
@@ -1205,7 +1315,7 @@ function handleRequest(req,res){
 
   // -- Batches --
   if(req.method==='POST'&&req.url==='/api/batches'){
-    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
   if(req.method==='PATCH'&&batchMatch){
@@ -1215,11 +1325,11 @@ function handleRequest(req,res){
   const batchIdMatch=req.url.match(/^\/api\/batches\/([^/]+)$/);
   if(req.method==='PATCH'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    try{db.deleteBatchById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{autoDeleteBatchCaldav(id);db.deleteBatchById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Scan Log --
@@ -1251,16 +1361,16 @@ function handleRequest(req,res){
 
   // -- Tasks --
   if(req.method==='POST'&&req.url==='/api/tasks'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
   if(req.method==='PATCH'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{db.deleteTaskById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{autoDeleteTaskCaldav(id);db.deleteTaskById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Team Members --
@@ -1290,16 +1400,16 @@ function handleRequest(req,res){
 
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
-    jsonBody(req,res,(e,data)=>{try{db.insertCalendarEvent(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.insertCalendarEvent(database,data);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
   if(req.method==='PATCH'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateCalendarEvent(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateCalendarEvent(database,id,data);autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    try{db.deleteCalendarEvent(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{autoDeleteCalendarEventCaldav(id);db.deleteCalendarEvent(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Inventory Delta --

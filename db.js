@@ -752,6 +752,18 @@ function updateTaskById(db, id, fields) {
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
 }
 
+function readTaskById(db, id) {
+  const r = db.prepare('SELECT * FROM manual_tasks WHERE id=?').get(id);
+  if (!r) return null;
+  return { id: r.id, text: r.text, priority: r.priority, done: r.done===1, created: r.created, assignee: r.assignee, dueDate: r.due_date, description: r.description, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced };
+}
+
+function readBatchById(db, batchId) {
+  const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
+  if (!r) return null;
+  return { batchId: r.batch_id, species: r.species, strain: r.strain, qty: r.qty, days: r.days, due: r.due, created: r.created, notes: r.notes };
+}
+
 function deleteTaskById(db, id) {
   db.prepare('DELETE FROM manual_tasks WHERE id=?').run(id);
 }
@@ -856,7 +868,7 @@ module.exports = {
   insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
   appendScanEntries, deleteLastScanEntries, clearScanLog,
   insertHarvest, insertCultures, updateCulture,
-  insertTask, updateTaskById, deleteTaskById,
+  insertTask, updateTaskById, deleteTaskById, readTaskById, readBatchById,
   insertMember, deleteMember,
   upsertAsset, deleteAssetById,
   updateCaldavCfg,

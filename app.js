@@ -146,7 +146,7 @@ function refresh(){
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
   if(id==='assets')renderAssets();
-  if(id==='todo'){renderTodo();if(document.getElementById('sp-todo-cal').classList.contains('active'))renderCalendar();}
+  if(id==='todo'){renderTodo();if(document.getElementById('sp-todo-cal').classList.contains('active')){loadCalDAVImports().then(()=>renderCalendar())}}
   updateTodoBadge();
 }
 
