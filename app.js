@@ -176,12 +176,14 @@ function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=do
 document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
 
 // Batch-add modal
-function openBatchAdd(){
+function openBatchAdd(batchId){
   const bs=document.getElementById('ba-batch');
   bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
+  if(batchId)bs.value=batchId;
   const ls=document.getElementById('ba-loc');
   ls.innerHTML=[...ZONES,...ALL_RACKS].map(l=>`<option value="${l}">${l}</option>`).join('');
   bs.onchange=baPreview;ls.onchange=baPreview;
+  baPreview();
   document.getElementById('m-batchadd').classList.add('open');
 }
 function closeBatchAdd(){document.getElementById('m-batchadd').classList.remove('open')}
@@ -665,7 +667,7 @@ function renderBatches(){
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${esc(b.batchId)}')">${esc(b.notes.length>22?b.notes.slice(0,22)+'…':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${esc(b.batchId)}')">Add note</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">Del</button></td></tr>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString('de-DE')}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString('de-DE')}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+Bags</button><button class="btn btn-sm" onclick="openBatchAdd('${esc(b.batchId)}')" style="margin-right:3px" data-i18n="batch.assign">Zuweisen</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">Del</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">No matches.</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
