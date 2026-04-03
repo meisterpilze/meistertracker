@@ -985,6 +985,11 @@ function renderCalMonth(){
   const events=collectCalendarEvents();
   const todayStr=new Date().toISOString().split('T')[0];
 
+  // Always show 6 rows for consistent height
+  const totalCells=startDow+daysInMonth;
+  const rows=Math.max(6,Math.ceil(totalCells/7));
+  const trailing=rows*7-totalCells;
+
   let html='<div class="cal-grid" id="cal-grid">';
   html+=CAL_DAYS.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
 
@@ -1003,21 +1008,21 @@ function renderCalMonth(){
 
   for(let i=startDow-1;i>=0;i--){
     const day=prevLast-i,m=calMonth===0?11:calMonth-1,y=calMonth===0?calYear-1:calYear,ds=fmtDate(y,m,day);
-    html+='<div class="cal-cell other" data-date="'+ds+'"><div class="cal-day" onclick="calGotoDay(\''+ds+'\')">'+day+'</div>'+eventsForDate(ds)+'</div>';
+    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+day+'</div>'+eventsForDate(ds)+'</div>';
   }
   for(let d=1;d<=daysInMonth;d++){
     const ds=fmtDate(calYear,calMonth,d),cls=ds===todayStr?'cal-cell today':'cal-cell';
-    html+='<div class="'+cls+'" data-date="'+ds+'"><div class="cal-day" onclick="calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+    html+='<div class="'+cls+'" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
   }
-  const total=startDow+daysInMonth,trailing=(7-total%7)%7;
   for(let d=1;d<=trailing;d++){
     const m=calMonth===11?0:calMonth+1,y=calMonth===11?calYear+1:calYear,ds=fmtDate(y,m,d);
-    html+='<div class="cal-cell other" data-date="'+ds+'"><div class="cal-day" onclick="calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
   }
   html+='</div>';
   container.innerHTML=html;
   initCalDragDrop(container);
 }
+function calCellClick(e,ds){if(e.target.closest('.cal-event')||e.target.closest('.cal-more'))return;openEventModal(ds)}
 
 function calGotoDay(ds){calSelectedDate=parseDateStr(ds);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth();setCalView('day')}
 
@@ -1037,12 +1042,12 @@ function renderCalWeek(){
   const dayStrs=days.map(d=>d.toISOString().split('T')[0]);
 
   let html='<div class="cal-week">';
-  // Header
+  // Header with day name + large day number
   html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
-  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'">'+CAL_DAYS[i]+' '+d.getDate()+'</div>'});
+  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'" onclick="calGotoDay(\''+ds+'\')">'+CAL_DAYS[i]+'<span class="wk-day-num">'+d.getDate()+'</span></div>'});
   html+='</div>';
   // All-day row
-  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">ganzt.</div>';
+  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">Ganzt.</div>';
   days.forEach((d,i)=>{
     const ds=dayStrs[i];
     const de=events.filter(e=>e.date===ds&&e.allDay);
@@ -1064,7 +1069,6 @@ function renderCalWeek(){
       html+='<div class="cal-week-slot'+(ds===todayStr?' today-col':'')+'" data-date="'+ds+'" data-hour="'+h+'" onclick="openEventModal(\''+ds+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';
     });
   }
-  // Place timed events
   html+='</div></div>';
   container.innerHTML=html;
 
@@ -1078,8 +1082,8 @@ function renderCalWeek(){
         const[sh,sm]=(e.startTime||'09:00').split(':').map(Number);
         const[eh,em]=(e.endTime||String(sh+1).padStart(2,'0')+':00').split(':').map(Number);
         const top=((sh-CAL_HOURS_START)*48)+(sm/60*48);
-        const height=Math.max(20,((eh-sh)*48)+((em-sm)/60*48));
-        const col=i+2; // grid column (1-based, +1 for time col)
+        const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
+        const col=i+2;
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
@@ -1090,6 +1094,21 @@ function renderCalWeek(){
         body.appendChild(el);
       });
     });
+    // Current time indicator
+    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const todayIdx=dayStrs.indexOf(nowDs);
+    if(todayIdx>=0){
+      const nowH=now.getHours(),nowM=now.getMinutes();
+      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
+        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
+        const line=document.createElement('div');
+        line.className='cal-week-now-line';
+        line.style.top=top+'px';
+        body.appendChild(line);
+        // Scroll to current time
+        body.scrollTop=Math.max(0,top-150);
+      }
+    }
   }
   initCalDragDrop(container);
 }
@@ -1117,7 +1136,7 @@ function renderCalDay(){
       const bg=e.color?'style="background:'+e.color+'"':'';
       html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
     });
-  }else{html+='<div style="font-size:11px;color:#aaa">Keine ganztägigen Events</div>'}
+  }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
   // Time slots
   html+='<div class="cal-day-body">';
@@ -1145,6 +1164,19 @@ function renderCalDay(){
       el.onclick=function(){onCalEventClick(e)};
       body.appendChild(el);
     });
+    // Current time indicator
+    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    if(ds===nowDs){
+      const nowH=now.getHours(),nowM=now.getMinutes();
+      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
+        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
+        const line=document.createElement('div');
+        line.className='cal-day-now-line';
+        line.style.top=top+'px';
+        body.appendChild(line);
+        body.scrollTop=Math.max(0,top-150);
+      }
+    }
   }
   initCalDragDrop(container);
 }
