@@ -198,23 +198,29 @@
 <!-- Content wrapper -->
 <div class="content-wrap">
 
-<!-- Floating scan status bar (bottom-right) -->
-<div id="scan-float" class="scan-float no-print">
-  <div class="scan-float-chips">
-    <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
-    <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
-    <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
-    <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-  </div>
-  <div class="scan-float-btns">
-    <button class="btn-xs" onclick="openCamScan()" title="Scan with camera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg></button>
-    <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
-    <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
+<!-- Scan modal (centered, appears on scan) -->
+<div id="scan-overlay" class="scan-overlay no-print" onclick="closeScanModal()">
+  <div class="scan-modal" onclick="event.stopPropagation()">
+    <button class="scan-modal-close" onclick="closeScanModal()" title="Close">&times;</button>
+    <div class="scan-modal-header">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+      <span>Scan-Modus</span>
+    </div>
+    <div class="scan-modal-chips">
+      <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+      <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+      <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+      <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
+    </div>
+    <div id="scan-toast" class="scan-toast-inline"></div>
+    <div class="scan-modal-log" id="scan-modal-log"></div>
+    <div class="scan-modal-btns">
+      <button class="btn-xs" onclick="openCamScan()" title="Scan with camera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg> Kamera</button>
+      <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
+      <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
+    </div>
   </div>
 </div>
-
-<!-- Scan toast popup (appears on scan) -->
-<div id="scan-toast" class="scan-toast no-print"></div>
 
 <!-- Harvest panel -->
 <div id="harvest-panel">

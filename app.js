@@ -2180,17 +2180,30 @@ async function printRef(){const sheet=document.getElementById('ref-print-sheet')
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 let _toastTimer=null;
+function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
+function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
+function _addLogEntry(type,msg){
+  const log=document.getElementById('scan-modal-log');
+  const el=document.createElement('div');
+  el.className='scan-log-entry log-'+type;
+  const t=new Date();
+  el.textContent=t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0')+':'+t.getSeconds().toString().padStart(2,'0')+' — '+msg;
+  log.prepend(el);
+  // Keep max 50 entries
+  while(log.children.length>50)log.lastChild.remove();
+}
 function setFb(type,msg){
+  openScanModal();
   const el=document.getElementById('scan-toast');
-  el.className='scan-toast fb-'+type;
+  el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
-  // Show toast
   requestAnimationFrame(()=>el.classList.add('visible'));
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+  _addLogEntry(type,msg);
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
-function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
+function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';document.getElementById('scan-modal-log').innerHTML='';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
 function processScan(raw){
   // Replace _ with - (German HID keyboard fix)
   let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
