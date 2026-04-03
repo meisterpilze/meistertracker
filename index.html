@@ -1028,6 +1028,11 @@
 <div id="ref-print-sheet"></div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+// Active frontend — uses atomic REST endpoints (apiPost/apiPatch/apiDelete).
+// Legacy app.js (full-state saveData) is deprecated and NOT loaded here.
+// ══════════════════════════════════════════════════════════════
+
 // ─── I18N ────────────────────────────────────────────────────
 let currentLang = localStorage.getItem('mp-lang') || 'de';
 const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };

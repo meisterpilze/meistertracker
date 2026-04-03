@@ -1,3 +1,10 @@
+// ══════════════════════════════════════════════════════════════
+// DEPRECATED — This file is the legacy frontend implementation.
+// The active frontend is index.html (inline JS with atomic REST endpoints).
+// This file is kept for reference only and is NOT loaded by index.html.
+// All new development should happen in index.html.
+// ══════════════════════════════════════════════════════════════
+
 // ─── HTML ESCAPING ──────────────────────────────────────────
 function esc(s) {
   if (s == null) return '';
