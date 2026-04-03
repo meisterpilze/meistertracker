@@ -3040,9 +3040,9 @@ async function authFetch(url,opts){
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
   return r;
 }
-async function apiPost(path,body){return authFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiPatch(path,body){return authFetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiDelete(path){return authFetch(path,{method:'DELETE'}).then(r=>r.json())}
+async function apiPost(path,body){_mutating++;try{return await authFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}finally{_mutating--}}
+async function apiPatch(path,body){_mutating++;try{return await authFetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}finally{_mutating--}}
+async function apiDelete(path){_mutating++;try{return await authFetch(path,{method:'DELETE'}).then(r=>r.json())}finally{_mutating--}}
 async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/delta',{mat,deltaKg,type,ref})}
 async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
@@ -3080,9 +3080,12 @@ function defaultInventory(){
   };
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls}
+let _mutating=0; // tracks in-flight mutations to block pollSync from overwriting
+let lastSyncTime=null;
+function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
 async function pollSync(){
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+  if(_mutating>0)return; // don't overwrite while mutations are in-flight
+  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}}catch{}
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
