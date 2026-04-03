@@ -166,10 +166,10 @@
     <button class="sb-btn" id="n-batch" onclick="go('batch','n-batch')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span data-i18n="nav.batches">Batches</span></button>
     <button class="sb-btn" id="n-lab" onclick="go('lab','n-lab')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v7l4 9H5l4-9V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg><span data-i18n="nav.lab">Lab</span></button>
     <button class="sb-btn" id="n-inv" onclick="go('inv','n-inv')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span data-i18n="nav.inventory">Inventory</span></button>
+    <button class="sb-btn" id="n-todo" onclick="go('todo','n-todo')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span data-i18n="nav.todo">To-do</span></button>
     <div class="sb-group-label" data-i18n="nav.tools">Tools</div>
     <button class="sb-btn" id="n-assets" onclick="go('assets','n-assets')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span data-i18n="nav.assets">Anlagen</span></button>
     <button class="sb-btn" id="n-print" onclick="go('print','n-print')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span data-i18n="nav.print">Print</span></button>
-    <button class="sb-btn" id="n-todo" onclick="go('todo','n-todo')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span data-i18n="nav.todo">To-do</span></button>
   </nav>
   <div class="sb-footer">
     <button class="sb-btn" id="n-settings" onclick="go('settings','n-settings')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span data-i18n="nav.more">Settings</span></button>
@@ -615,9 +615,7 @@
 <div class="page" id="p-todo">
   <div class="stabs">
     <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')" data-i18n="todo.tasks">Tasks</button>
-    <button class="stab" id="st-todo-team" onclick="openStab('todo','team')" data-i18n="todo.team">Team</button>
     <button class="stab" id="st-todo-cal" onclick="openStab('todo','cal')">Kalender</button>
-    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')">CalDAV</button>
   </div>
   <!-- To-do -->
   <div class="sp active" id="sp-todo-todo">
@@ -656,22 +654,6 @@
       </div>
     </div>
   </div>
-  <!-- Team -->
-  <div class="sp" id="sp-todo-team">
-    <div class="card">
-      <div class="sec" data-i18n="team.members">Team members</div>
-      <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6" data-i18n="team.membersDesc">Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.</p>
-      <div id="team-list"></div>
-      <div id="team-form" style="margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
-        <div class="g2" style="margin-bottom:8px">
-          <div><label data-i18n="team.name">Name</label><input type="text" id="member-name" placeholder="e.g. Jonas" /></div>
-          <div><label data-i18n="team.role">Role (optional)</label><input type="text" id="member-role" placeholder="e.g. Lab manager" /></div>
-        </div>
-        <button class="btn btn-p btn-sm" onclick="addMember()" data-i18n="team.addMember">+ Add member</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Calendar View -->
   <div class="sp" id="sp-todo-cal">
     <div class="cal-toolbar">
@@ -702,54 +684,6 @@
     </div>
   </div>
 
-  <!-- CalDAV Calendar Sync -->
-  <div class="sp" id="sp-todo-caldav">
-    <div class="card">
-      <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
-      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px" data-i18n="caldav.urlTitle">CalDAV URL (use this in your calendar app)</div>
-        <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="sec" style="font-size:12px;margin:0" data-i18n="caldav.password">Optional: protect with password</div>
-        <div class="g2">
-          <div><label data-i18n="caldav.username">Username</label><input type="text" id="caldav-user" data-i18n-placeholder="caldav.userPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
-          <div><label data-i18n="caldav.passwordLabel">Password</label><input type="password" id="caldav-pass" data-i18n-placeholder="caldav.passPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span data-i18n="caldav.enableSync">Enable sync (push tasks to calendars)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;margin-left:16px">
-            <input type="checkbox" id="caldav-per-person" style="width:auto" /> <span data-i18n="caldav.perPerson">Separate calendar per person</span>
-          </label>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()" data-i18n="caldav.saveSettings">Save settings</button>
-          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
-        </div>
-        <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">
-        <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
-        <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
-        <p style="margin-top:6px"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
-      </div>
-    </div>
-    <div class="card">
-      <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">
-        <p><strong>Base calendar:</strong> All tasks go to a shared <code>meisterpilze-tasks</code> calendar.</p>
-        <p style="margin-top:6px"><strong>Per-person calendars:</strong> When enabled, tasks assigned to a team member get their own calendar (e.g. <code>meisterpilze-jonas</code>). Unassigned / company-wide tasks stay in the shared calendar.</p>
-        <p style="margin-top:6px"><strong>Two-way:</strong> Tasks are written to calendar files on this server. Calendar clients can read them via CalDAV. Changes made in calendar apps (marking done, editing) are saved back to the .ics files.</p>
-        <p style="margin-top:6px"><strong>Calendars on disk:</strong> Stored in <code>/calendars/</code> folder next to data.json. Each calendar is a folder with .ics files inside.</p>
-      </div>
-    </div>
-  </div>
 
 </div>
 
@@ -759,6 +693,7 @@
     <button class="stab active" id="st-settings-log" onclick="openStab('settings','log')" data-i18n="settings.scanLog">Scan log</button>
     <button class="stab" id="st-settings-backup" onclick="openStab('settings','backup')" data-i18n="settings.backup">Backup</button>
     <button class="stab" id="st-settings-users" onclick="openStab('settings','users');loadUsersTab()">Users</button>
+    <button class="stab" id="st-settings-caldav" onclick="openStab('settings','caldav')">CalDAV</button>
   </div>
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
@@ -812,6 +747,54 @@
         <div><label style="font-size:11px;color:#888">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
         <div><label style="font-size:11px;color:#888">Role</label><select id="new-role" style="width:auto;font-size:13px;padding:6px"><option value="user">user</option><option value="admin">admin</option></select></div>
         <button class="btn btn-p" onclick="addUser()" style="font-size:12px">Add user</button>
+      </div>
+    </div>
+  </div>
+  <!-- CalDAV Calendar Sync -->
+  <div class="sp" id="sp-settings-caldav">
+    <div class="card">
+      <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px" data-i18n="caldav.urlTitle">CalDAV URL (use this in your calendar app)</div>
+        <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="sec" style="font-size:12px;margin:0" data-i18n="caldav.password">Optional: protect with password</div>
+        <div class="g2">
+          <div><label data-i18n="caldav.username">Username</label><input type="text" id="caldav-user" data-i18n-placeholder="caldav.userPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
+          <div><label data-i18n="caldav.passwordLabel">Password</label><input type="password" id="caldav-pass" data-i18n-placeholder="caldav.passPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span data-i18n="caldav.enableSync">Enable sync (push tasks to calendars)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;margin-left:16px">
+            <input type="checkbox" id="caldav-per-person" style="width:auto" /> <span data-i18n="caldav.perPerson">Separate calendar per person</span>
+          </label>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()" data-i18n="caldav.saveSettings">Save settings</button>
+          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
+        </div>
+        <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">
+        <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
+        <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
+        <p style="margin-top:6px"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">
+        <p><strong>Base calendar:</strong> All tasks go to a shared <code>meisterpilze-tasks</code> calendar.</p>
+        <p style="margin-top:6px"><strong>Per-person calendars:</strong> When enabled, tasks assigned to a team member get their own calendar (e.g. <code>meisterpilze-jonas</code>). Unassigned / company-wide tasks stay in the shared calendar.</p>
+        <p style="margin-top:6px"><strong>Two-way:</strong> Tasks are written to calendar files on this server. Calendar clients can read them via CalDAV. Changes made in calendar apps (marking done, editing) are saved back to the .ics files.</p>
+        <p style="margin-top:6px"><strong>Calendars on disk:</strong> Stored in <code>/calendars/</code> folder next to data.json. Each calendar is a folder with .ics files inside.</p>
       </div>
     </div>
   </div>

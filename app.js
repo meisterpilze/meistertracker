@@ -133,9 +133,8 @@ function openStab(page,sub){
   if(page==='print'&&sub==='lab'){renderLabList();renderLabPreview();}
   if(page==='print'&&sub==='ref')renderRefBarcodes();
   if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
-  if(page==='todo'&&sub==='team')renderTeam();
   if(page==='todo'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
-  if(page==='todo'&&sub==='caldav')loadCaldavSettings();
+  if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
