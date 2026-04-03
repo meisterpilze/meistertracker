@@ -1590,6 +1590,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Scan FROM and TO locations first.',
     'scanFb.logged': 'Logged: {action} {val}{to} [{n} this session]',
     'scanFb.unknown': 'Unknown barcode: {val}. Check the batch exists first.',
+    'scanFb.unknownFormat': 'Unknown format: {val} — check barcode.',
     'scanFb.matched': 'Matched: {val} from {batch}',
     'scanFb.noBatchFound': 'No batch found for {val} \u2014 check species/strain/date match',
     'scanFb.removeLogged': 'REMOVE logged: {bag}',
@@ -2238,6 +2239,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Erst VON- und NACH-Standort scannen.',
     'scanFb.logged': 'Erfasst: {action} {val}{to} [{n} diese Sitzung]',
     'scanFb.unknown': 'Unbekannter Barcode: {val}. Pr\u00fcfe ob die Charge existiert.',
+    'scanFb.unknownFormat': 'Unbekanntes Format: {val} — Barcode pr\u00fcfen.',
     'scanFb.matched': 'Zugeordnet: {val} aus {batch}',
     'scanFb.noBatchFound': 'Keine Charge f\u00fcr {val} gefunden \u2014 Art/Stamm/Datum pr\u00fcfen',
     'scanFb.removeLogged': 'REMOVE erfasst: {bag}',
@@ -3735,9 +3737,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest',t('harvest.bagScanned',{bag:bagId}));
+  setFb('harvest',t('harvest.bagScanned',{bag:bagId}),{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -4565,8 +4568,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info',t('scanFb.bagInfo',{bag:bagId}));
+  setFb('info',t('scanFb.bagInfo',{bag:bagId}),{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -4733,8 +4737,8 @@ function _addLogEntry(type,msg){
   while(log.children.length>50)log.lastChild.remove();
 }
 let _toastTimer=null;
-function setFb(type,msg){
-  openScanModal();
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -4824,7 +4828,7 @@ function _flushScanBuf(){
   _scanBuf.chars=[];
   if(raw.length<SCAN_MIN_LEN)return;
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err',t('scanFb.unknownFormat',{val:cleaned})||'Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 
