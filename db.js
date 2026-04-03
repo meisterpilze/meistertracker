@@ -524,6 +524,21 @@ function updateTaskCaldavUid(db, text, created, uid, synced) {
   ).run(uid, synced, text, created);
 }
 
+// ── Update batch due date (for calendar drag or CalDAV bidirectional sync) ──
+function updateBatchDue(db, batchId, newDueISO) {
+  const batch = db.prepare('SELECT created FROM batches WHERE batch_id = ?').get(batchId);
+  if (!batch) return;
+  const created = new Date(batch.created);
+  const newDue = new Date(newDueISO);
+  const newDays = Math.max(1, Math.round((newDue - created) / 86400000));
+  db.prepare('UPDATE batches SET due = ?, days = ? WHERE batch_id = ?').run(newDueISO, newDays, batchId);
+}
+
+// ── Update task due date (for calendar drag or CalDAV bidirectional sync) ──
+function updateTaskDueDate(db, caldavUid, newDueDate) {
+  db.prepare('UPDATE manual_tasks SET due_date = ?, caldav_synced = NULL WHERE caldav_uid = ?').run(newDueDate, caldavUid);
+}
+
 // ── Read only CalDAV config (lightweight, for auth checks) ──
 function readCaldavConfig(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
@@ -593,6 +608,7 @@ function deleteUser(db, userId) {
 
 module.exports = {
   openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid,
+  updateBatchDue, updateTaskDueDate,
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
   deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser
 };
