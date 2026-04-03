@@ -1,3 +1,10 @@
+// ══════════════════════════════════════════════════════════════
+// DEPRECATED — This file is the legacy frontend implementation.
+// The active frontend is index.html (inline JS with atomic REST endpoints).
+// This file is kept for reference only and is NOT loaded by index.html.
+// All new development should happen in index.html.
+// ══════════════════════════════════════════════════════════════
+
 // ─── HTML ESCAPING ──────────────────────────────────────────
 function esc(s) {
   if (s == null) return '';
@@ -5,7 +12,7 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 30000; // fallback polling (SSE is primary)
+const SYNC_INTERVAL_MS = 5000; // fast fallback polling (SSE is primary)
 const MAX_LOG_DISPLAY = 200;
 const MAX_RACK_CAPACITY = 20;
 const MS_PER_DAY = 86400000;
@@ -32,8 +39,9 @@ const REF_GROUPS=[
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
-let confirmCb=null,noteId=null,saving=false,lastHash='';
+let confirmCb=null,noteId=null,saving=false,pendingSave=false,lastHash='';
 let lastSyncTime=null; // tracks last successful server contact
+let sseConnection=null,sseBackoff=1000;
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
 const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
@@ -80,13 +88,14 @@ function defaultInventory(){
   };
 }
 async function saveData(){
-  if(saving)return;saving=true;setSyncStatus('busy','Saving...');
+  if(saving){pendingSave=true;return}
+  saving=true;setSyncStatus('busy','Saving...');
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
     setSyncStatus('ok','Saved · gerade eben');
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
-  finally{saving=false}
+  finally{saving=false;if(pendingSave){pendingSave=false;saveData()}}
 }
 function setSyncStatus(cls,msg){
   document.getElementById('sync-dot').className='sync-dot '+cls;
@@ -102,13 +111,13 @@ function formatRelativeTime(ts){
   return 'vor '+Math.floor(min/60)+' Std.';
 }
 async function pollSync(){
-  if(saving)return;
+  if(saving){pendingPoll=true;return;}
   try{const r=await authFetch('/api/data');
   if(!r.ok)return;
   const d=await r.json();const h=JSON.stringify(d);
   if(h!==lastHash){lastHash=h;applyData(d);refresh();}
   setSyncStatus('ok','Synced · gerade eben');
-  }catch{}
+  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -726,9 +735,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent='Log harvest — '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter');
+  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter',{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -897,13 +907,20 @@ function saveCaldavSettings(){
   saveData();
   showCaldavStatus('Einstellungen gespeichert.','#166534');
 }
+function copyCalDavUrl(){
+  const url=document.getElementById('caldav-url-display').textContent;
+  navigator.clipboard.writeText(url).then(()=>showCaldavStatus('URL kopiert!','#166534')).catch(()=>{});
+}
 function showCaldavStatus(msg,color){
   const el=document.getElementById('caldav-status');
   el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
   setTimeout(()=>{el.style.display='none'},8000);
 }
 async function syncCaldavNow(){
-  if(!caldav.enabled){showCaldavStatus('Enable sync first, then save settings.','#92400e');return}
+  // Auto-save checkbox state before syncing
+  caldav.enabled=document.getElementById('caldav-enabled').checked;
+  saveData();
+  if(!caldav.enabled){showCaldavStatus('Aktiviere zuerst die Synchronisation.','#92400e');return}
   const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
@@ -1016,7 +1033,7 @@ function renderCalMonth(){
       const bg=e.color?'style="background:'+e.color+'"':'';
       return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     }).join('');
-    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
+    if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' mehr</div>';
     return o;
   }
 
@@ -1069,7 +1086,7 @@ function renderCalWeek(){
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -1101,7 +1118,10 @@ function renderCalWeek(){
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
-        el.textContent=e.label;
+        let wkContent=esc(e.label);
+        if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+        if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
+        el.innerHTML=wkContent;
         el.title=e.label;
         el.dataset.type=e.type;el.dataset.id=e.id||'';
         el.dataset.date=ds;
@@ -1154,7 +1174,7 @@ function renderCalDay(){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
@@ -1177,8 +1197,11 @@ function renderCalDay(){
       const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
       const el=document.createElement('div');
       el.className='cal-day-ev';
-      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71');
-      el.innerHTML='<strong>'+esc(e.label)+'</strong>'+(e.startTime?' <span style="opacity:.8">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</span>':'');
+      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:2';
+      let dayContent='<strong>'+esc(e.label)+'</strong>';
+      if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+      if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
+      el.innerHTML=dayContent;
       el.title=e.label;
       el.dataset.type=e.type;el.dataset.id=e.id||'';
       el.dataset.date=ds;
@@ -1262,7 +1285,7 @@ function handleCalendarDrop(type,id,newDateStr){
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    saveData();renderCalendar();
+    patchCalendarEventAPI(id,{startDate:newDateStr,caldavSynced:null});renderCalendar();
     pushEventCaldav(ev);
   }
 }
@@ -1281,11 +1304,12 @@ function snapPx(px){return Math.round(px/12)*12}// snap to 15-min increments (48
 
 function updateEventTime(id,newStart,newEnd,newDate){
   const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
-  if(newStart)ev.startTime=newStart;
-  if(newEnd)ev.endTime=newEnd;
-  if(newDate)ev.startDate=newDate;
+  const fields={caldavSynced:null};
+  if(newStart){ev.startTime=newStart;fields.startTime=newStart}
+  if(newEnd){ev.endTime=newEnd;fields.endTime=newEnd}
+  if(newDate){ev.startDate=newDate;fields.startDate=newDate}
   ev.caldavSynced=null;
-  saveData();renderCalendar();
+  patchCalendarEventAPI(id,fields);renderCalendar();
   pushEventCaldav(ev);
 }
 
@@ -1399,12 +1423,107 @@ function initEventResize(el,handle,body,viewType){
 
 // ── Event Click ──
 function onCalEventClick(ev){
+  if(ev.type==='harvest')return;
+  openEventDetail(ev);
+}
+
+function openEventDetail(ev){
+  const titleEl=document.getElementById('cal-detail-title');
+  const metaEl=document.getElementById('cal-detail-meta');
+  const badgesEl=document.getElementById('cal-detail-badges');
+  const assignEl=document.getElementById('cal-detail-assignee');
+  const descEl=document.getElementById('cal-detail-desc');
+  const btnsEl=document.getElementById('cal-detail-btns');
+
   if(ev.type==='custom'){
-    const ce=calendarEvents.find(x=>x.id===ev.id);
-    if(ce)openEventModal(ce.startDate,ce.startTime,ce);
-  }else if(ev.type==='batch-due'||ev.type==='task-due'){
-    openEventMoveModal(ev);
+    const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
+    titleEl.textContent=ce.title;
+    let meta=new Date(ce.startDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
+    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(ce.color||'#2ecc71')+';color:#fff">'+(catLabels[ce.category]||ce.category)+'</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ce.description||'';
+    descEl.style.display=ce.description?'':'none';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
+
+  }else if(ev.type==='task-due'){
+    const t=manualTasks.find(x=>x.created===ev.id);if(!t)return;
+    titleEl.textContent=t.text;
+    let meta='Aufgabe';
+    if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
+    const prioColors={high:'#e74c3c',medium:'#f39c12',low:'#3498db'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+(prioLabels[t.priority]||t.priority)+'</span>':'');
+    assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
+    descEl.textContent=t.description||'';
+    descEl.style.display=t.description?'':'none';
+    const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='batch-due'){
+    titleEl.textContent=ev.label;
+    const b=batches.find(x=>x.batchId===ev.id);
+    let meta='Batch-Fälligkeitstermin';
+    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#e74c3c;color:#fff">Batch</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
+    descEl.style.display='';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="closeEventDetail();openEventMoveModal({type:\'batch-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='caldav-import'){
+    titleEl.textContent=ev.label;
+    let meta='CalDAV Import';
+    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#9b59b6;color:#fff">CalDAV</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ev.description||'';
+    descEl.style.display=ev.description?'':'none';
+    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">Schließen</button>';
   }
+  document.getElementById('m-cal-detail').classList.add('open');
+}
+
+function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+
+function editEventFromDetail(id){
+  closeEventDetail();
+  const ce=calendarEvents.find(x=>x.id===id);
+  if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+}
+
+function deleteCalEventFromDetail(id){
+  closeEventDetail();
+  confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+    calendarEvents=calendarEvents.filter(x=>x.id!==id);
+    saveData();renderCalendar();
+    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+  });
+}
+
+function toggleTaskFromCalendar(taskId){
+  const idx=manualTasks.findIndex(t=>t.created===taskId);
+  if(idx<0)return;
+  toggleTask(idx);
+  renderCalendar();
+  closeEventDetail();
+}
+
+function deleteTaskFromCalendar(taskId){
+  closeEventDetail();
+  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    const idx=manualTasks.findIndex(t=>t.created===taskId);
+    if(idx<0)return;
+    manualTasks.splice(idx,1);
+    saveData();renderManualTasks();renderCalendar();updateTodoBadge();
+  });
 }
 
 function onCalMonthEventClick(type,id){
@@ -1510,25 +1629,53 @@ function saveCalEvent(){
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-  }else{calendarEvents.push(ev)}
-  saveData();renderCalendar();closeEventModal();
+    patchCalendarEventAPI(ev.id,ev);
+  }else{calendarEvents.push(ev);saveCalendarEventAPI(ev)}
+  renderCalendar();closeEventModal();
   if(caldav.enabled)pushEventCaldav(ev);
 }
 
 function deleteCalEvent(){
   const id=document.getElementById('cal-ev-id').value;if(!id)return;
+  closeEventModal();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    saveData();renderCalendar();closeEventModal();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+    deleteCalendarEventAPI(id);
+    renderCalendar();closeEventModal();
   });
+}
+
+// ── Atomic Calendar REST helpers ──
+async function saveCalendarEventAPI(ev){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ev)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
+}
+async function patchCalendarEventAPI(id,fields){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(fields)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
+}
+async function deleteCalendarEventAPI(id){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
 }
 
 async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();saveData()}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();patchCalendarEventAPI(ev.id,{caldavUid:r.uid,caldavSynced:ev.caldavSynced})}
   }catch(e){console.error('CalDAV event push error:',e)}
 }
 
@@ -2187,8 +2334,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>Harvests:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' · ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info','Bag info: '+bagId+' — choose an action below or close');
+  setFb('info','Bag info: '+bagId+' — choose an action below or close',{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -2355,8 +2503,8 @@ function _addLogEntry(type,msg){
   // Keep max 50 entries
   while(log.children.length>50)log.lastChild.remove();
 }
-function setFb(type,msg){
-  openScanModal();
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -2364,6 +2512,9 @@ function setFb(type,msg){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
   _addLogEntry(type,msg);
+  const ov=document.getElementById('scan-overlay');
+  ov.classList.remove('scan-bg-ok','scan-bg-err','scan-bg-info','scan-bg-harvest');
+  ov.classList.add('scan-bg-'+type);
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';document.getElementById('scan-modal-log').innerHTML='';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
@@ -2451,7 +2602,7 @@ function _flushScanBuf(){
   if(raw.length<SCAN_MIN_LEN)return;
   // Validate against known formats
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err','Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 
@@ -2498,6 +2649,7 @@ document.addEventListener('keydown',e=>{
 let camScanner=null;
 function openCamScan(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setFb('err','Camera not available in this browser. Use HTTPS or localhost.');return}
+  closeScanModal();
   document.getElementById('m-camscan').classList.add('open');
   camScanner=new Html5Qrcode('cam-reader');
   camScanner.start(
@@ -2516,6 +2668,12 @@ function closeCamScan(){
   if(camScanner){camScanner.stop().catch(function(){});camScanner.clear();camScanner=null}
 }
 document.addEventListener('visibilitychange',function(){if(document.hidden&&camScanner)closeCamScan()});
+
+// JS fallback: show camera FAB on touch devices where CSS media query may not work
+(function(){
+  var isTouchDevice='ontouchstart' in window||navigator.maxTouchPoints>0||/Mobi|Android|iPad|iPhone|iPod|tablet/i.test(navigator.userAgent);
+  if(isTouchDevice){var fab=document.getElementById('cam-fab');if(fab)fab.style.display='flex'}
+})();
 
 // ─── USER MANAGEMENT ─────────────────────────────────────────
 async function doLogout(){
@@ -2571,22 +2729,37 @@ async function deleteUser(id){
 // ─── INIT ────────────────────────────────────────────────────
 loadCurrentUser();
 loadData();
+// Set CalDAV URL immediately so it's never empty
+{const port=location.port?':'+location.port:'';const el=document.getElementById('caldav-url-display');if(el)el.textContent=location.protocol+'//'+location.hostname+port+'/caldav/calendars/';}
 setInterval(pollSync,SYNC_INTERVAL_MS);
 
-// SSE for real-time multi-client sync
-(function initSSE(){
+// SSE for real-time multi-client sync (with robust reconnection)
+function connectSSE(){
   try{
+    if(sseConnection){try{sseConnection.close()}catch{}}
+    sseConnection=null;
     const es=new EventSource('/api/events');
+    es.onopen=function(){sseBackoff=1000;lastSyncTime=Date.now()};
     es.onmessage=function(e){
       try{
         const d=JSON.parse(e.data);
         if(d.type==='data-changed')pollSync();
+        else if(d.type==='connected'){lastSyncTime=Date.now();pollSync()}
         else if(d.type==='heartbeat')lastSyncTime=Date.now();
       }catch{}
     };
-    es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
-  }catch{}
-})();
+    es.onerror=function(){
+      try{es.close()}catch{}
+      sseConnection=null;
+      sseBackoff=Math.min(sseBackoff*2,30000);
+      setTimeout(connectSSE,sseBackoff);
+    };
+    sseConnection=es;
+  }catch{setTimeout(connectSSE,sseBackoff)}
+}
+connectSSE();
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&!sseConnection)connectSSE()});
+window.addEventListener('online',function(){if(!sseConnection)connectSSE()});
 
 // Update sync label with relative time every 5 seconds
 setInterval(()=>{

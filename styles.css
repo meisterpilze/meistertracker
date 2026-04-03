@@ -129,10 +129,15 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 /* ═══ SCAN MODAL (centered overlay) ════════════════════════════ */
 .scan-overlay{
   position:fixed;inset:0;z-index:900;
-  background:rgba(0,0,0,.35);
+  background:rgba(34,120,60,.35);
   display:none;align-items:center;justify-content:center;
+  transition:background .3s ease;
 }
 .scan-overlay.open{display:flex}
+.scan-overlay.scan-bg-ok{background:rgba(34,120,60,.35)}
+.scan-overlay.scan-bg-err{background:rgba(180,30,30,.4)}
+.scan-overlay.scan-bg-info{background:rgba(0,0,0,.35)}
+.scan-overlay.scan-bg-harvest{background:rgba(146,64,14,.35)}
 .scan-modal{
   background:var(--c-surface);border:1px solid var(--c-border);
   border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.22);
@@ -240,6 +245,24 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 /* -- Count bump animation -- */
 @keyframes count-bump{0%{transform:scale(1)}50%{transform:scale(1.35)}100%{transform:scale(1)}}
 .count-bump .chip-v{animation:count-bump .3s ease}
+
+/* ═══ CAMERA FAB (mobile/tablet only) ════════════════════════ */
+/* Hidden by default on desktop (pointer:fine = mouse) */
+.cam-fab{
+  display:none;
+  position:fixed;bottom:24px;right:24px;z-index:850;
+  width:56px;height:56px;border-radius:50%;border:none;
+  background:var(--c-primary,#16a34a);color:#fff;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+  cursor:pointer;align-items:center;justify-content:center;
+  transition:transform .15s,box-shadow .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.cam-fab:active{transform:scale(.92);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+/* Show only on touch devices (coarse pointer = finger/stylus, no hover = no mouse) */
+@media (pointer:coarse) and (hover:none){
+  .cam-fab{display:flex}
+}
 
 /* -- Harvest panel -- */
 #harvest-panel{padding:12px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:none}
@@ -436,7 +459,7 @@ tr:hover td{background:#f1f5f9}
 .cal-week-slot{border-left:1px solid var(--c-border-light);border-top:1px solid var(--c-border-light);height:48px;position:relative;background:var(--c-surface);cursor:pointer;transition:background .1s}
 .cal-week-slot:hover{background:var(--c-primary-light)}
 .cal-week-slot.today-col{background:#fafffc}
-.cal-week-ev{position:absolute;left:2px;right:2px;border-radius:5px;padding:2px 6px;font-size:11px;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;z-index:2;cursor:grab;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:opacity .15s}
+.cal-week-ev{position:absolute;left:2px;right:2px;border-radius:5px;padding:2px 6px;font-size:11px;color:#fff;overflow:hidden;z-index:2;cursor:grab;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:opacity .15s;line-height:1.3}
 .cal-week-ev:hover{opacity:.9}
 .cal-week-ev .ev-resize{position:absolute;left:0;right:0;bottom:0;height:6px;cursor:ns-resize;border-radius:0 0 5px 5px}
 .cal-week-ev .ev-resize:hover{background:rgba(255,255,255,.3)}
@@ -452,7 +475,7 @@ tr:hover td{background:#f1f5f9}
 .cal-day-time{font-size:10px;color:var(--c-text-muted);text-align:right;padding:0 8px;height:48px;display:flex;align-items:flex-start;justify-content:flex-end;background:var(--c-bg);border-top:1px solid var(--c-border-light);font-weight:500}
 .cal-day-slot{border-top:1px solid var(--c-border-light);height:48px;position:relative;background:var(--c-surface);cursor:pointer;transition:background .1s}
 .cal-day-slot:hover{background:var(--c-primary-light)}
-.cal-day-ev{position:absolute;left:4px;right:4px;border-radius:5px;padding:3px 8px;font-size:12px;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;z-index:2;cursor:grab;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:opacity .15s}
+.cal-day-ev{position:absolute;left:4px;right:4px;border-radius:5px;padding:3px 8px;font-size:12px;color:#fff;overflow:hidden;z-index:2;cursor:grab;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:opacity .15s;line-height:1.3}
 .cal-day-ev:hover{opacity:.9}
 .cal-day-ev .ev-resize{position:absolute;left:0;right:0;bottom:0;height:6px;cursor:ns-resize;border-radius:0 0 5px 5px}
 .cal-day-ev .ev-resize:hover{background:rgba(255,255,255,.3)}
@@ -474,6 +497,7 @@ tr:hover td{background:#f1f5f9}
   z-index:200;align-items:center;justify-content:center;
 }
 .modal-bg.open{display:flex}
+#m-confirm{z-index:210}
 .modal{
   background:var(--c-surface);border-radius:16px;padding:28px;
   width:92%;max-width:480px;max-height:92vh;overflow-y:auto;
@@ -487,6 +511,7 @@ tr:hover td{background:#f1f5f9}
 @media(max-width:1024px){
   .g4{grid-template-columns:repeat(2,1fr)}
   .rack-grid-inc{grid-template-columns:repeat(3,1fr)!important}
+  .scan-modal{width:96vw;max-width:96vw}
 }
 
 /* ═══ MOBILE ════════════════════════════════════════════════════ */
@@ -497,6 +522,9 @@ tr:hover td{background:#f1f5f9}
   .content-wrap{margin-left:0}
   .sb-is-collapsed .content-wrap{margin-left:0}
   .scan-float{bottom:10px;right:10px;left:10px;max-width:none}
+  .scan-modal{width:100%;max-width:100vw;max-height:100vh;height:100%;border-radius:0;padding:16px}
+  .scan-overlay{align-items:stretch}
+  .scan-modal-log{max-height:40vh}
   .main{padding:12px}
   .card{padding:14px}
   .g3,.g4{grid-template-columns:repeat(2,1fr)}
@@ -528,6 +556,10 @@ tr:hover td{background:#f1f5f9}
   .cal-cell{min-height:60px;padding:4px}
   .todo-row{padding:10px;gap:8px}
   .btn{padding:8px 12px;font-size:12px}
+  .scan-modal{padding:12px}
+  .scan-modal-chips{gap:4px}
+  .chip{min-width:44px;padding:4px 6px}
+  .scan-modal-btns{flex-wrap:wrap;justify-content:center}
 }
 
 /* ═══ PRINT ═════════════════════════════════════════════════════ */
