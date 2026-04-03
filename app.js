@@ -5,7 +5,7 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 30000; // fallback polling (SSE is primary)
+const SYNC_INTERVAL_MS = 15000; // fallback polling (SSE is primary)
 const MAX_LOG_DISPLAY = 200;
 const MAX_RACK_CAPACITY = 20;
 const MS_PER_DAY = 86400000;
@@ -2575,17 +2575,25 @@ setInterval(pollSync,SYNC_INTERVAL_MS);
 
 // SSE for real-time multi-client sync
 (function initSSE(){
-  try{
-    const es=new EventSource('/api/events');
-    es.onmessage=function(e){
-      try{
-        const d=JSON.parse(e.data);
-        if(d.type==='data-changed')pollSync();
-        else if(d.type==='heartbeat')lastSyncTime=Date.now();
-      }catch{}
-    };
-    es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
-  }catch{}
+  let es;
+  function connect(){
+    try{
+      if(es){try{es.close()}catch{}}
+      es=new EventSource('/api/events');
+      es.onmessage=function(e){
+        try{
+          const d=JSON.parse(e.data);
+          if(d.type==='data-changed')pollSync();
+          else if(d.type==='connected'||d.type==='heartbeat')lastSyncTime=Date.now();
+        }catch{}
+      };
+      es.onerror=function(){
+        try{es.close()}catch{}
+        setTimeout(connect,5000);
+      };
+    }catch{setTimeout(connect,5000)}
+  }
+  connect();
 })();
 
 // Update sync label with relative time every 5 seconds
