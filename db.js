@@ -196,7 +196,15 @@ function runMigrations(db) {
       console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
     } catch (e) {
       db.exec('ROLLBACK');
-      throw new Error(`Migration v${m.version} failed: ${e.message}`);
+      // Tolerate "duplicate column" errors — column may already exist from initial schema
+      if (e.message && e.message.includes('duplicate column')) {
+        db.exec('BEGIN');
+        db.prepare('INSERT INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description + ' (already exists)');
+        db.exec('COMMIT');
+        console.log(`  Migration v${m.version} skipped (already applied): ${m.description || ''}`);
+      } else {
+        throw new Error(`Migration v${m.version} failed: ${e.message}`);
+      }
     }
   }
 }
