@@ -33,6 +33,7 @@ const REF_GROUPS=[
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
+let lastSyncTime=null; // tracks last successful server contact
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
 const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
@@ -56,7 +57,7 @@ async function loadData(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     applyData(d);
-    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Synced · gerade eben');
     refresh();
   }catch(e){if(e.message==='unauthorized')return;setSyncStatus('err','Sync error: '+(e.message||'offline'))}
 }
@@ -83,16 +84,31 @@ async function saveData(){
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
-    setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Saved · gerade eben');
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
   finally{saving=false}
 }
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
+function setSyncStatus(cls,msg){
+  document.getElementById('sync-dot').className='sync-dot '+cls;
+  document.getElementById('sync-label').textContent=msg;
+  if(cls==='ok')lastSyncTime=Date.now();
+}
+function formatRelativeTime(ts){
+  const sec=Math.round((Date.now()-ts)/1000);
+  if(sec<5)return 'gerade eben';
+  if(sec<60)return 'vor '+sec+'s';
+  const min=Math.floor(sec/60);
+  if(min<60)return 'vor '+min+' Min.';
+  return 'vor '+Math.floor(min/60)+' Std.';
+}
 async function pollSync(){
   if(saving)return;
   try{const r=await authFetch('/api/data');
   if(!r.ok)return;
-  const d=await r.json();const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+  const d=await r.json();const h=JSON.stringify(d);
+  if(h!==lastHash){lastHash=h;applyData(d);refresh();}
+  setSyncStatus('ok','Synced · gerade eben');
+  }catch{}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -2562,11 +2578,23 @@ setInterval(pollSync,SYNC_INTERVAL_MS);
   try{
     const es=new EventSource('/api/events');
     es.onmessage=function(e){
-      try{const d=JSON.parse(e.data);if(d.type==='data-changed')pollSync()}catch{}
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='data-changed')pollSync();
+        else if(d.type==='heartbeat')lastSyncTime=Date.now();
+      }catch{}
     };
     es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
   }catch{}
 })();
+
+// Update sync label with relative time every 5 seconds
+setInterval(()=>{
+  if(!lastSyncTime)return;
+  const dot=document.getElementById('sync-dot');
+  if(!dot.classList.contains('ok'))return;
+  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+},5000);
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){
