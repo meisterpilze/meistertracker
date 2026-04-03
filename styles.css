@@ -198,7 +198,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 #harvest-panel .inner{max-width:980px;margin:0 auto;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 
 /* ═══ LAYOUT ════════════════════════════════════════════════════ */
-.main{padding:24px;max-width:1060px;margin:0 auto}
+.main{padding:24px;max-width:1400px;margin:0 auto}
 .page{display:none}.page.active{display:block}
 .card{
   background:var(--c-surface);border:1px solid var(--c-border);
@@ -242,6 +242,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c-primar
 .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+/* ═══ RESPONSIVE TABLES ════════════════════════════════════════ */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
 /* ═══ METRIC CARDS ══════════════════════════════════════════════ */
 .met{
@@ -424,6 +427,12 @@ tr:hover td{background:#f1f5f9}
 .modal p{font-size:14px;color:var(--c-text-sec);margin-bottom:14px;line-height:1.6}
 .modal-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
 
+/* ═══ TABLET ═══════════════════════════════════════════════════ */
+@media(max-width:1024px){
+  .g4{grid-template-columns:repeat(2,1fr)}
+  .rack-grid-inc{grid-template-columns:repeat(3,1fr)!important}
+}
+
 /* ═══ MOBILE ════════════════════════════════════════════════════ */
 @media(max-width:768px){
   .sidebar{transform:translateX(-100%)}
@@ -432,9 +441,15 @@ tr:hover td{background:#f1f5f9}
   .content-wrap{margin-left:0}
   .sb-is-collapsed .content-wrap{margin-left:0}
   .scan-float{bottom:10px;right:10px;left:10px;max-width:none}
-  .main{padding:14px}
+  .main{padding:12px}
   .card{padding:14px}
-  .g2,.g3,.g4{grid-template-columns:1fr}
+  .g3,.g4{grid-template-columns:repeat(2,1fr)}
+  .g2{grid-template-columns:1fr}
+  .stabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;gap:2px;padding-bottom:8px}
+  .stab{flex-shrink:0}
+  table{font-size:12px}
+  th,td{padding:7px 6px}
+  .met-v{font-size:22px}
   .cal-cell{min-height:72px}
   .cal-toolbar{flex-direction:column;align-items:stretch}
   .cal-toolbar-left,.cal-toolbar-right{justify-content:center}
@@ -443,6 +458,17 @@ tr:hover td{background:#f1f5f9}
   .cal-event{font-size:10px;padding:1px 5px}
   .cal-week-hdr-cell .wk-day-num{font-size:16px}
   .cal-legend{padding:6px 10px;gap:10px;font-size:11px}
+  .rack-grid-inc{grid-template-columns:repeat(2,1fr)!important}
+  .modal{width:96%;padding:20px}
+}
+@media(max-width:480px){
+  .main{padding:8px}
+  .card{padding:12px;border-radius:var(--radius-sm)}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .cal-grid{font-size:10px}
+  .cal-cell{min-height:60px;padding:4px}
+  .todo-row{padding:10px;gap:8px}
+  .btn{padding:8px 12px;font-size:12px}
 }
 
 /* ═══ PRINT ═════════════════════════════════════════════════════ */
