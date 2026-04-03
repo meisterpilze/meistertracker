@@ -4972,7 +4972,7 @@ function renderCalMonth(){
       const drag=e.draggable?'draggable="true"':'';
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
     return o;
@@ -5056,7 +5056,13 @@ function renderCalWeek(){
         el.textContent=e.label;
         el.title=e.label;
         el.dataset.type=e.type;el.dataset.id=e.id||'';
-        el.onclick=function(){onCalEventClick(e)};
+        el.dataset.date=ds;
+        el.onclick=function(){if(!el._dragged)onCalEventClick(e)};
+        if(e.type==='custom'){
+          const rh=document.createElement('div');rh.className='ev-resize';el.appendChild(rh);
+          initEventDrag(el,body,'week',dayStrs);
+          initEventResize(el,rh,body,'week');
+        }
         body.appendChild(el);
       });
     });
@@ -5121,7 +5127,13 @@ function renderCalDay(){
       el.innerHTML='<strong>'+esc(e.label)+'</strong>'+(e.startTime?' <span style="opacity:.8">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</span>':'');
       el.title=e.label;
       el.dataset.type=e.type;el.dataset.id=e.id||'';
-      el.onclick=function(){onCalEventClick(e)};
+      el.dataset.date=ds;
+      el.onclick=function(){if(!el._dragged)onCalEventClick(e)};
+      if(e.type==='custom'){
+        const rh=document.createElement('div');rh.className='ev-resize';el.appendChild(rh);
+        initEventDrag(el,body,'day',null);
+        initEventResize(el,rh,body,'day');
+      }
       body.appendChild(el);
     });
     const now=new Date();const nowDs=now.toISOString().split('T')[0];
@@ -5202,6 +5214,137 @@ function handleCalendarDrop(type,id,newDateStr){
   }
 }
 
+// ── Time-based Drag & Resize for Week/Day views ──
+function pxToTime(px){
+  const totalMin=(px/48)*60;
+  let h=CAL_HOURS_START+Math.floor(totalMin/60);
+  let m=Math.round(totalMin%60/15)*15;
+  if(m>=60){h++;m=0}
+  h=Math.max(CAL_HOURS_START,Math.min(CAL_HOURS_END,h));
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+
+function snapPx(px){return Math.round(px/12)*12}
+
+function updateEventTime(id,newStart,newEnd,newDate){
+  const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
+  if(newStart)ev.startTime=newStart;
+  if(newEnd)ev.endTime=newEnd;
+  if(newDate)ev.startDate=newDate;
+  ev.caldavSynced=null;
+  if(typeof saveData==='function')saveData();
+  renderCalendar();
+  if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
+}
+
+function initEventDrag(el,body,viewType,dayStrs){
+  function startDrag(clientX,clientY){
+    if(el._resizing)return;
+    const startY=clientY,startX=clientX;
+    const origTop=parseFloat(el.style.top);
+    let dragging=false;el._dragged=false;
+    const onMove=function(cx,cy){
+      const dy=cy-startY;
+      const dx=cx-startX;
+      if(!dragging&&Math.abs(dy)<4&&Math.abs(dx)<4)return;
+      dragging=true;el._dragged=true;
+      el.style.top=snapPx(origTop+dy)+'px';
+      el.style.opacity='0.7';el.style.zIndex='10';
+      if(viewType==='week'&&dayStrs){
+        const bodyRect=body.getBoundingClientRect();
+        const timeColW=56;
+        const colW=(bodyRect.width-timeColW)/7;
+        const relX=cx-bodyRect.left-timeColW;
+        const newColIdx=Math.max(0,Math.min(6,Math.floor(relX/colW)));
+        el.style.gridColumn=String(newColIdx+2);
+      }
+    };
+    const onUp=function(){
+      document.removeEventListener('mousemove',mmh);
+      document.removeEventListener('mouseup',muh);
+      document.removeEventListener('touchmove',tmh);
+      document.removeEventListener('touchend',teh);
+      el.style.opacity='';el.style.zIndex='';
+      if(!dragging)return;
+      const newTop=Math.max(0,snapPx(parseFloat(el.style.top)));
+      const evId=el.dataset.id;
+      const newStart=pxToTime(newTop);
+      const ce=calendarEvents.find(x=>x.id===evId);if(!ce)return;
+      const[osh,osm]=(ce.startTime||'09:00').split(':').map(Number);
+      const[oeh,oem]=(ce.endTime||'10:00').split(':').map(Number);
+      const durMin=(oeh*60+oem)-(osh*60+osm);
+      const[nsh,nsm]=newStart.split(':').map(Number);
+      const endMin=nsh*60+nsm+durMin;
+      const neh=Math.min(CAL_HOURS_END,Math.floor(endMin/60));
+      const nem=endMin%60;
+      const newEnd=String(neh).padStart(2,'0')+':'+String(nem).padStart(2,'0');
+      let newDate=el.dataset.date;
+      if(viewType==='week'&&dayStrs){
+        const newColIdx=parseInt(el.style.gridColumn)-2;
+        if(newColIdx>=0&&newColIdx<dayStrs.length)newDate=dayStrs[newColIdx];
+      }
+      updateEventTime(evId,newStart,newEnd,newDate);
+    };
+    const mmh=function(e){onMove(e.clientX,e.clientY)};
+    const muh=function(){onUp()};
+    const tmh=function(e){e.preventDefault();const t=e.touches[0];onMove(t.clientX,t.clientY)};
+    const teh=function(){onUp()};
+    document.addEventListener('mousemove',mmh);
+    document.addEventListener('mouseup',muh);
+    document.addEventListener('touchmove',tmh,{passive:false});
+    document.addEventListener('touchend',teh);
+  }
+  el.addEventListener('mousedown',function(e){
+    if(e.target.classList.contains('ev-resize'))return;
+    e.preventDefault();startDrag(e.clientX,e.clientY);
+  });
+  el.addEventListener('touchstart',function(e){
+    if(e.target.classList.contains('ev-resize'))return;
+    const t=e.touches[0];startDrag(t.clientX,t.clientY);
+  },{passive:true});
+}
+
+function initEventResize(el,handle,body,viewType){
+  function startResize(clientY){
+    el._resizing=true;
+    const startY=clientY;
+    const origHeight=parseFloat(el.style.height);
+    let resizing=false;
+    const onMove=function(cy){
+      const dy=cy-startY;
+      if(!resizing&&Math.abs(dy)<4)return;
+      resizing=true;el._dragged=true;
+      const newH=Math.max(12,snapPx(origHeight+dy));
+      el.style.height=newH+'px';
+    };
+    const onUp=function(){
+      document.removeEventListener('mousemove',mmh);
+      document.removeEventListener('mouseup',muh);
+      document.removeEventListener('touchmove',tmh);
+      document.removeEventListener('touchend',teh);
+      el._resizing=false;
+      if(!resizing)return;
+      const evId=el.dataset.id;
+      const newHeight=Math.max(12,parseFloat(el.style.height));
+      const topPx=parseFloat(el.style.top);
+      const endPx=topPx+newHeight;
+      const newEnd=pxToTime(endPx);
+      const newStart=pxToTime(topPx);
+      updateEventTime(evId,newStart,newEnd,null);
+    };
+    const mmh=function(e){onMove(e.clientY)};
+    const muh=function(){onUp()};
+    const tmh=function(e){e.preventDefault();onMove(e.touches[0].clientY)};
+    const teh=function(){onUp()};
+    document.addEventListener('mousemove',mmh);
+    document.addEventListener('mouseup',muh);
+    document.addEventListener('touchmove',tmh,{passive:false});
+    document.addEventListener('touchend',teh);
+  }
+  handle.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();startResize(e.clientY)});
+  handle.addEventListener('touchstart',function(e){e.stopPropagation();startResize(e.touches[0].clientY)},{passive:true});
+}
+
 // ── Calendar Event Click ──
 function onCalEventClick(ev){
   if(ev.type==='custom'){
@@ -5210,6 +5353,13 @@ function onCalEventClick(ev){
   }else if(ev.type==='batch-due'||ev.type==='task-due'){
     openEventMoveModal(ev);
   }
+}
+
+function onCalMonthEventClick(type,id){
+  if(!type||!id)return;
+  const events=collectCalendarEvents();
+  const ev=events.find(e=>e.type===type&&String(e.id)===String(id));
+  if(ev)onCalEventClick(ev);
 }
 
 function openEventMoveModal(ev){
@@ -5319,6 +5469,7 @@ function deleteCalEvent(){
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
     if(typeof saveData==='function')saveData();
     renderCalendar();closeEventModal();
+    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
   });
 }
 
