@@ -212,38 +212,29 @@
 
 <!-- Scan modal (centered, appears on scan) -->
 <div id="scan-overlay" class="scan-overlay no-print" onclick="closeScanModal()">
-  <div class="scan-modal" onclick="event.stopPropagation()">
+  <div class="scan-modal" id="scan-modal" onclick="event.stopPropagation()">
     <button class="scan-modal-close" onclick="closeScanModal()" title="Close">&times;</button>
-    <div class="scan-modal-header">
+    <div class="scan-modal-header" id="scan-modal-header">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       <span>Scan-Modus</span>
     </div>
-    <div class="scan-tabs">
-      <button class="scan-tab active" data-scan-tab="status" onclick="switchScanTab('status')">Aktueller Scan</button>
-      <button class="scan-tab" data-scan-tab="success" onclick="switchScanTab('success')">Letzte Erfolge</button>
-      <button class="scan-tab" data-scan-tab="log" onclick="switchScanTab('log')">Gesamt-Log</button>
+    <div class="scan-modal-body" id="scan-modal-body">
+    <div class="scan-modal-chips">
+      <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+      <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+      <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+      <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
+      <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
     </div>
-    <!-- Tab: Current scan status -->
-    <div class="scan-tab-panel active" id="stp-status">
-      <div class="scan-modal-chips">
-        <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-      </div>
-      <div id="scan-toast" class="scan-toast-inline"></div>
-    </div>
-    <!-- Tab: Last successful scans (undo-able) -->
-    <div class="scan-tab-panel" id="stp-success">
-      <div id="scan-success-empty" class="scan-success-empty">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
-      <div id="scan-success-list" class="scan-success-list"></div>
-    </div>
-    <!-- Tab: Full session log -->
-    <div class="scan-tab-panel" id="stp-log">
-      <div class="scan-modal-log" id="scan-modal-log"></div>
+    <div id="scan-toast" class="scan-toast-inline"></div>
+    <div class="scan-modal-log" id="scan-modal-log"></div>
+    <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
     </div>
     <div class="scan-modal-btns">
       <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
+      <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
+      <button class="btn-xs btn-end-session" id="btn-end-session" onclick="endScanSession()" style="display:none">Session beenden</button>
+      <button class="btn-xs" id="btn-scan-audio" onclick="scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4" title="Audio an/aus" style="margin-left:auto">🔊</button>
     </div>
   </div>
 </div>
@@ -734,17 +725,30 @@
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
         <div class="sec" style="margin:0" data-i18n="settings.scanLog">Scan log</div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select id="log-action-filter" onchange="renderLog()" style="font-size:12px;padding:4px 6px">
+            <option value="">Alle Aktionen</option>
+            <option value="ADD">ADD</option>
+            <option value="MOVE">MOVE</option>
+            <option value="REMOVE">REMOVE</option>
+            <option value="HARVEST">HARVEST</option>
+          </select>
+          <input type="date" id="log-date-from" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Von Datum" />
+          <input type="date" id="log-date-to" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Bis Datum" />
           <input type="text" id="log-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
           <button class="btn btn-sm btn-r" onclick="clearLog()" data-i18n="settings.clear">Clear</button>
         </div>
       </div>
+      <div id="log-count" style="font-size:11px;color:var(--c-text-muted);margin-bottom:4px"></div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th data-i18n="settings.time">Time</th><th data-i18n="settings.action">Action</th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th></tr></thead>
+        <thead><tr><th data-i18n="settings.time" style="cursor:pointer" onclick="toggleLogSort('time')">Time <span id="log-sort-time"></span></th><th data-i18n="settings.action" style="cursor:pointer" onclick="toggleLogSort('action')">Action <span id="log-sort-action"></span></th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th><th></th></tr></thead>
         <tbody id="log-body"></tbody>
       </table></div>
+      <div id="log-load-more" style="text-align:center;padding:8px;display:none">
+        <button class="btn btn-sm" onclick="logDisplayLimit+=200;renderLog()">Mehr laden...</button>
+      </div>
     </div>
   </div>
   <!-- Backup -->
@@ -1105,7 +1109,7 @@ const LANG = {
     'scan.to': 'To',
     'scan.count': 'Count',
     'scan.reset': 'Reset',
-    'batch.assign': 'Assign',
+    'scan.addBatch': 'Add batch',
     'scan.ready': 'Ready \u2014 scan ADD, MOVE, REMOVE or HARVEST to begin',
     'scan.stateReset': 'State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.',
     // Harvest panel
@@ -1754,7 +1758,7 @@ const LANG = {
     'scan.to': 'Nach',
     'scan.count': 'Anzahl',
     'scan.reset': 'Zur\u00fccksetzen',
-    'batch.assign': 'Zuweisen',
+    'scan.addBatch': 'Charge hinzufügen',
     'scan.ready': 'Bereit \u2014 scanne ADD, MOVE, REMOVE oder HARVEST',
     'scan.stateReset': 'Zur\u00fcckgesetzt. Scanne ADD, MOVE, REMOVE oder HARVEST.',
     // Harvest panel
@@ -2403,7 +2407,7 @@ const LANG = {
     'scan.to': 'Para',
     'scan.count': 'Cont.',
     'scan.reset': 'Resetar',
-    'batch.assign': 'Atribuir',
+    'scan.addBatch': 'Adicionar lote',
     'scan.ready': 'Pronto \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar',
     'scan.stateReset': 'Resetado. Escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar.',
     // Harvest panel
@@ -4021,7 +4025,52 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('settings.noScans')+'</td></tr>'}
+let logSortCol='time',logSortDir='desc',logDisplayLimit=200;
+function toggleLogSort(col){if(logSortCol===col)logSortDir=logSortDir==='desc'?'asc':'desc';else{logSortCol=col;logSortDir='desc'}renderLog()}
+function renderLog(){
+  const q=(document.getElementById('log-q').value||'').toLowerCase();
+  const actionF=document.getElementById('log-action-filter').value;
+  const dateFrom=document.getElementById('log-date-from').value;
+  const dateTo=document.getElementById('log-date-to').value;
+  const body=document.getElementById('log-body');
+  let items=[...scanLog];
+  // Filters
+  if(q)items=items.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
+  if(actionF)items=items.filter(e=>e.action===actionF);
+  if(dateFrom)items=items.filter(e=>e.time>=dateFrom);
+  if(dateTo)items=items.filter(e=>e.time<dateTo+'T23:59:59');
+  // Sort
+  const dir=logSortDir==='desc'?-1:1;
+  items.sort((a,b)=>{const av=a[logSortCol]||'',bv=b[logSortCol]||'';return av<bv?-dir:av>bv?dir:0});
+  // Sort indicators
+  document.querySelectorAll('[id^="log-sort-"]').forEach(el=>el.textContent='');
+  const si=document.getElementById('log-sort-'+logSortCol);if(si)si.textContent=logSortDir==='desc'?'▼':'▲';
+  // Count display
+  const total=scanLog.length,filtered=items.length;
+  const countEl=document.getElementById('log-count');
+  if(countEl)countEl.textContent=filtered===total?total+' Einträge':filtered+' von '+total+' Einträgen';
+  // Paginate
+  const hasMore=items.length>logDisplayLimit;
+  items=items.slice(0,logDisplayLimit);
+  const now=Date.now(),h24=24*60*60*1000;
+  body.innerHTML=items.length?items.map(e=>{
+    const isRecent=(now-new Date(e.time).getTime())<h24;
+    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+e.time+'\',\''+e.batch+'\',\''+e.action+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="8" class="empty">'+t('settings.noScans')+'</td></tr>';
+  const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
+}
+function deleteLogEntry(btn,time,batch,action){
+  confirm2('Eintrag löschen?',action+' '+batch+' vom '+fmtDtTime(time)+' löschen?','Löschen',()=>{
+    const idx=scanLog.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
+    if(idx===-1)return;
+    const entry=scanLog[idx];
+    scanLog.splice(idx,1);
+    const mi=movements.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
+    if(mi!==-1)movements.splice(mi,1);
+    const serverId=entry._serverId||entry.id;
+    if(serverId)apiDelete('/api/scan-log/'+serverId);
+    renderLog();renderLocTabs();renderRacks();renderStatus();
+  });
+}
 function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
@@ -4802,19 +4851,66 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
-function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
-function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
-function _addLogEntry(type,msg){
+// Session tracking
+let sessionEntries=[];
+let sessionStartTime=null;
+let sessionErrors=0;
+let _lastScanVal=null;
+// Audio feedback
+let _scanAudioCtx=null;
+let scanAudioEnabled=true;
+function _scanBeep(freq,dur){
+  if(!scanAudioEnabled)return;
+  try{
+    if(!_scanAudioCtx)_scanAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=_scanAudioCtx.createOscillator();const g=_scanAudioCtx.createGain();
+    o.connect(g);g.connect(_scanAudioCtx.destination);
+    o.frequency.value=freq;g.gain.value=0.15;o.start();
+    g.gain.exponentialRampToValueAtTime(0.001,_scanAudioCtx.currentTime+dur/1000);
+    o.stop(_scanAudioCtx.currentTime+dur/1000);
+  }catch{}
+}
+// Duplicate detection
+let _pendingDupe=null;let _pendingDupeTimer=null;
+// Remove confirmation
+let _pendingRemove=null;let _pendingRemoveTimer=null;
+
+function openScanModal(){
+  document.getElementById('scan-overlay').classList.add('open');
+  if(window.innerWidth<=768)document.body.style.overflow='hidden';
+}
+function closeScanModal(){
+  document.getElementById('scan-overlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+function _addLogEntry(type,msg,entryData){
   const log=document.getElementById('scan-modal-log');
   const el=document.createElement('div');
   el.className='scan-log-entry log-'+type;
+  if(entryData&&entryData._tempId)el.setAttribute('data-scan-id',entryData._tempId);
   const tm=new Date();
-  el.textContent=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0')+' — '+msg;
+  const timeStr=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0');
+  if(entryData&&entryData.action&&entryData.batch){
+    const sp=entryData.species||'';
+    const bagLabel=entryData.bag||entryData.batch;
+    const locStr=entryData.action==='MOVE'?(entryData.from+' → '+entryData.to)
+      :entryData.action==='ADD'?('→ '+entryData.to)
+      :entryData.action==='REMOVE'?('✕ '+(entryData.from||''))
+      :'';
+    el.innerHTML='<span class="sle-time">'+timeStr+'</span>'
+      +'<span class="badge b-'+entryData.action.toLowerCase()+'">'+entryData.action+'</span> '
+      +'<span class="sle-msg"><b>'+bagLabel+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+sp+'</span>':'')
+      +(locStr?' <span style="color:var(--c-text-muted)">'+locStr+'</span>':'')+'</span>'
+      +'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>';
+  }else{
+    el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+msg+'</span>';
+  }
   log.prepend(el);
-  while(log.children.length>50)log.lastChild.remove();
+  while(log.children.length>80)log.lastChild.remove();
 }
 let _toastTimer=null;
 function setFb(type,msg,opts){
+  const entryData=opts&&opts._tempId?opts:null;
   if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
@@ -4822,10 +4918,153 @@ function setFb(type,msg,opts){
   requestAnimationFrame(()=>el.classList.add('visible'));
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
-  _addLogEntry(type,msg);
+  if(type==='err')sessionErrors++;
+  if(type==='ok')_scanBeep(800,80);
+  else if(type==='err')_scanBeep(200,200);
+  _addLogEntry(type,msg,entryData);
 }
-function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
-function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
+function updateSD(){
+  document.getElementById('s-action').textContent=scan.action||'—';
+  document.getElementById('s-from').textContent=scan.from||'—';
+  document.getElementById('s-to').textContent=scan.to||'—';
+  document.getElementById('s-count').textContent=scan.count;
+  // Action-colored header
+  const modal=document.getElementById('scan-modal');
+  modal.className='scan-modal'+(scan.action?' scan-action-'+scan.action.toLowerCase():'');
+  // MOVE: combined from→to chip
+  const fromChip=document.getElementById('chip-from');
+  if(scan.action==='MOVE'&&scan.from&&scan.to){
+    fromChip.style.display='none';
+    document.getElementById('s-to').textContent=scan.from+' → '+scan.to;
+  }else{
+    fromChip.style.display='';
+  }
+  // Chip pulse hints
+  const chipTo=document.getElementById('chip-to');
+  const chipFrom=document.getElementById('chip-from');
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&scan.from&&!scan.to);
+  chipTo.classList.toggle('chip-pulse',toPulse);
+  chipFrom.classList.toggle('chip-pulse',scan.action==='MOVE'&&!scan.from);
+  // Last scan chip
+  const lastChip=document.getElementById('chip-last');
+  if(_lastScanVal){lastChip.style.display='';document.getElementById('s-last').textContent=_lastScanVal}
+  // Count bump animation
+  const countChip=document.getElementById('chip-count');
+  countChip.classList.remove('count-bump');void countChip.offsetWidth;
+  if(scan.count>0)countChip.classList.add('count-bump');
+  // Session end button
+  document.getElementById('btn-end-session').style.display=sessionEntries.length>0?'':'none';
+}
+function resetScan(){
+  scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};
+  document.getElementById('harvest-panel').style.display='none';
+  _pendingDupe=null;_pendingRemove=null;
+  clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
+  updateSD();setFb('info',t('scanFb.setAction'));
+}
+// Undo a single scan entry by clicking the ↩ button
+function undoScanEntry(btn){
+  const row=btn.closest('.scan-log-entry');
+  const tempId=row?row.getAttribute('data-scan-id'):null;
+  if(!tempId)return;
+  const idx=sessionEntries.findIndex(e=>e._tempId===tempId);
+  if(idx===-1)return;
+  const entry=sessionEntries[idx];
+  // Remove from scanLog + movements
+  const si=scanLog.findIndex(e=>e._tempId===tempId);if(si!==-1)scanLog.splice(si,1);
+  const mi=movements.findIndex(e=>e._tempId===tempId);if(mi!==-1)movements.splice(mi,1);
+  sessionEntries.splice(idx,1);
+  // Delete from server
+  if(entry._serverId)apiDelete('/api/scan-log/'+entry._serverId);
+  // Remove DOM row
+  if(row)row.remove();
+  scan.count=Math.max(0,scan.count-1);
+  _scanBeep(400,100);
+  setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
+  updateSD();renderLocTabs();renderRacks();
+}
+// Ctrl+Z undo support
+let _ctrlZPending=false;let _ctrlZTimer=null;
+document.addEventListener('keydown',function(e){
+  if(!document.getElementById('scan-overlay').classList.contains('open'))return;
+  if(e.ctrlKey&&e.key==='z'){
+    e.preventDefault();
+    if(sessionEntries.length===0){setFb('info','Nichts zum Rückgängig machen');return}
+    if(!_ctrlZPending){
+      _ctrlZPending=true;
+      setFb('info','Ctrl+Z nochmal drücken zum Bestätigen');
+      _ctrlZTimer=setTimeout(()=>{_ctrlZPending=false},2000);
+      return;
+    }
+    _ctrlZPending=false;clearTimeout(_ctrlZTimer);
+    const last=sessionEntries[sessionEntries.length-1];
+    const btn=document.querySelector('[data-scan-id="'+last._tempId+'"] .sle-undo');
+    if(btn)undoScanEntry(btn);
+  }
+});
+// End session → show summary
+function endScanSession(){
+  if(sessionEntries.length===0)return;
+  const sumEl=document.getElementById('scan-session-summary');
+  // Hide log, show summary
+  document.getElementById('scan-modal-log').style.display='none';
+  document.getElementById('scan-toast').style.display='none';
+  sumEl.style.display='block';
+  const dur=sessionStartTime?Math.round((Date.now()-sessionStartTime)/60000):0;
+  const startStr=sessionStartTime?new Date(sessionStartTime).toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'}):'';
+  const endStr=new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});
+  // Count by action
+  const counts={ADD:0,MOVE:0,REMOVE:0,HARVEST:0};
+  const touchedBatches=new Map();
+  sessionEntries.forEach(e=>{
+    if(counts[e.action]!==undefined)counts[e.action]++;
+    if(e.batch&&!touchedBatches.has(e.batch))touchedBatches.set(e.batch,e.species||'');
+  });
+  // Location summary
+  const locSummary=[];
+  if(counts.ADD>0){
+    const locs={};sessionEntries.filter(e=>e.action==='ADD').forEach(e=>{locs[e.to]=(locs[e.to]||0)+1});
+    Object.entries(locs).forEach(([l,n])=>locSummary.push(n+' Bags → '+l));
+  }
+  if(counts.MOVE>0){
+    const moves={};sessionEntries.filter(e=>e.action==='MOVE').forEach(e=>{const k=e.from+' → '+e.to;moves[k]=(moves[k]||0)+1});
+    Object.entries(moves).forEach(([k,n])=>locSummary.push(n+' Bags '+k));
+  }
+  let batchHtml='';
+  touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+bid+(sp?' ('+sp+')':'')+'</span>';});
+  sumEl.innerHTML='<h3>Session Zusammenfassung</h3>'
+    +'<div class="scan-summary-grid">'
+    +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">Gesamt</div></div>'
+    +(counts.ADD?'<div class="scan-summary-stat" style="border-top:3px solid #86efac"><div class="ss-num">'+counts.ADD+'</div><div class="ss-lbl">ADD</div></div>':'')
+    +(counts.MOVE?'<div class="scan-summary-stat" style="border-top:3px solid #93c5fd"><div class="ss-num">'+counts.MOVE+'</div><div class="ss-lbl">MOVE</div></div>':'')
+    +(counts.REMOVE?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+counts.REMOVE+'</div><div class="ss-lbl">REMOVE</div></div>':'')
+    +(counts.HARVEST?'<div class="scan-summary-stat" style="border-top:3px solid #fcd34d"><div class="ss-num">'+counts.HARVEST+'</div><div class="ss-lbl">HARVEST</div></div>':'')
+    +(sessionErrors?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+sessionErrors+'</div><div class="ss-lbl">Fehler</div></div>':'')
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">Dauer: '+dur+' Min'+(startStr?' ('+startStr+' – '+endStr+')':'')+'</div>'
+    +(batchHtml?'<div class="scan-summary-batches">Batches: '+batchHtml+'</div>':'')
+    +(locSummary.length?'<div style="font-size:12px;margin-bottom:12px">'+locSummary.join(' · ')+'</div>':'')
+    +'<div class="scan-summary-actions">'
+    +'<button class="btn-xs" onclick="closeScanSession()">Schließen</button>'
+    +'<button class="btn-xs green" onclick="newScanSession()">Neue Session</button>'
+    +'</div>';
+}
+function closeScanSession(){
+  document.getElementById('scan-session-summary').style.display='none';
+  document.getElementById('scan-modal-log').style.display='';
+  document.getElementById('scan-toast').style.display='';
+  closeScanModal();
+}
+function newScanSession(){
+  document.getElementById('scan-session-summary').style.display='none';
+  document.getElementById('scan-modal-log').style.display='';
+  document.getElementById('scan-toast').style.display='';
+  document.getElementById('scan-modal-log').innerHTML='';
+  sessionEntries=[];sessionStartTime=null;sessionErrors=0;_lastScanVal=null;
+  scan.count=0;
+  resetScan();
+}
+let _scanTempIdCounter=0;
 function processScan(raw){
   // Replace _ with - (German HID keyboard fix)
   let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
@@ -4855,7 +5094,10 @@ function processScan(raw){
   }
   if(ACTIONS.includes(val)){
     scan.action=val;scan.from=null;scan.to=null;scan.harvestBag=null;
-    document.getElementById('harvest-panel').style.display='none';updateSD();
+    document.getElementById('harvest-panel').style.display='none';
+    _pendingDupe=null;_pendingRemove=null;
+    clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
+    updateSD();
     setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
   }
   if(LOCS.includes(val)){
@@ -4877,9 +5119,47 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err',t('scanFb.scanFromTo'));return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
-    scan.count++;apiPost('/api/scan-log',{entries:[entry]});
-    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}));
+    // REMOVE confirmation: require scanning same bag twice within 5s
+    if(scan.action==='REMOVE'){
+      if(_pendingRemove&&_pendingRemove.val===val){
+        clearTimeout(_pendingRemoveTimer);_pendingRemove=null;
+        // Confirmed — fall through to log it
+      }else{
+        _pendingRemove={val};
+        clearTimeout(_pendingRemoveTimer);
+        _pendingRemoveTimer=setTimeout(()=>{_pendingRemove=null},5000);
+        _scanBeep(300,150);
+        setFb('err','REMOVE '+val+'? Nochmal scannen zum Bestätigen.');
+        return;
+      }
+    }
+    // Duplicate detection: warn if same bag+action+to already in session
+    const dupeKey=val+'|'+scan.action+'|'+scan.to;
+    if(scan.action!=='REMOVE'){
+      const hasDupe=sessionEntries.some(e=>(e.bag||e.batch)+'|'+e.action+'|'+e.to===dupeKey);
+      if(hasDupe){
+        if(_pendingDupe===dupeKey){
+          clearTimeout(_pendingDupeTimer);_pendingDupe=null;
+          // Confirmed duplicate — fall through
+        }else{
+          _pendingDupe=dupeKey;
+          clearTimeout(_pendingDupeTimer);
+          _pendingDupeTimer=setTimeout(()=>{_pendingDupe=null},3000);
+          _scanBeep(500,120);
+          setFb('err',val+' bereits gescannt als '+scan.action+(scan.to?' → '+scan.to:'')+'. Nochmal scannen zum Bestätigen.');
+          return;
+        }
+      }
+    }
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
+    scan.count++;
+    apiPost('/api/scan-log',{entries:[entry]}).then(r=>{if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
+    _lastScanVal=isBag?val:batchId;
+    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}),entry);
     updateSD();return;
   }
   setFb('err',t('scanFb.unknown',{val:val}));

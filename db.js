@@ -764,7 +764,8 @@ function deleteLastScanEntries(db, n) {
 }
 
 function deleteScanEntryById(db, id) {
-  db.prepare('DELETE FROM scan_log WHERE id=?').run(id);
+  const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
+  return info.changes > 0;
 }
 
 function clearScanLog(db) {
