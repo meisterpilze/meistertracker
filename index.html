@@ -49,15 +49,56 @@
     <div class="modal-btns"><button class="btn" onclick="closeNote()">Cancel</button><button class="btn btn-p" onclick="saveNote()">Save</button></div>
   </div>
 </div>
-<!-- Calendar move modal -->
-<div class="modal-bg" id="m-cal-move">
-  <div class="modal"><h3 id="cal-move-title">Event verschieben</h3>
-    <p id="cal-move-info" style="font-size:12px;color:#666"></p>
+<!-- Calendar event modal (create/edit/move) -->
+<div class="modal-bg" id="m-cal-event">
+  <div class="modal">
+    <h3 id="cal-ev-title">Neues Event</h3>
+    <input type="hidden" id="cal-ev-id" />
+    <input type="hidden" id="cal-ev-mode" value="create" />
     <div style="margin-bottom:8px">
-      <label>Neues Datum</label><input type="date" id="cal-move-date" />
+      <label>Titel</label><input type="text" id="cal-ev-name" placeholder="z.B. Team-Meeting" />
     </div>
-    <input type="hidden" id="cal-move-type" /><input type="hidden" id="cal-move-id" />
-    <div class="modal-btns"><button class="btn" onclick="closeCalMove()">Abbrechen</button><button class="btn btn-p" onclick="applyCalMove()">Verschieben</button></div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label>Datum</label><input type="date" id="cal-ev-date" /></div>
+      <div><label>Bis (optional)</label><input type="date" id="cal-ev-end-date" /></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="cal-ev-allday" checked style="width:auto" onchange="toggleCalTimeInputs()" /> Ganztägig
+      </label>
+    </div>
+    <div class="g2" id="cal-ev-times" style="margin-bottom:8px;display:none">
+      <div><label>Von</label><input type="time" id="cal-ev-start-time" value="09:00" /></div>
+      <div><label>Bis</label><input type="time" id="cal-ev-end-time" value="10:00" /></div>
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label>Kategorie</label>
+        <select id="cal-ev-category">
+          <option value="custom">Eigenes Event</option>
+          <option value="meeting">Meeting</option>
+          <option value="delivery">Lieferung</option>
+          <option value="maintenance">Wartung</option>
+        </select>
+      </div>
+      <div><label>Farbe</label>
+        <select id="cal-ev-color">
+          <option value="#2ecc71">Grün</option>
+          <option value="#9b59b6">Lila</option>
+          <option value="#1abc9c">Türkis</option>
+          <option value="#e67e22">Orange</option>
+          <option value="#34495e">Dunkelgrau</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label>Beschreibung (optional)</label>
+      <textarea id="cal-ev-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-r" id="cal-ev-del-btn" onclick="deleteCalEvent()" style="display:none;margin-right:auto">Löschen</button>
+      <button class="btn" onclick="closeEventModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="saveCalEvent()">Speichern</button>
+    </div>
   </div>
 </div>
 <!-- Batch-add modal -->
@@ -610,17 +651,32 @@
 
   <!-- Calendar View -->
   <div class="sp" id="sp-todo-cal">
-    <div class="cal-nav">
-      <button class="btn btn-sm" onclick="calNav(-1)">&larr;</button>
-      <span class="cal-title" id="cal-title"></span>
-      <button class="btn btn-sm" onclick="calNav(1)">&rarr;</button>
+    <div class="cal-toolbar">
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="btn btn-sm" onclick="calNav(-1)">&larr;</button>
+        <button class="btn btn-sm" onclick="calNav(1)">&rarr;</button>
+        <button class="btn btn-sm" onclick="calToday()" style="margin-left:4px">Heute</button>
+        <span class="cal-title" id="cal-title" style="margin-left:8px"></span>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <div class="cal-view-toggle">
+          <button class="cal-vbtn active" id="cv-month" onclick="setCalView('month')">Monat</button>
+          <button class="cal-vbtn" id="cv-week" onclick="setCalView('week')">Woche</button>
+          <button class="cal-vbtn" id="cv-day" onclick="setCalView('day')">Tag</button>
+        </div>
+        <button class="btn btn-sm btn-p" onclick="openEventModal()" style="margin-left:6px">+ Event</button>
+      </div>
     </div>
     <div class="cal-legend">
       <span class="leg-batch">Fälligkeiten</span>
       <span class="leg-task">Aufgaben</span>
       <span class="leg-harvest">Ernten</span>
+      <span class="leg-custom">Eigene</span>
+      <span class="leg-import">CalDAV</span>
     </div>
-    <div class="cal-grid" id="cal-grid"></div>
+    <div id="cal-container">
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
   </div>
 
   <!-- CalDAV Calendar Sync -->
