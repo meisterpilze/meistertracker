@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS manual_tasks (
   due_date      TEXT,
   description   TEXT,
   caldav_uid    TEXT,
-  caldav_synced TEXT
+  caldav_synced TEXT,
+  private       INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -179,8 +180,7 @@ CREATE TABLE IF NOT EXISTS assets (
 // To add a new migration: append an entry to MIGRATIONS array.
 const MIGRATIONS = [
   // v1: baseline — all tables already created via SCHEMA DDL
-  // Future migrations go here, e.g.:
-  // { version: 2, description: 'Add priority column to batches', sql: 'ALTER TABLE batches ADD COLUMN priority INTEGER DEFAULT 0' },
+  { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', sql: 'ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0' },
 ];
 
 function runMigrations(db) {
@@ -289,7 +289,8 @@ function readAll(db) {
     dueDate: r.due_date,
     description: r.description,
     caldavUid: r.caldav_uid,
-    caldavSynced: r.caldav_synced
+    caldavSynced: r.caldav_synced,
+    private: r.private === 1 ? true : false
   }));
 
   // Team members — include id for DELETE targeting
@@ -336,10 +337,7 @@ function readAll(db) {
   // CalDAV config
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
   const caldav = {
-    caldavUsername: cal.caldav_username,
-    caldavPassword: cal.caldav_password,
-    enabled: cal.enabled === 1 ? true : false,
-    perPersonCalendars: cal.per_person_calendars === 1 ? true : false
+    enabled: cal.enabled === 1 ? true : false
   };
 
   // Assets
@@ -573,16 +571,7 @@ function writeAll(db, incoming) {
     // ── CalDAV Config ──
     if (incoming.caldav) {
       const c = incoming.caldav;
-      db.prepare(`
-        UPDATE caldav_config SET
-          enabled=?, caldav_username=?, caldav_password=?, per_person_calendars=?
-        WHERE id=1
-      `).run(
-        c.enabled ? 1 : 0,
-        c.caldavUsername || '',
-        c.caldavPassword || '',
-        c.perPersonCalendars ? 1 : 0
-      );
+      db.prepare(`UPDATE caldav_config SET enabled=? WHERE id=1`).run(c.enabled ? 1 : 0);
     }
     db.exec('COMMIT');
   } catch (e) {
@@ -624,10 +613,7 @@ function updateTaskDueDate(db, caldavUid, newDueDate) {
 function readCaldavConfig(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
   return {
-    caldavUsername: cal.caldav_username,
-    caldavPassword: cal.caldav_password,
-    enabled: cal.enabled === 1,
-    perPersonCalendars: cal.per_person_calendars === 1
+    enabled: cal.enabled === 1
   };
 }
 
@@ -767,23 +753,23 @@ function updateCulture(db, id, fields) {
 
 // -- Tasks --
 function insertTask(db, t) {
-  const r = db.prepare('INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced) VALUES(?,?,?,?,?,?,?,?,?)').run(t.text, t.priority||'med', t.done?1:0, t.created, t.assignee||null, t.dueDate||null, t.description||null, t.caldavUid||null, t.caldavSynced||null);
+  const r = db.prepare('INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced,private) VALUES(?,?,?,?,?,?,?,?,?,?)').run(t.text, t.priority||'med', t.done?1:0, t.created, t.assignee||null, t.dueDate||null, t.description||null, t.caldavUid||null, t.caldavSynced||null, t.private?1:0);
   return r.lastInsertRowid;
 }
 
 function updateTaskById(db, id, fields) {
-  const map = {done:'done',caldavUid:'caldav_uid',caldavSynced:'caldav_synced',text:'text',priority:'priority',assignee:'assignee',dueDate:'due_date',description:'description'};
+  const map = {done:'done',caldavUid:'caldav_uid',caldavSynced:'caldav_synced',text:'text',priority:'priority',assignee:'assignee',dueDate:'due_date',description:'description','private':'private'};
   const entries = Object.entries(fields).filter(([k])=>map[k]);
   if (!entries.length) return;
   const sets = entries.map(([k])=>`${map[k]}=?`).join(',');
-  const vals = entries.map(([k,v])=>k==='done'?(v?1:0):v);
+  const vals = entries.map(([k,v])=>(k==='done'||k==='private')?(v?1:0):v);
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
 }
 
 function readTaskById(db, id) {
   const r = db.prepare('SELECT * FROM manual_tasks WHERE id=?').get(id);
   if (!r) return null;
-  return { id: r.id, text: r.text, priority: r.priority, done: r.done===1, created: r.created, assignee: r.assignee, dueDate: r.due_date, description: r.description, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced };
+  return { id: r.id, text: r.text, priority: r.priority, done: r.done===1, created: r.created, assignee: r.assignee, dueDate: r.due_date, description: r.description, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced, private: r.private===1 };
 }
 
 function readBatchById(db, batchId) {
@@ -818,7 +804,7 @@ function deleteAssetById(db, id) {
 
 // -- CalDAV Config --
 function updateCaldavCfg(db, c) {
-  db.prepare('UPDATE caldav_config SET enabled=?,caldav_username=?,caldav_password=?,per_person_calendars=? WHERE id=1').run(c.enabled?1:0, c.caldavUsername||'', c.caldavPassword||'', c.perPersonCalendars?1:0);
+  db.prepare('UPDATE caldav_config SET enabled=? WHERE id=1').run(c.enabled?1:0);
 }
 
 // -- Inventory Delta --

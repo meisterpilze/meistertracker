@@ -271,16 +271,19 @@ function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Check CalDAV basic auth against stored credentials
+// Check CalDAV basic auth against user accounts
 function checkCaldavAuth(req) {
-  const cfg = db.readCaldavConfig(database);
-  // If no credentials configured, allow all (open access on local network)
-  if (!cfg.caldavUsername) return true;
   const authHeader = req.headers['authorization'] || '';
   if (!authHeader.startsWith('Basic ')) return false;
   const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
-  const [user, pass] = decoded.split(':');
-  return user === cfg.caldavUsername && pass === cfg.caldavPassword;
+  const idx = decoded.indexOf(':');
+  if (idx < 0) return false;
+  const user = decoded.slice(0, idx);
+  const pass = decoded.slice(idx + 1);
+  const account = db.getUserByUsername(database, user);
+  if (!account) return false;
+  if (!db.verifyPassword(account.hash, account.salt, pass)) return false;
+  return account; // Return user object so handler knows who is authenticated
 }
 
 // Ensure a calendar directory exists
@@ -352,7 +355,7 @@ function taskToVTODO(task) {
 
 // Write a task as .ics file to the appropriate calendar
 function writeTaskToCalendar(task, calName) {
-  calName = calName || 'meisterpilze-tasks';
+  calName = calName || 'meisterpilze';
   const dir = ensureCalDir(calName);
   if (!task.caldavUid) task.caldavUid = generateUID();
   const { uid, ics } = taskToVTODO(task);
@@ -454,7 +457,7 @@ function customEventToVEVENT(event) {
 
 // Delete a task's .ics file
 function deleteTaskFromCalendar(uid, calName) {
-  calName = calName || 'meisterpilze-tasks';
+  calName = calName || 'meisterpilze';
   const file = path.join(CAL_DIR, calName, uid + '.ics');
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
@@ -466,7 +469,7 @@ function autoPushBatchCaldav(batch) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     if (!batch || !batch.due) return;
-    const dir = ensureCalDir('meisterpilze-dates');
+    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = batchToVEVENT(batch);
     fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
   } catch (e) { console.error('autoPushBatchCaldav error:', e.message); }
@@ -478,7 +481,7 @@ function autoDeleteBatchCaldav(batchId) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = 'batch-' + batchId + '@meisterpilze';
-    const file = path.join(CAL_DIR, 'meisterpilze-dates', uid + '.ics');
+    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
     if (fs.existsSync(file)) fs.unlinkSync(file);
   } catch (e) { console.error('autoDeleteBatchCaldav error:', e.message); }
 }
@@ -488,25 +491,40 @@ function autoPushTaskCaldav(task) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    writeTaskToCalendar(task, 'meisterpilze-tasks');
+    const isPrivate = task.private || task.private === 1;
+    // Shared calendar: all non-private tasks
+    if (!isPrivate) {
+      writeTaskToCalendar(task, 'meisterpilze');
+    }
+    // Per-person calendar: if assigned
+    if (task.assignee) {
+      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      writeTaskToCalendar(task, slug);
+    }
     if (task.dueDate) {
-      const dir = ensureCalDir('meisterpilze-dates');
+      const dir = ensureCalDir('meisterpilze');
       const { uid, ics } = taskDueToVEVENT(task);
       fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
     }
   } catch (e) { console.error('autoPushTaskCaldav error:', e.message); }
 }
 
-// Remove a task's CalDAV files (VTODO + VEVENT)
+// Remove a task's CalDAV files (VTODO + VEVENT) from all calendars
 function autoDeleteTaskCaldav(taskId) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const task = db.readTaskById(database, taskId);
     if (task && task.caldavUid) {
-      deleteTaskFromCalendar(task.caldavUid, 'meisterpilze-tasks');
+      // Remove from shared calendar
+      deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
+      // Remove from personal calendar if assigned
+      if (task.assignee) {
+        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        deleteTaskFromCalendar(task.caldavUid, slug);
+      }
       // Also remove VEVENT for due date
-      const eventFile = path.join(CAL_DIR, 'meisterpilze-dates', task.caldavUid + '-event.ics');
+      const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
       if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
     }
   } catch (e) { console.error('autoDeleteTaskCaldav error:', e.message); }
@@ -519,7 +537,7 @@ function autoSyncCalendarEvent(ev) {
     if (!cfg.enabled) return;
     if (!ev.startDate && !ev.start_date) return;
     const normalized = { id: ev.id, title: ev.title, startDate: ev.startDate || ev.start_date, endDate: ev.endDate || ev.end_date, allDay: ev.allDay != null ? ev.allDay : ev.all_day, startTime: ev.startTime || ev.start_time, endTime: ev.endTime || ev.end_time, category: ev.category, description: ev.description, caldavUid: ev.caldavUid || ev.caldav_uid };
-    const dir = ensureCalDir('meisterpilze-dates');
+    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = customEventToVEVENT(normalized);
     fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
   } catch (e) { console.error('autoSyncCalendarEvent error:', e.message); }
@@ -531,7 +549,7 @@ function autoDeleteCalendarEventCaldav(eventId) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = 'cev-' + eventId + '@meisterpilze';
-    const file = path.join(CAL_DIR, 'meisterpilze-dates', uid + '.ics');
+    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
     if (fs.existsSync(file)) fs.unlinkSync(file);
   } catch (e) { console.error('autoDeleteCalendarEventCaldav error:', e.message); }
 }
@@ -541,27 +559,27 @@ function autoSyncAllCaldav(data) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const datesDir = ensureCalDir('meisterpilze-dates');
+    const sharedDir = ensureCalDir('meisterpilze');
     const writtenUids = new Set();
-    // Batch due dates
+    // Batch due dates → shared calendar
     for (const b of (data.batches || [])) {
       if (!b.due) continue;
-      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
     }
-    // Task due dates
+    // Task due dates → shared calendar
     for (const t of (data.manualTasks || [])) {
       if (!t.dueDate) continue;
-      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
     }
-    // Custom events
+    // Custom events → shared calendar
     for (const ev of (data.calendarEvents || [])) {
-      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
     }
-    // Clean orphaned meisterpilze-generated files
+    // Clean orphaned meisterpilze-generated files in shared calendar
     try {
-      const existing = fs.readdirSync(datesDir).filter(f => f.endsWith('.ics'));
+      const existing = fs.readdirSync(sharedDir).filter(f => f.endsWith('.ics'));
       for (const f of existing) {
-        const filePath = path.join(datesDir, f);
+        const filePath = path.join(sharedDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
         if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
       }
@@ -573,40 +591,39 @@ function autoSyncAllCaldav(data) {
 function syncAllTasksLocal(data) {
   const cfg = data.caldav || {};
   const tasks = data.manualTasks || [];
-  const teamMembers = data.teamMembers || [];
   const results = { pushed: 0, errors: 0, calendarsCreated: 0 };
 
-  // Ensure base calendar
-  ensureCalDir('meisterpilze-tasks');
+  // Ensure shared calendar
+  const sharedDir = ensureCalDir('meisterpilze');
 
-  // Per-person calendars
-  const personCals = {};
-  if (cfg.perPersonCalendars && teamMembers.length > 0) {
-    for (const m of teamMembers) {
-      const slug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const calName = 'meisterpilze-' + slug;
-      ensureCalDir(calName);
-      personCals[m.name] = calName;
-    }
+  // Create per-user calendars for all users with accounts
+  const users = db.listUsers(database);
+  for (const u of users) {
+    const slug = u.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    ensureCalDir(slug);
   }
 
   // Write each task as VTODO
   for (const task of tasks) {
     try {
-      let calName = 'meisterpilze-tasks';
-      if (cfg.perPersonCalendars && task.assignee && personCals[task.assignee]) {
-        calName = personCals[task.assignee];
+      const isPrivate = task.private === 1 || task.private === true;
+      // Shared calendar: all non-private tasks
+      if (!isPrivate) {
+        writeTaskToCalendar(task, 'meisterpilze');
       }
-      writeTaskToCalendar(task, calName);
+      // Personal calendar: if assigned to someone
+      if (task.assignee) {
+        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        writeTaskToCalendar(task, slug);
+      }
       results.pushed++;
     } catch (e) {
       results.errors++;
     }
   }
 
-  // Write due dates as VEVENTs to a separate calendar
+  // Write due dates & events as VEVENTs to shared calendar
   const batches = data.batches || [];
-  const datesDir = ensureCalDir('meisterpilze-dates');
   const writtenUids = new Set();
 
   // Batch due dates
@@ -614,7 +631,7 @@ function syncAllTasksLocal(data) {
     if (!b.due) continue;
     try {
       const { uid, ics } = batchToVEVENT(b);
-      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -625,7 +642,7 @@ function syncAllTasksLocal(data) {
     if (!task.dueDate) continue;
     try {
       const { uid, ics } = taskDueToVEVENT(task);
-      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -636,17 +653,19 @@ function syncAllTasksLocal(data) {
   for (const ev of customEvents) {
     try {
       const { uid, ics } = customEventToVEVENT(ev);
-      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
   }
 
-  // Clean up orphaned .ics files in meisterpilze-dates
+  // Clean up orphaned .ics files in shared calendar
   try {
-    const existing = fs.readdirSync(datesDir).filter(f => f.endsWith('.ics'));
+    const existing = fs.readdirSync(sharedDir).filter(f => f.endsWith('.ics'));
     for (const f of existing) {
-      if (!writtenUids.has(f)) fs.unlinkSync(path.join(datesDir, f));
+      const filePath = path.join(sharedDir, f);
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
     }
   } catch (e) { /* ignore cleanup errors */ }
 
@@ -661,12 +680,14 @@ function handleCaldav(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
-  // Auth check
-  if (!checkCaldavAuth(req)) {
+  // Auth check — returns user account object or false
+  const caldavUser = checkCaldavAuth(req);
+  if (!caldavUser) {
     res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Meisterpilze CalDAV"' });
     res.end('Unauthorized');
     return;
   }
+  req.caldavUser = caldavUser;
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
@@ -756,9 +777,9 @@ function handlePropfind(parts, body, req, res) {
 
     if (depth !== '0') {
       for (const cal of cals) {
-        const displayName = cal.replace(/^meisterpilze-/, 'Meisterpilze ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        const compType = cal === 'meisterpilze-dates' ? 'VEVENT' : 'VTODO';
-        const colorProp = cal === 'meisterpilze-dates' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#e74c3c</x:calendar-color>' : '';
+        const displayName = cal === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : cal.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const compType = 'VTODO';
+        const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(cal)}/</d:href>
     <d:propstat>
@@ -792,9 +813,9 @@ function handlePropfind(parts, body, req, res) {
       res.end('Calendar not found');
       return;
     }
-    const displayName = calName.replace(/^meisterpilze-/, 'Meisterpilze ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const compType2 = calName === 'meisterpilze-dates' ? 'VEVENT' : 'VTODO';
-    const colorProp2 = calName === 'meisterpilze-dates' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#e74c3c</x:calendar-color>' : '';
+    const displayName = calName === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : calName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const compType2 = 'VTODO';
+    const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
     let responses = `<d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/</d:href>
     <d:propstat>
@@ -986,8 +1007,8 @@ function handlePut(parts, body, req, res) {
 
     fs.writeFileSync(filePath, body, 'utf8');
 
-    // Bidirectional sync: if a VEVENT in meisterpilze-dates is updated via CalDAV client, update DB
-    if (calName === 'meisterpilze-dates' && body.includes('VEVENT')) {
+    // Bidirectional sync: if a VEVENT in shared calendar is updated via CalDAV client, update DB
+    if (calName === 'meisterpilze' && body.includes('VEVENT')) {
       try {
         const dtMatch = body.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
         const typeMatch = body.match(/X-MEISTERPILZE-TYPE:(.*)/);
@@ -1504,14 +1525,18 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{task}=JSON.parse(body);
-        const data=readData();
-        const cfg=data.caldav||{};
-        let calName='meisterpilze-tasks';
-        if(cfg.perPersonCalendars&&task.assignee){
-          const slug=task.assignee.toLowerCase().replace(/[^a-z0-9]+/g,'-');
-          calName='meisterpilze-'+slug;
+        const isPrivate=task.private===1||task.private===true;
+        let uid;
+        // Shared calendar: all non-private tasks
+        if(!isPrivate){
+          uid=writeTaskToCalendar(task,'meisterpilze');
         }
-        const uid=writeTaskToCalendar(task,calName);
+        // Personal calendar: if assigned
+        if(task.assignee){
+          const slug=task.assignee.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+          uid=writeTaskToCalendar(task,slug);
+        }
+        if(!uid) uid=writeTaskToCalendar(task,'meisterpilze'); // fallback if private + unassigned
         const synced=task.caldavSynced||new Date().toISOString();
         db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
@@ -1530,7 +1555,7 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{event}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze-dates');
+        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=customEventToVEVENT(event);
         fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
         res.writeHead(200,{'Content-Type':'application/json'});
@@ -1549,7 +1574,7 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{batch}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze-dates');
+        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=batchToVEVENT(batch);
         fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
         res.writeHead(200,{'Content-Type':'application/json'});
