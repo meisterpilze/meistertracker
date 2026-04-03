@@ -2958,6 +2958,13 @@ async function authFetch(url,opts){
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
   return r;
 }
+async function apiPost(path,body){return authFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
+async function apiPatch(path,body){return authFetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
+async function apiDelete(path){return authFetch(path,{method:'DELETE'}).then(r=>r.json())}
+async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/delta',{mat,deltaKg,type,ref})}
+async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
+async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
+async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch{}
 }
@@ -2990,14 +2997,7 @@ function defaultInventory(){
     log:[]
   };
 }
-async function saveData(){
-  if(saving)return;saving=true;setSyncStatus('busy','Saving...');
-  try{
-    await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,movements,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets})});
-    setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
-  }catch{setSyncStatus('err','Save error — check server is running')}
-  finally{saving=false}
-}
+// saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
 async function pollSync(){
   try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
@@ -3064,7 +3064,7 @@ document.getElementById('m-ok').onclick=()=>{if(confirmCb)confirmCb();closeConfi
 document.getElementById('m-confirm').addEventListener('click',e=>{if(e.target.id==='m-confirm')closeConfirm()});
 function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent='Note — '+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
 function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
-function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();saveData();renderBatches()}closeNote()}
+function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();apiPatch('/api/batches/'+encodeURIComponent(noteId),{notes:b.notes});renderBatches()}closeNote()}
 document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
 
 // Batch-add modal
@@ -3083,8 +3083,8 @@ function confirmBatchAdd(){
   const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
   if(!id||!batch){alert('Select a batch first');return}
   const now=new Date().toISOString();
-  batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);movements.push(entry);scan.count++;});
-  saveData();updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
+  const entries=[];batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);movements.push(entry);scan.count++;entries.push(entry)});
+  apiPost('/api/scan-log',{entries});updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
@@ -3398,14 +3398,14 @@ let lastLocUndoCount=0;
 function locMoveTo(toLoc){
   if(!selectedLocBags.size)return;
   const now=new Date().toISOString();
-  const n=selectedLocBags.size;
+  const n=selectedLocBags.size;const entries=[];
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiPost('/api/scan-log',{entries});updateSD();renderLocTabs();renderRacks();renderStatus();
   setLocFb(t('scanFb.moved',{n:n,loc:toLoc}));
 }
 function locRemoveSelected(){
@@ -3413,13 +3413,13 @@ function locRemoveSelected(){
   const n=selectedLocBags.size;
   if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
   const now=new Date().toISOString();
-  selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);
+  const entries=[];selectedLocBags.forEach((d,bagId)=>{
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiPost('/api/scan-log',{entries});updateSD();renderLocTabs();renderRacks();renderStatus();
   setLocFb(t('scanFb.removed',{n:n}));
 }
 function setLocFb(msg){
@@ -3429,9 +3429,9 @@ function setLocFb(msg){
 }
 function locUndo(){
   if(!lastLocUndoCount)return;
-  scanLog.splice(scanLog.length-lastLocUndoCount,lastLocUndoCount);
+  const n2=lastLocUndoCount;scanLog.splice(scanLog.length-n2,n2);
   lastLocUndoCount=0;
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiDelete('/api/scan-log/last/'+n2);updateSD();renderLocTabs();renderRacks();renderStatus();
   setFb('ok','Undo successful');
 }
 
@@ -3519,25 +3519,27 @@ function createBatch(){
   const batchType=isGrain?'grain':'block';
   batches.push({batchId,species:sp,strain:st,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
 
-  // Auto-deduct materials from inventory
+  // Save batch to server
+  const batchObj=batches[batches.length-1];
+  apiPost('/api/batches',batchObj);
+
+  // Auto-deduct materials from inventory via server-side deltas
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  const now=new Date().toISOString();
+  const deltas=[];
   if(isGrain){
     const grainUsed=qty*bagKg;
     inventory.stock.grain=Math.max(0,inventory.stock.grain-grainUsed);
-    invLog('grain',-grainUsed,'batch',batchId,now);
+    deltas.push({mat:'grain',deltaKg:-grainUsed,type:'batch',ref:batchId});
   }else if(substrate){
-    // Subtract water first: dry matter = bagKg × (1 - rh/100)
     const rh=parseFloat(document.getElementById('nb-rh').value)||0;
     const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
     const hwUsed=qty*dryKgPerBag*(hw/100);
     const wbUsed=qty*dryKgPerBag*(wb/100);
-    if(hwUsed>0){inventory.stock.hardwood=Math.max(0,inventory.stock.hardwood-hwUsed);invLog('hardwood',-hwUsed,'batch',batchId,now)}
-    if(wbUsed>0){inventory.stock.wheatbran=Math.max(0,inventory.stock.wheatbran-wbUsed);invLog('wheatbran',-wbUsed,'batch',batchId,now)}
-    if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);invLog('gypsum',-gypUsed,'batch',batchId,now)}
+    if(hwUsed>0){inventory.stock.hardwood=Math.max(0,inventory.stock.hardwood-hwUsed);deltas.push({mat:'hardwood',deltaKg:-hwUsed,type:'batch',ref:batchId})}
+    if(wbUsed>0){inventory.stock.wheatbran=Math.max(0,inventory.stock.wheatbran-wbUsed);deltas.push({mat:'wheatbran',deltaKg:-wbUsed,type:'batch',ref:batchId})}
+    if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);deltas.push({mat:'gypsum',deltaKg:-gypUsed,type:'batch',ref:batchId})}
   }
-
-  saveData();
+  if(deltas.length)invDeltas(deltas);
   document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
   document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
@@ -3600,14 +3602,14 @@ function confirmAddBags(){
   const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
   b.bags=[...b.bags,...newBags];
   b.qty=b.bags.length;
-  saveData();
+  apiPatch('/api/batches/'+encodeURIComponent(b.batchId)+'/bags',{add:newBags,newQty:b.qty});
   document.getElementById('m-addbags').classList.remove('open');
   renderBatches();
   setFb('ok',t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length}));
 }
 document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
 
-function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{batches=batches.filter(b=>b.batchId!==id);saveData();renderBatches();renderStatus()})}
+function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{batches=batches.filter(b=>b.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus()})}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
@@ -3623,8 +3625,8 @@ function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
   if(!g||g<=0){alert(t('harvest.enterWeight'));return}
   const p=scan.harvestBag;
-  harvests.push({time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f});
-  saveData();scan.harvestBag=null;scan.count++;
+  const hEntry={time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f};
+  harvests.push(hEntry);apiPost('/api/harvests',hEntry);scan.harvestBag=null;scan.count++;
   document.getElementById('harvest-panel').style.display='none';
   setFb('ok',t('harvest.logged',{bag:p.bagId,g:g,f:f}));updateSD();
 }
@@ -3728,7 +3730,7 @@ function renderManualTasks(){
     const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
     const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
   }).join('');
 }
 function addTask(){
@@ -3745,31 +3747,33 @@ function saveTask(){
   const assignee=document.getElementById('task-assignee').value;
   const dueDate=document.getElementById('task-due').value||null;
   const description=document.getElementById('task-desc').value.trim()||null;
-  manualTasks.push({text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null});
+  const task={text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null};
+  manualTasks.push(task);
   document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';
   document.getElementById('task-form').style.display='none';
-  saveData();renderManualTasks();updateTodoBadge();
-  if(caldav.enabled)pushTaskCaldav(manualTasks[manualTasks.length-1]);
+  apiPost('/api/tasks',task).then(r=>{if(r.id)task.id=r.id});renderManualTasks();updateTodoBadge();
+  if(caldav.enabled)pushTaskCaldav(task);
 }
-function toggleTask(i){manualTasks[i].done=!manualTasks[i].done;manualTasks[i].caldavSynced=null;saveData();renderManualTasks();updateTodoBadge();if(caldav.enabled&&manualTasks[i].caldavUid)pushTaskCaldav(manualTasks[i])}
-function deleteTask(i){confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks.splice(i,1);saveData();renderManualTasks();updateTodoBadge()})}
+function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderManualTasks();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
+function deleteTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderManualTasks();updateTodoBadge()})}
 function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).length+manualTasks.filter(t=>!t.done).length+getInvAlerts().length;document.getElementById('n-todo').classList.toggle('alert',n>0)}
 
 // ─── TEAM MEMBERS ───────────────────────────────────────────
 function renderTeam(){
   const el=document.getElementById('team-list');
   if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
-  el.innerHTML=teamMembers.map((m,i)=>`<div class="member-row"><span class="name">${m.name}</span>${m.role?`<span style="font-size:11px;color:#888">${m.role}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${i})">×</button></div>`).join('');
+  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${m.name}</span>${m.role?`<span style="font-size:11px;color:#888">${m.role}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
 }
 function addMember(){
   const name=document.getElementById('member-name').value.trim();if(!name)return;
   const role=document.getElementById('member-role').value.trim();
   if(teamMembers.some(m=>m.name.toLowerCase()===name.toLowerCase()))return;
-  teamMembers.push({name,role:role||null,added:new Date().toISOString()});
+  const member={name,role:role||null,added:new Date().toISOString()};
+  teamMembers.push(member);
   document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  saveData();renderTeam();
+  apiPost('/api/team',member).then(r=>{if(r.id)member.id=r.id});renderTeam();
 }
-function removeMember(i){confirm2('Remove member?','Remove '+teamMembers[i].name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers.splice(i,1);saveData();renderTeam()})}
+function removeMember(id){const m=teamMembers.find(x=>x.id===id);if(!m)return;confirm2('Remove member?','Remove '+m.name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers=teamMembers.filter(x=>x.id!==id);apiDelete('/api/team/'+id);renderTeam()})}
 
 // ─── CalDAV SYNC ────────────────────────────────────────────
 function loadCaldavSettings(){
@@ -3786,7 +3790,7 @@ function saveCaldavSettings(){
   caldav.caldavPassword=document.getElementById('caldav-pass').value;
   caldav.enabled=document.getElementById('caldav-enabled').checked;
   caldav.perPersonCalendars=document.getElementById('caldav-per-person').checked;
-  saveData();
+  apiPost('/api/caldav/config',caldav);
   showCaldavStatus('Settings saved.','#166534');
 }
 function showCaldavStatus(msg,color){
@@ -3812,13 +3816,13 @@ async function pushTaskCaldav(task){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
-    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
+    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();apiPatch('/api/tasks/'+task.id,{caldavUid:task.caldavUid,caldavSynced:task.caldavSynced});renderManualTasks()}
   }catch(e){console.error('CalDAV push error:',e)}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
 function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString(loc())}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('settings.noScans')+'</td></tr>'}
-function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),()=>{scanLog=[];saveData();renderLog()})}
+function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
 const MAT_LABELS={hardwood:'Hardwood pellets',wheatbran:'Wheat bran',gypsum:'Gypsum',grain:'Grain'};
@@ -3948,14 +3952,14 @@ function renderThresholds(){
 function updateAvgComp(key,val){
   if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
   inventory.avgComposition[key]=parseFloat(val)||0;
-  saveData();renderInvStock();
+  saveInvConfig();renderInvStock();
 }
 
 function updateThreshold(mat,key,val){
   if(!inventory.thresholds)inventory.thresholds={};
   if(!inventory.thresholds[mat])inventory.thresholds[mat]={minKg:0};
   inventory.thresholds[mat][key]=parseFloat(val)||0;
-  saveData();renderInvStock();
+  saveInvConfig();renderInvStock();
 }
 
 function delMatChange(){
@@ -4009,8 +4013,7 @@ function logDelivery(){
   if(kg<=0){alert('Enter a quantity greater than 0');return}
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
   inventory.stock[mat]=(inventory.stock[mat]||0)+kg;
-  invLog(mat,kg,'delivery',note||'delivery');
-  saveData();
+  invDelta(mat,kg,'delivery',note||'delivery');
   document.getElementById('del-kg').value='';document.getElementById('del-note').value='';
   document.getElementById('del-preview').style.display='none';
   openStab('inv','stock');renderInvStock();
@@ -4030,8 +4033,7 @@ function logAdjustment(){
     delta=parseFloat(deltaVal)||0;newStock=Math.max(0,cur+delta);
   }else{alert('Enter either a new total or an adjustment amount');return}
   inventory.stock[mat]=newStock;
-  invLog(mat,delta,'adjustment',reason);
-  saveData();
+  invSetAbsolute(mat,newStock,'adjustment',reason);
   document.getElementById('adj-absolute').value='';document.getElementById('adj-delta').value='';
   document.getElementById('adj-reason').value='';document.getElementById('adj-preview').style.display='none';
   openStab('inv','stock');renderInvStock();
@@ -4072,7 +4074,7 @@ function getInvAlerts(){
 // ─── BACKUP ──────────────────────────────────────────────────
 function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
 function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));saveData();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=async e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));await apiPost('/api/backup/restore',{batches,scanLog,manualTasks,harvests,cultures,inventory,assets,caldav,teamMembers});alert('Restored successfully.');go('dash','n-dash');}catch(err){alert('Failed to restore: '+(err.message||err))}};r.readAsText(file)})}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
 let editingAssetId=null;
@@ -4226,13 +4228,13 @@ function saveAsset(){
   };
   if(editingAssetId){const i=assets.findIndex(a=>a.assetId===editingAssetId);if(i>=0)assets[i]=obj;else assets.push(obj)}
   else assets.push(obj);
-  saveData();editingAssetId=null;
+  apiPost('/api/assets',obj);editingAssetId=null;
   openStab('assets','list');
 }
 
 function deleteAsset(id){
   confirm2('Anlage löschen?','Die Anlage '+id+' wird unwiderruflich gelöscht.','Ja, löschen',()=>{
-    assets=assets.filter(a=>a.assetId!==id);saveData();renderAssets();
+    assets=assets.filter(a=>a.assetId!==id);apiDelete('/api/assets/'+encodeURIComponent(id));renderAssets();
   });
 }
 
@@ -4344,7 +4346,7 @@ function renderCultures(){
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
   body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString(loc())}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
 }
-function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;saveData();renderCultures()}}
+function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
 
 // ─── LAB WORK ────────────────────────────────────────────────
 function lwUpdate(){
@@ -4378,7 +4380,7 @@ function logLabWork(){
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
   const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
-  cultures.push(...newC);saveData();
+  cultures.push(...newC);apiPost('/api/cultures',{cultures:newC});
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
   renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);lwPreview();
@@ -4454,7 +4456,7 @@ function biSetAction(action){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
     const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
-    scan.count++;saveData();updateSD();
+    scan.count++;apiPost('/api/scan-log',{entries:[entry]});updateSD();
     setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
   }else{
     setFb('ok',t('scanFb.actionReady',{action:action}));
@@ -4654,7 +4656,7 @@ function processScan(raw){
     if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err',t('scanFb.scanFromTo'));return}
     const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);movements.push(entry);
-    scan.count++;saveData();
+    scan.count++;apiPost('/api/scan-log',{entries:[entry]});
     setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}));
     updateSD();return;
   }

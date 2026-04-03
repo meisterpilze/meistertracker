@@ -65,6 +65,14 @@ function writeData(data){
   db.writeAll(database, data);
 }
 
+function jsonBody(req, res, cb) {
+  let body='';let sz=0;
+  req.on('data',c=>{sz+=c.length;if(sz>MAX_BODY_SIZE){req.destroy();return}body+=c});
+  req.on('end',()=>{try{cb(null,JSON.parse(body))}catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":"bad json"}')}});
+}
+function jsonOk(res, data) { res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(data||{ok:true})); }
+function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:msg})); }
+
 // ── AUTH HELPERS ─────────────────────────────────────────────
 function getSessionToken(req){
   const cookies=req.headers.cookie||'';
@@ -1110,40 +1118,126 @@ function handleRequest(req,res){
     res.end(JSON.stringify(readData()));return;
   }
 
-  // POST /api/data
+  // POST /api/data — DEPRECATED
   if(req.method==='POST'&&req.url==='/api/data'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
-    req.on('end',()=>{
+    res.writeHead(410,{'Content-Type':'application/json'});
+    res.end('{"error":"Gone. Use atomic endpoints."}');return;
+  }
+
+  // ── ATOMIC REST ENDPOINTS ────────────────────────────────────
+
+  // -- Batches --
+  if(req.method==='POST'&&req.url==='/api/batches'){
+    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
+  if(req.method==='PATCH'&&batchMatch){
+    const id=decodeURIComponent(batchMatch[1]);
+    jsonBody(req,res,(e,data)=>{try{db.addBagsToBatch(database,id,data.add||[],data.newQty);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const batchIdMatch=req.url.match(/^\/api\/batches\/([^/]+)$/);
+  if(req.method==='PATCH'&&batchIdMatch){
+    const id=decodeURIComponent(batchIdMatch[1]);
+    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  if(req.method==='DELETE'&&batchIdMatch){
+    const id=decodeURIComponent(batchIdMatch[1]);
+    try{db.deleteBatchById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
+  // -- Scan Log --
+  if(req.method==='POST'&&req.url==='/api/scan-log'){
+    jsonBody(req,res,(e,data)=>{try{const ids=db.appendScanEntries(database,data.entries||[]);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
+  if(req.method==='DELETE'&&scanLastMatch){
+    try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+  if(req.method==='DELETE'&&req.url==='/api/scan-log'){
+    try{db.clearScanLog(database);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
+  // -- Harvests --
+  if(req.method==='POST'&&req.url==='/api/harvests'){
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertHarvest(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+
+  // -- Cultures --
+  if(req.method==='POST'&&req.url==='/api/cultures'){
+    jsonBody(req,res,(e,data)=>{try{db.insertCultures(database,data.cultures||[]);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const cultureMatch=req.url.match(/^\/api\/cultures\/([^/]+)$/);
+  if(req.method==='PATCH'&&cultureMatch){
+    const id=decodeURIComponent(cultureMatch[1]);
+    jsonBody(req,res,(e,data)=>{try{db.updateCulture(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+
+  // -- Tasks --
+  if(req.method==='POST'&&req.url==='/api/tasks'){
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
+  if(req.method==='PATCH'&&taskMatch){
+    const id=parseInt(taskMatch[1]);
+    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  if(req.method==='DELETE'&&taskMatch){
+    const id=parseInt(taskMatch[1]);
+    try{db.deleteTaskById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
+  // -- Team Members --
+  if(req.method==='POST'&&req.url==='/api/team'){
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertMember(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
+  if(req.method==='DELETE'&&teamMatch){
+    const id=parseInt(teamMatch[1]);
+    try{db.deleteMember(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
+  // -- Assets --
+  if(req.method==='POST'&&req.url==='/api/assets'){
+    jsonBody(req,res,(e,data)=>{try{db.upsertAsset(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const assetMatch=req.url.match(/^\/api\/assets\/([^/]+)$/);
+  if(req.method==='DELETE'&&assetMatch){
+    const id=decodeURIComponent(assetMatch[1]);
+    try{db.deleteAssetById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
+  // -- CalDAV Config --
+  if(req.method==='POST'&&req.url==='/api/caldav/config'){
+    jsonBody(req,res,(e,data)=>{try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+
+  // -- Inventory Delta --
+  if(req.method==='POST'&&req.url==='/api/inventory/delta'){
+    jsonBody(req,res,(e,data)=>{try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  if(req.method==='POST'&&req.url==='/api/inventory/set'){
+    jsonBody(req,res,(e,data)=>{try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  if(req.method==='POST'&&req.url==='/api/inventory/config'){
+    jsonBody(req,res,(e,data)=>{try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+
+  // -- Backup Restore --
+  if(req.method==='POST'&&req.url==='/api/backup/restore'){
+    jsonBody(req,res,(e,data)=>{
       try{
-        const incoming=JSON.parse(body);
-        if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end('{"error":"Expected a JSON object"}');
-          return;
+        writeData(data);
+        const stock=(data.inventory&&data.inventory.stock)||{};
+        for(const mat of Object.keys(stock)){
+          if(stock[mat]>0)db.setInventoryAbsolute(database,mat,stock[mat],'import','Backup restore');
         }
-        // Safety: never overwrite existing data with empty/smaller arrays
-        // (protects against stale browser cache sending blank state)
-        const existing=readData();
-        const checks=[
-          ['batches', existing.batches, incoming.batches],
-          ['scanLog', existing.scanLog, incoming.scanLog],
-          ['harvests', existing.harvests, incoming.harvests],
-          ['cultures', existing.cultures, incoming.cultures],
-          ['assets', existing.assets, incoming.assets],
-        ];
-        for(const [name, old, inc] of checks){
-          if(old && old.length > 0 && (!inc || inc.length === 0)){
-            console.log('  BLOCKED: save rejected — would erase '+old.length+' '+name+' entries');
-            res.writeHead(409,{'Content-Type':'application/json'});
-            res.end(JSON.stringify({error:'blocked',reason:'Would erase existing '+name+'. Refresh your browser (Ctrl+Shift+R).'}));
-            return;
-          }
+        if(data.inventory&&data.inventory.log&&data.inventory.log.length){
+          database.prepare('DELETE FROM inventory_log').run();
+          const ins=database.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)');
+          for(const l of data.inventory.log) ins.run(l.time,l.mat,l.deltaKg,l.running||0,l.type||null,l.ref||null);
         }
-        writeData(incoming);
-        res.writeHead(200,{'Content-Type':'application/json'});
-        res.end('{"ok":true}');
-      }catch{res.writeHead(400);res.end('{"error":"bad json"}');}
+        jsonOk(res);
+      }catch(err){jsonErr(res,500,err.message)}
     });return;
   }
 
