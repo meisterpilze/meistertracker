@@ -227,7 +227,6 @@
     <div id="scan-toast" class="scan-toast-inline"></div>
     <div class="scan-modal-log" id="scan-modal-log"></div>
     <div class="scan-modal-btns">
-      <button class="btn-xs" onclick="openCamScan()" title="Scan with camera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg> Kamera</button>
       <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
       <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
     </div>
@@ -5644,5 +5643,9 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
+<!-- Floating camera FAB (mobile/tablet only) -->
+<button class="cam-fab no-print" id="cam-fab" onclick="openCamScan()" aria-label="Open camera scanner">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg>
+</button>
 </body>
 </html>
