@@ -3118,9 +3118,12 @@ setInterval(()=>{
   if(!dot||!dot.classList.contains('ok'))return;
   document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
 },5000);
+let _polling=false;
 async function pollSync(){
-  if(_mutating>0)return; // don't overwrite while mutations are in-flight
+  if(_mutating>0||_polling)return; // don't overwrite while mutations are in-flight or already polling
+  _polling=true;
   try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
+  finally{_polling=false}
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
@@ -3965,7 +3968,10 @@ async function syncCaldavNow(){
     if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
     else{
       showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
-      await loadData();renderManualTasks();
+      // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
+      // instead of loadData() which would overwrite ALL local state
+      try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
+      renderManualTasks();
     }
   }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
