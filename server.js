@@ -336,6 +336,59 @@ function writeTaskToCalendar(task, calName) {
   return uid;
 }
 
+// Convert a batch to VEVENT .ics content (all-day event for due date)
+function batchToVEVENT(batch) {
+  const uid = 'batch-' + batch.batchId + '@meisterpilze';
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const dueDate = new Date(batch.due).toISOString().replace(/[-:]/g, '').split('T')[0];
+  // DTEND is next day for all-day events per RFC 5545
+  const endDate = new Date(new Date(batch.due).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Meisterpilze Lab Tracker//EN',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + now,
+    'DTSTART;VALUE=DATE:' + dueDate,
+    'DTEND;VALUE=DATE:' + endDate,
+    'SUMMARY:' + (batch.batchId + ' — ' + (batch.species || '') + ' fällig').replace(/\n/g, '\\n'),
+    'CATEGORIES:Fälligkeiten',
+    'TRANSP:TRANSPARENT',
+    'X-MEISTERPILZE-TYPE:batch-due',
+    'X-MEISTERPILZE-BATCH:' + batch.batchId,
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ];
+  return { uid, ics: lines.join('\r\n') };
+}
+
+// Convert a task with due date to VEVENT .ics content
+function taskDueToVEVENT(task) {
+  const uid = (task.caldavUid || generateUID()) + '-event';
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const dueDate = new Date(task.dueDate).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const endDate = new Date(new Date(task.dueDate).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Meisterpilze Lab Tracker//EN',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + now,
+    'DTSTART;VALUE=DATE:' + dueDate,
+    'DTEND;VALUE=DATE:' + endDate,
+    'SUMMARY:' + (task.text || '').replace(/\n/g, '\\n'),
+    'CATEGORIES:Aufgaben',
+    'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
+    'TRANSP:TRANSPARENT',
+    'X-MEISTERPILZE-TYPE:task-due',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ];
+  return { uid, ics: lines.join('\r\n') };
+}
+
 // Delete a task's .ics file
 function deleteTaskFromCalendar(uid, calName) {
   calName = calName || 'meisterpilze-tasks';
@@ -364,7 +417,7 @@ function syncAllTasksLocal(data) {
     }
   }
 
-  // Write each task
+  // Write each task as VTODO
   for (const task of tasks) {
     try {
       let calName = 'meisterpilze-tasks';
@@ -377,6 +430,42 @@ function syncAllTasksLocal(data) {
       results.errors++;
     }
   }
+
+  // Write due dates as VEVENTs to a separate calendar
+  const batches = data.batches || [];
+  const datesDir = ensureCalDir('meisterpilze-dates');
+  const writtenUids = new Set();
+
+  // Batch due dates
+  for (const b of batches) {
+    if (!b.due) continue;
+    try {
+      const { uid, ics } = batchToVEVENT(b);
+      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      writtenUids.add(uid + '.ics');
+      results.pushed++;
+    } catch (e) { results.errors++; }
+  }
+
+  // Task due dates as events
+  for (const task of tasks) {
+    if (!task.dueDate) continue;
+    try {
+      const { uid, ics } = taskDueToVEVENT(task);
+      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      writtenUids.add(uid + '.ics');
+      results.pushed++;
+    } catch (e) { results.errors++; }
+  }
+
+  // Clean up orphaned .ics files in meisterpilze-dates
+  try {
+    const existing = fs.readdirSync(datesDir).filter(f => f.endsWith('.ics'));
+    for (const f of existing) {
+      if (!writtenUids.has(f)) fs.unlinkSync(path.join(datesDir, f));
+    }
+  } catch (e) { /* ignore cleanup errors */ }
+
   return results;
 }
 
@@ -485,13 +574,15 @@ function handlePropfind(parts, body, req, res) {
     if (depth !== '0') {
       for (const cal of cals) {
         const displayName = cal.replace(/^meisterpilze-/, 'Meisterpilze ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const compType = cal === 'meisterpilze-dates' ? 'VEVENT' : 'VTODO';
+        const colorProp = cal === 'meisterpilze-dates' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#e74c3c</x:calendar-color>' : '';
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(cal)}/</d:href>
     <d:propstat>
       <d:prop>
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
-        <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
+        <c:supported-calendar-component-set><c:comp name="${compType}"/></c:supported-calendar-component-set>${colorProp}
         <cs:getctag>${computeCtag(cal)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
@@ -519,13 +610,15 @@ function handlePropfind(parts, body, req, res) {
       return;
     }
     const displayName = calName.replace(/^meisterpilze-/, 'Meisterpilze ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const compType2 = calName === 'meisterpilze-dates' ? 'VEVENT' : 'VTODO';
+    const colorProp2 = calName === 'meisterpilze-dates' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#e74c3c</x:calendar-color>' : '';
     let responses = `<d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/</d:href>
     <d:propstat>
       <d:prop>
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
-        <c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>
+        <c:supported-calendar-component-set><c:comp name="${compType2}"/></c:supported-calendar-component-set>${colorProp2}
         <cs:getctag>${computeCtag(calName)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
@@ -709,6 +802,30 @@ function handlePut(parts, body, req, res) {
     }
 
     fs.writeFileSync(filePath, body, 'utf8');
+
+    // Bidirectional sync: if a VEVENT in meisterpilze-dates is updated via CalDAV client, update DB
+    if (calName === 'meisterpilze-dates' && body.includes('VEVENT')) {
+      try {
+        const dtMatch = body.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+        const typeMatch = body.match(/X-MEISTERPILZE-TYPE:(.*)/);
+        const batchMatch = body.match(/X-MEISTERPILZE-BATCH:(.*)/);
+        if (dtMatch && typeMatch) {
+          const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
+          const evType = typeMatch[1].trim();
+          if (evType === 'batch-due' && batchMatch) {
+            const batchId = batchMatch[1].trim();
+            db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+          } else if (evType === 'task-due') {
+            const uidMatch = body.match(/UID:(.*)/);
+            if (uidMatch) {
+              const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+              db.updateTaskDueDate(database, taskUid, newDate);
+            }
+          }
+        }
+      } catch (e) { console.error('CalDAV VEVENT bidirectional sync error:', e); }
+    }
+
     const stat = fs.statSync(filePath);
     const etag = '"' + stat.mtimeMs.toString(36) + '"';
     res.writeHead(existed ? 204 : 201, { 'ETag': etag });
