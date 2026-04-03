@@ -4721,14 +4721,27 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
+function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
+function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
+function _addLogEntry(type,msg){
+  const log=document.getElementById('scan-modal-log');
+  const el=document.createElement('div');
+  el.className='scan-log-entry log-'+type;
+  const tm=new Date();
+  el.textContent=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0')+' — '+msg;
+  log.prepend(el);
+  while(log.children.length>50)log.lastChild.remove();
+}
 let _toastTimer=null;
 function setFb(type,msg){
+  openScanModal();
   const el=document.getElementById('scan-toast');
-  el.className='scan-toast fb-'+type;
+  el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
   requestAnimationFrame(()=>el.classList.add('visible'));
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+  _addLogEntry(type,msg);
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
