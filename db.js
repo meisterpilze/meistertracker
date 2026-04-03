@@ -180,7 +180,10 @@ CREATE TABLE IF NOT EXISTS assets (
 // To add a new migration: append an entry to MIGRATIONS array.
 const MIGRATIONS = [
   // v1: baseline — all tables already created via SCHEMA DDL
-  { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', sql: "ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0", allowDuplicate: true },
+  { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', fn(db) {
+    const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='private'").get();
+    if (!has.c) db.exec('ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0');
+  }},
 ];
 
 function runMigrations(db) {
@@ -190,18 +193,21 @@ function runMigrations(db) {
     if (applied.has(m.version)) continue;
     try {
       db.exec('BEGIN');
-      db.exec(m.sql);
+      if (m.fn) m.fn(db); else db.exec(m.sql);
       db.prepare('INSERT INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description || '');
       db.exec('COMMIT');
       console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
     } catch (e) {
       db.exec('ROLLBACK');
-      if (m.allowDuplicate && e.message.includes('duplicate column')) {
-        db.prepare('INSERT OR IGNORE INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description || '');
+      // Tolerate "duplicate column" errors — column may already exist from initial schema
+      if (e.message && e.message.includes('duplicate column')) {
+        db.exec('BEGIN');
+        db.prepare('INSERT INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description + ' (already exists)');
+        db.exec('COMMIT');
         console.log(`  Migration v${m.version} skipped (already applied): ${m.description || ''}`);
-        continue;
+      } else {
+        throw new Error(`Migration v${m.version} failed: ${e.message}`);
       }
-      throw new Error(`Migration v${m.version} failed: ${e.message}`);
     }
   }
 }

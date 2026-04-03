@@ -174,10 +174,11 @@
   <nav class="sb-nav">
     <div class="sb-group-label" data-i18n="nav.main">Main</div>
     <button class="sb-btn active" id="n-dash" onclick="go('dash','n-dash')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span data-i18n="nav.dashboard">Dashboard</span></button>
+    <button class="sb-btn" id="n-todo" onclick="go('todo','n-todo')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span data-i18n="nav.todo">To-do</span></button>
+    <button class="sb-btn" id="n-cal" onclick="go('cal','n-cal')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span data-i18n="nav.calendar">Kalender</span></button>
     <button class="sb-btn" id="n-batch" onclick="go('batch','n-batch')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span data-i18n="nav.batches">Batches</span></button>
     <button class="sb-btn" id="n-lab" onclick="go('lab','n-lab')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v7l4 9H5l4-9V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg><span data-i18n="nav.lab">Lab</span></button>
     <button class="sb-btn" id="n-inv" onclick="go('inv','n-inv')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span data-i18n="nav.inventory">Inventory</span></button>
-    <button class="sb-btn" id="n-todo" onclick="go('todo','n-todo')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span data-i18n="nav.todo">To-do</span></button>
     <div class="sb-group-label" data-i18n="nav.tools">Tools</div>
     <button class="sb-btn" id="n-assets" onclick="go('assets','n-assets')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span data-i18n="nav.assets">Anlagen</span></button>
     <button class="sb-btn" id="n-print" onclick="go('print','n-print')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span data-i18n="nav.print">Print</span></button>
@@ -1074,6 +1075,7 @@ const LANG = {
     'nav.assets': 'Assets',
     'nav.print': 'Print',
     'nav.todo': 'To-do',
+    'nav.calendar': 'Calendar',
     'nav.more': 'More',
     // Scan strip
     'scan.placeholder': 'Scan barcode here \u2014 works on every tab...',
@@ -1599,6 +1601,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Scan FROM and TO locations first.',
     'scanFb.logged': 'Logged: {action} {val}{to} [{n} this session]',
     'scanFb.unknown': 'Unknown barcode: {val}. Check the batch exists first.',
+    'scanFb.unknownFormat': 'Unknown format: {val} — check barcode.',
     'scanFb.matched': 'Matched: {val} from {batch}',
     'scanFb.noBatchFound': 'No batch found for {val} \u2014 check species/strain/date match',
     'scanFb.removeLogged': 'REMOVE logged: {bag}',
@@ -1721,6 +1724,7 @@ const LANG = {
     'nav.assets': 'Anlagen',
     'nav.print': 'Drucken',
     'nav.todo': 'Aufgaben',
+    'nav.calendar': 'Kalender',
     'nav.more': 'Mehr',
     // Scan strip
     'scan.placeholder': 'Barcode hier scannen \u2014 funktioniert auf jedem Tab...',
@@ -2246,6 +2250,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Erst VON- und NACH-Standort scannen.',
     'scanFb.logged': 'Erfasst: {action} {val}{to} [{n} diese Sitzung]',
     'scanFb.unknown': 'Unbekannter Barcode: {val}. Pr\u00fcfe ob die Charge existiert.',
+    'scanFb.unknownFormat': 'Unbekanntes Format: {val} — Barcode pr\u00fcfen.',
     'scanFb.matched': 'Zugeordnet: {val} aus {batch}',
     'scanFb.noBatchFound': 'Keine Charge f\u00fcr {val} gefunden \u2014 Art/Stamm/Datum pr\u00fcfen',
     'scanFb.removeLogged': 'REMOVE erfasst: {bag}',
@@ -2368,6 +2373,7 @@ const LANG = {
     'nav.assets': 'Ativos',
     'nav.print': 'Imprimir',
     'nav.todo': 'Tarefas',
+    'nav.calendar': 'Calendário',
     'nav.more': 'Mais',
     // Scan strip
     'scan.placeholder': 'Escaneie c\u00f3digo de barras aqui \u2014 funciona em todas as abas...',
@@ -3118,18 +3124,20 @@ function sbCloseMobile(){
 // ─── NAV ─────────────────────────────────────────────────────
 const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',todo:'n-todo',settings:'n-settings'};
 function go(page,btnId){
+  var actualPage = page==='cal'?'todo':page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('p-'+page).classList.add('active');
+  document.getElementById('p-'+actualPage).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(page==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
-  if(page==='batch')renderBatches();
-  if(page==='lab')renderCultures();
-  if(page==='inv'){renderInvStock();}
-  if(page==='assets')renderAssets();
-  if(page==='print'){fillBatchSelect();renderLabList();}
-  if(page==='todo')renderTodo();
-  if(page==='settings')renderLog();
+  if(actualPage==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
+  if(actualPage==='batch')renderBatches();
+  if(actualPage==='lab')renderCultures();
+  if(actualPage==='inv'){renderInvStock();}
+  if(actualPage==='assets')renderAssets();
+  if(actualPage==='print'){fillBatchSelect();renderLabList();}
+  if(page==='todo'){renderTodo();openStab('todo','todo');}
+  if(page==='cal'){renderTodo();openStab('todo','cal');}
+  if(actualPage==='settings')renderLog();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -3740,9 +3748,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest',t('harvest.bagScanned',{bag:bagId}));
+  setFb('harvest',t('harvest.bagScanned',{bag:bagId}),{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -4570,8 +4579,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info',t('scanFb.bagInfo',{bag:bagId}));
+  setFb('info',t('scanFb.bagInfo',{bag:bagId}),{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -4726,14 +4736,27 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
+function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
+function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
+function _addLogEntry(type,msg){
+  const log=document.getElementById('scan-modal-log');
+  const el=document.createElement('div');
+  el.className='scan-log-entry log-'+type;
+  const tm=new Date();
+  el.textContent=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0')+' — '+msg;
+  log.prepend(el);
+  while(log.children.length>50)log.lastChild.remove();
+}
 let _toastTimer=null;
-function setFb(type,msg){
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
-  el.className='scan-toast fb-'+type;
+  el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
   requestAnimationFrame(()=>el.classList.add('visible'));
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+  _addLogEntry(type,msg);
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
@@ -4816,7 +4839,7 @@ function _flushScanBuf(){
   _scanBuf.chars=[];
   if(raw.length<SCAN_MIN_LEN)return;
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err',t('scanFb.unknownFormat',{val:cleaned})||'Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 

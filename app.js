@@ -33,6 +33,7 @@ const REF_GROUPS=[
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
+let lastSyncTime=null; // tracks last successful server contact
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
 const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
@@ -56,7 +57,7 @@ async function loadData(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     applyData(d);
-    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Synced · gerade eben');
     refresh();
   }catch(e){if(e.message==='unauthorized')return;setSyncStatus('err','Sync error: '+(e.message||'offline'))}
 }
@@ -83,16 +84,31 @@ async function saveData(){
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
-    setSyncStatus('ok','Saved '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Saved · gerade eben');
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
   finally{saving=false}
 }
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg}
+function setSyncStatus(cls,msg){
+  document.getElementById('sync-dot').className='sync-dot '+cls;
+  document.getElementById('sync-label').textContent=msg;
+  if(cls==='ok')lastSyncTime=Date.now();
+}
+function formatRelativeTime(ts){
+  const sec=Math.round((Date.now()-ts)/1000);
+  if(sec<5)return 'gerade eben';
+  if(sec<60)return 'vor '+sec+'s';
+  const min=Math.floor(sec/60);
+  if(min<60)return 'vor '+min+' Min.';
+  return 'vor '+Math.floor(min/60)+' Std.';
+}
 async function pollSync(){
   if(saving)return;
   try{const r=await authFetch('/api/data');
   if(!r.ok)return;
-  const d=await r.json();const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+  const d=await r.json();const h=JSON.stringify(d);
+  if(h!==lastHash){lastHash=h;applyData(d);refresh();}
+  setSyncStatus('ok','Synced · gerade eben');
+  }catch{}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -710,9 +726,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent='Log harvest — '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter');
+  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter',{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -1000,7 +1017,7 @@ function renderCalMonth(){
       const bg=e.color?'style="background:'+e.color+'"':'';
       return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     }).join('');
-    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
+    if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' mehr</div>';
     return o;
   }
 
@@ -2273,8 +2290,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>Harvests:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' · ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info','Bag info: '+bagId+' — choose an action below or close');
+  setFb('info','Bag info: '+bagId+' — choose an action below or close',{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -2441,8 +2459,8 @@ function _addLogEntry(type,msg){
   // Keep max 50 entries
   while(log.children.length>50)log.lastChild.remove();
 }
-function setFb(type,msg){
-  openScanModal();
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -2537,7 +2555,7 @@ function _flushScanBuf(){
   if(raw.length<SCAN_MIN_LEN)return;
   // Validate against known formats
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err','Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 
@@ -2584,6 +2602,7 @@ document.addEventListener('keydown',e=>{
 let camScanner=null;
 function openCamScan(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setFb('err','Camera not available in this browser. Use HTTPS or localhost.');return}
+  closeScanModal();
   document.getElementById('m-camscan').classList.add('open');
   camScanner=new Html5Qrcode('cam-reader');
   camScanner.start(
@@ -2664,11 +2683,23 @@ setInterval(pollSync,SYNC_INTERVAL_MS);
   try{
     const es=new EventSource('/api/events');
     es.onmessage=function(e){
-      try{const d=JSON.parse(e.data);if(d.type==='data-changed')pollSync()}catch{}
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='data-changed')pollSync();
+        else if(d.type==='heartbeat')lastSyncTime=Date.now();
+      }catch{}
     };
     es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
   }catch{}
 })();
+
+// Update sync label with relative time every 5 seconds
+setInterval(()=>{
+  if(!lastSyncTime)return;
+  const dot=document.getElementById('sync-dot');
+  if(!dot.classList.contains('ok'))return;
+  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+},5000);
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){
