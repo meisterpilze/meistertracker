@@ -173,6 +173,11 @@ CREATE TABLE IF NOT EXISTS assets (
   notes               TEXT DEFAULT '',
   created             TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
 `;
 
 // ── Schema Migrations ───────────────────────────────────────
@@ -387,7 +392,19 @@ function readAll(db) {
     created: r.created
   }));
 
-  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents };
+  const version = getDataVersion(db);
+  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents, version };
+}
+
+// ── Data Versioning ─────────────────────────────────────────
+function getDataVersion(db) {
+  const row = db.prepare('SELECT value FROM meta WHERE key=?').get('data_version');
+  return row ? parseInt(row.value, 10) : 0;
+}
+function incrementDataVersion(db) {
+  const v = getDataVersion(db) + 1;
+  db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('data_version', String(v));
+  return v;
 }
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
@@ -584,6 +601,7 @@ function writeAll(db, incoming) {
       const c = incoming.caldav;
       db.prepare(`UPDATE caldav_config SET enabled=? WHERE id=1`).run(c.enabled ? 1 : 0);
     }
+    incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -603,6 +621,7 @@ function updateTaskCaldavUid(db, text, created, uid, synced) {
   db.prepare(
     'UPDATE manual_tasks SET caldav_uid = ?, caldav_synced = ? WHERE text = ? AND created = ?'
   ).run(uid, synced, text, created);
+  incrementDataVersion(db);
 }
 
 // ── Update batch due date (for calendar drag or CalDAV bidirectional sync) ──
@@ -613,11 +632,13 @@ function updateBatchDue(db, batchId, newDueISO) {
   const newDue = new Date(newDueISO);
   const newDays = Math.max(1, Math.round((newDue - created) / 86400000));
   db.prepare('UPDATE batches SET due = ?, days = ? WHERE batch_id = ?').run(newDueISO, newDays, batchId);
+  incrementDataVersion(db);
 }
 
 // ── Update task due date (for calendar drag or CalDAV bidirectional sync) ──
 function updateTaskDueDate(db, caldavUid, newDueDate) {
   db.prepare('UPDATE manual_tasks SET due_date = ?, caldav_synced = NULL WHERE caldav_uid = ?').run(newDueDate, caldavUid);
+  incrementDataVersion(db);
 }
 
 // ── Read only CalDAV config (lightweight, for auth checks) ──
@@ -695,6 +716,7 @@ function insertBatch(db, b) {
       .run(b.batchId, b.species, b.strain||null, b.qty, b.days, sub.hardwood||0, sub.wheatbran||0, sub.rh||0, sub.gypsum?1:0, b.bagKg||3, b.batchType||'block', b.sourceId||null, b.notes||'', b.created, b.due);
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id) VALUES(?,?)');
     for (const bagId of (b.bags||[])) ins.run(bagId, b.batchId);
+    incrementDataVersion(db);
     db.exec('COMMIT');
   } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
@@ -705,6 +727,7 @@ function updateBatchField(db, batchId, fields) {
   if (!cols.length) return;
   const sets = cols.map(c => `${c}=?`).join(',');
   db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map(c=>fields[c]), batchId);
+  incrementDataVersion(db);
 }
 
 function addBagsToBatch(db, batchId, newBags, newQty) {
@@ -713,12 +736,14 @@ function addBagsToBatch(db, batchId, newBags, newQty) {
     const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id) VALUES(?,?)');
     for (const id of newBags) ins.run(id, batchId);
     if (newQty != null) db.prepare('UPDATE batches SET qty=? WHERE batch_id=?').run(newQty, batchId);
+    incrementDataVersion(db);
     db.exec('COMMIT');
   } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
 function deleteBatchById(db, batchId) {
   db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
+  incrementDataVersion(db);
 }
 
 // -- Scan Log --
@@ -729,20 +754,24 @@ function appendScanEntries(db, entries) {
     const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null);
     ids.push(r.lastInsertRowid);
   }
+  incrementDataVersion(db);
   return ids;
 }
 
 function deleteLastScanEntries(db, n) {
   db.prepare('DELETE FROM scan_log WHERE id IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT ?)').run(n);
+  incrementDataVersion(db);
 }
 
 function clearScanLog(db) {
   db.prepare('DELETE FROM scan_log').run();
+  incrementDataVersion(db);
 }
 
 // -- Harvests --
 function insertHarvest(db, h) {
   const r = db.prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush) VALUES(?,?,?,?,?,?,?)').run(h.time, h.batch||null, h.bag||null, h.species||null, h.strain||null, h.grams, h.flush||1);
+  incrementDataVersion(db);
   return r.lastInsertRowid;
 }
 
@@ -752,6 +781,7 @@ function insertCultures(db, cultures) {
   for (const c of cultures) {
     ins.run(c.id, c.type, c.species||null, c.strain||null, c.parentId||null, c.source||null, c.status||'active', c.notes||'', c.created);
   }
+  incrementDataVersion(db);
 }
 
 function updateCulture(db, id, fields) {
@@ -760,11 +790,13 @@ function updateCulture(db, id, fields) {
   if (!cols.length) return;
   const sets = cols.map(c => `${c}=?`).join(',');
   db.prepare(`UPDATE cultures SET ${sets} WHERE id=?`).run(...cols.map(c=>fields[c]), id);
+  incrementDataVersion(db);
 }
 
 // -- Tasks --
 function insertTask(db, t) {
   const r = db.prepare('INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced,private) VALUES(?,?,?,?,?,?,?,?,?,?)').run(t.text, t.priority||'med', t.done?1:0, t.created, t.assignee||null, t.dueDate||null, t.description||null, t.caldavUid||null, t.caldavSynced||null, t.private?1:0);
+  incrementDataVersion(db);
   return r.lastInsertRowid;
 }
 
@@ -775,6 +807,7 @@ function updateTaskById(db, id, fields) {
   const sets = entries.map(([k])=>`${map[k]}=?`).join(',');
   const vals = entries.map(([k,v])=>(k==='done'||k==='private')?(v?1:0):v);
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
+  incrementDataVersion(db);
 }
 
 function readTaskById(db, id) {
@@ -791,31 +824,37 @@ function readBatchById(db, batchId) {
 
 function deleteTaskById(db, id) {
   db.prepare('DELETE FROM manual_tasks WHERE id=?').run(id);
+  incrementDataVersion(db);
 }
 
 // -- Team Members --
 function insertMember(db, m) {
   const r = db.prepare('INSERT INTO team_members(name,role,added) VALUES(?,?,?)').run(m.name, m.role||null, m.added);
+  incrementDataVersion(db);
   return r.lastInsertRowid;
 }
 
 function deleteMember(db, id) {
   db.prepare('DELETE FROM team_members WHERE id=?').run(id);
+  incrementDataVersion(db);
 }
 
 // -- Assets --
 function upsertAsset(db, a) {
   db.prepare(`INSERT INTO assets(asset_id,name,category,entry_date,exit_date,purchase_price,useful_life,depreciation_method,supplier,invoice_number,serial_number,location,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET name=excluded.name,category=excluded.category,entry_date=excluded.entry_date,exit_date=excluded.exit_date,purchase_price=excluded.purchase_price,useful_life=excluded.useful_life,depreciation_method=excluded.depreciation_method,supplier=excluded.supplier,invoice_number=excluded.invoice_number,serial_number=excluded.serial_number,location=excluded.location,status=excluded.status,notes=excluded.notes,created=excluded.created`)
     .run(a.assetId, a.name, a.category, a.entryDate, a.exitDate||null, a.purchasePrice, a.usefulLife, a.depreciationMethod||'linear', a.supplier||null, a.invoiceNumber||null, a.serialNumber||null, a.location||null, a.status||'aktiv', a.notes||'', a.created);
+  incrementDataVersion(db);
 }
 
 function deleteAssetById(db, id) {
   db.prepare('DELETE FROM assets WHERE asset_id=?').run(id);
+  incrementDataVersion(db);
 }
 
 // -- CalDAV Config --
 function updateCaldavCfg(db, c) {
   db.prepare('UPDATE caldav_config SET enabled=? WHERE id=1').run(c.enabled?1:0);
+  incrementDataVersion(db);
 }
 
 // -- Inventory Delta --
@@ -826,6 +865,7 @@ function applyInventoryDelta(db, mat, deltaKg, type, ref) {
     db.prepare(`UPDATE inventory SET ${col} = MAX(0, ${col} + ?) WHERE id=1`).run(deltaKg);
     const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
     db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), mat, deltaKg, row.val, type||null, ref||null);
+    incrementDataVersion(db);
     db.exec('COMMIT');
     return row.val;
   } catch(e) { db.exec('ROLLBACK'); throw e; }
@@ -839,6 +879,7 @@ function setInventoryAbsolute(db, mat, value, type, ref) {
     const delta = value - old;
     db.prepare(`UPDATE inventory SET ${col}=? WHERE id=1`).run(value);
     db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), mat, delta, value, type||null, ref||null);
+    incrementDataVersion(db);
     db.exec('COMMIT');
     return value;
   } catch(e) { db.exec('ROLLBACK'); throw e; }
@@ -852,6 +893,7 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
     (t.gypsum&&t.gypsum.minKg)||5, (t.grain&&t.grain.minKg)||10,
     a.hwPct||75, a.wbPct||25, a.rhPct||63, a.bagKg||3, a.grainBagKg||1
   );
+  incrementDataVersion(db);
 }
 
 // ── Calendar Event CRUD ─────────────────────────────────────
@@ -864,6 +906,7 @@ function insertCalendarEvent(db, ev) {
     ev.category || 'custom', ev.color || null, ev.caldavUid || null,
     ev.caldavSynced || null, ev.created || new Date().toISOString()
   );
+  incrementDataVersion(db);
 }
 
 function updateCalendarEvent(db, id, fields) {
@@ -879,14 +922,16 @@ function updateCalendarEvent(db, id, fields) {
   if (!sets.length) return;
   vals.push(id);
   db.prepare('UPDATE calendar_events SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
+  incrementDataVersion(db);
 }
 
 function deleteCalendarEvent(db, id) {
   db.prepare('DELETE FROM calendar_events WHERE id=?').run(id);
+  incrementDataVersion(db);
 }
 
 module.exports = {
-  openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid,
+  openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
   deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser,
