@@ -198,19 +198,25 @@
 <!-- Content wrapper -->
 <div class="content-wrap">
 
-<!-- Global scan strip -->
-<div class="scanstrip no-print">
-  <input type="text" id="scan-inp" class="scan-inp" data-i18n-placeholder="scan.placeholder" placeholder="Scan barcode here — works on every tab..." autocomplete="off" />
-  <button class="btn-xs" id="cam-scan-btn" onclick="openCamScan()" title="Scan with camera" style="padding:6px 9px;line-height:1;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg></button>
-  <div class="chips">
+<!-- Floating scan status bar (bottom-right) -->
+<div id="scan-float" class="scan-float no-print">
+  <div class="scan-float-chips">
     <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
     <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
     <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
     <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
   </div>
-  <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
-  <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">Add batch</button>
+  <div class="scan-float-btns">
+    <button class="btn-xs" onclick="openCamScan()" title="Scan with camera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg></button>
+    <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
+    <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
+  </div>
 </div>
+
+<!-- Scan toast popup (appears on scan) -->
+<div id="scan-toast" class="scan-toast no-print"></div>
+
+<!-- Harvest panel -->
 <div id="harvest-panel">
   <div class="inner">
     <div><div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:3px" id="hp-lbl" data-i18n="harvest.logHarvest">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:#fff8e7" /></div>
@@ -220,7 +226,6 @@
     <button class="btn btn-sm" onclick="cancelHarvest()" data-i18n="harvest.cancel">Cancel</button>
   </div>
 </div>
-<div id="scan-fb" class="fb-info" data-i18n="scan.ready">Ready — scan ADD, MOVE, REMOVE or HARVEST to begin</div>
 
 <div class="main">
 
@@ -3540,9 +3545,11 @@ function locRemoveSelected(){
   setLocFb(t('scanFb.removed',{n:n}));
 }
 function setLocFb(msg){
-  const el=document.getElementById('scan-fb');
-  el.className='fb-ok';
-  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600">Undo</button>';
+  const el=document.getElementById('scan-toast');
+  el.className='scan-toast fb-ok visible';
+  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('visible'),5000);
 }
 function locUndo(){
   if(!lastLocUndoCount)return;
@@ -4718,7 +4725,15 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
-function setFb(type,msg){const el=document.getElementById('scan-fb');el.className='fb-'+type;el.textContent=msg}
+let _toastTimer=null;
+function setFb(type,msg){
+  const el=document.getElementById('scan-toast');
+  el.className='scan-toast fb-'+type;
+  el.textContent=msg;
+  requestAnimationFrame(()=>el.classList.add('visible'));
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+}
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
 function processScan(raw){
@@ -4779,22 +4794,52 @@ function processScan(raw){
   }
   setFb('err',t('scanFb.unknown',{val:val}));
 }
-const si=document.getElementById('scan-inp');
-si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
-si.addEventListener('input',()=>{if(si.value.endsWith('\n')||si.value.endsWith('\r')){processScan(si.value);si.value=''}});
+// ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
+const _scanBuf={chars:[],timer:null};
+const SCAN_MAX_GAP=50;
+const SCAN_MIN_LEN=3;
 
-// Only steal focus for scan input when user is NOT in a form field
-function isInFormField(){
-  const tag=document.activeElement?.tagName?.toLowerCase();
-  return tag==='input'||tag==='select'||tag==='textarea';
+function isKnownBarcode(val){
+  val=val.toUpperCase().replace(/_/g,'-');
+  if(ACTIONS.includes(val))return true;
+  if(LOCS.includes(val))return true;
+  if(/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(val))return true;
+  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
+  if(/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(val))return true;
+  if(/^[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
+  return false;
 }
-document.addEventListener('click',e=>{
-  // Only refocus scan bar if clicking on blank space (not on any interactive element)
-  if(!e.target.closest('input,select,textarea,button,.modal-bg'))si.focus();
-});
+
+function _flushScanBuf(){
+  const raw=_scanBuf.chars.map(c=>c.ch).join('');
+  _scanBuf.chars=[];
+  if(raw.length<SCAN_MIN_LEN)return;
+  const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
+  if(!isKnownBarcode(cleaned))return;
+  processScan(raw);
+}
+
 document.addEventListener('keydown',e=>{
-  // Redirect keystrokes to scan bar ONLY if user is not already in a form field
-  if(document.activeElement!==si&&!isInFormField()&&!e.target.closest('.modal-bg')&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey)si.focus();
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const now=performance.now();
+  if(e.key==='Enter'){
+    if(_scanBuf.chars.length>=SCAN_MIN_LEN){
+      clearTimeout(_scanBuf.timer);
+      const allFast=_scanBuf.chars.every((c,i)=>i===0||c.t-_scanBuf.chars[i-1].t<SCAN_MAX_GAP);
+      if(allFast){
+        e.preventDefault();e.stopPropagation();
+        _flushScanBuf();return;
+      }
+    }
+    _scanBuf.chars=[];clearTimeout(_scanBuf.timer);return;
+  }
+  if(e.key.length!==1)return;
+  if(_scanBuf.chars.length>0&&now-_scanBuf.chars[_scanBuf.chars.length-1].t>SCAN_MAX_GAP){
+    _scanBuf.chars=[];
+  }
+  _scanBuf.chars.push({ch:e.key,t:now});
+  clearTimeout(_scanBuf.timer);
+  _scanBuf.timer=setTimeout(()=>{_scanBuf.chars=[]},SCAN_MAX_GAP*2);
 });
 
 // ─── USER MANAGEMENT ─────────────────────────────────────────

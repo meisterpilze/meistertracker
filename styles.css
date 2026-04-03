@@ -126,23 +126,19 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
   transition:margin-left .2s ease;
 }
 
-/* ═══ SCAN STRIP ════════════════════════════════════════════════ */
-.scanstrip{
-  background:var(--c-surface);border-bottom:1px solid var(--c-border);
-  padding:10px 24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-  position:sticky;top:0;z-index:100;
+/* ═══ FLOATING SCAN BAR ════════════════════════════════════════ */
+.scan-float{
+  position:fixed;bottom:16px;right:16px;z-index:900;
+  background:var(--c-surface);border:1px solid var(--c-border);
+  border-radius:var(--radius);box-shadow:var(--shadow-md);
+  padding:10px 14px;display:flex;flex-direction:column;gap:8px;
+  max-width:340px;transition:opacity .2s;
 }
-.scan-inp{
-  font-size:15px;font-family:ui-monospace,'Cascadia Code',monospace;
-  border:2px solid var(--c-border);border-radius:var(--radius-sm);
-  padding:9px 14px;flex:1;min-width:200px;
-  transition:border-color .15s,box-shadow .15s;
-}
-.scan-inp:focus{border-color:var(--c-primary);outline:none;box-shadow:0 0 0 3px rgba(22,163,74,.12)}
-.chips{display:flex;gap:6px;flex-shrink:0}
-.chip{background:var(--c-bg);border-radius:var(--radius-sm);padding:6px 10px;text-align:center;min-width:58px}
-.chip-l{font-size:10px;color:var(--c-text-muted);line-height:1;text-transform:uppercase;letter-spacing:.03em}
-.chip-v{font-size:13px;font-weight:700;color:var(--c-text);margin-top:2px}
+.scan-float-chips{display:flex;gap:6px;flex-wrap:wrap}
+.scan-float-btns{display:flex;gap:6px;justify-content:flex-end}
+.chip{background:var(--c-bg);border-radius:var(--radius-sm);padding:5px 8px;text-align:center;min-width:50px}
+.chip-l{font-size:9px;color:var(--c-text-muted);line-height:1;text-transform:uppercase;letter-spacing:.03em}
+.chip-v{font-size:12px;font-weight:700;color:var(--c-text);margin-top:1px}
 .btn-xs{
   padding:6px 12px;font-size:12px;font-weight:500;border-radius:var(--radius-sm);
   cursor:pointer;border:1px solid var(--c-border);background:var(--c-surface);
@@ -152,12 +148,21 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 .btn-xs.green{background:var(--c-primary-light);color:#166534;border-color:#bbf7d0}
 .btn-xs.green:hover{background:#dcfce7}
 
-/* -- Feedback bar -- */
-#scan-fb{padding:8px 24px;font-size:13px;min-height:30px;display:flex;align-items:center;border-bottom:1px solid var(--c-border-light)}
-.fb-ok{background:#dcfce7;color:#166534}
-.fb-err{background:#fee2e2;color:#991b1b}
-.fb-info{background:var(--c-bg);color:var(--c-text-sec)}
-.fb-harvest{background:#fef3c7;color:#92400e}
+/* -- Scan toast popup -- */
+.scan-toast{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);
+  z-index:1000;padding:20px 32px;border-radius:var(--radius);
+  font-size:16px;font-weight:600;font-family:ui-monospace,'Cascadia Code',monospace;
+  text-align:center;pointer-events:none;
+  opacity:0;transition:opacity .2s,transform .2s;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);
+  max-width:480px;word-break:break-word;
+}
+.scan-toast.visible{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.scan-toast.fb-ok{background:#dcfce7;color:#166534;border:2px solid #86efac}
+.scan-toast.fb-err{background:#fee2e2;color:#991b1b;border:2px solid #fca5a5}
+.scan-toast.fb-info{background:var(--c-surface);color:var(--c-text);border:2px solid var(--c-border)}
+.scan-toast.fb-harvest{background:#fef3c7;color:#92400e;border:2px solid #fcd34d}
 
 /* -- Harvest panel -- */
 #harvest-panel{padding:12px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:none}
@@ -370,9 +375,7 @@ tr:hover td{background:#f1f5f9}
   .mobile-topbar{display:flex}
   .content-wrap{margin-left:0}
   .sb-is-collapsed .content-wrap{margin-left:0}
-  .scanstrip{padding:10px 14px;flex-wrap:wrap}
-  .scan-inp{min-width:0;width:100%}
-  #scan-fb{padding:8px 14px}
+  .scan-float{bottom:10px;right:10px;left:10px;max-width:none}
   .main{padding:14px}
   .card{padding:14px}
   .g2,.g3,.g4{grid-template-columns:1fr}
@@ -381,7 +384,7 @@ tr:hover td{background:#f1f5f9}
 
 /* ═══ PRINT ═════════════════════════════════════════════════════ */
 @media print{
-  .sidebar,.mobile-topbar,.scanstrip,#scan-fb,#harvest-panel,.no-print,.sb-overlay{display:none!important}
+  .sidebar,.mobile-topbar,.scan-float,.scan-toast,#harvest-panel,.no-print,.sb-overlay{display:none!important}
   .content-wrap{margin-left:0!important}
   .main{padding:0;max-width:100%}
   .page,.sp{display:none!important}
