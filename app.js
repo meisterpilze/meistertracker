@@ -5,7 +5,7 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 5000;
+const SYNC_INTERVAL_MS = 30000; // fallback polling (SSE is primary)
 const MAX_LOG_DISPLAY = 200;
 const MAX_RACK_CAPACITY = 20;
 const MS_PER_DAY = 86400000;
@@ -2292,6 +2292,17 @@ async function deleteUser(id){
 loadCurrentUser();
 loadData();
 setInterval(pollSync,SYNC_INTERVAL_MS);
+
+// SSE for real-time multi-client sync
+(function initSSE(){
+  try{
+    const es=new EventSource('/api/events');
+    es.onmessage=function(e){
+      try{const d=JSON.parse(e.data);if(d.type==='data-changed')pollSync()}catch{}
+    };
+    es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
+  }catch{}
+})();
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){

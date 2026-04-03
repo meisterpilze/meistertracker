@@ -44,6 +44,23 @@ const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
+// ── SSE (Server-Sent Events) for real-time multi-client sync ──
+const sseClients = [];
+function broadcastSSE(excludeRes) {
+  const msg = 'data: {"type":"data-changed"}\n\n';
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    const c = sseClients[i];
+    if (c === excludeRes) continue;
+    try { c.write(msg); } catch { sseClients.splice(i, 1); }
+  }
+}
+setInterval(() => {
+  const hb = 'data: {"type":"heartbeat"}\n\n';
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    try { sseClients[i].write(hb); } catch { sseClients.splice(i, 1); }
+  }
+}, 30000);
+
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
   '.js':'application/javascript','.css':'text/css; charset=utf-8',
@@ -1161,98 +1178,109 @@ function handleRequest(req,res){
     return;
   }
 
+  // SSE endpoint for real-time sync
+  if(req.method==='GET'&&req.url==='/api/events'){
+    res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
+    res.write('data: {"type":"connected"}\n\n');
+    sseClients.push(res);
+    req.on('close',()=>{const i=sseClients.indexOf(res);if(i>=0)sseClients.splice(i,1)});
+    return;
+  }
+
   // GET /api/data
   if(req.method==='GET'&&req.url==='/api/data'){
     res.writeHead(200,{'Content-Type':'application/json'});
     res.end(JSON.stringify(readData()));return;
   }
 
-  // POST /api/data — DEPRECATED
+  // POST /api/data — full-state save (used by client saveData())
   if(req.method==='POST'&&req.url==='/api/data'){
-    res.writeHead(410,{'Content-Type':'application/json'});
-    res.end('{"error":"Gone. Use atomic endpoints."}');return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      try{writeData(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
 
   // ── ATOMIC REST ENDPOINTS ────────────────────────────────────
 
   // -- Batches --
   if(req.method==='POST'&&req.url==='/api/batches'){
-    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
   if(req.method==='PATCH'&&batchMatch){
     const id=decodeURIComponent(batchMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.addBagsToBatch(database,id,data.add||[],data.newQty);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.addBagsToBatch(database,id,data.add||[],data.newQty);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const batchIdMatch=req.url.match(/^\/api\/batches\/([^/]+)$/);
   if(req.method==='PATCH'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    try{db.deleteBatchById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteBatchById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Scan Log --
   if(req.method==='POST'&&req.url==='/api/scan-log'){
-    jsonBody(req,res,(e,data)=>{try{const ids=db.appendScanEntries(database,data.entries||[]);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const ids=db.appendScanEntries(database,data.entries||[]);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
-    try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
-    try{db.clearScanLog(database);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Harvests --
   if(req.method==='POST'&&req.url==='/api/harvests'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertHarvest(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Cultures --
   if(req.method==='POST'&&req.url==='/api/cultures'){
-    jsonBody(req,res,(e,data)=>{try{db.insertCultures(database,data.cultures||[]);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.insertCultures(database,data.cultures||[]);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const cultureMatch=req.url.match(/^\/api\/cultures\/([^/]+)$/);
   if(req.method==='PATCH'&&cultureMatch){
     const id=decodeURIComponent(cultureMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateCulture(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateCulture(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Tasks --
   if(req.method==='POST'&&req.url==='/api/tasks'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
   if(req.method==='PATCH'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{db.deleteTaskById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteTaskById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Team Members --
   if(req.method==='POST'&&req.url==='/api/team'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertMember(database,data);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
   if(req.method==='DELETE'&&teamMatch){
     const id=parseInt(teamMatch[1]);
-    try{db.deleteMember(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteMember(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Assets --
   if(req.method==='POST'&&req.url==='/api/assets'){
-    jsonBody(req,res,(e,data)=>{try{db.upsertAsset(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const assetMatch=req.url.match(/^\/api\/assets\/([^/]+)$/);
   if(req.method==='DELETE'&&assetMatch){
     const id=decodeURIComponent(assetMatch[1]);
-    try{db.deleteAssetById(database,id);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteAssetById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- CalDAV Config --
@@ -1260,15 +1288,29 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
+  // -- Calendar Events --
+  if(req.method==='POST'&&req.url==='/api/calendar-events'){
+    jsonBody(req,res,(e,data)=>{try{db.insertCalendarEvent(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
+  if(req.method==='PATCH'&&calEvMatch){
+    const id=decodeURIComponent(calEvMatch[1]);
+    jsonBody(req,res,(e,data)=>{try{db.updateCalendarEvent(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+  }
+  if(req.method==='DELETE'&&calEvMatch){
+    const id=decodeURIComponent(calEvMatch[1]);
+    try{db.deleteCalendarEvent(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
+
   // -- Inventory Delta --
   if(req.method==='POST'&&req.url==='/api/inventory/delta'){
-    jsonBody(req,res,(e,data)=>{try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/set'){
-    jsonBody(req,res,(e,data)=>{try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
-    jsonBody(req,res,(e,data)=>{try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Backup Restore --
@@ -1371,6 +1413,25 @@ function handleRequest(req,res){
         const{event}=JSON.parse(body);
         const dir=ensureCalDir('meisterpilze-dates');
         const{uid,ics}=customEventToVEVENT(event);
+        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        res.writeHead(200,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:true,uid}));
+      }catch(e){
+        res.writeHead(500,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:false,error:e.message}));
+      }
+    });return;
+  }
+
+  // POST /api/caldav/push-batch — write a single batch due date to calendar file
+  if(req.method==='POST'&&req.url==='/api/caldav/push-batch'){
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    req.on('end',()=>{
+      try{
+        const{batch}=JSON.parse(body);
+        const dir=ensureCalDir('meisterpilze-dates');
+        const{uid,ics}=batchToVEVENT(batch);
         fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
