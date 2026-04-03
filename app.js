@@ -32,8 +32,9 @@ const REF_GROUPS=[
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
-let confirmCb=null,noteId=null,saving=false,pendingPoll=false,lastHash='';
+let confirmCb=null,noteId=null,saving=false,pendingSave=false,lastHash='';
 let lastSyncTime=null; // tracks last successful server contact
+let sseConnection=null,sseBackoff=1000;
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
 const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
@@ -80,13 +81,14 @@ function defaultInventory(){
   };
 }
 async function saveData(){
-  if(saving)return;saving=true;pendingPoll=false;setSyncStatus('busy','Saving...');
+  if(saving){pendingSave=true;return}
+  saving=true;setSyncStatus('busy','Saving...');
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
     setSyncStatus('ok','Saved · gerade eben');
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
-  finally{saving=false;if(pendingPoll){pendingPoll=false;pollSync()}}
+  finally{saving=false;if(pendingSave){pendingSave=false;saveData()}}
 }
 function setSyncStatus(cls,msg){
   document.getElementById('sync-dot').className='sync-dot '+cls;
@@ -108,7 +110,7 @@ async function pollSync(){
   const d=await r.json();const h=JSON.stringify(d);
   if(h!==lastHash){lastHash=h;applyData(d);refresh();}
   setSyncStatus('ok','Synced · gerade eben');
-  }catch{}
+  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -1276,7 +1278,7 @@ function handleCalendarDrop(type,id,newDateStr){
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    saveData();renderCalendar();
+    patchCalendarEventAPI(id,{startDate:newDateStr,caldavSynced:null});renderCalendar();
     pushEventCaldav(ev);
   }
 }
@@ -1295,11 +1297,12 @@ function snapPx(px){return Math.round(px/12)*12}// snap to 15-min increments (48
 
 function updateEventTime(id,newStart,newEnd,newDate){
   const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
-  if(newStart)ev.startTime=newStart;
-  if(newEnd)ev.endTime=newEnd;
-  if(newDate)ev.startDate=newDate;
+  const fields={caldavSynced:null};
+  if(newStart){ev.startTime=newStart;fields.startTime=newStart}
+  if(newEnd){ev.endTime=newEnd;fields.endTime=newEnd}
+  if(newDate){ev.startDate=newDate;fields.startDate=newDate}
   ev.caldavSynced=null;
-  saveData();renderCalendar();
+  patchCalendarEventAPI(id,fields);renderCalendar();
   pushEventCaldav(ev);
 }
 
@@ -1619,8 +1622,9 @@ function saveCalEvent(){
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-  }else{calendarEvents.push(ev)}
-  saveData();renderCalendar();closeEventModal();
+    patchCalendarEventAPI(ev.id,ev);
+  }else{calendarEvents.push(ev);saveCalendarEventAPI(ev)}
+  renderCalendar();closeEventModal();
   if(caldav.enabled)pushEventCaldav(ev);
 }
 
@@ -1629,16 +1633,42 @@ function deleteCalEvent(){
   closeEventModal();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    saveData();renderCalendar();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+    deleteCalendarEventAPI(id);
+    renderCalendar();closeEventModal();
   });
+}
+
+// ── Atomic Calendar REST helpers ──
+async function saveCalendarEventAPI(ev){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ev)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
+}
+async function patchCalendarEventAPI(id,fields){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(fields)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
+}
+async function deleteCalendarEventAPI(id){
+  setSyncStatus('busy','Saving...');
+  try{
+    const r=await authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
 }
 
 async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();saveData()}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();patchCalendarEventAPI(ev.id,{caldavUid:r.uid,caldavSynced:ev.caldavSynced})}
   }catch(e){console.error('CalDAV event push error:',e)}
 }
 
@@ -2696,29 +2726,33 @@ loadData();
 {const port=location.port?':'+location.port:'';const el=document.getElementById('caldav-url-display');if(el)el.textContent=location.protocol+'//'+location.hostname+port+'/caldav/calendars/';}
 setInterval(pollSync,SYNC_INTERVAL_MS);
 
-// SSE for real-time multi-client sync
-(function initSSE(){
-  let es;
-  function connect(){
-    try{
-      if(es){try{es.close()}catch{}}
-      es=new EventSource('/api/events');
-      es.onmessage=function(e){
-        try{
-          const d=JSON.parse(e.data);
-          if(d.type==='data-changed')pollSync();
-          else if(d.type==='connected')pollSync();
-          else if(d.type==='heartbeat')lastSyncTime=Date.now();
-        }catch{}
-      };
-      es.onerror=function(){
-        try{es.close()}catch{}
-        setTimeout(connect,5000);
-      };
-    }catch{setTimeout(connect,5000)}
-  }
-  connect();
-})();
+// SSE for real-time multi-client sync (with robust reconnection)
+function connectSSE(){
+  try{
+    if(sseConnection){try{sseConnection.close()}catch{}}
+    sseConnection=null;
+    const es=new EventSource('/api/events');
+    es.onopen=function(){sseBackoff=1000;lastSyncTime=Date.now()};
+    es.onmessage=function(e){
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='data-changed')pollSync();
+        else if(d.type==='connected'){lastSyncTime=Date.now();pollSync()}
+        else if(d.type==='heartbeat')lastSyncTime=Date.now();
+      }catch{}
+    };
+    es.onerror=function(){
+      try{es.close()}catch{}
+      sseConnection=null;
+      sseBackoff=Math.min(sseBackoff*2,30000);
+      setTimeout(connectSSE,sseBackoff);
+    };
+    sseConnection=es;
+  }catch{setTimeout(connectSSE,sseBackoff)}
+}
+connectSSE();
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&!sseConnection)connectSSE()});
+window.addEventListener('online',function(){if(!sseConnection)connectSSE()});
 
 // Update sync label with relative time every 5 seconds
 setInterval(()=>{
