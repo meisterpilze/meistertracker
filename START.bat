@@ -219,9 +219,13 @@ if %errorlevel% neq 0 (
 echo.
 echo  ========================================
 echo    Server started successfully!
-echo    HTTP:  http://localhost:3000
 if exist "certs\server.crt" (
-    echo    HTTPS: https://localhost:3443
+    echo    URL: https://localhost:3000
+) else (
+    echo    URL: http://localhost:3000
+    echo.
+    echo    WARNING: No TLS certs found, running HTTP only.
+    echo    iOS camera scanning requires HTTPS.
 )
 echo    Run 'pm2 logs %PM2_PROCESS_NAME%' to see output.
 echo  ========================================
