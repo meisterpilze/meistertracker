@@ -196,8 +196,9 @@ function readAll(db) {
     bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
   }));
 
-  // Scan log
+  // Scan log — include id for PATCH/DELETE targeting
   const scanLog = db.prepare('SELECT * FROM scan_log ORDER BY id').all().map(r => ({
+    id: r.id,
     time: r.time,
     action: r.action,
     batch: r.batch,
@@ -208,8 +209,9 @@ function readAll(db) {
     strain: r.strain
   }));
 
-  // Harvests
+  // Harvests — include id for targeting
   const harvests = db.prepare('SELECT * FROM harvests ORDER BY id').all().map(r => ({
+    id: r.id,
     time: r.time,
     batch: r.batch,
     bag: r.bag,
@@ -232,8 +234,9 @@ function readAll(db) {
     created: r.created
   }));
 
-  // Manual tasks
+  // Manual tasks — include id for PATCH/DELETE targeting
   const manualTasks = db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
+    id: r.id,
     text: r.text,
     priority: r.priority,
     done: r.done === 1 ? true : false,
@@ -245,8 +248,9 @@ function readAll(db) {
     caldavSynced: r.caldav_synced
   }));
 
-  // Team members
+  // Team members — include id for DELETE targeting
   const teamMembers = db.prepare('SELECT * FROM team_members ORDER BY id').all().map(r => ({
+    id: r.id,
     name: r.name,
     role: r.role,
     added: r.added
@@ -317,6 +321,7 @@ function readAll(db) {
 }
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
+// Used by backup/restore only — normal mutations use atomic functions below
 function writeAll(db, incoming) {
   db.exec('BEGIN');
   try {
@@ -325,7 +330,6 @@ function writeAll(db, incoming) {
       const existingIds = new Set(db.prepare('SELECT batch_id FROM batches').all().map(r => r.batch_id));
       const incomingIds = new Set(incoming.batches.map(b => b.batchId));
 
-      // Delete removed batches (CASCADE deletes bags)
       for (const id of existingIds) {
         if (!incomingIds.has(id)) {
           db.prepare('DELETE FROM batches WHERE batch_id = ?').run(id);
@@ -354,7 +358,6 @@ function writeAll(db, incoming) {
           b.bagKg || 3, b.batchType || 'block', b.sourceId || null,
           b.notes || '', b.created, b.due
         );
-        // Replace bags for this batch
         deleteBags.run(b.batchId);
         for (const bagId of (b.bags || [])) {
           insertBag.run(bagId, b.batchId);
@@ -362,7 +365,7 @@ function writeAll(db, incoming) {
       }
     }
 
-    // ── Scan Log (replace all — append-only in practice, safety check done before writeAll) ──
+    // ── Scan Log (replace all) ──
     if (incoming.scanLog) {
       db.prepare('DELETE FROM scan_log').run();
       const ins = db.prepare('INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain) VALUES(?, ?, ?, ?, ?, ?, ?, ?)');
@@ -406,7 +409,7 @@ function writeAll(db, incoming) {
       }
     }
 
-    // ── Manual Tasks (replace all — no stable unique ID) ──
+    // ── Manual Tasks (replace all) ──
     if (incoming.manualTasks) {
       db.prepare('DELETE FROM manual_tasks').run();
       const ins = db.prepare('INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -426,20 +429,17 @@ function writeAll(db, incoming) {
       }
     }
 
-    // ── Inventory ──
+    // ── Inventory (config only — stock is managed via delta endpoints) ──
     if (incoming.inventory) {
       const inv = incoming.inventory;
-      const stock = inv.stock || {};
       const thresh = inv.thresholds || {};
       const avg = inv.avgComposition || {};
       db.prepare(`
         UPDATE inventory SET
-          stock_hardwood=?, stock_wheatbran=?, stock_gypsum=?, stock_grain=?,
           thresh_hardwood=?, thresh_wheatbran=?, thresh_gypsum=?, thresh_grain=?,
           avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?
         WHERE id=1
       `).run(
-        stock.hardwood || 0, stock.wheatbran || 0, stock.gypsum || 0, stock.grain || 0,
         (thresh.hardwood && thresh.hardwood.minKg) || 50,
         (thresh.wheatbran && thresh.wheatbran.minKg) || 20,
         (thresh.gypsum && thresh.gypsum.minKg) || 5,
@@ -447,15 +447,6 @@ function writeAll(db, incoming) {
         avg.hwPct || 75, avg.wbPct || 25, avg.rhPct || 63,
         avg.bagKg || 3, avg.grainBagKg || 1
       );
-
-      // Inventory log (replace all)
-      if (inv.log) {
-        db.prepare('DELETE FROM inventory_log').run();
-        const ins = db.prepare('INSERT INTO inventory_log(time, mat, delta_kg, running, type, ref) VALUES(?, ?, ?, ?, ?, ?)');
-        for (const e of inv.log) {
-          ins.run(e.time, e.mat, e.deltaKg, e.running || 0, e.type || null, e.ref || null);
-        }
-      }
     }
 
     // ── Assets ──
@@ -606,9 +597,175 @@ function deleteUser(db, userId) {
   db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 }
 
+// ── Atomic CRUD functions ───────────────────────────────────
+
+// -- Batches --
+function insertBatch(db, b) {
+  db.exec('BEGIN');
+  try {
+    const sub = b.substrate || {};
+    db.prepare(`INSERT INTO batches(batch_id,species,strain,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(b.batchId, b.species, b.strain||null, b.qty, b.days, sub.hardwood||0, sub.wheatbran||0, sub.rh||0, sub.gypsum?1:0, b.bagKg||3, b.batchType||'block', b.sourceId||null, b.notes||'', b.created, b.due);
+    const ins = db.prepare('INSERT INTO bags(bag_id,batch_id) VALUES(?,?)');
+    for (const bagId of (b.bags||[])) ins.run(bagId, b.batchId);
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
+}
+
+function updateBatchField(db, batchId, fields) {
+  const allowed = ['notes','species','strain','qty','days','due'];
+  const cols = Object.keys(fields).filter(k => allowed.includes(k));
+  if (!cols.length) return;
+  const sets = cols.map(c => `${c}=?`).join(',');
+  db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map(c=>fields[c]), batchId);
+}
+
+function addBagsToBatch(db, batchId, newBags, newQty) {
+  db.exec('BEGIN');
+  try {
+    const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id) VALUES(?,?)');
+    for (const id of newBags) ins.run(id, batchId);
+    if (newQty != null) db.prepare('UPDATE batches SET qty=? WHERE batch_id=?').run(newQty, batchId);
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
+}
+
+function deleteBatchById(db, batchId) {
+  db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
+}
+
+// -- Scan Log --
+function appendScanEntries(db, entries) {
+  const ins = db.prepare('INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain) VALUES(?,?,?,?,?,?,?,?)');
+  const ids = [];
+  for (const e of entries) {
+    const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null);
+    ids.push(r.lastInsertRowid);
+  }
+  return ids;
+}
+
+function deleteLastScanEntries(db, n) {
+  db.prepare('DELETE FROM scan_log WHERE id IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT ?)').run(n);
+}
+
+function clearScanLog(db) {
+  db.prepare('DELETE FROM scan_log').run();
+}
+
+// -- Harvests --
+function insertHarvest(db, h) {
+  const r = db.prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush) VALUES(?,?,?,?,?,?,?)').run(h.time, h.batch||null, h.bag||null, h.species||null, h.strain||null, h.grams, h.flush||1);
+  return r.lastInsertRowid;
+}
+
+// -- Cultures --
+function insertCultures(db, cultures) {
+  const ins = db.prepare('INSERT INTO cultures(id,type,species,strain,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?)');
+  for (const c of cultures) {
+    ins.run(c.id, c.type, c.species||null, c.strain||null, c.parentId||null, c.source||null, c.status||'active', c.notes||'', c.created);
+  }
+}
+
+function updateCulture(db, id, fields) {
+  const allowed = ['status','notes','species','strain','source'];
+  const cols = Object.keys(fields).filter(k => allowed.includes(k));
+  if (!cols.length) return;
+  const sets = cols.map(c => `${c}=?`).join(',');
+  db.prepare(`UPDATE cultures SET ${sets} WHERE id=?`).run(...cols.map(c=>fields[c]), id);
+}
+
+// -- Tasks --
+function insertTask(db, t) {
+  const r = db.prepare('INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced) VALUES(?,?,?,?,?,?,?,?,?)').run(t.text, t.priority||'med', t.done?1:0, t.created, t.assignee||null, t.dueDate||null, t.description||null, t.caldavUid||null, t.caldavSynced||null);
+  return r.lastInsertRowid;
+}
+
+function updateTaskById(db, id, fields) {
+  const map = {done:'done',caldavUid:'caldav_uid',caldavSynced:'caldav_synced',text:'text',priority:'priority',assignee:'assignee',dueDate:'due_date',description:'description'};
+  const entries = Object.entries(fields).filter(([k])=>map[k]);
+  if (!entries.length) return;
+  const sets = entries.map(([k])=>`${map[k]}=?`).join(',');
+  const vals = entries.map(([k,v])=>k==='done'?(v?1:0):v);
+  db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
+}
+
+function deleteTaskById(db, id) {
+  db.prepare('DELETE FROM manual_tasks WHERE id=?').run(id);
+}
+
+// -- Team Members --
+function insertMember(db, m) {
+  const r = db.prepare('INSERT INTO team_members(name,role,added) VALUES(?,?,?)').run(m.name, m.role||null, m.added);
+  return r.lastInsertRowid;
+}
+
+function deleteMember(db, id) {
+  db.prepare('DELETE FROM team_members WHERE id=?').run(id);
+}
+
+// -- Assets --
+function upsertAsset(db, a) {
+  db.prepare(`INSERT INTO assets(asset_id,name,category,entry_date,exit_date,purchase_price,useful_life,depreciation_method,supplier,invoice_number,serial_number,location,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET name=excluded.name,category=excluded.category,entry_date=excluded.entry_date,exit_date=excluded.exit_date,purchase_price=excluded.purchase_price,useful_life=excluded.useful_life,depreciation_method=excluded.depreciation_method,supplier=excluded.supplier,invoice_number=excluded.invoice_number,serial_number=excluded.serial_number,location=excluded.location,status=excluded.status,notes=excluded.notes,created=excluded.created`)
+    .run(a.assetId, a.name, a.category, a.entryDate, a.exitDate||null, a.purchasePrice, a.usefulLife, a.depreciationMethod||'linear', a.supplier||null, a.invoiceNumber||null, a.serialNumber||null, a.location||null, a.status||'aktiv', a.notes||'', a.created);
+}
+
+function deleteAssetById(db, id) {
+  db.prepare('DELETE FROM assets WHERE asset_id=?').run(id);
+}
+
+// -- CalDAV Config --
+function updateCaldavCfg(db, c) {
+  db.prepare('UPDATE caldav_config SET enabled=?,caldav_username=?,caldav_password=?,per_person_calendars=? WHERE id=1').run(c.enabled?1:0, c.caldavUsername||'', c.caldavPassword||'', c.perPersonCalendars?1:0);
+}
+
+// -- Inventory Delta --
+function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+  const col = 'stock_' + mat;
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE inventory SET ${col} = MAX(0, ${col} + ?) WHERE id=1`).run(deltaKg);
+    const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
+    db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), mat, deltaKg, row.val, type||null, ref||null);
+    db.exec('COMMIT');
+    return row.val;
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
+}
+
+function setInventoryAbsolute(db, mat, value, type, ref) {
+  const col = 'stock_' + mat;
+  db.exec('BEGIN');
+  try {
+    const old = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get().val;
+    const delta = value - old;
+    db.prepare(`UPDATE inventory SET ${col}=? WHERE id=1`).run(value);
+    db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), mat, delta, value, type||null, ref||null);
+    db.exec('COMMIT');
+    return value;
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
+}
+
+function updateInventoryConfig(db, thresholds, avgComposition) {
+  const t = thresholds || {};
+  const a = avgComposition || {};
+  db.prepare(`UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=? WHERE id=1`).run(
+    (t.hardwood&&t.hardwood.minKg)||50, (t.wheatbran&&t.wheatbran.minKg)||20,
+    (t.gypsum&&t.gypsum.minKg)||5, (t.grain&&t.grain.minKg)||10,
+    a.hwPct||75, a.wbPct||25, a.rhPct||63, a.bagKg||3, a.grainBagKg||1
+  );
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
-  deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser
+  deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser,
+  insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
+  appendScanEntries, deleteLastScanEntries, clearScanLog,
+  insertHarvest, insertCultures, updateCulture,
+  insertTask, updateTaskById, deleteTaskById,
+  insertMember, deleteMember,
+  upsertAsset, deleteAssetById,
+  updateCaldavCfg,
+  applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig
 };
