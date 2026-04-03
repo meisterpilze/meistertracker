@@ -726,9 +726,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent='Log harvest — '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter');
+  setFb('harvest','Bag scanned: '+bagId+' → enter grams above then press Enter',{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -2187,8 +2188,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>Harvests:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' · ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info','Bag info: '+bagId+' — choose an action below or close');
+  setFb('info','Bag info: '+bagId+' — choose an action below or close',{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -2355,8 +2357,8 @@ function _addLogEntry(type,msg){
   // Keep max 50 entries
   while(log.children.length>50)log.lastChild.remove();
 }
-function setFb(type,msg){
-  openScanModal();
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -2451,7 +2453,7 @@ function _flushScanBuf(){
   if(raw.length<SCAN_MIN_LEN)return;
   // Validate against known formats
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err','Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 
@@ -2498,6 +2500,7 @@ document.addEventListener('keydown',e=>{
 let camScanner=null;
 function openCamScan(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setFb('err','Camera not available in this browser. Use HTTPS or localhost.');return}
+  closeScanModal();
   document.getElementById('m-camscan').classList.add('open');
   camScanner=new Html5Qrcode('cam-reader');
   camScanner.start(
