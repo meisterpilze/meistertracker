@@ -691,8 +691,8 @@
       <span class="leg-batch">Fälligkeiten</span>
       <span class="leg-task">Aufgaben</span>
       <span class="leg-harvest">Ernten</span>
-      <span class="leg-custom">Eigene</span>
-      <span class="leg-import">CalDAV</span>
+      <span class="leg-custom">Eigene Termine</span>
+      <span class="leg-import">Externe Termine</span>
     </div>
     <div id="cal-container">
       <div class="cal-grid" id="cal-grid"></div>
@@ -771,16 +771,19 @@
       <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
       <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (use this in your calendar app)</div>
-        <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (in deiner Kalender-App eintragen)</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a;flex:1">Lade...</code>
+          <button class="btn btn-sm" onclick="copyCalDavUrl()" title="URL kopieren" style="white-space:nowrap;padding:4px 8px;font-size:11px">Kopieren</button>
+        </div>
       </div>
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.6">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">
         <strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
+            <input type="checkbox" id="caldav-enabled" style="width:auto" onchange="saveCaldavSettings()" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
           </label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">

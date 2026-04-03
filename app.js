@@ -897,13 +897,20 @@ function saveCaldavSettings(){
   saveData();
   showCaldavStatus('Einstellungen gespeichert.','#166534');
 }
+function copyCalDavUrl(){
+  const url=document.getElementById('caldav-url-display').textContent;
+  navigator.clipboard.writeText(url).then(()=>showCaldavStatus('URL kopiert!','#166534')).catch(()=>{});
+}
 function showCaldavStatus(msg,color){
   const el=document.getElementById('caldav-status');
   el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
   setTimeout(()=>{el.style.display='none'},8000);
 }
 async function syncCaldavNow(){
-  if(!caldav.enabled){showCaldavStatus('Enable sync first, then save settings.','#92400e');return}
+  // Auto-save checkbox state before syncing
+  caldav.enabled=document.getElementById('caldav-enabled').checked;
+  saveData();
+  if(!caldav.enabled){showCaldavStatus('Aktiviere zuerst die Synchronisation.','#92400e');return}
   const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
@@ -2571,6 +2578,8 @@ async function deleteUser(id){
 // ─── INIT ────────────────────────────────────────────────────
 loadCurrentUser();
 loadData();
+// Set CalDAV URL immediately so it's never empty
+{const port=location.port?':'+location.port:'';const el=document.getElementById('caldav-url-display');if(el)el.textContent=location.protocol+'//'+location.hostname+port+'/caldav/calendars/';}
 setInterval(pollSync,SYNC_INTERVAL_MS);
 
 // SSE for real-time multi-client sync
