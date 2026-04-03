@@ -2355,6 +2355,7 @@ function _addLogEntry(type,msg){
   // Keep max 50 entries
   while(log.children.length>50)log.lastChild.remove();
 }
+let _bgErrTimer=null;
 function setFb(type,msg){
   openScanModal();
   const el=document.getElementById('scan-toast');
@@ -2364,6 +2365,11 @@ function setFb(type,msg){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
   _addLogEntry(type,msg);
+  // Overlay bg: red flash on error, green otherwise
+  const ov=document.getElementById('scan-overlay');
+  clearTimeout(_bgErrTimer);
+  if(type==='err'){ov.classList.add('scan-bg-err');_bgErrTimer=setTimeout(()=>ov.classList.remove('scan-bg-err'),4000)}
+  else{ov.classList.remove('scan-bg-err')}
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';document.getElementById('scan-modal-log').innerHTML='';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
