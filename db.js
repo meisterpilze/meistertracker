@@ -122,6 +122,22 @@ CREATE TABLE IF NOT EXISTS caldav_config (
   per_person_calendars INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  description TEXT,
+  start_date  TEXT NOT NULL,
+  end_date    TEXT,
+  all_day     INTEGER DEFAULT 1,
+  start_time  TEXT,
+  end_time    TEXT,
+  category    TEXT DEFAULT 'custom',
+  color       TEXT,
+  caldav_uid  TEXT,
+  caldav_synced TEXT,
+  created     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
@@ -317,7 +333,24 @@ function readAll(db) {
     created: r.created
   }));
 
-  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets };
+  // Calendar events
+  const calendarEvents = db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    allDay: r.all_day === 1,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    category: r.category,
+    color: r.color,
+    caldavUid: r.caldav_uid,
+    caldavSynced: r.caldav_synced,
+    created: r.created
+  }));
+
+  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents };
 }
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
@@ -477,6 +510,35 @@ function writeAll(db, incoming) {
           a.purchasePrice, a.usefulLife, a.depreciationMethod || 'linear',
           a.supplier || null, a.invoiceNumber || null, a.serialNumber || null,
           a.location || null, a.status || 'aktiv', a.notes || '', a.created);
+      }
+    }
+
+    // ── Calendar Events ──
+    if (incoming.calendarEvents) {
+      const existingIds = new Set(db.prepare('SELECT id FROM calendar_events').all().map(r => r.id));
+      const incomingIds = new Set(incoming.calendarEvents.map(e => e.id));
+
+      for (const id of existingIds) {
+        if (!incomingIds.has(id)) {
+          db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
+        }
+      }
+
+      const upsert = db.prepare(`
+        INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
+          start_time, end_time, category, color, caldav_uid, caldav_synced, created)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title=excluded.title, description=excluded.description, start_date=excluded.start_date,
+          end_date=excluded.end_date, all_day=excluded.all_day, start_time=excluded.start_time,
+          end_time=excluded.end_time, category=excluded.category, color=excluded.color,
+          caldav_uid=excluded.caldav_uid, caldav_synced=excluded.caldav_synced, created=excluded.created
+      `);
+      for (const e of incoming.calendarEvents) {
+        upsert.run(e.id, e.title, e.description || null, e.startDate, e.endDate || null,
+          e.allDay ? 1 : 0, e.startTime || null, e.endTime || null,
+          e.category || 'custom', e.color || null,
+          e.caldavUid || null, e.caldavSynced || null, e.created);
       }
     }
 
