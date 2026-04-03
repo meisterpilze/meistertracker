@@ -1,7 +1,7 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meisterpilze-v11';
+const CACHE = 'meisterpilze-v12';
 const ASSETS = ['/', '/styles.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

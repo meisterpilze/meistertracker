@@ -59,7 +59,7 @@ setInterval(() => {
   for (let i = sseClients.length - 1; i >= 0; i--) {
     try { sseClients[i].write(hb); } catch { sseClients.splice(i, 1); }
   }
-}, 30000);
+}, 15000);
 
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
@@ -256,6 +256,26 @@ public class DOCINFO {
 // Data stored in /calendars/<cal-name>/<uid>.ics
 // No npm dependencies — pure Node.js
 
+// RFC 5545 §3.1: fold content lines longer than 75 octets
+function foldIcsLines(icsText) {
+  return icsText.split('\r\n').map(line => {
+    if (Buffer.byteLength(line, 'utf8') <= 75) return line;
+    const parts = [];
+    let remaining = line;
+    let first = true;
+    while (Buffer.byteLength(remaining, 'utf8') > 75) {
+      const limit = first ? 75 : 74; // subsequent lines have leading space
+      let cut = limit;
+      while (cut > 0 && Buffer.byteLength(remaining.slice(0, cut), 'utf8') > limit) cut--;
+      parts.push(remaining.slice(0, cut));
+      remaining = remaining.slice(cut);
+      first = false;
+    }
+    if (remaining) parts.push(remaining);
+    return parts.join('\r\n ');
+  }).join('\r\n');
+}
+
 function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
@@ -350,7 +370,7 @@ function taskToVTODO(task) {
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
   if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
   lines.push('END:VTODO', 'END:VCALENDAR');
-  return { uid, ics: lines.join('\r\n') };
+  return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
 
 // Write a task as .ics file to the appropriate calendar
@@ -388,7 +408,7 @@ function batchToVEVENT(batch) {
     'END:VEVENT',
     'END:VCALENDAR'
   ];
-  return { uid, ics: lines.join('\r\n') };
+  return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
 
 // Convert a task with due date to VEVENT .ics content
@@ -414,7 +434,7 @@ function taskDueToVEVENT(task) {
     'END:VEVENT',
     'END:VCALENDAR'
   ];
-  return { uid, ics: lines.join('\r\n') };
+  return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
 
 // Convert a custom calendar event to VEVENT .ics content
@@ -433,14 +453,37 @@ function customEventToVEVENT(event) {
     const d = event.startDate.replace(/-/g, '');
     const st = (event.startTime || '09:00').replace(':', '') + '00';
     const et = (event.endTime || '10:00').replace(':', '') + '00';
-    dtstart = 'DTSTART:' + d + 'T' + st;
-    dtend = 'DTEND:' + d + 'T' + et;
+    dtstart = 'DTSTART;TZID=Europe/Berlin:' + d + 'T' + st;
+    dtend = 'DTEND;TZID=Europe/Berlin:' + d + 'T' + et;
   }
+  const needsTZ = dtstart.includes('TZID=');
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//Meisterpilze Lab Tracker//EN',
-    'BEGIN:VEVENT',
+  ];
+  if (needsTZ) {
+    lines.push(
+      'BEGIN:VTIMEZONE',
+      'TZID:Europe/Berlin',
+      'BEGIN:STANDARD',
+      'DTSTART:19701025T030000',
+      'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10',
+      'TZOFFSETFROM:+0200',
+      'TZOFFSETTO:+0100',
+      'TZNAME:CET',
+      'END:STANDARD',
+      'BEGIN:DAYLIGHT',
+      'DTSTART:19700329T020000',
+      'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3',
+      'TZOFFSETFROM:+0100',
+      'TZOFFSETTO:+0200',
+      'TZNAME:CEST',
+      'END:DAYLIGHT',
+      'END:VTIMEZONE'
+    );
+  }
+  lines.push('BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + now,
     dtstart,
@@ -449,10 +492,10 @@ function customEventToVEVENT(event) {
     'CATEGORIES:' + (event.category || 'Benutzerdefiniert'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:custom-event',
-  ];
+  );
   if (event.description) lines.push('DESCRIPTION:' + event.description.replace(/\n/g, '\\n'));
   lines.push('END:VEVENT', 'END:VCALENDAR');
-  return { uid, ics: lines.join('\r\n') };
+  return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
 
 // Delete a task's .ics file
@@ -491,7 +534,7 @@ function autoPushTaskCaldav(task) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const isPrivate = task.private || task.private === 1;
+    const isPrivate = task.private === 1 || task.private === true;
     // Shared calendar: all non-private tasks
     if (!isPrivate) {
       writeTaskToCalendar(task, 'meisterpilze');
@@ -501,7 +544,8 @@ function autoPushTaskCaldav(task) {
       const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       writeTaskToCalendar(task, slug);
     }
-    if (task.dueDate) {
+    // Due-date VEVENT: respect privacy — only shared if not private
+    if (task.dueDate && !isPrivate) {
       const dir = ensureCalDir('meisterpilze');
       const { uid, ics } = taskDueToVEVENT(task);
       fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
@@ -566,9 +610,22 @@ function autoSyncAllCaldav(data) {
       if (!b.due) continue;
       try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
     }
-    // Task due dates → shared calendar
+    // Task VTODOs → shared + personal calendars
+    for (const t of (data.manualTasks || [])) {
+      try {
+        const isPriv = t.private === 1 || t.private === true;
+        if (!isPriv) { writeTaskToCalendar(t, 'meisterpilze'); }
+        if (t.assignee) {
+          const slug = t.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          writeTaskToCalendar(t, slug);
+        }
+      } catch (e) { /* skip */ }
+    }
+    // Task due dates → shared calendar (respect privacy)
     for (const t of (data.manualTasks || [])) {
       if (!t.dueDate) continue;
+      const isPrivate = t.private === 1 || t.private === true;
+      if (isPrivate) continue;
       try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
     }
     // Custom events → shared calendar
@@ -637,9 +694,11 @@ function syncAllTasksLocal(data) {
     } catch (e) { results.errors++; }
   }
 
-  // Task due dates as events
+  // Task due dates as events (respect privacy)
   for (const task of tasks) {
     if (!task.dueDate) continue;
+    const isPrivate = task.private === 1 || task.private === true;
+    if (isPrivate) continue;
     try {
       const { uid, ics } = taskDueToVEVENT(task);
       fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
@@ -779,6 +838,7 @@ function handlePropfind(parts, body, req, res) {
       for (const cal of cals) {
         const displayName = cal === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : cal.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const compType = 'VTODO';
+        const compType2v = 'VEVENT';
         const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(cal)}/</d:href>
@@ -786,7 +846,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
-        <c:supported-calendar-component-set><c:comp name="${compType}"/></c:supported-calendar-component-set>${colorProp}
+        <c:supported-calendar-component-set><c:comp name="${compType}"/><c:comp name="${compType2v}"/></c:supported-calendar-component-set>${colorProp}
         <cs:getctag>${computeCtag(cal)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
@@ -815,6 +875,7 @@ function handlePropfind(parts, body, req, res) {
     }
     const displayName = calName === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : calName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const compType2 = 'VTODO';
+    const compType2ev = 'VEVENT';
     const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
     let responses = `<d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/</d:href>
@@ -822,7 +883,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
         <d:displayname>${escapeXml(displayName)}</d:displayname>
-        <c:supported-calendar-component-set><c:comp name="${compType2}"/></c:supported-calendar-component-set>${colorProp2}
+        <c:supported-calendar-component-set><c:comp name="${compType2}"/><c:comp name="${compType2ev}"/></c:supported-calendar-component-set>${colorProp2}
         <cs:getctag>${computeCtag(calName)}</cs:getctag>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
