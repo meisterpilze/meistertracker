@@ -134,7 +134,10 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
   transition:background .3s ease;
 }
 .scan-overlay.open{display:flex}
+.scan-overlay.scan-bg-ok{background:rgba(34,120,60,.35)}
 .scan-overlay.scan-bg-err{background:rgba(180,30,30,.4)}
+.scan-overlay.scan-bg-info{background:rgba(0,0,0,.35)}
+.scan-overlay.scan-bg-harvest{background:rgba(146,64,14,.35)}
 .scan-modal{
   background:var(--c-surface);border:1px solid var(--c-border);
   border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.22);
