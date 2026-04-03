@@ -3072,7 +3072,7 @@ async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.de
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
-  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch{}
+  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3091,6 +3091,7 @@ function applyData(d){
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
+  calendarEvents=d.calendarEvents||[];
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -4924,7 +4925,7 @@ async function loadUsersTab(){
     tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Created</th><th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
       users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?new Date(u.created).toLocaleDateString('de-DE'):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
       '</tbody></table>';
-  }catch{}
+  }catch(e){console.error('Failed to load users:',e)}
 }
 
 async function addUser(){
