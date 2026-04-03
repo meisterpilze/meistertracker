@@ -5,7 +5,7 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 30000; // fallback polling (SSE is primary)
+const SYNC_INTERVAL_MS = 5000; // fast fallback polling (SSE is primary)
 const MAX_LOG_DISPLAY = 200;
 const MAX_RACK_CAPACITY = 20;
 const MS_PER_DAY = 86400000;
@@ -32,7 +32,7 @@ const REF_GROUPS=[
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
-let confirmCb=null,noteId=null,saving=false,lastHash='';
+let confirmCb=null,noteId=null,saving=false,pendingPoll=false,lastHash='';
 let lastSyncTime=null; // tracks last successful server contact
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
@@ -80,13 +80,13 @@ function defaultInventory(){
   };
 }
 async function saveData(){
-  if(saving)return;saving=true;setSyncStatus('busy','Saving...');
+  if(saving)return;saving=true;pendingPoll=false;setSyncStatus('busy','Saving...');
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
     setSyncStatus('ok','Saved · gerade eben');
   }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
-  finally{saving=false}
+  finally{saving=false;if(pendingPoll){pendingPoll=false;pollSync()}}
 }
 function setSyncStatus(cls,msg){
   document.getElementById('sync-dot').className='sync-dot '+cls;
@@ -102,7 +102,7 @@ function formatRelativeTime(ts){
   return 'vor '+Math.floor(min/60)+' Std.';
 }
 async function pollSync(){
-  if(saving)return;
+  if(saving){pendingPoll=true;return;}
   try{const r=await authFetch('/api/data');
   if(!r.ok)return;
   const d=await r.json();const h=JSON.stringify(d);
@@ -2581,10 +2581,11 @@ setInterval(pollSync,SYNC_INTERVAL_MS);
       try{
         const d=JSON.parse(e.data);
         if(d.type==='data-changed')pollSync();
+        else if(d.type==='connected')pollSync(); // sync immediately on (re)connect
         else if(d.type==='heartbeat')lastSyncTime=Date.now();
       }catch{}
     };
-    es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
+    es.onerror=function(){/* auto-reconnects; pollSync on 'connected' catches gaps */};
   }catch{}
 })();
 
