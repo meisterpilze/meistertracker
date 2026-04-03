@@ -817,6 +817,37 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   );
 }
 
+// ── Calendar Event CRUD ─────────────────────────────────────
+function insertCalendarEvent(db, ev) {
+  db.prepare(`INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
+    start_time, end_time, category, color, caldav_uid, caldav_synced, created)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    ev.id, ev.title, ev.description || null, ev.startDate, ev.endDate || null,
+    ev.allDay ? 1 : 0, ev.startTime || null, ev.endTime || null,
+    ev.category || 'custom', ev.color || null, ev.caldavUid || null,
+    ev.caldavSynced || null, ev.created || new Date().toISOString()
+  );
+}
+
+function updateCalendarEvent(db, id, fields) {
+  const allowed = ['title','description','start_date','end_date','all_day','start_time','end_time','category','color','caldav_uid','caldav_synced'];
+  const map = {startDate:'start_date',endDate:'end_date',allDay:'all_day',startTime:'start_time',endTime:'end_time',caldavUid:'caldav_uid',caldavSynced:'caldav_synced'};
+  const sets = []; const vals = [];
+  for (const [k, v] of Object.entries(fields)) {
+    const col = map[k] || k;
+    if (!allowed.includes(col)) continue;
+    sets.push(col + '=?');
+    vals.push(col === 'all_day' ? (v ? 1 : 0) : (v ?? null));
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  db.prepare('UPDATE calendar_events SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
+}
+
+function deleteCalendarEvent(db, id) {
+  db.prepare('DELETE FROM calendar_events WHERE id=?').run(id);
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
@@ -829,5 +860,6 @@ module.exports = {
   insertMember, deleteMember,
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
-  applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig
+  applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
+  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent
 };
