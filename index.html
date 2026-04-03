@@ -101,6 +101,17 @@
     </div>
   </div>
 </div>
+<!-- Calendar event detail (read-only) modal -->
+<div class="modal-bg" id="m-cal-detail" onclick="if(event.target===this)closeEventDetail()">
+  <div class="modal">
+    <h3 id="cal-detail-title" style="margin-bottom:4px;word-break:break-word"></h3>
+    <div id="cal-detail-meta" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px"></div>
+    <div id="cal-detail-badges" style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div id="cal-detail-assignee" style="margin-bottom:10px;font-size:12px;color:var(--c-text-sec)"></div>
+    <div id="cal-detail-desc" style="font-size:13px;line-height:1.6;color:var(--c-text-sec);margin-bottom:14px;white-space:pre-wrap;word-break:break-word"></div>
+    <div class="modal-btns" id="cal-detail-btns" style="flex-wrap:wrap"></div>
+  </div>
+</div>
 <!-- Batch-add modal -->
 <div class="modal-bg" id="m-batchadd">
   <div class="modal"><h3>Add entire batch to location</h3>
@@ -216,7 +227,6 @@
     <div id="scan-toast" class="scan-toast-inline"></div>
     <div class="scan-modal-log" id="scan-modal-log"></div>
     <div class="scan-modal-btns">
-      <button class="btn-xs" onclick="openCamScan()" title="Scan with camera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg> Kamera</button>
       <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
     </div>
   </div>
@@ -624,10 +634,6 @@
 
 <!-- ══ TO-DO ══ -->
 <div class="page" id="p-todo">
-  <div class="stabs">
-    <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')" data-i18n="todo.tasks">Tasks</button>
-    <button class="stab" id="st-todo-cal" onclick="openStab('todo','cal')">Kalender</button>
-  </div>
   <!-- To-do -->
   <div class="sp active" id="sp-todo-todo">
     <div class="g3" id="todo-metrics" style="margin-bottom:10px"></div>
@@ -690,8 +696,8 @@
       <span class="leg-batch">Fälligkeiten</span>
       <span class="leg-task">Aufgaben</span>
       <span class="leg-harvest">Ernten</span>
-      <span class="leg-custom">Eigene</span>
-      <span class="leg-import">CalDAV</span>
+      <span class="leg-custom">Eigene Termine</span>
+      <span class="leg-import">Externe Termine</span>
     </div>
     <div id="cal-container">
       <div class="cal-grid" id="cal-grid"></div>
@@ -770,16 +776,19 @@
       <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
       <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (use this in your calendar app)</div>
-        <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (in deiner Kalender-App eintragen)</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a;flex:1">Lade...</code>
+          <button class="btn btn-sm" onclick="copyCalDavUrl()" title="URL kopieren" style="white-space:nowrap;padding:4px 8px;font-size:11px">Kopieren</button>
+        </div>
       </div>
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.6">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">
         <strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
+            <input type="checkbox" id="caldav-enabled" style="width:auto" onchange="saveCaldavSettings()" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
           </label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1027,10 +1036,18 @@
 <div id="ref-print-sheet"></div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+// Active frontend — uses atomic REST endpoints (apiPost/apiPatch/apiDelete).
+// Legacy app.js (full-state saveData) is deprecated and NOT loaded here.
+// ══════════════════════════════════════════════════════════════
+
 // ─── I18N ────────────────────────────────────────────────────
 let currentLang = localStorage.getItem('mp-lang') || 'de';
 const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };
 function loc() { return LOCALE_MAP[currentLang]; }
+function fmtDt(d){if(!(d instanceof Date))d=new Date(d);const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=String(d.getFullYear()).slice(-2);return dd+'.'+mm+'.'+yy}
+function fmtDtTime(d){if(!(d instanceof Date))d=new Date(d);return fmtDt(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function fmtDtShort(d){if(!(d instanceof Date))d=new Date(d);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')}
 function t(key, params) {
   const str = (LANG[currentLang] && LANG[currentLang][key]) || (LANG['en'] && LANG['en'][key]) || key;
   if (!params) return str;
@@ -1589,6 +1606,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Scan FROM and TO locations first.',
     'scanFb.logged': 'Logged: {action} {val}{to} [{n} this session]',
     'scanFb.unknown': 'Unknown barcode: {val}. Check the batch exists first.',
+    'scanFb.unknownFormat': 'Unknown format: {val} — check barcode.',
     'scanFb.matched': 'Matched: {val} from {batch}',
     'scanFb.noBatchFound': 'No batch found for {val} \u2014 check species/strain/date match',
     'scanFb.removeLogged': 'REMOVE logged: {bag}',
@@ -2237,6 +2255,7 @@ const LANG = {
     'scanFb.scanFromTo': 'Erst VON- und NACH-Standort scannen.',
     'scanFb.logged': 'Erfasst: {action} {val}{to} [{n} diese Sitzung]',
     'scanFb.unknown': 'Unbekannter Barcode: {val}. Pr\u00fcfe ob die Charge existiert.',
+    'scanFb.unknownFormat': 'Unbekanntes Format: {val} — Barcode pr\u00fcfen.',
     'scanFb.matched': 'Zugeordnet: {val} aus {batch}',
     'scanFb.noBatchFound': 'Keine Charge f\u00fcr {val} gefunden \u2014 Art/Stamm/Datum pr\u00fcfen',
     'scanFb.removeLogged': 'REMOVE erfasst: {bag}',
@@ -3039,15 +3058,34 @@ async function authFetch(url,opts){
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
   return r;
 }
-async function apiPost(path,body){return authFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiPatch(path,body){return authFetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiDelete(path){return authFetch(path,{method:'DELETE'}).then(r=>r.json())}
+function _apiCall(method,path,body){
+  _mutating++;
+  setSyncStatus('busy','Saving...');
+  const opts={method,headers:{}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}
+  return authFetch(path,opts).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(d=>{
+    _mutating--;
+    if(_mutating===0)setSyncStatus('ok','Saved · gerade eben');
+    return d;
+  }).catch(e=>{
+    _mutating--;
+    setSyncStatus('err','Save error: '+(e.message||'check server'));
+    console.error('API error:',method,path,e);
+    return {};
+  });
+}
+function apiPost(path,body){return _apiCall('POST',path,body)}
+function apiPatch(path,body){return _apiCall('PATCH',path,body)}
+function apiDelete(path){return _apiCall('DELETE',path)}
 async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/delta',{mat,deltaKg,type,ref})}
 async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
-  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch{}
+  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3055,16 +3093,18 @@ async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
     const d=await authFetch('/api/data').then(r=>r.json());
+    lastHash=JSON.stringify(d);
     applyData(d);
-    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Synced · gerade eben');
     refresh();
-  }catch{setSyncStatus('err','Sync error')}
+  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
+  calendarEvents=d.calendarEvents||[];
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -3079,9 +3119,30 @@ function defaultInventory(){
   };
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls}
+let _mutating=0; // tracks in-flight mutations to block pollSync from overwriting
+let lastSyncTime=null;
+function formatRelativeTime(ts){
+  const sec=Math.round((Date.now()-ts)/1000);
+  if(sec<5)return 'gerade eben';
+  if(sec<60)return 'vor '+sec+'s';
+  const min=Math.floor(sec/60);
+  if(min<60)return 'vor '+min+' Min.';
+  return 'vor '+Math.floor(min/60)+' Std.';
+}
+function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
+// Update relative time display every 5 seconds
+setInterval(()=>{
+  if(!lastSyncTime)return;
+  const dot=document.getElementById('sync-dot');
+  if(!dot||!dot.classList.contains('ok'))return;
+  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+},5000);
+let _polling=false;
 async function pollSync(){
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));refresh();}}catch{}
+  if(_mutating>0||_polling)return; // don't overwrite while mutations are in-flight or already polling
+  _polling=true;
+  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
+  finally{_polling=false}
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
@@ -3326,7 +3387,7 @@ function renderStatusCards(){
         ${stages.map(([l,n,col])=>`<span style="font-size:11px;font-weight:600;background:${col}22;color:${col};border:1px solid ${col}44;padding:1px 7px;border-radius:99px">${l}: ${n}</span>`).join('')}
       </div>
       ${harv>0?`<div style="font-size:11px;color:#92400e;font-weight:500;margin-bottom:4px">${t('dash.harvestedAmount',{g:harv})}</div>`:''}
-      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">${t('dash.due')}: ${due.toLocaleDateString(loc())}${ov?' ⚠':''}</div>
+      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">${t('dash.due')}: ${fmtDt(due)}${ov?' ⚠':''}</div>
       ${action?`<div style="font-size:11px;color:#666;margin-top:4px;font-style:italic">${action}</div>`:''}
     </div>`;
   }).join('');
@@ -3340,7 +3401,7 @@ function renderStatus(){
     const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
     const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
     const harv=getHarvested(b.batchId);
-    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${due.toLocaleDateString(loc())}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${fmtDt(due)}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
   });
   body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">'+t('dash.noMatches')+'</td></tr>';
   renderMetrics(batches.length,ti,tt,tc);
@@ -3673,7 +3734,7 @@ function renderBatches(){
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${b.sourceId}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${new Date(b.created).toLocaleDateString(loc())}</td><td style="font-size:10px;color:#888">${new Date(b.due).toLocaleDateString(loc())}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">${t('batch.del')}</button></td></tr>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
@@ -3734,9 +3795,10 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest',t('harvest.bagScanned',{bag:bagId}));
+  setFb('harvest',t('harvest.bagScanned',{bag:bagId}),{noModal:true});
 }
 function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
@@ -3752,7 +3814,7 @@ document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='E
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
   const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${new Date(h.time).toLocaleString(loc())}</td><td style="font-family:monospace;font-size:10px">${h.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'\u2014'}</td><td>${h.species?spDot(h.species)+h.species:'\u2014'}</td><td>${h.strain||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${h.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'\u2014'}</td><td>${h.species?spDot(h.species)+h.species:'\u2014'}</td><td>${h.strain||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
 
   const byBatch={};
   harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
@@ -3798,7 +3860,7 @@ function renderHarvests(){
     timelineInst=new Chart(timelineCanvas,{
       type:'line',
       data:{
-        labels:weekKeys.map(k=>{const d=new Date(k);return d.toLocaleDateString(loc(),{day:'2-digit',month:'2-digit'})}),
+        labels:weekKeys.map(k=>{const d=new Date(k);return fmtDtShort(d)}),
         datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f39c12',backgroundColor:'rgba(243,156,18,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f39c12'}]
       },
       options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}}}}
@@ -3844,7 +3906,7 @@ function renderManualTasks(){
   if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
   el.innerHTML=manualTasks.map((t,i)=>{
     const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Alle</span>';
-    const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
+    const dueTag=t.dueDate?`<span class="tag tag-due">${fmtDtShort(t.dueDate)}</span>`:'';
     const privateTag=t.private?'<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px">privat</span>':'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
     const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
@@ -3926,7 +3988,10 @@ async function syncCaldavNow(){
     if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
     else{
       showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
-      await loadData();renderManualTasks();
+      // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
+      // instead of loadData() which would overwrite ALL local state
+      try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
+      renderManualTasks();
     }
   }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
@@ -3940,7 +4005,7 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString(loc())}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('settings.noScans')+'</td></tr>'}
+function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('settings.noScans')+'</td></tr>'}
 function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
@@ -4166,7 +4231,7 @@ function renderInvLog(){
   const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
   // Build running totals per material going forwards for display
   body.innerHTML=rows.map(e=>`<tr>
-    <td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td>
+    <td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td>
     <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
     <td style="font-weight:600;color:${e.deltaKg<0?'#991b1b':'#166534'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
     <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
@@ -4192,7 +4257,7 @@ function getInvAlerts(){
 
 // ─── BACKUP ──────────────────────────────────────────────────
 function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
-function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
+function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${fmtDtTime(d.exported)} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
 function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=async e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));await apiPost('/api/backup/restore',{batches,scanLog,manualTasks,harvests,cultures,inventory,assets,caldav,teamMembers});alert('Restored successfully.');go('dash','n-dash');}catch(err){alert('Failed to restore: '+(err.message||err))}};r.readAsText(file)})}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
@@ -4463,7 +4528,7 @@ function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString(loc())}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td style="font-size:10px;color:#888">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
 
@@ -4509,7 +4574,7 @@ function logLabWork(){
     setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${new Date(c.created).toLocaleDateString(loc())}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
 function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${c.id}">${c.id} (${c.type} — ${c.species})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${b.batchId}">${b.batchId} (${b.species})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
@@ -4521,7 +4586,7 @@ function buildTree(rootId,rootType){
 }
 const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
 const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
-function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${node.type}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${node.id}</span><span style="font-size:11px;color:#666">${node.species||''}${node.strain?' / '+node.strain:''}</span><span style="font-size:10px;color:#888">${node.status||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?new Date(node.created).toLocaleDateString('de-DE'):''}</span></div>${ch}</div>`}
+function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${node.type}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${node.id}</span><span style="font-size:11px;color:#666">${node.species||''}${node.strain?' / '+node.strain:''}</span><span style="font-size:10px;color:#888">${node.status||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
 function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">Select a culture or batch above.</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">No lineage data found.</div>'}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
@@ -4564,8 +4629,9 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
+  closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info',t('scanFb.bagInfo',{bag:bagId}));
+  setFb('info',t('scanFb.bagInfo',{bag:bagId}),{noModal:true});
 }
 function biSetAction(action){
   document.getElementById('m-baginfo').classList.remove('open');
@@ -4640,7 +4706,7 @@ function makeLabZPL(ids,opts){
   return ids.map(id=>{
     const c=cultures.find(x=>x.id===id);if(!c)return'';
     const sp=(c.species||'')+(c.strain?' / '+c.strain:'');
-    const ds=new Date(c.created).toLocaleDateString('de-DE');
+    const ds=fmtDt(c.created);
     const bcVal=id.replace(/-/g,'_');
     let z='^XA^PW400^LL240^CI28^LH0,0';
     if(opts.bc)z+='^FO20,10^BY2,2.0,60^BCN,60,N,N,N^FD'+bcVal+'^FS';
@@ -4711,7 +4777,7 @@ let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${c.id}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${c.id}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${c.type}</span><span style="color:#888">${c.species}${c.strain?' / '+c.strain:''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
-function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id,{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=new Date(c.created).toLocaleDateString('de-DE');left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
+function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id,{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=fmtDt(c.created);left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
 
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
@@ -4732,8 +4798,8 @@ function _addLogEntry(type,msg){
   while(log.children.length>50)log.lastChild.remove();
 }
 let _toastTimer=null;
-function setFb(type,msg){
-  openScanModal();
+function setFb(type,msg,opts){
+  if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -4823,7 +4889,7 @@ function _flushScanBuf(){
   _scanBuf.chars=[];
   if(raw.length<SCAN_MIN_LEN)return;
   const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
-  if(!isKnownBarcode(cleaned))return;
+  if(!isKnownBarcode(cleaned)){setFb('err',t('scanFb.unknownFormat',{val:cleaned})||'Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
 
@@ -4872,9 +4938,9 @@ async function loadUsersTab(){
     const tbl=document.getElementById('users-table');
     if(!tbl)return;
     tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Created</th><th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
-      users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?new Date(u.created).toLocaleDateString('de-DE'):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
+      users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?fmtDt(u.created):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
       '</tbody></table>';
-  }catch{}
+  }catch(e){console.error('Failed to load users:',e)}
 }
 
 async function addUser(){
@@ -5041,7 +5107,7 @@ function renderCalWeek(){
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -5071,7 +5137,10 @@ function renderCalWeek(){
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
-        el.textContent=e.label;
+        let wkContent=esc(e.label);
+        if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+        if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
+        el.innerHTML=wkContent;
         el.title=e.label;
         el.dataset.type=e.type;el.dataset.id=e.id||'';
         el.dataset.date=ds;
@@ -5120,7 +5189,7 @@ function renderCalDay(){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
@@ -5141,8 +5210,11 @@ function renderCalDay(){
       const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
       const el=document.createElement('div');
       el.className='cal-day-ev';
-      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71');
-      el.innerHTML='<strong>'+esc(e.label)+'</strong>'+(e.startTime?' <span style="opacity:.8">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</span>':'');
+      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:2';
+      let dayContent='<strong>'+esc(e.label)+'</strong>';
+      if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+      if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
+      el.innerHTML=dayContent;
       el.title=e.label;
       el.dataset.type=e.type;el.dataset.id=e.id||'';
       el.dataset.date=ds;
@@ -5214,19 +5286,19 @@ function handleCalendarDrop(type,id,newDateStr){
     b.due=newDue.toISOString();
     const created=new Date(b.created);
     b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
     renderCalendar();
     if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
   }else if(type==='task-due'){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
     t.dueDate=newDateStr;t.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/tasks/'+t.id,{dueDate:newDateStr,caldavSynced:null});
     renderCalendar();if(typeof renderManualTasks==='function')renderManualTasks();
     if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{startDate:newDateStr,caldavSynced:null});
     renderCalendar();
     if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
   }
@@ -5250,7 +5322,11 @@ function updateEventTime(id,newStart,newEnd,newDate){
   if(newEnd)ev.endTime=newEnd;
   if(newDate)ev.startDate=newDate;
   ev.caldavSynced=null;
-  if(typeof saveData==='function')saveData();
+  const patch={caldavSynced:null};
+  if(newStart)patch.startTime=newStart;
+  if(newEnd)patch.endTime=newEnd;
+  if(newDate)patch.startDate=newDate;
+  apiPatch('/api/calendar-events/'+encodeURIComponent(id),patch);
   renderCalendar();
   if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
@@ -5365,12 +5441,109 @@ function initEventResize(el,handle,body,viewType){
 
 // ── Calendar Event Click ──
 function onCalEventClick(ev){
+  if(ev.type==='harvest')return;
+  openEventDetail(ev);
+}
+
+function openEventDetail(ev){
+  const titleEl=document.getElementById('cal-detail-title');
+  const metaEl=document.getElementById('cal-detail-meta');
+  const badgesEl=document.getElementById('cal-detail-badges');
+  const assignEl=document.getElementById('cal-detail-assignee');
+  const descEl=document.getElementById('cal-detail-desc');
+  const btnsEl=document.getElementById('cal-detail-btns');
+
   if(ev.type==='custom'){
-    const ce=calendarEvents.find(x=>x.id===ev.id);
-    if(ce)openEventModal(ce.startDate,ce.startTime,ce);
-  }else if(ev.type==='batch-due'||ev.type==='task-due'){
-    openEventMoveModal(ev);
+    const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
+    titleEl.textContent=ce.title;
+    let meta=new Date(ce.startDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
+    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(ce.color||'#2ecc71')+';color:#fff">'+(catLabels[ce.category]||ce.category)+'</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ce.description||'';
+    descEl.style.display=ce.description?'':'none';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
+
+  }else if(ev.type==='task-due'){
+    const t=manualTasks.find(x=>x.created===ev.id);if(!t)return;
+    titleEl.textContent=t.text;
+    let meta='Aufgabe';
+    if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
+    const prioColors={high:'#e74c3c',medium:'#f39c12',low:'#3498db'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+(prioLabels[t.priority]||t.priority)+'</span>':'');
+    assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
+    descEl.textContent=t.description||'';
+    descEl.style.display=t.description?'':'none';
+    const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='batch-due'){
+    titleEl.textContent=ev.label;
+    const b=batches.find(x=>x.batchId===ev.id);
+    let meta='Batch-Fälligkeitstermin';
+    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#e74c3c;color:#fff">Batch</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
+    descEl.style.display='';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="closeEventDetail();openEventMoveModal({type:\'batch-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='caldav-import'){
+    titleEl.textContent=ev.label;
+    let meta='CalDAV Import';
+    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#9b59b6;color:#fff">CalDAV</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ev.description||'';
+    descEl.style.display=ev.description?'':'none';
+    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">Schließen</button>';
   }
+  document.getElementById('m-cal-detail').classList.add('open');
+}
+
+function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+
+function editEventFromDetail(id){
+  closeEventDetail();
+  const ce=calendarEvents.find(x=>x.id===id);
+  if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+}
+
+function deleteCalEventFromDetail(id){
+  closeEventDetail();
+  confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+    calendarEvents=calendarEvents.filter(x=>x.id!==id);
+    if(typeof saveData==='function')saveData();
+    renderCalendar();
+    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+  });
+}
+
+function toggleTaskFromCalendar(taskId){
+  const idx=manualTasks.findIndex(t=>t.created===taskId);
+  if(idx<0)return;
+  toggleTask(idx);
+  renderCalendar();
+  closeEventDetail();
+}
+
+function deleteTaskFromCalendar(taskId){
+  closeEventDetail();
+  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    const idx=manualTasks.findIndex(t=>t.created===taskId);
+    if(idx<0)return;
+    manualTasks.splice(idx,1);
+    if(typeof saveData==='function')saveData();
+    renderManualTasks();renderCalendar();updateTodoBadge();
+  });
 }
 
 function onCalMonthEventClick(type,id){
@@ -5475,19 +5648,22 @@ function saveCalEvent(){
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-  }else{calendarEvents.push(ev)}
-  if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),ev);
+  }else{
+    calendarEvents.push(ev);
+    apiPost('/api/calendar-events',ev).then(r=>{if(r&&r.id)ev.id=r.id});
+  }
   renderCalendar();closeEventModal();
   if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
 
 function deleteCalEvent(){
   const id=document.getElementById('cal-ev-id').value;if(!id)return;
+  closeEventModal();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    if(typeof saveData==='function')saveData();
+    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
     renderCalendar();closeEventModal();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
   });
 }
 
@@ -5495,7 +5671,7 @@ async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();if(typeof saveData==='function')saveData()}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{caldavUid:ev.caldavUid,caldavSynced:ev.caldavSynced})}
   }catch(e){console.error('CalDAV event push error:',e)}
 }
 
@@ -5524,5 +5700,9 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
+<!-- Floating camera FAB (mobile/tablet only) -->
+<button class="cam-fab no-print" id="cam-fab" onclick="openCamScan()" aria-label="Open camera scanner">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg>
+</button>
 </body>
 </html>
