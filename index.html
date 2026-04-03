@@ -3075,10 +3075,11 @@ async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
     const d=await authFetch('/api/data').then(r=>r.json());
+    lastHash=JSON.stringify(d);
     applyData(d);
-    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString('de-DE'));
+    setSyncStatus('ok','Synced · gerade eben');
     refresh();
-  }catch{setSyncStatus('err','Sync error')}
+  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
@@ -3101,10 +3102,25 @@ function defaultInventory(){
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
 let _mutating=0; // tracks in-flight mutations to block pollSync from overwriting
 let lastSyncTime=null;
+function formatRelativeTime(ts){
+  const sec=Math.round((Date.now()-ts)/1000);
+  if(sec<5)return 'gerade eben';
+  if(sec<60)return 'vor '+sec+'s';
+  const min=Math.floor(sec/60);
+  if(min<60)return 'vor '+min+' Min.';
+  return 'vor '+Math.floor(min/60)+' Std.';
+}
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
+// Update relative time display every 5 seconds
+setInterval(()=>{
+  if(!lastSyncTime)return;
+  const dot=document.getElementById('sync-dot');
+  if(!dot||!dot.classList.contains('ok'))return;
+  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+},5000);
 async function pollSync(){
   if(_mutating>0)return; // don't overwrite while mutations are in-flight
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}}catch{}
+  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
