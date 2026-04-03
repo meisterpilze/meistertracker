@@ -193,6 +193,24 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 .scan-log-entry.log-err{border-left:3px solid #fca5a5}
 .scan-log-entry.log-info{border-left:3px solid var(--c-border)}
 
+/* ═══ CAMERA FAB (mobile/tablet only) ════════════════════════ */
+/* Hidden by default on desktop (pointer:fine = mouse) */
+.cam-fab{
+  display:none;
+  position:fixed;bottom:24px;right:24px;z-index:850;
+  width:56px;height:56px;border-radius:50%;border:none;
+  background:var(--c-primary,#16a34a);color:#fff;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+  cursor:pointer;align-items:center;justify-content:center;
+  transition:transform .15s,box-shadow .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.cam-fab:active{transform:scale(.92);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+/* Show only on touch devices (coarse pointer = finger/stylus, no hover = no mouse) */
+@media (pointer:coarse) and (hover:none){
+  .cam-fab{display:flex}
+}
+
 /* -- Harvest panel -- */
 #harvest-panel{padding:12px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:none}
 #harvest-panel .inner{max-width:980px;margin:0 auto;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
