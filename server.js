@@ -59,7 +59,7 @@ setInterval(() => {
   for (let i = sseClients.length - 1; i >= 0; i--) {
     try { sseClients[i].write(hb); } catch { sseClients.splice(i, 1); }
   }
-}, 30000);
+}, 15000);
 
 const MIME = {
   '.html':'text/html; charset=utf-8','.json':'application/json',
