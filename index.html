@@ -647,9 +647,12 @@
         <div style="margin-bottom:8px">
           <label data-i18n="todo.description">Description (optional)</label><textarea id="task-desc" rows="2" data-i18n-placeholder="todo.descPlaceholder" placeholder="Additional details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-p btn-sm" onclick="saveTask()" data-i18n="todo.save">Save</button>
-          <button class="btn btn-sm" onclick="document.getElementById('task-form').style.display='none'" data-i18n="nav.cancel">Cancel</button>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn btn-p btn-sm" onclick="saveTask()">Speichern</button>
+          <button class="btn btn-sm" onclick="document.getElementById('task-form').style.display='none'">Abbrechen</button>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;margin-left:auto;font-size:11px;color:#888">
+            <input type="checkbox" id="task-private" style="width:auto" /> Nur für zugewiesene Person sichtbar
+          </label>
         </div>
       </div>
     </div>
@@ -756,26 +759,21 @@
       <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
       <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px" data-i18n="caldav.urlTitle">CalDAV URL (use this in your calendar app)</div>
+        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (use this in your calendar app)</div>
         <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a"></code>
       </div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.6">
+        <strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.
+      </div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="sec" style="font-size:12px;margin:0" data-i18n="caldav.password">Optional: protect with password</div>
-        <div class="g2">
-          <div><label data-i18n="caldav.username">Username</label><input type="text" id="caldav-user" data-i18n-placeholder="caldav.userPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
-          <div><label data-i18n="caldav.passwordLabel">Password</label><input type="password" id="caldav-pass" data-i18n-placeholder="caldav.passPlaceholder" placeholder="leave empty for open access" autocomplete="off" /></div>
-        </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span data-i18n="caldav.enableSync">Enable sync (push tasks to calendars)</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;margin-left:16px">
-            <input type="checkbox" id="caldav-per-person" style="width:auto" /> <span data-i18n="caldav.perPerson">Separate calendar per person</span>
+            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
           </label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()" data-i18n="caldav.saveSettings">Save settings</button>
-          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
+          <button class="btn btn-sm btn-p" onclick="saveCaldavSettings()">Einstellungen speichern</button>
+          <button class="btn btn-sm" onclick="syncCaldavNow()" id="caldav-sync-btn">Alle Aufgaben jetzt synchronisieren</button>
         </div>
         <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
       </div>
@@ -789,12 +787,12 @@
       </div>
     </div>
     <div class="card">
-      <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
+      <div class="sec">So funktioniert es</div>
       <div style="font-size:12px;color:#666;line-height:1.7">
-        <p><strong>Base calendar:</strong> All tasks go to a shared <code>meisterpilze-tasks</code> calendar.</p>
-        <p style="margin-top:6px"><strong>Per-person calendars:</strong> When enabled, tasks assigned to a team member get their own calendar (e.g. <code>meisterpilze-jonas</code>). Unassigned / company-wide tasks stay in the shared calendar.</p>
-        <p style="margin-top:6px"><strong>Two-way:</strong> Tasks are written to calendar files on this server. Calendar clients can read them via CalDAV. Changes made in calendar apps (marking done, editing) are saved back to the .ics files.</p>
-        <p style="margin-top:6px"><strong>Calendars on disk:</strong> Stored in <code>/calendars/</code> folder next to data.json. Each calendar is a folder with .ics files inside.</p>
+        <p><strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-Fälligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.</p>
+        <p style="margin-top:6px"><strong>Persönliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zusätzlich.</p>
+        <p style="margin-top:6px"><strong>Sichtbarkeit:</strong> Standardmäßig sind alle Aufgaben für alle sichtbar (im Betriebskalender). Einzelne Aufgaben können als "Nur für zugewiesene Person" markiert werden — diese erscheinen dann nur im persönlichen Kalender.</p>
+        <p style="margin-top:6px"><strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. Änderungen in der Kalender-App werden zurückgespeichert.</p>
       </div>
     </div>
   </div>
@@ -3826,11 +3824,12 @@ function renderManualTasks(){
   const el=document.getElementById('todo-manual');
   if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
   el.innerHTML=manualTasks.map((t,i)=>{
-    const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Everyone</span>';
+    const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Alle</span>';
     const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
+    const privateTag=t.private?'<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px">privat</span>':'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
     const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${privateTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
   }).join('');
 }
 function addTask(){
@@ -3847,9 +3846,10 @@ function saveTask(){
   const assignee=document.getElementById('task-assignee').value;
   const dueDate=document.getElementById('task-due').value||null;
   const description=document.getElementById('task-desc').value.trim()||null;
-  const task={text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null};
+  const priv=document.getElementById('task-private').checked;
+  const task={text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null,private:priv};
   manualTasks.push(task);
-  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';
+  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';document.getElementById('task-private').checked=false;
   document.getElementById('task-form').style.display='none';
   apiPost('/api/tasks',task).then(r=>{if(r.id)task.id=r.id});renderManualTasks();updateTodoBadge();
   if(caldav.enabled)pushTaskCaldav(task);

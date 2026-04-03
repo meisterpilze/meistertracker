@@ -817,11 +817,12 @@ function renderManualTasks(){
   const el=document.getElementById('todo-manual');
   if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
   el.innerHTML=manualTasks.map((t,i)=>{
-    const assignTag=t.assignee?`<span class="tag tag-assignee">${esc(t.assignee)}</span>`:'<span class="tag tag-company">Everyone</span>';
+    const assignTag=t.assignee?`<span class="tag tag-assignee">${esc(t.assignee)}</span>`:'<span class="tag tag-company">Alle</span>';
     const dueTag=t.dueDate?`<span class="tag tag-due">${new Date(t.dueDate).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`:'';
+    const privateTag=t.private?'<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px">privat</span>':'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
     const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${esc(t.description)}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${esc(t.text)}${assignTag}${dueTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${esc(t.text)}${assignTag}${dueTag}${privateTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${i})">×</button></div>`;
   }).join('');
 }
 function addTask(){
@@ -838,8 +839,9 @@ function saveTask(){
   const assignee=document.getElementById('task-assignee').value;
   const dueDate=document.getElementById('task-due').value||null;
   const description=document.getElementById('task-desc').value.trim()||null;
-  manualTasks.push({text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null});
-  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';
+  const priv=document.getElementById('task-private').checked;
+  manualTasks.push({text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null,private:priv});
+  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';document.getElementById('task-private').checked=false;
   document.getElementById('task-form').style.display='none';
   saveData();renderManualTasks();updateTodoBadge();
   if(caldav.enabled)pushTaskCaldav(manualTasks[manualTasks.length-1]);
@@ -867,20 +869,15 @@ function removeMember(i){confirm2('Remove member?','Remove '+teamMembers[i].name
 // ─── CalDAV SYNC ────────────────────────────────────────────
 function loadCaldavSettings(){
   // Show the CalDAV URL for this server
-  const url=location.protocol+'//'+location.hostname+':'+location.port+'/caldav/calendars/';
+  const port=location.port?':'+location.port:'';
+  const url=location.protocol+'//'+location.hostname+port+'/caldav/calendars/';
   document.getElementById('caldav-url-display').textContent=url;
-  document.getElementById('caldav-user').value=caldav.caldavUsername||'';
-  document.getElementById('caldav-pass').value=caldav.caldavPassword||'';
   document.getElementById('caldav-enabled').checked=!!caldav.enabled;
-  document.getElementById('caldav-per-person').checked=!!caldav.perPersonCalendars;
 }
 function saveCaldavSettings(){
-  caldav.caldavUsername=document.getElementById('caldav-user').value.trim();
-  caldav.caldavPassword=document.getElementById('caldav-pass').value;
   caldav.enabled=document.getElementById('caldav-enabled').checked;
-  caldav.perPersonCalendars=document.getElementById('caldav-per-person').checked;
   saveData();
-  showCaldavStatus('Settings saved.','#166534');
+  showCaldavStatus('Einstellungen gespeichert.','#166534');
 }
 function showCaldavStatus(msg,color){
   const el=document.getElementById('caldav-status');
