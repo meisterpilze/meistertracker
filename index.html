@@ -3207,8 +3207,8 @@ function go(page,btnId){
 function openStab(page,sub){
   document.querySelectorAll(`#p-${page} .stab`).forEach(b=>b.classList.remove('active'));
   document.querySelectorAll(`#p-${page} .sp`).forEach(p=>p.classList.remove('active'));
-  document.getElementById(`st-${page}-${sub}`).classList.add('active');
-  document.getElementById(`sp-${page}-${sub}`).classList.add('active');
+  const stEl=document.getElementById(`st-${page}-${sub}`);if(stEl)stEl.classList.add('active');
+  const spEl=document.getElementById(`sp-${page}-${sub}`);if(spEl)spEl.classList.add('active');
   if(page==='batch'&&sub==='list')renderBatches();
   if(page==='batch'&&sub==='harvest')renderHarvests();
   if(page==='lab'&&sub==='cultures')renderCultures();
@@ -3227,7 +3227,7 @@ function openStab(page,sub){
   if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
   if(page==='todo'&&sub==='team')renderTeam();
   if(page==='todo'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
-  if(page==='todo'&&sub==='caldav')loadCaldavSettings();
+  if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
@@ -5544,9 +5544,9 @@ function deleteCalEventFromDetail(id){
 }
 
 function toggleTaskFromCalendar(taskId){
-  const idx=manualTasks.findIndex(t=>t.created===taskId);
-  if(idx<0)return;
-  toggleTask(idx);
+  const t=manualTasks.find(t=>t.created===taskId);
+  if(!t)return;
+  toggleTask(t.id);
   renderCalendar();
   closeEventDetail();
 }
@@ -5554,10 +5554,10 @@ function toggleTaskFromCalendar(taskId){
 function deleteTaskFromCalendar(taskId){
   closeEventDetail();
   confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
-    const idx=manualTasks.findIndex(t=>t.created===taskId);
-    if(idx<0)return;
-    manualTasks.splice(idx,1);
-    if(typeof saveData==='function')saveData();
+    const t=manualTasks.find(t=>t.created===taskId);
+    if(!t)return;
+    manualTasks=manualTasks.filter(x=>x.id!==t.id);
+    apiDelete('/api/tasks/'+t.id);
     renderManualTasks();renderCalendar();updateTodoBadge();
   });
 }
