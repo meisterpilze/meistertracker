@@ -397,6 +397,44 @@ function taskDueToVEVENT(task) {
   return { uid, ics: lines.join('\r\n') };
 }
 
+// Convert a custom calendar event to VEVENT .ics content
+function customEventToVEVENT(event) {
+  const uid = event.caldavUid || ('cev-' + event.id + '@meisterpilze');
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  let dtstart, dtend;
+  if (event.allDay || !event.startTime) {
+    const d = new Date(event.startDate).toISOString().replace(/[-:]/g, '').split('T')[0];
+    dtstart = 'DTSTART;VALUE=DATE:' + d;
+    const endD = event.endDate
+      ? new Date(new Date(event.endDate).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0]
+      : new Date(new Date(event.startDate).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
+    dtend = 'DTEND;VALUE=DATE:' + endD;
+  } else {
+    const d = event.startDate.replace(/-/g, '');
+    const st = (event.startTime || '09:00').replace(':', '') + '00';
+    const et = (event.endTime || '10:00').replace(':', '') + '00';
+    dtstart = 'DTSTART:' + d + 'T' + st;
+    dtend = 'DTEND:' + d + 'T' + et;
+  }
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Meisterpilze Lab Tracker//EN',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + now,
+    dtstart,
+    dtend,
+    'SUMMARY:' + (event.title || '').replace(/\n/g, '\\n'),
+    'CATEGORIES:' + (event.category || 'Benutzerdefiniert'),
+    'TRANSP:TRANSPARENT',
+    'X-MEISTERPILZE-TYPE:custom-event',
+  ];
+  if (event.description) lines.push('DESCRIPTION:' + event.description.replace(/\n/g, '\\n'));
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return { uid, ics: lines.join('\r\n') };
+}
+
 // Delete a task's .ics file
 function deleteTaskFromCalendar(uid, calName) {
   calName = calName || 'meisterpilze-tasks';
@@ -460,6 +498,17 @@ function syncAllTasksLocal(data) {
     if (!task.dueDate) continue;
     try {
       const { uid, ics } = taskDueToVEVENT(task);
+      fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
+      writtenUids.add(uid + '.ics');
+      results.pushed++;
+    } catch (e) { results.errors++; }
+  }
+
+  // Custom calendar events
+  const customEvents = data.calendarEvents || [];
+  for (const ev of customEvents) {
+    try {
+      const { uid, ics } = customEventToVEVENT(ev);
       fs.writeFileSync(path.join(datesDir, uid + '.ics'), ics, 'utf8');
       writtenUids.add(uid + '.ics');
       results.pushed++;
@@ -1311,6 +1360,64 @@ function handleRequest(req,res){
         res.end(JSON.stringify({ok:false,error:e.message}));
       }
     });return;
+  }
+
+  // POST /api/caldav/push-event — write a single custom event to calendar file
+  if(req.method==='POST'&&req.url==='/api/caldav/push-event'){
+    let body='';let bodySize=0;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    req.on('end',()=>{
+      try{
+        const{event}=JSON.parse(body);
+        const dir=ensureCalDir('meisterpilze-dates');
+        const{uid,ics}=customEventToVEVENT(event);
+        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        res.writeHead(200,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:true,uid}));
+      }catch(e){
+        res.writeHead(500,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({ok:false,error:e.message}));
+      }
+    });return;
+  }
+
+  // GET /api/caldav/import — read external events from calendar files
+  if(req.method==='GET'&&req.url==='/api/caldav/import'){
+    try{
+      const imported=[];
+      if(fs.existsSync(CAL_DIR)){
+        const dirs=fs.readdirSync(CAL_DIR).filter(d=>fs.statSync(path.join(CAL_DIR,d)).isDirectory());
+        for(const dir of dirs){
+          const files=fs.readdirSync(path.join(CAL_DIR,dir)).filter(f=>f.endsWith('.ics'));
+          for(const f of files){
+            try{
+              const content=fs.readFileSync(path.join(CAL_DIR,dir,f),'utf8');
+              // Skip meistertracker-generated events
+              if(content.includes('X-MEISTERPILZE-TYPE'))continue;
+              if(!content.includes('VEVENT')&&!content.includes('VTODO'))continue;
+              const uid=(content.match(/UID:(.*)/)||[])[1]?.trim()||f;
+              const summary=(content.match(/SUMMARY:(.*)/)||[])[1]?.trim()||'(kein Titel)';
+              const dtRaw=(content.match(/DTSTART[^:]*:([\dT]+)/)||[])[1]||'';
+              let date='',startTime=null,allDay=true;
+              if(dtRaw.length===8){date=dtRaw.slice(0,4)+'-'+dtRaw.slice(4,6)+'-'+dtRaw.slice(6,8)}
+              else if(dtRaw.length>=15){date=dtRaw.slice(0,4)+'-'+dtRaw.slice(4,6)+'-'+dtRaw.slice(6,8);startTime=dtRaw.slice(9,11)+':'+dtRaw.slice(11,13);allDay=false}
+              if(!date)continue;
+              const dtEndRaw=(content.match(/DTEND[^:]*:([\dT]+)/)||[])[1]||'';
+              let endTime=null;
+              if(dtEndRaw.length>=15){endTime=dtEndRaw.slice(9,11)+':'+dtEndRaw.slice(11,13)}
+              const desc=(content.match(/DESCRIPTION:(.*)/)||[])[1]?.trim()||null;
+              imported.push({uid,summary:summary.replace(/\\n/g,' '),date,startTime,endTime,allDay,description:desc,calendar:dir});
+            }catch(e){/* skip broken files */}
+          }
+        }
+      }
+      res.writeHead(200,{'Content-Type':'application/json'});
+      res.end(JSON.stringify(imported));
+    }catch(e){
+      res.writeHead(500,{'Content-Type':'application/json'});
+      res.end(JSON.stringify([]));
+    }
+    return;
   }
 
   // GET /api/printer-status
