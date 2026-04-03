@@ -546,9 +546,8 @@ function syncAllTasksLocal(data) {
 // ── CalDAV HTTP handler ─────────────────────────────────────
 // Handles requests under /caldav/
 function handleCaldav(req, res) {
-  // CORS + DAV headers for all CalDAV responses
+  // DAV headers for all CalDAV responses (no CORS — CalDAV clients don't need it)
   res.setHeader('DAV', '1, 2, 3, calendar-access');
-  const caldavOrigin = req.headers.origin; if (caldavOrigin) res.setHeader('Access-Control-Allow-Origin', caldavOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -1011,6 +1010,13 @@ function handleRequest(req,res){
     res.end('{"error":"Too many requests"}');
     return;
   }
+
+  // ── Security headers ──
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
   // ── Well-known CalDAV discovery (RFC 6764) ──
   if(req.url.startsWith('/.well-known/caldav')){
     res.writeHead(301,{'Location':'/caldav/'});
@@ -1022,7 +1028,7 @@ function handleRequest(req,res){
     return handleCaldav(req,res);
   }
 
-  const origin = req.headers.origin; if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
+  // CORS — only allow same-origin requests (no cross-origin API access)
   res.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
@@ -1045,9 +1051,9 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{username,password}=JSON.parse(body);
-        if(!username||!password||password.length<4){
+        if(!username||!password||password.length<8){
           res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
         }
         const user=db.createUser(database,username,password,'admin');
         const dbUser=db.getUserByUsername(database,username);
@@ -1142,9 +1148,9 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{username,password,role}=JSON.parse(body);
-        if(!username||!password||password.length<4){
+        if(!username||!password||password.length<8){
           res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
         }
         const user=db.createUser(database,username,password,role||'user');
         res.writeHead(200,{'Content-Type':'application/json'});
@@ -1173,8 +1179,11 @@ function handleRequest(req,res){
 
   // GET /api/health
   if(req.method==='GET'&&req.url==='/api/health'){
-    res.writeHead(200,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({status:'ok',uptime:process.uptime(),version:require('./package.json').version}));
+    let dbOk=false;
+    try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){}
+    const status=dbOk?'ok':'degraded';
+    res.writeHead(dbOk?200:503,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({status,db:dbOk?'connected':'error',uptime:process.uptime(),version:require('./package.json').version}));
     return;
   }
 
@@ -1501,6 +1510,12 @@ function handleRequest(req,res){
   else if(url.startsWith('/lib/'))filePath=path.join(DIR,'lib',path.basename(url));
   else if(url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg)$/))filePath=path.join(DIR,url.slice(1));
   else{res.writeHead(404);res.end('Not found');return;}
+
+  // Path traversal protection — ensure resolved path stays within project dir
+  const resolved = path.resolve(filePath);
+  if(!resolved.startsWith(path.resolve(DIR))){
+    res.writeHead(403);res.end('Forbidden');return;
+  }
 
   fs.readFile(filePath,(err,data)=>{
     if(err){res.writeHead(404);res.end('Not found');return;}
