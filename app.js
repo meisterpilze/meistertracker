@@ -2517,6 +2517,12 @@ function closeCamScan(){
 }
 document.addEventListener('visibilitychange',function(){if(document.hidden&&camScanner)closeCamScan()});
 
+// JS fallback: show camera FAB on touch devices where CSS media query may not work
+(function(){
+  var isTouchDevice='ontouchstart' in window||navigator.maxTouchPoints>0||/Mobi|Android|iPad|iPhone|iPod|tablet/i.test(navigator.userAgent);
+  if(isTouchDevice){var fab=document.getElementById('cam-fab');if(fab)fab.style.display='flex'}
+})();
+
 // ─── USER MANAGEMENT ─────────────────────────────────────────
 async function doLogout(){
   try{await authFetch('/api/auth/logout',{method:'POST'});}catch{}
