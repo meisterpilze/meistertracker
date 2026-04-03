@@ -1398,7 +1398,7 @@ function handleRequest(req,res){
   if(req.method==='POST'&&req.url==='/api/data'){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
-      try{writeData(data);autoSyncAllCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){console.error('CalDAV auto-sync:',ce.message)}}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
 
@@ -1406,17 +1406,17 @@ function handleRequest(req,res){
 
   // -- Batches --
   if(req.method==='POST'&&req.url==='/api/batches'){
-    jsonBody(req,res,(e,data)=>{try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
   if(req.method==='PATCH'&&batchMatch){
     const id=decodeURIComponent(batchMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.addBagsToBatch(database,id,data.add||[],data.newQty);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.addBagsToBatch(database,id,data.add||[],data.newQty);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const batchIdMatch=req.url.match(/^\/api\/batches\/([^/]+)$/);
   if(req.method==='PATCH'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
@@ -1425,7 +1425,7 @@ function handleRequest(req,res){
 
   // -- Scan Log --
   if(req.method==='POST'&&req.url==='/api/scan-log'){
-    jsonBody(req,res,(e,data)=>{try{const ids=db.appendScanEntries(database,data.entries||[]);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const ids=db.appendScanEntries(database,data.entries||[]);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
@@ -1441,27 +1441,27 @@ function handleRequest(req,res){
 
   // -- Harvests --
   if(req.method==='POST'&&req.url==='/api/harvests'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Cultures --
   if(req.method==='POST'&&req.url==='/api/cultures'){
-    jsonBody(req,res,(e,data)=>{try{db.insertCultures(database,data.cultures||[]);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCultures(database,data.cultures||[]);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const cultureMatch=req.url.match(/^\/api\/cultures\/([^/]+)$/);
   if(req.method==='PATCH'&&cultureMatch){
     const id=decodeURIComponent(cultureMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateCulture(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCulture(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Tasks --
   if(req.method==='POST'&&req.url==='/api/tasks'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
   if(req.method==='PATCH'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateTaskById(database,id,data);const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateTaskById(database,id,data);const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
@@ -1470,7 +1470,7 @@ function handleRequest(req,res){
 
   // -- Team Members --
   if(req.method==='POST'&&req.url==='/api/team'){
-    jsonBody(req,res,(e,data)=>{try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
   if(req.method==='DELETE'&&teamMatch){
@@ -1480,7 +1480,7 @@ function handleRequest(req,res){
 
   // -- Assets --
   if(req.method==='POST'&&req.url==='/api/assets'){
-    jsonBody(req,res,(e,data)=>{try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const assetMatch=req.url.match(/^\/api\/assets\/([^/]+)$/);
   if(req.method==='DELETE'&&assetMatch){
@@ -1490,17 +1490,17 @@ function handleRequest(req,res){
 
   // -- CalDAV Config --
   if(req.method==='POST'&&req.url==='/api/caldav/config'){
-    jsonBody(req,res,(e,data)=>{try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
-    jsonBody(req,res,(e,data)=>{try{db.insertCalendarEvent(database,data);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCalendarEvent(database,data);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
   if(req.method==='PATCH'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    jsonBody(req,res,(e,data)=>{try{db.updateCalendarEvent(database,id,data);autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCalendarEvent(database,id,data);autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
@@ -1509,13 +1509,13 @@ function handleRequest(req,res){
 
   // -- Inventory Delta --
   if(req.method==='POST'&&req.url==='/api/inventory/delta'){
-    jsonBody(req,res,(e,data)=>{try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/set'){
-    jsonBody(req,res,(e,data)=>{try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
-    jsonBody(req,res,(e,data)=>{try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
   // -- Backup Restore --
