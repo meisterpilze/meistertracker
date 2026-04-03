@@ -5215,19 +5215,19 @@ function handleCalendarDrop(type,id,newDateStr){
     b.due=newDue.toISOString();
     const created=new Date(b.created);
     b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
     renderCalendar();
     if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
   }else if(type==='task-due'){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
     t.dueDate=newDateStr;t.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/tasks/'+t.id,{dueDate:newDateStr,caldavSynced:null});
     renderCalendar();if(typeof renderManualTasks==='function')renderManualTasks();
     if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{startDate:newDateStr,caldavSynced:null});
     renderCalendar();
     if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
   }
@@ -5251,7 +5251,11 @@ function updateEventTime(id,newStart,newEnd,newDate){
   if(newEnd)ev.endTime=newEnd;
   if(newDate)ev.startDate=newDate;
   ev.caldavSynced=null;
-  if(typeof saveData==='function')saveData();
+  const patch={caldavSynced:null};
+  if(newStart)patch.startTime=newStart;
+  if(newEnd)patch.endTime=newEnd;
+  if(newDate)patch.startDate=newDate;
+  apiPatch('/api/calendar-events/'+encodeURIComponent(id),patch);
   renderCalendar();
   if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
@@ -5476,8 +5480,11 @@ function saveCalEvent(){
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-  }else{calendarEvents.push(ev)}
-  if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),ev);
+  }else{
+    calendarEvents.push(ev);
+    apiPost('/api/calendar-events',ev).then(r=>{if(r&&r.id)ev.id=r.id});
+  }
   renderCalendar();closeEventModal();
   if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
@@ -5486,9 +5493,8 @@ function deleteCalEvent(){
   const id=document.getElementById('cal-ev-id').value;if(!id)return;
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    if(typeof saveData==='function')saveData();
+    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
     renderCalendar();closeEventModal();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
   });
 }
 
@@ -5496,7 +5502,7 @@ async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();if(typeof saveData==='function')saveData()}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{caldavUid:ev.caldavUid,caldavSynced:ev.caldavSynced})}
   }catch(e){console.error('CalDAV event push error:',e)}
 }
 
