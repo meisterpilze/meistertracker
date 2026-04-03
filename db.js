@@ -763,6 +763,10 @@ function deleteLastScanEntries(db, n) {
   incrementDataVersion(db);
 }
 
+function deleteScanEntryById(db, id) {
+  db.prepare('DELETE FROM scan_log WHERE id=?').run(id);
+}
+
 function clearScanLog(db) {
   db.prepare('DELETE FROM scan_log').run();
   incrementDataVersion(db);
@@ -936,7 +940,7 @@ module.exports = {
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
   deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser,
   insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
-  appendScanEntries, deleteLastScanEntries, clearScanLog,
+  appendScanEntries, deleteLastScanEntries, deleteScanEntryById, clearScanLog,
   insertHarvest, insertCultures, updateCulture,
   insertTask, updateTaskById, deleteTaskById, readTaskById, readBatchById,
   insertMember, deleteMember,

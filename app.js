@@ -219,7 +219,7 @@ function confirmBatchAdd(){
   const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
   if(!id||!batch){alert('Select a batch first');return}
   const now=new Date().toISOString();
-  batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);scan.count++;});
+  batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);_sessionSuccesses.push(entry);scan.count++;});
   markDirty();updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
 }
 
@@ -538,7 +538,7 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);    scan.count++;
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);_sessionSuccesses.push(entry);scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -551,7 +551,7 @@ function locRemoveSelected(){
   if(!confirm('Remove '+n+' bag'+(n!==1?'s':'')+'?'))return;
   const now=new Date().toISOString();
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);    scan.count++;
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);_sessionSuccesses.push(entry);scan.count++;
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
@@ -2511,7 +2511,86 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
-let _toastTimer=null;
+let _toastTimer=null,_bgFlashTimer=null;
+let _sessionSuccesses=[];
+
+// ─── Web Audio beep system ───
+let _audioCtx=null;
+function _getAudioCtx(){
+  if(!_audioCtx)try{_audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch{}
+  if(_audioCtx&&_audioCtx.state==='suspended')_audioCtx.resume().catch(()=>{});
+  return _audioCtx;
+}
+function playBeep(type){
+  try{
+    const ctx=_getAudioCtx();if(!ctx)return;
+    const gain=ctx.createGain();gain.connect(ctx.destination);
+    if(type==='ok'){
+      // Pleasant chirp: 880Hz sine, 120ms
+      const osc=ctx.createOscillator();osc.type='sine';osc.frequency.value=880;
+      osc.connect(gain);gain.gain.setValueAtTime(0.18,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+0.12);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.12);
+    }else if(type==='err'){
+      // Sharp alarm: two dissonant square waves with double-buzz
+      const o1=ctx.createOscillator(),o2=ctx.createOscillator();
+      o1.type='square';o1.frequency.value=280;
+      o2.type='square';o2.frequency.value=350;
+      const g1=ctx.createGain(),g2=ctx.createGain();
+      o1.connect(g1);g1.connect(ctx.destination);
+      o2.connect(g2);g2.connect(ctx.destination);
+      const t=ctx.currentTime;
+      // First buzz
+      g1.gain.setValueAtTime(0.22,t);g1.gain.setValueAtTime(0,t+0.12);
+      g2.gain.setValueAtTime(0.15,t);g2.gain.setValueAtTime(0,t+0.12);
+      // Brief silence, then second buzz
+      g1.gain.setValueAtTime(0.22,t+0.18);g1.gain.exponentialRampToValueAtTime(0.01,t+0.35);
+      g2.gain.setValueAtTime(0.15,t+0.18);g2.gain.exponentialRampToValueAtTime(0.01,t+0.35);
+      o1.start(t);o1.stop(t+0.35);
+      o2.start(t);o2.stop(t+0.35);
+    }
+  }catch{}
+}
+
+// ─── Scan tab switching ───
+function switchScanTab(tab){
+  document.querySelectorAll('.scan-tab').forEach(b=>b.classList.toggle('active',b.dataset.scanTab===tab));
+  document.querySelectorAll('.scan-tab-panel').forEach(p=>p.classList.toggle('active',p.id==='stp-'+tab));
+  if(tab==='success')renderSuccessList();
+}
+
+// ─── Success list rendering & undo ───
+function renderSuccessList(){
+  const list=document.getElementById('scan-success-list');
+  const empty=document.getElementById('scan-success-empty');
+  list.innerHTML='';
+  if(!_sessionSuccesses.length){empty.style.display='';return}
+  empty.style.display='none';
+  for(let i=_sessionSuccesses.length-1;i>=0;i--){
+    const e=_sessionSuccesses[i];
+    const t=new Date(e.time);
+    const ts=t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0')+':'+t.getSeconds().toString().padStart(2,'0');
+    const desc=e.action+' '+(e.bag||e.batch)+(e.to?' → '+e.to:'')+(e.from?' von '+e.from:'');
+    const row=document.createElement('div');row.className='scan-success-item';
+    row.innerHTML='<span class="s-time">'+ts+'</span><span class="s-desc">'+esc(desc)+'</span><button class="s-undo" data-idx="'+i+'">Rückgängig</button>';
+    list.appendChild(row);
+  }
+  list.querySelectorAll('.s-undo').forEach(btn=>btn.addEventListener('click',function(){undoScanEntry(parseInt(this.dataset.idx))}));
+}
+function undoScanEntry(idx){
+  const entry=_sessionSuccesses[idx];if(!entry)return;
+  const desc=entry.action+' '+(entry.bag||entry.batch)+(entry.to?' → '+entry.to:'');
+  confirm2('Scan rückgängig machen?','Diesen Scan-Eintrag wirklich rückgängig machen?\n\n'+desc,'Ja, rückgängig',()=>{
+    const si=scanLog.indexOf(entry);
+    if(si!==-1)scanLog.splice(si,1);
+    _sessionSuccesses.splice(idx,1);
+    scan.count=Math.max(0,scan.count-1);
+    markDirty();updateSD();renderSuccessList();
+    try{renderLocTabs();renderRacks();renderStatus()}catch{}
+    setFb('info','Rückgängig: '+desc);
+  });
+}
+
 function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
 function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
 function _addLogEntry(type,msg){
@@ -2526,6 +2605,7 @@ function _addLogEntry(type,msg){
 }
 function setFb(type,msg,opts){
   if(!opts||!opts.noModal)openScanModal();
+  switchScanTab('status');
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -2533,9 +2613,14 @@ function setFb(type,msg,opts){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
   _addLogEntry(type,msg);
+  // Background flash
   const ov=document.getElementById('scan-overlay');
+  clearTimeout(_bgFlashTimer);
   ov.classList.remove('scan-bg-ok','scan-bg-err','scan-bg-info','scan-bg-harvest');
   ov.classList.add('scan-bg-'+type);
+  if(type==='ok'||type==='err')_bgFlashTimer=setTimeout(()=>ov.classList.remove('scan-bg-ok','scan-bg-err'),800);
+  // Sound
+  if(type==='ok'||type==='err')playBeep(type);
 }
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';document.getElementById('scan-modal-log').innerHTML='';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
@@ -2590,7 +2675,7 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);    scan.count++;markDirty();
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);_sessionSuccesses.push(entry);scan.count++;markDirty();
     setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
     updateSD();return;
   }
