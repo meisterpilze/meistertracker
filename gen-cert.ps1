@@ -71,13 +71,19 @@ keyUsage = digitalSignature, keyEncipherment
 try {
     Write-Host '  -> Generating with PowerShell...'
     $cert = New-SelfSignedCertificate `
-        -DnsName 'localhost', 'Meisterpilze Lab Tracker' `
+        -Subject 'CN=Meisterpilze Lab Tracker' `
+        -TextExtension @("2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1&IPAddress=$lanIp") `
         -CertStoreLocation 'Cert:\CurrentUser\My' `
+        -KeyExportPolicy Exportable `
+        -KeySpec KeyExchange `
         -NotAfter (Get-Date).AddDays(365)
 
-    $keyPem = "-----BEGIN RSA PRIVATE KEY-----`n" +
-        [Convert]::ToBase64String($cert.PrivateKey.ExportRSAPrivateKey(), 'InsertLineBreaks') +
-        "`n-----END RSA PRIVATE KEY-----"
+    # Export private key via CNG — works on Windows PowerShell 5.1 / .NET Framework
+    $rsaKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($cert)
+    $keyBytes = $rsaKey.Key.Export([System.Security.Cryptography.CngKeyBlobFormat]::Pkcs8PrivateBlob)
+    $keyPem = "-----BEGIN PRIVATE KEY-----`n" +
+        [Convert]::ToBase64String($keyBytes, 'InsertLineBreaks') +
+        "`n-----END PRIVATE KEY-----"
     [IO.File]::WriteAllText("$certDir\server.key", $keyPem)
 
     $certPem = "-----BEGIN CERTIFICATE-----`n" +
