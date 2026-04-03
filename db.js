@@ -293,7 +293,7 @@ function readAll(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
   const caldav = {
     caldavUsername: cal.caldav_username,
-    caldavPassword: cal.caldav_password,
+    caldavPassword: cal.caldav_password ? '***' : '',
     enabled: cal.enabled === 1 ? true : false,
     perPersonCalendars: cal.per_person_calendars === 1 ? true : false
   };
@@ -720,7 +720,10 @@ function updateCaldavCfg(db, c) {
 }
 
 // -- Inventory Delta --
+const VALID_MATS = ['hardwood','wheatbran','gypsum','grain'];
+
 function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {
@@ -733,6 +736,7 @@ function applyInventoryDelta(db, mat, deltaKg, type, ref) {
 }
 
 function setInventoryAbsolute(db, mat, value, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {
@@ -742,6 +746,23 @@ function setInventoryAbsolute(db, mat, value, type, ref) {
     db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), mat, delta, value, type||null, ref||null);
     db.exec('COMMIT');
     return value;
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
+}
+
+function applyInventoryDeltas(db, deltas) {
+  db.exec('BEGIN');
+  try {
+    const results = {};
+    for (const d of deltas) {
+      if (!VALID_MATS.includes(d.mat)) throw new Error('invalid material: ' + d.mat);
+      const col = 'stock_' + d.mat;
+      db.prepare(`UPDATE inventory SET ${col} = MAX(0, ${col} + ?) WHERE id=1`).run(d.deltaKg);
+      const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
+      db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(), d.mat, d.deltaKg, row.val, d.type||null, d.ref||null);
+      results[d.mat] = row.val;
+    }
+    db.exec('COMMIT');
+    return results;
   } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
@@ -767,5 +788,5 @@ module.exports = {
   insertMember, deleteMember,
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
-  applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig
+  applyInventoryDelta, applyInventoryDeltas, setInventoryAbsolute, updateInventoryConfig
 };

@@ -920,6 +920,11 @@ const RATE_WINDOW_MS = 60000;
 const RATE_MAX_REQUESTS = 300;
 const rateLimits = new Map();
 
+// Stricter rate limit for login attempts (10 per minute per IP)
+const LOGIN_RATE_WINDOW_MS = 60 * 1000;
+const LOGIN_RATE_MAX = 10;
+const loginRateLimits = new Map();
+
 function checkRateLimit(ip) {
   const now = Date.now();
   let entry = rateLimits.get(ip);
@@ -931,10 +936,24 @@ function checkRateLimit(ip) {
   return entry.count <= RATE_MAX_REQUESTS;
 }
 
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  let entry = loginRateLimits.get(ip);
+  if (!entry || now - entry.start > LOGIN_RATE_WINDOW_MS) {
+    entry = { start: now, count: 0 };
+    loginRateLimits.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count <= LOGIN_RATE_MAX;
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of rateLimits) {
     if (now - entry.start > RATE_WINDOW_MS) rateLimits.delete(ip);
+  }
+  for (const [ip, entry] of loginRateLimits) {
+    if (now - entry.start > LOGIN_RATE_WINDOW_MS) loginRateLimits.delete(ip);
   }
 }, RATE_WINDOW_MS);
 
@@ -956,9 +975,11 @@ function handleRequest(req,res){
     return handleCaldav(req,res);
   }
 
-  const origin = req.headers.origin; if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers','Content-Type');
+  // No CORS headers — all clients access same-origin via LAN IP/hostname.
+  // Rejecting cross-origin requests prevents CSRF from malicious sites.
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
 
   const url=req.url.split('?')[0];
@@ -997,6 +1018,10 @@ function handleRequest(req,res){
   }
 
   if(url==='/api/auth/login'&&req.method==='POST'){
+    if(!checkLoginRateLimit(clientIP)){
+      res.writeHead(429,{'Content-Type':'application/json'});
+      res.end('{"error":"Too many login attempts, try again later"}');return;
+    }
     let body='';
     req.on('data',c=>body+=c);
     req.on('end',()=>{
@@ -1215,6 +1240,9 @@ function handleRequest(req,res){
   if(req.method==='POST'&&req.url==='/api/inventory/delta'){
     jsonBody(req,res,(e,data)=>{try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
+  if(req.method==='POST'&&req.url==='/api/inventory/deltas'){
+    jsonBody(req,res,(e,data)=>{try{if(!Array.isArray(data.deltas))throw new Error('deltas must be an array');const vals=db.applyInventoryDeltas(database,data.deltas);jsonOk(res,{values:vals})}catch(err){jsonErr(res,400,err.message)}});return;
+  }
   if(req.method==='POST'&&req.url==='/api/inventory/set'){
     jsonBody(req,res,(e,data)=>{try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
   }
@@ -1222,8 +1250,12 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
-  // -- Backup Restore --
+  // -- Backup Restore (admin only) --
   if(req.method==='POST'&&req.url==='/api/backup/restore'){
+    if(!req.authUser||req.authUser.role!=='admin'){
+      res.writeHead(403,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({error:'admin required'}));return;
+    }
     jsonBody(req,res,(e,data)=>{
       try{
         writeData(data);
