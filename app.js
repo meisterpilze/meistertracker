@@ -1016,7 +1016,7 @@ function renderCalMonth(){
       const bg=e.color?'style="background:'+e.color+'"':'';
       return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     }).join('');
-    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
+    if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' mehr</div>';
     return o;
   }
 
@@ -1069,7 +1069,7 @@ function renderCalWeek(){
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -1154,7 +1154,7 @@ function renderCalDay(){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
