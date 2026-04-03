@@ -32,7 +32,8 @@ const REF_GROUPS=[
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
-let confirmCb=null,noteId=null,saving=false,lastHash='';
+let confirmCb=null,noteId=null,saving=false,dirty=false,lastVersion=0;
+let retryCount=0;const MAX_RETRIES=3;const DEBOUNCE_MS=400;let debounceTimer=null;
 let lastSyncTime=null; // tracks last successful server contact
 let spMap={};
 const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
@@ -79,14 +80,30 @@ function defaultInventory(){
     log:[]
   };
 }
-async function saveData(){
-  if(saving)return;saving=true;setSyncStatus('busy','Saving...');
+function markDirty(){
+  dirty=true;retryCount=0;
+  if(debounceTimer)clearTimeout(debounceTimer);
+  debounceTimer=setTimeout(flushSave,DEBOUNCE_MS);
+}
+async function flushSave(){
+  debounceTimer=null;
+  if(saving)return;
+  if(!dirty)return;
+  dirty=false;saving=true;setSyncStatus('busy','Saving...');
   try{
     const r=await authFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batches,scanLog,manualTasks,harvests,cultures,inventory,teamMembers,caldav,assets,calendarEvents})});
-    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.reason||d.error||'HTTP '+r.status)}
-    setSyncStatus('ok','Saved · gerade eben');
-  }catch(e){setSyncStatus('err','Save error: '+(e.message||'check server'))}
-  finally{saving=false}
+    const resp=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(resp.reason||resp.error||'HTTP '+r.status);
+    if(resp.version)lastVersion=resp.version;
+    retryCount=0;setSyncStatus('ok','Saved · gerade eben');
+  }catch(e){
+    dirty=true;retryCount++;
+    if(retryCount<=MAX_RETRIES){
+      const delay=Math.min(1000*Math.pow(2,retryCount-1),8000);
+      setSyncStatus('err','Save error, retry in '+Math.round(delay/1000)+'s...');
+      setTimeout(flushSave,delay);
+    }else{setSyncStatus('err','Save failed: '+(e.message||'check server'))}
+  }finally{saving=false;if(dirty&&retryCount<=MAX_RETRIES)setTimeout(flushSave,50)}
 }
 function setSyncStatus(cls,msg){
   document.getElementById('sync-dot').className='sync-dot '+cls;
@@ -102,11 +119,12 @@ function formatRelativeTime(ts){
   return 'vor '+Math.floor(min/60)+' Std.';
 }
 async function pollSync(){
-  if(saving)return;
+  if(saving||dirty)return;
   try{const r=await authFetch('/api/data');
   if(!r.ok)return;
-  const d=await r.json();const h=JSON.stringify(d);
-  if(h!==lastHash){lastHash=h;applyData(d);refresh();}
+  const d=await r.json();
+  if(d.version!==undefined&&d.version!==lastVersion){lastVersion=d.version;applyData(d);refresh();}
+  else if(d.version===undefined){const h=JSON.stringify(d);if(h!==lastVersion){lastVersion=h;applyData(d);refresh();}}
   setSyncStatus('ok','Synced · gerade eben');
   }catch{}
 }
@@ -172,7 +190,7 @@ document.getElementById('m-ok').onclick=()=>{if(confirmCb)confirmCb();closeConfi
 document.getElementById('m-confirm').addEventListener('click',e=>{if(e.target.id==='m-confirm')closeConfirm()});
 function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent='Note — '+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
 function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
-function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();saveData();renderBatches()}closeNote()}
+function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();markDirty();renderBatches()}closeNote()}
 document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
 
 // Batch-add modal
@@ -192,7 +210,7 @@ function confirmBatchAdd(){
   if(!id||!batch){alert('Select a batch first');return}
   const now=new Date().toISOString();
   batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);scan.count++;});
-  saveData();updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
+  markDirty();updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
@@ -514,7 +532,7 @@ function locMoveTo(toLoc){
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  markDirty();updateSD();renderLocTabs();renderRacks();renderStatus();
   setLocFb('Moved '+n+' bag'+(n!==1?'s':'')+' → '+toLoc);
 }
 function locRemoveSelected(){
@@ -527,7 +545,7 @@ function locRemoveSelected(){
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  markDirty();updateSD();renderLocTabs();renderRacks();renderStatus();
   setLocFb('Removed '+n+' bag'+(n!==1?'s':''));
 }
 function setLocFb(msg){
@@ -541,7 +559,7 @@ function locUndo(){
   if(!lastLocUndoCount)return;
   scanLog.splice(scanLog.length-lastLocUndoCount,lastLocUndoCount);
   lastLocUndoCount=0;
-  saveData();updateSD();renderLocTabs();renderRacks();renderStatus();
+  markDirty();updateSD();renderLocTabs();renderRacks();renderStatus();
   setFb('ok','Undo successful');
 }
 
@@ -647,7 +665,7 @@ function createBatch(){
     if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);invLog('gypsum',-gypUsed,'batch',batchId,now)}
   }
 
-  saveData();
+  markDirty();
   pushBatchCaldav(batches[batches.length-1]);
   document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
@@ -711,14 +729,14 @@ function confirmAddBags(){
   const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
   b.bags=[...b.bags,...newBags];
   b.qty=b.bags.length;
-  saveData();
+  markDirty();
   document.getElementById('m-addbags').classList.remove('open');
   renderBatches();
   setFb('ok','Added '+qty+' bag'+(qty!==1?'s':'')+' to '+b.batchId+' (now '+b.bags.length+' total)');
 }
 document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
 
-function delBatch(id){confirm2('Delete batch '+id+'?','Permanently deletes the batch record. Scan log and harvest entries remain.','Delete batch',()=>{batches=batches.filter(b=>b.batchId!==id);saveData();renderBatches();renderStatus()})}
+function delBatch(id){confirm2('Delete batch '+id+'?','Permanently deletes the batch record. Scan log and harvest entries remain.','Delete batch',()=>{batches=batches.filter(b=>b.batchId!==id);markDirty();renderBatches();renderStatus()})}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
@@ -735,7 +753,7 @@ function confirmHarvest(){
   if(!g||g<=0){alert('Enter a weight in grams');return}
   const p=scan.harvestBag;
   harvests.push({time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f});
-  saveData();scan.harvestBag=null;scan.count++;
+  markDirty();scan.harvestBag=null;scan.count++;
   document.getElementById('harvest-panel').style.display='none';
   setFb('ok',`Harvest logged: ${p.bagId} → ${g}g (flush ${f})`);updateSD();
 }
@@ -861,11 +879,11 @@ function saveTask(){
   manualTasks.push({text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null,private:priv});
   document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';document.getElementById('task-private').checked=false;
   document.getElementById('task-form').style.display='none';
-  saveData();renderManualTasks();updateTodoBadge();
+  markDirty();renderManualTasks();updateTodoBadge();
   if(caldav.enabled)pushTaskCaldav(manualTasks[manualTasks.length-1]);
 }
-function toggleTask(i){manualTasks[i].done=!manualTasks[i].done;manualTasks[i].caldavSynced=null;saveData();renderManualTasks();updateTodoBadge();if(caldav.enabled&&manualTasks[i].caldavUid)pushTaskCaldav(manualTasks[i])}
-function deleteTask(i){confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks.splice(i,1);saveData();renderManualTasks();updateTodoBadge()})}
+function toggleTask(i){manualTasks[i].done=!manualTasks[i].done;manualTasks[i].caldavSynced=null;markDirty();renderManualTasks();updateTodoBadge();if(caldav.enabled&&manualTasks[i].caldavUid)pushTaskCaldav(manualTasks[i])}
+function deleteTask(i){confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks.splice(i,1);markDirty();renderManualTasks();updateTodoBadge()})}
 function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).length+manualTasks.filter(t=>!t.done).length+getInvAlerts().length;document.getElementById('n-todo').classList.toggle('alert',n>0)}
 
 // ─── TEAM MEMBERS ───────────────────────────────────────────
@@ -880,9 +898,9 @@ function addMember(){
   if(teamMembers.some(m=>m.name.toLowerCase()===name.toLowerCase()))return;
   teamMembers.push({name,role:role||null,added:new Date().toISOString()});
   document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  saveData();renderTeam();
+  markDirty();renderTeam();
 }
-function removeMember(i){confirm2('Remove member?','Remove '+teamMembers[i].name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers.splice(i,1);saveData();renderTeam()})}
+function removeMember(i){confirm2('Remove member?','Remove '+teamMembers[i].name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers.splice(i,1);markDirty();renderTeam()})}
 
 // ─── CalDAV SYNC ────────────────────────────────────────────
 function loadCaldavSettings(){
@@ -894,7 +912,7 @@ function loadCaldavSettings(){
 }
 function saveCaldavSettings(){
   caldav.enabled=document.getElementById('caldav-enabled').checked;
-  saveData();
+  markDirty();
   showCaldavStatus('Einstellungen gespeichert.','#166534');
 }
 function showCaldavStatus(msg,color){
@@ -920,15 +938,17 @@ async function pushTaskCaldav(task){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
-    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
-  }catch(e){console.error('CalDAV push error:',e)}
+    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();markDirty();renderManualTasks()}
+    else{setSyncStatus('err','CalDAV task sync failed')}
+  }catch(e){console.error('CalDAV push error:',e);setSyncStatus('err','CalDAV: '+(e.message||'sync error'))}
 }
 
 async function pushBatchCaldav(batch){
   if(!caldav.enabled)return;
   try{
-    await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})});
-  }catch(e){console.error('CalDAV batch push error:',e)}
+    const r=await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})});
+    if(!r.ok)setSyncStatus('err','CalDAV batch sync failed');
+  }catch(e){console.error('CalDAV batch push error:',e);setSyncStatus('err','CalDAV: '+(e.message||'sync error'))}
 }
 
 // ─── CALENDAR ───────────────────────────────────────────────
@@ -1247,22 +1267,22 @@ function initCalDragDrop(root){
 function handleCalendarDrop(type,id,newDateStr){
   if(type==='batch-due'){
     const b=batches.find(x=>x.batchId===id);if(!b)return;
-    const newDue=new Date(newDateStr+'T12:00:00');
-    b.due=newDue.toISOString();
+    b.due=newDateStr+'T12:00:00.000Z';
+    const newDue=new Date(b.due);
     const created=new Date(b.created);
     b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-    saveData();renderCalendar();
+    markDirty();renderCalendar();
     pushBatchCaldav(b);
     if(document.querySelector('#p-dash.active'))renderStatus();
   }else if(type==='task-due'){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
     t.dueDate=newDateStr;t.caldavSynced=null;
-    saveData();renderCalendar();renderManualTasks();
+    markDirty();renderCalendar();renderManualTasks();
     if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t);
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    saveData();renderCalendar();
+    markDirty();renderCalendar();
     pushEventCaldav(ev);
   }
 }
@@ -1285,7 +1305,7 @@ function updateEventTime(id,newStart,newEnd,newDate){
   if(newEnd)ev.endTime=newEnd;
   if(newDate)ev.startDate=newDate;
   ev.caldavSynced=null;
-  saveData();renderCalendar();
+  markDirty();renderCalendar();
   pushEventCaldav(ev);
 }
 
@@ -1511,7 +1531,7 @@ function saveCalEvent(){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
   }else{calendarEvents.push(ev)}
-  saveData();renderCalendar();closeEventModal();
+  markDirty();renderCalendar();closeEventModal();
   if(caldav.enabled)pushEventCaldav(ev);
 }
 
@@ -1519,7 +1539,7 @@ function deleteCalEvent(){
   const id=document.getElementById('cal-ev-id').value;if(!id)return;
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    saveData();renderCalendar();closeEventModal();
+    markDirty();renderCalendar();closeEventModal();
     authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
   });
 }
@@ -1528,8 +1548,9 @@ async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();saveData()}
-  }catch(e){console.error('CalDAV event push error:',e)}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();markDirty()}
+    else{setSyncStatus('err','CalDAV event sync failed')}
+  }catch(e){console.error('CalDAV event push error:',e);setSyncStatus('err','CalDAV: '+(e.message||'sync error'))}
 }
 
 // ── CalDAV Import ──
@@ -1542,7 +1563,7 @@ async function loadCalDAVImports(){
 
 // ─── SCAN LOG ────────────────────────────────────────────────
 function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,MAX_LOG_DISPLAY);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${new Date(e.time).toLocaleString('de-DE')}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'—'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'—'}</td><td>${esc(e.from)||'—'}</td><td>${esc(e.to)||'—'}</td><td>${e.species?spDot(e.species)+esc(e.species):'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No scans yet.</td></tr>'}
-function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];saveData();renderLog()})}
+function clearLog(){confirm2('Clear entire scan log?','Permanently deletes all '+scanLog.length+' scan entries. Batches and harvests are not deleted.','Yes, clear everything',()=>{scanLog=[];markDirty();renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
 const MAT_LABELS={hardwood:'Hardwood pellets',wheatbran:'Wheat bran',gypsum:'Gypsum',grain:'Grain'};
@@ -1672,14 +1693,14 @@ function renderThresholds(){
 function updateAvgComp(key,val){
   if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
   inventory.avgComposition[key]=parseFloat(val)||0;
-  saveData();renderInvStock();
+  markDirty();renderInvStock();
 }
 
 function updateThreshold(mat,key,val){
   if(!inventory.thresholds)inventory.thresholds={};
   if(!inventory.thresholds[mat])inventory.thresholds[mat]={minKg:0};
   inventory.thresholds[mat][key]=parseFloat(val)||0;
-  saveData();renderInvStock();
+  markDirty();renderInvStock();
 }
 
 function delMatChange(){
@@ -1734,7 +1755,7 @@ function logDelivery(){
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
   inventory.stock[mat]=(inventory.stock[mat]||0)+kg;
   invLog(mat,kg,'delivery',note||'delivery');
-  saveData();
+  markDirty();
   document.getElementById('del-kg').value='';document.getElementById('del-note').value='';
   document.getElementById('del-preview').style.display='none';
   openStab('inv','stock');renderInvStock();
@@ -1755,7 +1776,7 @@ function logAdjustment(){
   }else{alert('Enter either a new total or an adjustment amount');return}
   inventory.stock[mat]=newStock;
   invLog(mat,delta,'adjustment',reason);
-  saveData();
+  markDirty();
   document.getElementById('adj-absolute').value='';document.getElementById('adj-delta').value='';
   document.getElementById('adj-reason').value='';document.getElementById('adj-preview').style.display='none';
   openStab('inv','stock');renderInvStock();
@@ -1796,7 +1817,7 @@ function getInvAlerts(){
 // ─── BACKUP ──────────────────────────────────────────────────
 function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
 function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));saveData();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));markDirty();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
 let editingAssetId=null;
@@ -1970,13 +1991,13 @@ function saveAsset(){
   };
   if(editingAssetId){const i=assets.findIndex(a=>a.assetId===editingAssetId);if(i>=0)assets[i]=obj;else assets.push(obj)}
   else assets.push(obj);
-  saveData();editingAssetId=null;
+  markDirty();editingAssetId=null;
   openStab('assets','list');
 }
 
 function deleteAsset(id){
   confirm2('Anlage löschen?','Die Anlage '+id+' wird unwiderruflich gelöscht.','Ja, löschen',()=>{
-    assets=assets.filter(a=>a.assetId!==id);saveData();renderAssets();
+    assets=assets.filter(a=>a.assetId!==id);markDirty();renderAssets();
   });
 }
 
@@ -2088,7 +2109,7 @@ function renderCultures(){
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">No cultures yet. Use Lab → Log work to register them.</td></tr>';return}
   body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'—'}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'—'}</td><td style="font-size:10px;color:#888">${new Date(c.created).toLocaleDateString('de-DE')}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'—'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>Active</option><option value="stored" ${c.status==='stored'?'selected':''}>Stored</option><option value="used" ${c.status==='used'?'selected':''}>Used up</option><option value="contam" ${c.status==='contam'?'selected':''}>Contaminated</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="Print label" style="padding:2px 6px">Print</button></td></tr>`).join('');
 }
-function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;saveData();renderCultures()}}
+function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;markDirty();renderCultures()}}
 
 // ─── LAB WORK ────────────────────────────────────────────────
 function lwUpdate(){
@@ -2122,7 +2143,7 @@ function logLabWork(){
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
   const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
-  cultures.push(...newC);saveData();
+  cultures.push(...newC);markDirty();
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
   renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);lwPreview();
@@ -2197,7 +2218,7 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);    scan.count++;saveData();updateSD();
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);    scan.count++;markDirty();updateSD();
     setFb('ok','REMOVE logged: '+biBagId);
   }else{
     setFb('ok',action+' ready — now scan a location, then scan more bags');
@@ -2418,7 +2439,7 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err','Scan a location or rack first.');return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err','Scan FROM and TO locations first.');return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);    scan.count++;saveData();
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain};scanLog.push(entry);    scan.count++;markDirty();
     setFb('ok','Logged: '+scan.action+' '+val+(scan.to?' → '+scan.to:'')+' ['+scan.count+' this session]');
     updateSD();return;
   }
