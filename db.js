@@ -174,12 +174,40 @@ CREATE TABLE IF NOT EXISTS assets (
 );
 `;
 
+// ── Schema Migrations ───────────────────────────────────────
+// Each migration runs exactly once, tracked by schema_version.
+// To add a new migration: append an entry to MIGRATIONS array.
+const MIGRATIONS = [
+  // v1: baseline — all tables already created via SCHEMA DDL
+  // Future migrations go here, e.g.:
+  // { version: 2, description: 'Add priority column to batches', sql: 'ALTER TABLE batches ADD COLUMN priority INTEGER DEFAULT 0' },
+];
+
+function runMigrations(db) {
+  db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied TEXT NOT NULL, description TEXT)');
+  const applied = new Set(db.prepare('SELECT version FROM schema_version').all().map(r => r.version));
+  for (const m of MIGRATIONS) {
+    if (applied.has(m.version)) continue;
+    try {
+      db.exec('BEGIN');
+      db.exec(m.sql);
+      db.prepare('INSERT INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description || '');
+      db.exec('COMMIT');
+      console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw new Error(`Migration v${m.version} failed: ${e.message}`);
+    }
+  }
+}
+
 // ── Open / Init ──────────────────────────────────────────────
 function openDb(dbPath) {
   const db = new Database(dbPath);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  runMigrations(db);
   // Ensure singleton rows exist
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();

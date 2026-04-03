@@ -1179,8 +1179,11 @@ function handleRequest(req,res){
 
   // GET /api/health
   if(req.method==='GET'&&req.url==='/api/health'){
-    res.writeHead(200,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({status:'ok',uptime:process.uptime(),version:require('./package.json').version}));
+    let dbOk=false;
+    try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){}
+    const status=dbOk?'ok':'degraded';
+    res.writeHead(dbOk?200:503,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({status,db:dbOk?'connected':'error',uptime:process.uptime(),version:require('./package.json').version}));
     return;
   }
 
