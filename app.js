@@ -515,9 +515,11 @@ function locRemoveSelected(){
   setLocFb('Removed '+n+' bag'+(n!==1?'s':''));
 }
 function setLocFb(msg){
-  const el=document.getElementById('scan-fb');
-  el.className='fb-ok';
-  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600">Undo</button>';
+  const el=document.getElementById('scan-toast');
+  el.className='scan-toast fb-ok visible';
+  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('visible'),5000);
 }
 function locUndo(){
   if(!lastLocUndoCount)return;
@@ -2145,7 +2147,16 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
-function setFb(type,msg){const el=document.getElementById('scan-fb');el.className='fb-'+type;el.textContent=msg}
+let _toastTimer=null;
+function setFb(type,msg){
+  const el=document.getElementById('scan-toast');
+  el.className='scan-toast fb-'+type;
+  el.textContent=msg;
+  // Show toast
+  requestAnimationFrame(()=>el.classList.add('visible'));
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+}
 function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
 function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info','State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.')}
 function processScan(raw){
@@ -2205,9 +2216,75 @@ function processScan(raw){
   }
   setFb('err','Unknown barcode: '+val+'. Check the batch exists first.');
 }
-const si=document.getElementById('scan-inp');
-si.addEventListener('keydown',e=>{if(e.key==='Enter'){processScan(si.value);si.value=''}});
-si.addEventListener('input',()=>{if(si.value.endsWith('\n')||si.value.endsWith('\r')){processScan(si.value);si.value=''}});
+// ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
+const _scanBuf={chars:[],timer:null};
+const SCAN_MAX_GAP=50;   // max ms between keystrokes from a scanner
+const SCAN_MIN_LEN=3;    // minimum barcode length
+
+// Known barcode format patterns for validation
+function isKnownBarcode(val){
+  val=val.toUpperCase().replace(/_/g,'-');
+  if(ACTIONS.includes(val))return true;
+  if(LOCS.includes(val))return true;
+  // Short barcode format: XX-XXX-0000-0
+  if(/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(val))return true;
+  // Culture ID: MC|PD|LC-XXX-000000-00
+  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
+  // Bag ID: SPECIES-YYMMDD-NN-NN
+  if(/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(val))return true;
+  // Batch ID: SPECIES-YYMMDD-NN
+  if(/^[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
+  return false;
+}
+
+function _flushScanBuf(){
+  const raw=_scanBuf.chars.map(c=>c.ch).join('');
+  _scanBuf.chars=[];
+  if(raw.length<SCAN_MIN_LEN)return;
+  // Validate against known formats
+  const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
+  if(!isKnownBarcode(cleaned))return;
+  processScan(raw);
+}
+
+document.addEventListener('keydown',e=>{
+  // Ignore modifier combos (copy-paste, shortcuts)
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+
+  const now=performance.now();
+
+  // Enter/Return = end of barcode
+  if(e.key==='Enter'){
+    if(_scanBuf.chars.length>=SCAN_MIN_LEN){
+      clearTimeout(_scanBuf.timer);
+      // Check timing: all chars must have arrived within SCAN_MAX_GAP of each other
+      const allFast=_scanBuf.chars.every((c,i)=>i===0||c.t-_scanBuf.chars[i-1].t<SCAN_MAX_GAP);
+      if(allFast){
+        e.preventDefault();
+        e.stopPropagation();
+        _flushScanBuf();
+        return;
+      }
+    }
+    _scanBuf.chars=[];
+    clearTimeout(_scanBuf.timer);
+    return;
+  }
+
+  // Only collect single printable characters
+  if(e.key.length!==1)return;
+
+  // If gap since last char is too long, reset buffer
+  if(_scanBuf.chars.length>0&&now-_scanBuf.chars[_scanBuf.chars.length-1].t>SCAN_MAX_GAP){
+    _scanBuf.chars=[];
+  }
+
+  _scanBuf.chars.push({ch:e.key,t:now});
+
+  // Safety timeout: flush if scanner stops mid-stream
+  clearTimeout(_scanBuf.timer);
+  _scanBuf.timer=setTimeout(()=>{_scanBuf.chars=[]},SCAN_MAX_GAP*2);
+});
 
 // ─── CAMERA SCAN ────────────────────────────────────────────
 let camScanner=null;
@@ -2231,20 +2308,6 @@ function closeCamScan(){
   if(camScanner){camScanner.stop().catch(function(){});camScanner.clear();camScanner=null}
 }
 document.addEventListener('visibilitychange',function(){if(document.hidden&&camScanner)closeCamScan()});
-
-// Only steal focus for scan input when user is NOT in a form field
-function isInFormField(){
-  const tag=document.activeElement?.tagName?.toLowerCase();
-  return tag==='input'||tag==='select'||tag==='textarea';
-}
-document.addEventListener('click',e=>{
-  // Only refocus scan bar if clicking on blank space (not on any interactive element)
-  if(!e.target.closest('input,select,textarea,button,.modal-bg'))si.focus();
-});
-document.addEventListener('keydown',e=>{
-  // Redirect keystrokes to scan bar ONLY if user is not already in a form field
-  if(document.activeElement!==si&&!isInFormField()&&!e.target.closest('.modal-bg')&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey)si.focus();
-});
 
 // ─── USER MANAGEMENT ─────────────────────────────────────────
 async function doLogout(){
