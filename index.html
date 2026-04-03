@@ -662,19 +662,19 @@
   <!-- Calendar View -->
   <div class="sp" id="sp-todo-cal">
     <div class="cal-toolbar">
-      <div style="display:flex;gap:4px;align-items:center">
-        <button class="btn btn-sm" onclick="calNav(-1)">&larr;</button>
-        <button class="btn btn-sm" onclick="calNav(1)">&rarr;</button>
-        <button class="btn btn-sm" onclick="calToday()" style="margin-left:4px">Heute</button>
-        <span class="cal-title" id="cal-title" style="margin-left:8px"></span>
+      <div class="cal-toolbar-left">
+        <button class="cal-today-btn" onclick="calToday()">Heute</button>
+        <button class="cal-nav-btn" onclick="calNav(-1)">&#8249;</button>
+        <button class="cal-nav-btn" onclick="calNav(1)">&#8250;</button>
+        <span class="cal-title" id="cal-title"></span>
       </div>
-      <div style="display:flex;gap:4px;align-items:center">
+      <div class="cal-toolbar-right">
         <div class="cal-view-toggle">
           <button class="cal-vbtn active" id="cv-month" onclick="setCalView('month')">Monat</button>
           <button class="cal-vbtn" id="cv-week" onclick="setCalView('week')">Woche</button>
           <button class="cal-vbtn" id="cv-day" onclick="setCalView('day')">Tag</button>
         </div>
-        <button class="btn btn-sm btn-p" onclick="openEventModal()" style="margin-left:6px">+ Event</button>
+        <button class="cal-add-btn" onclick="openEventModal()">+ Event</button>
       </div>
     </div>
     <div class="cal-legend">
@@ -3140,6 +3140,7 @@ function openStab(page,sub){
   if(page==='print'&&sub==='ref')renderRefBarcodes();
   if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
   if(page==='todo'&&sub==='team')renderTeam();
+  if(page==='todo'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='todo'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
@@ -4882,6 +4883,460 @@ const savedLang = localStorage.getItem('mp-lang');
 if (savedLang && LANG[savedLang]) currentLang = savedLang;
 document.getElementById('lang-sel').value = currentLang;
 translatePage();
+
+// ─── CALENDAR ───────────────────────────────────────────────
+if(typeof calendarEvents==='undefined') var calendarEvents=[];
+if(typeof MS_PER_DAY==='undefined') var MS_PER_DAY=86400000;
+let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),calView='month';
+let calSelectedDate=new Date(),caldavImports=[];
+const CAL_DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+const CAL_MONTHS=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const CAL_HOURS_START=6,CAL_HOURS_END=22;
+
+function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
+
+function collectCalendarEvents(){
+  const events=[];
+  batches.forEach(b=>{
+    if(!b.due)return;
+    const d=new Date(b.due);
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#e74c3c'});
+  });
+  manualTasks.forEach(t=>{
+    if(!t.dueDate)return;
+    events.push({date:t.dueDate.split('T')[0],label:t.text,type:'task-due',id:t.created,draggable:!t.done,allDay:true,color:'#3498db'});
+  });
+  harvests.forEach(h=>{
+    if(!h.time)return;
+    const d=new Date(h.time);
+    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f39c12'});
+  });
+  calendarEvents.forEach(ev=>{
+    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:ev.color||'#2ecc71',description:ev.description});
+  });
+  caldavImports.forEach(ev=>{
+    events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#9b59b6'});
+  });
+  return events;
+}
+
+function renderCalendar(){
+  const title=document.getElementById('cal-title');
+  if(!title)return;
+  document.querySelectorAll('.cal-vbtn').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById('cv-'+calView);if(btn)btn.classList.add('active');
+  if(calView==='month')renderCalMonth();
+  else if(calView==='week')renderCalWeek();
+  else if(calView==='day')renderCalDay();
+}
+
+function setCalView(v){calView=v;renderCalendar()}
+function calToday(){calYear=new Date().getFullYear();calMonth=new Date().getMonth();calSelectedDate=new Date();renderCalendar()}
+
+function calNav(delta){
+  if(calView==='month'){calMonth+=delta;if(calMonth<0){calMonth=11;calYear--}if(calMonth>11){calMonth=0;calYear++}}
+  else if(calView==='week'){calSelectedDate.setDate(calSelectedDate.getDate()+delta*7);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth()}
+  else if(calView==='day'){calSelectedDate.setDate(calSelectedDate.getDate()+delta);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth()}
+  renderCalendar();
+}
+
+// ── Month View ──
+function renderCalMonth(){
+  const container=document.getElementById('cal-container');
+  const title=document.getElementById('cal-title');
+  title.textContent=CAL_MONTHS[calMonth]+' '+calYear;
+  const firstDay=new Date(calYear,calMonth,1);
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  let startDow=(firstDay.getDay()+6)%7;
+  const prevLast=new Date(calYear,calMonth,0).getDate();
+  const events=collectCalendarEvents();
+  const todayStr=new Date().toISOString().split('T')[0];
+  const totalCells=startDow+daysInMonth;
+  const rows=Math.max(6,Math.ceil(totalCells/7));
+  const trailing=rows*7-totalCells;
+
+  let html='<div class="cal-grid" id="cal-grid">';
+  html+=CAL_DAYS.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
+
+  function eventsForDate(ds){
+    const de=events.filter(e=>e.date===ds);
+    const mx=3;
+    let o=de.slice(0,mx).map(e=>{
+      const drag=e.draggable?'draggable="true"':'';
+      const cls=e.draggable?'cal-event':'cal-event no-drag';
+      const bg=e.color?'style="background:'+e.color+'"':'';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+    }).join('');
+    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
+    return o;
+  }
+
+  for(let i=startDow-1;i>=0;i--){
+    const day=prevLast-i,m=calMonth===0?11:calMonth-1,y=calMonth===0?calYear-1:calYear,ds=fmtDate(y,m,day);
+    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+day+'</div>'+eventsForDate(ds)+'</div>';
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=fmtDate(calYear,calMonth,d),cls=ds===todayStr?'cal-cell today':'cal-cell';
+    html+='<div class="'+cls+'" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  }
+  for(let d=1;d<=trailing;d++){
+    const m=calMonth===11?0:calMonth+1,y=calMonth===11?calYear+1:calYear,ds=fmtDate(y,m,d);
+    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  }
+  html+='</div>';
+  container.innerHTML=html;
+  initCalDragDrop(container);
+}
+function calCellClick(e,ds){if(e.target.closest('.cal-event')||e.target.closest('.cal-more'))return;openEventModal(ds)}
+function calGotoDay(ds){calSelectedDate=parseDateStr(ds);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth();setCalView('day')}
+
+// ── Week View ──
+function getWeekStart(d){const dt=new Date(d);const dow=(dt.getDay()+6)%7;dt.setDate(dt.getDate()-dow);dt.setHours(0,0,0,0);return dt}
+
+function renderCalWeek(){
+  const container=document.getElementById('cal-container');
+  const title=document.getElementById('cal-title');
+  const ws=getWeekStart(calSelectedDate);
+  const days=[];
+  for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);days.push(d)}
+  const todayStr=new Date().toISOString().split('T')[0];
+  title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?CAL_MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+CAL_MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+CAL_MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
+  const events=collectCalendarEvents();
+  const dayStrs=days.map(d=>d.toISOString().split('T')[0]);
+
+  let html='<div class="cal-week">';
+  html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
+  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'" onclick="calGotoDay(\''+ds+'\')">'+CAL_DAYS[i]+'<span class="wk-day-num">'+d.getDate()+'</span></div>'});
+  html+='</div>';
+  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">Ganzt.</div>';
+  days.forEach((d,i)=>{
+    const ds=dayStrs[i];
+    const de=events.filter(e=>e.date===ds&&e.allDay);
+    html+='<div class="cal-week-allday-cell" data-date="'+ds+'">';
+    de.forEach(e=>{
+      const cls=e.draggable?'cal-event':'cal-event no-drag';
+      const bg=e.color?'style="background:'+e.color+'"':'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div class="cal-week-body">';
+  for(let h=CAL_HOURS_START;h<=CAL_HOURS_END;h++){
+    html+='<div class="cal-week-time">'+String(h).padStart(2,'0')+':00</div>';
+    days.forEach((d,i)=>{
+      const ds=dayStrs[i];
+      html+='<div class="cal-week-slot'+(ds===todayStr?' today-col':'')+'" data-date="'+ds+'" data-hour="'+h+'" onclick="openEventModal(\''+ds+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';
+    });
+  }
+  html+='</div></div>';
+  container.innerHTML=html;
+
+  const body=container.querySelector('.cal-week-body');
+  if(body){
+    days.forEach((d,i)=>{
+      const ds=dayStrs[i];
+      const timed=events.filter(e=>e.date===ds&&!e.allDay&&e.startTime);
+      timed.forEach(e=>{
+        const[sh,sm]=(e.startTime||'09:00').split(':').map(Number);
+        const[eh,em]=(e.endTime||String(sh+1).padStart(2,'0')+':00').split(':').map(Number);
+        const top=((sh-CAL_HOURS_START)*48)+(sm/60*48);
+        const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
+        const col=i+2;
+        const el=document.createElement('div');
+        el.className='cal-week-ev';
+        el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
+        el.textContent=e.label;
+        el.title=e.label;
+        el.dataset.type=e.type;el.dataset.id=e.id||'';
+        el.onclick=function(){onCalEventClick(e)};
+        body.appendChild(el);
+      });
+    });
+    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const todayIdx=dayStrs.indexOf(nowDs);
+    if(todayIdx>=0){
+      const nowH=now.getHours(),nowM=now.getMinutes();
+      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
+        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
+        const line=document.createElement('div');
+        line.className='cal-week-now-line';
+        line.style.top=top+'px';
+        body.appendChild(line);
+        body.scrollTop=Math.max(0,top-150);
+      }
+    }
+  }
+  initCalDragDrop(container);
+}
+
+// ── Day View ──
+function renderCalDay(){
+  const container=document.getElementById('cal-container');
+  const title=document.getElementById('cal-title');
+  const d=calSelectedDate;
+  const ds=d.toISOString().split('T')[0];
+  const dayName=CAL_DAYS[(d.getDay()+6)%7];
+  title.textContent=dayName+', '+d.getDate()+'. '+CAL_MONTHS[d.getMonth()]+' '+d.getFullYear();
+  const events=collectCalendarEvents();
+  const dayEvents=events.filter(e=>e.date===ds);
+  const allDay=dayEvents.filter(e=>e.allDay);
+  const timed=dayEvents.filter(e=>!e.allDay&&e.startTime);
+
+  let html='<div class="cal-day-view">';
+  html+='<div class="cal-day-allday"><div class="sec">Ganztägig</div>';
+  if(allDay.length){
+    allDay.forEach(e=>{
+      const cls=e.draggable?'cal-event':'cal-event no-drag';
+      const bg=e.color?'style="background:'+e.color+'"':'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+esc(e.label)+'</div>';
+    });
+  }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
+  html+='</div>';
+  html+='<div class="cal-day-body">';
+  for(let h=CAL_HOURS_START;h<=CAL_HOURS_END;h++){
+    html+='<div class="cal-day-time">'+String(h).padStart(2,'0')+':00</div>';
+    html+='<div class="cal-day-slot" data-date="'+ds+'" data-hour="'+h+'" onclick="openEventModal(\''+ds+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';
+  }
+  html+='</div></div>';
+  container.innerHTML=html;
+
+  const body=container.querySelector('.cal-day-body');
+  if(body){
+    timed.forEach(e=>{
+      const[sh,sm]=(e.startTime||'09:00').split(':').map(Number);
+      const[eh,em]=(e.endTime||String(sh+1).padStart(2,'0')+':00').split(':').map(Number);
+      const top=((sh-CAL_HOURS_START)*48)+(sm/60*48);
+      const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
+      const el=document.createElement('div');
+      el.className='cal-day-ev';
+      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71');
+      el.innerHTML='<strong>'+esc(e.label)+'</strong>'+(e.startTime?' <span style="opacity:.8">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</span>':'');
+      el.title=e.label;
+      el.dataset.type=e.type;el.dataset.id=e.id||'';
+      el.onclick=function(){onCalEventClick(e)};
+      body.appendChild(el);
+    });
+    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    if(ds===nowDs){
+      const nowH=now.getHours(),nowM=now.getMinutes();
+      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
+        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
+        const line=document.createElement('div');
+        line.className='cal-day-now-line';
+        line.style.top=top+'px';
+        body.appendChild(line);
+        body.scrollTop=Math.max(0,top-150);
+      }
+    }
+  }
+  initCalDragDrop(container);
+}
+
+// ── Calendar Drag-and-Drop ──
+function initCalDragDrop(root){
+  if(!root)return;
+  root.ondragstart=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(!ev||ev.classList.contains('no-drag')){e.preventDefault();return}
+    e.dataTransfer.setData('text/plain',ev.dataset.type+'|'+ev.dataset.id);
+    e.dataTransfer.effectAllowed='move';
+    ev.style.opacity='0.4';
+  };
+  root.ondragend=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(ev)ev.style.opacity='1';
+    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+  };
+  root.ondragover=function(e){
+    const cell=e.target.closest('[data-date]');
+    if(!cell)return;
+    e.preventDefault();e.dataTransfer.dropEffect='move';
+    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+    cell.classList.add('drag-over');
+  };
+  root.ondragleave=function(e){
+    const cell=e.target.closest('[data-date]');
+    if(cell)cell.classList.remove('drag-over');
+  };
+  root.ondrop=function(e){
+    e.preventDefault();
+    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+    const cell=e.target.closest('[data-date]');
+    if(!cell||!cell.dataset.date)return;
+    const data=e.dataTransfer.getData('text/plain');if(!data)return;
+    const[type,id]=data.split('|');
+    handleCalendarDrop(type,id,cell.dataset.date);
+  };
+}
+
+function handleCalendarDrop(type,id,newDateStr){
+  if(type==='batch-due'){
+    const b=batches.find(x=>x.batchId===id);if(!b)return;
+    const newDue=new Date(newDateStr+'T12:00:00');
+    b.due=newDue.toISOString();
+    const created=new Date(b.created);
+    b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
+    if(typeof saveData==='function')saveData();
+    renderCalendar();
+    if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
+  }else if(type==='task-due'){
+    const t=manualTasks.find(x=>x.created===id);if(!t)return;
+    t.dueDate=newDateStr;t.caldavSynced=null;
+    if(typeof saveData==='function')saveData();
+    renderCalendar();if(typeof renderManualTasks==='function')renderManualTasks();
+    if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
+  }else if(type==='custom'){
+    const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
+    ev.startDate=newDateStr;ev.caldavSynced=null;
+    if(typeof saveData==='function')saveData();
+    renderCalendar();
+    if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
+  }
+}
+
+// ── Calendar Event Click ──
+function onCalEventClick(ev){
+  if(ev.type==='custom'){
+    const ce=calendarEvents.find(x=>x.id===ev.id);
+    if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+  }else if(ev.type==='batch-due'||ev.type==='task-due'){
+    openEventMoveModal(ev);
+  }
+}
+
+function openEventMoveModal(ev){
+  document.getElementById('cal-ev-title').textContent='Event verschieben';
+  document.getElementById('cal-ev-id').value='';
+  document.getElementById('cal-ev-mode').value='move';
+  document.getElementById('cal-ev-name').value=ev.label;
+  document.getElementById('cal-ev-name').disabled=true;
+  document.getElementById('cal-ev-date').value=ev.date;
+  document.getElementById('cal-ev-end-date').value='';
+  document.getElementById('cal-ev-allday').checked=true;
+  document.getElementById('cal-ev-times').style.display='none';
+  document.getElementById('cal-ev-category').closest('.g2').style.display='none';
+  document.getElementById('cal-ev-desc').closest('div').style.display='none';
+  document.getElementById('cal-ev-del-btn').style.display='none';
+  document.getElementById('cal-ev-id').dataset.moveType=ev.type;
+  document.getElementById('cal-ev-id').dataset.moveId=ev.id;
+  document.getElementById('m-cal-event').classList.add('open');
+}
+
+// ── Calendar Event CRUD Modal ──
+function openEventModal(date,time,existing){
+  const modal=document.getElementById('m-cal-event');
+  document.getElementById('cal-ev-name').disabled=false;
+  document.getElementById('cal-ev-category').closest('.g2').style.display='';
+  document.getElementById('cal-ev-desc').closest('div').style.display='';
+  if(existing){
+    document.getElementById('cal-ev-title').textContent='Event bearbeiten';
+    document.getElementById('cal-ev-mode').value='edit';
+    document.getElementById('cal-ev-id').value=existing.id;
+    document.getElementById('cal-ev-name').value=existing.title;
+    document.getElementById('cal-ev-date').value=existing.startDate;
+    document.getElementById('cal-ev-end-date').value=existing.endDate||'';
+    document.getElementById('cal-ev-allday').checked=existing.allDay;
+    document.getElementById('cal-ev-start-time').value=existing.startTime||'09:00';
+    document.getElementById('cal-ev-end-time').value=existing.endTime||'10:00';
+    document.getElementById('cal-ev-category').value=existing.category||'custom';
+    document.getElementById('cal-ev-color').value=existing.color||'#2ecc71';
+    document.getElementById('cal-ev-desc').value=existing.description||'';
+    document.getElementById('cal-ev-del-btn').style.display='';
+  }else{
+    document.getElementById('cal-ev-title').textContent='Neues Event';
+    document.getElementById('cal-ev-mode').value='create';
+    document.getElementById('cal-ev-id').value='';
+    document.getElementById('cal-ev-name').value='';
+    document.getElementById('cal-ev-date').value=date||new Date().toISOString().split('T')[0];
+    document.getElementById('cal-ev-end-date').value='';
+    document.getElementById('cal-ev-allday').checked=!time;
+    document.getElementById('cal-ev-start-time').value=time||'09:00';
+    const endH=time?String(Math.min(23,parseInt(time)+1)).padStart(2,'0')+':00':'10:00';
+    document.getElementById('cal-ev-end-time').value=endH;
+    document.getElementById('cal-ev-category').value='custom';
+    document.getElementById('cal-ev-color').value='#2ecc71';
+    document.getElementById('cal-ev-desc').value='';
+    document.getElementById('cal-ev-del-btn').style.display='none';
+  }
+  toggleCalTimeInputs();
+  modal.classList.add('open');
+  if(!existing)document.getElementById('cal-ev-name').focus();
+}
+function closeEventModal(){
+  document.getElementById('m-cal-event').classList.remove('open');
+  document.getElementById('cal-ev-id').dataset.moveType='';
+  document.getElementById('cal-ev-id').dataset.moveId='';
+}
+function toggleCalTimeInputs(){
+  document.getElementById('cal-ev-times').style.display=document.getElementById('cal-ev-allday').checked?'none':'grid';
+}
+
+function saveCalEvent(){
+  const mode=document.getElementById('cal-ev-mode').value;
+  if(mode==='move'){
+    const moveType=document.getElementById('cal-ev-id').dataset.moveType;
+    const moveId=document.getElementById('cal-ev-id').dataset.moveId;
+    const newDate=document.getElementById('cal-ev-date').value;
+    if(newDate&&moveType)handleCalendarDrop(moveType,moveId,newDate);
+    closeEventModal();return;
+  }
+  const name=document.getElementById('cal-ev-name').value.trim();if(!name)return;
+  const allDay=document.getElementById('cal-ev-allday').checked;
+  const ev={
+    id:mode==='edit'?document.getElementById('cal-ev-id').value:('cev-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)),
+    title:name,
+    description:document.getElementById('cal-ev-desc').value.trim()||null,
+    startDate:document.getElementById('cal-ev-date').value,
+    endDate:document.getElementById('cal-ev-end-date').value||null,
+    allDay:allDay,
+    startTime:allDay?null:document.getElementById('cal-ev-start-time').value,
+    endTime:allDay?null:document.getElementById('cal-ev-end-time').value,
+    category:document.getElementById('cal-ev-category').value,
+    color:document.getElementById('cal-ev-color').value,
+    caldavUid:null,caldavSynced:null,
+    created:new Date().toISOString()
+  };
+  if(mode==='edit'){
+    const idx=calendarEvents.findIndex(x=>x.id===ev.id);
+    if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
+  }else{calendarEvents.push(ev)}
+  if(typeof saveData==='function')saveData();
+  renderCalendar();closeEventModal();
+  if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
+}
+
+function deleteCalEvent(){
+  const id=document.getElementById('cal-ev-id').value;if(!id)return;
+  confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+    calendarEvents=calendarEvents.filter(x=>x.id!==id);
+    if(typeof saveData==='function')saveData();
+    renderCalendar();closeEventModal();
+  });
+}
+
+async function pushEventCaldav(ev){
+  if(!caldav.enabled)return;
+  try{
+    const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();if(typeof saveData==='function')saveData()}
+  }catch(e){console.error('CalDAV event push error:',e)}
+}
+
+async function loadCalDAVImports(){
+  try{
+    const r=await authFetch('/api/caldav/import');
+    if(r.ok)caldavImports=await r.json();
+  }catch(e){caldavImports=[];}
+}
+
+if(typeof pushBatchCaldav==='undefined'){
+  window.pushBatchCaldav=async function(batch){
+    if(!caldav.enabled)return;
+    try{await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})})}catch(e){}
+  };
+}
 
 loadCurrentUser();
 loadData();
