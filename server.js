@@ -1370,6 +1370,10 @@ function handleRequest(req,res){
   if(req.method==='DELETE'&&scanLastMatch){
     try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
+  const scanIdMatch=req.url.match(/^\/api\/scan-log\/(\d+)$/);
+  if(req.method==='DELETE'&&scanIdMatch){
+    try{db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+  }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
     try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
