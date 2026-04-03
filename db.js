@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS assets (
 // To add a new migration: append an entry to MIGRATIONS array.
 const MIGRATIONS = [
   // v1: baseline — all tables already created via SCHEMA DDL
-  { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', sql: 'ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0' },
+  { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', sql: "ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0", allowDuplicate: true },
 ];
 
 function runMigrations(db) {
@@ -196,6 +196,11 @@ function runMigrations(db) {
       console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
     } catch (e) {
       db.exec('ROLLBACK');
+      if (m.allowDuplicate && e.message.includes('duplicate column')) {
+        db.prepare('INSERT OR IGNORE INTO schema_version(version, applied, description) VALUES(?, ?, ?)').run(m.version, new Date().toISOString(), m.description || '');
+        console.log(`  Migration v${m.version} skipped (already applied): ${m.description || ''}`);
+        continue;
+      }
       throw new Error(`Migration v${m.version} failed: ${e.message}`);
     }
   }
