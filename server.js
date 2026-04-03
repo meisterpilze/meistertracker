@@ -1366,6 +1366,10 @@ function handleRequest(req,res){
   if(req.method==='POST'&&req.url==='/api/scan-log'){
     jsonBody(req,res,(e,data)=>{try{const ids=db.appendScanEntries(database,data.entries||[]);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
   }
+  const scanIdMatch=req.url.match(/^\/api\/scan-log\/(\d+)$/);
+  if(req.method==='DELETE'&&scanIdMatch){
+    try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){jsonErr(res,400,err.message)}return;
+  }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
     try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
