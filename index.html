@@ -1037,6 +1037,11 @@
 <div id="ref-print-sheet"></div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+// Active frontend — uses atomic REST endpoints (apiPost/apiPatch/apiDelete).
+// Legacy app.js (full-state saveData) is deprecated and NOT loaded here.
+// ══════════════════════════════════════════════════════════════
+
 // ─── I18N ────────────────────────────────────────────────────
 let currentLang = localStorage.getItem('mp-lang') || 'de';
 const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };
@@ -3054,15 +3059,34 @@ async function authFetch(url,opts){
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
   return r;
 }
-async function apiPost(path,body){return authFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiPatch(path,body){return authFetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json())}
-async function apiDelete(path){return authFetch(path,{method:'DELETE'}).then(r=>r.json())}
+function _apiCall(method,path,body){
+  _mutating++;
+  setSyncStatus('busy','Saving...');
+  const opts={method,headers:{}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}
+  return authFetch(path,opts).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(d=>{
+    _mutating--;
+    if(_mutating===0)setSyncStatus('ok','Saved · gerade eben');
+    return d;
+  }).catch(e=>{
+    _mutating--;
+    setSyncStatus('err','Save error: '+(e.message||'check server'));
+    console.error('API error:',method,path,e);
+    return {};
+  });
+}
+function apiPost(path,body){return _apiCall('POST',path,body)}
+function apiPatch(path,body){return _apiCall('PATCH',path,body)}
+function apiDelete(path){return _apiCall('DELETE',path)}
 async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/delta',{mat,deltaKg,type,ref})}
 async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
-  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch{}
+  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3070,16 +3094,18 @@ async function loadData(){
   setSyncStatus('busy','Syncing...');
   try{
     const d=await authFetch('/api/data').then(r=>r.json());
+    lastHash=JSON.stringify(d);
     applyData(d);
-    setSyncStatus('ok','Synced '+fmtDtTime(new Date()));
+    setSyncStatus('ok','Synced · gerade eben');
     refresh();
-  }catch{setSyncStatus('err','Sync error')}
+  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
+  calendarEvents=d.calendarEvents||[];
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -3094,9 +3120,30 @@ function defaultInventory(){
   };
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls}
+let _mutating=0; // tracks in-flight mutations to block pollSync from overwriting
+let lastSyncTime=null;
+function formatRelativeTime(ts){
+  const sec=Math.round((Date.now()-ts)/1000);
+  if(sec<5)return 'gerade eben';
+  if(sec<60)return 'vor '+sec+'s';
+  const min=Math.floor(sec/60);
+  if(min<60)return 'vor '+min+' Min.';
+  return 'vor '+Math.floor(min/60)+' Std.';
+}
+function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
+// Update relative time display every 5 seconds
+setInterval(()=>{
+  if(!lastSyncTime)return;
+  const dot=document.getElementById('sync-dot');
+  if(!dot||!dot.classList.contains('ok'))return;
+  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+},5000);
+let _polling=false;
 async function pollSync(){
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced '+fmtDtTime(new Date()));refresh();}}catch{}
+  if(_mutating>0||_polling)return; // don't overwrite while mutations are in-flight or already polling
+  _polling=true;
+  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
+  finally{_polling=false}
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
@@ -3942,7 +3989,10 @@ async function syncCaldavNow(){
     if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
     else{
       showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
-      await loadData();renderManualTasks();
+      // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
+      // instead of loadData() which would overwrite ALL local state
+      try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
+      renderManualTasks();
     }
   }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
@@ -4891,7 +4941,7 @@ async function loadUsersTab(){
     tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Created</th><th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
       users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?fmtDt(u.created):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
       '</tbody></table>';
-  }catch{}
+  }catch(e){console.error('Failed to load users:',e)}
 }
 
 async function addUser(){
@@ -5237,19 +5287,19 @@ function handleCalendarDrop(type,id,newDateStr){
     b.due=newDue.toISOString();
     const created=new Date(b.created);
     b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
     renderCalendar();
     if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
   }else if(type==='task-due'){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
     t.dueDate=newDateStr;t.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/tasks/'+t.id,{dueDate:newDateStr,caldavSynced:null});
     renderCalendar();if(typeof renderManualTasks==='function')renderManualTasks();
     if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
-    if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{startDate:newDateStr,caldavSynced:null});
     renderCalendar();
     if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
   }
@@ -5273,7 +5323,11 @@ function updateEventTime(id,newStart,newEnd,newDate){
   if(newEnd)ev.endTime=newEnd;
   if(newDate)ev.startDate=newDate;
   ev.caldavSynced=null;
-  if(typeof saveData==='function')saveData();
+  const patch={caldavSynced:null};
+  if(newStart)patch.startTime=newStart;
+  if(newEnd)patch.endTime=newEnd;
+  if(newDate)patch.startDate=newDate;
+  apiPatch('/api/calendar-events/'+encodeURIComponent(id),patch);
   renderCalendar();
   if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
@@ -5595,8 +5649,11 @@ function saveCalEvent(){
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-  }else{calendarEvents.push(ev)}
-  if(typeof saveData==='function')saveData();
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),ev);
+  }else{
+    calendarEvents.push(ev);
+    apiPost('/api/calendar-events',ev).then(r=>{if(r&&r.id)ev.id=r.id});
+  }
   renderCalendar();closeEventModal();
   if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
@@ -5606,9 +5663,8 @@ function deleteCalEvent(){
   closeEventModal();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    if(typeof saveData==='function')saveData();
-    renderCalendar();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
+    renderCalendar();closeEventModal();
   });
 }
 
@@ -5616,7 +5672,7 @@ async function pushEventCaldav(ev){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();if(typeof saveData==='function')saveData()}
+    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{caldavUid:ev.caldavUid,caldavSynced:ev.caldavSynced})}
   }catch(e){console.error('CalDAV event push error:',e)}
 }
 
