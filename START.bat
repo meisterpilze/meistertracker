@@ -255,17 +255,26 @@ if exist "certs\server.key" if exist "certs\server.crt" (
     exit /b 0
 )
 if exist "gen-cert.ps1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "gen-cert.ps1"
-    exit /b 0
+    echo  -^> TLS certificates missing, generating...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\gen-cert.ps1"
+    if exist "certs\server.key" if exist "certs\server.crt" (
+        echo  -^> TLS certificates generated successfully.
+        exit /b 0
+    )
+    echo  -^> WARNING: Certificate generation failed.
 )
 if exist "gen-cert.sh" (
     where bash >nul 2>&1
     if !errorlevel! equ 0 (
-        bash gen-cert.sh
-        exit /b 0
+        echo  -^> Trying gen-cert.sh...
+        bash "%CD%/gen-cert.sh"
+        if exist "certs\server.key" if exist "certs\server.crt" (
+            echo  -^> TLS certificates generated successfully.
+            exit /b 0
+        )
     )
 )
-echo  -^> WARNING: No cert generation script found.
+echo  -^> WARNING: Could not generate TLS certificates.
 echo     Server will start in HTTP-only mode ^(iOS camera will not work^).
 exit /b 0
 
