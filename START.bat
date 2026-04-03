@@ -18,11 +18,16 @@ if not "%~1"=="--relaunched" (
     echo [1/5] Updating code from git...
     where git >nul 2>&1
     if !errorlevel! equ 0 (
-        git fetch origin >nul 2>&1
-        if !errorlevel! equ 0 (
-            git reset --hard origin/main
+        if exist ".git" (
+            git fetch origin >nul 2>&1
+            if !errorlevel! equ 0 (
+                git reset --hard origin/main
+            ) else (
+                echo  WARNING: git fetch failed. Continuing with local code.
+            )
         ) else (
-            echo  WARNING: git fetch failed. Continuing with local code.
+            echo  WARNING: No .git directory found ^(ZIP download?^). Auto-update disabled.
+            echo  For auto-updates, re-download with: git clone https://github.com/loewenmaehne/meistertracker.git
         )
     ) else (
         echo  WARNING: Git not found, skipping code update.
@@ -50,8 +55,22 @@ REM ============================================================
 REM  Check and auto-install prerequisites
 REM ============================================================
 
+REM ---- Check for admin rights (needed for winget installs) ----
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    call :check_node
+    if !errorlevel! neq 0 (
+        echo.
+        echo  ERROR: Node.js is missing and this terminal is not running as Administrator.
+        echo  winget install requires admin rights. Please right-click START.bat
+        echo  and choose "Run as administrator", then try again.
+        echo.
+        exit /b 1
+    )
+)
+
 where winget >nul 2>&1
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     set "HAS_WINGET=0"
 ) else (
     set "HAS_WINGET=1"
@@ -59,7 +78,7 @@ if %errorlevel% neq 0 (
 
 REM ---- Check / Install Node.js ----
 call :check_node
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo  Node.js is not installed.
     if "!HAS_WINGET!"=="1" (
@@ -84,7 +103,7 @@ if %errorlevel% neq 0 (
 
 REM ---- Check / Install Git ----
 call :check_git
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo  Git is not installed.
     if "!HAS_WINGET!"=="1" (
@@ -112,7 +131,7 @@ if "!NEED_PATH_REFRESH!"=="1" (
 
 REM ---- Verify Node.js is now available ----
 call :check_node
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo  ERROR: Node.js is still not found after installation.
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
@@ -125,7 +144,7 @@ echo  -^> Node.js %NODE_VER% found.
 
 REM ---- Ensure PM2 ----
 call :check_pm2
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo  PM2 not found, installing globally...
     call npm install -g pm2
     if !errorlevel! neq 0 (
@@ -135,7 +154,7 @@ if %errorlevel% neq 0 (
     call :refresh_path
 )
 call :check_pm2
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo  ERROR: PM2 is still not found after installation.
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
     exit /b 1
@@ -149,7 +168,7 @@ REM ============================================================
 echo.
 echo [2/5] Installing dependencies...
 call npm install --omit=dev
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo  ERROR: npm install failed.
     exit /b 1
 )
@@ -189,7 +208,7 @@ for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:3000.*LIST
 )
 
 call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
-if %errorlevel% equ 0 (
+if !errorlevel! equ 0 (
     echo  -^> Process found, restarting...
     call pm2 restart %PM2_PROCESS_NAME%
     if !errorlevel! neq 0 (
@@ -206,7 +225,7 @@ call pm2 save >nul 2>&1
 REM Wait briefly for the process to initialize, then verify it stayed up
 ping -n 4 127.0.0.1 >nul 2>&1
 call pm2 show %PM2_PROCESS_NAME% 2>nul | findstr /i /c:"online" >nul 2>&1
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo  ERROR: Server process crashed on startup.
     echo.
