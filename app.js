@@ -5,7 +5,7 @@ function esc(s) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const SYNC_INTERVAL_MS = 5000;
+const SYNC_INTERVAL_MS = 30000; // fallback polling (SSE is primary)
 const MAX_LOG_DISPLAY = 200;
 const MAX_RACK_CAPACITY = 20;
 const MS_PER_DAY = 86400000;
@@ -631,6 +631,7 @@ function createBatch(){
   }
 
   saveData();
+  pushBatchCaldav(batches[batches.length-1]);
   document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
   document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
@@ -907,6 +908,13 @@ async function pushTaskCaldav(task){
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
     if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
   }catch(e){console.error('CalDAV push error:',e)}
+}
+
+async function pushBatchCaldav(batch){
+  if(!caldav.enabled)return;
+  try{
+    await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})});
+  }catch(e){console.error('CalDAV batch push error:',e)}
 }
 
 // ─── CALENDAR ───────────────────────────────────────────────
@@ -1186,6 +1194,7 @@ function handleCalendarDrop(type,id,newDateStr){
     const created=new Date(b.created);
     b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
     saveData();renderCalendar();
+    pushBatchCaldav(b);
     if(document.querySelector('#p-dash.active'))renderStatus();
   }else if(type==='task-due'){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
@@ -1196,6 +1205,7 @@ function handleCalendarDrop(type,id,newDateStr){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
     ev.startDate=newDateStr;ev.caldavSynced=null;
     saveData();renderCalendar();
+    pushEventCaldav(ev);
   }
 }
 
@@ -2292,6 +2302,17 @@ async function deleteUser(id){
 loadCurrentUser();
 loadData();
 setInterval(pollSync,SYNC_INTERVAL_MS);
+
+// SSE for real-time multi-client sync
+(function initSSE(){
+  try{
+    const es=new EventSource('/api/events');
+    es.onmessage=function(e){
+      try{const d=JSON.parse(e.data);if(d.type==='data-changed')pollSync()}catch{}
+    };
+    es.onerror=function(){/* auto-reconnects; fallback polling handles gaps */};
+  }catch{}
+})();
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){
