@@ -1051,9 +1051,9 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{username,password}=JSON.parse(body);
-        if(!username||!password||password.length<4){
+        if(!username||!password||password.length<8){
           res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
         }
         const user=db.createUser(database,username,password,'admin');
         const dbUser=db.getUserByUsername(database,username);
@@ -1148,9 +1148,9 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{username,password,role}=JSON.parse(body);
-        if(!username||!password||password.length<4){
+        if(!username||!password||password.length<8){
           res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 4 chars) required'}));return;
+          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
         }
         const user=db.createUser(database,username,password,role||'user');
         res.writeHead(200,{'Content-Type':'application/json'});

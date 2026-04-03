@@ -2279,7 +2279,7 @@ async function addUser(){
   const p=document.getElementById('new-password').value;
   const role=document.getElementById('new-role').value;
   if(!u||!p){alert('Username and password required');return;}
-  if(p.length<4){alert('Password must be at least 4 characters');return;}
+  if(p.length<8){alert('Password must be at least 8 characters');return;}
   try{
     const r=await authFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role})});
     if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
