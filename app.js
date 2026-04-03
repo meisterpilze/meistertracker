@@ -1102,7 +1102,10 @@ function renderCalWeek(){
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
-        el.textContent=e.label;
+        let wkContent=esc(e.label);
+        if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+        if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
+        el.innerHTML=wkContent;
         el.title=e.label;
         el.dataset.type=e.type;el.dataset.id=e.id||'';
         el.dataset.date=ds;
@@ -1178,8 +1181,11 @@ function renderCalDay(){
       const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
       const el=document.createElement('div');
       el.className='cal-day-ev';
-      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71');
-      el.innerHTML='<strong>'+esc(e.label)+'</strong>'+(e.startTime?' <span style="opacity:.8">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</span>':'');
+      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:2';
+      let dayContent='<strong>'+esc(e.label)+'</strong>';
+      if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
+      if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
+      el.innerHTML=dayContent;
       el.title=e.label;
       el.dataset.type=e.type;el.dataset.id=e.id||'';
       el.dataset.date=ds;
@@ -1400,12 +1406,107 @@ function initEventResize(el,handle,body,viewType){
 
 // ── Event Click ──
 function onCalEventClick(ev){
+  if(ev.type==='harvest')return;
+  openEventDetail(ev);
+}
+
+function openEventDetail(ev){
+  const titleEl=document.getElementById('cal-detail-title');
+  const metaEl=document.getElementById('cal-detail-meta');
+  const badgesEl=document.getElementById('cal-detail-badges');
+  const assignEl=document.getElementById('cal-detail-assignee');
+  const descEl=document.getElementById('cal-detail-desc');
+  const btnsEl=document.getElementById('cal-detail-btns');
+
   if(ev.type==='custom'){
-    const ce=calendarEvents.find(x=>x.id===ev.id);
-    if(ce)openEventModal(ce.startDate,ce.startTime,ce);
-  }else if(ev.type==='batch-due'||ev.type==='task-due'){
-    openEventMoveModal(ev);
+    const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
+    titleEl.textContent=ce.title;
+    let meta=new Date(ce.startDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
+    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(ce.color||'#2ecc71')+';color:#fff">'+(catLabels[ce.category]||ce.category)+'</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ce.description||'';
+    descEl.style.display=ce.description?'':'none';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
+
+  }else if(ev.type==='task-due'){
+    const t=manualTasks.find(x=>x.created===ev.id);if(!t)return;
+    titleEl.textContent=t.text;
+    let meta='Aufgabe';
+    if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
+    const prioColors={high:'#e74c3c',medium:'#f39c12',low:'#3498db'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+(prioLabels[t.priority]||t.priority)+'</span>':'');
+    assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
+    descEl.textContent=t.description||'';
+    descEl.style.display=t.description?'':'none';
+    const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='batch-due'){
+    titleEl.textContent=ev.label;
+    const b=batches.find(x=>x.batchId===ev.id);
+    let meta='Batch-Fälligkeitstermin';
+    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#e74c3c;color:#fff">Batch</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
+    descEl.style.display='';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="closeEventDetail();openEventMoveModal({type:\'batch-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+
+  }else if(ev.type==='caldav-import'){
+    titleEl.textContent=ev.label;
+    let meta='CalDAV Import';
+    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
+    metaEl.textContent=meta;
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#9b59b6;color:#fff">CalDAV</span>';
+    assignEl.innerHTML='';
+    descEl.textContent=ev.description||'';
+    descEl.style.display=ev.description?'':'none';
+    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">Schließen</button>';
   }
+  document.getElementById('m-cal-detail').classList.add('open');
+}
+
+function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+
+function editEventFromDetail(id){
+  closeEventDetail();
+  const ce=calendarEvents.find(x=>x.id===id);
+  if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+}
+
+function deleteCalEventFromDetail(id){
+  closeEventDetail();
+  confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+    calendarEvents=calendarEvents.filter(x=>x.id!==id);
+    saveData();renderCalendar();
+    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+  });
+}
+
+function toggleTaskFromCalendar(taskId){
+  const idx=manualTasks.findIndex(t=>t.created===taskId);
+  if(idx<0)return;
+  toggleTask(idx);
+  renderCalendar();
+  closeEventDetail();
+}
+
+function deleteTaskFromCalendar(taskId){
+  closeEventDetail();
+  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    const idx=manualTasks.findIndex(t=>t.created===taskId);
+    if(idx<0)return;
+    manualTasks.splice(idx,1);
+    saveData();renderManualTasks();renderCalendar();updateTodoBadge();
+  });
 }
 
 function onCalMonthEventClick(type,id){
@@ -1518,9 +1619,10 @@ function saveCalEvent(){
 
 function deleteCalEvent(){
   const id=document.getElementById('cal-ev-id').value;if(!id)return;
+  closeEventModal();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    saveData();renderCalendar();closeEventModal();
+    saveData();renderCalendar();
     authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
   });
 }
