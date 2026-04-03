@@ -49,6 +49,17 @@
     <div class="modal-btns"><button class="btn" onclick="closeNote()">Cancel</button><button class="btn btn-p" onclick="saveNote()">Save</button></div>
   </div>
 </div>
+<!-- Calendar move modal -->
+<div class="modal-bg" id="m-cal-move">
+  <div class="modal"><h3 id="cal-move-title">Event verschieben</h3>
+    <p id="cal-move-info" style="font-size:12px;color:#666"></p>
+    <div style="margin-bottom:8px">
+      <label>Neues Datum</label><input type="date" id="cal-move-date" />
+    </div>
+    <input type="hidden" id="cal-move-type" /><input type="hidden" id="cal-move-id" />
+    <div class="modal-btns"><button class="btn" onclick="closeCalMove()">Abbrechen</button><button class="btn btn-p" onclick="applyCalMove()">Verschieben</button></div>
+  </div>
+</div>
 <!-- Batch-add modal -->
 <div class="modal-bg" id="m-batchadd">
   <div class="modal"><h3>Add entire batch to location</h3>
@@ -541,7 +552,8 @@
   <div class="stabs">
     <button class="stab active" id="st-todo-todo" onclick="openStab('todo','todo')" data-i18n="todo.tasks">Tasks</button>
     <button class="stab" id="st-todo-team" onclick="openStab('todo','team')" data-i18n="todo.team">Team</button>
-    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')" data-i18n="todo.calendar">Calendar</button>
+    <button class="stab" id="st-todo-cal" onclick="openStab('todo','cal')">Kalender</button>
+    <button class="stab" id="st-todo-caldav" onclick="openStab('todo','caldav')">CalDAV</button>
   </div>
   <!-- To-do -->
   <div class="sp active" id="sp-todo-todo">
@@ -594,6 +606,21 @@
         <button class="btn btn-p btn-sm" onclick="addMember()" data-i18n="team.addMember">+ Add member</button>
       </div>
     </div>
+  </div>
+
+  <!-- Calendar View -->
+  <div class="sp" id="sp-todo-cal">
+    <div class="cal-nav">
+      <button class="btn btn-sm" onclick="calNav(-1)">&larr;</button>
+      <span class="cal-title" id="cal-title"></span>
+      <button class="btn btn-sm" onclick="calNav(1)">&rarr;</button>
+    </div>
+    <div class="cal-legend">
+      <span class="leg-batch">Fälligkeiten</span>
+      <span class="leg-task">Aufgaben</span>
+      <span class="leg-harvest">Ernten</span>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
   </div>
 
   <!-- CalDAV Calendar Sync -->

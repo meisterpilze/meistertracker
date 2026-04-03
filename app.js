@@ -134,6 +134,7 @@ function openStab(page,sub){
   if(page==='print'&&sub==='ref')renderRefBarcodes();
   if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
   if(page==='todo'&&sub==='team')renderTeam();
+  if(page==='todo'&&sub==='cal')renderCalendar();
   if(page==='todo'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
@@ -145,7 +146,7 @@ function refresh(){
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
   if(id==='assets')renderAssets();
-  if(id==='todo')renderTodo();
+  if(id==='todo'){renderTodo();if(document.getElementById('sp-todo-cal').classList.contains('active'))renderCalendar();}
   updateTodoBadge();
 }
 
@@ -891,7 +892,7 @@ async function syncCaldavNow(){
   const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
-    const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
+    const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks,batches})}).then(r=>r.json());
     if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
     else{
       showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
@@ -906,6 +907,186 @@ async function pushTaskCaldav(task){
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
     if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();saveData();renderManualTasks()}
   }catch(e){console.error('CalDAV push error:',e)}
+}
+
+// ─── CALENDAR ───────────────────────────────────────────────
+let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
+const CAL_DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+const CAL_MONTHS=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+function collectCalendarEvents(){
+  const events=[];
+  // Batch due dates
+  batches.forEach(b=>{
+    if(!b.due)return;
+    const d=new Date(b.due);
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true});
+  });
+  // Manual task due dates
+  manualTasks.forEach(t=>{
+    if(!t.dueDate)return;
+    events.push({date:t.dueDate.split('T')[0],label:t.text,type:'task-due',id:t.created,draggable:!t.done});
+  });
+  // Harvests
+  harvests.forEach(h=>{
+    if(!h.time)return;
+    const d=new Date(h.time);
+    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false});
+  });
+  return events;
+}
+
+function renderCalendar(){
+  const grid=document.getElementById('cal-grid');
+  const title=document.getElementById('cal-title');
+  if(!grid||!title)return;
+  title.textContent=CAL_MONTHS[calMonth]+' '+calYear;
+
+  const firstDay=new Date(calYear,calMonth,1);
+  const lastDay=new Date(calYear,calMonth+1,0);
+  const daysInMonth=lastDay.getDate();
+  // Monday=0 start: JS getDay() 0=Sun → shift to Mon-start
+  let startDow=(firstDay.getDay()+6)%7;
+
+  const prevLast=new Date(calYear,calMonth,0).getDate();
+  const events=collectCalendarEvents();
+  const todayStr=new Date().toISOString().split('T')[0];
+
+  let html=CAL_DAYS.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
+
+  // Helper to render events for a date string
+  function eventsForDate(dateStr){
+    const dayEvents=events.filter(e=>e.date===dateStr);
+    const maxShow=3;
+    let out=dayEvents.slice(0,maxShow).map(e=>{
+      const drag=e.draggable?'draggable="true"':'';
+      const cls=e.draggable?'cal-event':'cal-event no-drag';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'">'+esc(e.label)+'</div>';
+    }).join('');
+    if(dayEvents.length>maxShow)out+='<div class="cal-more">+'+(dayEvents.length-maxShow)+' mehr</div>';
+    return out;
+  }
+
+  // Leading days from previous month
+  for(let i=startDow-1;i>=0;i--){
+    const day=prevLast-i;
+    const m=calMonth===0?11:calMonth-1;
+    const y=calMonth===0?calYear-1:calYear;
+    const ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    html+='<div class="cal-cell other" data-date="'+ds+'"><div class="cal-day">'+day+'</div>'+eventsForDate(ds)+'</div>';
+  }
+
+  // Current month days
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const cls=ds===todayStr?'cal-cell today':'cal-cell';
+    html+='<div class="'+cls+'" data-date="'+ds+'"><div class="cal-day">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  }
+
+  // Trailing days to fill last row
+  const totalCells=startDow+daysInMonth;
+  const trailing=(7-totalCells%7)%7;
+  for(let d=1;d<=trailing;d++){
+    const m=calMonth===11?0:calMonth+1;
+    const y=calMonth===11?calYear+1:calYear;
+    const ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    html+='<div class="cal-cell other" data-date="'+ds+'"><div class="cal-day">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  }
+
+  grid.innerHTML=html;
+  initCalDragDrop();
+}
+
+function calNav(delta){
+  calMonth+=delta;
+  if(calMonth<0){calMonth=11;calYear--}
+  if(calMonth>11){calMonth=0;calYear++}
+  renderCalendar();
+}
+
+function initCalDragDrop(){
+  const grid=document.getElementById('cal-grid');
+  if(!grid)return;
+  grid.ondragstart=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(!ev||ev.classList.contains('no-drag')){e.preventDefault();return}
+    e.dataTransfer.setData('text/plain',ev.dataset.type+'|'+ev.dataset.id);
+    e.dataTransfer.effectAllowed='move';
+    ev.style.opacity='0.4';
+  };
+  grid.ondragend=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(ev)ev.style.opacity='1';
+    grid.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+  };
+  grid.ondragover=function(e){
+    const cell=e.target.closest('.cal-cell');
+    if(!cell)return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect='move';
+    // Clear previous highlights
+    grid.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+    cell.classList.add('drag-over');
+  };
+  grid.ondragleave=function(e){
+    const cell=e.target.closest('.cal-cell');
+    if(cell)cell.classList.remove('drag-over');
+  };
+  grid.ondrop=function(e){
+    e.preventDefault();
+    grid.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+    const cell=e.target.closest('.cal-cell');
+    if(!cell||!cell.dataset.date)return;
+    const data=e.dataTransfer.getData('text/plain');
+    if(!data)return;
+    const[type,id]=data.split('|');
+    handleCalendarDrop(type,id,cell.dataset.date);
+  };
+  // Click handler for touch/mobile fallback
+  grid.onclick=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(!ev)return;
+    openCalMove(ev.dataset.type,ev.dataset.id,ev.closest('.cal-cell').dataset.date,ev.title);
+  };
+}
+
+function handleCalendarDrop(type,id,newDateStr){
+  if(type==='batch-due'){
+    const b=batches.find(x=>x.batchId===id);
+    if(!b)return;
+    const newDue=new Date(newDateStr+'T12:00:00');
+    b.due=newDue.toISOString();
+    const created=new Date(b.created);
+    b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
+    saveData();renderCalendar();
+    if(document.querySelector('#p-dash.active'))renderStatus();
+  }else if(type==='task-due'){
+    const t=manualTasks.find(x=>x.created===id);
+    if(!t)return;
+    t.dueDate=newDateStr;
+    t.caldavSynced=null;
+    saveData();renderCalendar();renderManualTasks();
+    if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t);
+  }
+}
+
+function openCalMove(type,id,currentDate,label){
+  if(type==='harvest')return; // harvests not movable
+  document.getElementById('cal-move-title').textContent='Event verschieben';
+  document.getElementById('cal-move-info').textContent=label||'';
+  document.getElementById('cal-move-date').value=currentDate||'';
+  document.getElementById('cal-move-type').value=type;
+  document.getElementById('cal-move-id').value=id;
+  document.getElementById('m-cal-move').classList.add('open');
+}
+function closeCalMove(){document.getElementById('m-cal-move').classList.remove('open')}
+function applyCalMove(){
+  const type=document.getElementById('cal-move-type').value;
+  const id=document.getElementById('cal-move-id').value;
+  const newDate=document.getElementById('cal-move-date').value;
+  if(!newDate)return;
+  handleCalendarDrop(type,id,newDate);
+  closeCalMove();
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
