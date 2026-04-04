@@ -5,6 +5,57 @@ set -e
 
 # Configuration
 PM2_PROCESS_NAME="meisterpilze"
+BASE_PORT=3000
+BASE_HTTPS_PORT=3443
+
+# ---- Worktree detection ----
+
+detect_worktree() {
+    # Check if we're inside a git worktree (not the main working tree)
+    local toplevel
+    toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    local common_dir
+    common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
+    local git_dir
+    git_dir="$(git rev-parse --git-dir 2>/dev/null)" || return 1
+
+    # In a worktree, .git is a file pointing to the main repo's worktrees/<name> dir
+    # The git-dir will contain "/worktrees/" when inside a worktree
+    if echo "$git_dir" | grep -q "/worktrees/"; then
+        WORKTREE_NAME="$(basename "$toplevel")"
+        IS_WORKTREE=true
+    else
+        IS_WORKTREE=false
+    fi
+}
+
+find_free_port() {
+    local port=$1
+    while lsof -iTCP:"$port" -sTCP:LISTEN -t > /dev/null 2>&1; do
+        port=$((port + 1))
+    done
+    echo "$port"
+}
+
+setup_worktree_config() {
+    if [ "$IS_WORKTREE" = true ]; then
+        PM2_PROCESS_NAME="meisterpilze-${WORKTREE_NAME}"
+        local http_port
+        http_port=$(find_free_port $((BASE_PORT + 1)))
+        local https_port
+        https_port=$(find_free_port $((BASE_HTTPS_PORT + 1)))
+        export PORT="$http_port"
+        export HTTPS_PORT="$https_port"
+        echo "  ┌─ Worktree mode ─────────────────────────────"
+        echo "  │ Worktree:    $WORKTREE_NAME"
+        echo "  │ PM2 name:    $PM2_PROCESS_NAME"
+        echo "  │ HTTP port:   $http_port"
+        echo "  │ HTTPS port:  $https_port"
+        echo "  └─────────────────────────────────────────────"
+    fi
+}
+
+detect_worktree
 
 # ---- Helper functions ----
 
@@ -55,15 +106,20 @@ do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
     check_node
     ensure_pm2
+    setup_worktree_config
 
-    echo "[1/5] Updating code from git (reset to origin/main)..."
-    if ! git fetch origin; then
-        echo "Error: git fetch failed."
-        exit 1
-    fi
-    if ! git reset --hard origin/main; then
-        echo "Error: git reset --hard origin/main failed."
-        exit 1
+    if [ "$IS_WORKTREE" = true ]; then
+        echo "[1/5] Skipping git pull (worktree mode — code is managed by the worktree)"
+    else
+        echo "[1/5] Updating code from git (reset to origin/main)..."
+        if ! git fetch origin; then
+            echo "Error: git fetch failed."
+            exit 1
+        fi
+        if ! git reset --hard origin/main; then
+            echo "Error: git reset --hard origin/main failed."
+            exit 1
+        fi
     fi
 
     echo "[2/5] Installing dependencies..."
@@ -77,13 +133,12 @@ do_update() {
 
     echo "[5/5] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
-        echo "  -> Process found, attempting reload..."
-        pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
-    else
-        echo "  -> Process not found in PM2, starting new instance..."
-        pm2 start server.js --name "$PM2_PROCESS_NAME"
-        pm2 save
+        echo "  -> Process found, deleting for clean restart..."
+        pm2 delete "$PM2_PROCESS_NAME"
     fi
+    echo "  -> Starting instance..."
+    pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
+    pm2 save
 
     echo "==== Update Completed Successfully ===="
     echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
@@ -93,6 +148,7 @@ do_start() {
     echo "==== Meisterpilze Server — Start ===="
     check_node
     ensure_pm2
+    setup_worktree_config
 
     # Ensure dependencies are installed
     if [ -f package.json ] && [ ! -d node_modules ]; then
@@ -104,23 +160,24 @@ do_start() {
     ensure_certs
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
-        echo "Process already exists in PM2, restarting..."
-        pm2 restart "$PM2_PROCESS_NAME"
-    else
-        echo "Starting new instance..."
-        pm2 start server.js --name "$PM2_PROCESS_NAME"
-        pm2 save
+        echo "Process already exists, restarting clean..."
+        pm2 delete "$PM2_PROCESS_NAME"
     fi
+    echo "Starting instance..."
+    pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
+    pm2 save
     echo "==== Server Started ===="
 }
 
 do_stop() {
     echo "==== Meisterpilze Server — Stop ===="
     ensure_pm2
+    setup_worktree_config
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         pm2 stop "$PM2_PROCESS_NAME"
-        echo "Server stopped."
+        pm2 delete "$PM2_PROCESS_NAME"
+        echo "Server stopped and removed from PM2."
     else
         echo "Process '$PM2_PROCESS_NAME' not found in PM2 — nothing to stop."
     fi
