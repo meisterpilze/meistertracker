@@ -94,6 +94,11 @@
       <label>Beschreibung (optional)</label>
       <textarea id="cal-ev-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
     </div>
+    <div style="margin-bottom:8px">
+      <label>Zugewiesen an</label>
+      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;cursor:pointer" onclick="toggleAssigneeDropdown()"><span style="color:#aaa;font-size:12px">Niemand zugewiesen</span></div>
+      <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid #e5e3dd;border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-r" id="cal-ev-del-btn" onclick="deleteCalEvent()" style="display:none;margin-right:auto">Löschen</button>
       <button class="btn" onclick="closeEventModal()">Abbrechen</button>
@@ -700,6 +705,9 @@
         <span class="cal-title" id="cal-title"></span>
       </div>
       <div class="cal-toolbar-right">
+        <select id="cal-filter-user" onchange="renderCalendar()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid #e5e3dd">
+          <option value="">Alle Benutzer</option>
+        </select>
         <div class="cal-view-toggle">
           <button class="cal-vbtn active" id="cv-month" onclick="setCalView('month')">Monat</button>
           <button class="cal-vbtn" id="cv-week" onclick="setCalView('week')">Woche</button>

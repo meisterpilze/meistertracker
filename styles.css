@@ -425,6 +425,11 @@ tr:hover td{background:#f1f5f9}
 .cal-event:hover{opacity:.9;transform:translateY(-1px)}
 .cal-event.no-drag{cursor:default;opacity:.8}
 .cal-event.no-drag:hover{transform:none;opacity:.85}
+.cal-ev-assignees{font-size:10px;opacity:.85;display:inline;white-space:nowrap}
+.assignee-chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:1px 8px;background:#eee;border-radius:12px}
+.assignee-chip button{background:none;border:none;cursor:pointer;font-size:13px;padding:0;line-height:1}
+#cal-ev-assignee-dropdown label{display:block;padding:4px 8px;cursor:pointer;font-size:12px}
+#cal-ev-assignee-dropdown label:hover{background:#f0f0f0}
 .cal-more{font-size:11px;color:var(--c-primary);cursor:pointer;padding:2px 7px;font-weight:600;border-radius:4px;transition:background .15s}
 .cal-more:hover{background:var(--c-primary-light)}
 .cal-cell.drag-over{background:#dcfce7;box-shadow:inset 0 0 0 2px var(--c-primary)}
