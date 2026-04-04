@@ -389,6 +389,7 @@ function readAll(db) {
   }));
 
   // Calendar events
+  const assigneeMap = getAllCalendarEventAssignees(db);
   const calendarEvents = db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
     id: r.id,
     title: r.title,
@@ -402,7 +403,8 @@ function readAll(db) {
     color: r.color,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
-    created: r.created
+    created: r.created,
+    assignees: assigneeMap.get(r.id) || []
   }));
 
   const version = getDataVersion(db);
@@ -606,6 +608,14 @@ function writeAll(db, incoming) {
           e.allDay ? 1 : 0, e.startTime || null, e.endTime || null,
           e.category || 'custom', e.color || null,
           e.caldavUid || null, e.caldavSynced || null, e.created);
+      }
+      // Sync assignees
+      db.prepare('DELETE FROM calendar_event_assignees').run();
+      const insAssignee = db.prepare('INSERT OR IGNORE INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
+      for (const e of incoming.calendarEvents) {
+        if (e.assignees && e.assignees.length) {
+          for (const a of e.assignees) insAssignee.run(e.id, a.userId);
+        }
       }
     }
 
@@ -947,6 +957,28 @@ function deleteCalendarEvent(db, id) {
   incrementDataVersion(db);
 }
 
+function setCalendarEventAssignees(db, eventId, userIds) {
+  db.prepare('DELETE FROM calendar_event_assignees WHERE event_id=?').run(eventId);
+  const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
+  for (const uid of userIds) ins.run(eventId, uid);
+  incrementDataVersion(db);
+}
+
+function getAllCalendarEventAssignees(db) {
+  const rows = db.prepare(`
+    SELECT cea.event_id, cea.user_id, u.username
+    FROM calendar_event_assignees cea
+    JOIN users u ON u.id = cea.user_id
+    ORDER BY cea.event_id, u.username
+  `).all();
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.event_id)) map.set(r.event_id, []);
+    map.get(r.event_id).push({ userId: r.user_id, username: r.username });
+  }
+  return map;
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
@@ -960,5 +992,6 @@ module.exports = {
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
-  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent
+  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+  setCalendarEventAssignees, getAllCalendarEventAssignees
 };
