@@ -139,6 +139,12 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   created     TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS calendar_event_assignees (
+  event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
@@ -188,6 +194,13 @@ const MIGRATIONS = [
   { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', fn(db) {
     const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='private'").get();
     if (!has.c) db.exec('ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0');
+  }},
+  { version: 3, description: 'Add calendar_event_assignees junction table', fn(db) {
+    db.exec(`CREATE TABLE IF NOT EXISTS calendar_event_assignees (
+      event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+      user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (event_id, user_id)
+    )`);
   }},
 ];
 
