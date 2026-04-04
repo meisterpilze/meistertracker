@@ -771,7 +771,8 @@ function deleteLastScanEntries(db, n) {
 }
 
 function deleteScanEntryById(db, id) {
-  db.prepare('DELETE FROM scan_log WHERE id=?').run(id);
+  const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
+  return info.changes > 0;
 }
 
 function clearScanLog(db) {
@@ -869,7 +870,10 @@ function updateCaldavCfg(db, c) {
 }
 
 // -- Inventory Delta --
+const VALID_MATS = ['hardwood','wheatbran','gypsum','grain'];
+
 function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {
@@ -883,6 +887,7 @@ function applyInventoryDelta(db, mat, deltaKg, type, ref) {
 }
 
 function setInventoryAbsolute(db, mat, value, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {

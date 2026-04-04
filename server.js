@@ -41,7 +41,7 @@ const CAL_DIR = path.join(DIR, 'calendars');
 const PRINTER_NAME = process.env.PRINTER_NAME || 'ZDesigner GK420d';
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
-const database = db.openDb(DB_FILE);
+let database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
@@ -128,7 +128,9 @@ setInterval(()=>db.deleteExpiredSessions(database),60*60*1000);
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
 const BACKUP_DIR = path.join(DIR, 'backups');
-if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR);
+if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, {mode:0o700});
+// Clean up orphaned temp files from interrupted backup operations
+try{fs.readdirSync(BACKUP_DIR).filter(f=>f.startsWith('_')).forEach(f=>{try{fs.unlinkSync(path.join(BACKUP_DIR,f))}catch(e){}})}catch(e){}
 
 function runDailyBackup(){
   try{
@@ -1434,7 +1436,7 @@ function handleRequest(req,res){
   }
   const scanIdMatch=req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if(req.method==='DELETE'&&scanIdMatch){
-    try{db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){jsonErr(res,400,err.message)}return;
   }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
     try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
@@ -1519,22 +1521,103 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
-  // -- Backup Restore --
-  if(req.method==='POST'&&req.url==='/api/backup/restore'){
+  // -- Backup Download (encrypted .db) --
+  if(req.method==='POST'&&req.url==='/api/backup/download'){
     jsonBody(req,res,(e,data)=>{
+      let tmpDest;
       try{
-        writeData(data);
-        const stock=(data.inventory&&data.inventory.stock)||{};
-        for(const mat of Object.keys(stock)){
-          if(stock[mat]>0)db.setInventoryAbsolute(database,mat,stock[mat],'import','Backup restore');
+        if(!data||!data.password||data.password.length<8){jsonErr(res,400,'Password required (min 8 characters)');return}
+        // Create a fresh VACUUM INTO temp file for a consistent snapshot
+        tmpDest=path.join(BACKUP_DIR,'_download_tmp_'+Date.now()+'.db');
+        db.backupDb(database,tmpDest);
+        const plain=fs.readFileSync(tmpDest);
+        try{fs.unlinkSync(tmpDest)}catch(e){}
+        tmpDest=null;
+        // Encrypt: salt(32) + iv(12) + authTag(16) + ciphertext
+        const salt=crypto.randomBytes(32);
+        const key=crypto.scryptSync(data.password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
+        const iv=crypto.randomBytes(12);
+        const cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
+        const enc=Buffer.concat([cipher.update(plain),cipher.final()]);
+        const tag=cipher.getAuthTag();
+        const out=Buffer.concat([salt,iv,tag,enc]);
+        const stamp=new Date().toISOString().slice(0,10);
+        res.writeHead(200,{
+          'Content-Type':'application/octet-stream',
+          'Content-Disposition':'attachment; filename="meisterpilze_backup_'+stamp+'.enc"',
+          'Content-Length':out.length
+        });
+        res.end(out);
+      }catch(err){
+        if(tmpDest)try{fs.unlinkSync(tmpDest)}catch(e){}
+        log('error','Backup download failed',{error:err.message});
+        jsonErr(res,500,'Backup download failed');
+      }
+    });return;
+  }
+
+  // -- Backup Restore (encrypted .db) --
+  if(req.method==='POST'&&req.url==='/api/backup/restore'){
+    const chunks=[];let sz=0;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
+    req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){req.destroy();return}chunks.push(c)});
+    req.on('end',()=>{
+      let tmpPath;
+      try{
+        const raw=Buffer.concat(chunks);
+        const password=req.headers['x-backup-password']||'';
+        if(!password){jsonErr(res,400,'Password required');return}
+        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext
+        if(raw.length<60+16){jsonErr(res,400,'File too small to be a valid backup');return}
+        const salt=raw.subarray(0,32);
+        const iv=raw.subarray(32,44);
+        const tag=raw.subarray(44,60);
+        const ciphertext=raw.subarray(60);
+        const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
+        const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
+        decipher.setAuthTag(tag);
+        let plain;
+        try{plain=Buffer.concat([decipher.update(ciphertext),decipher.final()])}
+        catch(decErr){jsonErr(res,401,'Wrong password or corrupted file');return}
+        // Validate SQLite header
+        if(plain.length<16||plain.toString('utf8',0,15)!=='SQLite format 3'){jsonErr(res,400,'Decrypted file is not a valid database');return}
+        // Write to temp with restrictive permissions, validate schema
+        tmpPath=path.join(BACKUP_DIR,'_restore_tmp_'+Date.now()+'.db');
+        fs.writeFileSync(tmpPath,plain,{mode:0o600});
+        let tmpDb;
+        try{
+          tmpDb=db.openDb(tmpPath); // validates schema + runs migrations
+          tmpDb.close();
+        }catch(valErr){
+          try{fs.unlinkSync(tmpPath)}catch(e){}
+          log('error','Backup validation failed',{error:valErr.message});
+          jsonErr(res,400,'Database validation failed');return;
         }
-        if(data.inventory&&data.inventory.log&&data.inventory.log.length){
-          database.prepare('DELETE FROM inventory_log').run();
-          const ins=database.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)');
-          for(const l of data.inventory.log) ins.run(l.time,l.mat,l.deltaKg,l.running||0,l.type||null,l.ref||null);
+        // Atomic swap: backup current db, replace, reopen — rollback on failure
+        const bakPath=DB_FILE+'.pre-restore.bak';
+        try{database.close()}catch(e){}
+        try{fs.copyFileSync(DB_FILE,bakPath)}catch(e){} // keep old db as safety net
+        fs.renameSync(tmpPath,DB_FILE);
+        tmpPath=null;
+        try{
+          database=db.openDb(DB_FILE);
+        }catch(openErr){
+          // Rollback: restore the old database
+          log('error','Failed to open restored database, rolling back',{error:openErr.message});
+          try{fs.copyFileSync(bakPath,DB_FILE)}catch(e){}
+          database=db.openDb(DB_FILE);
+          jsonErr(res,500,'Restore failed, previous data has been preserved');return;
         }
+        // Cleanup backup of old db
+        try{fs.unlinkSync(bakPath)}catch(e){}
+        // Trigger auto-sync of CalDAV after restore
+        try{autoSyncAllCaldav(readData())}catch(ce){console.error('CalDAV post-restore sync:',ce.message)}
+        broadcastSSE(res);
         jsonOk(res);
-      }catch(err){jsonErr(res,500,err.message)}
+      }catch(err){
+        if(tmpPath)try{fs.unlinkSync(tmpPath)}catch(e){}
+        log('error','Backup restore failed',{error:err.message});
+        jsonErr(res,500,'Backup restore failed');
+      }
     });return;
   }
 

@@ -212,38 +212,29 @@
 
 <!-- Scan modal (centered, appears on scan) -->
 <div id="scan-overlay" class="scan-overlay no-print" onclick="closeScanModal()">
-  <div class="scan-modal" onclick="event.stopPropagation()">
+  <div class="scan-modal" id="scan-modal" onclick="event.stopPropagation()">
     <button class="scan-modal-close" onclick="closeScanModal()" title="Close">&times;</button>
-    <div class="scan-modal-header">
+    <div class="scan-modal-header" id="scan-modal-header">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       <span>Scan-Modus</span>
     </div>
-    <div class="scan-tabs">
-      <button class="scan-tab active" data-scan-tab="status" onclick="switchScanTab('status')">Aktueller Scan</button>
-      <button class="scan-tab" data-scan-tab="success" onclick="switchScanTab('success')">Letzte Erfolge</button>
-      <button class="scan-tab" data-scan-tab="log" onclick="switchScanTab('log')">Gesamt-Log</button>
+    <div class="scan-modal-body" id="scan-modal-body">
+    <div class="scan-modal-chips">
+      <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+      <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+      <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+      <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
+      <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
     </div>
-    <!-- Tab: Current scan status -->
-    <div class="scan-tab-panel active" id="stp-status">
-      <div class="scan-modal-chips">
-        <div class="chip"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
-        <div class="chip"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-      </div>
-      <div id="scan-toast" class="scan-toast-inline"></div>
-    </div>
-    <!-- Tab: Last successful scans (undo-able) -->
-    <div class="scan-tab-panel" id="stp-success">
-      <div id="scan-success-empty" class="scan-success-empty">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
-      <div id="scan-success-list" class="scan-success-list"></div>
-    </div>
-    <!-- Tab: Full session log -->
-    <div class="scan-tab-panel" id="stp-log">
-      <div class="scan-modal-log" id="scan-modal-log"></div>
+    <div id="scan-toast" class="scan-toast-inline"></div>
+    <div class="scan-modal-log" id="scan-modal-log"></div>
+    <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
     </div>
     <div class="scan-modal-btns">
       <button class="btn-xs" onclick="resetScan()" data-i18n="scan.reset">Reset</button>
+      <button class="btn-xs green" onclick="openBatchAdd()" data-i18n="scan.addBatch">+ Batch</button>
+      <button class="btn-xs btn-end-session" id="btn-end-session" onclick="endScanSession()" style="display:none">Session beenden</button>
+      <button class="btn-xs" id="btn-scan-audio" onclick="scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4" title="Audio an/aus" style="margin-left:auto">🔊</button>
     </div>
   </div>
 </div>
@@ -734,38 +725,58 @@
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
         <div class="sec" style="margin:0" data-i18n="settings.scanLog">Scan log</div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select id="log-action-filter" onchange="renderLog()" style="font-size:12px;padding:4px 6px">
+            <option value="">Alle Aktionen</option>
+            <option value="ADD">ADD</option>
+            <option value="MOVE">MOVE</option>
+            <option value="REMOVE">REMOVE</option>
+            <option value="HARVEST">HARVEST</option>
+          </select>
+          <input type="date" id="log-date-from" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Von Datum" />
+          <input type="date" id="log-date-to" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Bis Datum" />
           <input type="text" id="log-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
           <button class="btn btn-sm btn-r" onclick="clearLog()" data-i18n="settings.clear">Clear</button>
         </div>
       </div>
+      <div id="log-count" style="font-size:11px;color:var(--c-text-muted);margin-bottom:4px"></div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th data-i18n="settings.time">Time</th><th data-i18n="settings.user">User</th><th data-i18n="settings.action">Action</th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th></tr></thead>
+        <thead><tr><th data-i18n="settings.time" style="cursor:pointer" onclick="toggleLogSort('time')">Time <span id="log-sort-time"></span></th><th data-i18n="settings.user">User</th><th data-i18n="settings.action" style="cursor:pointer" onclick="toggleLogSort('action')">Action <span id="log-sort-action"></span></th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th><th></th></tr></thead>
         <tbody id="log-body"></tbody>
       </table></div>
+      <div id="log-load-more" style="text-align:center;padding:8px;display:none">
+        <button class="btn btn-sm" onclick="logDisplayLimit+=200;renderLog()">Mehr laden...</button>
+      </div>
     </div>
   </div>
   <!-- Backup -->
   <div class="sp" id="sp-settings-backup">
     <div class="card">
-      <div class="sec" data-i18n="settings.exportBackup">Export backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.exportDesc">Download all data as a JSON file. Save to USB, cloud or email it to yourself.</p>
-      <button class="btn btn-p" onclick="exportBackup()" data-i18n="settings.downloadBackup">Download backup (.json)</button>
+      <div class="sec" data-i18n="settings.downloadBackupTitle">Download backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.downloadBackupDesc">Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="password" id="backup-dl-pw" placeholder="Encryption password" style="flex:1;min-width:140px" />
+        <button class="btn btn-p" onclick="downloadBackup()" data-i18n="settings.downloadBackupBtn">Download backup</button>
+      </div>
+      <div id="backup-dl-status" style="margin-top:8px;font-size:12px;color:#666"></div>
     </div>
     <div class="card">
-      <div class="sec" data-i18n="settings.importBackup">Import / restore backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.importDescHtml">Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
+      <div class="sec" data-i18n="settings.restoreBackupTitle">Restore backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.restoreDescHtml">Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="file" id="import-file" accept=".json" style="width:auto;flex:1" onchange="previewImport()" />
-        <button class="btn btn-r" id="import-btn" style="display:none" onclick="importBackup()" data-i18n="settings.restore">Restore</button>
+        <input type="file" id="restore-file" accept=".enc" style="width:auto;flex:1" />
       </div>
-      <div id="import-preview" style="margin-top:8px;font-size:12px;color:#666"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <input type="password" id="backup-restore-pw" placeholder="Decryption password" style="flex:1;min-width:140px" />
+        <button class="btn btn-r" onclick="restoreBackup()" data-i18n="settings.restoreBtn">Restore</button>
+      </div>
+      <div id="backup-restore-status" style="margin-top:8px;font-size:12px;color:#666"></div>
     </div>
     <div class="card">
       <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
-      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored on the server — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
     </div>
   </div>
   <!-- Users -->
@@ -1105,7 +1116,7 @@ const LANG = {
     'scan.to': 'To',
     'scan.count': 'Count',
     'scan.reset': 'Reset',
-    'batch.assign': 'Assign',
+    'scan.addBatch': 'Add batch',
     'scan.ready': 'Ready \u2014 scan ADD, MOVE, REMOVE or HARVEST to begin',
     'scan.stateReset': 'State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.',
     // Harvest panel
@@ -1431,20 +1442,17 @@ const LANG = {
     'settings.clearLog': 'Clear entire scan log?',
     'settings.clearLogMsg': 'Permanently deletes all {n} scan entries. Batches and harvests are not deleted.',
     'settings.clearLogBtn': 'Yes, clear everything',
-    'settings.exportBackup': 'Export backup',
-    'settings.exportDesc': 'Download all data as a JSON file. Save to USB, cloud or email it to yourself.',
-    'settings.downloadBackup': 'Download backup (.json)',
-    'settings.importBackup': 'Import / restore backup',
-    'settings.importDesc': 'Restore from a previous backup.',
-    'settings.importWarn': 'Replaces all current data for everyone.',
-    'settings.restore': 'Restore',
+    'settings.downloadBackupTitle': 'Download backup',
+    'settings.downloadBackupDesc': 'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
+    'settings.downloadBackupBtn': 'Download backup',
+    'settings.restoreBackupTitle': 'Restore backup',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreBtn': 'Restore',
     'settings.syncInfo': 'Sync info',
-    'settings.syncInfoDesc': 'All data is stored in <strong>data.json</strong> on the server PC \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
+    'settings.syncInfoDesc': 'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
     'settings.restoreBackup': 'Restore this backup?',
     'settings.restoreMsg': 'Replaces ALL data on the server for all users. Cannot be undone.',
-    'settings.restoreBtn': 'Yes, restore',
-    'settings.restoredOk': 'Restored successfully.',
-    'settings.restoreFail': 'Failed to restore.',
+    'settings.restoreConfirm': 'Yes, restore',
     'settings.invalidFile': 'Invalid file.',
     'settings.cannotRead': 'Cannot read file.',
     // Table headers - scan log
@@ -1668,7 +1676,7 @@ const LANG = {
     'settings.bag': 'Bag',
     'settings.from': 'From',
     'settings.to': 'To',
-    'settings.importDescHtml': 'Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
     'caldav.passwordLabel': 'Password',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
@@ -1755,7 +1763,7 @@ const LANG = {
     'scan.to': 'Nach',
     'scan.count': 'Anzahl',
     'scan.reset': 'Zur\u00fccksetzen',
-    'batch.assign': 'Zuweisen',
+    'scan.addBatch': 'Charge hinzufügen',
     'scan.ready': 'Bereit \u2014 scanne ADD, MOVE, REMOVE oder HARVEST',
     'scan.stateReset': 'Zur\u00fcckgesetzt. Scanne ADD, MOVE, REMOVE oder HARVEST.',
     // Harvest panel
@@ -2081,20 +2089,17 @@ const LANG = {
     'settings.clearLog': 'Gesamtes Scan-Log l\u00f6schen?',
     'settings.clearLogMsg': 'L\u00f6scht dauerhaft alle {n} Scan-Eintr\u00e4ge. Chargen und Ernten werden nicht gel\u00f6scht.',
     'settings.clearLogBtn': 'Ja, alles l\u00f6schen',
-    'settings.exportBackup': 'Backup exportieren',
-    'settings.exportDesc': 'Alle Daten als JSON-Datei herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
-    'settings.downloadBackup': 'Backup herunterladen (.json)',
-    'settings.importBackup': 'Backup importieren / wiederherstellen',
-    'settings.importDesc': 'Aus einem vorherigen Backup wiederherstellen.',
-    'settings.importWarn': 'Ersetzt alle aktuellen Daten f\u00fcr alle Benutzer.',
-    'settings.restore': 'Wiederherstellen',
+    'settings.downloadBackupTitle': 'Backup herunterladen',
+    'settings.downloadBackupDesc': 'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
+    'settings.downloadBackupBtn': 'Backup herunterladen',
+    'settings.restoreBackupTitle': 'Backup wiederherstellen',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
+    'settings.restoreBtn': 'Wiederherstellen',
     'settings.syncInfo': 'Sync-Info',
-    'settings.syncInfoDesc': 'Alle Daten werden in <strong>data.json</strong> auf dem Server-PC gespeichert \u2014 automatisch f\u00fcr alle Ger\u00e4te verf\u00fcgbar. \u00c4nderungen werden alle 5 Sekunden synchronisiert. Klicke auf den gr\u00fcnen Punkt f\u00fcr sofortige Synchronisation.',
+    'settings.syncInfoDesc': 'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',
     'settings.restoreBackup': 'Dieses Backup wiederherstellen?',
-    'settings.restoreMsg': 'Ersetzt ALLE Daten auf dem Server f\u00fcr alle Benutzer. Kann nicht r\u00fcckg\u00e4ngig gemacht werden.',
-    'settings.restoreBtn': 'Ja, wiederherstellen',
-    'settings.restoredOk': 'Erfolgreich wiederhergestellt.',
-    'settings.restoreFail': 'Wiederherstellung fehlgeschlagen.',
+    'settings.restoreMsg': 'Ersetzt ALLE Daten auf dem Server für alle Benutzer. Kann nicht rückgängig gemacht werden.',
+    'settings.restoreConfirm': 'Ja, wiederherstellen',
     'settings.invalidFile': 'Ung\u00fcltige Datei.',
     'settings.cannotRead': 'Datei kann nicht gelesen werden.',
     // Table headers - scan log
@@ -2318,7 +2323,7 @@ const LANG = {
     'settings.bag': 'Beutel',
     'settings.from': 'Von',
     'settings.to': 'Nach',
-    'settings.importDescHtml': 'Aus einem fr\u00fcheren Backup wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten f\u00fcr alle Nutzer.</strong>',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
     'caldav.passwordLabel': 'Passwort',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
@@ -2405,7 +2410,7 @@ const LANG = {
     'scan.to': 'Para',
     'scan.count': 'Cont.',
     'scan.reset': 'Resetar',
-    'batch.assign': 'Atribuir',
+    'scan.addBatch': 'Adicionar lote',
     'scan.ready': 'Pronto \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar',
     'scan.stateReset': 'Resetado. Escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar.',
     // Harvest panel
@@ -2731,20 +2736,17 @@ const LANG = {
     'settings.clearLog': 'Limpar todo o log de scan?',
     'settings.clearLogMsg': 'Exclui permanentemente todas as {n} entradas de scan. Lotes e colheitas n\u00e3o s\u00e3o exclu\u00eddos.',
     'settings.clearLogBtn': 'Sim, limpar tudo',
-    'settings.exportBackup': 'Exportar backup',
-    'settings.exportDesc': 'Baixar todos os dados como arquivo JSON. Salve em USB, nuvem ou envie por e-mail.',
-    'settings.downloadBackup': 'Baixar backup (.json)',
-    'settings.importBackup': 'Importar / restaurar backup',
-    'settings.importDesc': 'Restaurar de um backup anterior.',
-    'settings.importWarn': 'Substitui todos os dados atuais para todos os usu\u00e1rios.',
-    'settings.restore': 'Restaurar',
-    'settings.syncInfo': 'Info de sincroniza\u00e7\u00e3o',
-    'settings.syncInfoDesc': 'Todos os dados s\u00e3o armazenados em <strong>data.json</strong> no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudan\u00e7as sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
+    'settings.downloadBackupTitle': 'Baixar backup',
+    'settings.downloadBackupDesc': 'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
+    'settings.downloadBackupBtn': 'Baixar backup',
+    'settings.restoreBackupTitle': 'Restaurar backup',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreBtn': 'Restaurar',
+    'settings.syncInfo': 'Info de sincronização',
+    'settings.syncInfoDesc': 'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
     'settings.restoreBackup': 'Restaurar este backup?',
-    'settings.restoreMsg': 'Substitui TODOS os dados no servidor para todos os usu\u00e1rios. N\u00e3o pode ser desfeito.',
-    'settings.restoreBtn': 'Sim, restaurar',
-    'settings.restoredOk': 'Restaurado com sucesso.',
-    'settings.restoreFail': 'Falha ao restaurar.',
+    'settings.restoreMsg': 'Substitui TODOS os dados no servidor para todos os usuários. Não pode ser desfeito.',
+    'settings.restoreConfirm': 'Sim, restaurar',
     'settings.invalidFile': 'Arquivo inv\u00e1lido.',
     'settings.cannotRead': 'N\u00e3o foi poss\u00edvel ler o arquivo.',
     // Table headers - scan log
@@ -2967,7 +2969,7 @@ const LANG = {
     'settings.bag': 'Saco',
     'settings.from': 'De',
     'settings.to': 'Para',
-    'settings.importDescHtml': 'Restaurar de um backup anterior. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usu\u00e1rios.</strong>',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
     'caldav.passwordLabel': 'Senha',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
@@ -3210,8 +3212,8 @@ function go(page,btnId){
 function openStab(page,sub){
   document.querySelectorAll(`#p-${page} .stab`).forEach(b=>b.classList.remove('active'));
   document.querySelectorAll(`#p-${page} .sp`).forEach(p=>p.classList.remove('active'));
-  document.getElementById(`st-${page}-${sub}`).classList.add('active');
-  document.getElementById(`sp-${page}-${sub}`).classList.add('active');
+  const stEl=document.getElementById(`st-${page}-${sub}`);if(stEl)stEl.classList.add('active');
+  const spEl=document.getElementById(`sp-${page}-${sub}`);if(spEl)spEl.classList.add('active');
   if(page==='batch'&&sub==='list')renderBatches();
   if(page==='batch'&&sub==='harvest')renderHarvests();
   if(page==='lab'&&sub==='cultures')renderCultures();
@@ -3230,7 +3232,7 @@ function openStab(page,sub){
   if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
   if(page==='todo'&&sub==='team')renderTeam();
   if(page==='todo'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
-  if(page==='todo'&&sub==='caldav')loadCaldavSettings();
+  if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
@@ -4024,7 +4026,52 @@ async function pushTaskCaldav(task){
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-function renderLog(){const q=(document.getElementById('log-q').value||'').toLowerCase(),body=document.getElementById('log-body');const items=[...scanLog].reverse().filter(e=>!q||JSON.stringify(e).toLowerCase().includes(q)).slice(0,200);body.innerHTML=items.length?items.map(e=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${e.user||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">'+t('settings.noScans')+'</td></tr>'}
+let logSortCol='time',logSortDir='desc',logDisplayLimit=200;
+function toggleLogSort(col){if(logSortCol===col)logSortDir=logSortDir==='desc'?'asc':'desc';else{logSortCol=col;logSortDir='desc'}renderLog()}
+function renderLog(){
+  const q=(document.getElementById('log-q').value||'').toLowerCase();
+  const actionF=document.getElementById('log-action-filter').value;
+  const dateFrom=document.getElementById('log-date-from').value;
+  const dateTo=document.getElementById('log-date-to').value;
+  const body=document.getElementById('log-body');
+  let items=[...scanLog];
+  // Filters
+  if(q)items=items.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
+  if(actionF)items=items.filter(e=>e.action===actionF);
+  if(dateFrom)items=items.filter(e=>e.time>=dateFrom);
+  if(dateTo)items=items.filter(e=>e.time<dateTo+'T23:59:59');
+  // Sort
+  const dir=logSortDir==='desc'?-1:1;
+  items.sort((a,b)=>{const av=a[logSortCol]||'',bv=b[logSortCol]||'';return av<bv?-dir:av>bv?dir:0});
+  // Sort indicators
+  document.querySelectorAll('[id^="log-sort-"]').forEach(el=>el.textContent='');
+  const si=document.getElementById('log-sort-'+logSortCol);if(si)si.textContent=logSortDir==='desc'?'▼':'▲';
+  // Count display
+  const total=scanLog.length,filtered=items.length;
+  const countEl=document.getElementById('log-count');
+  if(countEl)countEl.textContent=filtered===total?total+' Einträge':filtered+' von '+total+' Einträgen';
+  // Paginate
+  const hasMore=items.length>logDisplayLimit;
+  items=items.slice(0,logDisplayLimit);
+  const now=Date.now(),h24=24*60*60*1000;
+  body.innerHTML=items.length?items.map(e=>{
+    const isRecent=(now-new Date(e.time).getTime())<h24;
+    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${e.user||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+e.time+'\',\''+e.batch+'\',\''+e.action+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
+  const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
+}
+function deleteLogEntry(btn,time,batch,action){
+  confirm2('Eintrag löschen?',action+' '+batch+' vom '+fmtDtTime(time)+' löschen?','Löschen',()=>{
+    const idx=scanLog.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
+    if(idx===-1)return;
+    const entry=scanLog[idx];
+    scanLog.splice(idx,1);
+    const mi=movements.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
+    if(mi!==-1)movements.splice(mi,1);
+    const serverId=entry._serverId||entry.id;
+    if(serverId)apiDelete('/api/scan-log/'+serverId);
+    renderLog();renderLocTabs();renderRacks();renderStatus();
+  });
+}
 function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
 
 // ─── INVENTORY ───────────────────────────────────────────────
@@ -4275,9 +4322,44 @@ function getInvAlerts(){
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
-function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${fmtDtTime(d.exported)} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=async e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));await apiPost('/api/backup/restore',{batches,scanLog,manualTasks,harvests,cultures,inventory,assets,caldav,teamMembers});alert('Restored successfully.');go('dash','n-dash');}catch(err){alert('Failed to restore: '+(err.message||err))}};r.readAsText(file)})}
+function setStatus(el,msg,ok){el.style.color=ok?'#166534':'#b91c1c';el.textContent=msg}
+async function downloadBackup(){
+  const pw=document.getElementById('backup-dl-pw').value;
+  const st=document.getElementById('backup-dl-status');
+  if(!pw||pw.length<8){setStatus(st,'Password must be at least 8 characters.',false);return}
+  setStatus(st,'Preparing backup…',true);
+  try{
+    const r=await authFetch('/api/backup/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Download failed',false);return}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const cd=r.headers.get('content-disposition')||'';
+    const m=cd.match(/filename="(.+?)"/);
+    a.download=m?m[1]:'meisterpilze_backup.enc';
+    a.click();URL.revokeObjectURL(a.href);
+    setStatus(st,'Backup downloaded.',true);
+    document.getElementById('backup-dl-pw').value='';
+  }catch(err){setStatus(st,'Download failed',false)}
+}
+function restoreBackup(){
+  const file=document.getElementById('restore-file').files[0];
+  const pw=document.getElementById('backup-restore-pw').value;
+  const st=document.getElementById('backup-restore-status');
+  if(!file){setStatus(st,'Select a .enc backup file.',false);return}
+  if(!pw){setStatus(st,'Enter the decryption password.',false);return}
+  confirm2(t('settings.restoreBackup')||'Restore this backup?',t('settings.restoreMsg')||'Replaces ALL data on the server for all users. Cannot be undone.',t('settings.restoreConfirm')||'Yes, restore',async()=>{
+    setStatus(st,'Restoring…',true);
+    try{
+      const buf=await file.arrayBuffer();
+      const r=await authFetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Backup-Password':pw},body:buf});
+      if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Restore failed',false);return}
+      setStatus(st,'Restored successfully. Reloading…',true);
+      document.getElementById('backup-restore-pw').value='';
+      setTimeout(()=>window.location.reload(),1500);
+    }catch(err){setStatus(st,'Restore failed',false)}
+  });
+}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
 let editingAssetId=null;
@@ -4805,19 +4887,66 @@ async function renderRefBarcodes(){const grid=document.getElementById('ref-grid'
 async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
-function openScanModal(){document.getElementById('scan-overlay').classList.add('open')}
-function closeScanModal(){document.getElementById('scan-overlay').classList.remove('open')}
-function _addLogEntry(type,msg){
+// Session tracking
+let sessionEntries=[];
+let sessionStartTime=null;
+let sessionErrors=0;
+let _lastScanVal=null;
+// Audio feedback
+let _scanAudioCtx=null;
+let scanAudioEnabled=true;
+function _scanBeep(freq,dur){
+  if(!scanAudioEnabled)return;
+  try{
+    if(!_scanAudioCtx)_scanAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=_scanAudioCtx.createOscillator();const g=_scanAudioCtx.createGain();
+    o.connect(g);g.connect(_scanAudioCtx.destination);
+    o.frequency.value=freq;g.gain.value=0.15;o.start();
+    g.gain.exponentialRampToValueAtTime(0.001,_scanAudioCtx.currentTime+dur/1000);
+    o.stop(_scanAudioCtx.currentTime+dur/1000);
+  }catch{}
+}
+// Duplicate detection
+let _pendingDupe=null;let _pendingDupeTimer=null;
+// Remove confirmation
+let _pendingRemove=null;let _pendingRemoveTimer=null;
+
+function openScanModal(){
+  document.getElementById('scan-overlay').classList.add('open');
+  if(window.innerWidth<=768)document.body.style.overflow='hidden';
+}
+function closeScanModal(){
+  document.getElementById('scan-overlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+function _addLogEntry(type,msg,entryData){
   const log=document.getElementById('scan-modal-log');
   const el=document.createElement('div');
   el.className='scan-log-entry log-'+type;
+  if(entryData&&entryData._tempId)el.setAttribute('data-scan-id',entryData._tempId);
   const tm=new Date();
-  el.textContent=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0')+' — '+msg;
+  const timeStr=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0');
+  if(entryData&&entryData.action&&entryData.batch){
+    const sp=entryData.species||'';
+    const bagLabel=entryData.bag||entryData.batch;
+    const locStr=entryData.action==='MOVE'?(entryData.from+' → '+entryData.to)
+      :entryData.action==='ADD'?('→ '+entryData.to)
+      :entryData.action==='REMOVE'?('✕ '+(entryData.from||''))
+      :'';
+    el.innerHTML='<span class="sle-time">'+timeStr+'</span>'
+      +'<span class="badge b-'+entryData.action.toLowerCase()+'">'+entryData.action+'</span> '
+      +'<span class="sle-msg"><b>'+bagLabel+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+sp+'</span>':'')
+      +(locStr?' <span style="color:var(--c-text-muted)">'+locStr+'</span>':'')+'</span>'
+      +'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>';
+  }else{
+    el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+msg+'</span>';
+  }
   log.prepend(el);
-  while(log.children.length>50)log.lastChild.remove();
+  while(log.children.length>80)log.lastChild.remove();
 }
 let _toastTimer=null;
 function setFb(type,msg,opts){
+  const entryData=opts&&opts._tempId?opts:null;
   if(!opts||!opts.noModal)openScanModal();
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
@@ -4825,10 +4954,153 @@ function setFb(type,msg,opts){
   requestAnimationFrame(()=>el.classList.add('visible'));
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
-  _addLogEntry(type,msg);
+  if(type==='err')sessionErrors++;
+  if(type==='ok')_scanBeep(800,80);
+  else if(type==='err')_scanBeep(200,200);
+  _addLogEntry(type,msg,entryData);
 }
-function updateSD(){document.getElementById('s-action').textContent=scan.action||'—';document.getElementById('s-from').textContent=scan.from||'—';document.getElementById('s-to').textContent=scan.to||'—';document.getElementById('s-count').textContent=scan.count}
-function resetScan(){scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};document.getElementById('harvest-panel').style.display='none';updateSD();setFb('info',t('scanFb.setAction'))}
+function updateSD(){
+  document.getElementById('s-action').textContent=scan.action||'—';
+  document.getElementById('s-from').textContent=scan.from||'—';
+  document.getElementById('s-to').textContent=scan.to||'—';
+  document.getElementById('s-count').textContent=scan.count;
+  // Action-colored header
+  const modal=document.getElementById('scan-modal');
+  modal.className='scan-modal'+(scan.action?' scan-action-'+scan.action.toLowerCase():'');
+  // MOVE: combined from→to chip
+  const fromChip=document.getElementById('chip-from');
+  if(scan.action==='MOVE'&&scan.from&&scan.to){
+    fromChip.style.display='none';
+    document.getElementById('s-to').textContent=scan.from+' → '+scan.to;
+  }else{
+    fromChip.style.display='';
+  }
+  // Chip pulse hints
+  const chipTo=document.getElementById('chip-to');
+  const chipFrom=document.getElementById('chip-from');
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&scan.from&&!scan.to);
+  chipTo.classList.toggle('chip-pulse',toPulse);
+  chipFrom.classList.toggle('chip-pulse',scan.action==='MOVE'&&!scan.from);
+  // Last scan chip
+  const lastChip=document.getElementById('chip-last');
+  if(_lastScanVal){lastChip.style.display='';document.getElementById('s-last').textContent=_lastScanVal}
+  // Count bump animation
+  const countChip=document.getElementById('chip-count');
+  countChip.classList.remove('count-bump');void countChip.offsetWidth;
+  if(scan.count>0)countChip.classList.add('count-bump');
+  // Session end button
+  document.getElementById('btn-end-session').style.display=sessionEntries.length>0?'':'none';
+}
+function resetScan(){
+  scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};
+  document.getElementById('harvest-panel').style.display='none';
+  _pendingDupe=null;_pendingRemove=null;
+  clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
+  updateSD();setFb('info',t('scanFb.setAction'));
+}
+// Undo a single scan entry by clicking the ↩ button
+function undoScanEntry(btn){
+  const row=btn.closest('.scan-log-entry');
+  const tempId=row?row.getAttribute('data-scan-id'):null;
+  if(!tempId)return;
+  const idx=sessionEntries.findIndex(e=>e._tempId===tempId);
+  if(idx===-1)return;
+  const entry=sessionEntries[idx];
+  // Remove from scanLog + movements
+  const si=scanLog.findIndex(e=>e._tempId===tempId);if(si!==-1)scanLog.splice(si,1);
+  const mi=movements.findIndex(e=>e._tempId===tempId);if(mi!==-1)movements.splice(mi,1);
+  sessionEntries.splice(idx,1);
+  // Delete from server
+  if(entry._serverId)apiDelete('/api/scan-log/'+entry._serverId);
+  // Remove DOM row
+  if(row)row.remove();
+  scan.count=Math.max(0,scan.count-1);
+  _scanBeep(400,100);
+  setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
+  updateSD();renderLocTabs();renderRacks();
+}
+// Ctrl+Z undo support
+let _ctrlZPending=false;let _ctrlZTimer=null;
+document.addEventListener('keydown',function(e){
+  if(!document.getElementById('scan-overlay').classList.contains('open'))return;
+  if(e.ctrlKey&&e.key==='z'){
+    e.preventDefault();
+    if(sessionEntries.length===0){setFb('info','Nichts zum Rückgängig machen');return}
+    if(!_ctrlZPending){
+      _ctrlZPending=true;
+      setFb('info','Ctrl+Z nochmal drücken zum Bestätigen');
+      _ctrlZTimer=setTimeout(()=>{_ctrlZPending=false},2000);
+      return;
+    }
+    _ctrlZPending=false;clearTimeout(_ctrlZTimer);
+    const last=sessionEntries[sessionEntries.length-1];
+    const btn=document.querySelector('[data-scan-id="'+last._tempId+'"] .sle-undo');
+    if(btn)undoScanEntry(btn);
+  }
+});
+// End session → show summary
+function endScanSession(){
+  if(sessionEntries.length===0)return;
+  const sumEl=document.getElementById('scan-session-summary');
+  // Hide log, show summary
+  document.getElementById('scan-modal-log').style.display='none';
+  document.getElementById('scan-toast').style.display='none';
+  sumEl.style.display='block';
+  const dur=sessionStartTime?Math.round((Date.now()-sessionStartTime)/60000):0;
+  const startStr=sessionStartTime?new Date(sessionStartTime).toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'}):'';
+  const endStr=new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});
+  // Count by action
+  const counts={ADD:0,MOVE:0,REMOVE:0,HARVEST:0};
+  const touchedBatches=new Map();
+  sessionEntries.forEach(e=>{
+    if(counts[e.action]!==undefined)counts[e.action]++;
+    if(e.batch&&!touchedBatches.has(e.batch))touchedBatches.set(e.batch,e.species||'');
+  });
+  // Location summary
+  const locSummary=[];
+  if(counts.ADD>0){
+    const locs={};sessionEntries.filter(e=>e.action==='ADD').forEach(e=>{locs[e.to]=(locs[e.to]||0)+1});
+    Object.entries(locs).forEach(([l,n])=>locSummary.push(n+' Bags → '+l));
+  }
+  if(counts.MOVE>0){
+    const moves={};sessionEntries.filter(e=>e.action==='MOVE').forEach(e=>{const k=e.from+' → '+e.to;moves[k]=(moves[k]||0)+1});
+    Object.entries(moves).forEach(([k,n])=>locSummary.push(n+' Bags '+k));
+  }
+  let batchHtml='';
+  touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+bid+(sp?' ('+sp+')':'')+'</span>';});
+  sumEl.innerHTML='<h3>Session Zusammenfassung</h3>'
+    +'<div class="scan-summary-grid">'
+    +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">Gesamt</div></div>'
+    +(counts.ADD?'<div class="scan-summary-stat" style="border-top:3px solid #86efac"><div class="ss-num">'+counts.ADD+'</div><div class="ss-lbl">ADD</div></div>':'')
+    +(counts.MOVE?'<div class="scan-summary-stat" style="border-top:3px solid #93c5fd"><div class="ss-num">'+counts.MOVE+'</div><div class="ss-lbl">MOVE</div></div>':'')
+    +(counts.REMOVE?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+counts.REMOVE+'</div><div class="ss-lbl">REMOVE</div></div>':'')
+    +(counts.HARVEST?'<div class="scan-summary-stat" style="border-top:3px solid #fcd34d"><div class="ss-num">'+counts.HARVEST+'</div><div class="ss-lbl">HARVEST</div></div>':'')
+    +(sessionErrors?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+sessionErrors+'</div><div class="ss-lbl">Fehler</div></div>':'')
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">Dauer: '+dur+' Min'+(startStr?' ('+startStr+' – '+endStr+')':'')+'</div>'
+    +(batchHtml?'<div class="scan-summary-batches">Batches: '+batchHtml+'</div>':'')
+    +(locSummary.length?'<div style="font-size:12px;margin-bottom:12px">'+locSummary.join(' · ')+'</div>':'')
+    +'<div class="scan-summary-actions">'
+    +'<button class="btn-xs" onclick="closeScanSession()">Schließen</button>'
+    +'<button class="btn-xs green" onclick="newScanSession()">Neue Session</button>'
+    +'</div>';
+}
+function closeScanSession(){
+  document.getElementById('scan-session-summary').style.display='none';
+  document.getElementById('scan-modal-log').style.display='';
+  document.getElementById('scan-toast').style.display='';
+  closeScanModal();
+}
+function newScanSession(){
+  document.getElementById('scan-session-summary').style.display='none';
+  document.getElementById('scan-modal-log').style.display='';
+  document.getElementById('scan-toast').style.display='';
+  document.getElementById('scan-modal-log').innerHTML='';
+  sessionEntries=[];sessionStartTime=null;sessionErrors=0;_lastScanVal=null;
+  scan.count=0;
+  resetScan();
+}
+let _scanTempIdCounter=0;
 function processScan(raw){
   // Replace _ with - (German HID keyboard fix)
   let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
@@ -4858,7 +5130,10 @@ function processScan(raw){
   }
   if(ACTIONS.includes(val)){
     scan.action=val;scan.from=null;scan.to=null;scan.harvestBag=null;
-    document.getElementById('harvest-panel').style.display='none';updateSD();
+    document.getElementById('harvest-panel').style.display='none';
+    _pendingDupe=null;_pendingRemove=null;
+    clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
+    updateSD();
     setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
   }
   if(LOCS.includes(val)){
@@ -4880,9 +5155,47 @@ function processScan(raw){
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
     if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err',t('scanFb.scanFromTo'));return}
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
-    scan.count++;apiPost('/api/scan-log',{entries:[entry]});
-    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}));
+    // REMOVE confirmation: require scanning same bag twice within 5s
+    if(scan.action==='REMOVE'){
+      if(_pendingRemove&&_pendingRemove.val===val){
+        clearTimeout(_pendingRemoveTimer);_pendingRemove=null;
+        // Confirmed — fall through to log it
+      }else{
+        _pendingRemove={val};
+        clearTimeout(_pendingRemoveTimer);
+        _pendingRemoveTimer=setTimeout(()=>{_pendingRemove=null},5000);
+        _scanBeep(300,150);
+        setFb('err','REMOVE '+val+'? Nochmal scannen zum Bestätigen.');
+        return;
+      }
+    }
+    // Duplicate detection: warn if same bag+action+to already in session
+    const dupeKey=val+'|'+scan.action+'|'+scan.to;
+    if(scan.action!=='REMOVE'){
+      const hasDupe=sessionEntries.some(e=>(e.bag||e.batch)+'|'+e.action+'|'+e.to===dupeKey);
+      if(hasDupe){
+        if(_pendingDupe===dupeKey){
+          clearTimeout(_pendingDupeTimer);_pendingDupe=null;
+          // Confirmed duplicate — fall through
+        }else{
+          _pendingDupe=dupeKey;
+          clearTimeout(_pendingDupeTimer);
+          _pendingDupeTimer=setTimeout(()=>{_pendingDupe=null},3000);
+          _scanBeep(500,120);
+          setFb('err',val+' bereits gescannt als '+scan.action+(scan.to?' → '+scan.to:'')+'. Nochmal scannen zum Bestätigen.');
+          return;
+        }
+      }
+    }
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,user:currentUser?.username||null,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
+    scan.count++;
+    apiPost('/api/scan-log',{entries:[entry]}).then(r=>{if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
+    _lastScanVal=isBag?val:batchId;
+    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}),entry);
     updateSD();return;
   }
   setFb('err',t('scanFb.unknown',{val:val}));
@@ -5547,9 +5860,9 @@ function deleteCalEventFromDetail(id){
 }
 
 function toggleTaskFromCalendar(taskId){
-  const idx=manualTasks.findIndex(t=>t.created===taskId);
-  if(idx<0)return;
-  toggleTask(idx);
+  const t=manualTasks.find(t=>t.created===taskId);
+  if(!t)return;
+  toggleTask(t.id);
   renderCalendar();
   closeEventDetail();
 }
@@ -5557,10 +5870,10 @@ function toggleTaskFromCalendar(taskId){
 function deleteTaskFromCalendar(taskId){
   closeEventDetail();
   confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
-    const idx=manualTasks.findIndex(t=>t.created===taskId);
-    if(idx<0)return;
-    manualTasks.splice(idx,1);
-    if(typeof saveData==='function')saveData();
+    const t=manualTasks.find(t=>t.created===taskId);
+    if(!t)return;
+    manualTasks=manualTasks.filter(x=>x.id!==t.id);
+    apiDelete('/api/tasks/'+t.id);
     renderManualTasks();renderCalendar();updateTodoBadge();
   });
 }
