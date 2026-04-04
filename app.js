@@ -1962,9 +1962,42 @@ function getInvAlerts(){
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
-function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${new Date(d.exported).toLocaleString('de-DE')} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));markDirty();alert('Restored successfully.');go('dash','n-dash');}catch{alert('Failed to restore.')}};r.readAsText(file)})}
+async function downloadBackup(){
+  const pw=document.getElementById('backup-dl-pw').value;
+  const st=document.getElementById('backup-dl-status');
+  if(!pw||pw.length<4){st.innerHTML='<span style="color:#b91c1c">Password must be at least 4 characters.</span>';return}
+  st.textContent='Preparing backup…';
+  try{
+    const r=await authFetch('/api/backup/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));st.innerHTML='<span style="color:#b91c1c">'+(e.error||'Download failed')+'</span>';return}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const cd=r.headers.get('content-disposition')||'';
+    const m=cd.match(/filename="(.+?)"/);
+    a.download=m?m[1]:'meisterpilze_backup.enc';
+    a.click();URL.revokeObjectURL(a.href);
+    st.innerHTML='<span style="color:#166534">Backup downloaded.</span>';
+    document.getElementById('backup-dl-pw').value='';
+  }catch(err){st.innerHTML='<span style="color:#b91c1c">'+err.message+'</span>'}
+}
+function restoreBackup(){
+  const file=document.getElementById('restore-file').files[0];
+  const pw=document.getElementById('backup-restore-pw').value;
+  const st=document.getElementById('backup-restore-status');
+  if(!file){st.innerHTML='<span style="color:#b91c1c">Select a .enc backup file.</span>';return}
+  if(!pw){st.innerHTML='<span style="color:#b91c1c">Enter the decryption password.</span>';return}
+  confirm2(t('settings.restoreBackup')||'Restore this backup?',t('settings.restoreMsg')||'Replaces ALL data on the server for all users. Cannot be undone.',t('settings.restoreConfirm')||'Yes, restore',async()=>{
+    st.textContent='Restoring…';
+    try{
+      const buf=await file.arrayBuffer();
+      const r=await authFetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Backup-Password':pw},body:buf});
+      if(!r.ok){const e=await r.json().catch(()=>({}));st.innerHTML='<span style="color:#b91c1c">'+(e.error||'Restore failed')+'</span>';return}
+      st.innerHTML='<span style="color:#166534">Restored successfully. Reloading…</span>';
+      setTimeout(()=>window.location.reload(),1500);
+    }catch(err){st.innerHTML='<span style="color:#b91c1c">'+err.message+'</span>'}
+  });
+}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
 let editingAssetId=null;
