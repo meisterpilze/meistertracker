@@ -743,7 +743,7 @@
       </div>
       <div id="log-count" style="font-size:11px;color:var(--c-text-muted);margin-bottom:4px"></div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th data-i18n="settings.time" style="cursor:pointer" onclick="toggleLogSort('time')">Time <span id="log-sort-time"></span></th><th data-i18n="settings.action" style="cursor:pointer" onclick="toggleLogSort('action')">Action <span id="log-sort-action"></span></th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="settings.time" style="cursor:pointer" onclick="toggleLogSort('time')">Time <span id="log-sort-time"></span></th><th data-i18n="settings.user">User</th><th data-i18n="settings.action" style="cursor:pointer" onclick="toggleLogSort('action')">Action <span id="log-sort-action"></span></th><th data-i18n="batch.batchId">Batch</th><th data-i18n="settings.bag">Bag</th><th data-i18n="settings.from">From</th><th data-i18n="settings.to">To</th><th data-i18n="batch.species">Species</th><th></th></tr></thead>
         <tbody id="log-body"></tbody>
       </table></div>
       <div id="log-load-more" style="text-align:center;padding:8px;display:none">
@@ -1435,6 +1435,7 @@ const LANG = {
     'caldav.howItWorks': 'How it works',
     // More / Settings
     'settings.scanLog': 'Scan log',
+    'settings.user': 'User',
     'settings.backup': 'Backup',
     'settings.clear': 'Clear',
     'settings.noScans': 'No scans yet.',
@@ -2081,6 +2082,7 @@ const LANG = {
     'caldav.howItWorks': 'So funktioniert es',
     // More / Settings
     'settings.scanLog': 'Scan-Log',
+    'settings.user': 'Benutzer',
     'settings.backup': 'Backup',
     'settings.clear': 'L\u00f6schen',
     'settings.noScans': 'Noch keine Scans.',
@@ -2727,6 +2729,7 @@ const LANG = {
     'caldav.howItWorks': 'Como funciona',
     // More / Settings
     'settings.scanLog': 'Log de scan',
+    'settings.user': 'Usuário',
     'settings.backup': 'Backup',
     'settings.clear': 'Limpar',
     'settings.noScans': 'Nenhum scan ainda.',
@@ -3270,7 +3273,7 @@ function confirmBatchAdd(){
   const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
   if(!id||!batch){alert('Select a batch first');return}
   const now=new Date().toISOString();
-  const entries=[];batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain};scanLog.push(entry);movements.push(entry);scan.count++;entries.push(entry)});
+  const entries=[];batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);scan.count++;entries.push(entry)});
   apiPost('/api/scan-log',{entries});updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
 }
 
@@ -3594,7 +3597,7 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;const entries=[];
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3608,7 +3611,7 @@ function locRemoveSelected(){
   if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
   const now=new Date().toISOString();
   const entries=[];selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -4053,7 +4056,7 @@ function renderLog(){
   const now=Date.now(),h24=24*60*60*1000;
   body.innerHTML=items.length?items.map(e=>{
     const isRecent=(now-new Date(e.time).getTime())<h24;
-    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+e.time+'\',\''+e.batch+'\',\''+e.action+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="8" class="empty">'+t('settings.noScans')+'</td></tr>';
+    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${e.user||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+e.time+'\',\''+e.batch+'\',\''+e.action+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
   const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
 }
 function deleteLogEntry(btn,time,batch,action){
@@ -4738,7 +4741,7 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null};scanLog.push(entry);movements.push(entry);
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
     scan.count++;apiPost('/api/scan-log',{entries:[entry]});updateSD();
     setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
   }else{
@@ -5185,7 +5188,7 @@ function processScan(raw){
       }
     }
     const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,_tempId:tempId};
+    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,user:currentUser?.username||null,_tempId:tempId};
     scanLog.push(entry);movements.push(entry);
     if(!sessionStartTime)sessionStartTime=Date.now();
     sessionEntries.push(entry);
