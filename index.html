@@ -754,22 +754,29 @@
   <!-- Backup -->
   <div class="sp" id="sp-settings-backup">
     <div class="card">
-      <div class="sec" data-i18n="settings.exportBackup">Export backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.exportDesc">Download all data as a JSON file. Save to USB, cloud or email it to yourself.</p>
-      <button class="btn btn-p" onclick="exportBackup()" data-i18n="settings.downloadBackup">Download backup (.json)</button>
+      <div class="sec" data-i18n="settings.downloadBackupTitle">Download backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.downloadBackupDesc">Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="password" id="backup-dl-pw" placeholder="Encryption password" style="flex:1;min-width:140px" />
+        <button class="btn btn-p" onclick="downloadBackup()" data-i18n="settings.downloadBackupBtn">Download backup</button>
+      </div>
+      <div id="backup-dl-status" style="margin-top:8px;font-size:12px;color:#666"></div>
     </div>
     <div class="card">
-      <div class="sec" data-i18n="settings.importBackup">Import / restore backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.importDescHtml">Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
+      <div class="sec" data-i18n="settings.restoreBackupTitle">Restore backup</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.restoreDescHtml">Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="file" id="import-file" accept=".json" style="width:auto;flex:1" onchange="previewImport()" />
-        <button class="btn btn-r" id="import-btn" style="display:none" onclick="importBackup()" data-i18n="settings.restore">Restore</button>
+        <input type="file" id="restore-file" accept=".enc" style="width:auto;flex:1" />
       </div>
-      <div id="import-preview" style="margin-top:8px;font-size:12px;color:#666"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <input type="password" id="backup-restore-pw" placeholder="Decryption password" style="flex:1;min-width:140px" />
+        <button class="btn btn-r" onclick="restoreBackup()" data-i18n="settings.restoreBtn">Restore</button>
+      </div>
+      <div id="backup-restore-status" style="margin-top:8px;font-size:12px;color:#666"></div>
     </div>
     <div class="card">
       <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
-      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored in <strong>data.json</strong> on the server PC — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored on the server — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
     </div>
   </div>
   <!-- Users -->
@@ -1434,20 +1441,17 @@ const LANG = {
     'settings.clearLog': 'Clear entire scan log?',
     'settings.clearLogMsg': 'Permanently deletes all {n} scan entries. Batches and harvests are not deleted.',
     'settings.clearLogBtn': 'Yes, clear everything',
-    'settings.exportBackup': 'Export backup',
-    'settings.exportDesc': 'Download all data as a JSON file. Save to USB, cloud or email it to yourself.',
-    'settings.downloadBackup': 'Download backup (.json)',
-    'settings.importBackup': 'Import / restore backup',
-    'settings.importDesc': 'Restore from a previous backup.',
-    'settings.importWarn': 'Replaces all current data for everyone.',
-    'settings.restore': 'Restore',
+    'settings.downloadBackupTitle': 'Download backup',
+    'settings.downloadBackupDesc': 'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
+    'settings.downloadBackupBtn': 'Download backup',
+    'settings.restoreBackupTitle': 'Restore backup',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreBtn': 'Restore',
     'settings.syncInfo': 'Sync info',
-    'settings.syncInfoDesc': 'All data is stored in <strong>data.json</strong> on the server PC \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
+    'settings.syncInfoDesc': 'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
     'settings.restoreBackup': 'Restore this backup?',
     'settings.restoreMsg': 'Replaces ALL data on the server for all users. Cannot be undone.',
-    'settings.restoreBtn': 'Yes, restore',
-    'settings.restoredOk': 'Restored successfully.',
-    'settings.restoreFail': 'Failed to restore.',
+    'settings.restoreConfirm': 'Yes, restore',
     'settings.invalidFile': 'Invalid file.',
     'settings.cannotRead': 'Cannot read file.',
     // Table headers - scan log
@@ -1671,7 +1675,7 @@ const LANG = {
     'settings.bag': 'Bag',
     'settings.from': 'From',
     'settings.to': 'To',
-    'settings.importDescHtml': 'Restore from a previous backup. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
     'caldav.passwordLabel': 'Password',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
@@ -2083,20 +2087,17 @@ const LANG = {
     'settings.clearLog': 'Gesamtes Scan-Log l\u00f6schen?',
     'settings.clearLogMsg': 'L\u00f6scht dauerhaft alle {n} Scan-Eintr\u00e4ge. Chargen und Ernten werden nicht gel\u00f6scht.',
     'settings.clearLogBtn': 'Ja, alles l\u00f6schen',
-    'settings.exportBackup': 'Backup exportieren',
-    'settings.exportDesc': 'Alle Daten als JSON-Datei herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
-    'settings.downloadBackup': 'Backup herunterladen (.json)',
-    'settings.importBackup': 'Backup importieren / wiederherstellen',
-    'settings.importDesc': 'Aus einem vorherigen Backup wiederherstellen.',
-    'settings.importWarn': 'Ersetzt alle aktuellen Daten f\u00fcr alle Benutzer.',
-    'settings.restore': 'Wiederherstellen',
+    'settings.downloadBackupTitle': 'Backup herunterladen',
+    'settings.downloadBackupDesc': 'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
+    'settings.downloadBackupBtn': 'Backup herunterladen',
+    'settings.restoreBackupTitle': 'Backup wiederherstellen',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
+    'settings.restoreBtn': 'Wiederherstellen',
     'settings.syncInfo': 'Sync-Info',
-    'settings.syncInfoDesc': 'Alle Daten werden in <strong>data.json</strong> auf dem Server-PC gespeichert \u2014 automatisch f\u00fcr alle Ger\u00e4te verf\u00fcgbar. \u00c4nderungen werden alle 5 Sekunden synchronisiert. Klicke auf den gr\u00fcnen Punkt f\u00fcr sofortige Synchronisation.',
+    'settings.syncInfoDesc': 'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',
     'settings.restoreBackup': 'Dieses Backup wiederherstellen?',
-    'settings.restoreMsg': 'Ersetzt ALLE Daten auf dem Server f\u00fcr alle Benutzer. Kann nicht r\u00fcckg\u00e4ngig gemacht werden.',
-    'settings.restoreBtn': 'Ja, wiederherstellen',
-    'settings.restoredOk': 'Erfolgreich wiederhergestellt.',
-    'settings.restoreFail': 'Wiederherstellung fehlgeschlagen.',
+    'settings.restoreMsg': 'Ersetzt ALLE Daten auf dem Server für alle Benutzer. Kann nicht rückgängig gemacht werden.',
+    'settings.restoreConfirm': 'Ja, wiederherstellen',
     'settings.invalidFile': 'Ung\u00fcltige Datei.',
     'settings.cannotRead': 'Datei kann nicht gelesen werden.',
     // Table headers - scan log
@@ -2320,7 +2321,7 @@ const LANG = {
     'settings.bag': 'Beutel',
     'settings.from': 'Von',
     'settings.to': 'Nach',
-    'settings.importDescHtml': 'Aus einem fr\u00fcheren Backup wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten f\u00fcr alle Nutzer.</strong>',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
     'caldav.passwordLabel': 'Passwort',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
@@ -2732,20 +2733,17 @@ const LANG = {
     'settings.clearLog': 'Limpar todo o log de scan?',
     'settings.clearLogMsg': 'Exclui permanentemente todas as {n} entradas de scan. Lotes e colheitas n\u00e3o s\u00e3o exclu\u00eddos.',
     'settings.clearLogBtn': 'Sim, limpar tudo',
-    'settings.exportBackup': 'Exportar backup',
-    'settings.exportDesc': 'Baixar todos os dados como arquivo JSON. Salve em USB, nuvem ou envie por e-mail.',
-    'settings.downloadBackup': 'Baixar backup (.json)',
-    'settings.importBackup': 'Importar / restaurar backup',
-    'settings.importDesc': 'Restaurar de um backup anterior.',
-    'settings.importWarn': 'Substitui todos os dados atuais para todos os usu\u00e1rios.',
-    'settings.restore': 'Restaurar',
-    'settings.syncInfo': 'Info de sincroniza\u00e7\u00e3o',
-    'settings.syncInfoDesc': 'Todos os dados s\u00e3o armazenados em <strong>data.json</strong> no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudan\u00e7as sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
+    'settings.downloadBackupTitle': 'Baixar backup',
+    'settings.downloadBackupDesc': 'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
+    'settings.downloadBackupBtn': 'Baixar backup',
+    'settings.restoreBackupTitle': 'Restaurar backup',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreBtn': 'Restaurar',
+    'settings.syncInfo': 'Info de sincronização',
+    'settings.syncInfoDesc': 'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
     'settings.restoreBackup': 'Restaurar este backup?',
-    'settings.restoreMsg': 'Substitui TODOS os dados no servidor para todos os usu\u00e1rios. N\u00e3o pode ser desfeito.',
-    'settings.restoreBtn': 'Sim, restaurar',
-    'settings.restoredOk': 'Restaurado com sucesso.',
-    'settings.restoreFail': 'Falha ao restaurar.',
+    'settings.restoreMsg': 'Substitui TODOS os dados no servidor para todos os usuários. Não pode ser desfeito.',
+    'settings.restoreConfirm': 'Sim, restaurar',
     'settings.invalidFile': 'Arquivo inv\u00e1lido.',
     'settings.cannotRead': 'N\u00e3o foi poss\u00edvel ler o arquivo.',
     // Table headers - scan log
@@ -2968,7 +2966,7 @@ const LANG = {
     'settings.bag': 'Saco',
     'settings.from': 'De',
     'settings.to': 'Para',
-    'settings.importDescHtml': 'Restaurar de um backup anterior. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usu\u00e1rios.</strong>',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
     'caldav.passwordLabel': 'Senha',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
@@ -4321,9 +4319,44 @@ function getInvAlerts(){
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function exportBackup(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),version:8,batches,scanLog,manualTasks,harvests,cultures,inventory,assets},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meisterpilze_backup_'+todayStr()+'.json';a.click()}
-function previewImport(){const file=document.getElementById('import-file').files[0],prev=document.getElementById('import-preview'),btn=document.getElementById('import-btn');if(!file){prev.textContent='';btn.style.display='none';return}const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.batches){prev.textContent='Invalid file.';btn.style.display='none';return}prev.innerHTML=`<span style="color:#166534">Valid: ${fmtDtTime(d.exported)} — ${d.batches.length} batches, ${d.scanLog.length} scans, ${(d.cultures||[]).length} cultures, inventory: ${d.inventory?'yes':'no'}.</span>`;btn.style.display='inline-block';}catch{prev.textContent='Cannot read file.';btn.style.display='none'}};r.readAsText(file)}
-function importBackup(){const file=document.getElementById('import-file').files[0];if(!file)return;confirm2('Restore this backup?','Replaces ALL data on the server for all users. Cannot be undone.','Yes, restore',()=>{const r=new FileReader();r.onload=async e=>{try{const d=JSON.parse(e.target.result);batches=d.batches||[];scanLog=d.scanLog||[];manualTasks=d.manualTasks||[];harvests=d.harvests||[];cultures=d.cultures||[];inventory=d.inventory||defaultInventory();assets=d.assets||[];batches.forEach(b=>spColor(b.species));await apiPost('/api/backup/restore',{batches,scanLog,manualTasks,harvests,cultures,inventory,assets,caldav,teamMembers});alert('Restored successfully.');go('dash','n-dash');}catch(err){alert('Failed to restore: '+(err.message||err))}};r.readAsText(file)})}
+function setStatus(el,msg,ok){el.style.color=ok?'#166534':'#b91c1c';el.textContent=msg}
+async function downloadBackup(){
+  const pw=document.getElementById('backup-dl-pw').value;
+  const st=document.getElementById('backup-dl-status');
+  if(!pw||pw.length<8){setStatus(st,'Password must be at least 8 characters.',false);return}
+  setStatus(st,'Preparing backup…',true);
+  try{
+    const r=await authFetch('/api/backup/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Download failed',false);return}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const cd=r.headers.get('content-disposition')||'';
+    const m=cd.match(/filename="(.+?)"/);
+    a.download=m?m[1]:'meisterpilze_backup.enc';
+    a.click();URL.revokeObjectURL(a.href);
+    setStatus(st,'Backup downloaded.',true);
+    document.getElementById('backup-dl-pw').value='';
+  }catch(err){setStatus(st,'Download failed',false)}
+}
+function restoreBackup(){
+  const file=document.getElementById('restore-file').files[0];
+  const pw=document.getElementById('backup-restore-pw').value;
+  const st=document.getElementById('backup-restore-status');
+  if(!file){setStatus(st,'Select a .enc backup file.',false);return}
+  if(!pw){setStatus(st,'Enter the decryption password.',false);return}
+  confirm2(t('settings.restoreBackup')||'Restore this backup?',t('settings.restoreMsg')||'Replaces ALL data on the server for all users. Cannot be undone.',t('settings.restoreConfirm')||'Yes, restore',async()=>{
+    setStatus(st,'Restoring…',true);
+    try{
+      const buf=await file.arrayBuffer();
+      const r=await authFetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Backup-Password':pw},body:buf});
+      if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Restore failed',false);return}
+      setStatus(st,'Restored successfully. Reloading…',true);
+      document.getElementById('backup-restore-pw').value='';
+      setTimeout(()=>window.location.reload(),1500);
+    }catch(err){setStatus(st,'Restore failed',false)}
+  });
+}
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
 let editingAssetId=null;
