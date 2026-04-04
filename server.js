@@ -1534,7 +1534,7 @@ function handleRequest(req,res){
         tmpDest=null;
         // Encrypt: salt(32) + iv(12) + authTag(16) + ciphertext
         const salt=crypto.randomBytes(32);
-        const key=crypto.scryptSync(data.password,salt,32,{N:32768,r:8,p:1});
+        const key=crypto.scryptSync(data.password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
         const iv=crypto.randomBytes(12);
         const cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
         const enc=Buffer.concat([cipher.update(plain),cipher.final()]);
@@ -1571,7 +1571,7 @@ function handleRequest(req,res){
         const iv=raw.subarray(32,44);
         const tag=raw.subarray(44,60);
         const ciphertext=raw.subarray(60);
-        const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1});
+        const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
         const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
         decipher.setAuthTag(tag);
         let plain;
