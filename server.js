@@ -128,7 +128,9 @@ setInterval(()=>db.deleteExpiredSessions(database),60*60*1000);
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
 const BACKUP_DIR = path.join(DIR, 'backups');
-if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR);
+if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, {mode:0o700});
+// Clean up orphaned temp files from interrupted backup operations
+try{fs.readdirSync(BACKUP_DIR).filter(f=>f.startsWith('_')).forEach(f=>{try{fs.unlinkSync(path.join(BACKUP_DIR,f))}catch(e){}})}catch(e){}
 
 function runDailyBackup(){
   try{
@@ -1521,16 +1523,18 @@ function handleRequest(req,res){
   // -- Backup Download (encrypted .db) --
   if(req.method==='POST'&&req.url==='/api/backup/download'){
     jsonBody(req,res,(e,data)=>{
+      let tmpDest;
       try{
-        if(!data||!data.password||data.password.length<4){jsonErr(res,400,'Password required (min 4 characters)');return}
+        if(!data||!data.password||data.password.length<8){jsonErr(res,400,'Password required (min 8 characters)');return}
         // Create a fresh VACUUM INTO temp file for a consistent snapshot
-        const tmpDest=path.join(BACKUP_DIR,'_download_tmp_'+Date.now()+'.db');
+        tmpDest=path.join(BACKUP_DIR,'_download_tmp_'+Date.now()+'.db');
         db.backupDb(database,tmpDest);
         const plain=fs.readFileSync(tmpDest);
-        fs.unlinkSync(tmpDest);
+        try{fs.unlinkSync(tmpDest)}catch(e){}
+        tmpDest=null;
         // Encrypt: salt(32) + iv(12) + authTag(16) + ciphertext
         const salt=crypto.randomBytes(32);
-        const key=crypto.scryptSync(data.password,salt,32);
+        const key=crypto.scryptSync(data.password,salt,32,{N:32768,r:8,p:1});
         const iv=crypto.randomBytes(12);
         const cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
         const enc=Buffer.concat([cipher.update(plain),cipher.final()]);
@@ -1543,7 +1547,11 @@ function handleRequest(req,res){
           'Content-Length':out.length
         });
         res.end(out);
-      }catch(err){jsonErr(res,500,err.message)}
+      }catch(err){
+        if(tmpDest)try{fs.unlinkSync(tmpDest)}catch(e){}
+        log('error','Backup download failed',{error:err.message});
+        jsonErr(res,500,'Backup download failed');
+      }
     });return;
   }
 
@@ -1552,9 +1560,9 @@ function handleRequest(req,res){
     const chunks=[];let sz=0;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
     req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){req.destroy();return}chunks.push(c)});
     req.on('end',()=>{
+      let tmpPath;
       try{
         const raw=Buffer.concat(chunks);
-        // Extract password from header
         const password=req.headers['x-backup-password']||'';
         if(!password){jsonErr(res,400,'Password required');return}
         // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext
@@ -1563,35 +1571,52 @@ function handleRequest(req,res){
         const iv=raw.subarray(32,44);
         const tag=raw.subarray(44,60);
         const ciphertext=raw.subarray(60);
-        const key=crypto.scryptSync(password,salt,32);
+        const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1});
         const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
         decipher.setAuthTag(tag);
         let plain;
         try{plain=Buffer.concat([decipher.update(ciphertext),decipher.final()])}
         catch(decErr){jsonErr(res,401,'Wrong password or corrupted file');return}
-        // Validate: SQLite files start with "SQLite format 3\0"
+        // Validate SQLite header
         if(plain.length<16||plain.toString('utf8',0,15)!=='SQLite format 3'){jsonErr(res,400,'Decrypted file is not a valid database');return}
-        // Write to temp, open to validate tables, then swap
-        const tmpPath=path.join(BACKUP_DIR,'_restore_tmp_'+Date.now()+'.db');
-        fs.writeFileSync(tmpPath,plain);
+        // Write to temp with restrictive permissions, validate schema
+        tmpPath=path.join(BACKUP_DIR,'_restore_tmp_'+Date.now()+'.db');
+        fs.writeFileSync(tmpPath,plain,{mode:0o600});
         let tmpDb;
         try{
           tmpDb=db.openDb(tmpPath); // validates schema + runs migrations
           tmpDb.close();
         }catch(valErr){
           try{fs.unlinkSync(tmpPath)}catch(e){}
-          jsonErr(res,400,'Database validation failed: '+valErr.message);return;
+          log('error','Backup validation failed',{error:valErr.message});
+          jsonErr(res,400,'Database validation failed');return;
         }
-        // Swap: close current db, replace file, reopen
+        // Atomic swap: backup current db, replace, reopen — rollback on failure
+        const bakPath=DB_FILE+'.pre-restore.bak';
         try{database.close()}catch(e){}
-        fs.copyFileSync(tmpPath,DB_FILE);
-        try{fs.unlinkSync(tmpPath)}catch(e){}
-        database=db.openDb(DB_FILE);
+        try{fs.copyFileSync(DB_FILE,bakPath)}catch(e){} // keep old db as safety net
+        fs.renameSync(tmpPath,DB_FILE);
+        tmpPath=null;
+        try{
+          database=db.openDb(DB_FILE);
+        }catch(openErr){
+          // Rollback: restore the old database
+          log('error','Failed to open restored database, rolling back',{error:openErr.message});
+          try{fs.copyFileSync(bakPath,DB_FILE)}catch(e){}
+          database=db.openDb(DB_FILE);
+          jsonErr(res,500,'Restore failed, previous data has been preserved');return;
+        }
+        // Cleanup backup of old db
+        try{fs.unlinkSync(bakPath)}catch(e){}
         // Trigger auto-sync of CalDAV after restore
         try{autoSyncAllCaldav(readData())}catch(ce){console.error('CalDAV post-restore sync:',ce.message)}
         broadcastSSE(res);
         jsonOk(res);
-      }catch(err){jsonErr(res,500,err.message)}
+      }catch(err){
+        if(tmpPath)try{fs.unlinkSync(tmpPath)}catch(e){}
+        log('error','Backup restore failed',{error:err.message});
+        jsonErr(res,500,'Backup restore failed');
+      }
     });return;
   }
 
