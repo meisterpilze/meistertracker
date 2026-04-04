@@ -496,6 +496,9 @@ function customEventToVEVENT(event) {
     'X-MEISTERPILZE-TYPE:custom-event',
   );
   if (event.description) lines.push('DESCRIPTION:' + event.description.replace(/\n/g, '\\n'));
+  if (event.assignees && event.assignees.length) {
+    for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
+  }
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
@@ -583,6 +586,8 @@ function autoSyncCalendarEvent(ev) {
     if (!cfg.enabled) return;
     if (!ev.startDate && !ev.start_date) return;
     const normalized = { id: ev.id, title: ev.title, startDate: ev.startDate || ev.start_date, endDate: ev.endDate || ev.end_date, allDay: ev.allDay != null ? ev.allDay : ev.all_day, startTime: ev.startTime || ev.start_time, endTime: ev.endTime || ev.end_time, category: ev.category, description: ev.description, caldavUid: ev.caldavUid || ev.caldav_uid };
+    const aMap = db.getAllCalendarEventAssignees(database);
+    normalized.assignees = aMap.get(ev.id) || [];
     const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = customEventToVEVENT(normalized);
     fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
@@ -1322,6 +1327,13 @@ function handleRequest(req,res){
     req.authUser=authUser;
   }
 
+  // ── Username list (any authenticated user) ────────────────
+  if(url==='/api/usernames'&&req.method==='GET'){
+    const users=db.listUsers(database).map(u=>({id:u.id,username:u.username}));
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify(users));return;
+  }
+
   // ── User management (admin only) ──────────────────────────
   if(url==='/api/users'&&req.method==='GET'){
     if(!req.authUser||req.authUser.role!=='admin'){
@@ -1498,12 +1510,12 @@ function handleRequest(req,res){
 
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCalendarEvent(database,data);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCalendarEvent(database,data);if(Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,data.id,data.assignees)}autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
   if(req.method==='PATCH'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCalendarEvent(database,id,data);autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCalendarEvent(database,id,data);if(data.assignees!==undefined&&Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,id,data.assignees)}autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
