@@ -38,6 +38,7 @@ const REF_GROUPS=[
 
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],calendarEvents=[];
+let appUsers=[];let calEvSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,dirty=false,lastVersion=0;
 let retryCount=0;const MAX_RETRIES=3;const DEBOUNCE_MS=400;let debounceTimer=null;
@@ -981,6 +982,7 @@ function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2
 
 function collectCalendarEvents(){
   const events=[];
+  const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
@@ -996,7 +998,8 @@ function collectCalendarEvents(){
     events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f39c12'});
   });
   calendarEvents.forEach(ev=>{
-    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:ev.color||'#2ecc71',description:ev.description});
+    if(filterUserId&&ev.assignees&&ev.assignees.length&&!ev.assignees.some(a=>a.userId===filterUserId))return;
+    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:ev.color||'#2ecc71',description:ev.description,assignees:ev.assignees||[]});
   });
   caldavImports.forEach(ev=>{
     events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#9b59b6'});
@@ -1052,7 +1055,8 @@ function renderCalMonth(){
       const drag=e.draggable?'draggable="true"':'';
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+e.color+'"':'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
+      const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+assigneeStr+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' mehr</div>';
     return o;
@@ -1140,6 +1144,7 @@ function renderCalWeek(){
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
         let wkContent=esc(e.label);
+        if(e.assignees&&e.assignees.length)wkContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
         if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
         if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
         el.innerHTML=wkContent;
@@ -1220,6 +1225,7 @@ function renderCalDay(){
       el.className='cal-day-ev';
       el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:2';
       let dayContent='<strong>'+esc(e.label)+'</strong>';
+      if(e.assignees&&e.assignees.length)dayContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
       if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
       if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
       el.innerHTML=dayContent;
@@ -1465,7 +1471,7 @@ function openEventDetail(ev){
     metaEl.textContent=meta;
     const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
     badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(ce.color||'#2ecc71')+';color:#fff">'+(catLabels[ce.category]||ce.category)+'</span>';
-    assignEl.innerHTML='';
+    assignEl.innerHTML=ce.assignees&&ce.assignees.length?'Zugewiesen: <strong>'+ce.assignees.map(a=>esc(a.username)).join(', ')+'</strong>':'';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
     btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
@@ -1590,6 +1596,7 @@ function openEventModal(date,time,existing){
     document.getElementById('cal-ev-category').value=existing.category||'custom';
     document.getElementById('cal-ev-color').value=existing.color||'#2ecc71';
     document.getElementById('cal-ev-desc').value=existing.description||'';
+    calEvSelectedAssignees=(existing.assignees||[]).map(a=>a.userId);renderAssigneePicker();
     document.getElementById('cal-ev-del-btn').style.display='';
   }else{
     document.getElementById('cal-ev-title').textContent='Neues Event';
@@ -1605,8 +1612,10 @@ function openEventModal(date,time,existing){
     document.getElementById('cal-ev-category').value='custom';
     document.getElementById('cal-ev-color').value='#2ecc71';
     document.getElementById('cal-ev-desc').value='';
+    calEvSelectedAssignees=[];renderAssigneePicker();
     document.getElementById('cal-ev-del-btn').style.display='none';
   }
+  document.getElementById('cal-ev-assignee-dropdown').style.display='none';
   toggleCalTimeInputs();
   modal.classList.add('open');
   if(!existing)document.getElementById('cal-ev-name').focus();
@@ -1644,13 +1653,15 @@ function saveCalEvent(){
     category:document.getElementById('cal-ev-category').value,
     color:document.getElementById('cal-ev-color').value,
     caldavUid:null,caldavSynced:null,
-    created:new Date().toISOString()
+    created:new Date().toISOString(),
+    assignees:getSelectedAssigneeIds().map(uid=>{const u=appUsers.find(x=>x.id===uid);return{userId:uid,username:u?u.username:'?'}})
   };
+  const assigneeIds=getSelectedAssigneeIds();
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-    patchCalendarEventAPI(ev.id,ev);
-  }else{calendarEvents.push(ev);saveCalendarEventAPI(ev)}
+    patchCalendarEventAPI(ev.id,Object.assign({},ev,{assignees:assigneeIds}));
+  }else{calendarEvents.push(ev);saveCalendarEventAPI(Object.assign({},ev,{assignees:assigneeIds}))}
   renderCalendar();closeEventModal();
   if(caldav.enabled)pushEventCaldav(ev);
 }
@@ -1699,6 +1710,32 @@ async function pushEventCaldav(ev){
     else{setSyncStatus('err','CalDAV event sync failed')}
   }catch(e){console.error('CalDAV event push error:',e);setSyncStatus('err','CalDAV: '+(e.message||'sync error'))}
 }
+
+// ── User list + Assignee picker ──
+async function loadAppUsers(){
+  try{const r=await authFetch('/api/usernames');if(r.ok)appUsers=await r.json();fillCalendarUserFilter()}catch{appUsers=[]}
+}
+function fillCalendarUserFilter(){
+  const sel=document.getElementById('cal-filter-user');if(!sel)return;
+  sel.innerHTML='<option value="">Alle Benutzer</option>'+appUsers.map(u=>'<option value="'+u.id+'">'+esc(u.username)+'</option>').join('');
+}
+function renderAssigneePicker(){
+  const box=document.getElementById('cal-ev-assignees');if(!box)return;
+  const dd=document.getElementById('cal-ev-assignee-dropdown');
+  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:#aaa;font-size:12px">Niemand zugewiesen</span>'}
+  else{box.innerHTML=calEvSelectedAssignees.map(uid=>{const u=appUsers.find(x=>x.id===uid);return'<span class="assignee-chip">'+esc(u?u.username:'?')+' <button onclick="event.stopPropagation();toggleAssignee('+uid+')">×</button></span>'}).join('')}
+  if(dd){dd.innerHTML=appUsers.map(u=>{const checked=calEvSelectedAssignees.includes(u.id);return'<label style="'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee('+u.id+')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(u.username)+'</label>'}).join('')}
+}
+function toggleAssigneeDropdown(){
+  const dd=document.getElementById('cal-ev-assignee-dropdown');if(!dd)return;
+  dd.style.display=dd.style.display==='none'?'block':'none';
+}
+function toggleAssignee(uid){
+  const i=calEvSelectedAssignees.indexOf(uid);
+  if(i>=0)calEvSelectedAssignees.splice(i,1);else calEvSelectedAssignees.push(uid);
+  renderAssigneePicker();
+}
+function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
 
 // ── CalDAV Import ──
 async function loadCalDAVImports(){
@@ -2834,6 +2871,7 @@ async function deleteUser(id){
 
 // ─── INIT ────────────────────────────────────────────────────
 loadCurrentUser();
+loadAppUsers();
 loadData();
 // Set CalDAV URL immediately so it's never empty
 {const port=location.port?':'+location.port:'';const el=document.getElementById('caldav-url-display');if(el)el.textContent=location.protocol+'//'+location.hostname+port+'/caldav/calendars/';}
