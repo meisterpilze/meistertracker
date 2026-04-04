@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS scan_log (
   "from"  TEXT,
   "to"    TEXT,
   species TEXT,
-  strain  TEXT
+  strain  TEXT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
 
@@ -189,6 +190,10 @@ const MIGRATIONS = [
     const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='private'").get();
     if (!has.c) db.exec('ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0');
   }},
+  { version: 3, description: 'Add user_id to scan_log for user tracking', fn(db) {
+    const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('scan_log') WHERE name='user_id'").get();
+    if (!has.c) db.exec('ALTER TABLE scan_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+  }},
 ];
 
 function runMigrations(db) {
@@ -256,8 +261,8 @@ function readAll(db) {
     bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
   }));
 
-  // Scan log — include id for PATCH/DELETE targeting
-  const scanLog = db.prepare('SELECT * FROM scan_log ORDER BY id').all().map(r => ({
+  // Scan log — include id for PATCH/DELETE targeting, join username
+  const scanLog = db.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id').all().map(r => ({
     id: r.id,
     time: r.time,
     action: r.action,
@@ -266,7 +271,9 @@ function readAll(db) {
     from: r.from,
     to: r.to,
     species: r.species,
-    strain: r.strain
+    strain: r.strain,
+    userId: r.user_id,
+    user: r.username || null
   }));
 
   // Harvests — include id for targeting
@@ -747,11 +754,11 @@ function deleteBatchById(db, batchId) {
 }
 
 // -- Scan Log --
-function appendScanEntries(db, entries) {
-  const ins = db.prepare('INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain) VALUES(?,?,?,?,?,?,?,?)');
+function appendScanEntries(db, entries, userId) {
+  const ins = db.prepare('INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id) VALUES(?,?,?,?,?,?,?,?,?)');
   const ids = [];
   for (const e of entries) {
-    const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null);
+    const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null, userId||null);
     ids.push(r.lastInsertRowid);
   }
   incrementDataVersion(db);

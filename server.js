@@ -1425,7 +1425,8 @@ function handleRequest(req,res){
 
   // -- Scan Log --
   if(req.method==='POST'&&req.url==='/api/scan-log'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const ids=db.appendScanEntries(database,data.entries||[]);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
+    const sess=checkAuth(req);const userId=sess?sess.user_id:null;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const ids=db.appendScanEntries(database,data.entries||[],userId);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
   }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
