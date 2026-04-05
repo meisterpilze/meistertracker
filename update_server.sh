@@ -5,59 +5,23 @@ set -e
 
 # Configuration
 PM2_PROCESS_NAME="meisterpilze"
-BASE_PORT=3000
-BASE_HTTPS_PORT=3443
-
-# ---- Worktree detection ----
-
-detect_worktree() {
-    # Check if we're inside a git worktree (not the main working tree)
-    local toplevel
-    toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-    local common_dir
-    common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
-    local git_dir
-    git_dir="$(git rev-parse --git-dir 2>/dev/null)" || return 1
-
-    # In a worktree, .git is a file pointing to the main repo's worktrees/<name> dir
-    # The git-dir will contain "/worktrees/" when inside a worktree
-    if echo "$git_dir" | grep -q "/worktrees/"; then
-        WORKTREE_NAME="$(basename "$toplevel")"
-        IS_WORKTREE=true
-    else
-        IS_WORKTREE=false
-    fi
-}
-
-find_free_port() {
-    local port=$1
-    while lsof -iTCP:"$port" -sTCP:LISTEN -t > /dev/null 2>&1; do
-        port=$((port + 1))
-    done
-    echo "$port"
-}
-
-setup_worktree_config() {
-    if [ "$IS_WORKTREE" = true ]; then
-        PM2_PROCESS_NAME="meisterpilze-${WORKTREE_NAME}"
-        local http_port
-        http_port=$(find_free_port $((BASE_PORT + 1)))
-        local https_port
-        https_port=$(find_free_port $((BASE_HTTPS_PORT + 1)))
-        export PORT="$http_port"
-        export HTTPS_PORT="$https_port"
-        echo "  ┌─ Worktree mode ─────────────────────────────"
-        echo "  │ Worktree:    $WORKTREE_NAME"
-        echo "  │ PM2 name:    $PM2_PROCESS_NAME"
-        echo "  │ HTTP port:   $http_port"
-        echo "  │ HTTPS port:  $https_port"
-        echo "  └─────────────────────────────────────────────"
-    fi
-}
-
-detect_worktree
 
 # ---- Helper functions ----
+
+detect_worktree() {
+    IS_WORKTREE=false
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        local git_dir
+        git_dir="$(git rev-parse --git-dir 2>/dev/null)"
+        if [[ "$git_dir" == */.git/worktrees/* ]]; then
+            IS_WORKTREE=true
+            echo "┌──────────────────────────────────────────┐"
+            echo "│  Running in git worktree                 │"
+            echo "│  Git pull will be skipped                │"
+            echo "└──────────────────────────────────────────┘"
+        fi
+    fi
+}
 
 check_node() {
     if ! command -v node &> /dev/null; then
@@ -81,12 +45,17 @@ ensure_certs() {
         echo "  -> TLS certificates found."
         return
     fi
-    if command -v openssl &> /dev/null; then
-        echo "  -> TLS certificates missing, generating..."
+    echo "  -> TLS certificates not found, generating..."
+    if ! command -v openssl &> /dev/null; then
+        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
+        echo "     Camera scanning on iOS Safari requires HTTPS."
+        echo "     Install openssl and run: bash update_server.sh gen-cert"
+        return
+    fi
+    if [ -f gen-cert.sh ]; then
         bash gen-cert.sh
     else
-        echo "  ⚠ OpenSSL not installed — cannot generate TLS certificates."
-        echo "    Server will start in HTTP mode (iOS camera will not work)."
+        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
     fi
 }
 
@@ -104,12 +73,12 @@ backup_data() {
 
 do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
+    detect_worktree
     check_node
     ensure_pm2
-    setup_worktree_config
 
     if [ "$IS_WORKTREE" = true ]; then
-        echo "[1/5] Skipping git pull (worktree mode — code is managed by the worktree)"
+        echo "[1/5] Skipping git pull (worktree mode)."
     else
         echo "[1/5] Updating code from git (reset to origin/main)..."
         if ! git fetch origin; then
@@ -148,7 +117,6 @@ do_start() {
     echo "==== Meisterpilze Server — Start ===="
     check_node
     ensure_pm2
-    setup_worktree_config
 
     # Ensure dependencies are installed
     if [ -f package.json ] && [ ! -d node_modules ]; then
@@ -172,7 +140,6 @@ do_start() {
 do_stop() {
     echo "==== Meisterpilze Server — Stop ===="
     ensure_pm2
-    setup_worktree_config
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         pm2 stop "$PM2_PROCESS_NAME"
@@ -186,25 +153,6 @@ do_stop() {
 do_status() {
     ensure_pm2
     pm2 status
-}
-
-ensure_certs() {
-    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
-        echo "  -> TLS certificates found."
-        return
-    fi
-    echo "  -> TLS certificates not found, generating..."
-    if ! command -v openssl &> /dev/null; then
-        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
-        echo "     Camera scanning on iOS Safari requires HTTPS."
-        echo "     Install openssl and run: bash update_server.sh gen-cert"
-        return
-    fi
-    if [ -f gen-cert.sh ]; then
-        bash gen-cert.sh
-    else
-        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
-    fi
 }
 
 do_gen_cert() {
