@@ -8,6 +8,21 @@ PM2_PROCESS_NAME="meisterpilze"
 
 # ---- Helper functions ----
 
+detect_worktree() {
+    IS_WORKTREE=false
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        local git_dir
+        git_dir="$(git rev-parse --git-dir 2>/dev/null)"
+        if [[ "$git_dir" == */.git/worktrees/* ]]; then
+            IS_WORKTREE=true
+            echo "┌──────────────────────────────────────────┐"
+            echo "│  Running in git worktree                 │"
+            echo "│  Git pull will be skipped                │"
+            echo "└──────────────────────────────────────────┘"
+        fi
+    fi
+}
+
 check_node() {
     if ! command -v node &> /dev/null; then
         echo "Error: Node.js is not installed or not in PATH."
@@ -53,17 +68,22 @@ backup_data() {
 
 do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
+    detect_worktree
     check_node
     ensure_pm2
 
-    echo "[1/5] Updating code from git (reset to origin/main)..."
-    if ! git fetch origin; then
-        echo "Error: git fetch failed."
-        exit 1
-    fi
-    if ! git reset --hard origin/main; then
-        echo "Error: git reset --hard origin/main failed."
-        exit 1
+    if [ "$IS_WORKTREE" = true ]; then
+        echo "[1/5] Skipping git pull (worktree mode)."
+    else
+        echo "[1/5] Updating code from git (reset to origin/main)..."
+        if ! git fetch origin; then
+            echo "Error: git fetch failed."
+            exit 1
+        fi
+        if ! git reset --hard origin/main; then
+            echo "Error: git reset --hard origin/main failed."
+            exit 1
+        fi
     fi
 
     echo "[2/5] Installing dependencies..."
