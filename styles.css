@@ -402,17 +402,17 @@ tr:hover td{background:#f1f5f9}
 /* ═══ CALENDAR ══════════════════════════════════════════════════ */
 .cal-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
 .cal-toolbar-left{display:flex;gap:6px;align-items:center}
-.cal-toolbar-right{display:flex;gap:8px;align-items:center}
+.cal-toolbar-right{display:flex;gap:8px;align-items:center;flex-shrink:0}
 .cal-nav-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--c-border);border-radius:var(--radius-sm);background:var(--c-surface);color:var(--c-text);cursor:pointer;font-size:16px;transition:all .15s}
 .cal-nav-btn:hover{background:var(--c-primary-light);border-color:var(--c-primary);color:var(--c-primary)}
 .cal-today-btn{height:36px;padding:0 16px;border:1px solid var(--c-border);border-radius:var(--radius-sm);background:var(--c-surface);color:var(--c-text);cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all .15s}
 .cal-today-btn:hover{background:var(--c-primary);color:#fff;border-color:var(--c-primary)}
 .cal-title{font-size:20px;font-weight:800;color:var(--c-text);margin-left:8px;letter-spacing:-.3px}
 .cal-view-toggle{display:flex;border:1px solid var(--c-border);border-radius:var(--radius-sm);overflow:hidden}
-.cal-vbtn{padding:7px 18px;font-size:13px;font-weight:600;border:none;background:var(--c-surface);color:var(--c-text-sec);cursor:pointer;font-family:inherit;transition:all .15s}
+.cal-vbtn{padding:7px 18px;font-size:13px;font-weight:600;border:none;background:var(--c-surface);color:var(--c-text-sec);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
 .cal-vbtn.active{background:var(--c-primary);color:#fff}
 .cal-vbtn:hover:not(.active){background:var(--c-primary-light);color:var(--c-primary)}
-.cal-add-btn{height:36px;padding:0 16px;border:none;border-radius:var(--radius-sm);background:var(--c-primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px}
+.cal-add-btn{height:36px;padding:0 16px;border:none;border-radius:var(--radius-sm);background:var(--c-primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
 .cal-add-btn:hover{background:var(--c-primary-hover)}
 .cal-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--c-text-sec);padding:8px 12px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-sm)}
 .cal-legend span{display:flex;align-items:center;gap:6px;font-weight:500}
