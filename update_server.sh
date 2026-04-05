@@ -45,12 +45,17 @@ ensure_certs() {
         echo "  -> TLS certificates found."
         return
     fi
-    if command -v openssl &> /dev/null; then
-        echo "  -> TLS certificates missing, generating..."
+    echo "  -> TLS certificates not found, generating..."
+    if ! command -v openssl &> /dev/null; then
+        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
+        echo "     Camera scanning on iOS Safari requires HTTPS."
+        echo "     Install openssl and run: bash update_server.sh gen-cert"
+        return
+    fi
+    if [ -f gen-cert.sh ]; then
         bash gen-cert.sh
     else
-        echo "  ⚠ OpenSSL not installed — cannot generate TLS certificates."
-        echo "    Server will start in HTTP mode (iOS camera will not work)."
+        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
     fi
 }
 
@@ -97,13 +102,12 @@ do_update() {
 
     echo "[5/5] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
-        echo "  -> Process found, attempting reload..."
-        pm2 reload "$PM2_PROCESS_NAME" || pm2 restart "$PM2_PROCESS_NAME"
-    else
-        echo "  -> Process not found in PM2, starting new instance..."
-        pm2 start server.js --name "$PM2_PROCESS_NAME"
-        pm2 save
+        echo "  -> Process found, deleting for clean restart..."
+        pm2 delete "$PM2_PROCESS_NAME"
     fi
+    echo "  -> Starting instance..."
+    pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
+    pm2 save
 
     echo "==== Update Completed Successfully ===="
     echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
@@ -124,13 +128,12 @@ do_start() {
     ensure_certs
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
-        echo "Process already exists in PM2, restarting..."
-        pm2 restart "$PM2_PROCESS_NAME"
-    else
-        echo "Starting new instance..."
-        pm2 start server.js --name "$PM2_PROCESS_NAME"
-        pm2 save
+        echo "Process already exists, restarting clean..."
+        pm2 delete "$PM2_PROCESS_NAME"
     fi
+    echo "Starting instance..."
+    pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
+    pm2 save
     echo "==== Server Started ===="
 }
 
@@ -140,7 +143,8 @@ do_stop() {
 
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         pm2 stop "$PM2_PROCESS_NAME"
-        echo "Server stopped."
+        pm2 delete "$PM2_PROCESS_NAME"
+        echo "Server stopped and removed from PM2."
     else
         echo "Process '$PM2_PROCESS_NAME' not found in PM2 — nothing to stop."
     fi
@@ -149,25 +153,6 @@ do_stop() {
 do_status() {
     ensure_pm2
     pm2 status
-}
-
-ensure_certs() {
-    if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
-        echo "  -> TLS certificates found."
-        return
-    fi
-    echo "  -> TLS certificates not found, generating..."
-    if ! command -v openssl &> /dev/null; then
-        echo "  -> WARNING: openssl not installed — skipping HTTPS setup."
-        echo "     Camera scanning on iOS Safari requires HTTPS."
-        echo "     Install openssl and run: bash update_server.sh gen-cert"
-        return
-    fi
-    if [ -f gen-cert.sh ]; then
-        bash gen-cert.sh
-    else
-        echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
-    fi
 }
 
 do_gen_cert() {

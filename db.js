@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS scan_log (
   "from"  TEXT,
   "to"    TEXT,
   species TEXT,
-  strain  TEXT
+  strain  TEXT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
 
@@ -139,6 +140,12 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   created     TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS calendar_event_assignees (
+  event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
@@ -188,6 +195,17 @@ const MIGRATIONS = [
   { version: 2, description: 'Add private flag to manual_tasks for CalDAV visibility', fn(db) {
     const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='private'").get();
     if (!has.c) db.exec('ALTER TABLE manual_tasks ADD COLUMN private INTEGER DEFAULT 0');
+  }},
+  { version: 3, description: 'Add user_id to scan_log for user tracking', fn(db) {
+    const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('scan_log') WHERE name='user_id'").get();
+    if (!has.c) db.exec('ALTER TABLE scan_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+  }},
+  { version: 4, description: 'Add calendar_event_assignees junction table', fn(db) {
+    db.exec(`CREATE TABLE IF NOT EXISTS calendar_event_assignees (
+      event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
+      user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (event_id, user_id)
+    )`);
   }},
 ];
 
@@ -256,8 +274,8 @@ function readAll(db) {
     bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
   }));
 
-  // Scan log — include id for PATCH/DELETE targeting
-  const scanLog = db.prepare('SELECT * FROM scan_log ORDER BY id').all().map(r => ({
+  // Scan log — include id for PATCH/DELETE targeting, join username
+  const scanLog = db.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id').all().map(r => ({
     id: r.id,
     time: r.time,
     action: r.action,
@@ -266,7 +284,9 @@ function readAll(db) {
     from: r.from,
     to: r.to,
     species: r.species,
-    strain: r.strain
+    strain: r.strain,
+    userId: r.user_id,
+    user: r.username || null
   }));
 
   // Harvests — include id for targeting
@@ -376,6 +396,7 @@ function readAll(db) {
   }));
 
   // Calendar events
+  const assigneeMap = getAllCalendarEventAssignees(db);
   const calendarEvents = db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
     id: r.id,
     title: r.title,
@@ -389,7 +410,8 @@ function readAll(db) {
     color: r.color,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
-    created: r.created
+    created: r.created,
+    assignees: assigneeMap.get(r.id) || []
   }));
 
   const version = getDataVersion(db);
@@ -594,6 +616,14 @@ function writeAll(db, incoming) {
           e.category || 'custom', e.color || null,
           e.caldavUid || null, e.caldavSynced || null, e.created);
       }
+      // Sync assignees
+      db.prepare('DELETE FROM calendar_event_assignees').run();
+      const insAssignee = db.prepare('INSERT OR IGNORE INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
+      for (const e of incoming.calendarEvents) {
+        if (e.assignees && e.assignees.length) {
+          for (const a of e.assignees) insAssignee.run(e.id, a.userId);
+        }
+      }
     }
 
     // ── CalDAV Config ──
@@ -747,11 +777,11 @@ function deleteBatchById(db, batchId) {
 }
 
 // -- Scan Log --
-function appendScanEntries(db, entries) {
-  const ins = db.prepare('INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain) VALUES(?,?,?,?,?,?,?,?)');
+function appendScanEntries(db, entries, userId) {
+  const ins = db.prepare('INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id) VALUES(?,?,?,?,?,?,?,?,?)');
   const ids = [];
   for (const e of entries) {
-    const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null);
+    const r = ins.run(e.time, e.action, e.batch||null, e.bag||null, e.from||null, e.to||null, e.species||null, e.strain||null, userId||null);
     ids.push(r.lastInsertRowid);
   }
   incrementDataVersion(db);
@@ -764,7 +794,8 @@ function deleteLastScanEntries(db, n) {
 }
 
 function deleteScanEntryById(db, id) {
-  db.prepare('DELETE FROM scan_log WHERE id=?').run(id);
+  const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
+  return info.changes > 0;
 }
 
 function clearScanLog(db) {
@@ -862,7 +893,10 @@ function updateCaldavCfg(db, c) {
 }
 
 // -- Inventory Delta --
+const VALID_MATS = ['hardwood','wheatbran','gypsum','grain'];
+
 function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {
@@ -876,6 +910,7 @@ function applyInventoryDelta(db, mat, deltaKg, type, ref) {
 }
 
 function setInventoryAbsolute(db, mat, value, type, ref) {
+  if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
   try {
@@ -934,6 +969,28 @@ function deleteCalendarEvent(db, id) {
   incrementDataVersion(db);
 }
 
+function setCalendarEventAssignees(db, eventId, userIds) {
+  db.prepare('DELETE FROM calendar_event_assignees WHERE event_id=?').run(eventId);
+  const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
+  for (const uid of userIds) ins.run(eventId, uid);
+  incrementDataVersion(db);
+}
+
+function getAllCalendarEventAssignees(db) {
+  const rows = db.prepare(`
+    SELECT cea.event_id, cea.user_id, u.username
+    FROM calendar_event_assignees cea
+    JOIN users u ON u.id = cea.user_id
+    ORDER BY cea.event_id, u.username
+  `).all();
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.event_id)) map.set(r.event_id, []);
+    map.get(r.event_id).push({ userId: r.user_id, username: r.username });
+  }
+  return map;
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
@@ -947,5 +1004,6 @@ module.exports = {
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
-  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent
+  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+  setCalendarEventAssignees, getAllCalendarEventAssignees
 };
