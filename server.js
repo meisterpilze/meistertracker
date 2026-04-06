@@ -1814,7 +1814,19 @@ function handleRequest(req,res){
 
   fs.readFile(filePath,(err,data)=>{
     if(err){res.writeHead(404);res.end('Not found');return;}
-    res.writeHead(200,{'Content-Type':MIME[path.extname(filePath)]||'application/octet-stream'});
+    const ext = path.extname(filePath);
+    const headers = {'Content-Type':MIME[ext]||'application/octet-stream'};
+    // Cache immutable vendor libs aggressively; cache HTML/CSS/SW short-term
+    if(url.startsWith('/lib/')){
+      headers['Cache-Control']='public, max-age=31536000, immutable';
+    }else if(ext==='.png'||ext==='.ico'||ext==='.svg'){
+      headers['Cache-Control']='public, max-age=86400';
+    }else if(ext==='.css'||ext==='.js'){
+      headers['Cache-Control']='public, max-age=300';
+    }else{
+      headers['Cache-Control']='no-cache';
+    }
+    res.writeHead(200,headers);
     res.end(data);
   });
 }
