@@ -1315,6 +1315,40 @@ setInterval(() => {
   }
 }, RATE_WINDOW_MS);
 
+// ── LOGIN BRUTE-FORCE PROTECTION ────────────────────────────
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+const loginAttempts = new Map(); // key → { count, firstAttempt, lockedUntil }
+
+function checkLoginAllowed(key) {
+  const entry = loginAttempts.get(key);
+  if (!entry) return true;
+  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
+  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) { loginAttempts.delete(key); return true; }
+  return true;
+}
+
+function recordLoginFailure(key) {
+  const now = Date.now();
+  let entry = loginAttempts.get(key);
+  if (!entry) { entry = { count: 0, firstAttempt: now, lockedUntil: null }; loginAttempts.set(key, entry); }
+  entry.count++;
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
+    log('warn', 'Login locked due to too many failed attempts', { key, attempts: entry.count });
+  }
+}
+
+function clearLoginAttempts(key) { loginAttempts.delete(key); }
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of loginAttempts) {
+    if (entry.lockedUntil && now >= entry.lockedUntil) loginAttempts.delete(key);
+    else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
+  }
+}, 60000);
+
 function handleRequest(req,res){
   const clientIP = req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(clientIP)) {
@@ -1386,11 +1420,18 @@ function handleRequest(req,res){
     req.on('end',()=>{
       try{
         const{username,password}=JSON.parse(body);
+        const throttleKey=username.toLowerCase()+'@'+clientIP;
+        if(!checkLoginAllowed(throttleKey)){
+          res.writeHead(429,{'Content-Type':'application/json'});
+          res.end(JSON.stringify({error:'Too many login attempts. Try again in 15 minutes.'}));return;
+        }
         const user=db.getUserByUsername(database,username);
         if(!user||!db.verifyPassword(user.hash,user.salt,password)){
+          recordLoginFailure(throttleKey);
           res.writeHead(401,{'Content-Type':'application/json'});
           res.end(JSON.stringify({error:'Invalid credentials'}));return;
         }
+        clearLoginAttempts(throttleKey);
         const token=db.createSession(database,user.id);
         setSessionCookie(res,token);
         res.writeHead(200,{'Content-Type':'application/json'});
