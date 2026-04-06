@@ -90,6 +90,26 @@ function jsonBody(req, res, cb) {
 function jsonOk(res, data) { res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(data||{ok:true})); }
 function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:msg})); }
 
+// ── REQUEST VALIDATION ──────────────────────────────────────
+// Returns null if valid, or an error string if invalid.
+function validateRequired(data, fields) {
+  if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
+  for (const f of fields) {
+    if (data[f] === undefined || data[f] === null || data[f] === '') return 'Missing required field: ' + f;
+  }
+  return null;
+}
+function validateTypes(data, schema) {
+  for (const [field, type] of Object.entries(schema)) {
+    if (data[field] === undefined || data[field] === null) continue;
+    if (type === 'number' && typeof data[field] !== 'number') return field + ' must be a number';
+    if (type === 'string' && typeof data[field] !== 'string') return field + ' must be a string';
+    if (type === 'boolean' && typeof data[field] !== 'boolean') return field + ' must be a boolean';
+    if (type === 'array' && !Array.isArray(data[field])) return field + ' must be an array';
+  }
+  return null;
+}
+
 // ── AUTH HELPERS ─────────────────────────────────────────────
 function getSessionToken(req){
   const cookies=req.headers.cookie||'';
@@ -1419,7 +1439,12 @@ function handleRequest(req,res){
 
   // -- Batches --
   if(req.method==='POST'&&req.url==='/api/batches'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['batchId','species','qty','days','created','due']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{qty:'number',days:'number',species:'string',batchId:'string'});if(vt){jsonErr(res,400,vt);return}
+      try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
   if(req.method==='PATCH'&&batchMatch){
@@ -1455,7 +1480,12 @@ function handleRequest(req,res){
 
   // -- Harvests --
   if(req.method==='POST'&&req.url==='/api/harvests'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['time','grams']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{grams:'number'});if(vt){jsonErr(res,400,vt);return}
+      try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
 
   // -- Cultures --
@@ -1470,7 +1500,12 @@ function handleRequest(req,res){
 
   // -- Tasks --
   if(req.method==='POST'&&req.url==='/api/tasks'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['text','created']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{text:'string',priority:'string'});if(vt){jsonErr(res,400,vt);return}
+      try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
   if(req.method==='PATCH'&&taskMatch){
@@ -1509,7 +1544,12 @@ function handleRequest(req,res){
 
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCalendarEvent(database,data);if(Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,data.id,data.assignees)}autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['id','title','startDate']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{id:'string',title:'string',startDate:'string'});if(vt){jsonErr(res,400,vt);return}
+      try{db.insertCalendarEvent(database,data);if(Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,data.id,data.assignees)}autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
   if(req.method==='PATCH'&&calEvMatch){
@@ -1523,10 +1563,20 @@ function handleRequest(req,res){
 
   // -- Inventory Delta --
   if(req.method==='POST'&&req.url==='/api/inventory/delta'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['mat','deltaKg']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{mat:'string',deltaKg:'number'});if(vt){jsonErr(res,400,vt);return}
+      try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/set'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['mat','value']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{mat:'string',value:'number'});if(vt){jsonErr(res,400,vt);return}
+      try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
