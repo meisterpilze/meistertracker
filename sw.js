@@ -129,7 +129,7 @@ self.addEventListener('fetch', e => {
     // All other API calls: network only, offline error fallback
     e.respondWith(
       fetch(e.request).catch(() =>
-        new Response('{"error":"offline"}', { headers: { 'Content-Type': 'application/json' } })
+        new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
       )
     );
     return;
