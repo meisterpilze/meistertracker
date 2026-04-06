@@ -19,9 +19,9 @@
 <body>
 
 <!-- Add bags modal -->
-<div class="modal-bg" id="m-addbags">
+<div class="modal-bg" id="m-addbags" role="dialog" aria-modal="true" aria-labelledby="m-addbags-title">
   <div class="modal">
-    <h3>Add bags to batch</h3>
+    <h3 id="m-addbags-title">Add bags to batch</h3>
     <p id="ab-info" style="font-size:13px;color:#555;margin-bottom:12px"></p>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div><label>How many bags to add</label>
@@ -37,20 +37,20 @@
 </div>
 
 <!-- Confirm modal -->
-<div class="modal-bg" id="m-confirm">
+<div class="modal-bg" id="m-confirm" role="dialog" aria-modal="true" aria-labelledby="m-title">
   <div class="modal"><h3 id="m-title"></h3><p id="m-body"></p>
     <div class="modal-btns"><button class="btn" onclick="closeConfirm()">Cancel</button><button class="btn btn-r" id="m-ok">Confirm</button></div>
   </div>
 </div>
 <!-- Note modal -->
-<div class="modal-bg" id="m-note">
+<div class="modal-bg" id="m-note" role="dialog" aria-modal="true" aria-labelledby="m-note-title">
   <div class="modal"><h3 id="m-note-title">Edit note</h3>
     <textarea id="m-note-text" rows="4" placeholder="Type your note here..."></textarea>
     <div class="modal-btns"><button class="btn" onclick="closeNote()">Cancel</button><button class="btn btn-p" onclick="saveNote()">Save</button></div>
   </div>
 </div>
 <!-- Calendar event modal (create/edit/move) -->
-<div class="modal-bg" id="m-cal-event">
+<div class="modal-bg" id="m-cal-event" role="dialog" aria-modal="true" aria-labelledby="cal-ev-title">
   <div class="modal">
     <h3 id="cal-ev-title">Neues Event</h3>
     <input type="hidden" id="cal-ev-id" />
@@ -107,7 +107,7 @@
   </div>
 </div>
 <!-- Calendar event detail (read-only) modal -->
-<div class="modal-bg" id="m-cal-detail" onclick="if(event.target===this)closeEventDetail()">
+<div class="modal-bg" id="m-cal-detail" role="dialog" aria-modal="true" aria-labelledby="cal-detail-title" onclick="if(event.target===this)closeEventDetail()">
   <div class="modal">
     <h3 id="cal-detail-title" style="margin-bottom:4px;word-break:break-word"></h3>
     <div id="cal-detail-meta" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px"></div>
@@ -118,8 +118,8 @@
   </div>
 </div>
 <!-- Batch-add modal -->
-<div class="modal-bg" id="m-batchadd">
-  <div class="modal"><h3>Add entire batch to location</h3>
+<div class="modal-bg" id="m-batchadd" role="dialog" aria-modal="true" aria-labelledby="m-batchadd-title">
+  <div class="modal"><h3 id="m-batchadd-title">Add entire batch to location</h3>
     <p>All bags will be logged as ADD in one step.</p>
     <div style="display:flex;flex-direction:column;gap:8px">
       <div><label>Batch</label><select id="ba-batch" onchange="baPreview()"><option value="">— choose batch —</option></select></div>
@@ -131,7 +131,7 @@
 </div>
 
 <!-- Move bag modal -->
-<div class="modal-bg" id="m-locmove" onclick="if(event.target===this)this.classList.remove('open')">
+<div class="modal-bg" id="m-locmove" role="dialog" aria-modal="true" aria-labelledby="lm-title" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal" style="max-width:420px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <h3 id="lm-title" style="font-family:monospace;font-size:15px">Bag</h3>
@@ -148,7 +148,7 @@
 </div>
 
 <!-- Bag info modal — opens when scanning a bag with no action set -->
-<div class="modal-bg" id="m-baginfo">
+<div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
   <div class="modal" style="max-width:540px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <h3 id="bi-title">Bag info</h3>
@@ -164,7 +164,7 @@
   </div>
 </div>
 <!-- Camera scan modal -->
-<div class="modal-bg" id="m-camscan" onclick="if(event.target===this)closeCamScan()" style="background:rgba(0,0,0,.85)">
+<div class="modal-bg" id="m-camscan" role="dialog" aria-modal="true" aria-label="Camera scanner" onclick="if(event.target===this)closeCamScan()" style="background:rgba(0,0,0,.85)">
   <div style="position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px">
     <div id="cam-reader" style="width:100%;max-width:500px;border-radius:12px;overflow:hidden;background:#000"></div>
     <button class="btn btn-sm" onclick="closeCamScan()" style="margin-top:16px;background:#fff;padding:10px 28px;border-radius:99px;font-size:14px;font-weight:600">Close Camera</button>
@@ -176,7 +176,7 @@
     <div class="sb-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M12 13v5M8 21h8M9 3c0 0-2-2-2-3M15 3c0 0 2-2 2-3"/></svg><span class="sb-logo-text">Meisterpilze <small>lab</small></span></div>
     <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
   </div>
-  <nav class="sb-nav">
+  <nav class="sb-nav" aria-label="Main navigation" role="navigation">
     <div class="sb-group-label" data-i18n="nav.main">Main</div>
     <button class="sb-btn active" id="n-dash" onclick="go('dash','n-dash')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span data-i18n="nav.dashboard">Dashboard</span></button>
     <button class="sb-btn" id="n-todo" onclick="go('todo','n-todo')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span data-i18n="nav.todo">To-do</span></button>
@@ -290,7 +290,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="sec" style="margin:0" data-i18n="dash.liveStatus">Live batch status</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" id="status-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
+        <input type="text" id="status-q" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
         <button class="btn btn-sm" id="status-view-btn" onclick="toggleStatusView()" data-i18n="dash.cards">Cards</button>
       </div>
     </div>
@@ -348,7 +348,7 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec" style="margin:0" data-i18n="batch.allBatches">All batches</div>
-        <input type="text" id="batch-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderBatches()" />
+        <input type="text" id="batch-q" aria-label="Search batches" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderBatches()" />
       </div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th data-i18n="th.batchId">Batch ID</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.qty">Qty</th><th data-i18n="th.inc">Inc</th><th data-i18n="th.substrate">Substrate</th><th data-i18n="th.source">Source</th><th data-i18n="th.created">Created</th><th data-i18n="th.due">Due</th><th data-i18n="th.status">Status</th><th data-i18n="th.notes">Notes</th><th></th></tr></thead>
@@ -445,7 +445,7 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec" style="margin:0" data-i18n="harvest.log">Harvest log</div>
-        <input type="text" id="harvest-q" data-i18n-placeholder="harvest.searchBatch" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderHarvests()" />
+        <input type="text" id="harvest-q" aria-label="Search harvests" data-i18n-placeholder="harvest.searchBatch" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" oninput="renderHarvests()" />
       </div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th data-i18n="th.date">Date</th><th data-i18n="th.batch">Batch</th><th data-i18n="th.bag">Bag</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.flush">Flush</th><th data-i18n="th.grams">Grams</th></tr></thead>
@@ -745,7 +745,7 @@
           </select>
           <input type="date" id="log-date-from" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Von Datum" />
           <input type="date" id="log-date-to" onchange="renderLog()" style="font-size:12px;padding:4px 6px" title="Bis Datum" />
-          <input type="text" id="log-q" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
+          <input type="text" id="log-q" aria-label="Search log" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" oninput="renderLog()" />
           <button class="btn btn-sm btn-r" onclick="clearLog()" data-i18n="settings.clear">Clear</button>
         </div>
       </div>
@@ -6064,6 +6064,16 @@ if(typeof pushBatchCaldav==='undefined'){
     try{await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})})}catch(e){console.warn('CalDAV push failed:',e.message)}
   };
 }
+
+// Escape key closes the topmost open modal
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  const modals = ['m-camscan','m-cal-event','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-confirm'];
+  for (const id of modals) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
+  }
+});
 
 loadCurrentUser();
 loadAppUsers();
