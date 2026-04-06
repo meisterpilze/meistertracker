@@ -1867,3 +1867,15 @@ function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('uncaughtException', (err) => {
+  log('error', 'Uncaught exception', { error: err.message, stack: err.stack });
+  shutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason) => {
+  log('error', 'Unhandled promise rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined
+  });
+});
