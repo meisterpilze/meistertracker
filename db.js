@@ -754,9 +754,13 @@ function updateBatchField(db, batchId, fields) {
   const allowed = ['notes','species','strain','qty','days','due'];
   const cols = Object.keys(fields).filter(k => allowed.includes(k));
   if (!cols.length) return;
-  const sets = cols.map(c => `${c}=?`).join(',');
-  db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map(c=>fields[c]), batchId);
-  incrementDataVersion(db);
+  db.exec('BEGIN');
+  try {
+    const sets = cols.map(c => `${c}=?`).join(',');
+    db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map(c=>fields[c]), batchId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
 function addBagsToBatch(db, batchId, newBags, newQty) {
@@ -935,16 +939,24 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
 }
 
 // ── Calendar Event CRUD ─────────────────────────────────────
-function insertCalendarEvent(db, ev) {
-  db.prepare(`INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
-    start_time, end_time, category, color, caldav_uid, caldav_synced, created)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-    ev.id, ev.title, ev.description || null, ev.startDate, ev.endDate || null,
-    ev.allDay ? 1 : 0, ev.startTime || null, ev.endTime || null,
-    ev.category || 'custom', ev.color || null, ev.caldavUid || null,
-    ev.caldavSynced || null, ev.created || new Date().toISOString()
-  );
-  incrementDataVersion(db);
+function insertCalendarEvent(db, ev, assigneeIds) {
+  db.exec('BEGIN');
+  try {
+    db.prepare(`INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
+      start_time, end_time, category, color, caldav_uid, caldav_synced, created)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      ev.id, ev.title, ev.description || null, ev.startDate, ev.endDate || null,
+      ev.allDay ? 1 : 0, ev.startTime || null, ev.endTime || null,
+      ev.category || 'custom', ev.color || null, ev.caldavUid || null,
+      ev.caldavSynced || null, ev.created || new Date().toISOString()
+    );
+    if (assigneeIds && assigneeIds.length) {
+      const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
+      for (const uid of assigneeIds) ins.run(ev.id, uid);
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
 function updateCalendarEvent(db, id, fields) {
