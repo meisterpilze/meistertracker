@@ -14,7 +14,11 @@ function loadEnv() {
     if (fs.existsSync(envPath)) {
       fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
         const match = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
-        if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
+        if (match) {
+          let val = match[2];
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+          if (!process.env[match[1]]) process.env[match[1]] = val;
+        }
       });
     }
   } catch (e) { /* .env is optional */ }
@@ -38,8 +42,12 @@ function log(level, msg, meta) {
   }
 }
 
-const PORT = parseInt(process.env.PORT, 10) || 3000;
-const HTTPS_PORT = parseInt(process.env.HTTPS_PORT, 10) || 3443;
+const PORT_RAW = parseInt(process.env.PORT, 10) || 3000;
+if (PORT_RAW < 1 || PORT_RAW > 65535) { log('error', 'Invalid PORT, using default 3000', { value: PORT_RAW }); }
+const PORT = (PORT_RAW >= 1 && PORT_RAW <= 65535) ? PORT_RAW : 3000;
+const HTTPS_PORT_RAW = parseInt(process.env.HTTPS_PORT, 10) || 3443;
+if (HTTPS_PORT_RAW < 1 || HTTPS_PORT_RAW > 65535) { log('error', 'Invalid HTTPS_PORT, using default 3443', { value: HTTPS_PORT_RAW }); }
+const HTTPS_PORT = (HTTPS_PORT_RAW >= 1 && HTTPS_PORT_RAW <= 65535) ? HTTPS_PORT_RAW : 3443;
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
@@ -1526,6 +1534,7 @@ function handleRequest(req,res){
           res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
         }
         const user=db.createUser(database,username,password,role||'user');
+        log('info','User created',{actor:req.authUser.username,newUser:username,role:role||'user'});
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify(user));
       }catch(e){
@@ -1546,6 +1555,7 @@ function handleRequest(req,res){
       res.end(JSON.stringify({error:'Cannot delete yourself'}));return;
     }
     db.deleteUser(database,userId);
+    log('info','User deleted',{actor:req.authUser.username,deletedUserId:userId});
     res.writeHead(200,{'Content-Type':'application/json'});
     res.end(JSON.stringify({ok:true}));return;
   }
@@ -1795,7 +1805,7 @@ function handleRequest(req,res){
   // -- CalDAV Config --
   if(req.method==='POST'&&req.url==='/api/caldav/config'){
     if(requireAdmin(req,res))return;
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){safeErr(res,err)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);log('info','CalDAV config updated',{actor:req.authUser.username});jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Calendar Events --
@@ -1842,7 +1852,7 @@ function handleRequest(req,res){
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
     if(requireAdmin(req,res))return;
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);log('info','Inventory config updated',{actor:req.authUser.username});broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Backup Download (encrypted .db) --
@@ -1875,6 +1885,7 @@ function handleRequest(req,res){
           'Content-Length':out.length
         });
         res.end(out);
+        log('info','Backup downloaded',{actor:req.authUser.username});
       }catch(err){
         if(tmpDest)try{fs.unlinkSync(tmpDest)}catch(e){log('warn','Failed to clean backup temp after error',{error:e.message})}
         log('error','Backup download failed',{error:err.message});
@@ -1949,6 +1960,7 @@ function handleRequest(req,res){
         try{fs.unlinkSync(bakPath)}catch(e){log('warn','Failed to clean pre-restore backup',{error:e.message})}
         // Trigger auto-sync of CalDAV after restore
         try{autoSyncAllCaldav(readData())}catch(ce){log('error','CalDAV post-restore sync failed',{error:ce.message})}
+        log('info','Backup restored successfully',{actor:req.authUser.username});
         broadcastSSE(res);
         jsonOk(res);
       }catch(err){
