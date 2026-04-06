@@ -2833,7 +2833,7 @@ function createBatch(){
     if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);deltas.push({mat:'gypsum',deltaKg:-gypUsed,type:'batch',ref:batchId})}
   }
   if(deltas.length)invDeltas(deltas);
-  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${b}</span>`).join('');
+  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${esc(b)}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
   document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
   document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
@@ -2849,7 +2849,7 @@ function renderBatches(){
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${esc(b.batchId)}')">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${esc(b.batchId)}')">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">${t('batch.del')}</button></td></tr>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
@@ -2986,7 +2986,7 @@ function renderHarvests(){
   const max=byBatch[ids[0]].total;
   document.getElementById('harvest-totals').innerHTML=ids.map(id=>{
     const d=byBatch[id],pct=Math.round((d.total/max)*100);
-    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${id}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
+    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
   }).join('');
 }
 
@@ -3150,7 +3150,7 @@ function renderLog(){
   const now=Date.now(),h24=24*60*60*1000;
   body.innerHTML=items.length?items.map(e=>{
     const isRecent=(now-new Date(e.time).getTime())<h24;
-    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${e.user||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${e.action}</span></td><td style="font-family:monospace;font-size:10px">${e.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${e.bag||'\u2014'}</td><td>${e.from||'\u2014'}</td><td>${e.to||'\u2014'}</td><td>${e.species?spDot(e.species)+e.species:'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+e.time+'\',\''+e.batch+'\',\''+e.action+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
+    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
   const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
 }
 function deleteLogEntry(btn,time,batch,action){
@@ -3396,7 +3396,7 @@ function renderInvLog(){
     <td style="font-weight:600;color:${e.deltaKg<0?'#991b1b':'#166534'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
     <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
     <td><span class="badge ${e.type==='delivery'?'b-add':e.type==='adjustment'?'b-move':'b-harvest'}">${e.type}</span></td>
-    <td style="font-size:11px;color:#666">${e.ref||'—'}</td>
+    <td style="font-size:11px;color:#666">${esc(e.ref)||'—'}</td>
   </tr>`).join('');
 }
 
@@ -3790,7 +3790,7 @@ function openBagInfo(bagId,batchId,batch){
   biBagId=bagId;biBatchId=batchId;
   const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
   const el=document.getElementById('bi-body');
-  if(!b){el.innerHTML='<p style="color:#b91c1c">'+t('batch.notFound')+': '+batchId+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
+  if(!b){el.innerHTML='<p style="color:#b91c1c">'+t('batch.notFound')+': '+esc(batchId)+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
   document.getElementById('bi-title').textContent=bagId;
   // Current location
   const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
@@ -3805,12 +3805,12 @@ function openBagInfo(bagId,batchId,batch){
   const totalHarv=bagHarvests.reduce((s,h)=>s+(h.grams||0),0);
   el.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${b.species}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strain||'\u2014'}</div></div>
-      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:#1e40af">${currentLoc}</div></div>
+      <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${esc(b.strain)||'\u2014'}</div></div>
+      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:#1e40af">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${b.batchId} \u2014 ${t('bagInfo.allBags')}</div>
+    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags.map(bag=>{
         const isThis=bag.toUpperCase()===bagId.toUpperCase();
@@ -4028,12 +4028,12 @@ function _addLogEntry(type,msg,entryData){
       :entryData.action==='REMOVE'?('✕ '+(entryData.from||''))
       :'';
     el.innerHTML='<span class="sle-time">'+timeStr+'</span>'
-      +'<span class="badge b-'+entryData.action.toLowerCase()+'">'+entryData.action+'</span> '
-      +'<span class="sle-msg"><b>'+bagLabel+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+sp+'</span>':'')
-      +(locStr?' <span style="color:var(--c-text-muted)">'+locStr+'</span>':'')+'</span>'
+      +'<span class="badge b-'+esc(entryData.action.toLowerCase())+'">'+esc(entryData.action)+'</span> '
+      +'<span class="sle-msg"><b>'+esc(bagLabel)+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+esc(sp)+'</span>':'')
+      +(locStr?' <span style="color:var(--c-text-muted)">'+esc(locStr)+'</span>':'')+'</span>'
       +'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>';
   }else{
-    el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+msg+'</span>';
+    el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+esc(msg)+'</span>';
   }
   log.prepend(el);
   while(log.children.length>80)log.lastChild.remove();
@@ -4154,14 +4154,14 @@ function endScanSession(){
   const locSummary=[];
   if(counts.ADD>0){
     const locs={};sessionEntries.filter(e=>e.action==='ADD').forEach(e=>{locs[e.to]=(locs[e.to]||0)+1});
-    Object.entries(locs).forEach(([l,n])=>locSummary.push(n+' Bags → '+l));
+    Object.entries(locs).forEach(([l,n])=>locSummary.push(n+' Bags → '+esc(l)));
   }
   if(counts.MOVE>0){
-    const moves={};sessionEntries.filter(e=>e.action==='MOVE').forEach(e=>{const k=e.from+' → '+e.to;moves[k]=(moves[k]||0)+1});
+    const moves={};sessionEntries.filter(e=>e.action==='MOVE').forEach(e=>{const k=esc(e.from)+' → '+esc(e.to);moves[k]=(moves[k]||0)+1});
     Object.entries(moves).forEach(([k,n])=>locSummary.push(n+' Bags '+k));
   }
   let batchHtml='';
-  touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+bid+(sp?' ('+sp+')':'')+'</span>';});
+  touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+esc(bid)+(sp?' ('+esc(sp)+')':'')+'</span>';});
   sumEl.innerHTML='<h3>Session Zusammenfassung</h3>'
     +'<div class="scan-summary-grid">'
     +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">Gesamt</div></div>'
@@ -4906,7 +4906,7 @@ function openEventDetail(ev){
     metaEl.textContent=meta;
     const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
     const prioColors={high:'#e74c3c',medium:'#f39c12',low:'#3498db'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+(prioLabels[t.priority]||t.priority)+'</span>':'');
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
     assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=t.description||'';
     descEl.style.display=t.description?'':'none';
