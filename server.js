@@ -135,6 +135,39 @@ function validateTypes(data, schema) {
   }
   return null;
 }
+// Validate numeric ranges: {field: {min, max}} — skips null/undefined fields
+function validateRanges(data, ranges) {
+  for (const [field, { min, max }] of Object.entries(ranges)) {
+    const v = data[field];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v)) return field + ' must be a finite number';
+    if (min !== undefined && v < min) return field + ' must be >= ' + min;
+    if (max !== undefined && v > max) return field + ' must be <= ' + max;
+  }
+  return null;
+}
+// Validate string max lengths: {field: maxLen}
+function validateLengths(data, limits) {
+  for (const [field, maxLen] of Object.entries(limits)) {
+    const v = data[field];
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'string' && v.length > maxLen) return field + ' exceeds max length of ' + maxLen;
+  }
+  return null;
+}
+// Validate ISO date strings (YYYY-MM-DD or full ISO)
+function validateDate(value, fieldName) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return fieldName + ' is not a valid date';
+  return null;
+}
+// Validate enum membership
+function validateEnum(value, allowed, fieldName) {
+  if (value === undefined || value === null) return null;
+  if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
+  return null;
+}
 
 // ── AUTH HELPERS ─────────────────────────────────────────────
 function getSessionToken(req){
@@ -1504,6 +1537,10 @@ function handleRequest(req,res){
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['batchId','species','qty','days','created','due']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{qty:'number',days:'number',species:'string',batchId:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vrng=validateRanges(data,{qty:{min:1,max:10000},days:{min:1,max:3650}});if(vrng){jsonErr(res,400,vrng);return}
+      const vlen=validateLengths(data,{batchId:100,species:200,strain:200,notes:10000});if(vlen){jsonErr(res,400,vlen);return}
+      let vd=validateDate(data.created,'created');if(vd){jsonErr(res,400,vd);return}
+      vd=validateDate(data.due,'due');if(vd){jsonErr(res,400,vd);return}
       try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
@@ -1544,7 +1581,9 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['time','grams']);if(vr){jsonErr(res,400,vr);return}
-      const vt=validateTypes(data,{grams:'number'});if(vt){jsonErr(res,400,vt);return}
+      const vt=validateTypes(data,{grams:'number',flush:'number'});if(vt){jsonErr(res,400,vt);return}
+      const vrng=validateRanges(data,{grams:{min:0,max:1000000},flush:{min:1,max:100}});if(vrng){jsonErr(res,400,vrng);return}
+      let vd=validateDate(data.time,'time');if(vd){jsonErr(res,400,vd);return}
       try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
@@ -1564,7 +1603,10 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['text','created']);if(vr){jsonErr(res,400,vr);return}
-      const vt=validateTypes(data,{text:'string',priority:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vt=validateTypes(data,{text:'string',priority:'string',assignee:'string',description:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vlen=validateLengths(data,{text:2000,description:10000,assignee:200});if(vlen){jsonErr(res,400,vlen);return}
+      let ve=validateEnum(data.priority,['low','med','high'],'priority');if(ve){jsonErr(res,400,ve);return}
+      if(data.dueDate){const vd=validateDate(data.dueDate,'dueDate');if(vd){jsonErr(res,400,vd);return}}
       try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
@@ -1580,7 +1622,13 @@ function handleRequest(req,res){
 
   // -- Team Members --
   if(req.method==='POST'&&req.url==='/api/team'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['name']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{name:'string',role:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vlen=validateLengths(data,{name:100,role:100});if(vlen){jsonErr(res,400,vlen);return}
+      try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
   if(req.method==='DELETE'&&teamMatch){
@@ -1590,7 +1638,17 @@ function handleRequest(req,res){
 
   // -- Assets --
   if(req.method==='POST'&&req.url==='/api/assets'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['assetId','name','category','entryDate','purchasePrice','usefulLife']);if(vr){jsonErr(res,400,vr);return}
+      const vt=validateTypes(data,{purchasePrice:'number',usefulLife:'number'});if(vt){jsonErr(res,400,vt);return}
+      const vrng=validateRanges(data,{purchasePrice:{min:0,max:100000000},usefulLife:{min:1,max:100}});if(vrng){jsonErr(res,400,vrng);return}
+      const vlen=validateLengths(data,{assetId:200,name:500,category:200,supplier:500,notes:10000});if(vlen){jsonErr(res,400,vlen);return}
+      const ve=validateEnum(data.depreciationMethod,['linear'],'depreciationMethod');if(ve){jsonErr(res,400,ve);return}
+      let vd=validateDate(data.entryDate,'entryDate');if(vd){jsonErr(res,400,vd);return}
+      if(data.exitDate){vd=validateDate(data.exitDate,'exitDate');if(vd){jsonErr(res,400,vd);return}}
+      try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+    });return;
   }
   const assetMatch=req.url.match(/^\/api\/assets\/([^/]+)$/);
   if(req.method==='DELETE'&&assetMatch){
@@ -1608,7 +1666,11 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['id','title','startDate']);if(vr){jsonErr(res,400,vr);return}
-      const vt=validateTypes(data,{id:'string',title:'string',startDate:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vt=validateTypes(data,{id:'string',title:'string',startDate:'string',description:'string'});if(vt){jsonErr(res,400,vt);return}
+      const vlen=validateLengths(data,{id:200,title:500,description:10000});if(vlen){jsonErr(res,400,vlen);return}
+      let vd=validateDate(data.startDate,'startDate');if(vd){jsonErr(res,400,vd);return}
+      if(data.endDate){vd=validateDate(data.endDate,'endDate');if(vd){jsonErr(res,400,vd);return}}
+      if(Array.isArray(data.assignees)){for(const uid of data.assignees){if(typeof uid!=='number'||!Number.isInteger(uid)){jsonErr(res,400,'assignees must be integer user IDs');return}}}
       try{db.insertCalendarEvent(database,data);if(Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,data.id,data.assignees)}autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
@@ -1628,6 +1690,7 @@ function handleRequest(req,res){
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['mat','deltaKg']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{mat:'string',deltaKg:'number'});if(vt){jsonErr(res,400,vt);return}
+      const vrng=validateRanges(data,{deltaKg:{min:-100000,max:100000}});if(vrng){jsonErr(res,400,vrng);return}
       try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
@@ -1636,6 +1699,7 @@ function handleRequest(req,res){
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['mat','value']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{mat:'string',value:'number'});if(vt){jsonErr(res,400,vt);return}
+      const vrng=validateRanges(data,{value:{min:0,max:1000000}});if(vrng){jsonErr(res,400,vrng);return}
       try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
