@@ -3,7 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "lint": "eslint server.js db.js sw.js test/",
+    "lint:fix": "eslint --fix server.js db.js sw.js test/",
+    "format": "prettier --write server.js db.js sw.js styles.css test/",
+    "format:check": "prettier --check server.js db.js sw.js styles.css test/"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1"
+  }
 }

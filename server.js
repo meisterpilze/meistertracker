@@ -653,7 +653,6 @@ function autoSyncAllCaldav(data) {
 
 // Full sync: write all tasks to calendar directories
 function syncAllTasksLocal(data) {
-  const cfg = data.caldav || {};
   const tasks = data.manualTasks || [];
   const results = { pushed: 0, errors: 0, calendarsCreated: 0 };
 

@@ -1,0 +1,9 @@
+lib/
+node_modules/
+backups/
+calendars/
+certs/
+*.db
+*.db-shm
+*.db-wal
+data.json
