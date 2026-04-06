@@ -106,9 +106,24 @@ input:focus{outline:none;border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,7
         submitBtn.textContent=setupMode?'Create Account':'Login';
         return;
       }
+      // Verify session was actually established before redirecting
+      try{
+        const verify=await fetch('/api/auth/me');
+        if(!verify.ok){
+          showError('Login succeeded but the session could not be established. Make sure cookies are enabled.');
+          submitBtn.disabled=false;
+          submitBtn.textContent=setupMode?'Create Account':'Login';
+          return;
+        }
+      }catch{
+        showError('Could not verify session. Please try again.');
+        submitBtn.disabled=false;
+        submitBtn.textContent=setupMode?'Create Account':'Login';
+        return;
+      }
       window.location.href='/';
     }catch(err){
-      showError('Connection error');
+      showError('Connection error — is the server running?');
       submitBtn.disabled=false;
       submitBtn.textContent=setupMode?'Create Account':'Login';
     }
