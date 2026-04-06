@@ -1,7 +1,7 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meisterpilze-v15';
+const CACHE = 'meisterpilze-v16';
 const ASSETS = ['/', '/styles.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 // ── IndexedDB helpers for offline scan queue ────────────────
@@ -132,6 +132,11 @@ self.addEventListener('fetch', e => {
         new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
       )
     );
+    return;
+  }
+  // Login page: network only — never serve stale login form from cache
+  if (e.request.url.endsWith('/login.html') || e.request.url.endsWith('/login.js')) {
+    e.respondWith(fetch(e.request));
     return;
   }
   // Everything else — network first, fall back to cache for offline
