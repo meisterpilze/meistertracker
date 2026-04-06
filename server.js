@@ -116,6 +116,14 @@ function jsonBody(req, res, cb) {
 }
 function jsonOk(res, data) { res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(data||{ok:true})); }
 function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:msg})); }
+// Safe error response: log internals, send generic message to client for unexpected errors
+function safeErr(res, err) {
+  const msg = err.message || '';
+  // Known validation errors from db.js are safe to expose
+  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot/i.test(msg);
+  if (safe) { jsonErr(res, 400, msg); }
+  else { log('error', 'Unexpected error', { error: msg, stack: err.stack }); jsonErr(res, 500, 'Internal server error'); }
+}
 
 // ── REQUEST VALIDATION ──────────────────────────────────────
 // Returns null if valid, or an error string if invalid.
@@ -1419,7 +1427,7 @@ function handleRequest(req,res){
         const token=db.createSession(database,dbUser.id);
         setSessionCookie(res,token);
         jsonOk(res,{username:user.username,role:'admin'});
-      }catch(err){jsonErr(res,400,err.message)}
+      }catch(err){safeErr(res,err)}
     });return;
   }
 
@@ -1444,7 +1452,7 @@ function handleRequest(req,res){
         const token=db.createSession(database,user.id);
         setSessionCookie(res,token);
         jsonOk(res,{username:user.username,role:user.role});
-      }catch(err){jsonErr(res,400,err.message)}
+      }catch(err){safeErr(res,err)}
     });return;
   }
 
@@ -1615,7 +1623,7 @@ function handleRequest(req,res){
   if(req.method==='POST'&&url==='/api/data'){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
-      try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){log('error','CalDAV auto-sync failed',{error:ce.message})}}catch(err){jsonErr(res,400,err.message)}
+      try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){log('error','CalDAV auto-sync failed',{error:ce.message})}}catch(err){safeErr(res,err)}
     });return;
   }
 
@@ -1631,41 +1639,41 @@ function handleRequest(req,res){
       const vlen=validateLengths(data,{batchId:100,species:200,strain:200,notes:10000});if(vlen){jsonErr(res,400,vlen);return}
       let vd=validateDate(data.created,'created');if(vd){jsonErr(res,400,vd);return}
       vd=validateDate(data.due,'due');if(vd){jsonErr(res,400,vd);return}
-      try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{db.insertBatch(database,data);autoPushBatchCaldav(data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
   const batchMatch=req.url.match(/^\/api\/batches\/([^/]+)\/bags$/);
   if(req.method==='PATCH'&&batchMatch){
     const id=decodeURIComponent(batchMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.addBagsToBatch(database,id,data.add||[],data.newQty);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.addBagsToBatch(database,id,data.add||[],data.newQty);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
   const batchIdMatch=req.url.match(/^\/api\/batches\/([^/]+)$/);
   if(req.method==='PATCH'&&batchIdMatch){
     const id=decodeURIComponent(batchIdMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
   if(req.method==='DELETE'&&batchIdMatch){
     if(requireAdmin(req,res))return;
     const id=decodeURIComponent(batchIdMatch[1]);
-    try{db.deleteBatchById(database,id);try{autoDeleteBatchCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after batch delete',{batchId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteBatchById(database,id);try{autoDeleteBatchCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after batch delete',{batchId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Scan Log --
   if(req.method==='POST'&&req.url==='/api/scan-log'){
     const sess=checkAuth(req);const userId=sess?sess.user_id:null;
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const ids=db.appendScanEntries(database,data.entries||[],userId);broadcastSSE(res);jsonOk(res,{ids})}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{const ids=db.appendScanEntries(database,data.entries||[],userId);broadcastSSE(res);jsonOk(res,{ids})}catch(err){safeErr(res,err)}});return;
   }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
-    try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
   const scanIdMatch=req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if(req.method==='DELETE'&&scanIdMatch){
-    try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){jsonErr(res,400,err.message)}return;
+    try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){safeErr(res,err)}return;
   }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
     if(requireAdmin(req,res))return;
-    try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Harvests --
@@ -1676,18 +1684,18 @@ function handleRequest(req,res){
       const vt=validateTypes(data,{grams:'number',flush:'number'});if(vt){jsonErr(res,400,vt);return}
       const vrng=validateRanges(data,{grams:{min:0,max:1000000},flush:{min:1,max:100}});if(vrng){jsonErr(res,400,vrng);return}
       let vd=validateDate(data.time,'time');if(vd){jsonErr(res,400,vd);return}
-      try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+      try{const id=db.insertHarvest(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){safeErr(res,err)}
     });return;
   }
 
   // -- Cultures --
   if(req.method==='POST'&&req.url==='/api/cultures'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCultures(database,data.cultures||[]);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.insertCultures(database,data.cultures||[]);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
   const cultureMatch=req.url.match(/^\/api\/cultures\/([^/]+)$/);
   if(req.method==='PATCH'&&cultureMatch){
     const id=decodeURIComponent(cultureMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCulture(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCulture(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Tasks --
@@ -1699,17 +1707,17 @@ function handleRequest(req,res){
       const vlen=validateLengths(data,{text:2000,description:10000,assignee:200});if(vlen){jsonErr(res,400,vlen);return}
       let ve=validateEnum(data.priority,['low','med','high'],'priority');if(ve){jsonErr(res,400,ve);return}
       if(data.dueDate){const vd=validateDate(data.dueDate,'dueDate');if(vd){jsonErr(res,400,vd);return}}
-      try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+      try{const id=db.insertTask(database,data);if(data.dueDate){const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t)}broadcastSSE(res);jsonOk(res,{id})}catch(err){safeErr(res,err)}
     });return;
   }
   const taskMatch=req.url.match(/^\/api\/tasks\/(\d+)$/);
   if(req.method==='PATCH'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateTaskById(database,id,data);const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateTaskById(database,id,data);const t=db.readTaskById(database,id);if(t)autoPushTaskCaldav(t);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Team Members --
@@ -1719,13 +1727,13 @@ function handleRequest(req,res){
       const vr=validateRequired(data,['name']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{name:'string',role:'string'});if(vt){jsonErr(res,400,vt);return}
       const vlen=validateLengths(data,{name:100,role:100});if(vlen){jsonErr(res,400,vlen);return}
-      try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){jsonErr(res,400,err.message)}
+      try{const id=db.insertMember(database,data);broadcastSSE(res);jsonOk(res,{id})}catch(err){safeErr(res,err)}
     });return;
   }
   const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
   if(req.method==='DELETE'&&teamMatch){
     const id=parseInt(teamMatch[1]);
-    try{db.deleteMember(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteMember(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Assets --
@@ -1739,19 +1747,19 @@ function handleRequest(req,res){
       const ve=validateEnum(data.depreciationMethod,['linear'],'depreciationMethod');if(ve){jsonErr(res,400,ve);return}
       let vd=validateDate(data.entryDate,'entryDate');if(vd){jsonErr(res,400,vd);return}
       if(data.exitDate){vd=validateDate(data.exitDate,'exitDate');if(vd){jsonErr(res,400,vd);return}}
-      try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{db.upsertAsset(database,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
   const assetMatch=req.url.match(/^\/api\/assets\/([^/]+)$/);
   if(req.method==='DELETE'&&assetMatch){
     const id=decodeURIComponent(assetMatch[1]);
-    try{db.deleteAssetById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteAssetById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- CalDAV Config --
   if(req.method==='POST'&&req.url==='/api/caldav/config'){
     if(requireAdmin(req,res))return;
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Calendar Events --
@@ -1764,17 +1772,17 @@ function handleRequest(req,res){
       let vd=validateDate(data.startDate,'startDate');if(vd){jsonErr(res,400,vd);return}
       if(data.endDate){vd=validateDate(data.endDate,'endDate');if(vd){jsonErr(res,400,vd);return}}
       if(Array.isArray(data.assignees)){for(const uid of data.assignees){if(typeof uid!=='number'||!Number.isInteger(uid)){jsonErr(res,400,'assignees must be integer user IDs');return}}}
-      try{db.insertCalendarEvent(database,data,Array.isArray(data.assignees)?data.assignees:null);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{db.insertCalendarEvent(database,data,Array.isArray(data.assignees)?data.assignees:null);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
   if(req.method==='PATCH'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCalendarEvent(database,id,data);if(data.assignees!==undefined&&Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,id,data.assignees)}autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCalendarEvent(database,id,data);if(data.assignees!==undefined&&Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,id,data.assignees)}autoSyncCalendarEvent(Object.assign({id},data));broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    try{db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Inventory Delta --
@@ -1784,7 +1792,7 @@ function handleRequest(req,res){
       const vr=validateRequired(data,['mat','deltaKg']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{mat:'string',deltaKg:'number'});if(vt){jsonErr(res,400,vt);return}
       const vrng=validateRanges(data,{deltaKg:{min:-100000,max:100000}});if(vrng){jsonErr(res,400,vrng);return}
-      try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
+      try{const val=db.applyInventoryDelta(database,data.mat,data.deltaKg,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){safeErr(res,err)}
     });return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/set'){
@@ -1793,11 +1801,11 @@ function handleRequest(req,res){
       const vr=validateRequired(data,['mat','value']);if(vr){jsonErr(res,400,vr);return}
       const vt=validateTypes(data,{mat:'string',value:'number'});if(vt){jsonErr(res,400,vt);return}
       const vrng=validateRanges(data,{value:{min:0,max:1000000}});if(vrng){jsonErr(res,400,vrng);return}
-      try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){jsonErr(res,400,err.message)}
+      try{const val=db.setInventoryAbsolute(database,data.mat,data.value,data.type||null,data.ref||null);broadcastSSE(res);jsonOk(res,{value:val})}catch(err){safeErr(res,err)}
     });return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
-    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
+    jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Backup Download (encrypted .db) --
