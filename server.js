@@ -1392,7 +1392,7 @@ function handleRequest(req,res){
   // ── Security headers ──
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; report-uri /api/csp-reports");
   if(protocol==='https') res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
@@ -1589,6 +1589,17 @@ function handleRequest(req,res){
       db.resetUserPassword(database,userId,data.newPassword);
       jsonOk(res);
     });return;
+  }
+
+  // POST /api/csp-reports — log CSP violations
+  if(req.method==='POST'&&req.url==='/api/csp-reports'){
+    let body='';
+    req.on('data',c=>{body+=c;if(body.length>10000){req.destroy()}});
+    req.on('end',()=>{
+      try{const report=JSON.parse(body);log('warn','CSP violation',report['csp-report']||report)}catch(e){}
+      res.writeHead(204);res.end();
+    });
+    return;
   }
 
   // GET /api/health
