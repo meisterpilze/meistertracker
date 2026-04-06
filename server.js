@@ -206,7 +206,7 @@ function cookieFlags(){
 }
 
 function setSessionCookie(res,token){
-  res.setHeader('Set-Cookie','session='+token+'; '+cookieFlags()+' Max-Age=2592000');
+  res.setHeader('Set-Cookie','session='+token+'; '+cookieFlags()+' Max-Age=604800');
 }
 
 function clearSessionCookie(res){
@@ -1199,12 +1199,16 @@ function handlePut(parts, body, req, res) {
           const evType = typeMatch[1].trim();
           if (evType === 'batch-due' && batchMatch) {
             const batchId = batchMatch[1].trim();
-            db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+            if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
+              db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+            } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
           } else if (evType === 'task-due') {
             const uidMatch = body.match(/UID:(.*)/);
             if (uidMatch) {
               const taskUid = uidMatch[1].trim().replace(/-event$/, '');
-              db.updateTaskDueDate(database, taskUid, newDate);
+              if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+                db.updateTaskDueDate(database, taskUid, newDate);
+              } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
             }
           }
         }
@@ -1392,34 +1396,26 @@ function handleRequest(req,res){
       res.writeHead(403,{'Content-Type':'application/json'});
       res.end(JSON.stringify({error:'setup already completed'}));return;
     }
-    let body='';
-    req.on('data',c=>body+=c);
-    req.on('end',()=>{
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
       try{
-        const{username,password}=JSON.parse(body);
-        if(!username||!password||password.length<8){
-          res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
-        }
+        const{username,password}=data;
+        if(!username||!password||password.length<8){jsonErr(res,400,'Username and password (min 8 chars) required');return}
         const user=db.createUser(database,username,password,'admin');
         const dbUser=db.getUserByUsername(database,username);
         const token=db.createSession(database,dbUser.id);
         setSessionCookie(res,token);
-        res.writeHead(200,{'Content-Type':'application/json'});
-        res.end(JSON.stringify({ok:true,username:user.username,role:'admin'}));
-      }catch(e){
-        res.writeHead(400,{'Content-Type':'application/json'});
-        res.end(JSON.stringify({error:e.message}));
-      }
+        jsonOk(res,{username:user.username,role:'admin'});
+      }catch(err){jsonErr(res,400,err.message)}
     });return;
   }
 
   if(url==='/api/auth/login'&&req.method==='POST'){
-    let body='';
-    req.on('data',c=>body+=c);
-    req.on('end',()=>{
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
       try{
-        const{username,password}=JSON.parse(body);
+        const{username,password}=data;
+        if(!username||!password){jsonErr(res,400,'Username and password required');return}
         const throttleKey=username.toLowerCase()+'@'+clientIP;
         if(!checkLoginAllowed(throttleKey)){
           res.writeHead(429,{'Content-Type':'application/json'});
@@ -1434,12 +1430,8 @@ function handleRequest(req,res){
         clearLoginAttempts(throttleKey);
         const token=db.createSession(database,user.id);
         setSessionCookie(res,token);
-        res.writeHead(200,{'Content-Type':'application/json'});
-        res.end(JSON.stringify({ok:true,username:user.username,role:user.role}));
-      }catch(e){
-        res.writeHead(400,{'Content-Type':'application/json'});
-        res.end(JSON.stringify({error:e.message}));
-      }
+        jsonOk(res,{username:user.username,role:user.role});
+      }catch(err){jsonErr(res,400,err.message)}
     });return;
   }
 
