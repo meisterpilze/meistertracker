@@ -2095,11 +2095,35 @@ setInterval(()=>{
 },5000);
 let _polling=false;
 async function pollSync(){
-  if(_mutating>0||_polling)return; // don't overwrite while mutations are in-flight or already polling
+  if(_mutating>0||_polling)return;
   _polling=true;
   try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
   finally{_polling=false}
 }
+
+// ── SSE real-time sync (replaces 5s polling for connected clients) ──
+let _sse=null;
+let _sseReconnectTimer=null;
+function connectSSE(){
+  if(_sse)return;
+  try{
+    _sse=new EventSource('/api/events');
+    _sse.onmessage=function(ev){
+      try{
+        const msg=JSON.parse(ev.data);
+        if(msg.type==='data-changed'&&_mutating===0)pollSync();
+        if(msg.type==='connected')setSyncStatus('ok','Connected');
+      }catch(e){/* ignore parse errors */}
+    };
+    _sse.onerror=function(){
+      _sse.close();_sse=null;
+      setSyncStatus('err','Connection lost');
+      // Reconnect with backoff, fall back to polling in the meantime
+      if(!_sseReconnectTimer)_sseReconnectTimer=setTimeout(()=>{_sseReconnectTimer=null;connectSSE()},5000);
+    };
+  }catch(e){/* SSE not supported — polling fallback active */}
+}
+function disconnectSSE(){if(_sse){_sse.close();_sse=null}if(_sseReconnectTimer){clearTimeout(_sseReconnectTimer);_sseReconnectTimer=null}}
 
 // ─── SIDEBAR ────────────────────────────────────────────────
 function toggleSidebar(){
@@ -5005,7 +5029,9 @@ document.addEventListener('keydown', function(e) {
 loadCurrentUser();
 loadAppUsers();
 loadData();
-setInterval(pollSync,5000);
+// Primary: SSE for instant updates. Fallback: poll every 30s (was 5s) for stale detection.
+connectSSE();
+setInterval(pollSync,30000);
 
 // Register service worker for PWA / offline support
 if('serviceWorker' in navigator){
