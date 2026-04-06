@@ -2006,6 +2006,10 @@ function esc(s){
   if(s==null)return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function safeColor(c,fallback){
+  if(!c)return fallback||'#2ecc71';
+  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#2ecc71');
+}
 
 // ─── AUTH ────────────────────────────────────────────────────
 let currentUser=null;
@@ -4348,7 +4352,7 @@ function renderCalMonth(){
     let o=de.slice(0,mx).map(e=>{
       const drag=e.draggable?'draggable="true"':'';
       const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+e.color+'"':'';
+      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
       return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+assigneeStr+'</div>';
     }).join('');
@@ -4400,7 +4404,7 @@ function renderCalWeek(){
     html+='<div class="cal-week-allday-cell" data-date="'+ds+'">';
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+e.color+'"':'';
+      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
     html+='</div>';
@@ -4430,7 +4434,7 @@ function renderCalWeek(){
         const col=i+2;
         const el=document.createElement('div');
         el.className='cal-week-ev';
-        el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:'+col;
+        el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:'+col;
         let wkContent=esc(e.label);
         if(e.assignees&&e.assignees.length)wkContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
         if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
@@ -4483,7 +4487,7 @@ function renderCalDay(){
   if(allDay.length){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+e.color+'"':'';
+      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
@@ -4505,7 +4509,7 @@ function renderCalDay(){
       const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
       const el=document.createElement('div');
       el.className='cal-day-ev';
-      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+(e.color||'#2ecc71')+';grid-column:2';
+      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:2';
       let dayContent='<strong>'+esc(e.label)+'</strong>';
       if(e.assignees&&e.assignees.length)dayContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
       if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
@@ -4757,7 +4761,7 @@ function openEventDetail(ev){
     if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(ce.color||'#2ecc71')+';color:#fff">'+(catLabels[ce.category]||ce.category)+'</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+safeColor(ce.color)+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
     assignEl.innerHTML=ce.assignees&&ce.assignees.length?'Zugewiesen: <strong>'+ce.assignees.map(a=>esc(a.username)).join(', ')+'</strong>':'';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
