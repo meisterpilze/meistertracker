@@ -271,7 +271,21 @@
     <div id="dash-alerts"></div>
   </div>
 
-  <!-- Charts row -->
+  <!-- Search bar -->
+  <div class="dash-search-bar">
+    <input type="text" id="status-q" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." oninput="renderStatus()" />
+  </div>
+
+  <!-- Location sections rendered by JS -->
+  <div id="dash-locations"></div>
+
+  <!-- Sticky action bar for bag selection -->
+  <div id="loc-action-bar" class="action-bar-sticky" style="display:none"></div>
+
+  <!-- Temporary: event delegation target (removed in Step 3) -->
+  <div id="loc-body" style="display:none"></div>
+
+  <!-- Charts row (moved to bottom) -->
   <div class="g2" style="margin-bottom:10px">
     <!-- Pipeline funnel -->
     <div class="card">
@@ -283,56 +297,6 @@
       <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (g)</div>
       <canvas id="harvest-chart" height="160"></canvas>
     </div>
-  </div>
-
-  <!-- Batch status -->
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0" data-i18n="dash.liveStatus">Live batch status</div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" id="status-q" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:120px;font-size:12px;padding:4px 8px" oninput="renderStatus()" />
-        <button class="btn btn-sm" id="status-view-btn" onclick="toggleStatusView()" data-i18n="dash.cards">Cards</button>
-      </div>
-    </div>
-    <!-- Table view (default) -->
-    <div id="status-table-view" style="overflow-x:auto"><table>
-      <thead><tr><th data-i18n="th.batchId">Batch ID</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th>SPAWN</th><th>INC</th><th>T1</th><th>T2</th><th>T3</th><th>CONTAM</th><th data-i18n="th.total">Total</th><th data-i18n="th.harvested">Harvested</th><th data-i18n="th.due">Due</th><th data-i18n="th.status">Status</th><th data-i18n="th.action">Action</th></tr></thead>
-      <tbody id="status-body"></tbody>
-    </table></div>
-    <!-- Card view (toggle) -->
-    <div id="status-card-view" style="display:none;display:none"></div>
-  </div>
-
-  <!-- Racks -->
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0" data-i18n="dash.rackOccupancy">Rack occupancy</div>
-      <span style="font-size:11px;color:#aaa" data-i18n="dash.clickRack">Click a rack to see contents</span>
-    </div>
-    <div style="margin-bottom:10px">
-      <div class="sec" style="margin-bottom:6px" data-i18n="dash.spawnRacks">SPAWN — 2 racks</div>
-      <div id="racks-spawn" class="g2" style="gap:8px"></div>
-    </div>
-    <div>
-      <div class="sec" style="margin-bottom:6px" data-i18n="dash.incRacks">INC — 10 racks</div>
-      <div id="racks-inc" class="rack-grid-inc" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
-    </div>
-    <div id="rack-detail" style="display:none;margin-top:10px;background:#f9f8f5;border-radius:8px;padding:12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="sec" style="margin:0" id="rack-detail-title" data-i18n="dash.rack">Rack</div>
-        <button class="btn btn-sm" onclick="document.getElementById('rack-detail').style.display='none'" data-i18n="dash.close">Close</button>
-      </div>
-      <div id="rack-detail-body"></div>
-    </div>
-  </div>
-
-  <!-- Location tabs -->
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0" data-i18n="dash.bagsByLocation">Bags by location</div>
-    </div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px" id="loc-tabs"></div>
-    <div id="loc-body"></div>
   </div>
 </div>
 
