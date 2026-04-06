@@ -2603,9 +2603,14 @@ function renderDashAlerts(){
   const tasks=buildAutoTasks().filter(t=>t.urgent||t.warn);
   const invAlerts=getInvAlerts();
   const all=[...invAlerts,...tasks];
+  const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
-  if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">'+t('dash.noUrgent')+'</div>';return}
-  el.innerHTML=all.slice(0,8).map(tk=>`<div class="todo-row ${tk.urgent?'urgent':'warn'}"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(tk.detail)}</div></div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">${t('inv.stock')}</button>`}</div>`).join('');
+  if(!all.length){card.style.display='none';return}
+  card.style.display='';
+  const shown=all.slice(0,5);
+  const more=all.length-shown.length;
+  el.innerHTML=shown.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px;padding:2px 8px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button>`}</div>`).join('')
+    +(more>0?`<div style="font-size:11px;color:var(--c-text-muted);padding-top:4px">+${more} more</div>`:'');
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
