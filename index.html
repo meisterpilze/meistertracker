@@ -6062,7 +6062,7 @@ async function loadCalDAVImports(){
 if(typeof pushBatchCaldav==='undefined'){
   window.pushBatchCaldav=async function(batch){
     if(!caldav.enabled)return;
-    try{await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})})}catch(e){}
+    try{await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})})}catch(e){console.warn('CalDAV push failed:',e.message)}
   };
 }
 

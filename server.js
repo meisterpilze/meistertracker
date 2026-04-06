@@ -130,7 +130,7 @@ setInterval(()=>db.deleteExpiredSessions(database),60*60*1000);
 const BACKUP_DIR = path.join(DIR, 'backups');
 if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, {mode:0o700});
 // Clean up orphaned temp files from interrupted backup operations
-try{fs.readdirSync(BACKUP_DIR).filter(f=>f.startsWith('_')).forEach(f=>{try{fs.unlinkSync(path.join(BACKUP_DIR,f))}catch(e){}})}catch(e){}
+try{fs.readdirSync(BACKUP_DIR).filter(f=>f.startsWith('_')).forEach(f=>{try{fs.unlinkSync(path.join(BACKUP_DIR,f))}catch(e){log('warn','Failed to clean orphaned temp file',{file:f,error:e.message})}})}catch(e){log('warn','Failed to scan backup dir for orphans',{error:e.message})}
 
 function runDailyBackup(){
   try{
@@ -1386,7 +1386,7 @@ function handleRequest(req,res){
   // GET /api/health
   if(req.method==='GET'&&req.url==='/api/health'){
     let dbOk=false;
-    try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){}
+    try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){log('error','Health check: database unreachable',{error:e.message})}
     const status=dbOk?'ok':'degraded';
     res.writeHead(dbOk?200:503,{'Content-Type':'application/json'});
     res.end(JSON.stringify({status,db:dbOk?'connected':'error',uptime:process.uptime(),version:require('./package.json').version}));
@@ -1543,7 +1543,7 @@ function handleRequest(req,res){
         tmpDest=path.join(BACKUP_DIR,'_download_tmp_'+Date.now()+'.db');
         db.backupDb(database,tmpDest);
         const plain=fs.readFileSync(tmpDest);
-        try{fs.unlinkSync(tmpDest)}catch(e){}
+        try{fs.unlinkSync(tmpDest)}catch(e){log('warn','Failed to clean backup temp file',{error:e.message})}
         tmpDest=null;
         // Encrypt: salt(32) + iv(12) + authTag(16) + ciphertext
         const salt=crypto.randomBytes(32);
@@ -1561,7 +1561,7 @@ function handleRequest(req,res){
         });
         res.end(out);
       }catch(err){
-        if(tmpDest)try{fs.unlinkSync(tmpDest)}catch(e){}
+        if(tmpDest)try{fs.unlinkSync(tmpDest)}catch(e){log('warn','Failed to clean backup temp after error',{error:e.message})}
         log('error','Backup download failed',{error:err.message});
         jsonErr(res,500,'Backup download failed');
       }
@@ -1600,14 +1600,14 @@ function handleRequest(req,res){
           tmpDb=db.openDb(tmpPath); // validates schema + runs migrations
           tmpDb.close();
         }catch(valErr){
-          try{fs.unlinkSync(tmpPath)}catch(e){}
+          try{fs.unlinkSync(tmpPath)}catch(e){log('warn','Failed to clean temp after validation error',{error:e.message})}
           log('error','Backup validation failed',{error:valErr.message});
           jsonErr(res,400,'Database validation failed');return;
         }
         // Atomic swap: backup current db, replace, reopen — rollback on failure
         const bakPath=DB_FILE+'.pre-restore.bak';
-        try{database.close()}catch(e){}
-        try{fs.copyFileSync(DB_FILE,bakPath)}catch(e){} // keep old db as safety net
+        try{database.close()}catch(e){log('warn','Failed to close database before restore',{error:e.message})}
+        try{fs.copyFileSync(DB_FILE,bakPath)}catch(e){log('warn','Failed to create pre-restore backup',{error:e.message})} // keep old db as safety net
         fs.renameSync(tmpPath,DB_FILE);
         tmpPath=null;
         try{
@@ -1615,18 +1615,18 @@ function handleRequest(req,res){
         }catch(openErr){
           // Rollback: restore the old database
           log('error','Failed to open restored database, rolling back',{error:openErr.message});
-          try{fs.copyFileSync(bakPath,DB_FILE)}catch(e){}
+          try{fs.copyFileSync(bakPath,DB_FILE)}catch(e){log('error','Rollback copy also failed',{error:e.message})}
           database=db.openDb(DB_FILE);
           jsonErr(res,500,'Restore failed, previous data has been preserved');return;
         }
         // Cleanup backup of old db
-        try{fs.unlinkSync(bakPath)}catch(e){}
+        try{fs.unlinkSync(bakPath)}catch(e){log('warn','Failed to clean pre-restore backup',{error:e.message})}
         // Trigger auto-sync of CalDAV after restore
         try{autoSyncAllCaldav(readData())}catch(ce){console.error('CalDAV post-restore sync:',ce.message)}
         broadcastSSE(res);
         jsonOk(res);
       }catch(err){
-        if(tmpPath)try{fs.unlinkSync(tmpPath)}catch(e){}
+        if(tmpPath)try{fs.unlinkSync(tmpPath)}catch(e){log('warn','Failed to clean restore temp after error',{error:e.message})}
         log('error','Backup restore failed',{error:err.message});
         jsonErr(res,500,'Backup restore failed');
       }
