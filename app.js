@@ -3026,7 +3026,7 @@ function renderTodo(){
   const shown=filter==='urgent'?tasks.filter(t=>t.urgent||t.warn):tasks;
   const urgent=tasks.filter(t=>t.urgent).length,warn=tasks.filter(t=>t.warn).length;
   document.getElementById('todo-metrics').innerHTML=[['Open tasks',tasks.length],['Urgent',urgent],['Coming up',warn]].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${l==='Urgent'&&v>0?'#b91c1c':l==='Coming up'&&v>0?'#92400e':'#1a1a1a'}">${v}</div></div>`).join('');
-  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}"><span class="pdot ${t.urgent?'high':t.warn?'med':'low'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${esc(t.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(t.detail)}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
+  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}">${t.urgent?'<span class="pdot high"></span>':t.warn?'<span class="pdot med"></span>':''}<div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${esc(t.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(t.detail)}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
   renderManualTasks();updateTodoBadge();
 }
 function renderManualTasks(){
