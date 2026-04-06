@@ -21,12 +21,21 @@ function loadEnv() {
 }
 loadEnv();
 
-// ── LOGGING ──────────────────────────────────────────────────
+// ── STRUCTURED LOGGING ───────────────────────────────────────
+// Outputs JSON lines for structured log aggregation (PM2, journald, etc.)
+// Falls back to human-readable format when LOG_FORMAT=text
+const LOG_FORMAT = process.env.LOG_FORMAT || 'json';
 function log(level, msg, meta) {
   const ts = new Date().toISOString();
-  const entry = `${ts} [${level.toUpperCase()}] ${msg}`;
-  if (level === 'error') console.error(entry, meta || '');
-  else console.log(entry, meta ? JSON.stringify(meta) : '');
+  if (LOG_FORMAT === 'json') {
+    const entry = JSON.stringify({ time: ts, level: level.toUpperCase(), msg, ...meta });
+    if (level === 'error') console.error(entry);
+    else console.log(entry);
+  } else {
+    const entry = `${ts} [${level.toUpperCase()}] ${msg}`;
+    if (level === 'error') console.error(entry, meta || '');
+    else console.log(entry, meta ? JSON.stringify(meta) : '');
+  }
 }
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
@@ -159,18 +168,18 @@ function runDailyBackup(){
     const dest=path.join(BACKUP_DIR,'meisterpilze_backup_'+stamp+'.db');
     if(!fs.existsSync(dest)){
       db.backupDb(database, dest).then(()=>{
-        console.log('  Auto-backup saved: '+dest);
+        log('info','Auto-backup saved',{path:dest});
         // Keep last 30 daily backups
         const files=fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.db')).sort();
         if(files.length>30){
           files.slice(0,files.length-30).forEach(f=>{
             fs.unlinkSync(path.join(BACKUP_DIR,f));
-            console.log('  Old backup removed: '+f);
+            log('info','Old backup removed',{file:f});
           });
         }
-      }).catch(e=>console.error('Auto-backup failed:',e.message));
+      }).catch(e=>log('error','Auto-backup failed',{error:e.message}));
     }
-  }catch(e){console.error('Auto-backup failed:',e.message);}
+  }catch(e){log('error','Auto-backup failed',{error:e.message});}
 }
 
 function scheduleDailyBackup(){
@@ -181,7 +190,7 @@ function scheduleDailyBackup(){
   const next=new Date(now);
   next.setHours(24,0,0,0); // next midnight
   const msUntil=next-now;
-  console.log('  Next auto-backup: '+next.toLocaleString('de-DE'));
+  log('info','Next auto-backup scheduled',{at:next.toISOString()});
   setTimeout(()=>{
     runDailyBackup();
     setInterval(runDailyBackup, 24*60*60*1000); // then every 24h
@@ -259,10 +268,10 @@ public class DOCINFO {
         fs.unlink(tmp,()=>{});
         fs.unlink(psTmp,()=>{});
         if(e){
-          console.error('PowerShell print error:', stderr||e.message);
+          log('error','PowerShell print error',{error:stderr||e.message});
           callback('Print failed: '+(stderr||e.message).trim());
         }else{
-          console.log('Print OK:', stdout.trim());
+          log('info','Print OK',{output:stdout.trim()});
           callback(null);
         }
       });
@@ -540,7 +549,7 @@ function autoPushBatchCaldav(batch) {
     const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = batchToVEVENT(batch);
     fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
-  } catch (e) { console.error('autoPushBatchCaldav error:', e.message); }
+  } catch (e) { log('error','autoPushBatchCaldav failed',{error:e.message}); }
 }
 
 // Remove a batch's CalDAV .ics file
@@ -551,7 +560,7 @@ function autoDeleteBatchCaldav(batchId) {
     const uid = 'batch-' + batchId + '@meisterpilze';
     const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
     if (fs.existsSync(file)) fs.unlinkSync(file);
-  } catch (e) { console.error('autoDeleteBatchCaldav error:', e.message); }
+  } catch (e) { log('error','autoDeleteBatchCaldav failed',{error:e.message}); }
 }
 
 // Push a task's VTODO + due-date VEVENT to CalDAV
@@ -575,7 +584,7 @@ function autoPushTaskCaldav(task) {
       const { uid, ics } = taskDueToVEVENT(task);
       fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
     }
-  } catch (e) { console.error('autoPushTaskCaldav error:', e.message); }
+  } catch (e) { log('error','autoPushTaskCaldav failed',{error:e.message}); }
 }
 
 // Remove a task's CalDAV files (VTODO + VEVENT) from all calendars
@@ -596,7 +605,7 @@ function autoDeleteTaskCaldav(taskId) {
       const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
       if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
     }
-  } catch (e) { console.error('autoDeleteTaskCaldav error:', e.message); }
+  } catch (e) { log('error','autoDeleteTaskCaldav failed',{error:e.message}); }
 }
 
 // Push a custom calendar event to CalDAV
@@ -611,7 +620,7 @@ function autoSyncCalendarEvent(ev) {
     const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = customEventToVEVENT(normalized);
     fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
-  } catch (e) { console.error('autoSyncCalendarEvent error:', e.message); }
+  } catch (e) { log('error','autoSyncCalendarEvent failed',{error:e.message}); }
 }
 
 // Remove a custom calendar event's CalDAV file
@@ -622,7 +631,7 @@ function autoDeleteCalendarEventCaldav(eventId) {
     const uid = 'cev-' + eventId + '@meisterpilze';
     const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
     if (fs.existsSync(file)) fs.unlinkSync(file);
-  } catch (e) { console.error('autoDeleteCalendarEventCaldav error:', e.message); }
+  } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
 
 // Lightweight CalDAV sync after full-state save — writes all due dates & events
@@ -668,7 +677,7 @@ function autoSyncAllCaldav(data) {
         if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
       }
     } catch (e) { /* ignore */ }
-  } catch (e) { console.error('autoSyncAllCaldav error:', e.message); }
+  } catch (e) { log('error','autoSyncAllCaldav failed',{error:e.message}); }
 }
 
 // Full sync: write all tasks to calendar directories
@@ -814,7 +823,7 @@ function handleCaldav(req, res) {
       res.writeHead(405);
       res.end('Method not allowed');
     } catch (e) {
-      console.error('CalDAV error:', e);
+      log('error','CalDAV request error',{error:e.message});
       res.writeHead(500);
       res.end('Internal server error');
     }
@@ -1056,7 +1065,7 @@ function handleMkcalendar(parts, body, req, res) {
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
-    console.log('  CalDAV: Calendar created:', calName);
+    log('info','CalDAV calendar created',{name:calName});
     return;
   }
   res.writeHead(403);
@@ -1114,7 +1123,7 @@ function handlePut(parts, body, req, res) {
             }
           }
         }
-      } catch (e) { console.error('CalDAV VEVENT bidirectional sync error:', e); }
+      } catch (e) { log('error','CalDAV VEVENT bidirectional sync error',{error:e.message}); }
     }
 
     const stat = fs.statSync(filePath);
@@ -1431,7 +1440,7 @@ function handleRequest(req,res){
   if(req.method==='POST'&&req.url==='/api/data'){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
-      try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){console.error('CalDAV auto-sync:',ce.message)}}catch(err){jsonErr(res,400,err.message)}
+      try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){log('error','CalDAV auto-sync failed',{error:ce.message})}}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
 
@@ -1671,7 +1680,7 @@ function handleRequest(req,res){
         // Cleanup backup of old db
         try{fs.unlinkSync(bakPath)}catch(e){log('warn','Failed to clean pre-restore backup',{error:e.message})}
         // Trigger auto-sync of CalDAV after restore
-        try{autoSyncAllCaldav(readData())}catch(ce){console.error('CalDAV post-restore sync:',ce.message)}
+        try{autoSyncAllCaldav(readData())}catch(ce){log('error','CalDAV post-restore sync failed',{error:ce.message})}
         broadcastSSE(res);
         jsonOk(res);
       }catch(err){
@@ -1692,7 +1701,7 @@ function handleRequest(req,res){
         if(!zpl){res.writeHead(400);res.end('{"error":"no zpl"}');return;}
         printZPL(zpl,err=>{
           if(err){
-            console.error('Print error:',err);
+            log('error','Print error',{error:err.message||err});
             res.writeHead(500,{'Content-Type':'application/json'});
             res.end(JSON.stringify({error:err}));
           }else{
@@ -1721,7 +1730,7 @@ function handleRequest(req,res){
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify(result));
       }catch(e){
-        console.error('CalDAV sync error:',e);
+        log('error','CalDAV sync error',{error:e.message});
         res.writeHead(500,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:false,error:e.message}));
       }
