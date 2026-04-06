@@ -63,59 +63,73 @@
   </div>
 </div>
 <!-- Calendar event modal (create/edit/move) -->
-<div class="modal-bg" id="m-cal-event" role="dialog" aria-modal="true" aria-labelledby="cal-ev-title">
+<div class="modal-bg" id="m-cal-entry" role="dialog" aria-modal="true" aria-labelledby="cal-entry-title">
   <div class="modal">
-    <h3 id="cal-ev-title">Neues Event</h3>
-    <input type="hidden" id="cal-ev-id" />
-    <input type="hidden" id="cal-ev-mode" value="create" />
+    <h3 id="cal-entry-title">Neuer Eintrag</h3>
+    <input type="hidden" id="cal-entry-id" />
+    <input type="hidden" id="cal-entry-mode" value="create" />
+    <div class="entry-type-toggle" style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--c-border);border-radius:var(--radius-sm);overflow:hidden">
+      <button type="button" class="entry-type-btn active" data-type="task" id="cal-entry-type-task" style="flex:1;padding:8px 0;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--c-primary);color:#fff">Aufgabe</button>
+      <button type="button" class="entry-type-btn" data-type="event" id="cal-entry-type-event" style="flex:1;padding:8px 0;border:none;border-left:1px solid var(--c-border);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--c-surface);color:var(--c-text)">Event</button>
+    </div>
     <div style="margin-bottom:8px">
-      <label>Titel</label><input type="text" id="cal-ev-name" placeholder="z.B. Team-Meeting" />
+      <label id="cal-entry-name-label">Aufgabe</label>
+      <input type="text" id="cal-entry-name" placeholder="z.B. Luftfeuchtezelt reinigen" />
     </div>
     <div class="g2" style="margin-bottom:8px">
-      <div><label>Datum</label><input type="date" id="cal-ev-date" /></div>
-      <div><label>Bis (optional)</label><input type="date" id="cal-ev-end-date" /></div>
+      <div><label id="cal-entry-date-label">Fälligkeitsdatum</label><input type="date" id="cal-entry-date" /></div>
+      <div id="cal-entry-enddate-wrap"><label>Bis (optional)</label><input type="date" id="cal-entry-end-date" /></div>
     </div>
-    <div style="margin-bottom:8px">
+    <div id="cal-entry-allday-wrap" style="margin-bottom:8px;display:none">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="cal-ev-allday" checked style="width:auto" /> Ganztägig
+        <input type="checkbox" id="cal-entry-allday" checked style="width:auto" /> Ganztägig
       </label>
     </div>
-    <div class="g2" id="cal-ev-times" style="margin-bottom:8px;display:none">
-      <div><label>Von</label><input type="time" id="cal-ev-start-time" value="09:00" /></div>
-      <div><label>Bis</label><input type="time" id="cal-ev-end-time" value="10:00" /></div>
+    <div class="g2" id="cal-entry-times" style="margin-bottom:8px;display:none">
+      <div><label>Von</label><input type="time" id="cal-entry-start-time" value="09:00" /></div>
+      <div><label>Bis</label><input type="time" id="cal-entry-end-time" value="10:00" /></div>
     </div>
-    <div class="g2" style="margin-bottom:8px">
-      <div><label>Kategorie</label>
-        <select id="cal-ev-category">
-          <option value="custom">Eigenes Event</option>
-          <option value="meeting">Meeting</option>
-          <option value="delivery">Lieferung</option>
-          <option value="maintenance">Wartung</option>
-        </select>
-      </div>
-      <div><label>Farbe</label>
-        <select id="cal-ev-color">
-          <option value="#2ecc71">Grün</option>
-          <option value="#9b59b6">Lila</option>
-          <option value="#1abc9c">Türkis</option>
-          <option value="#e67e22">Orange</option>
-          <option value="#34495e">Dunkelgrau</option>
-        </select>
-      </div>
+    <div id="cal-entry-category-wrap" style="margin-bottom:8px;display:none">
+      <label>Kategorie</label>
+      <select id="cal-entry-category">
+        <option value="custom">Eigenes Event</option>
+        <option value="meeting">Meeting</option>
+        <option value="delivery">Lieferung</option>
+        <option value="maintenance">Wartung</option>
+      </select>
+    </div>
+    <div id="cal-entry-prio-wrap" style="margin-bottom:8px">
+      <label>Priorität</label>
+      <select id="cal-entry-prio">
+        <option value="low">Niedrig</option>
+        <option value="med" selected>Mittel</option>
+        <option value="high">Hoch</option>
+      </select>
     </div>
     <div style="margin-bottom:8px">
       <label>Beschreibung (optional)</label>
-      <textarea id="cal-ev-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+      <textarea id="cal-entry-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
     </div>
-    <div style="margin-bottom:8px">
+    <div id="cal-entry-task-assign-wrap" style="margin-bottom:8px">
+      <label>Zuweisen an</label>
+      <select id="cal-entry-task-assignee">
+        <option value="">Alle (Betrieb)</option>
+      </select>
+    </div>
+    <div id="cal-entry-ev-assign-wrap" style="margin-bottom:8px;display:none">
       <label>Zugewiesen an</label>
       <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;cursor:pointer"><span style="color:#aaa;font-size:12px">Niemand zugewiesen</span></div>
       <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid #e5e3dd;border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
     </div>
+    <div id="cal-entry-private-wrap" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:#888">
+        <input type="checkbox" id="cal-entry-private" style="width:auto" /> Nur für zugewiesene Person sichtbar
+      </label>
+    </div>
     <div class="modal-btns">
-      <button class="btn btn-r" id="cal-ev-del-btn" style="display:none;margin-right:auto">Löschen</button>
-      <button id="cls-5" class="btn">Abbrechen</button>
-      <button id="act-6" class="btn btn-p">Speichern</button>
+      <button class="btn btn-r" id="cal-entry-del-btn" style="display:none;margin-right:auto">Löschen</button>
+      <button class="btn" id="cal-entry-cancel-btn">Abbrechen</button>
+      <button class="btn btn-p" id="cal-entry-save-btn">Speichern</button>
     </div>
   </div>
 </div>
@@ -128,50 +142,6 @@
     <div id="cal-detail-assignee" style="margin-bottom:10px;font-size:12px;color:var(--c-text-sec)"></div>
     <div id="cal-detail-desc" style="font-size:13px;line-height:1.6;color:var(--c-text-sec);margin-bottom:14px;white-space:pre-wrap;word-break:break-word"></div>
     <div class="modal-btns" id="cal-detail-btns" style="flex-wrap:wrap"></div>
-  </div>
-</div>
-<!-- Calendar task modal -->
-<div class="modal-bg" id="m-cal-task" role="dialog" aria-modal="true" aria-labelledby="cal-task-title">
-  <div class="modal">
-    <h3 id="cal-task-title">Neue Aufgabe</h3>
-    <input type="hidden" id="cal-task-id" />
-    <input type="hidden" id="cal-task-mode" value="create" />
-    <div style="margin-bottom:8px">
-      <label data-i18n="todo.task">Aufgabe</label>
-      <input type="text" id="cal-task-text" data-i18n-placeholder="todo.taskPlaceholder" placeholder="z.B. Luftfeuchtezelt reinigen" />
-    </div>
-    <div class="g2" style="margin-bottom:8px">
-      <div><label data-i18n="todo.priority">Priorität</label>
-        <select id="cal-task-prio">
-          <option value="low" data-i18n="todo.low">Niedrig</option>
-          <option value="med" selected data-i18n="todo.medium">Mittel</option>
-          <option value="high" data-i18n="todo.high">Hoch</option>
-        </select>
-      </div>
-      <div><label data-i18n="todo.dueDate">Fälligkeitsdatum</label>
-        <input type="date" id="cal-task-due" />
-      </div>
-    </div>
-    <div style="margin-bottom:8px">
-      <label data-i18n="todo.assignTo">Zuweisen an</label>
-      <select id="cal-task-assignee">
-        <option value="" data-i18n="todo.everyone">Alle (Betrieb)</option>
-      </select>
-    </div>
-    <div style="margin-bottom:8px">
-      <label data-i18n="todo.description">Beschreibung (optional)</label>
-      <textarea id="cal-task-desc" rows="2" data-i18n-placeholder="todo.descPlaceholder" placeholder="Weitere Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:#888">
-        <input type="checkbox" id="cal-task-private" style="width:auto" /> <span data-i18n="todo.privateLabel">Nur für zugewiesene Person sichtbar</span>
-      </label>
-    </div>
-    <div class="modal-btns">
-      <button class="btn btn-r" id="cal-task-del-btn" style="display:none;margin-right:auto">Löschen</button>
-      <button class="btn" id="cal-task-cancel-btn">Abbrechen</button>
-      <button class="btn btn-p" id="cal-task-save-btn">Speichern</button>
-    </div>
   </div>
 </div>
 <!-- Batch-add modal -->
@@ -688,8 +658,7 @@
           <button class="cal-vbtn" id="cv-week">Woche</button>
           <button class="cal-vbtn" id="cv-day">Tag</button>
         </div>
-        <button id="btn-cal-add-task" class="cal-add-btn" style="background:#3498db">+ Aufgabe</button>
-        <button id="btn-36" class="cal-add-btn">+ Event</button>
+        <button id="btn-cal-add" class="cal-add-btn">+ Neu</button>
       </div>
     </div>
     <div class="cal-legend">
@@ -697,6 +666,9 @@
       <span class="leg-task">Aufgaben</span>
       <span class="leg-harvest">Ernten</span>
       <span class="leg-custom">Eigene Termine</span>
+      <span class="leg-meeting">Meetings</span>
+      <span class="leg-delivery">Lieferungen</span>
+      <span class="leg-maintenance">Wartung</span>
       <span class="leg-import">Externe Termine</span>
     </div>
     <div id="cal-container">
