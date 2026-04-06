@@ -2191,22 +2191,20 @@ function sbCloseMobile(){
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
-const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',todo:'n-todo',settings:'n-settings'};
+const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',cal:'n-cal',settings:'n-settings'};
 function go(page,btnId){
-  var actualPage = page==='cal'?'todo':page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('p-'+actualPage).classList.add('active');
+  document.getElementById('p-'+page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(actualPage==='dash'){renderStatus();renderDashAlerts();}
-  if(actualPage==='batch')renderBatches();
-  if(actualPage==='lab')renderCultures();
-  if(actualPage==='inv'){renderInvStock();}
-  if(actualPage==='assets')renderAssets();
-  if(actualPage==='print'){fillBatchSelect();renderLabList();}
-  if(page==='todo'){renderTodo();openStab('todo','todo');}
-  if(page==='cal'){renderTodo();openStab('todo','cal');}
-  if(actualPage==='settings')renderLog();
+  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(page==='batch')renderBatches();
+  if(page==='lab')renderCultures();
+  if(page==='inv'){renderInvStock();}
+  if(page==='assets')renderAssets();
+  if(page==='print'){fillBatchSelect();renderLabList();}
+  if(page==='cal'){renderCalendar();loadCalDAVImports().then(()=>renderCalendar());}
+  if(page==='settings')renderLog();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -2230,21 +2228,19 @@ function openStab(page,sub){
   if(page==='print'&&sub==='bags')fillBatchSelect();
   if(page==='print'&&sub==='lab'){renderLabList();renderLabPreview();}
   if(page==='print'&&sub==='ref')renderRefBarcodes();
-  if(page==='todo'&&sub==='todo'){renderTodo();fillAssigneeSelect();}
-  if(page==='todo'&&sub==='team')renderTeam();
-  if(page==='todo'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
+  if(page==='cal'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();}
+  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
   if(id==='assets')renderAssets();
-  if(id==='todo')renderTodo();
+  if(id==='cal')renderCalendar();
   updateTodoBadge();
 }
 
@@ -2600,17 +2596,25 @@ function locSelectAllVisible(){
   renderStatus();
 }
 function renderDashAlerts(){
-  const tasks=buildAutoTasks().filter(t=>t.urgent||t.warn);
   const invAlerts=getInvAlerts();
-  const all=[...invAlerts,...tasks];
   const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
-  if(!all.length){card.style.display='none';return}
+  if(!invAlerts.length){card.style.display='none';return}
   card.style.display='';
-  const shown=all.slice(0,5);
-  const more=all.length-shown.length;
-  el.innerHTML=shown.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px;padding:2px 8px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button>`}</div>`).join('')
-    +(more>0?`<div style="font-size:11px;color:var(--c-text-muted);padding-top:4px">+${more} more</div>`:'');
+  el.innerHTML=invAlerts.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(tk.text)}</div><button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button></div>`).join('');
+}
+function renderDashBatchTasks(){
+  const filter=document.getElementById('dash-batch-filter')?.value||'all';
+  const tasks=buildAutoTasks();
+  const shown=filter==='urgent'?tasks.filter(tk=>tk.urgent||tk.warn):tasks;
+  const el=document.getElementById('dash-batch-tasks');
+  if(!el)return;
+  if(!tasks.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';return}
+  el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px">'
+    +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
+    +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+spDot(tk.species)+esc(tk.text)+'</div>'
+    +'<div style="font-size:11px;color:#888;margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
+    :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -3021,51 +3025,9 @@ function buildAutoTasks(){
   });
   return tasks;
 }
-function renderTodo(){
-  const filter=document.getElementById('todo-filter').value,tasks=buildAutoTasks();
-  const shown=filter==='urgent'?tasks.filter(t=>t.urgent||t.warn):tasks;
-  const urgent=tasks.filter(t=>t.urgent).length,warn=tasks.filter(t=>t.warn).length;
-  document.getElementById('todo-metrics').innerHTML=[['Open tasks',tasks.length],['Urgent',urgent],['Coming up',warn]].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${l==='Urgent'&&v>0?'#b91c1c':l==='Coming up'&&v>0?'#92400e':'#1a1a1a'}">${v}</div></div>`).join('');
-  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}">${t.urgent?'<span class="pdot high"></span>':t.warn?'<span class="pdot med"></span>':''}<div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${esc(t.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(t.detail)}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
-  renderManualTasks();updateTodoBadge();
-}
-function renderManualTasks(){
-  const el=document.getElementById('todo-manual');
-  if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
-  el.innerHTML=manualTasks.map((t,i)=>{
-    const assignTag=t.assignee?`<span class="tag tag-assignee">${esc(t.assignee)}</span>`:'<span class="tag tag-company">Alle</span>';
-    const dueTag=t.dueDate?`<span class="tag tag-due">${fmtDtShort(t.dueDate)}</span>`:'';
-    const privateTag=t.private?'<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px">privat</span>':'';
-    const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
-    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${esc(t.description)}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${esc(t.text)}${assignTag}${dueTag}${privateTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
-  }).join('');
-}
-function addTask(){
-  document.getElementById('task-form').style.display='block';
-  fillAssigneeSelect();
-  document.getElementById('task-text').focus();
-}
-function fillAssigneeSelect(){
-  const sel=document.getElementById('task-assignee');
-  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
-}
-function saveTask(){
-  const text=document.getElementById('task-text').value.trim();if(!text)return;
-  const assignee=document.getElementById('task-assignee').value;
-  const dueDate=document.getElementById('task-due').value||null;
-  const description=document.getElementById('task-desc').value.trim()||null;
-  const priv=document.getElementById('task-private').checked;
-  const task={text,priority:document.getElementById('task-prio').value,done:false,created:new Date().toISOString(),assignee:assignee||null,dueDate,description,caldavUid:null,caldavSynced:null,private:priv};
-  manualTasks.push(task);
-  document.getElementById('task-text').value='';document.getElementById('task-desc').value='';document.getElementById('task-due').value='';document.getElementById('task-private').checked=false;
-  document.getElementById('task-form').style.display='none';
-  apiPost('/api/tasks',task).then(r=>{if(r.id)task.id=r.id});renderManualTasks();updateTodoBadge();
-  if(caldav.enabled)pushTaskCaldav(task);
-}
-function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderManualTasks();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
-function deleteTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderManualTasks();updateTodoBadge()})}
-function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).length+manualTasks.filter(t=>!t.done).length+getInvAlerts().length;document.getElementById('n-todo').classList.toggle('alert',n>0)}
+function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderCalendar();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
+function deleteTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderCalendar();updateTodoBadge()})}
+function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const el=document.getElementById('n-cal');if(el)el.classList.toggle('alert',n>0);const bd=buildAutoTasks().filter(t=>t.urgent||t.warn).length+getInvAlerts().length;const de=document.getElementById('n-dash');if(de)de.classList.toggle('alert',bd>0)}
 
 // ─── TEAM MEMBERS ───────────────────────────────────────────
 function renderTeam(){
@@ -3119,7 +3081,7 @@ async function syncCaldavNow(){
       // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
       // instead of loadData() which would overwrite ALL local state
       try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
-      renderManualTasks();
+      renderCalendar();
     }
   }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
@@ -3128,7 +3090,7 @@ async function pushTaskCaldav(task){
   if(!caldav.enabled)return;
   try{
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
-    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();apiPatch('/api/tasks/'+task.id,{caldavUid:task.caldavUid,caldavSynced:task.caldavSynced});renderManualTasks()}
+    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();apiPatch('/api/tasks/'+task.id,{caldavUid:task.caldavUid,caldavSynced:task.caldavSynced});renderCalendar()}
   }catch(e){console.error('CalDAV push error:',e)}
 }
 
@@ -4768,7 +4730,7 @@ function handleCalendarDrop(type,id,newDateStr){
     const t=manualTasks.find(x=>x.created===id);if(!t)return;
     t.dueDate=newDateStr;t.caldavSynced=null;
     apiPatch('/api/tasks/'+t.id,{dueDate:newDateStr,caldavSynced:null});
-    renderCalendar();if(typeof renderManualTasks==='function')renderManualTasks();
+    renderCalendar();
     if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
   }else if(type==='custom'){
     const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
@@ -4955,7 +4917,7 @@ function openEventDetail(ev){
     descEl.textContent=t.description||'';
     descEl.style.display=t.description?'':'none';
     const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">Bearbeiten</button>';
 
   }else if(ev.type==='batch-due'){
     titleEl.textContent=ev.label;
@@ -5017,8 +4979,82 @@ function deleteTaskFromCalendar(taskId){
     if(!t)return;
     manualTasks=manualTasks.filter(x=>x.id!==t.id);
     apiDelete('/api/tasks/'+t.id);
-    renderManualTasks();renderCalendar();updateTodoBadge();
+    renderCalendar();updateTodoBadge();
   });
+}
+
+// ─── CALENDAR TASK MODAL ─────────────────────────────────────
+function openTaskModal(date,existing){
+  const modal=document.getElementById('m-cal-task');
+  const sel=document.getElementById('cal-task-assignee');
+  sel.innerHTML='<option value="">'+t('todo.everyone','Alle (Betrieb)')+'</option>'
+    +teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
+  if(existing){
+    document.getElementById('cal-task-title').textContent=t('todo.editTask','Aufgabe bearbeiten');
+    document.getElementById('cal-task-mode').value='edit';
+    document.getElementById('cal-task-id').value=existing.id;
+    document.getElementById('cal-task-text').value=existing.text;
+    document.getElementById('cal-task-prio').value=existing.priority||'med';
+    document.getElementById('cal-task-due').value=existing.dueDate?existing.dueDate.split('T')[0]:'';
+    document.getElementById('cal-task-assignee').value=existing.assignee||'';
+    document.getElementById('cal-task-desc').value=existing.description||'';
+    document.getElementById('cal-task-private').checked=!!existing.private;
+    document.getElementById('cal-task-del-btn').style.display='';
+  }else{
+    document.getElementById('cal-task-title').textContent=t('todo.newTask','Neue Aufgabe');
+    document.getElementById('cal-task-mode').value='create';
+    document.getElementById('cal-task-id').value='';
+    document.getElementById('cal-task-text').value='';
+    document.getElementById('cal-task-prio').value='med';
+    document.getElementById('cal-task-due').value=date||new Date().toISOString().split('T')[0];
+    document.getElementById('cal-task-assignee').value='';
+    document.getElementById('cal-task-desc').value='';
+    document.getElementById('cal-task-private').checked=false;
+    document.getElementById('cal-task-del-btn').style.display='none';
+  }
+  modal.classList.add('open');
+  if(!existing)setTimeout(()=>document.getElementById('cal-task-text').focus(),50);
+}
+function closeCalTaskModal(){document.getElementById('m-cal-task').classList.remove('open')}
+function saveCalTask(){
+  const mode=document.getElementById('cal-task-mode').value;
+  const text=document.getElementById('cal-task-text').value.trim();
+  if(!text)return;
+  const prio=document.getElementById('cal-task-prio').value;
+  const due=document.getElementById('cal-task-due').value||null;
+  const assignee=document.getElementById('cal-task-assignee').value||null;
+  const desc=document.getElementById('cal-task-desc').value.trim()||null;
+  const priv=document.getElementById('cal-task-private').checked;
+  if(mode==='edit'){
+    const id=parseInt(document.getElementById('cal-task-id').value);
+    const tk=manualTasks.find(x=>x.id===id);
+    if(!tk){closeCalTaskModal();return}
+    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.caldavSynced=null;
+    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,assignee:tk.assignee,description:tk.description,private:priv?1:0,caldavSynced:null});
+    if(caldav.enabled&&tk.caldavUid)pushTaskCaldav(tk);
+  }else{
+    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
+    manualTasks.push(task);
+    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id});
+    if(caldav.enabled&&due)pushTaskCaldav(task);
+  }
+  closeCalTaskModal();
+  renderCalendar();updateTodoBadge();
+}
+function deleteCalTask(){
+  const id=parseInt(document.getElementById('cal-task-id').value);
+  if(!id){closeCalTaskModal();return}
+  closeCalTaskModal();
+  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    manualTasks=manualTasks.filter(x=>x.id!==id);
+    apiDelete('/api/tasks/'+id);
+    renderCalendar();updateTodoBadge();
+  });
+}
+function editTaskFromCalendar(taskId){
+  closeEventDetail();
+  const tk=manualTasks.find(x=>x.created===taskId);
+  if(tk)openTaskModal(tk.dueDate,tk);
 }
 
 function onCalMonthEventClick(type,id){
@@ -5285,7 +5321,6 @@ function initEventListeners() {
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
   $('n-dash').addEventListener('click', () => { go('dash','n-dash'); });
-  $('n-todo').addEventListener('click', () => { go('todo','n-todo'); });
   $('n-cal').addEventListener('click', () => { go('cal','n-cal'); });
   $('n-batch').addEventListener('click', () => { go('batch','n-batch'); });
   $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
@@ -5313,7 +5348,7 @@ function initEventListeners() {
   $('btn-22').addEventListener('click', cancelHarvest);
 
   // Dashboard
-  $('nav-23').addEventListener('click', () => { go('todo','n-todo');openStab('todo','todo'); });
+  $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
 
   // Batches
@@ -5366,12 +5401,6 @@ function initEventListeners() {
   $('ref-qr').addEventListener('change', renderRefBarcodes);
   $('prt-29').addEventListener('click', printRef);
 
-  // To-do
-  $('todo-filter').addEventListener('change', renderTodo);
-  $('btn-30').addEventListener('click', addTask);
-  $('act-31').addEventListener('click', saveTask);
-  $('btn-32').addEventListener('click', () => { document.getElementById('task-form').style.display='none'; });
-
   // Calendar
   $('btn-33').addEventListener('click', calToday);
   $('btn-34').addEventListener('click', () => { calNav(-1); });
@@ -5381,6 +5410,13 @@ function initEventListeners() {
   $('cv-week').addEventListener('click', () => { setCalView('week'); });
   $('cv-day').addEventListener('click', () => { setCalView('day'); });
   $('btn-36').addEventListener('click', openEventModal);
+
+  // Calendar task modal
+  $('btn-cal-add-task').addEventListener('click', ()=>openTaskModal());
+  $('cal-task-cancel-btn').addEventListener('click', closeCalTaskModal);
+  $('cal-task-save-btn').addEventListener('click', saveCalTask);
+  $('cal-task-del-btn').addEventListener('click', deleteCalTask);
+  $('m-cal-task').addEventListener('click', e=>{if(e.target.id==='m-cal-task')closeCalTaskModal()});
 
   // Settings
   $('st-settings-log').addEventListener('click', () => { openStab('settings','log'); });
