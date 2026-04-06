@@ -90,7 +90,7 @@ function getLocalIP(){
 }
 
 function readData(){
-  return db.readAll(database);
+  return db.readAll(database, { inventoryLogLimit: 500 });
 }
 
 function writeData(data){
@@ -1573,13 +1573,41 @@ function handleRequest(req,res){
   }
 
   // GET /api/data
-  if(req.method==='GET'&&req.url==='/api/data'){
+  if(req.method==='GET'&&url==='/api/data'){
     res.writeHead(200,{'Content-Type':'application/json'});
     res.end(JSON.stringify(readData()));return;
   }
 
+  // GET /api/scan-log — paginated scan log history
+  if(req.method==='GET'&&url==='/api/scan-log'){
+    const params=new URL(req.url,'http://x').searchParams;
+    const limit=Math.min(parseInt(params.get('limit'))||200,1000);
+    const offset=parseInt(params.get('offset'))||0;
+    const batch=params.get('batch')||null;
+    const action=params.get('action')||null;
+    let where='1=1';const args=[];
+    if(batch){where+=' AND s.batch=?';args.push(batch)}
+    if(action){where+=' AND s.action=?';args.push(action)}
+    const total=database.prepare('SELECT COUNT(*) as total FROM scan_log s WHERE '+where).get(...args).total;
+    const rows=database.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id=u.id WHERE '+where+' ORDER BY s.id DESC LIMIT ? OFFSET ?').all(...args,limit,offset);
+    jsonOk(res,{items:rows.map(r=>({id:r.id,time:r.time,action:r.action,batch:r.batch,bag:r.bag,from:r.from,to:r.to,species:r.species,strain:r.strain,userId:r.user_id,user:r.username||null})),total,limit,offset});return;
+  }
+
+  // GET /api/harvests — paginated harvest history
+  if(req.method==='GET'&&url==='/api/harvests'){
+    const params=new URL(req.url,'http://x').searchParams;
+    const limit=Math.min(parseInt(params.get('limit'))||200,1000);
+    const offset=parseInt(params.get('offset'))||0;
+    const batch=params.get('batch')||null;
+    let where='1=1';const args=[];
+    if(batch){where+=' AND batch=?';args.push(batch)}
+    const total=database.prepare('SELECT COUNT(*) as total FROM harvests WHERE '+where).get(...args).total;
+    const rows=database.prepare('SELECT * FROM harvests WHERE '+where+' ORDER BY id DESC LIMIT ? OFFSET ?').all(...args,limit,offset);
+    jsonOk(res,{items:rows.map(r=>({id:r.id,time:r.time,batch:r.batch,bag:r.bag,species:r.species,strain:r.strain,grams:r.grams,flush:r.flush})),total,limit,offset});return;
+  }
+
   // POST /api/data — full-state save (used by client saveData())
-  if(req.method==='POST'&&req.url==='/api/data'){
+  if(req.method==='POST'&&url==='/api/data'){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){log('error','CalDAV auto-sync failed',{error:ce.message})}}catch(err){jsonErr(res,400,err.message)}
