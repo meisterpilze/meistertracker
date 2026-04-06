@@ -720,7 +720,7 @@ function verifyPassword(storedHash, salt, password) {
 function createSession(db, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const created = new Date().toISOString();
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   db.prepare('INSERT INTO sessions(token, user_id, created, expires) VALUES(?, ?, ?, ?)')
     .run(token, userId, created, expires);
   return token;
