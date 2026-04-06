@@ -1799,7 +1799,7 @@ function handleRequest(req,res){
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
   else if(url==='/login.html')filePath=path.join(DIR,'login.html');
   else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
-  else if(url==='/app.js')filePath=path.join(DIR,'app.js');
+  // app.js removed — was deprecated legacy frontend
   else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');
   else if(url==='/manifest.json')filePath=path.join(DIR,'manifest.json');
   else if(url.startsWith('/lib/'))filePath=path.join(DIR,'lib',path.basename(url));
