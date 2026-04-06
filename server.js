@@ -168,6 +168,14 @@ function validateEnum(value, allowed, fieldName) {
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
   return null;
 }
+// Admin-only guard — returns true if blocked (response already sent)
+function requireAdmin(req, res) {
+  if (!req.authUser || req.authUser.role !== 'admin') {
+    jsonErr(res, 403, 'admin required');
+    return true;
+  }
+  return false;
+}
 
 // ── AUTH HELPERS ─────────────────────────────────────────────
 function getSessionToken(req){
@@ -1487,20 +1495,22 @@ function handleRequest(req,res){
     let dbOk=false;
     try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){log('error','Health check: database unreachable',{error:e.message})}
     const mem=process.memoryUsage();
+    // Public: minimal status only. Detailed info requires auth.
+    const authUser=checkAuth(req);
     const health={
       status:dbOk?'ok':'degraded',
       db:dbOk?'connected':'error',
       uptime:Math.round(process.uptime()),
-      version:require('./package.json').version,
-      sseClients:sseClients.length,
-      memory:{
+      version:require('./package.json').version
+    };
+    if(authUser){
+      health.sseClients=sseClients.length;
+      health.memory={
         rss:Math.round(mem.rss/1024/1024),
         heapUsed:Math.round(mem.heapUsed/1024/1024),
         heapTotal:Math.round(mem.heapTotal/1024/1024)
-      },
-      node:process.version,
-      platform:process.platform
-    };
+      };
+    }
     res.writeHead(dbOk?200:503,{'Content-Type':'application/json'});
     res.end(JSON.stringify(health));
     return;
@@ -1555,6 +1565,7 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateBatchField(database,id,data);if(data.due){const b=db.readBatchById(database,id);if(b)autoPushBatchCaldav(b)}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
   if(req.method==='DELETE'&&batchIdMatch){
+    if(requireAdmin(req,res))return;
     const id=decodeURIComponent(batchIdMatch[1]);
     try{autoDeleteBatchCaldav(id);db.deleteBatchById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
@@ -1573,6 +1584,7 @@ function handleRequest(req,res){
     try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){jsonErr(res,400,err.message)}return;
   }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
+    if(requireAdmin(req,res))return;
     try{db.clearScanLog(database);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
@@ -1658,6 +1670,7 @@ function handleRequest(req,res){
 
   // -- CalDAV Config --
   if(req.method==='POST'&&req.url==='/api/caldav/config'){
+    if(requireAdmin(req,res))return;
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}});return;
   }
 
@@ -1744,6 +1757,7 @@ function handleRequest(req,res){
 
   // -- Backup Restore (encrypted .db) --
   if(req.method==='POST'&&req.url==='/api/backup/restore'){
+    if(requireAdmin(req,res))return;
     const chunks=[];let sz=0;let aborted=false;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
     req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){aborted=true;jsonErr(res,413,'Backup file too large');req.destroy();return}chunks.push(c)});
     req.on('end',()=>{
