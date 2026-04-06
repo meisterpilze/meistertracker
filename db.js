@@ -2,6 +2,9 @@
 const { DatabaseSync: Database } = require('node:sqlite');
 const crypto = require('crypto');
 
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
+const MAX_SESSIONS_PER_USER = 10;
+
 // ── Schema ───────────────────────────────────────────────────
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS batches (
@@ -724,9 +727,16 @@ function verifyPassword(storedHash, salt, password) {
 }
 
 function createSession(db, userId) {
+  // Enforce session limit per user — evict oldest when at cap
+  const count = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE user_id = ?').get(userId).count;
+  if (count >= MAX_SESSIONS_PER_USER) {
+    db.prepare(`DELETE FROM sessions WHERE token IN (
+      SELECT token FROM sessions WHERE user_id = ? ORDER BY created ASC LIMIT ?
+    )`).run(userId, count - MAX_SESSIONS_PER_USER + 1);
+  }
   const token = crypto.randomBytes(32).toString('hex');
   const created = new Date().toISOString();
-  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
   db.prepare('INSERT INTO sessions(token, user_id, created, expires) VALUES(?, ?, ?, ?)')
     .run(token, userId, created, expires);
   return token;
@@ -744,6 +754,10 @@ function deleteSession(db, token) {
   db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
+function deleteSessionsByUserId(db, userId) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+}
+
 function deleteExpiredSessions(db) {
   db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
 }
@@ -757,6 +771,7 @@ function listUsers(db) {
 }
 
 function deleteUser(db, userId) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 }
 
@@ -1045,7 +1060,8 @@ module.exports = {
   openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
-  deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser,
+  deleteSession, deleteSessionsByUserId, deleteExpiredSessions, countUsers, listUsers, deleteUser,
+  SESSION_TTL_MS,
   updateUserPassword, resetUserPassword,
   insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
   appendScanEntries, deleteLastScanEntries, deleteScanEntryById, clearScanLog,

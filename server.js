@@ -62,6 +62,7 @@ if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
 }
 const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
+const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
 
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
@@ -222,7 +223,7 @@ function cookieFlags(){
 }
 
 function setSessionCookie(res,token){
-  res.setHeader('Set-Cookie','session='+token+'; '+cookieFlags()+' Max-Age=604800');
+  res.setHeader('Set-Cookie','session='+token+'; '+cookieFlags()+' Max-Age='+SESSION_TTL_SECONDS);
 }
 
 function clearSessionCookie(res){
@@ -1574,6 +1575,10 @@ function handleRequest(req,res){
       const salt=crypto.randomBytes(16).toString('hex');
       const hash=crypto.scryptSync(data.newPassword,salt,64).toString('hex');
       db.updateUserPassword(database,user.id,hash,salt);
+      // Invalidate all existing sessions, issue a fresh one for current user
+      db.deleteSessionsByUserId(database,user.id);
+      const newToken=db.createSession(database,user.id);
+      setSessionCookie(res,newToken);
       jsonOk(res);
     });return;
   }
@@ -1587,6 +1592,8 @@ function handleRequest(req,res){
       if(!data||!data.newPassword){jsonErr(res,400,'newPassword required');return}
       if(data.newPassword.length<8){jsonErr(res,400,'New password must be at least 8 characters');return}
       db.resetUserPassword(database,userId,data.newPassword);
+      // Invalidate all sessions for the affected user
+      db.deleteSessionsByUserId(database,userId);
       jsonOk(res);
     });return;
   }
