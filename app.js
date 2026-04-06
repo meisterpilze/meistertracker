@@ -3446,7 +3446,7 @@ function restoreBackup(){
     setStatus(st,'Restoring…',true);
     try{
       const buf=await file.arrayBuffer();
-      const r=await fetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Backup-Password':pw},body:buf});
+      const r=await fetch('/api/backup/restore?pw='+encodeURIComponent(pw),{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:buf});
       if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Restore failed',false);return}
       setStatus(st,'Restored successfully. Reloading…',true);
       document.getElementById('backup-restore-pw').value='';
