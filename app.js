@@ -5245,6 +5245,10 @@ function updateOfflineBadge(count){
 }
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
+function openCamScan(){document.getElementById('m-camscan').classList.add('open')}
+function closeCamScan(){document.getElementById('m-camscan').classList.remove('open')}
+function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent='Kopiert!';setTimeout(()=>{b.textContent='Kopieren'},2000)}).catch(()=>{})}
+
 function initEventListeners() {
   const $=id=>document.getElementById(id);
 
@@ -5269,7 +5273,7 @@ function initEventListeners() {
   $('act-8').addEventListener('click', confirmBatchAdd);
   $('m-locmove').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
   $('cls-9').addEventListener('click', () => { document.getElementById('m-locmove').classList.remove('open'); });
-  $('btn-10').addEventListener('click', locRemoveBag);
+  $('btn-10').addEventListener('click', locRemoveSelected);
   $('cls-11').addEventListener('click', () => { document.getElementById('m-baginfo').classList.remove('open'); });
   $('set-12').addEventListener('click', () => { biSetAction('ADD'); });
   $('set-13').addEventListener('click', () => { biSetAction('MOVE'); });
@@ -5431,6 +5435,6 @@ function initEventListeners() {
   $('prt-55').addEventListener('click', printAssetLabels);
   $('set-56').addEventListener('click', downloadAssetZPL);
 
-  // Camera FAB
-  $('cam-fab').addEventListener('click', openCamScan);
+  // Camera FAB (element is after the script tag, may not exist yet)
+  if($('cam-fab')) $('cam-fab').addEventListener('click', openCamScan);
 }
