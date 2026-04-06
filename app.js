@@ -4963,7 +4963,7 @@ function openEventDetail(ev){
     descEl.textContent=t.description||'';
     descEl.style.display=t.description?'':'none';
     const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">Bearbeiten</button>';
 
   }else if(ev.type==='batch-due'){
     titleEl.textContent=ev.label;
@@ -5027,6 +5027,80 @@ function deleteTaskFromCalendar(taskId){
     apiDelete('/api/tasks/'+t.id);
     renderManualTasks();renderCalendar();updateTodoBadge();
   });
+}
+
+// ─── CALENDAR TASK MODAL ─────────────────────────────────────
+function openTaskModal(date,existing){
+  const modal=document.getElementById('m-cal-task');
+  const sel=document.getElementById('cal-task-assignee');
+  sel.innerHTML='<option value="">'+t('todo.everyone','Alle (Betrieb)')+'</option>'
+    +teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
+  if(existing){
+    document.getElementById('cal-task-title').textContent=t('todo.editTask','Aufgabe bearbeiten');
+    document.getElementById('cal-task-mode').value='edit';
+    document.getElementById('cal-task-id').value=existing.id;
+    document.getElementById('cal-task-text').value=existing.text;
+    document.getElementById('cal-task-prio').value=existing.priority||'med';
+    document.getElementById('cal-task-due').value=existing.dueDate?existing.dueDate.split('T')[0]:'';
+    document.getElementById('cal-task-assignee').value=existing.assignee||'';
+    document.getElementById('cal-task-desc').value=existing.description||'';
+    document.getElementById('cal-task-private').checked=!!existing.private;
+    document.getElementById('cal-task-del-btn').style.display='';
+  }else{
+    document.getElementById('cal-task-title').textContent=t('todo.newTask','Neue Aufgabe');
+    document.getElementById('cal-task-mode').value='create';
+    document.getElementById('cal-task-id').value='';
+    document.getElementById('cal-task-text').value='';
+    document.getElementById('cal-task-prio').value='med';
+    document.getElementById('cal-task-due').value=date||new Date().toISOString().split('T')[0];
+    document.getElementById('cal-task-assignee').value='';
+    document.getElementById('cal-task-desc').value='';
+    document.getElementById('cal-task-private').checked=false;
+    document.getElementById('cal-task-del-btn').style.display='none';
+  }
+  modal.classList.add('open');
+  if(!existing)setTimeout(()=>document.getElementById('cal-task-text').focus(),50);
+}
+function closeCalTaskModal(){document.getElementById('m-cal-task').classList.remove('open')}
+function saveCalTask(){
+  const mode=document.getElementById('cal-task-mode').value;
+  const text=document.getElementById('cal-task-text').value.trim();
+  if(!text)return;
+  const prio=document.getElementById('cal-task-prio').value;
+  const due=document.getElementById('cal-task-due').value||null;
+  const assignee=document.getElementById('cal-task-assignee').value||null;
+  const desc=document.getElementById('cal-task-desc').value.trim()||null;
+  const priv=document.getElementById('cal-task-private').checked;
+  if(mode==='edit'){
+    const id=parseInt(document.getElementById('cal-task-id').value);
+    const tk=manualTasks.find(x=>x.id===id);
+    if(!tk){closeCalTaskModal();return}
+    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.caldavSynced=null;
+    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,assignee:tk.assignee,description:tk.description,private:priv?1:0,caldavSynced:null});
+    if(caldav.enabled&&tk.caldavUid)pushTaskCaldav(tk);
+  }else{
+    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
+    manualTasks.push(task);
+    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id});
+    if(caldav.enabled&&due)pushTaskCaldav(task);
+  }
+  closeCalTaskModal();
+  renderCalendar();updateTodoBadge();
+}
+function deleteCalTask(){
+  const id=parseInt(document.getElementById('cal-task-id').value);
+  if(!id){closeCalTaskModal();return}
+  closeCalTaskModal();
+  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    manualTasks=manualTasks.filter(x=>x.id!==id);
+    apiDelete('/api/tasks/'+id);
+    renderCalendar();updateTodoBadge();
+  });
+}
+function editTaskFromCalendar(taskId){
+  closeEventDetail();
+  const tk=manualTasks.find(x=>x.created===taskId);
+  if(tk)openTaskModal(tk.dueDate,tk);
 }
 
 function onCalMonthEventClick(type,id){
@@ -5389,6 +5463,13 @@ function initEventListeners() {
   $('cv-week').addEventListener('click', () => { setCalView('week'); });
   $('cv-day').addEventListener('click', () => { setCalView('day'); });
   $('btn-36').addEventListener('click', openEventModal);
+
+  // Calendar task modal
+  $('btn-cal-add-task').addEventListener('click', ()=>openTaskModal());
+  $('cal-task-cancel-btn').addEventListener('click', closeCalTaskModal);
+  $('cal-task-save-btn').addEventListener('click', saveCalTask);
+  $('cal-task-del-btn').addEventListener('click', deleteCalTask);
+  $('m-cal-task').addEventListener('click', e=>{if(e.target.id==='m-cal-task')closeCalTaskModal()});
 
   // Settings
   $('st-settings-log').addEventListener('click', () => { openStab('settings','log'); });

@@ -130,6 +130,50 @@
     <div class="modal-btns" id="cal-detail-btns" style="flex-wrap:wrap"></div>
   </div>
 </div>
+<!-- Calendar task modal -->
+<div class="modal-bg" id="m-cal-task" role="dialog" aria-modal="true" aria-labelledby="cal-task-title">
+  <div class="modal">
+    <h3 id="cal-task-title">Neue Aufgabe</h3>
+    <input type="hidden" id="cal-task-id" />
+    <input type="hidden" id="cal-task-mode" value="create" />
+    <div style="margin-bottom:8px">
+      <label data-i18n="todo.task">Aufgabe</label>
+      <input type="text" id="cal-task-text" data-i18n-placeholder="todo.taskPlaceholder" placeholder="z.B. Luftfeuchtezelt reinigen" />
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label data-i18n="todo.priority">Priorität</label>
+        <select id="cal-task-prio">
+          <option value="low" data-i18n="todo.low">Niedrig</option>
+          <option value="med" selected data-i18n="todo.medium">Mittel</option>
+          <option value="high" data-i18n="todo.high">Hoch</option>
+        </select>
+      </div>
+      <div><label data-i18n="todo.dueDate">Fälligkeitsdatum</label>
+        <input type="date" id="cal-task-due" />
+      </div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label data-i18n="todo.assignTo">Zuweisen an</label>
+      <select id="cal-task-assignee">
+        <option value="" data-i18n="todo.everyone">Alle (Betrieb)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:8px">
+      <label data-i18n="todo.description">Beschreibung (optional)</label>
+      <textarea id="cal-task-desc" rows="2" data-i18n-placeholder="todo.descPlaceholder" placeholder="Weitere Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:#888">
+        <input type="checkbox" id="cal-task-private" style="width:auto" /> <span data-i18n="todo.privateLabel">Nur für zugewiesene Person sichtbar</span>
+      </label>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-r" id="cal-task-del-btn" style="display:none;margin-right:auto">Löschen</button>
+      <button class="btn" id="cal-task-cancel-btn">Abbrechen</button>
+      <button class="btn btn-p" id="cal-task-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
 <!-- Batch-add modal -->
 <div class="modal-bg" id="m-batchadd" role="dialog" aria-modal="true" aria-labelledby="m-batchadd-title">
   <div class="modal"><h3 id="m-batchadd-title">Add entire batch to location</h3>
@@ -687,6 +731,7 @@
           <button class="cal-vbtn" id="cv-week">Woche</button>
           <button class="cal-vbtn" id="cv-day">Tag</button>
         </div>
+        <button id="btn-cal-add-task" class="cal-add-btn" style="background:#3498db">+ Aufgabe</button>
         <button id="btn-36" class="cal-add-btn">+ Event</button>
       </div>
     </div>
