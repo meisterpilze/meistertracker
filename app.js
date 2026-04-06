@@ -2138,10 +2138,15 @@ async function pollSync(){
 // ── SSE real-time sync (replaces 5s polling for connected clients) ──
 let _sse=null;
 let _sseReconnectTimer=null;
+let _sseRetryDelay=1000;
 function connectSSE(){
   if(_sse)return;
   try{
     _sse=new EventSource('/api/events');
+    _sse.onopen=function(){
+      _sseRetryDelay=1000; // Reset backoff on successful connection
+      setSyncStatus('ok','Connected');
+    };
     _sse.onmessage=function(ev){
       try{
         const msg=JSON.parse(ev.data);
@@ -2152,12 +2157,15 @@ function connectSSE(){
     _sse.onerror=function(){
       _sse.close();_sse=null;
       setSyncStatus('err','Connection lost');
-      // Reconnect with backoff, fall back to polling in the meantime
-      if(!_sseReconnectTimer)_sseReconnectTimer=setTimeout(()=>{_sseReconnectTimer=null;connectSSE()},5000);
+      // Exponential backoff reconnect, capped at 30s
+      if(!_sseReconnectTimer){
+        _sseReconnectTimer=setTimeout(()=>{_sseReconnectTimer=null;connectSSE()},Math.min(_sseRetryDelay,30000));
+        _sseRetryDelay=Math.min(_sseRetryDelay*2,30000);
+      }
     };
   }catch(e){/* SSE not supported — polling fallback active */}
 }
-function disconnectSSE(){if(_sse){_sse.close();_sse=null}if(_sseReconnectTimer){clearTimeout(_sseReconnectTimer);_sseReconnectTimer=null}}
+function disconnectSSE(){if(_sse){_sse.close();_sse=null}if(_sseReconnectTimer){clearTimeout(_sseReconnectTimer);_sseReconnectTimer=null}_sseRetryDelay=1000}
 
 // ─── SIDEBAR ────────────────────────────────────────────────
 function toggleSidebar(){
@@ -3999,6 +4007,16 @@ function _scanBeep(freq,dur){
     o.stop(_scanAudioCtx.currentTime+dur/1000);
   }catch{}
 }
+// Multi-tab scan dedup via BroadcastChannel
+const scanChannel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('meister-scans'):null;
+if(scanChannel){
+  scanChannel.onmessage=function(ev){
+    if(ev.data&&ev.data.type==='scan-entry'){
+      // Add to sessionEntries for dedup checking across tabs
+      sessionEntries.push(ev.data.entry);
+    }
+  };
+}
 // Duplicate detection
 let _pendingDupe=null;let _pendingDupeTimer=null;
 // Remove confirmation
@@ -4285,6 +4303,7 @@ function processScan(raw){
     scanLog.push(entry);movements.push(entry);
     if(!sessionStartTime)sessionStartTime=Date.now();
     sessionEntries.push(entry);
+    if(scanChannel)scanChannel.postMessage({type:'scan-entry',entry:{bag:entry.bag,batch:entry.batch,action:entry.action,to:entry.to}});
     scan.count++;
     apiPost('/api/scan-log',{entries:[entry]}).then(r=>{if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
     _lastScanVal=isBag?val:batchId;
