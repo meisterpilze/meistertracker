@@ -423,6 +423,9 @@ tr:hover td{background:#f1f5f9}
 .cal-legend .leg-task::before{background:#3b82f6}
 .cal-legend .leg-harvest::before{background:#f59e0b}
 .cal-legend .leg-custom::before{background:#22c55e}
+.cal-legend .leg-meeting::before{background:#8b5cf6}
+.cal-legend .leg-delivery::before{background:#f59e0b}
+.cal-legend .leg-maintenance::before{background:#64748b}
 .cal-legend .leg-import::before{background:#a855f7}
 
 /* Month grid */
