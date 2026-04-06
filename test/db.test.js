@@ -59,6 +59,18 @@ describe('db – schema & init', () => {
       }
     }
   });
+
+  it('migration v6 creates unique caldav_uid indexes', () => {
+    const taskIndexes = d.prepare("SELECT name, \"unique\" as u FROM pragma_index_list('manual_tasks')").all();
+    const ti = taskIndexes.find(r => r.name === 'idx_tasks_caldav_uid');
+    assert.ok(ti, 'Missing unique index idx_tasks_caldav_uid on manual_tasks');
+    assert.equal(ti.u, 1, 'idx_tasks_caldav_uid should be unique');
+
+    const eventIndexes = d.prepare("SELECT name, \"unique\" as u FROM pragma_index_list('calendar_events')").all();
+    const ei = eventIndexes.find(r => r.name === 'idx_calevents_caldav_uid');
+    assert.ok(ei, 'Missing unique index idx_calevents_caldav_uid on calendar_events');
+    assert.equal(ei.u, 1, 'idx_calevents_caldav_uid should be unique');
+  });
 });
 
 describe('db – auth (users & sessions)', () => {
@@ -189,6 +201,14 @@ describe('db – batches CRUD', () => {
     const data = db.readAll(d);
     assert.equal(data.batches.length, 0);
   });
+
+  it('insertBatch rejects qty < 1', () => {
+    assert.throws(() => db.insertBatch(d, { ...batch, batchId: 'B-BAD', qty: 0 }), /qty must be >= 1/);
+  });
+
+  it('insertBatch rejects days < 1', () => {
+    assert.throws(() => db.insertBatch(d, { ...batch, batchId: 'B-BAD2', days: 0 }), /days must be >= 1/);
+  });
 });
 
 describe('db – scan log', () => {
@@ -240,6 +260,13 @@ describe('db – harvests', () => {
     const data = db.readAll(d);
     assert.equal(data.harvests.length, 1);
     assert.equal(data.harvests[0].grams, 250);
+  });
+
+  it('insertHarvest rejects negative grams', () => {
+    assert.throws(() => db.insertHarvest(d, {
+      time: '2024-03-01T08:00:00Z', batch: 'B-002', bag: 'B-002-01',
+      species: 'Lentinula edodes', strain: null, grams: -5, flush: 1
+    }), /grams must be >= 0/);
   });
 });
 
