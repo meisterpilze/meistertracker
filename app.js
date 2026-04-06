@@ -2219,7 +2219,7 @@ document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id===
 // Batch-add modal
 function openBatchAdd(){
   const bs=document.getElementById('ba-batch');
-  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species})</option>`).join('');
+  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
   const ls=document.getElementById('ba-loc');
   ls.innerHTML=[...ZONES,...ALL_RACKS].map(l=>`<option value="${l}">${l}</option>`).join('');
   bs.onchange=baPreview;ls.onchange=baPreview;
@@ -2357,9 +2357,9 @@ function renderStatusCards(){
     return`<div style="border:1px solid ${ov?'#fecaca':'#e5e3dd'};border-radius:10px;padding:12px;background:${ov?'#fff5f5':'#fff'}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
         <div>
-          <div style="font-size:11px;font-family:monospace;color:#888">${b.batchId}</div>
-          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${b.species}</div>
-          <div style="font-size:11px;color:#888">${b.strain}</div>
+          <div style="font-size:11px;font-family:monospace;color:#888">${esc(b.batchId)}</div>
+          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${esc(b.species)}</div>
+          <div style="font-size:11px;color:#888">${esc(b.strain)}</div>
         </div>
         <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${statusColors[status]||'#f5f4f0'};color:#555;flex-shrink:0;margin-left:4px">${status}</span>
       </div>
@@ -2381,7 +2381,7 @@ function renderStatus(){
     const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
     const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
     const harv=getHarvested(b.batchId);
-    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${fmtDt(due)}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${fmtDt(due)}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
   });
   body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">'+t('dash.noMatches')+'</td></tr>';
   renderMetrics(batches.length,ti,tt,tc);
@@ -2395,7 +2395,7 @@ function renderDashAlerts(){
   const all=[...invAlerts,...tasks];
   const el=document.getElementById('dash-alerts');
   if(!all.length){el.innerHTML='<div style="font-size:12px;color:#888;padding:4px 0">'+t('dash.noUrgent')+'</div>';return}
-  el.innerHTML=all.slice(0,8).map(tk=>`<div class="todo-row ${tk.urgent?'urgent':'warn'}"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${tk.species?spDot(tk.species):''}${tk.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${tk.detail}</div></div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">${t('inv.stock')}</button>`}</div>`).join('');
+  el.innerHTML=all.slice(0,8).map(tk=>`<div class="todo-row ${tk.urgent?'urgent':'warn'}"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(tk.detail)}</div></div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">${t('inv.stock')}</button>`}</div>`).join('');
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -2417,7 +2417,7 @@ function renderRacks(){
       return`<div class="rack-card" onclick="showRack('${id}')">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${tp('dash.bags',count)}</span></div>
         <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
-        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${bid}</span>(${d.c})`).join(' '):t('dash.empty')}</div>
+        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${esc(bid)}</span>(${d.c})`).join(' '):t('dash.empty')}</div>
       </div>`;
     }).join('');
   };
@@ -2429,7 +2429,7 @@ function showRack(id){
   document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' \u2014 '+tp('dash.bags',entries.length);
   if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">'+t('dash.noBagsOnRack')+'</div>';el.style.display='block';return}
   const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push(bagId)});
-  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${bid} — ${d.sp}/${d.st} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
+  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${esc(bid)} — ${esc(d.sp)}/${esc(d.st)} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
   el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
@@ -2527,11 +2527,11 @@ function renderLocBody(){
   Object.values(byBatch).forEach(d=>d.bags.sort((a,b)=>{const na=parseInt(a.id.split('-').pop())||0,nb=parseInt(b.id.split('-').pop())||0;return na-nb}));
   const n=selectedLocBags.size;
   el.innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:12px">
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${bid} <span style="font-weight:400;color:#888">— ${d.sp}/${d.st}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${esc(bid)} <span style="font-weight:400;color:#888">— ${esc(d.sp)}/${esc(d.st)}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
     <div style="display:flex;flex-wrap:wrap;gap:5px">${d.bags.map(b=>{
       const sel=selectedLocBags.has(b.id);
-      return`<span id="lb-${b.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${b.id}" data-batch="${bid}" data-loc="${b.loc}" style="font-size:11px;font-family:monospace;padding:4px 8px;border-radius:6px;cursor:pointer;${sel?'background:#1a1a1a;color:#fff;border:1px solid #1a1a1a':'background:#fff;border:1px solid #e5e3dd;color:#333'}">
-        ${b.id.split('-').pop()}${b.loc!==activeLocTab?` <span style="font-size:9px;color:${sel?'#aaa':'#999'}">${b.loc}</span>`:''}
+      return`<span id="lb-${b.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${esc(b.id)}" data-batch="${esc(bid)}" data-loc="${esc(b.loc)}" style="font-size:11px;font-family:monospace;padding:4px 8px;border-radius:6px;cursor:pointer;${sel?'background:#1a1a1a;color:#fff;border:1px solid #1a1a1a':'background:#fff;border:1px solid #e5e3dd;color:#333'}">
+        ${b.id.split('-').pop()}${b.loc!==activeLocTab?` <span style="font-size:9px;color:${sel?'#aaa':'#999'}">${esc(b.loc)}</span>`:''}
       </span>`;
     }).join('')}</div>
   </div>`).join('')
@@ -2712,9 +2712,9 @@ function renderBatches(){
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
-    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${b.sourceId}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${b.batchId}')">${b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${b.batchId}')">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${b.batchId}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${b.batchId}</td><td>${spDot(b.species)}${b.species}</td><td>${b.strain}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${b.batchId}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${b.batchId}')">${t('batch.del')}</button></td></tr>`;
+    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
+    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${esc(b.batchId)}')">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${esc(b.batchId)}')">${t('batch.addNote')}</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${b.batchId}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
@@ -2794,7 +2794,7 @@ document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='E
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
   const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${h.batch||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${h.bag||'\u2014'}</td><td>${h.species?spDot(h.species)+h.species:'\u2014'}</td><td>${h.strain||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'\u2014'}</td><td>${h.species?spDot(h.species)+esc(h.species):'\u2014'}</td><td>${esc(h.strain)||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
 
   const byBatch={};
   harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
@@ -2878,19 +2878,19 @@ function renderTodo(){
   const shown=filter==='urgent'?tasks.filter(t=>t.urgent||t.warn):tasks;
   const urgent=tasks.filter(t=>t.urgent).length,warn=tasks.filter(t=>t.warn).length;
   document.getElementById('todo-metrics').innerHTML=[['Open tasks',tasks.length],['Urgent',urgent],['Coming up',warn]].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="color:${l==='Urgent'&&v>0?'#b91c1c':l==='Coming up'&&v>0?'#92400e':'#1a1a1a'}">${v}</div></div>`).join('');
-  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}"><span class="pdot ${t.urgent?'high':t.warn?'med':'low'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${t.text}</div><div style="font-size:11px;color:#888;margin-top:1px">${t.detail}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
+  document.getElementById('todo-auto').innerHTML=shown.length?shown.map(t=>`<div class="todo-row ${t.urgent?'urgent':t.warn?'warn':''}"><span class="pdot ${t.urgent?'high':t.warn?'med':'low'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${spDot(t.species)}${esc(t.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(t.detail)}</div></div><button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">View</button></div>`).join(''):'<div class="empty">No tasks right now!</div>';
   renderManualTasks();updateTodoBadge();
 }
 function renderManualTasks(){
   const el=document.getElementById('todo-manual');
   if(!manualTasks.length){el.innerHTML='<div class="empty" style="padding:1rem">No manual tasks.</div>';return}
   el.innerHTML=manualTasks.map((t,i)=>{
-    const assignTag=t.assignee?`<span class="tag tag-assignee">${t.assignee}</span>`:'<span class="tag tag-company">Alle</span>';
+    const assignTag=t.assignee?`<span class="tag tag-assignee">${esc(t.assignee)}</span>`:'<span class="tag tag-company">Alle</span>';
     const dueTag=t.dueDate?`<span class="tag tag-due">${fmtDtShort(t.dueDate)}</span>`:'';
     const privateTag=t.private?'<span class="tag" style="background:#fef3c7;color:#92400e;font-size:10px">privat</span>':'';
     const syncDot=caldav.enabled?(t.caldavSynced?'<span class="caldav-status synced" title="Synced"></span>':'<span class="caldav-status pending" title="Not synced"></span>'):'';
-    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${t.description}</div>`:'';
-    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${t.text}${assignTag}${dueTag}${privateTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
+    const desc=t.description?`<div style="font-size:11px;color:#888;margin-top:2px">${esc(t.description)}</div>`:'';
+    return`<div class="todo-row"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" /><span class="pdot ${t.priority}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500" class="${t.done?'done-text':''}">${esc(t.text)}${assignTag}${dueTag}${privateTag}${syncDot}</div>${desc}</div><button class="btn btn-sm btn-r" onclick="deleteTask(${t.id})">×</button></div>`;
   }).join('');
 }
 function addTask(){
@@ -2900,7 +2900,7 @@ function addTask(){
 }
 function fillAssigneeSelect(){
   const sel=document.getElementById('task-assignee');
-  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${m.name}">${m.name}</option>`).join('');
+  sel.innerHTML='<option value="">Everyone (company)</option>'+teamMembers.map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
 }
 function saveTask(){
   const text=document.getElementById('task-text').value.trim();if(!text)return;
@@ -2923,7 +2923,7 @@ function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).
 function renderTeam(){
   const el=document.getElementById('team-list');
   if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
-  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${m.name}</span>${m.role?`<span style="font-size:11px;color:#888">${m.role}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
+  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:#888">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
 }
 function addMember(){
   const name=document.getElementById('member-name').value.trim();if(!name)return;
@@ -3385,17 +3385,17 @@ function renderAssets(){
     const d=computeDepreciation(a);
     const gwg=d.isGwg?'<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>':'';
     return`<tr>
-      <td style="font-family:monospace;font-size:11px;font-weight:500">${a.assetId}</td>
-      <td>${a.name}${gwg}</td>
-      <td>${a.category}</td>
+      <td style="font-family:monospace;font-size:11px;font-weight:500">${esc(a.assetId)}</td>
+      <td>${esc(a.name)}${gwg}</td>
+      <td>${esc(a.category)}</td>
       <td style="text-align:right">${formatEur(a.purchasePrice)}</td>
       <td style="text-align:right">${formatEur(d.bookValue)}</td>
       <td>${assetStatusBadge(a.status)}</td>
-      <td style="font-size:11px;color:#555">${a.location||'—'}</td>
+      <td style="font-size:11px;color:#555">${esc(a.location)||'—'}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="editAsset('${a.assetId}')" style="padding:2px 6px">Bearb.</button>
-        <button class="btn btn-sm" onclick="quickPrintAsset('${a.assetId}')" style="padding:2px 6px">Druck</button>
-        <button class="btn btn-sm" onclick="deleteAsset('${a.assetId}')" style="padding:2px 6px;color:#991b1b">×</button>
+        <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">Bearb.</button>
+        <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">Druck</button>
+        <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:#991b1b">×</button>
       </td>
     </tr>`}).join('');
 }
@@ -3510,7 +3510,7 @@ function renderStichtagReport(){
   const rows=aktiv.map(a=>{
     const d=computeDepreciation(a,ref);
     totalPurchase+=a.purchasePrice;totalBook+=d.bookValue;totalAccum+=d.accumulated;
-    return`<tr><td style="font-family:monospace;font-size:11px">${a.assetId}</td><td>${a.name}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
+    return`<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
   });
   document.getElementById('stichtag-result').innerHTML=
     `<div style="font-size:12px;color:#555;margin-bottom:6px">Stichtag: ${fmtDE(ref)} — ${aktiv.length} aktive Anlagen</div>`+
@@ -3527,10 +3527,10 @@ function renderAssetLabelList(){
   el.innerHTML=assets.filter(a=>a.status==='aktiv').map(a=>{
     const chk=selectedAssetIds.has(a.assetId)?'checked':'';
     return`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
-      <input type="checkbox" ${chk} onchange="toggleAssetLabel('${a.assetId}',this.checked)">
-      <span style="font-family:monospace;font-weight:500">${a.assetId}</span>
-      <span style="color:#555">${a.name}</span>
-      <span style="color:#999;font-size:11px">${a.category}</span>
+      <input type="checkbox" ${chk} onchange="toggleAssetLabel('${esc(a.assetId)}',this.checked)">
+      <span style="font-family:monospace;font-weight:500">${esc(a.assetId)}</span>
+      <span style="color:#555">${esc(a.name)}</span>
+      <span style="color:#999;font-size:11px">${esc(a.category)}</span>
     </label>`;
   }).join('');
 }
@@ -3583,12 +3583,12 @@ async function quickPrintAsset(id){
 // ─── CULTURES ────────────────────────────────────────────────
 const ctBadge=t=>{const m={MC:'badge-mc',PD:'badge-pd',LC:'badge-lc',G2G:'badge-g2g'};return`<span class="badge ${m[t]||''}">${t}</span>`}
 const csBadge=s=>{const m={active:'badge-active',stored:'badge-stored',used:'badge-used',contam:'badge-contam'};return`<span class="badge ${m[s]||''}">${s}</span>`}
-function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain} (${c.type})</option>`).join('');if(cur)s.value=cur}
+function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${c.id}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${c.species}</td><td>${c.strain||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td style="font-size:10px;color:#888">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.notes||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${c.id}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${c.id}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:#888">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
 
@@ -3604,7 +3604,7 @@ function lwUpdate(){
   else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
   lwPreview();
 }
-function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${c.id}">${c.id} — ${c.species}/${c.strain}</option>`).join('');if(cur)s.value=cur}
+function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
@@ -3634,10 +3634,10 @@ function logLabWork(){
     setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${c.id}</td><td style="font-family:monospace;font-size:10px;color:#888">${c.parentId||'\u2014'}</td><td>${spDot(c.species)}${c.species}${c.strain?' / '+c.strain:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'\u2014'}</td><td>${spDot(c.species)}${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
-function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${c.id}">${c.id} (${c.type} — ${c.species})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${b.batchId}">${b.batchId} (${b.species})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
+function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
 function buildTree(rootId,rootType){
   const getAnc=id=>{const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
   const getDesc=(id,depth)=>{if(depth>6)return[];const ch=[];cultures.filter(c=>c.parentId===id).forEach(c=>ch.push({...c,harvest:0,children:getDesc(c.id,depth+1)}));batches.filter(b=>b.sourceId===id).forEach(b=>{const{status}=getStatus(b.batchId);ch.push({id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]})});return ch};
@@ -3646,7 +3646,7 @@ function buildTree(rootId,rootType){
 }
 const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
 const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
-function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${node.type}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${node.id}</span><span style="font-size:11px;color:#666">${node.species||''}${node.strain?' / '+node.strain:''}</span><span style="font-size:10px;color:#888">${node.status||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
+function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:#666">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:#888">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
 function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">Select a culture or batch above.</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">No lineage data found.</div>'}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
@@ -3829,12 +3829,12 @@ async function sendToPrinter(zpl){
 
 
 
-function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${b.batchId}">${b.batchId} (${b.species} / ${b.strain})</option>`).join('');if(cur)s.value=cur}
+function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
 
 function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview');if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;aspect-ratio:2/1;display:flex;align-items:center;justify-content:center;overflow:hidden';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:56px';cell.appendChild(svg);wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bagId,{format:'CODE128',width:1.4,height:32,displayValue:true,fontSize:10,margin:6,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
-function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${c.id}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${c.id}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${c.type}</span><span style="color:#888">${c.species}${c.strain?' / '+c.strain:''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
+function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
 function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id,{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=fmtDt(c.created);left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
