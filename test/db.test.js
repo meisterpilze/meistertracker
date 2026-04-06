@@ -42,6 +42,23 @@ describe('db – schema & init', () => {
     assert.equal(data.inventory.stock.gypsum, 0);
     assert.equal(data.inventory.stock.grain, 0);
   });
+
+  it('migration v5 creates performance indexes', () => {
+    const expected = {
+      scan_log: ['idx_scanlog_batch', 'idx_scanlog_bag', 'idx_scanlog_user'],
+      harvests: ['idx_harvests_bag'],
+      cultures: ['idx_cultures_parent'],
+      manual_tasks: ['idx_tasks_assignee', 'idx_tasks_due'],
+      calendar_events: ['idx_calevents_start'],
+      calendar_event_assignees: ['idx_calassign_user'],
+    };
+    for (const [table, names] of Object.entries(expected)) {
+      const indexes = d.prepare(`SELECT name FROM pragma_index_list('${table}')`).all().map(r => r.name);
+      for (const name of names) {
+        assert.ok(indexes.includes(name), `Missing index ${name} on ${table}`);
+      }
+    }
+  });
 });
 
 describe('db – auth (users & sessions)', () => {
