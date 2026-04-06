@@ -63,6 +63,12 @@ if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
 const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
+
+function getClientIP(req) {
+  const fwd = TRUST_PROXY ? req.headers['x-forwarded-for'] : null;
+  return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
 
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
@@ -400,6 +406,15 @@ function sanitizePart(s) {
 
 function escapeXml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Extract username from Basic auth header (without verifying password)
+function extractBasicAuthUsername(req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.startsWith('Basic ')) return null;
+  const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
+  const idx = decoded.indexOf(':');
+  return idx >= 0 ? decoded.slice(0, idx) : null;
 }
 
 // Check CalDAV basic auth against user accounts
@@ -877,11 +892,24 @@ function handleCaldav(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
   // Reject Basic auth over plain HTTP (except localhost) to prevent credential sniffing
-  if(protocol==='https'&&!req.socket.encrypted){
+  if(!req.socket.encrypted){
     const host=(req.headers.host||'').replace(/:.*$/,'');
-    if(host!=='localhost'&&host!=='127.0.0.1'){
+    if(host!=='localhost'&&host!=='127.0.0.1'&&host!=='[::1]'){
       res.writeHead(403);
       res.end('CalDAV requires HTTPS');
+      return;
+    }
+  }
+
+  // Brute-force protection for CalDAV basic auth
+  const caldavIP = getClientIP(req);
+  const caldavUsername = extractBasicAuthUsername(req);
+  if (caldavUsername) {
+    const caldavUserKey = caldavUsername.toLowerCase();
+    const caldavThrottleKey = caldavUserKey + '@' + caldavIP;
+    if (!checkLoginAllowed(caldavThrottleKey) || !checkLoginAllowedPerUser(caldavUserKey)) {
+      res.writeHead(429, { 'Content-Type': 'text/plain' });
+      res.end('Too many login attempts. Try again later.');
       return;
     }
   }
@@ -889,10 +917,19 @@ function handleCaldav(req, res) {
   // Auth check — returns user account object or false
   const caldavUser = checkCaldavAuth(req);
   if (!caldavUser) {
+    if (caldavUsername) {
+      const caldavUserKey = caldavUsername.toLowerCase();
+      recordLoginFailure(caldavUserKey + '@' + caldavIP);
+      recordLoginFailurePerUser(caldavUserKey);
+    }
     res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Meisterpilze CalDAV"' });
     res.end('Unauthorized');
     return;
   }
+  // Clear attempts on successful auth
+  const successKey = caldavUser.username.toLowerCase();
+  clearLoginAttempts(successKey + '@' + caldavIP);
+  clearLoginAttemptsPerUser(successKey);
   req.caldavUser = caldavUser;
 
   const method = req.method;
@@ -1347,15 +1384,25 @@ setInterval(() => {
 }, RATE_WINDOW_MS);
 
 // ── LOGIN BRUTE-FORCE PROTECTION ────────────────────────────
-const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_MAX_ATTEMPTS = 5;        // per username+IP
+const LOGIN_MAX_PER_USER = 20;       // per username across all IPs
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
-const loginAttempts = new Map(); // key → { count, firstAttempt, lockedUntil }
+const loginAttempts = new Map();      // username@IP → { count, firstAttempt, lockedUntil }
+const loginAttemptsPerUser = new Map(); // username → { count, firstAttempt, lockedUntil }
 
 function checkLoginAllowed(key) {
   const entry = loginAttempts.get(key);
   if (!entry) return true;
   if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
   if (entry.lockedUntil && Date.now() >= entry.lockedUntil) { loginAttempts.delete(key); return true; }
+  return true;
+}
+
+function checkLoginAllowedPerUser(username) {
+  const entry = loginAttemptsPerUser.get(username);
+  if (!entry) return true;
+  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
+  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) { loginAttemptsPerUser.delete(username); return true; }
   return true;
 }
 
@@ -1370,7 +1417,19 @@ function recordLoginFailure(key) {
   }
 }
 
+function recordLoginFailurePerUser(username) {
+  const now = Date.now();
+  let entry = loginAttemptsPerUser.get(username);
+  if (!entry) { entry = { count: 0, firstAttempt: now, lockedUntil: null }; loginAttemptsPerUser.set(username, entry); }
+  entry.count++;
+  if (entry.count >= LOGIN_MAX_PER_USER) {
+    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
+    log('warn', 'Login locked (per-user) due to too many failed attempts', { username, attempts: entry.count });
+  }
+}
+
 function clearLoginAttempts(key) { loginAttempts.delete(key); }
+function clearLoginAttemptsPerUser(username) { loginAttemptsPerUser.delete(username); }
 
 setInterval(() => {
   const now = Date.now();
@@ -1378,12 +1437,14 @@ setInterval(() => {
     if (entry.lockedUntil && now >= entry.lockedUntil) loginAttempts.delete(key);
     else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
   }
+  for (const [key, entry] of loginAttemptsPerUser) {
+    if (entry.lockedUntil && now >= entry.lockedUntil) loginAttemptsPerUser.delete(key);
+    else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
+  }
 }, 60000);
 
 function handleRequest(req,res){
-  // Use X-Forwarded-For when behind a reverse proxy, fall back to socket address
-  const fwd = req.headers['x-forwarded-for'];
-  const clientIP = (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+  const clientIP = getClientIP(req);
   if (!checkRateLimit(clientIP)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
     res.end('{"error":"Too many requests"}');
@@ -1446,18 +1507,21 @@ function handleRequest(req,res){
       try{
         const{username,password}=data;
         if(!username||!password){jsonErr(res,400,'Username and password required');return}
-        const throttleKey=username.toLowerCase()+'@'+clientIP;
-        if(!checkLoginAllowed(throttleKey)){
+        const userKey=username.toLowerCase();
+        const throttleKey=userKey+'@'+clientIP;
+        if(!checkLoginAllowed(throttleKey)||!checkLoginAllowedPerUser(userKey)){
           res.writeHead(429,{'Content-Type':'application/json'});
           res.end(JSON.stringify({error:'Too many login attempts. Try again in 15 minutes.'}));return;
         }
         const user=db.getUserByUsername(database,username);
         if(!user||!db.verifyPassword(user.hash,user.salt,password)){
           recordLoginFailure(throttleKey);
+          recordLoginFailurePerUser(userKey);
           res.writeHead(401,{'Content-Type':'application/json'});
           res.end(JSON.stringify({error:'Invalid credentials'}));return;
         }
         clearLoginAttempts(throttleKey);
+        clearLoginAttemptsPerUser(userKey);
         const token=db.createSession(database,user.id);
         setSessionCookie(res,token);
         jsonOk(res,{username:user.username,role:user.role});
