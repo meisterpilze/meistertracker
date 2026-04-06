@@ -239,6 +239,9 @@ function openDb(dbPath) {
   const db = new Database(dbPath);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.exec("PRAGMA synchronous = NORMAL");
+  db.exec("PRAGMA wal_autocheckpoint = 1000");
   db.exec(SCHEMA);
   runMigrations(db);
   // Ensure singleton rows exist
