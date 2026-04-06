@@ -219,6 +219,12 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_calassign_user ON calendar_event_assignees(user_id);
     `);
   }},
+  { version: 6, description: 'Add unique constraints on caldav_uid columns', fn(db) {
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_caldav_uid ON manual_tasks(caldav_uid) WHERE caldav_uid IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_calevents_caldav_uid ON calendar_events(caldav_uid) WHERE caldav_uid IS NOT NULL;
+    `);
+  }},
 ];
 
 function runMigrations(db) {
@@ -768,6 +774,8 @@ function resetUserPassword(db, userId, newPassword) {
 
 // -- Batches --
 function insertBatch(db, b) {
+  if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
+  if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
@@ -838,6 +846,7 @@ function clearScanLog(db) {
 
 // -- Harvests --
 function insertHarvest(db, h) {
+  if (!Number.isFinite(h.grams) || h.grams < 0) throw new Error('grams must be >= 0');
   const r = db.prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush) VALUES(?,?,?,?,?,?,?)').run(h.time, h.batch||null, h.bag||null, h.species||null, h.strain||null, h.grams, h.flush||1);
   incrementDataVersion(db);
   return r.lastInsertRowid;
