@@ -1,0 +1,793 @@
+openapi: 3.0.3
+info:
+  title: Meisterpilze Lab Tracker API
+  version: 1.0.0
+  description: REST API for the Meisterpilze mushroom lab management system.
+servers:
+  - url: https://localhost:3000
+    description: Local development (HTTPS)
+  - url: http://localhost:3000
+    description: Local development (HTTP fallback)
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    Ok:
+      type: object
+      properties:
+        ok:
+          type: boolean
+
+security:
+  - cookieAuth: []
+
+paths:
+  /api/auth/setup-required:
+    get:
+      summary: Check if initial setup is needed
+      security: []
+      responses:
+        '200':
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  setupRequired:
+                    type: boolean
+
+  /api/auth/setup:
+    post:
+      summary: Initial admin account setup
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Setup complete
+        '400':
+          description: Validation error
+
+  /api/auth/login:
+    post:
+      summary: User login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful, session cookie set
+        '401':
+          description: Invalid credentials
+
+  /api/auth/logout:
+    post:
+      summary: User logout
+      responses:
+        '200':
+          description: Session invalidated
+
+  /api/auth/me:
+    get:
+      summary: Get current user info
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  role:
+                    type: string
+
+  /api/health:
+    get:
+      summary: Server health check
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  db:
+                    type: string
+                  uptime:
+                    type: integer
+                  version:
+                    type: string
+                  sseClients:
+                    type: integer
+                  memory:
+                    type: object
+                    properties:
+                      rss:
+                        type: integer
+                      heapUsed:
+                        type: integer
+                      heapTotal:
+                        type: integer
+        '503':
+          description: Database unreachable
+
+  /api/data:
+    get:
+      summary: Fetch all application data
+      responses:
+        '200':
+          description: Full data snapshot
+    post:
+      summary: Full-state save (backup/restore only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Data saved
+
+  /api/events:
+    get:
+      summary: Server-Sent Events stream for real-time sync
+      responses:
+        '200':
+          description: SSE stream (text/event-stream)
+
+  /api/batches:
+    post:
+      summary: Create a new batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId, species, qty, days, created, due]
+              properties:
+                batchId:
+                  type: string
+                species:
+                  type: string
+                strain:
+                  type: string
+                qty:
+                  type: integer
+                days:
+                  type: integer
+                bags:
+                  type: array
+                  items:
+                    type: string
+                created:
+                  type: string
+                  format: date-time
+                due:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Batch created
+
+  /api/batches/{batchId}:
+    patch:
+      summary: Update batch fields
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                species:
+                  type: string
+                days:
+                  type: integer
+                due:
+                  type: string
+      responses:
+        '200':
+          description: Batch updated
+    delete:
+      summary: Delete a batch (cascades bags)
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Batch deleted
+
+  /api/batches/{batchId}/bags:
+    patch:
+      summary: Add bags to an existing batch
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                add:
+                  type: array
+                  items:
+                    type: string
+                newQty:
+                  type: integer
+      responses:
+        '200':
+          description: Bags added
+
+  /api/scan-log:
+    post:
+      summary: Append scan log entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      time:
+                        type: string
+                      action:
+                        type: string
+                        enum: [ADD, MOVE, REMOVE, HARVEST]
+                      batch:
+                        type: string
+                      bag:
+                        type: string
+                      from:
+                        type: string
+                      to:
+                        type: string
+      responses:
+        '200':
+          description: Entries added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ids:
+                    type: array
+                    items:
+                      type: integer
+    delete:
+      summary: Clear all scan log entries
+      responses:
+        '200':
+          description: Scan log cleared
+
+  /api/scan-log/{id}:
+    delete:
+      summary: Delete a single scan log entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Entry deleted
+
+  /api/harvests:
+    post:
+      summary: Log a harvest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [time, grams]
+              properties:
+                time:
+                  type: string
+                  format: date-time
+                batch:
+                  type: string
+                bag:
+                  type: string
+                species:
+                  type: string
+                grams:
+                  type: number
+                flush:
+                  type: integer
+      responses:
+        '200':
+          description: Harvest logged
+
+  /api/cultures:
+    post:
+      summary: Create cultures
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cultures:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                      species:
+                        type: string
+                      strain:
+                        type: string
+                      status:
+                        type: string
+      responses:
+        '200':
+          description: Cultures created
+
+  /api/cultures/{id}:
+    patch:
+      summary: Update a culture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Culture updated
+
+  /api/tasks:
+    post:
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, created]
+              properties:
+                text:
+                  type: string
+                priority:
+                  type: string
+                  enum: [low, med, high]
+                created:
+                  type: string
+                  format: date-time
+                assignee:
+                  type: string
+                dueDate:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Task created
+
+  /api/tasks/{id}:
+    patch:
+      summary: Update a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                done:
+                  type: boolean
+                text:
+                  type: string
+                priority:
+                  type: string
+                assignee:
+                  type: string
+                dueDate:
+                  type: string
+      responses:
+        '200':
+          description: Task updated
+    delete:
+      summary: Delete a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task deleted
+
+  /api/team:
+    post:
+      summary: Add a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, added]
+              properties:
+                name:
+                  type: string
+                role:
+                  type: string
+                added:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Member added
+
+  /api/team/{id}:
+    delete:
+      summary: Remove a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Member removed
+
+  /api/inventory/delta:
+    post:
+      summary: Adjust inventory stock by delta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mat, deltaKg]
+              properties:
+                mat:
+                  type: string
+                  enum: [hardwood, wheatbran, gypsum, grain]
+                deltaKg:
+                  type: number
+                type:
+                  type: string
+                ref:
+                  type: string
+      responses:
+        '200':
+          description: Stock updated
+
+  /api/inventory/set:
+    post:
+      summary: Set absolute inventory stock level
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mat, value]
+              properties:
+                mat:
+                  type: string
+                  enum: [hardwood, wheatbran, gypsum, grain]
+                value:
+                  type: number
+      responses:
+        '200':
+          description: Stock set
+
+  /api/inventory/config:
+    post:
+      summary: Update inventory thresholds and avg composition
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                thresholds:
+                  type: object
+                avgComposition:
+                  type: object
+      responses:
+        '200':
+          description: Config updated
+
+  /api/calendar-events:
+    post:
+      summary: Create a calendar event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, title, startDate]
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+                allDay:
+                  type: boolean
+                category:
+                  type: string
+                assignees:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Event created
+
+  /api/calendar-events/{id}:
+    patch:
+      summary: Update a calendar event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event updated
+    delete:
+      summary: Delete a calendar event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event deleted
+
+  /api/assets:
+    post:
+      summary: Create or update an asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetId, name, category, entryDate, purchasePrice, usefulLife, created]
+              properties:
+                assetId:
+                  type: string
+                name:
+                  type: string
+                category:
+                  type: string
+                entryDate:
+                  type: string
+                  format: date
+                purchasePrice:
+                  type: number
+                usefulLife:
+                  type: integer
+      responses:
+        '200':
+          description: Asset saved
+
+  /api/assets/{id}:
+    delete:
+      summary: Delete an asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asset deleted
+
+  /api/backup/download:
+    post:
+      summary: Download encrypted database backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Encrypted backup file (AES-256-GCM)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/backup/restore:
+    post:
+      summary: Restore database from encrypted backup
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Restore successful
+        '401':
+          description: Wrong password
+
+  /api/users:
+    get:
+      summary: List all users
+      responses:
+        '200':
+          description: User list (without password hashes)
+    post:
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [admin, user]
+      responses:
+        '200':
+          description: User created
+
+  /api/users/{id}:
+    delete:
+      summary: Delete a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User deleted
+
+  /api/usernames:
+    get:
+      summary: Get all usernames (lightweight)
+      responses:
+        '200':
+          description: Username list
+
+  /api/print:
+    post:
+      summary: Send ZPL to label printer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zpl]
+              properties:
+                zpl:
+                  type: string
+      responses:
+        '200':
+          description: Print job sent
+
+  /api/caldav/config:
+    post:
+      summary: Update CalDAV configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Config updated
