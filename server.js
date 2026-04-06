@@ -1481,7 +1481,7 @@ function handleRequest(req,res){
 
   // ── Auth gate ─────────────────────────────────────────────
   const isLoginPage=(url==='/login.html');
-  const isPublicAsset=!!url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg|manifest\.json|sw\.js)$/);
+  const isPublicAsset=!!url.match(/^\/(login\.js|icon-\d+\.png|favicon\.ico|icon\.svg|manifest\.json|sw\.js)$/);
 
   if(!isLoginPage&&!isPublicAsset){
     if(db.countUsers(database)===0){
@@ -2153,6 +2153,7 @@ function handleRequest(req,res){
   let filePath;
   if(url==='/'||url==='/index.html')filePath=path.join(DIR,'index.html');
   else if(url==='/login.html')filePath=path.join(DIR,'login.html');
+  else if(url==='/login.js')filePath=path.join(DIR,'login.js');
   else if(url==='/styles.css')filePath=path.join(DIR,'styles.css');
   else if(url==='/app.js')filePath=path.join(DIR,'app.js');
   else if(url==='/sw.js')filePath=path.join(DIR,'sw.js');
