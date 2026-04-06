@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const db = require('./db.js');
 
 // ── CONFIGURATION ────────────────────────────────────────────
@@ -47,7 +47,12 @@ const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers
-const PRINTER_NAME = process.env.PRINTER_NAME || 'ZDesigner GK420d';
+// Validated to prevent command injection via PowerShell/WMI
+const PRINTER_NAME_RAW = process.env.PRINTER_NAME || 'ZDesigner GK420d';
+if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
+  log('error', 'PRINTER_NAME contains unsafe characters, falling back to default', { value: PRINTER_NAME_RAW });
+}
+const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
 let database = db.openDb(DB_FILE);
@@ -92,9 +97,21 @@ function writeData(data){
 }
 
 function jsonBody(req, res, cb) {
-  let body='';let sz=0;
-  req.on('data',c=>{sz+=c.length;if(sz>MAX_BODY_SIZE){req.destroy();return}body+=c});
-  req.on('end',()=>{try{cb(null,JSON.parse(body))}catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":"bad json"}')}});
+  let body='';let sz=0;let aborted=false;
+  req.on('data',c=>{
+    sz+=c.length;
+    if(sz>MAX_BODY_SIZE){
+      aborted=true;
+      jsonErr(res,413,'Payload too large');
+      req.destroy();
+      return;
+    }
+    body+=c;
+  });
+  req.on('end',()=>{
+    if(aborted)return;
+    try{cb(null,JSON.parse(body))}catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":"bad json"}')}
+  });
 }
 function jsonOk(res, data) { res.writeHead(200,{'Content-Type':'application/json'}); res.end(JSON.stringify(data||{ok:true})); }
 function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'application/json'}); res.end(JSON.stringify({error:msg})); }
@@ -264,7 +281,7 @@ public class DOCINFO {
     fs.writeFile(psTmp, ps, 'utf8', err2=>{
       if(err2){fs.unlink(tmp,()=>{});return callback('Could not write PS script: '+err2.message);}
 
-      exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psTmp}"`, (e, stdout, stderr)=>{
+      execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psTmp], (e, stdout, stderr)=>{
         fs.unlink(tmp,()=>{});
         fs.unlink(psTmp,()=>{});
         if(e){
@@ -1663,9 +1680,10 @@ function handleRequest(req,res){
 
   // -- Backup Restore (encrypted .db) --
   if(req.method==='POST'&&req.url==='/api/backup/restore'){
-    const chunks=[];let sz=0;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
-    req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){req.destroy();return}chunks.push(c)});
+    const chunks=[];let sz=0;let aborted=false;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
+    req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){aborted=true;jsonErr(res,413,'Backup file too large');req.destroy();return}chunks.push(c)});
     req.on('end',()=>{
+      if(aborted)return;
       let tmpPath;
       try{
         const raw=Buffer.concat(chunks);
@@ -1728,9 +1746,10 @@ function handleRequest(req,res){
 
   // POST /api/print  —  body: { zpl: "^XA...^XZ" }
   if(req.method==='POST'&&req.url==='/api/print'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';let bodySize=0;let aborted=false;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){aborted=true;jsonErr(res,413,'Payload too large');req.destroy();return}body+=c});
     req.on('end',()=>{
+      if(aborted)return;
       try{
         const{zpl}=JSON.parse(body);
         if(!zpl){res.writeHead(400);res.end('{"error":"no zpl"}');return;}
@@ -1750,9 +1769,10 @@ function handleRequest(req,res){
 
   // POST /api/caldav/sync — write all tasks to local calendar files
   if(req.method==='POST'&&req.url==='/api/caldav/sync'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';let bodySize=0;let aborted=false;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){aborted=true;jsonErr(res,413,'Payload too large');req.destroy();return}body+=c});
     req.on('end',()=>{
+      if(aborted)return;
       try{
         const data=readData();
         const incoming=JSON.parse(body);
@@ -1774,9 +1794,10 @@ function handleRequest(req,res){
 
   // POST /api/caldav/push-one — write a single task to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-one'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';let bodySize=0;let aborted=false;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){aborted=true;jsonErr(res,413,'Payload too large');req.destroy();return}body+=c});
     req.on('end',()=>{
+      if(aborted)return;
       try{
         const{task}=JSON.parse(body);
         const isPrivate=task.private===1||task.private===true;
@@ -1804,9 +1825,10 @@ function handleRequest(req,res){
 
   // POST /api/caldav/push-event — write a single custom event to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-event'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';let bodySize=0;let aborted=false;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){aborted=true;jsonErr(res,413,'Payload too large');req.destroy();return}body+=c});
     req.on('end',()=>{
+      if(aborted)return;
       try{
         const{event}=JSON.parse(body);
         const dir=ensureCalDir('meisterpilze');
@@ -1823,9 +1845,10 @@ function handleRequest(req,res){
 
   // POST /api/caldav/push-batch — write a single batch due date to calendar file
   if(req.method==='POST'&&req.url==='/api/caldav/push-batch'){
-    let body='';let bodySize=0;
-    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){req.destroy();return}body+=c});
+    let body='';let bodySize=0;let aborted=false;
+    req.on('data',c=>{bodySize+=c.length;if(bodySize>MAX_BODY_SIZE){aborted=true;jsonErr(res,413,'Payload too large');req.destroy();return}body+=c});
     req.on('end',()=>{
+      if(aborted)return;
       try{
         const{batch}=JSON.parse(body);
         const dir=ensureCalDir('meisterpilze');
@@ -1881,7 +1904,7 @@ function handleRequest(req,res){
 
   // GET /api/printer-status
   if(req.method==='GET'&&req.url==='/api/printer-status'){
-    exec(`wmic printer where "Name='${PRINTER_NAME}'" get Name,PrinterStatus /format:csv`,(err,stdout)=>{
+    execFile('wmic', ['printer', 'where', 'Name=\'' + PRINTER_NAME + '\'', 'get', 'Name,PrinterStatus', '/format:csv'], (err,stdout)=>{
       const found=!err&&stdout.includes(PRINTER_NAME);
       res.writeHead(200,{'Content-Type':'application/json'});
       res.end(JSON.stringify({found,name:PRINTER_NAME}));
