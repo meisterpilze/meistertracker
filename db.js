@@ -754,6 +754,16 @@ function deleteUser(db, userId) {
   db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 }
 
+function updateUserPassword(db, userId, hash, salt) {
+  db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+}
+
+function resetUserPassword(db, userId, newPassword) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(newPassword, salt, 64).toString('hex');
+  db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+}
+
 // ── Atomic CRUD functions ───────────────────────────────────
 
 // -- Batches --
@@ -1027,6 +1037,7 @@ module.exports = {
   updateBatchDue, updateTaskDueDate,
   createUser, getUserByUsername, verifyPassword, createSession, getSession,
   deleteSession, deleteExpiredSessions, countUsers, listUsers, deleteUser,
+  updateUserPassword, resetUserPassword,
   insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
   appendScanEntries, deleteLastScanEntries, deleteScanEntryById, clearScanLog,
   insertHarvest, insertCultures, updateCulture,
