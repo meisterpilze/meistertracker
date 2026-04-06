@@ -2487,7 +2487,7 @@ function renderDashAlerts(){
   card.style.display='';
   const shown=all.slice(0,5);
   const more=all.length-shown.length;
-  el.innerHTML=shown.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px;padding:2px 8px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button>`}</div>`).join('')
+  el.innerHTML=shown.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px;padding:2px 8px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button>`}</div>`).join('')
     +(more>0?`<div style="font-size:11px;color:var(--c-text-muted);padding-top:4px">+${more} more</div>`:'');
 }
 
