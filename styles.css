@@ -566,7 +566,7 @@ tr:hover td{background:#f1f5f9}
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media(max-width:1024px){
   .g4{grid-template-columns:repeat(2,1fr)}
-  .rack-grid-inc{grid-template-columns:repeat(3,1fr)!important}
+
   .rack-grid-5{grid-template-columns:repeat(3,1fr)}
   .tent-columns{grid-template-columns:repeat(3,1fr)}
   .scan-modal{width:96vw;max-width:96vw}
@@ -600,7 +600,7 @@ tr:hover td{background:#f1f5f9}
   .cal-event{font-size:10px;padding:1px 5px}
   .cal-week-hdr-cell .wk-day-num{font-size:16px}
   .cal-legend{padding:6px 10px;gap:10px;font-size:11px}
-  .rack-grid-inc{grid-template-columns:repeat(2,1fr)!important}
+
   .rack-grid-5{grid-template-columns:repeat(2,1fr)}
   .tent-columns{grid-template-columns:1fr}
   .location-section{padding:12px}
