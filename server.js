@@ -1820,13 +1820,33 @@ function handleRequest(req,res){
   });
 }
 
-// ── SERVER CREATION (HTTPS-only, HTTP fallback if no certs) ──
+// ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
 let server;
 let protocol;
 if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
   const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
   server=https.createServer(tlsOpts,handleRequest);
   protocol='https';
+
+  // HTTP→HTTPS redirect server: redirect all non-localhost requests to HTTPS
+  const redirectServer=http.createServer((req,res)=>{
+    const host=(req.headers.host||'').replace(/:.*$/,'');
+    // Allow localhost HTTP for local development
+    if(host==='localhost'||host==='127.0.0.1'){
+      handleRequest(req,res);return;
+    }
+    const target='https://'+host+(PORT===443?'':':'+PORT)+req.url;
+    res.writeHead(301,{Location:target});
+    res.end();
+  });
+  const HTTP_REDIRECT_PORT=parseInt(process.env.HTTP_REDIRECT_PORT,10)||80;
+  redirectServer.listen(HTTP_REDIRECT_PORT,'0.0.0.0',()=>{
+    log('info','HTTP→HTTPS redirect active on port '+HTTP_REDIRECT_PORT);
+  }).on('error',(e)=>{
+    if(e.code==='EACCES'||e.code==='EADDRINUSE'){
+      log('warn','Could not start HTTP redirect on port '+HTTP_REDIRECT_PORT+' ('+e.code+') — HTTPS-only mode');
+    }
+  });
 }else{
   log('warn','TLS certificates not found — falling back to HTTP. Run: bash gen-cert.sh');
   server=http.createServer(handleRequest);
