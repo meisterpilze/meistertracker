@@ -59,19 +59,19 @@ let database = db.openDb(DB_FILE);
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
-const sseClients = [];
+// Uses a Set for O(1) add/delete instead of array splice.
+const sseClients = new Set();
 function broadcastSSE(excludeRes) {
   const msg = 'data: {"type":"data-changed"}\n\n';
-  for (let i = sseClients.length - 1; i >= 0; i--) {
-    const c = sseClients[i];
+  for (const c of sseClients) {
     if (c === excludeRes) continue;
-    try { c.write(msg); } catch { sseClients.splice(i, 1); }
+    try { c.write(msg); } catch { sseClients.delete(c); }
   }
 }
 setInterval(() => {
   const hb = 'data: {"type":"heartbeat"}\n\n';
-  for (let i = sseClients.length - 1; i >= 0; i--) {
-    try { sseClients[i].write(hb); } catch { sseClients.splice(i, 1); }
+  for (const c of sseClients) {
+    try { c.write(hb); } catch { sseClients.delete(c); }
   }
 }, 15000);
 
@@ -1505,7 +1505,7 @@ function handleRequest(req,res){
       version:require('./package.json').version
     };
     if(authUser){
-      health.sseClients=sseClients.length;
+      health.sseClients=sseClients.size;
       health.memory={
         rss:Math.round(mem.rss/1024/1024),
         heapUsed:Math.round(mem.heapUsed/1024/1024),
@@ -1521,8 +1521,8 @@ function handleRequest(req,res){
   if(req.method==='GET'&&req.url==='/api/events'){
     res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
     res.write('data: {"type":"connected"}\n\n');
-    sseClients.push(res);
-    req.on('close',()=>{const i=sseClients.indexOf(res);if(i>=0)sseClients.splice(i,1)});
+    sseClients.add(res);
+    req.on('close',()=>sseClients.delete(res));
     return;
   }
 
