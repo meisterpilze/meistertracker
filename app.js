@@ -2190,7 +2190,7 @@ function go(page,btnId){
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('p-'+actualPage).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(actualPage==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
+  if(actualPage==='dash'){renderStatus();renderDashAlerts();}
   if(actualPage==='batch')renderBatches();
   if(actualPage==='lab')renderCultures();
   if(actualPage==='inv'){renderInvStock();}
@@ -2231,7 +2231,7 @@ function openStab(page,sub){
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderRacks();renderLocTabs();renderDashAlerts();}
+  if(id==='dash'){renderStatus();renderDashAlerts();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
@@ -2367,61 +2367,145 @@ function renderHarvestChart(){
   });
 }
 
-let statusCardMode=false;
-function toggleStatusView(){
-  statusCardMode=!statusCardMode;
-  document.getElementById('status-table-view').style.display=statusCardMode?'none':'block';
-  document.getElementById('status-card-view').style.display=statusCardMode?'block':'none';
-  document.getElementById('status-view-btn').textContent=statusCardMode?t('dash.table'):t('dash.cards');
-  if(statusCardMode)renderStatusCards();
+function renderBatchCard(batchId, bags, zone, q){
+  const b=batches.find(x=>x.batchId===batchId);
+  if(!b)return'';
+  if(q&&!batchId.toLowerCase().includes(q)&&!b.species.toLowerCase().includes(q)&&!(b.strain||'').toLowerCase().includes(q))return'';
+  const harv=getHarvested(batchId);
+  const due=new Date(b.due);
+  const now=new Date();
+  const ov=due<now&&(zone==='SPAWN'||zone==='INC');
+  const bagList=bags.sort((a,c)=>{const na=parseInt(a.id.split('-').pop())||0,nc=parseInt(c.id.split('-').pop())||0;return na-nc});
+  return`<div class="batch-card${ov?' batch-overdue':''}" onclick="this.classList.toggle('expanded')">
+    <div class="batch-card-header">
+      ${spDot(b.species)}<span class="batch-card-species">${esc(b.species)}</span>
+      <span class="batch-card-strain">${esc(b.strain||'')}</span>
+      <span class="batch-card-count">${bagList.length} bags</span>
+    </div>
+    <div class="batch-card-meta">
+      <span style="font-family:monospace">${esc(batchId)}</span>
+      ${harv>0?`<span style="color:#92400e">${t('dash.harvestedAmount',{g:harv})}</span>`:''}
+      <span${ov?' class="overdue-tag"':''}>${t('dash.due')}: ${fmtDt(due)}${ov?' \u26a0':''}</span>
+    </div>
+    <div class="batch-card-chips">${bagList.map(bg=>{
+      const sel=selectedLocBags.has(bg.id);
+      return`<span class="bag-chip${sel?' selected':''}" id="lb-${bg.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${esc(bg.id)}" data-batch="${esc(batchId)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+    }).join('')}</div>
+  </div>`;
 }
 
-function renderStatusCards(){
-  const q=(document.getElementById('status-q').value||'').toLowerCase();
-  const el=document.getElementById('status-card-view');
-  const filtered=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q));
-  if(!filtered.length){el.innerHTML='<div class="empty">'+t('dash.noMatches')+'</div>';return}
-  el.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px';
-  el.innerHTML=filtered.map(b=>{
-    const{c,status,action}=getStatus(b.batchId);
-    const harv=getHarvested(b.batchId);
-    const due=new Date(b.due);const ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
-    const stages=[['S',c.SPAWN,'#9b59b6'],['I',c.INC,'#3498db'],['T',c.TENT1+c.TENT2+c.TENT3,'#2ecc71'],['!',c.CONTAM,'#e74c3c']].filter(x=>x[1]>0);
-    const statusColors={INCUBATING:'#dbeafe',FRUITING:'#dcfce7','SPAWN RUN':'#f3e8ff',CONTAM:'#fee2e2',DONE:'#f5f4f0',EMPTY:'#f5f4f0'};
-    return`<div style="border:1px solid ${ov?'#fecaca':'#e5e3dd'};border-radius:10px;padding:12px;background:${ov?'#fff5f5':'#fff'}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
-        <div>
-          <div style="font-size:11px;font-family:monospace;color:#888">${esc(b.batchId)}</div>
-          <div style="font-size:14px;font-weight:600;margin-top:1px">${spDot(b.species)}${esc(b.species)}</div>
-          <div style="font-size:11px;color:#888">${esc(b.strain)}</div>
-        </div>
-        <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${statusColors[status]||'#f5f4f0'};color:#555;flex-shrink:0;margin-left:4px">${status}</span>
+function renderRackSection(titleKey, racks, stageColor, q){
+  let totalBags=0;
+  const rackCards=racks.map(rackId=>{
+    const bags=getRackBags(rackId);
+    const entries=Object.entries(bags);
+    const count=entries.length;
+    totalBags+=count;
+    const num=rackId.split('_R')[1]||rackId;
+    const byBatch={};
+    entries.forEach(([bagId,d])=>{
+      if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
+      byBatch[d.batchId].bags.push({id:bagId,loc:rackId});
+    });
+    const zone=RACK_ZONE[rackId]||'SPAWN';
+    const batchCards=Object.entries(byBatch).map(([bid,d])=>renderBatchCard(bid,d.bags,zone,q)).filter(Boolean).join('');
+    if(q&&!batchCards&&count>0)return'';
+    return`<div class="rack-card">
+      <div class="rack-card-header">
+        <span class="rack-card-name">${t('dash.rackLabel',{n:num})}</span>
+        <span class="rack-card-count">${tp('dash.bags',count)}</span>
       </div>
-      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
-        ${stages.map(([l,n,col])=>`<span style="font-size:11px;font-weight:600;background:${col}22;color:${col};border:1px solid ${col}44;padding:1px 7px;border-radius:99px">${l}: ${n}</span>`).join('')}
-      </div>
-      ${harv>0?`<div style="font-size:11px;color:#92400e;font-weight:500;margin-bottom:4px">${t('dash.harvestedAmount',{g:harv})}</div>`:''}
-      <div style="font-size:10px;color:${ov?'#b91c1c':'#aaa'}">${t('dash.due')}: ${fmtDt(due)}${ov?' ⚠':''}</div>
-      ${action?`<div style="font-size:11px;color:#666;margin-top:4px;font-style:italic">${action}</div>`:''}
+      <div class="rack-card-bar"><div class="rack-card-bar-fill" style="background:${count>0?stageColor:'var(--c-border-light)'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
+      ${batchCards||`<div style="font-size:11px;color:var(--c-text-muted)">${t('dash.empty')}</div>`}
     </div>`;
-  }).join('');
+  }).filter(Boolean);
+  if(q&&!rackCards.length)return'';
+  const gridClass=racks.length>2?'rack-grid rack-grid-5':'rack-grid';
+  return`<div class="location-section" style="border-left-color:${stageColor}">
+    <div class="location-section-header">
+      <div class="location-section-title"><span class="dot" style="background:${stageColor}"></span>${t(titleKey)}</div>
+      <div class="location-section-count">${tp('dash.bags',totalBags)}</div>
+    </div>
+    <div class="${gridClass}">${rackCards.join('')}</div>
+  </div>`;
+}
+
+function renderTentsSection(q){
+  const tents=['TENT1','TENT2','TENT3'];
+  const tentKeys=['dash.zoneTent1','dash.zoneTent2','dash.zoneTent3'];
+  let totalBags=0;
+  const cols=tents.map((tz,i)=>{
+    const bags=getZoneBags(tz);
+    const entries=Object.entries(bags);
+    totalBags+=entries.length;
+    const byBatch={};
+    entries.forEach(([bagId,d])=>{
+      if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
+      byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
+    });
+    const batchCards=Object.entries(byBatch).map(([bid,d])=>renderBatchCard(bid,d.bags,tz,q)).filter(Boolean).join('');
+    return`<div class="tent-column">
+      <div class="tent-column-header">${t(tentKeys[i])}<span class="tent-column-count">${tp('dash.bags',entries.length)}</span></div>
+      ${batchCards||`<div style="font-size:12px;color:var(--c-text-muted);padding:8px 0">${t('dash.empty')}</div>`}
+    </div>`;
+  });
+  if(q&&totalBags===0)return'';
+  return`<div class="location-section" style="border-left-color:#2ecc71">
+    <div class="location-section-header">
+      <div class="location-section-title"><span class="dot" style="background:#2ecc71"></span>${t('dash.fruitingTents')}</div>
+      <div class="location-section-count">${tp('dash.bags',totalBags)}</div>
+    </div>
+    <div class="tent-columns">${cols.join('')}</div>
+  </div>`;
+}
+
+function renderContamSection(q){
+  const bags=getZoneBags('CONTAM');
+  const entries=Object.entries(bags);
+  if(!entries.length)return'';
+  const byBatch={};
+  entries.forEach(([bagId,d])=>{
+    if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
+    byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
+  });
+  const batchCards=Object.entries(byBatch).map(([bid,d])=>renderBatchCard(bid,d.bags,'CONTAM',q)).filter(Boolean).join('');
+  if(q&&!batchCards)return'';
+  return`<div class="location-section contam-section">
+    <div class="location-section-header">
+      <div class="location-section-title"><span class="dot" style="background:#e74c3c"></span>\u26a0 ${t('dash.zoneContam')}</div>
+      <div class="location-section-count">${tp('dash.bags',entries.length)}</div>
+    </div>
+    ${batchCards}
+  </div>`;
 }
 
 function renderStatus(){
-  const q=(document.getElementById('status-q').value||'').toLowerCase(),body=document.getElementById('status-body');
-  if(!batches.length){body.innerHTML='<tr><td colspan="14" class="empty">'+t('dash.noBatches')+'</td></tr>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
+  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
+  const el=document.getElementById('dash-locations');
+  // Compute metrics
   let ti=0,tt=0,tc=0;
-  const rows=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
-    const{c,total,status,action}=getStatus(b.batchId);ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
-    const due=new Date(b.due),ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
-    const harv=getHarvested(b.batchId);
-    return`<tr class="${ov?'alert-tr':''}"><td style="font-family:monospace;font-size:10px">${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${c.SPAWN||''}</td><td>${c.INC||''}</td><td>${c.TENT1||''}</td><td>${c.TENT2||''}</td><td>${c.TENT3||''}</td><td style="color:${c.CONTAM>0?'#b91c1c':'inherit'}">${c.CONTAM||''}</td><td style="font-weight:600">${total}</td><td style="color:#92400e;font-size:11px">${harv>0?harv+'g':''}</td><td style="font-size:10px;color:${ov?'#b91c1c':'#888'}">${fmtDt(due)}</td><td>${sbadge(status)}</td><td style="font-size:11px;color:#666">${action}</td></tr>`;
+  batches.forEach(b=>{
+    const{c}=getStatus(b.batchId);
+    ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
   });
-  body.innerHTML=rows.join('')||'<tr><td colspan="14" class="empty">'+t('dash.noMatches')+'</td></tr>';
   renderMetrics(batches.length,ti,tt,tc);
   renderPipelineChart();
   renderHarvestChart();
-  if(statusCardMode)renderStatusCards();
+  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';return}
+  // Build location sections
+  let html='';
+  html+=renderRackSection('dash.zoneSpawn',SPAWN_RACKS,'#9b59b6',q);
+  html+=renderRackSection('dash.zoneInc',INC_RACKS,'#3498db',q);
+  html+=renderTentsSection(q);
+  html+=renderContamSection(q);
+  el.innerHTML=html||'<div class="empty">'+t('dash.noMatches')+'</div>';
+  // Event delegation for bag chips
+  el.onclick=function(e){
+    const chip=e.target.closest('.bag-chip');
+    if(!chip)return;
+    e.preventDefault();e.stopPropagation();
+    toggleLocBag(chip.dataset.bag,chip.dataset.batch,chip.dataset.loc);
+  };
 }
 function renderDashAlerts(){
   const tasks=buildAutoTasks().filter(t=>t.urgent||t.warn);
@@ -2432,7 +2516,7 @@ function renderDashAlerts(){
   el.innerHTML=all.slice(0,8).map(tk=>`<div class="todo-row ${tk.urgent?'urgent':'warn'}"><span class="pdot ${tk.urgent?'high':'med'}"></span><div style="flex:1"><div style="font-size:13px;font-weight:500">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div><div style="font-size:11px;color:#888;margin-top:1px">${esc(tk.detail)}</div></div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px">${t('inv.stock')}</button>`}</div>`).join('');
 }
 
-// ─── RACKS ───────────────────────────────────────────────────
+// ─── DATA FUNCTIONS ─────────────────────────────────────────
 function getRackBags(rackId){
   const bags={};
   scanLog.forEach(e=>{
@@ -2442,33 +2526,6 @@ function getRackBags(rackId){
   });
   return bags;
 }
-function renderRacks(){
-  const render=(ids,elId)=>{
-    document.getElementById(elId).innerHTML=ids.map(id=>{
-      const bags=getRackBags(id),count=Object.keys(bags).length;
-      const byBatch={};Object.values(bags).forEach(b=>{if(!byBatch[b.batchId])byBatch[b.batchId]={c:0,sp:b.species};byBatch[b.batchId].c++});
-      const label=id.replace(/_/g,' ');
-      return`<div class="rack-card" onclick="showRack('${id}')">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${label}</span><span style="font-size:12px;color:${count>0?'#1a1a1a':'#aaa'}">${tp('dash.bags',count)}</span></div>
-        <div style="height:4px;border-radius:2px;background:#f0ede8;overflow:hidden;margin-bottom:4px"><div style="height:100%;border-radius:2px;background:${count>0?'#3498db':'#e5e3dd'};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
-        <div style="font-size:10px;color:#888">${Object.entries(byBatch).length?Object.entries(byBatch).map(([bid,d])=>`${spDot(d.sp)}<span style="font-family:monospace">${esc(bid)}</span>(${d.c})`).join(' '):t('dash.empty')}</div>
-      </div>`;
-    }).join('');
-  };
-  render(SPAWN_RACKS,'racks-spawn');render(INC_RACKS,'racks-inc');
-}
-function showRack(id){
-  const bags=getRackBags(id),entries=Object.entries(bags);
-  const el=document.getElementById('rack-detail');
-  document.getElementById('rack-detail-title').textContent=id.replace(/_/g,' ')+' \u2014 '+tp('dash.bags',entries.length);
-  if(!entries.length){document.getElementById('rack-detail-body').innerHTML='<div class="empty">'+t('dash.noBagsOnRack')+'</div>';el.style.display='block';return}
-  const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push(bagId)});
-  document.getElementById('rack-detail-body').innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${spDot(d.sp)}${esc(bid)} — ${esc(d.sp)}/${esc(d.st)} (${d.bags.length} bags)</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#fff;border:1px solid #e5e3dd;padding:2px 6px;border-radius:4px">${b}</span>`).join('')}</div></div>`).join('');
-  el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-
-// ─── LOCATION TABS ──────────────────────────────────────────
-let activeLocTab='SPAWN';
 const selectedLocBags=new Map(); // bagId → {batchId, loc}
 function getZoneBags(zone){
   const bags={};
@@ -2483,48 +2540,47 @@ function getZoneBags(zone){
   });
   return bags;
 }
-function renderLocTabs(){
-  const tabs=document.getElementById('loc-tabs');
-  tabs.innerHTML=ZONES.map(z=>{
-    const count=Object.keys(getZoneBags(z)).length;
-    return`<button class="btn btn-sm${activeLocTab===z?' btn-p':''}" onclick="activeLocTab='${z}';selectedLocBags.clear();renderLocTabs()" style="font-size:11px">${z} <span style="font-size:10px;opacity:.7">(${count})</span></button>`;
-  }).join('');
-  renderLocBody();
-}
+
+// ─── BAG INTERACTION ────────────────────────────────────────
 function toggleLocBag(bagId,batchId,loc){
   if(selectedLocBags.has(bagId))selectedLocBags.delete(bagId);
   else selectedLocBags.set(bagId,{batchId,loc});
   // Update chip style
   const el=document.getElementById('lb-'+bagId.replace(/[^a-zA-Z0-9]/g,'_'));
-  if(el){
-    const sel=selectedLocBags.has(bagId);
-    el.style.background=sel?'#1a1a1a':'#fff';
-    el.style.color=sel?'#fff':'#333';
-    el.style.border=sel?'1px solid #1a1a1a':'1px solid #e5e3dd';
-  }
+  if(el){el.classList.toggle('selected',selectedLocBags.has(bagId))}
   // Update action bar
   const bar=document.getElementById('loc-action-bar');
   const n=selectedLocBags.size;
   if(n>0){
     bar.style.display='flex';
     bar.innerHTML=`<span style="font-size:12px;font-weight:600">${tp('dash.bagsSelected',n)}</span><span style="flex:1"></span>
-      <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">${t('dash.selectAll')}</button>
-      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">${t('dash.clear')}</button>
+      <button class="btn btn-sm" onclick="locSelectAllVisible()" style="font-size:11px">${t('dash.selectAll')}</button>
+      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderStatus()" style="font-size:11px">${t('dash.clear')}</button>
       <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
       <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>`;
   }else{
     bar.style.display='none';
   }
 }
-function locSelectAll(){
-  const bags=getZoneBags(activeLocTab);
-  Object.entries(bags).forEach(([bagId,d])=>selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc}));
-  renderLocBody();
+function locSelectAllVisible(){
+  ZONES.forEach(z=>{
+    const bags=getZoneBags(z);
+    Object.entries(bags).forEach(([bagId,d])=>selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc}));
+  });
+  renderStatus();
+}
+function _getFromLoc(){
+  // Derive most common zone from selected bags
+  const counts={};
+  selectedLocBags.forEach(d=>{const z=toZone(d.loc);counts[z]=(counts[z]||0)+1});
+  let best='',max=0;
+  Object.entries(counts).forEach(([z,n])=>{if(n>max){max=n;best=z}});
+  return best;
 }
 function openLocMovePopup(){
   if(!selectedLocBags.size)return;
   const n=selectedLocBags.size;
-  const fromLoc=activeLocTab;
+  const fromLoc=_getFromLoc();
   const m=document.getElementById('m-locmove');
   document.getElementById('lm-title').textContent=tp('dash.bags',n);
   document.getElementById('lm-info').textContent=t('dash.currentlyIn',{loc:fromLoc});
@@ -2542,48 +2598,19 @@ function locPreConfirm(toLoc){
   const c=document.getElementById('lm-confirm');
   c.style.display='block';
   const n=selectedLocBags.size;
+  const fromLoc=_getFromLoc();
   const ids=[...selectedLocBags.keys()];
   const preview=ids.length<=6?ids.map(id=>id.split('-').pop()).join(', '):ids.slice(0,5).map(id=>id.split('-').pop()).join(', ')+' + '+(ids.length-5)+' more';
   c.innerHTML=`<div style="text-align:center;padding:12px 0">
     <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags',{n:n})}</div>
     <div style="font-size:11px;color:#888;margin-bottom:8px;font-family:monospace">${preview}</div>
-    <div style="font-size:20px;margin-bottom:16px">${activeLocTab} \u2192 <strong>${toLoc}</strong></div>
+    <div style="font-size:20px;margin-bottom:16px">${esc(fromLoc)} \u2192 <strong>${esc(toLoc)}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
       <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">${t('nav.cancel')}</button>
       <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">${t('confirm.confirm')}</button>
     </div>
   </div>`;
 }
-function renderLocBody(){
-  const bags=getZoneBags(activeLocTab),entries=Object.entries(bags),el=document.getElementById('loc-body');
-  if(!entries.length){selectedLocBags.clear();el.innerHTML='<div class="empty" style="font-size:12px">'+t('dash.noBagsIn',{loc:activeLocTab})+'</div><div id="loc-action-bar" style="display:none"></div>';return}
-  const byBatch={};entries.forEach(([bagId,d])=>{if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};byBatch[d.batchId].bags.push({id:bagId,loc:d.loc})});
-  Object.values(byBatch).forEach(d=>d.bags.sort((a,b)=>{const na=parseInt(a.id.split('-').pop())||0,nb=parseInt(b.id.split('-').pop())||0;return na-nb}));
-  const n=selectedLocBags.size;
-  el.innerHTML=Object.entries(byBatch).map(([bid,d])=>`<div style="margin-bottom:12px">
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px">${spDot(d.sp)}${esc(bid)} <span style="font-weight:400;color:#888">— ${esc(d.sp)}/${esc(d.st)}</span> <span style="font-size:11px;color:#aaa">(${d.bags.length})</span></div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px">${d.bags.map(b=>{
-      const sel=selectedLocBags.has(b.id);
-      return`<span id="lb-${b.id.replace(/[^a-zA-Z0-9]/g,'_')}" data-bag="${esc(b.id)}" data-batch="${esc(bid)}" data-loc="${esc(b.loc)}" style="font-size:11px;font-family:monospace;padding:4px 8px;border-radius:6px;cursor:pointer;${sel?'background:#1a1a1a;color:#fff;border:1px solid #1a1a1a':'background:#fff;border:1px solid #e5e3dd;color:#333'}">
-        ${b.id.split('-').pop()}${b.loc!==activeLocTab?` <span style="font-size:9px;color:${sel?'#aaa':'#999'}">${esc(b.loc)}</span>`:''}
-      </span>`;
-    }).join('')}</div>
-  </div>`).join('')
-  +`<div id="loc-action-bar" style="${n>0?'display:flex':'display:none'};align-items:center;gap:8px;flex-wrap:wrap;background:#f9f8f5;border:1px solid #e5e3dd;border-radius:8px;padding:8px 12px;margin-top:8px">
-    <span style="font-size:12px;font-weight:600">${tp('dash.bagsSelected',n)}</span><span style="flex:1"></span>
-    <button class="btn btn-sm" onclick="locSelectAll()" style="font-size:11px">${t('dash.selectAll')}</button>
-    <button class="btn btn-sm" onclick="selectedLocBags.clear();renderLocBody()" style="font-size:11px">${t('dash.clear')}</button>
-    <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
-    <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>
-  </div>`;
-}
-// Event delegation — no inline onclick, prevents scroll
-document.getElementById('loc-body').addEventListener('click',function(e){
-  const chip=e.target.closest('span[data-bag]');
-  if(!chip)return;
-  e.preventDefault();e.stopPropagation();
-  toggleLocBag(chip.dataset.bag,chip.dataset.batch,chip.dataset.loc);
-});
 let lastLocUndoCount=0;
 function locMoveTo(toLoc){
   if(!selectedLocBags.size)return;
@@ -2595,7 +2622,7 @@ function locMoveTo(toLoc){
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log',{entries});updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiPost('/api/scan-log',{entries});updateSD();renderStatus();
   setLocFb(t('scanFb.moved',{n:n,loc:toLoc}));
 }
 function locRemoveSelected(){
@@ -2609,7 +2636,7 @@ function locRemoveSelected(){
   });
   lastLocUndoCount=n;
   selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log',{entries});updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiPost('/api/scan-log',{entries});updateSD();renderStatus();
   setLocFb(t('scanFb.removed',{n:n}));
 }
 function setLocFb(msg){
@@ -2623,7 +2650,7 @@ function locUndo(){
   if(!lastLocUndoCount)return;
   const n2=lastLocUndoCount;scanLog.splice(scanLog.length-n2,n2);
   lastLocUndoCount=0;
-  apiDelete('/api/scan-log/last/'+n2);updateSD();renderLocTabs();renderRacks();renderStatus();
+  apiDelete('/api/scan-log/last/'+n2);updateSD();renderStatus();
   setFb('ok','Undo successful');
 }
 
@@ -3062,7 +3089,7 @@ function deleteLogEntry(btn,time,batch,action){
     if(mi!==-1)movements.splice(mi,1);
     const serverId=entry._serverId||entry.id;
     if(serverId)apiDelete('/api/scan-log/'+serverId);
-    renderLog();renderLocTabs();renderRacks();renderStatus();
+    renderLog();renderStatus();
   });
 }
 function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
@@ -4010,7 +4037,7 @@ function undoScanEntry(btn){
   scan.count=Math.max(0,scan.count-1);
   _scanBeep(400,100);
   setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
-  updateSD();renderLocTabs();renderRacks();
+  updateSD();renderStatus();
 }
 // Ctrl+Z undo support
 let _ctrlZPending=false;let _ctrlZTimer=null;

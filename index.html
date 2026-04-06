@@ -142,7 +142,7 @@
     <div id="lm-grid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     <div id="lm-confirm" style="display:none"></div>
     <div style="border-top:1px solid #e5e3dd;margin-top:14px;padding-top:12px">
-      <button class="btn btn-sm btn-r" onclick="locRemoveBag()" style="width:100%">Remove this bag</button>
+      <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="width:100%">Remove selected bags</button>
     </div>
   </div>
 </div>
@@ -281,9 +281,6 @@
 
   <!-- Sticky action bar for bag selection -->
   <div id="loc-action-bar" class="action-bar-sticky" style="display:none"></div>
-
-  <!-- Temporary: event delegation target (removed in Step 3) -->
-  <div id="loc-body" style="display:none"></div>
 
   <!-- Charts row (moved to bottom) -->
   <div class="g2" style="margin-bottom:10px">
