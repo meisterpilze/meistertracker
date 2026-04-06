@@ -56,6 +56,7 @@ const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 
 let database = db.openDb(DB_FILE);
+let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
@@ -200,12 +201,16 @@ function sendUnauthorized(res,isApi){
   }
 }
 
+function cookieFlags(){
+  return 'HttpOnly; SameSite=Strict; Path=/;'+(protocol==='https'?' Secure;':'');
+}
+
 function setSessionCookie(res,token){
-  res.setHeader('Set-Cookie','session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000');
+  res.setHeader('Set-Cookie','session='+token+'; '+cookieFlags()+' Max-Age=2592000');
 }
 
 function clearSessionCookie(res){
-  res.setHeader('Set-Cookie','session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie','session=; '+cookieFlags()+' Max-Age=0');
 }
 
 // Clean expired sessions on startup and hourly
@@ -2029,7 +2034,6 @@ function handleRequest(req,res){
 
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
 let server;
-let protocol;
 if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
   const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
   server=https.createServer(tlsOpts,handleRequest);
