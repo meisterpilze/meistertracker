@@ -1621,6 +1621,7 @@ function handleRequest(req,res){
 
   // POST /api/data — full-state save (used by client saveData())
   if(req.method==='POST'&&url==='/api/data'){
+    if(requireAdmin(req,res))return;
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       try{writeData(data);const version=db.getDataVersion(database);broadcastSSE(res);jsonOk(res,{version});try{autoSyncAllCaldav(data)}catch(ce){log('error','CalDAV auto-sync failed',{error:ce.message})}}catch(err){safeErr(res,err)}
@@ -1665,10 +1666,12 @@ function handleRequest(req,res){
   }
   const scanLastMatch=req.url.match(/^\/api\/scan-log\/last\/(\d+)$/);
   if(req.method==='DELETE'&&scanLastMatch){
+    if(requireAdmin(req,res))return;
     try{db.deleteLastScanEntries(database,parseInt(scanLastMatch[1]));broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
   const scanIdMatch=req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if(req.method==='DELETE'&&scanIdMatch){
+    if(requireAdmin(req,res))return;
     try{const ok=db.deleteScanEntryById(database,parseInt(scanIdMatch[1]));broadcastSSE(res);jsonOk(res,{deleted:ok})}catch(err){safeErr(res,err)}return;
   }
   if(req.method==='DELETE'&&req.url==='/api/scan-log'){
@@ -1722,6 +1725,7 @@ function handleRequest(req,res){
 
   // -- Team Members --
   if(req.method==='POST'&&req.url==='/api/team'){
+    if(requireAdmin(req,res))return;
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['name']);if(vr){jsonErr(res,400,vr);return}
@@ -1732,6 +1736,7 @@ function handleRequest(req,res){
   }
   const teamMatch=req.url.match(/^\/api\/team\/(\d+)$/);
   if(req.method==='DELETE'&&teamMatch){
+    if(requireAdmin(req,res))return;
     const id=parseInt(teamMatch[1]);
     try{db.deleteMember(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
@@ -1805,11 +1810,13 @@ function handleRequest(req,res){
     });return;
   }
   if(req.method==='POST'&&req.url==='/api/inventory/config'){
+    if(requireAdmin(req,res))return;
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateInventoryConfig(database,data.thresholds,data.avgComposition);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
   // -- Backup Download (encrypted .db) --
   if(req.method==='POST'&&req.url==='/api/backup/download'){
+    if(requireAdmin(req,res))return;
     jsonBody(req,res,(e,data)=>{
       let tmpDest;
       try{
