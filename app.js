@@ -4352,7 +4352,7 @@ async function loadUsersTab(){
   const c=document.getElementById('sp-settings-users');
   if(!c)return;
   const acct=document.getElementById('users-account');
-  if(acct&&currentUser)acct.innerHTML=`Logged in as <b>${esc(currentUser.username)}</b> (${esc(currentUser.role)})`;
+  if(acct&&currentUser)acct.innerHTML=`Logged in as <b>${esc(currentUser.username)}</b> (${esc(currentUser.role)}) <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">Change Password</button>`;
   if(!currentUser||currentUser.role!=='admin'){
     const tbl=document.getElementById('users-table');
     if(tbl)tbl.innerHTML='<p style="color:#888">Admin access required to manage users.</p>';
@@ -4391,6 +4391,27 @@ async function deleteUser(id){
     if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
     loadUsersTab();
   }catch(e){alert(e.message)}
+}
+
+function showChangePasswordModal(){
+  const m=document.getElementById('change-pw-modal');
+  if(m){m.style.display='flex';document.getElementById('chpw-current').value='';document.getElementById('chpw-new').value='';document.getElementById('chpw-status').textContent='';}
+}
+function hideChangePasswordModal(){
+  const m=document.getElementById('change-pw-modal');if(m)m.style.display='none';
+}
+async function submitChangePassword(){
+  const cur=document.getElementById('chpw-current').value;
+  const nw=document.getElementById('chpw-new').value;
+  const st=document.getElementById('chpw-status');
+  if(!cur||!nw){st.textContent='Both fields are required.';st.style.color='red';return}
+  if(nw.length<8){st.textContent='New password must be at least 8 characters.';st.style.color='red';return}
+  try{
+    const r=await authFetch('/api/auth/password',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});
+    if(!r.ok){const d=await r.json().catch(()=>({}));st.textContent=d.error||'Failed';st.style.color='red';return}
+    st.textContent='Password changed successfully.';st.style.color='green';
+    setTimeout(()=>hideChangePasswordModal(),1500);
+  }catch(e){st.textContent='Error: '+e.message;st.style.color='red'}
 }
 
 // ─── INIT ────────────────────────────────────────────────────

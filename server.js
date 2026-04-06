@@ -1550,6 +1550,37 @@ function handleRequest(req,res){
     res.end(JSON.stringify({ok:true}));return;
   }
 
+  // PATCH /api/auth/password — change own password (any authenticated user)
+  if(url==='/api/auth/password'&&req.method==='PATCH'){
+    const session=checkAuth(req);
+    if(!session){sendUnauthorized(res,true);return;}
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      if(!data||!data.currentPassword||!data.newPassword){jsonErr(res,400,'currentPassword and newPassword required');return}
+      if(data.newPassword.length<8){jsonErr(res,400,'New password must be at least 8 characters');return}
+      const user=db.getUserByUsername(database,session.username);
+      if(!user){jsonErr(res,404,'User not found');return}
+      if(!db.verifyPassword(user.hash,user.salt,data.currentPassword)){jsonErr(res,401,'Current password is incorrect');return}
+      const salt=crypto.randomBytes(16).toString('hex');
+      const hash=crypto.scryptSync(data.newPassword,salt,64).toString('hex');
+      db.updateUserPassword(database,user.id,hash,salt);
+      jsonOk(res);
+    });return;
+  }
+
+  // PATCH /api/users/:id/password — admin reset any user's password
+  if(url.match(/^\/api\/users\/\d+\/password$/)&&req.method==='PATCH'){
+    if(requireAdmin(req,res))return;
+    const userId=parseInt(url.split('/')[3]);
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      if(!data||!data.newPassword){jsonErr(res,400,'newPassword required');return}
+      if(data.newPassword.length<8){jsonErr(res,400,'New password must be at least 8 characters');return}
+      db.resetUserPassword(database,userId,data.newPassword);
+      jsonOk(res);
+    });return;
+  }
+
   // GET /api/health
   if(req.method==='GET'&&req.url==='/api/health'){
     let dbOk=false;

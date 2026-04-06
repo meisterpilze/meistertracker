@@ -42,6 +42,19 @@
     <div class="modal-btns"><button class="btn" onclick="closeConfirm()">Cancel</button><button class="btn btn-r" id="m-ok">Confirm</button></div>
   </div>
 </div>
+<!-- Change password modal -->
+<div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" aria-label="Change password" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center" onclick="if(event.target===this)hideChangePasswordModal()">
+  <div class="modal" style="max-width:360px">
+    <h3>Change Password</h3>
+    <label style="display:block;margin-bottom:8px">Current password<br><input type="password" id="chpw-current" style="width:100%;padding:6px;margin-top:4px" autocomplete="current-password"></label>
+    <label style="display:block;margin-bottom:8px">New password (min 8 chars)<br><input type="password" id="chpw-new" style="width:100%;padding:6px;margin-top:4px" autocomplete="new-password"></label>
+    <p id="chpw-status" style="min-height:1.2em;margin:8px 0"></p>
+    <div class="modal-btns">
+      <button class="btn" onclick="hideChangePasswordModal()">Cancel</button>
+      <button class="btn btn-p" onclick="submitChangePassword()">Change</button>
+    </div>
+  </div>
+</div>
 <!-- Note modal -->
 <div class="modal-bg" id="m-note" role="dialog" aria-modal="true" aria-labelledby="m-note-title">
   <div class="modal"><h3 id="m-note-title">Edit note</h3>
