@@ -3749,8 +3749,7 @@ function lwPreview(){
   prev.textContent=Array.from({length:qty},(_,i)=>prefix+String(existing+i+1).padStart(2,'0')).join('\n');
   box.style.display='block';
 }
-document.getElementById('lw-sp').addEventListener('input',lwPreview);
-document.getElementById('lw-qty').addEventListener('input',lwPreview);
+// lw-sp and lw-qty input listeners moved to initEventListeners()
 function logLabWork(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),st=document.getElementById('lw-st').value.trim();
   const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
@@ -5182,6 +5181,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+initEventListeners();
 loadCurrentUser();
 loadAppUsers();
 loadData();
@@ -5218,4 +5218,195 @@ function updateOfflineBadge(count){
     else document.querySelector('.topbar')?.appendChild(badge);
   }
   badge.textContent=count+' queued';
+}
+
+// ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
+function initEventListeners() {
+  const $=id=>document.getElementById(id);
+
+  // Modals
+  $('addbags-cancel-btn').addEventListener('click', () => { document.getElementById('m-addbags').classList.remove('open'); });
+  $('addbags-confirm-btn').addEventListener('click', confirmAddBags);
+  $('m-cancel').addEventListener('click', closeConfirm);
+  $('change-pw-modal').addEventListener('click', function(e) { if(e.target===this) hideChangePasswordModal(); });
+  $('btn-1').addEventListener('click', hideChangePasswordModal);
+  $('act-2').addEventListener('click', submitChangePassword);
+  $('cls-3').addEventListener('click', closeNote);
+  $('act-4').addEventListener('click', saveNote);
+  $('cal-ev-allday').addEventListener('change', toggleCalTimeInputs);
+  $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
+  $('cal-ev-del-btn').addEventListener('click', deleteCalEvent);
+  $('cls-5').addEventListener('click', closeEventModal);
+  $('act-6').addEventListener('click', saveCalEvent);
+  $('m-cal-detail').addEventListener('click', function(e) { if(e.target===this) closeEventDetail(); });
+  $('ba-batch').addEventListener('change', baPreview);
+  $('ba-loc').addEventListener('change', baPreview);
+  $('cls-7').addEventListener('click', closeBatchAdd);
+  $('act-8').addEventListener('click', confirmBatchAdd);
+  $('m-locmove').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
+  $('cls-9').addEventListener('click', () => { document.getElementById('m-locmove').classList.remove('open'); });
+  $('btn-10').addEventListener('click', locRemoveBag);
+  $('cls-11').addEventListener('click', () => { document.getElementById('m-baginfo').classList.remove('open'); });
+  $('set-12').addEventListener('click', () => { biSetAction('ADD'); });
+  $('set-13').addEventListener('click', () => { biSetAction('MOVE'); });
+  $('set-14').addEventListener('click', () => { biSetAction('HARVEST'); });
+  $('set-15').addEventListener('click', () => { biSetAction('REMOVE'); });
+  $('m-camscan').addEventListener('click', function(e) { if(e.target===this) closeCamScan(); });
+  $('cls-16').addEventListener('click', closeCamScan);
+
+  // Sidebar navigation
+  $('sb-toggle').addEventListener('click', toggleSidebar);
+  $('n-dash').addEventListener('click', () => { go('dash','n-dash'); });
+  $('n-todo').addEventListener('click', () => { go('todo','n-todo'); });
+  $('n-cal').addEventListener('click', () => { go('cal','n-cal'); });
+  $('n-batch').addEventListener('click', () => { go('batch','n-batch'); });
+  $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
+  $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
+  $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
+  $('n-print').addEventListener('click', () => { go('print','n-print'); });
+  $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
+  $('sync-dot').addEventListener('click', loadData);
+  $('lang-sel').addEventListener('change', function() { setLang(this.value); });
+  $('tgl-17').addEventListener('click', toggleSidebar);
+  $('sync-dot-m').addEventListener('click', loadData);
+  $('sb-overlay').addEventListener('click', toggleSidebar);
+
+  // Scan modal
+  $('scan-overlay').addEventListener('click', closeScanModal);
+  $('scan-modal').addEventListener('click', e => e.stopPropagation());
+  $('cls-18').addEventListener('click', closeScanModal);
+  $('set-19').addEventListener('click', resetScan);
+  $('btn-20').addEventListener('click', openBatchAdd);
+  $('btn-end-session').addEventListener('click', endScanSession);
+  $('btn-scan-audio').addEventListener('click', function() { scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4; });
+
+  // Harvest panel
+  $('act-21').addEventListener('click', confirmHarvest);
+  $('btn-22').addEventListener('click', cancelHarvest);
+
+  // Dashboard
+  $('nav-23').addEventListener('click', () => { go('todo','n-todo');openStab('todo','todo'); });
+  $('status-q').addEventListener('input', renderStatus);
+
+  // Batches
+  $('st-batch-list').addEventListener('click', () => { openStab('batch','list'); });
+  $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
+  $('st-batch-harvest').addEventListener('click', () => { openStab('batch','harvest'); });
+  $('batch-q').addEventListener('input', renderBatches);
+  $('nb-type').addEventListener('change', nbTypeChange);
+  $('wbtn-3').addEventListener('click', () => { setBagWeight(3); });
+  $('wbtn-5').addEventListener('click', () => { setBagWeight(5); });
+  $('wbtn-07').addEventListener('click', () => { setBagWeight(0.7); });
+  $('wbtn-1').addEventListener('click', () => { setBagWeight(1); });
+  $('wbtn-2').addEventListener('click', () => { setBagWeight(2); });
+  $('wbtn-5g').addEventListener('click', () => { setBagWeight(5); });
+  $('nb-weight').addEventListener('input', nbPreview);
+  $('nb-sp').addEventListener('input', nbPreview);
+  $('nb-st').addEventListener('input', nbPreview);
+  $('nb-qty').addEventListener('input', nbPreview);
+  $('nb-hw').addEventListener('input', nbSubSum);
+  $('nb-wb').addEventListener('input', nbSubSum);
+  $('nb-rh').addEventListener('input', nbPreview);
+  $('btn-24').addEventListener('click', createBatch);
+  $('prt-25').addEventListener('click', goToPrintBatch);
+  $('harvest-q').addEventListener('input', renderHarvests);
+
+  // Lab
+  $('st-lab-cultures').addEventListener('click', () => { openStab('lab','cultures'); });
+  $('st-lab-work').addEventListener('click', () => { openStab('lab','work'); });
+  $('st-lab-lineage').addEventListener('click', () => { openStab('lab','lineage'); });
+  $('cult-type').addEventListener('change', renderCultures);
+  $('cult-stat').addEventListener('change', renderCultures);
+  $('lw-type').addEventListener('change', lwUpdate);
+  $('lw-sp').addEventListener('input', lwPreview);
+  $('lw-qty').addEventListener('input', lwPreview);
+  $('btn-26').addEventListener('click', logLabWork);
+  $('lineage-sel').addEventListener('change', renderLineage);
+
+  // Print
+  $('st-print-bags').addEventListener('click', () => { openStab('print','bags'); });
+  $('st-print-lab').addEventListener('click', () => { openStab('print','lab'); });
+  $('st-print-ref').addEventListener('click', () => { openStab('print','ref'); });
+  $('print-batch').addEventListener('change', renderBagPreview);
+  $('print-mode').addEventListener('change', renderBagPreview);
+  $('print-range').addEventListener('change', toggleBagRange);
+  $('prt-27').addEventListener('click', printBagLabels);
+  $('lab-filter').addEventListener('change', renderLabList);
+  $('lp-bc').addEventListener('change', renderLabPreview);
+  $('lp-qr').addEventListener('change', renderLabPreview);
+  $('prt-28').addEventListener('click', printLabLabels);
+  $('ref-qr').addEventListener('change', renderRefBarcodes);
+  $('prt-29').addEventListener('click', printRef);
+
+  // To-do
+  $('todo-filter').addEventListener('change', renderTodo);
+  $('btn-30').addEventListener('click', addTask);
+  $('act-31').addEventListener('click', saveTask);
+  $('btn-32').addEventListener('click', () => { document.getElementById('task-form').style.display='none'; });
+
+  // Calendar
+  $('btn-33').addEventListener('click', calToday);
+  $('btn-34').addEventListener('click', () => { calNav(-1); });
+  $('btn-35').addEventListener('click', () => { calNav(1); });
+  $('cal-filter-user').addEventListener('change', renderCalendar);
+  $('cv-month').addEventListener('click', () => { setCalView('month'); });
+  $('cv-week').addEventListener('click', () => { setCalView('week'); });
+  $('cv-day').addEventListener('click', () => { setCalView('day'); });
+  $('btn-36').addEventListener('click', openEventModal);
+
+  // Settings
+  $('st-settings-log').addEventListener('click', () => { openStab('settings','log'); });
+  $('st-settings-backup').addEventListener('click', () => { openStab('settings','backup'); });
+  $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
+  $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
+  $('log-action-filter').addEventListener('change', renderLog);
+  $('log-date-from').addEventListener('change', renderLog);
+  $('log-date-to').addEventListener('change', renderLog);
+  $('log-q').addEventListener('input', renderLog);
+  $('btn-37').addEventListener('click', clearLog);
+  $('tgl-38').addEventListener('click', () => { toggleLogSort('time'); });
+  $('tgl-39').addEventListener('click', () => { toggleLogSort('action'); });
+  $('ctl-40').addEventListener('click', () => { logDisplayLimit+=200;renderLog(); });
+  $('btn-41').addEventListener('click', downloadBackup);
+  $('btn-42').addEventListener('click', restoreBackup);
+  $('btn-43').addEventListener('click', doLogout);
+  $('btn-44').addEventListener('click', addUser);
+  $('btn-45').addEventListener('click', copyCalDavUrl);
+  $('caldav-enabled').addEventListener('change', saveCaldavSettings);
+  $('act-46').addEventListener('click', saveCaldavSettings);
+  $('caldav-sync-btn').addEventListener('click', syncCaldavNow);
+
+  // Inventory
+  $('st-inv-stock').addEventListener('click', () => { openStab('inv','stock'); });
+  $('st-inv-delivery').addEventListener('click', () => { openStab('inv','delivery'); });
+  $('st-inv-log').addEventListener('click', () => { openStab('inv','log'); });
+  $('del-mat').addEventListener('change', delMatChange);
+  $('del-kg').addEventListener('input', delPreview);
+  $('btn-47').addEventListener('click', logDelivery);
+  $('adj-mat').addEventListener('change', adjMatChange);
+  $('adj-absolute').addEventListener('input', () => { adjPreview('absolute'); });
+  $('adj-delta').addEventListener('input', () => { adjPreview('delta'); });
+  $('btn-48').addEventListener('click', logAdjustment);
+  $('inv-log-filter').addEventListener('change', renderInvLog);
+
+  // Assets
+  $('st-assets-list').addEventListener('click', () => { openStab('assets','list'); });
+  $('st-assets-add').addEventListener('click', () => { openStab('assets','add'); });
+  $('st-assets-export').addEventListener('click', () => { openStab('assets','export'); });
+  $('st-assets-labels').addEventListener('click', () => { openStab('assets','labels'); });
+  $('asset-cat-filter').addEventListener('change', renderAssets);
+  $('asset-stat-filter').addEventListener('change', renderAssets);
+  $('asset-search').addEventListener('input', renderAssets);
+  $('asset-status').addEventListener('change', assetStatusChange);
+  $('act-49').addEventListener('click', saveAsset);
+  $('set-50').addEventListener('click', resetAssetForm);
+  $('set-51').addEventListener('click', exportAssetCSV);
+  $('ctl-52').addEventListener('click', renderStichtagReport);
+  $('tgl-53').addEventListener('click', () => { toggleAllAssetLabels(true); });
+  $('tgl-54').addEventListener('click', () => { toggleAllAssetLabels(false); });
+  $('prt-55').addEventListener('click', printAssetLabels);
+  $('set-56').addEventListener('click', downloadAssetZPL);
+
+  // Camera FAB
+  $('cam-fab').addEventListener('click', openCamScan);
 }
