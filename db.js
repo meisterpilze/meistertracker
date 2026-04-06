@@ -206,6 +206,19 @@ const MIGRATIONS = [
       PRIMARY KEY (event_id, user_id)
     )`);
   }},
+  { version: 5, description: 'Add performance indexes for multi-user workloads', fn(db) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_scanlog_batch  ON scan_log(batch);
+      CREATE INDEX IF NOT EXISTS idx_scanlog_bag    ON scan_log(bag);
+      CREATE INDEX IF NOT EXISTS idx_scanlog_user   ON scan_log(user_id);
+      CREATE INDEX IF NOT EXISTS idx_harvests_bag   ON harvests(bag);
+      CREATE INDEX IF NOT EXISTS idx_cultures_parent ON cultures(parent_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON manual_tasks(assignee);
+      CREATE INDEX IF NOT EXISTS idx_tasks_due      ON manual_tasks(due_date);
+      CREATE INDEX IF NOT EXISTS idx_calevents_start ON calendar_events(start_date);
+      CREATE INDEX IF NOT EXISTS idx_calassign_user ON calendar_event_assignees(user_id);
+    `);
+  }},
 ];
 
 function runMigrations(db) {
