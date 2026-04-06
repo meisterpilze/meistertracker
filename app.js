@@ -2191,22 +2191,20 @@ function sbCloseMobile(){
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
-const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',todo:'n-todo',settings:'n-settings'};
+const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',cal:'n-cal',settings:'n-settings'};
 function go(page,btnId){
-  var actualPage = page==='cal'?'todo':page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('p-'+actualPage).classList.add('active');
+  document.getElementById('p-'+page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(actualPage==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
-  if(actualPage==='batch')renderBatches();
-  if(actualPage==='lab')renderCultures();
-  if(actualPage==='inv'){renderInvStock();}
-  if(actualPage==='assets')renderAssets();
-  if(actualPage==='print'){fillBatchSelect();renderLabList();}
-  if(page==='todo'){renderTodo();openStab('todo','todo');}
-  if(page==='cal'){renderTodo();openStab('todo','cal');}
-  if(actualPage==='settings')renderLog();
+  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(page==='batch')renderBatches();
+  if(page==='lab')renderCultures();
+  if(page==='inv'){renderInvStock();}
+  if(page==='assets')renderAssets();
+  if(page==='print'){fillBatchSelect();renderLabList();}
+  if(page==='cal'){renderCalendar();loadCalDAVImports().then(()=>renderCalendar());}
+  if(page==='settings')renderLog();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -2244,7 +2242,7 @@ function refresh(){
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
   if(id==='assets')renderAssets();
-  if(id==='todo')renderTodo();
+  if(id==='cal')renderCalendar();
   updateTodoBadge();
 }
 
@@ -3073,7 +3071,7 @@ function saveTask(){
 }
 function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderManualTasks();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
 function deleteTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderManualTasks();updateTodoBadge()})}
-function updateTodoBadge(){const n=buildAutoTasks().filter(t=>t.urgent||t.warn).length+manualTasks.filter(t=>!t.done).length+getInvAlerts().length;document.getElementById('n-todo').classList.toggle('alert',n>0)}
+function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const el=document.getElementById('n-cal');if(el)el.classList.toggle('alert',n>0);const bd=buildAutoTasks().filter(t=>t.urgent||t.warn).length+getInvAlerts().length;const de=document.getElementById('n-dash');if(de)de.classList.toggle('alert',bd>0)}
 
 // ─── TEAM MEMBERS ───────────────────────────────────────────
 function renderTeam(){
@@ -5367,7 +5365,6 @@ function initEventListeners() {
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
   $('n-dash').addEventListener('click', () => { go('dash','n-dash'); });
-  $('n-todo').addEventListener('click', () => { go('todo','n-todo'); });
   $('n-cal').addEventListener('click', () => { go('cal','n-cal'); });
   $('n-batch').addEventListener('click', () => { go('batch','n-batch'); });
   $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
