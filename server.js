@@ -1415,9 +1415,23 @@ function handleRequest(req,res){
   if(req.method==='GET'&&req.url==='/api/health'){
     let dbOk=false;
     try{database.prepare('SELECT 1').get();dbOk=true;}catch(e){log('error','Health check: database unreachable',{error:e.message})}
-    const status=dbOk?'ok':'degraded';
+    const mem=process.memoryUsage();
+    const health={
+      status:dbOk?'ok':'degraded',
+      db:dbOk?'connected':'error',
+      uptime:Math.round(process.uptime()),
+      version:require('./package.json').version,
+      sseClients:sseClients.length,
+      memory:{
+        rss:Math.round(mem.rss/1024/1024),
+        heapUsed:Math.round(mem.heapUsed/1024/1024),
+        heapTotal:Math.round(mem.heapTotal/1024/1024)
+      },
+      node:process.version,
+      platform:process.platform
+    };
     res.writeHead(dbOk?200:503,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({status,db:dbOk?'connected':'error',uptime:process.uptime(),version:require('./package.json').version}));
+    res.end(JSON.stringify(health));
     return;
   }
 
