@@ -264,7 +264,7 @@ function openDb(dbPath) {
 }
 
 // ── Read All (assembles the JSON shape the client expects) ───
-function readAll(db) {
+function readAll(db, opts = {}) {
   // Batches + bags
   const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
   const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
@@ -354,7 +354,11 @@ function readAll(db) {
 
   // Inventory (singleton)
   const inv = db.prepare('SELECT * FROM inventory WHERE id = 1').get();
-  const invLog = db.prepare('SELECT * FROM inventory_log ORDER BY id').all().map(r => ({
+  const invLogLimit = opts.inventoryLogLimit;
+  const invLogRaw = invLogLimit
+    ? db.prepare('SELECT * FROM inventory_log ORDER BY id DESC LIMIT ?').all(invLogLimit).reverse()
+    : db.prepare('SELECT * FROM inventory_log ORDER BY id').all();
+  const invLog = invLogRaw.map(r => ({
     time: r.time,
     mat: r.mat,
     deltaKg: r.delta_kg,
