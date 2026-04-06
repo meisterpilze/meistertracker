@@ -5042,4 +5042,28 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('/sw.js').catch(()=>{});
   });
+  navigator.serviceWorker.addEventListener('message',e=>{
+    if(e.data&&e.data.type==='offline-queue-update'){
+      updateOfflineBadge(e.data.pendingCount);
+    }
+  });
+  window.addEventListener('online',()=>{
+    if(navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage({type:'replay-pending'});
+    }
+  });
+}
+
+function updateOfflineBadge(count){
+  let badge=document.getElementById('offline-badge');
+  if(count===0){if(badge)badge.remove();return}
+  if(!badge){
+    badge=document.createElement('span');
+    badge.id='offline-badge';
+    badge.style.cssText='display:inline-block;background:#e74c3c;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
+    const syncEl=document.getElementById('sync-label');
+    if(syncEl)syncEl.parentNode.appendChild(badge);
+    else document.querySelector('.topbar')?.appendChild(badge);
+  }
+  badge.textContent=count+' queued';
 }
