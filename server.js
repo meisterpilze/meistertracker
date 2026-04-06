@@ -692,11 +692,11 @@ function autoDeleteCalendarEventCaldav(eventId) {
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
 
-// CalDAV sync mutex — prevents concurrent sync operations from conflicting
+// CalDAV sync mutex — serializes sync operations to prevent concurrent file writes.
+// Uses a queue with setImmediate to avoid re-entrant calls from the finally block.
 let caldavSyncRunning = false;
 let caldavSyncQueued = null;
 
-// Lightweight CalDAV sync after full-state save — writes all due dates & events
 function autoSyncAllCaldav(data) {
   if (caldavSyncRunning) {
     caldavSyncQueued = data; // queue latest, discard stale
@@ -705,13 +705,14 @@ function autoSyncAllCaldav(data) {
   caldavSyncRunning = true;
   try {
     _doAutoSyncAllCaldav(data);
+  } catch (e) {
+    log('error', 'CalDAV auto-sync failed', { error: e.message });
   } finally {
+    const queued = caldavSyncQueued;
+    caldavSyncQueued = null;
     caldavSyncRunning = false;
-    if (caldavSyncQueued) {
-      const queued = caldavSyncQueued;
-      caldavSyncQueued = null;
-      autoSyncAllCaldav(queued);
-    }
+    // Defer queued sync to next tick to prevent re-entrant race
+    if (queued) setImmediate(() => autoSyncAllCaldav(queued));
   }
 }
 function _doAutoSyncAllCaldav(data) {
@@ -723,7 +724,7 @@ function _doAutoSyncAllCaldav(data) {
     // Batch due dates → shared calendar
     for (const b of (data.batches || [])) {
       if (!b.due) continue;
-      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write batch event',{batchId:b.batchId,error:e.message}); }
     }
     // Task VTODOs → shared + personal calendars
     for (const t of (data.manualTasks || [])) {
@@ -734,18 +735,18 @@ function _doAutoSyncAllCaldav(data) {
           const slug = t.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
           writeTaskToCalendar(t, slug);
         }
-      } catch (e) { /* skip */ }
+      } catch (e) { log('warn','CalDAV: failed to write task VTODO',{taskText:t.text?.slice(0,50),error:e.message}); }
     }
     // Task due dates → shared calendar (respect privacy)
     for (const t of (data.manualTasks || [])) {
       if (!t.dueDate) continue;
       const isPrivate = t.private === 1 || t.private === true;
       if (isPrivate) continue;
-      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write task due event',{taskText:t.text?.slice(0,50),error:e.message}); }
     }
     // Custom events → shared calendar
     for (const ev of (data.calendarEvents || [])) {
-      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { /* skip */ }
+      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write calendar event',{eventId:ev.id,error:e.message}); }
     }
     // Clean orphaned meisterpilze-generated files in shared calendar
     try {
@@ -755,7 +756,7 @@ function _doAutoSyncAllCaldav(data) {
         const content = fs.readFileSync(filePath, 'utf8');
         if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { log('warn','CalDAV: failed to clean orphaned files',{error:e.message}); }
   } catch (e) { log('error','autoSyncAllCaldav failed',{error:e.message}); }
 }
 
@@ -1567,7 +1568,7 @@ function handleRequest(req,res){
   if(req.method==='DELETE'&&batchIdMatch){
     if(requireAdmin(req,res))return;
     const id=decodeURIComponent(batchIdMatch[1]);
-    try{autoDeleteBatchCaldav(id);db.deleteBatchById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteBatchById(database,id);try{autoDeleteBatchCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after batch delete',{batchId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Scan Log --
@@ -1629,7 +1630,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{autoDeleteTaskCaldav(id);db.deleteTaskById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Team Members --
@@ -1684,7 +1685,7 @@ function handleRequest(req,res){
       let vd=validateDate(data.startDate,'startDate');if(vd){jsonErr(res,400,vd);return}
       if(data.endDate){vd=validateDate(data.endDate,'endDate');if(vd){jsonErr(res,400,vd);return}}
       if(Array.isArray(data.assignees)){for(const uid of data.assignees){if(typeof uid!=='number'||!Number.isInteger(uid)){jsonErr(res,400,'assignees must be integer user IDs');return}}}
-      try{db.insertCalendarEvent(database,data);if(Array.isArray(data.assignees)){db.setCalendarEventAssignees(database,data.id,data.assignees)}autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
+      try{db.insertCalendarEvent(database,data,Array.isArray(data.assignees)?data.assignees:null);autoSyncCalendarEvent(data);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}
     });return;
   }
   const calEvMatch=req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
@@ -1694,7 +1695,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    try{autoDeleteCalendarEventCaldav(id);db.deleteCalendarEvent(database,id);broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
+    try{db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){jsonErr(res,400,err.message)}return;
   }
 
   // -- Inventory Delta --
