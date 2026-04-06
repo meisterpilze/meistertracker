@@ -275,13 +275,24 @@
   <!-- KPI strip -->
   <div id="metrics" class="g4" style="margin-bottom:10px"></div>
 
-  <!-- Alerts (compact) -->
-  <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts &amp; tasks</div>
-      <button id="nav-23" class="btn btn-sm" style="padding:2px 8px;font-size:11px" data-i18n="dash.seeAll">See all</button>
+  <!-- Alerts (inventory only) -->
+  <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px;display:none">
+    <div style="margin-bottom:6px">
+      <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts</div>
     </div>
     <div id="dash-alerts"></div>
+  </div>
+
+  <!-- Batch tasks -->
+  <div class="card" id="dash-batch-tasks-card" style="padding:12px 16px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
+      <select id="dash-batch-filter" style="width:auto;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid #e5e3dd">
+        <option value="all" data-i18n="todo.all">All</option>
+        <option value="urgent" data-i18n="todo.urgentOnly">Urgent only</option>
+      </select>
+    </div>
+    <div id="dash-batch-tasks"></div>
   </div>
 
   <!-- Search bar -->

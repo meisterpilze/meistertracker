@@ -2198,7 +2198,7 @@ function go(page,btnId){
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('p-'+actualPage).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(actualPage==='dash'){renderStatus();renderDashAlerts();}
+  if(actualPage==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
   if(actualPage==='batch')renderBatches();
   if(actualPage==='lab')renderCultures();
   if(actualPage==='inv'){renderInvStock();}
@@ -2239,7 +2239,7 @@ function openStab(page,sub){
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();}
+  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
@@ -2600,17 +2600,25 @@ function locSelectAllVisible(){
   renderStatus();
 }
 function renderDashAlerts(){
-  const tasks=buildAutoTasks().filter(t=>t.urgent||t.warn);
   const invAlerts=getInvAlerts();
-  const all=[...invAlerts,...tasks];
   const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
-  if(!all.length){card.style.display='none';return}
+  if(!invAlerts.length){card.style.display='none';return}
   card.style.display='';
-  const shown=all.slice(0,5);
-  const more=all.length-shown.length;
-  el.innerHTML=shown.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tk.species?spDot(tk.species):''}${esc(tk.text)}</div>${tk.species?`<button class="btn btn-sm" onclick="go('dash','n-dash')" style="font-size:11px;padding:2px 8px">${t('dash.view')}</button>`:`<button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button>`}</div>`).join('')
-    +(more>0?`<div style="font-size:11px;color:var(--c-text-muted);padding-top:4px">+${more} more</div>`:'');
+  el.innerHTML=invAlerts.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(tk.text)}</div><button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button></div>`).join('');
+}
+function renderDashBatchTasks(){
+  const filter=document.getElementById('dash-batch-filter')?.value||'all';
+  const tasks=buildAutoTasks();
+  const shown=filter==='urgent'?tasks.filter(tk=>tk.urgent||tk.warn):tasks;
+  const el=document.getElementById('dash-batch-tasks');
+  if(!el)return;
+  if(!tasks.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';return}
+  el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px">'
+    +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
+    +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+spDot(tk.species)+esc(tk.text)+'</div>'
+    +'<div style="font-size:11px;color:#888;margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
+    :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -5313,7 +5321,7 @@ function initEventListeners() {
   $('btn-22').addEventListener('click', cancelHarvest);
 
   // Dashboard
-  $('nav-23').addEventListener('click', () => { go('todo','n-todo');openStab('todo','todo'); });
+  $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
 
   // Batches
