@@ -1,6 +1,5 @@
 'use strict';
 const { DatabaseSync: Database } = require('node:sqlite');
-const path = require('path');
 const crypto = require('crypto');
 
 // ── Schema ───────────────────────────────────────────────────
