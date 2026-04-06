@@ -634,8 +634,29 @@ function autoDeleteCalendarEventCaldav(eventId) {
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
 
+// CalDAV sync mutex — prevents concurrent sync operations from conflicting
+let caldavSyncRunning = false;
+let caldavSyncQueued = null;
+
 // Lightweight CalDAV sync after full-state save — writes all due dates & events
 function autoSyncAllCaldav(data) {
+  if (caldavSyncRunning) {
+    caldavSyncQueued = data; // queue latest, discard stale
+    return;
+  }
+  caldavSyncRunning = true;
+  try {
+    _doAutoSyncAllCaldav(data);
+  } finally {
+    caldavSyncRunning = false;
+    if (caldavSyncQueued) {
+      const queued = caldavSyncQueued;
+      caldavSyncQueued = null;
+      autoSyncAllCaldav(queued);
+    }
+  }
+}
+function _doAutoSyncAllCaldav(data) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
