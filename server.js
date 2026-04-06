@@ -859,6 +859,16 @@ function handleCaldav(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
+  // Reject Basic auth over plain HTTP (except localhost) to prevent credential sniffing
+  if(protocol==='https'&&!req.socket.encrypted){
+    const host=(req.headers.host||'').replace(/:.*$/,'');
+    if(host!=='localhost'&&host!=='127.0.0.1'){
+      res.writeHead(403);
+      res.end('CalDAV requires HTTPS');
+      return;
+    }
+  }
+
   // Auth check — returns user account object or false
   const caldavUser = checkCaldavAuth(req);
   if (!caldavUser) {
@@ -1354,7 +1364,9 @@ setInterval(() => {
 }, 60000);
 
 function handleRequest(req,res){
-  const clientIP = req.socket.remoteAddress || 'unknown';
+  // Use X-Forwarded-For when behind a reverse proxy, fall back to socket address
+  const fwd = req.headers['x-forwarded-for'];
+  const clientIP = (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
   if (!checkRateLimit(clientIP)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
     res.end('{"error":"Too many requests"}');
@@ -1365,6 +1377,7 @@ function handleRequest(req,res){
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
+  if(protocol==='https') res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   // ── Well-known CalDAV discovery (RFC 6764) ──
@@ -2096,7 +2109,7 @@ function handleRequest(req,res){
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
 let server;
 if(fs.existsSync(CERT_KEY)&&fs.existsSync(CERT_CRT)){
-  const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT)};
+  const tlsOpts={key:fs.readFileSync(CERT_KEY),cert:fs.readFileSync(CERT_CRT),minVersion:'TLSv1.2'};
   server=https.createServer(tlsOpts,handleRequest);
   protocol='https';
 
