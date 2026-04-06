@@ -1827,7 +1827,9 @@ function handleRequest(req,res){
         const cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
         const enc=Buffer.concat([cipher.update(plain),cipher.final()]);
         const tag=cipher.getAuthTag();
-        const out=Buffer.concat([salt,iv,tag,enc]);
+        const payload=Buffer.concat([salt,iv,tag,enc]);
+        const hmac=crypto.createHmac('sha256',key).update(payload).digest();
+        const out=Buffer.concat([payload,hmac]);
         const stamp=new Date().toISOString().slice(0,10);
         res.writeHead(200,{
           'Content-Type':'application/octet-stream',
@@ -1844,7 +1846,7 @@ function handleRequest(req,res){
   }
 
   // -- Backup Restore (encrypted .db) --
-  if(req.method==='POST'&&req.url==='/api/backup/restore'){
+  if(req.method==='POST'&&req.url.startsWith('/api/backup/restore')){
     if(requireAdmin(req,res))return;
     const chunks=[];let sz=0;let aborted=false;const MAX_BACKUP=50*1024*1024; // 50 MB limit for backup files
     req.on('data',c=>{sz+=c.length;if(sz>MAX_BACKUP){aborted=true;jsonErr(res,413,'Backup file too large');req.destroy();return}chunks.push(c)});
@@ -1853,15 +1855,24 @@ function handleRequest(req,res){
       let tmpPath;
       try{
         const raw=Buffer.concat(chunks);
-        const password=req.headers['x-backup-password']||'';
+        const password=new URL(req.url,'http://x').searchParams.get('pw')||req.headers['x-backup-password']||'';
         if(!password){jsonErr(res,400,'Password required');return}
-        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext
+        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext + hmac(32)
         if(raw.length<60+16){jsonErr(res,400,'File too small to be a valid backup');return}
-        const salt=raw.subarray(0,32);
-        const iv=raw.subarray(32,44);
-        const tag=raw.subarray(44,60);
-        const ciphertext=raw.subarray(60);
+        // Check for HMAC suffix (last 32 bytes) — backups created with HMAC are 32 bytes longer
+        const hasHmac=raw.length>=60+16+32;
+        const payload=hasHmac?raw.subarray(0,raw.length-32):raw;
+        const salt=payload.subarray(0,32);
+        const iv=payload.subarray(32,44);
+        const tag=payload.subarray(44,60);
+        const ciphertext=payload.subarray(60);
         const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
+        // Verify HMAC if present
+        if(hasHmac){
+          const storedHmac=raw.subarray(raw.length-32);
+          const expectedHmac=crypto.createHmac('sha256',key).update(payload).digest();
+          if(!crypto.timingSafeEqual(storedHmac,expectedHmac)){jsonErr(res,401,'HMAC verification failed — wrong password or tampered file');return}
+        }
         const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
         decipher.setAuthTag(tag);
         let plain;
