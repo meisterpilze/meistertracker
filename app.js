@@ -724,6 +724,10 @@ const LANG = {
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Delete rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
+    'zones.showQr': 'Show QR',
+    'zones.hideQr': 'Hide QR',
+    'zones.printQr': 'Print QR',
+    'zones.printAllQr': 'Print all QR codes',
   },
   de: {
     // Nav
@@ -1419,6 +1423,10 @@ const LANG = {
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Rack löschen?',
     'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
+    'zones.showQr': 'QR anzeigen',
+    'zones.hideQr': 'QR ausblenden',
+    'zones.printQr': 'QR drucken',
+    'zones.printAllQr': 'Alle QR-Codes drucken',
   },
   pt: {
     // Nav
@@ -2113,6 +2121,10 @@ const LANG = {
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Excluir rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
+    'zones.showQr': 'Mostrar QR',
+    'zones.hideQr': 'Ocultar QR',
+    'zones.printQr': 'Imprimir QR',
+    'zones.printAllQr': 'Imprimir todos QR codes',
   }
 };
 
@@ -3658,11 +3670,14 @@ function renderZones(){
         ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
+        <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
+        <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
         ${bagCount===0
           ?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
           :`<button class="btn btn-sm btn-r" disabled title="${esc(t('zones.hasBags',{count:bagCount}))}" style="font-size:11px;opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`}
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
+      <div class="zone-qr-panel" id="zone-qr-${esc(z.id)}" style="display:none"></div>
     </div>`;
   }).join('');
 }
@@ -3719,6 +3734,78 @@ function removeRack(rackId){
       rebuildZoneConstants();renderZones();renderStatus();
     });
   });
+}
+
+// ─── ZONE QR CODES ──────────────────────────────────────────
+async function renderZoneQrPanel(zoneId){
+  const panel=document.getElementById('zone-qr-'+zoneId);
+  if(!panel)return;
+  // Toggle if already loaded
+  if(panel.dataset.loaded){
+    const show=panel.style.display==='none';
+    panel.style.display=show?'':'none';
+    const btn=panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
+    if(btn)btn.textContent=show?t('zones.hideQr'):t('zones.showQr');
+    return;
+  }
+  panel.style.display='';
+  panel.dataset.loaded='1';
+  const btn=panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
+  if(btn)btn.textContent=t('zones.hideQr');
+  const z=zones.find(x=>x.id===zoneId);
+  if(!z)return;
+  const items=[zoneId,...z.racks.map(r=>r.id)];
+  const grid=document.createElement('div');
+  grid.className='zone-qr-grid';
+  for(const val of items){
+    const cell=document.createElement('div');
+    cell.className='zone-qr-cell';
+    const img=await makeQR(val);
+    if(img){img.style.cssText='width:80px;height:80px';cell.appendChild(img)}
+    const lbl=document.createElement('div');
+    lbl.className='zone-qr-label';
+    lbl.textContent=val;
+    cell.appendChild(lbl);
+    grid.appendChild(cell);
+  }
+  panel.innerHTML='';
+  panel.appendChild(grid);
+}
+
+async function printZoneQrBrowser(zoneId){
+  const z=zones.find(x=>x.id===zoneId);
+  if(!z)return;
+  const items=[zoneId,...z.racks.map(r=>r.id)];
+  await printQrSheet(items,z.name);
+}
+
+async function printAllZoneQrBrowser(){
+  const items=[...ZONES,...ALL_RACKS];
+  await printQrSheet(items,'All Zones');
+}
+
+async function printQrSheet(items,title){
+  const sheet=document.getElementById('ref-print-sheet');
+  sheet.innerHTML='';
+  const hdr=document.createElement('div');
+  hdr.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
+  hdr.textContent='Meisterpilze — QR Codes: '+title;
+  sheet.appendChild(hdr);
+  const row=document.createElement('div');
+  row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';
+  for(const val of items){
+    const cell=document.createElement('div');
+    cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';
+    const img=await makeQR(val);
+    if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}
+    const lbl=document.createElement('div');
+    lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';
+    lbl.textContent=val;
+    cell.appendChild(lbl);
+    row.appendChild(cell);
+  }
+  sheet.appendChild(row);
+  setTimeout(()=>window.print(),600);
 }
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
@@ -5698,6 +5785,7 @@ function initEventListeners() {
   $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
   $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
   $('btn-add-zone').addEventListener('click', addZone);
+  $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function(){const c={spawn:'#a855f7',incubation:'#0ea5e9',fruiting:'#10b981',contaminated:'#ef4444'}[this.value];if(c)document.getElementById('zone-color').value=c});
   // Zone list event delegation (CSP blocks inline onclick)
   $('zones-list').addEventListener('click', e=>{
@@ -5706,6 +5794,8 @@ function initEventListeners() {
     if(action==='del-zone')removeZone(btn.dataset.zone);
     else if(action==='add-rack')addRackToZone(btn.dataset.zone);
     else if(action==='del-rack')removeRack(btn.dataset.rack);
+    else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
+    else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
   });
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
