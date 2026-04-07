@@ -4509,6 +4509,49 @@ function calNav(delta){
   renderCalendar();
 }
 
+function printCalendar(){
+  const sheet=document.getElementById('print-sheet');
+  if(!sheet)return;
+  const titleEl=document.getElementById('cal-title');
+  const titleText=titleEl?titleEl.textContent:'Kalender';
+  const viewLabel=calView==='month'?'Monatsansicht':calView==='week'?'Wochenansicht':'Tagesansicht';
+
+  // Clone calendar content
+  const container=document.getElementById('cal-container');
+  if(!container)return;
+  const clone=container.cloneNode(true);
+
+  // Remove interactive attributes from clone
+  clone.querySelectorAll('[onclick]').forEach(el=>el.removeAttribute('onclick'));
+  clone.querySelectorAll('[draggable]').forEach(el=>el.removeAttribute('draggable'));
+  clone.querySelectorAll('.ev-resize').forEach(el=>el.remove());
+  clone.querySelectorAll('.cal-week-now-line,.cal-day-now-line').forEach(el=>el.remove());
+
+  // Build legend
+  const legendItems=[
+    {cls:'leg-batch',color:'#ef4444',label:'Fälligkeiten'},
+    {cls:'leg-task',color:'#3b82f6',label:'Aufgaben'},
+    {cls:'leg-harvest',color:'#f59e0b',label:'Ernten'},
+    {cls:'leg-custom',color:'#22c55e',label:'Eigene Termine'},
+    {cls:'leg-meeting',color:'#8b5cf6',label:'Meetings'},
+    {cls:'leg-delivery',color:'#14b8a6',label:'Lieferungen'},
+    {cls:'leg-maintenance',color:'#64748b',label:'Wartung'},
+    {cls:'leg-import',color:'#6366f1',label:'Externe Termine'}
+  ];
+  const legendHtml=legendItems.map(l=>'<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#555"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+l.color+'"></span>'+l.label+'</span>').join('&nbsp;&nbsp;');
+
+  sheet.innerHTML='<div class="cal-print-page">'+
+    '<div class="cal-print-header">'+
+      '<div style="font-size:18px;font-weight:800;color:#1a1a1a">'+titleText+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">'+viewLabel+' — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
+    '</div>'+
+    '<div class="cal-print-legend">'+legendHtml+'</div>'+
+    '<div class="cal-print-body"></div>'+
+  '</div>';
+  sheet.querySelector('.cal-print-body').appendChild(clone);
+  setTimeout(()=>window.print(),150);
+}
+
 // ── Month View ──
 function renderCalMonth(){
   const container=document.getElementById('cal-container');
