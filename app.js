@@ -2345,6 +2345,7 @@ function refresh(){
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
   if(id==='assets')renderAssets();
+  if(id==='zones')renderZones();
   if(id==='cal')renderCalendar();
   updateTodoBadge();
 }
@@ -2492,8 +2493,8 @@ function renderHarvestChart(){
   });
 }
 
-let ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-let ZONE_COLORS={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
+let ZONE_LABELS={};
+let ZONE_COLORS={};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
 
 function renderStatus(){
@@ -3029,7 +3030,7 @@ function renderBatches(){
     return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
-let locColor={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
+let locColor={};
 function toggleBatchBags(batchId){
   const existing=document.getElementById('brow-'+batchId);
   if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
@@ -3625,7 +3626,7 @@ function renderZones(){
     const rackHtml=z.racks.length
       ?z.racks.map(r=>{
         const rBags=Object.keys(getRackBags(r.id)).length;
-        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" onclick="removeRack('${esc(r.id)}')" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
+        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
       }).join('')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
     return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
@@ -3634,8 +3635,8 @@ function renderZones(){
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
         <span style="flex:1"></span>
-        <button class="btn btn-sm" onclick="addRackToZone('${esc(z.id)}')" style="font-size:11px">${esc(t('zones.addRack'))}</button>
-        ${bagCount===0?`<button class="btn btn-sm btn-r" onclick="removeZone('${esc(z.id)}')" style="font-size:11px">${t('zones.delete')}</button>`:''}
+        <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
+        ${bagCount===0?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`:''}
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
     </div>`;
@@ -3650,7 +3651,7 @@ async function addZone(){
   const role=document.getElementById('zone-role').value;
   const color=document.getElementById('zone-color').value;
   const racksRaw=document.getElementById('zone-racks').value.trim();
-  const racks=racksRaw?racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'):[];
+  const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
   const now=new Date().toISOString();
   const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
   if(res.error){alert(res.error);return}
@@ -3658,6 +3659,8 @@ async function addZone(){
   rebuildZoneConstants();renderZones();renderStatus();
   document.getElementById('zone-name').value='';
   document.getElementById('zone-racks').value='';
+  document.getElementById('zone-color').value='#10b981';
+  document.getElementById('zone-role').value='fruiting';
 }
 function removeZone(id){
   const z=zones.find(x=>x.id===id);if(!z)return;
@@ -5669,6 +5672,14 @@ function initEventListeners() {
   $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
   $('btn-add-zone').addEventListener('click', addZone);
   $('zone-role').addEventListener('change', function(){const c={spawn:'#a855f7',incubation:'#0ea5e9',fruiting:'#10b981',contaminated:'#ef4444'}[this.value];if(c)document.getElementById('zone-color').value=c});
+  // Zone list event delegation (CSP blocks inline onclick)
+  $('zones-list').addEventListener('click', e=>{
+    const btn=e.target.closest('[data-action]');if(!btn)return;
+    const action=btn.dataset.action;
+    if(action==='del-zone')removeZone(btn.dataset.zone);
+    else if(action==='add-rack')addRackToZone(btn.dataset.zone);
+    else if(action==='del-rack')removeRack(btn.dataset.rack);
+  });
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
