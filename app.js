@@ -87,6 +87,7 @@ const LANG = {
     'dash.stock': 'Stock',
     'dash.noMatches': 'No batches match.',
     'dash.noBatches': 'No batches yet. Create one in Batches \u2192 New batch.',
+    'dash.noZones': 'No zones configured. Go to Tools \u2192 Zones to add zones.',
     'dash.harvestedAmount': '{g}g harvested',
     'dash.due': 'Due',
     'dash.bags.one': '{n} bag',
@@ -792,6 +793,7 @@ const LANG = {
     'dash.stock': 'Lager',
     'dash.noMatches': 'Keine Chargen gefunden.',
     'dash.noBatches': 'Noch keine Chargen. Erstelle eine unter Chargen \u2192 Neue Charge.',
+    'dash.noZones': 'Keine Zonen konfiguriert. Gehe zu Werkzeuge \u2192 Zonen, um Zonen anzulegen.',
     'dash.harvestedAmount': '{g}g geerntet',
     'dash.due': 'F\u00e4llig',
     'dash.bags.one': '{n} Beutel',
@@ -1497,6 +1499,7 @@ const LANG = {
     'dash.stock': 'Estoque',
     'dash.noMatches': 'Nenhum lote encontrado.',
     'dash.noBatches': 'Nenhum lote ainda. Crie um em Lotes \u2192 Novo lote.',
+    'dash.noZones': 'Nenhuma zona configurada. V\u00e1 para Ferramentas \u2192 Zonas para adicionar zonas.',
     'dash.harvestedAmount': '{g}g colhido',
     'dash.due': 'Vencimento',
     'dash.bags.one': '{n} saco',
@@ -2250,7 +2253,7 @@ function applyData(d){
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
   calendarEvents=d.calendarEvents||[];zones=d.zones||[];
-  if(zones.length)rebuildZoneConstants();
+  rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -2553,6 +2556,7 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
   if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
 
   // Compute per-batch status
@@ -3720,15 +3724,20 @@ async function addZone(){
   const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
   if(racks.some(r=>r===id+'_'||r.length<=id.length+1)){alert(t('zones.errRackEmpty'));return}
   if(racks.length>50){alert(t('zones.errTooManyRacks'));return}
-  const now=new Date().toISOString();
-  const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
-  if(res.error){alert(res.error);return}
-  zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
-  rebuildZoneConstants();renderZones();renderStatus();
-  document.getElementById('zone-name').value='';
-  document.getElementById('zone-racks').value='';
-  document.getElementById('zone-color').value='#10b981';
-  document.getElementById('zone-role').value='fruiting';
+  try{
+    const now=new Date().toISOString();
+    const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
+    if(res.error){alert(res.error);return}
+    zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
+    rebuildZoneConstants();renderZones();renderStatus();
+    document.getElementById('zone-name').value='';
+    document.getElementById('zone-racks').value='';
+    document.getElementById('zone-color').value='#10b981';
+    document.getElementById('zone-role').value='fruiting';
+  }catch(e){
+    console.error('addZone error:',e);
+    alert('Error creating zone: '+(e.message||'unknown error'));
+  }
 }
 function removeZone(id){
   const z=zones.find(x=>x.id===id);if(!z)return;
