@@ -734,6 +734,8 @@ const LANG = {
     'zones.hideQr': 'Hide QR',
     'zones.printQr': 'Print QR',
     'zones.printAllQr': 'Print all QR codes',
+    'zones.capacity': 'Max. capacity (bags)',
+    'zones.errCapacity': 'Capacity must be a positive number',
     'scanFb.preferRack': '⚠ "{loc}" is a zone — scan a rack for precise tracking (e.g. {example})',
   },
   de: {
@@ -1440,6 +1442,8 @@ const LANG = {
     'zones.hideQr': 'QR ausblenden',
     'zones.printQr': 'QR drucken',
     'zones.printAllQr': 'Alle QR-Codes drucken',
+    'zones.capacity': 'Max. Kapazität (Bags)',
+    'zones.errCapacity': 'Kapazität muss eine positive Zahl sein',
     'scanFb.preferRack': '⚠ „{loc}" ist eine Zone — scanne ein Rack für genaues Tracking (z.B. {example})',
   },
   pt: {
@@ -2145,6 +2149,8 @@ const LANG = {
     'zones.hideQr': 'Ocultar QR',
     'zones.printQr': 'Imprimir QR',
     'zones.printAllQr': 'Imprimir todos QR codes',
+    'zones.capacity': 'Capacidade máx. (bags)',
+    'zones.errCapacity': 'Capacidade deve ser um número positivo',
     'scanFb.preferRack': '⚠ "{loc}" é uma zona — escaneie um rack para rastreamento preciso (ex. {example})',
   }
 };
@@ -2600,6 +2606,8 @@ function renderStatus(){
 
 function renderRackSection(zone,racks,filtered){
   const color=ZONE_COLORS[zone];
+  const zoneObj=zones.find(z=>z.id===zone);
+  const cap=zoneObj?zoneObj.maxCapacity:null;
   let totalBags=0;
   racks.forEach(r=>totalBags+=Object.keys(getRackBags(r)).length);
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
@@ -2649,11 +2657,15 @@ function renderRackSection(zone,racks,filtered){
 
   const rackCount=racks.length;
   const gridClass=rackCount>4?'rack-grid rack-grid-5col':'rack-grid';
+  const capHtml=cap?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags>cap?'#ef4444':color};width:${Math.min(100,Math.round(totalBags/cap*100))}%;border-radius:3px"></div></div>
+      <span style="font-size:11px;color:${totalBags>cap?'#ef4444':'var(--c-text-muted)'};white-space:nowrap">${Math.round(totalBags/cap*100)}%</span>
+    </div>`:'';
   return`<div class="location-section">
     <div class="location-section-header">
       <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
-      <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
-    </div>
+      <span class="location-section-count">${cap?totalBags+' / '+cap+' Bags':tp('dash.bags',totalBags)}</span>
+    </div>${capHtml}
     <div class="${gridClass}">${rackCards}</div>
   </div>`;
 }
@@ -2703,8 +2715,13 @@ function renderFruitingSection(fruitingZones,filtered){
         }).join('')}</div>
       </div>`;
     }).join('');
+    const cap=z.maxCapacity;
+    const capBar=cap?`<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
+        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length>cap?'#ef4444':z.color||color};width:${Math.min(100,Math.round(entries.length/cap*100))}%;border-radius:3px"></div></div>
+        <span style="font-size:10px;color:${entries.length>cap?'#ef4444':'var(--c-text-muted)'}">${Math.round(entries.length/cap*100)}%</span>
+      </div>`:'';
     return`<div class="tent-column">
-      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${entries.length})</span></div>
+      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap?entries.length+'/'+cap:entries.length})</span></div>${capBar}
       ${cards}
     </div>`;
   }).join('');
@@ -2740,11 +2757,16 @@ function renderSimpleZoneSection(zone,filtered){
     </div>`;
   }).join('');
   if(!cards)return'';
+  const cap=zone.maxCapacity;
+  const capHtml=cap?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length>cap?'#ef4444':zone.color};width:${Math.min(100,Math.round(entries.length/cap*100))}%;border-radius:3px"></div></div>
+      <span style="font-size:11px;color:${entries.length>cap?'#ef4444':'var(--c-text-muted)'};white-space:nowrap">${Math.round(entries.length/cap*100)}%</span>
+    </div>`:'';
   return`<div class="location-section">
     <div class="location-section-header">
       <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${zoneDisplayName(zone.id)}</div>
-      <span class="location-section-count">${tp('dash.bags',entries.length)}</span>
-    </div>
+      <span class="location-section-count">${cap?entries.length+' / '+cap+' Bags':tp('dash.bags',entries.length)}</span>
+    </div>${capHtml}
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
   </div>`;
 }
@@ -3692,7 +3714,7 @@ function renderZones(){
       <div class="zone-row-header">
         <span class="zone-row-name">${esc(z.name)}</span>
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
-        <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
+        <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity?bagCount+' / '+z.maxCapacity+' Bags':tp('dash.bags',bagCount)}</span>
         ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-warning)">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
@@ -3722,16 +3744,20 @@ async function addZone(){
   const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
   if(racks.some(r=>r===id+'_'||r.length<=id.length+1)){alert(t('zones.errRackEmpty'));return}
   if(racks.length>50){alert(t('zones.errTooManyRacks'));return}
+  const capVal=document.getElementById('zone-capacity').value.trim();
+  const maxCapacity=capVal?parseInt(capVal,10):null;
+  if(maxCapacity!==null&&(!Number.isFinite(maxCapacity)||maxCapacity<1)){alert(t('zones.errCapacity'));return}
   try{
     const now=new Date().toISOString();
-    const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
+    const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,maxCapacity,created:now});
     if(res.error){alert(res.error);return}
-    zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
+    zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,maxCapacity,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
     rebuildZoneConstants();renderZones();renderStatus();
     document.getElementById('zone-name').value='';
     document.getElementById('zone-racks').value='';
     document.getElementById('zone-color').value='#10b981';
     document.getElementById('zone-role').value='fruiting';
+    document.getElementById('zone-capacity').value='';
   }catch(e){
     console.error('addZone error:',e);
     alert('Error creating zone: '+(e.message||'unknown error'));
