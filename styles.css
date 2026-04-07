@@ -370,7 +370,7 @@ tr:hover td{background:#f1f5f9}
 .sp-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .sub-tag{font-size:11px;background:var(--c-bg);color:var(--c-text-sec);padding:3px 8px;border-radius:99px;margin-right:3px}
 .harvest-bar{height:5px;border-radius:3px;background:var(--c-border);overflow:hidden;margin-top:4px}
-.harvest-bar-fill{height:100%;border-radius:3px;background:#f39c12}
+.harvest-bar-fill{height:100%;border-radius:3px;background:#f59e0b}
 .todo-row{
   display:flex;align-items:flex-start;gap:12px;padding:12px 14px;
   border-radius:var(--radius-sm);margin-bottom:8px;
@@ -433,9 +433,9 @@ tr:hover td{background:#f1f5f9}
 .cal-legend .leg-harvest::before{background:#f59e0b}
 .cal-legend .leg-custom::before{background:#22c55e}
 .cal-legend .leg-meeting::before{background:#8b5cf6}
-.cal-legend .leg-delivery::before{background:#f59e0b}
+.cal-legend .leg-delivery::before{background:#14b8a6}
 .cal-legend .leg-maintenance::before{background:#64748b}
-.cal-legend .leg-import::before{background:#a855f7}
+.cal-legend .leg-import::before{background:#6366f1}
 
 /* Month grid */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--c-border);border:1px solid var(--c-border);border-radius:var(--radius);overflow:hidden}
