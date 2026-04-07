@@ -14,6 +14,15 @@
   --c-text:#1e293b;
   --c-text-sec:#64748b;
   --c-text-muted:#94a3b8;
+  /* Semantic color palette */
+  --c-red:#ef4444;--c-red-light:#fee2e2;--c-red-dark:#991b1b;--c-red-border:#fecaca;--c-red-accent:#fca5a5;
+  --c-blue:#3b82f6;--c-blue-light:#dbeafe;--c-blue-dark:#1e40af;--c-blue-border:#bfdbfe;--c-blue-accent:#93c5fd;
+  --c-green:#22c55e;--c-green-light:#dcfce7;--c-green-dark:#166534;--c-green-border:#bbf7d0;--c-green-accent:#86efac;
+  --c-amber:#f59e0b;--c-amber-light:#fef3c7;--c-amber-dark:#92400e;--c-amber-border:#fde68a;--c-amber-accent:#fcd34d;
+  --c-purple:#8b5cf6;--c-purple-light:#f3e8ff;--c-purple-dark:#6b21a8;--c-purple-border:#e9d5ff;--c-purple-accent:#c084fc;
+  --c-slate:#64748b;
+  --c-teal:#14b8a6;--c-teal-light:#ccfbf1;--c-teal-dark:#115e59;--c-teal-border:#99f6e4;
+  --c-indigo:#6366f1;--c-indigo-light:#e0e7ff;--c-indigo-dark:#3730a3;--c-indigo-border:#c7d2fe;
   --sidebar-w:240px;
   --sidebar-collapsed:64px;
   --radius:12px;
@@ -361,7 +370,7 @@ tr:hover td{background:#f1f5f9}
 .sp-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .sub-tag{font-size:11px;background:var(--c-bg);color:var(--c-text-sec);padding:3px 8px;border-radius:99px;margin-right:3px}
 .harvest-bar{height:5px;border-radius:3px;background:var(--c-border);overflow:hidden;margin-top:4px}
-.harvest-bar-fill{height:100%;border-radius:3px;background:#f39c12}
+.harvest-bar-fill{height:100%;border-radius:3px;background:#f59e0b}
 .todo-row{
   display:flex;align-items:flex-start;gap:12px;padding:12px 14px;
   border-radius:var(--radius-sm);margin-bottom:8px;
@@ -424,9 +433,9 @@ tr:hover td{background:#f1f5f9}
 .cal-legend .leg-harvest::before{background:#f59e0b}
 .cal-legend .leg-custom::before{background:#22c55e}
 .cal-legend .leg-meeting::before{background:#8b5cf6}
-.cal-legend .leg-delivery::before{background:#f59e0b}
+.cal-legend .leg-delivery::before{background:#14b8a6}
 .cal-legend .leg-maintenance::before{background:#64748b}
-.cal-legend .leg-import::before{background:#a855f7}
+.cal-legend .leg-import::before{background:#6366f1}
 
 /* Month grid */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--c-border);border:1px solid var(--c-border);border-radius:var(--radius);overflow:hidden}
