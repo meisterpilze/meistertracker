@@ -1895,6 +1895,7 @@ function handleRequest(req,res){
       const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}
       if(!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
       if(data.racks&&Array.isArray(data.racks)){for(const r of data.racks){if(!/^[A-Z][A-Z0-9_]{0,29}$/.test(r)){jsonErr(res,400,'Invalid rack ID: '+r);return}}}
+      if(data.maxCapacity!==undefined&&data.maxCapacity!==null){data.maxCapacity=parseInt(data.maxCapacity,10);if(!Number.isFinite(data.maxCapacity)||data.maxCapacity<1){jsonErr(res,400,'maxCapacity must be a positive integer');return}}
       try{db.insertZone(database,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
@@ -1907,6 +1908,7 @@ function handleRequest(req,res){
       if(data.name!==undefined){const vlen=validateLengths(data,{name:50});if(vlen){jsonErr(res,400,vlen);return}}
       if(data.color&&!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
       if(data.role){const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}}
+      if(data.maxCapacity!==undefined&&data.maxCapacity!==null){data.maxCapacity=parseInt(data.maxCapacity,10);if(!Number.isFinite(data.maxCapacity)||data.maxCapacity<1){jsonErr(res,400,'maxCapacity must be a positive integer');return}}
       if(!db.zoneExists(database,id)){jsonErr(res,404,'Zone not found');return}
       try{db.updateZone(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
