@@ -2027,7 +2027,7 @@ const LOCS=[...ZONES,...ALL_RACKS];
 const RACK_ZONE=Object.fromEntries([...SPAWN_RACKS.map(r=>[r,'SPAWN']),...INC_RACKS.map(r=>[r,'INC'])]);
 const toZone=loc=>RACK_ZONE[loc]||loc;
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
-const SP_COLORS=['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16'];
+const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 const REF_GROUPS=[
   {g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},
   {g:'Zones',items:['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM']},
@@ -2052,8 +2052,8 @@ function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function safeColor(c,fallback){
-  if(!c)return fallback||'#22c55e';
-  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#22c55e');
+  if(!c)return fallback||'#16a34a';
+  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#16a34a');
 }
 
 // ─── AUTH ────────────────────────────────────────────────────
@@ -2338,9 +2338,9 @@ function renderMetrics(tot,inc,tent,contam){
 
 function renderPipelineChart(){
   const stages=[
-    {label:'SPAWN',color:'#8b5cf6'},
-    {label:'INC',color:'#3b82f6'},
-    {label:'TENT',color:'#22c55e'},
+    {label:'SPAWN',color:'#a855f7'},
+    {label:'INC',color:'#0ea5e9'},
+    {label:'TENT',color:'#10b981'},
     {label:'DONE',color:'#e5e3dd'},
     {label:'CONTAM',color:'#ef4444'}
   ];
@@ -2387,7 +2387,7 @@ function renderHarvestChart(){
 }
 
 const ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-const ZONE_COLORS={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+const ZONE_COLORS={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
 
 function renderStatus(){
@@ -2540,7 +2540,7 @@ function renderTentsSection(filtered){
 
   return`<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#22c55e"></span>${t('dash.fruitingTents')}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:#10b981"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
     <div class="tent-columns">${tentCols}</div>
@@ -2884,7 +2884,7 @@ function renderBatches(){
     return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
-const locColor={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+const locColor={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
 function toggleBatchBags(batchId){
   const existing=document.getElementById('brow-'+batchId);
   if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
@@ -4467,7 +4467,7 @@ function collectCalendarEvents(){
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444'});
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
@@ -4476,12 +4476,12 @@ function collectCalendarEvents(){
   harvests.forEach(h=>{
     if(!h.time)return;
     const d=new Date(h.time);
-    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b'});
+    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
   });
   const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
   calendarEvents.forEach(ev=>{
     if(filterUserId&&ev.assignees&&ev.assignees.length&&!ev.assignees.some(a=>a.userId===filterUserId))return;
-    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#22c55e',description:ev.description,assignees:ev.assignees||[]});
+    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#16a34a',description:ev.description,assignees:ev.assignees||[]});
   });
   caldavImports.forEach(ev=>{
     events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#6366f1'});
@@ -4535,7 +4535,8 @@ function renderCalMonth(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+assigneeStr+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
     return o;
@@ -4586,7 +4587,8 @@ function renderCalWeek(){
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -4616,7 +4618,8 @@ function renderCalWeek(){
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:'+col;
-        let wkContent=esc(e.label);
+        const wkDot=e.species?spDot(e.species):'';
+        let wkContent=wkDot+esc(e.label);
         if(e.assignees&&e.assignees.length)wkContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
         if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
         if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
@@ -4669,7 +4672,8 @@ function renderCalDay(){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
@@ -4691,7 +4695,8 @@ function renderCalDay(){
       const el=document.createElement('div');
       el.className='cal-day-ev';
       el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:2';
-      let dayContent='<strong>'+esc(e.label)+'</strong>';
+      const dayDot=e.species?spDot(e.species):'';
+      let dayContent=dayDot+'<strong>'+esc(e.label)+'</strong>';
       if(e.assignees&&e.assignees.length)dayContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
       if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
       if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
@@ -4955,7 +4960,7 @@ function openEventDetail(ev){
     if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
-    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#3b82f6'};
+    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
     badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3b82f6;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
     assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=t.description||'';
@@ -5028,7 +5033,7 @@ function deleteTaskFromCalendar(taskId){
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS={custom:'#22c55e',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
+const CATEGORY_COLORS={custom:'#16a34a',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
 let calEntryType='task';
 
 function setEntryType(type){
@@ -5182,7 +5187,7 @@ function saveEntryEvent(){
     startTime:allDay?null:document.getElementById('cal-entry-start-time').value,
     endTime:allDay?null:document.getElementById('cal-entry-end-time').value,
     category:category,
-    color:CATEGORY_COLORS[category]||'#22c55e',
+    color:CATEGORY_COLORS[category]||'#16a34a',
     caldavUid:null,caldavSynced:null,
     created:new Date().toISOString(),
     assignees:getSelectedAssigneeIds().map(uid=>{const u=appUsers.find(x=>x.id===uid);return{userId:uid,username:u?u.username:'?'}})
