@@ -4869,12 +4869,18 @@ const CAL_HOURS_START=6,CAL_HOURS_END=22;
 function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
 function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
 
+function getBatchLoc(b){
+  const locs={};
+  b.bags.forEach(bag=>{const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());if(last&&last.action!=='REMOVE'&&last.to)locs[last.to]=(locs[last.to]||0)+1});
+  const entries=Object.entries(locs);if(!entries.length)return'';entries.sort((a,b)=>b[1]-a[1]);return entries[0][0];
+}
 function collectCalendarEvents(){
   const events=[];
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
+    const loc=getBatchLoc(b);
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
