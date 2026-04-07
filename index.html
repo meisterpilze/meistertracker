@@ -946,7 +946,10 @@
 
 <div class="page" id="p-zones">
   <div class="card" style="margin-bottom:16px">
-    <div class="sec" data-i18n="zones.title">Zonen &amp; Racks</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="sec" data-i18n="zones.title" style="margin:0">Zonen &amp; Racks</div>
+      <button class="btn btn-sm" id="btn-print-all-zone-qr" data-i18n="zones.printAllQr" style="font-size:11px">Alle QR-Codes drucken</button>
+    </div>
     <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px" data-i18n="zones.desc">Verwalte die Standorte deiner Farm. Zonen lassen sich nur löschen, wenn keine Bags darin sind.</p>
     <div id="zones-list"></div>
   </div>

@@ -751,3 +751,7 @@ tr:hover td{background:#f1f5f9}
 .zone-row-racks{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .zone-rack-chip{font-size:11px;font-family:monospace;padding:2px 8px;border-radius:4px;background:var(--c-border-light);display:inline-flex;align-items:center;gap:3px}
 .zone-rack-del{padding:1px 4px!important;font-size:9px!important;margin-left:4px;line-height:1}
+.zone-qr-panel{border-top:1px solid var(--c-border-light);margin-top:6px;padding-top:8px}
+.zone-qr-grid{display:flex;flex-wrap:wrap;gap:8px}
+.zone-qr-cell{border:1px solid var(--c-border);border-radius:6px;padding:8px;text-align:center;background:var(--c-surface);display:flex;flex-direction:column;align-items:center;gap:4px}
+.zone-qr-label{font-size:11px;font-weight:600;font-family:monospace;color:var(--c-text-sec)}
