@@ -135,7 +135,7 @@ function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'applicati
 function safeErr(res, err) {
   const msg = err.message || '';
   // Known validation errors from db.js are safe to expose
-  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot/i.test(msg);
+  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot|constraint/i.test(msg);
   if (safe) { jsonErr(res, 400, msg); }
   else { log('error', 'Unexpected error', { error: msg, stack: err.stack }); jsonErr(res, 500, 'Internal server error'); }
 }
