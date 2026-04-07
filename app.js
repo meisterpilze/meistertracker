@@ -5331,7 +5331,7 @@ function openEventDetail(ev){
     if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
     if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    const catLabels={custom:'Eigenes Event',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
+    const catLabels={custom:'Eigener Termin',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
     badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(CATEGORY_COLORS[ce.category]||safeColor(ce.color))+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
     assignEl.innerHTML=ce.assignees&&ce.assignees.length?'Zugewiesen: <strong>'+ce.assignees.map(a=>esc(a.username)).join(', ')+'</strong>':'';
     descEl.textContent=ce.description||'';
@@ -5422,12 +5422,11 @@ const CATEGORY_COLORS={custom:'#16a34a',meeting:'#8b5cf6',delivery:'#14b8a6',mai
 let calEntryType='task';
 
 function setEntryType(type){
-  calEntryType=type;
-  document.getElementById('cal-entry-type-select').value=type;
   const isTask=type==='task';
+  calEntryType=isTask?'task':'event';
+  document.getElementById('cal-entry-type-select').value=type;
   document.getElementById('cal-entry-enddate-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-allday-wrap').style.display=isTask?'none':'';
-  document.getElementById('cal-entry-category-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-prio-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-task-assign-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
@@ -5468,7 +5467,7 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-allday').checked=existing.allDay;
     document.getElementById('cal-entry-start-time').value=existing.startTime||'09:00';
     document.getElementById('cal-entry-end-time').value=existing.endTime||'10:00';
-    document.getElementById('cal-entry-category').value=existing.category||'custom';
+    setEntryType(existing.category||'custom');
     document.getElementById('cal-entry-desc').value=existing.description||'';
     calEvSelectedAssignees=(existing.assignees||[]).map(a=>a.userId);renderAssigneePicker();
     document.getElementById('cal-entry-del-btn').style.display='';
@@ -5483,7 +5482,6 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-start-time').value=time||'09:00';
     const endH=time?String(Math.min(23,parseInt(time)+1)).padStart(2,'0')+':00':'10:00';
     document.getElementById('cal-entry-end-time').value=endH;
-    document.getElementById('cal-entry-category').value='custom';
     document.getElementById('cal-entry-prio').value='med';
     document.getElementById('cal-entry-task-assignee').value='';
     document.getElementById('cal-entry-desc').value='';
@@ -5497,7 +5495,7 @@ function openEntryModal(type,date,time,existing){
   if(!existing)setTimeout(()=>document.getElementById('cal-entry-name').focus(),50);
 }
 
-function openEventModal(date,time,existing){openEntryModal('event',date,time,existing)}
+function openEventModal(date,time,existing){openEntryModal(existing?'event':'custom',date,time,existing)}
 function openTaskModal(date,existing){openEntryModal('task',date,null,existing)}
 
 function closeEntryModal(){
@@ -5561,7 +5559,7 @@ function saveEntryEvent(){
   const mode=document.getElementById('cal-entry-mode').value;
   const name=document.getElementById('cal-entry-name').value.trim();if(!name)return;
   const allDay=document.getElementById('cal-entry-allday').checked;
-  const category=document.getElementById('cal-entry-category').value;
+  const category=document.getElementById('cal-entry-type-select').value;
   const ev={
     id:mode==='edit'?document.getElementById('cal-entry-id').value:('cev-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)),
     title:name,
@@ -5634,7 +5632,6 @@ function openEventMoveModal(ev){
   document.getElementById('cal-entry-enddate-wrap').style.display='none';
   document.getElementById('cal-entry-allday-wrap').style.display='none';
   document.getElementById('cal-entry-times').style.display='none';
-  document.getElementById('cal-entry-category-wrap').style.display='none';
   document.getElementById('cal-entry-prio-wrap').style.display='none';
   document.getElementById('cal-entry-desc').closest('div').style.display='none';
   document.getElementById('cal-entry-task-assign-wrap').style.display='none';
