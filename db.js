@@ -261,6 +261,9 @@ const MIGRATIONS = [
     insR.run('SPAWN_R2', 'SPAWN', 2, now);
     for (let i = 1; i <= 10; i++) insR.run('INC_R' + i, 'INC', i, now);
   }},
+  { version: 8, description: 'Add optional max_capacity to zones', fn(db) {
+    db.exec('ALTER TABLE zones ADD COLUMN max_capacity INTEGER DEFAULT NULL');
+  }},
 ];
 
 function runMigrations(db) {
@@ -484,6 +487,7 @@ function readAll(db, opts = {}) {
     role: z.role,
     color: z.color,
     sortOrder: z.sort_order,
+    maxCapacity: z.max_capacity || null,
     created: z.created,
     racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
   }));
@@ -1157,8 +1161,8 @@ function insertZone(db, z) {
   }
   db.exec('BEGIN');
   try {
-    db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
-      z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
+    db.prepare('INSERT INTO zones(id,name,role,color,sort_order,max_capacity,created) VALUES(?,?,?,?,?,?,?)').run(
+      z.id, z.name, z.role, z.color, z.sortOrder || 0, z.maxCapacity || null, z.created || new Date().toISOString()
     );
     if (z.racks && z.racks.length) {
       const ins = db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
@@ -1169,21 +1173,6 @@ function insertZone(db, z) {
   } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
-function updateZone(db, id, fields) {
-  const allowed = ['name', 'role', 'color', 'sort_order'];
-  const map = { sortOrder: 'sort_order' };
-  const sets = []; const vals = [];
-  for (const [k, v] of Object.entries(fields)) {
-    const col = map[k] || k;
-    if (!allowed.includes(col)) continue;
-    sets.push(col + '=?');
-    vals.push(v);
-  }
-  if (!sets.length) return;
-  vals.push(id);
-  db.prepare('UPDATE zones SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
-  incrementDataVersion(db);
-}
 
 function zoneBagCount(db, zoneId) {
   // Get all rack ids for this zone
@@ -1253,5 +1242,5 @@ module.exports = {
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
-  insertZone, updateZone, deleteZone, insertRack, deleteRack, zoneExists
+  insertZone, deleteZone, insertRack, deleteRack, zoneExists
 };
