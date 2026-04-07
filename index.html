@@ -93,10 +93,13 @@
     </div>
     <div class="g2" style="margin-bottom:8px">
       <div>
-        <label>Art</label>
+        <label>Kategorie</label>
         <select id="cal-entry-type-select" onchange="setEntryType(this.value)">
           <option value="task">Aufgabe</option>
-          <option value="event">Event</option>
+          <option value="custom">Eigener Termin</option>
+          <option value="meeting">Meeting</option>
+          <option value="delivery">Lieferung</option>
+          <option value="maintenance">Wartung</option>
         </select>
       </div>
       <div id="cal-entry-prio-wrap">
@@ -105,15 +108,6 @@
           <option value="low">Niedrig</option>
           <option value="med" selected>Mittel</option>
           <option value="high">Hoch</option>
-        </select>
-      </div>
-      <div id="cal-entry-category-wrap" style="display:none">
-        <label>Kategorie</label>
-        <select id="cal-entry-category">
-          <option value="custom">Eigenes Event</option>
-          <option value="meeting">Meeting</option>
-          <option value="delivery">Lieferung</option>
-          <option value="maintenance">Wartung</option>
         </select>
       </div>
     </div>
@@ -926,6 +920,30 @@
 </div>
 
 <!-- ══ ZONEN (Location Management) ══ -->
+<!-- Zone edit modal -->
+<div class="modal-bg" id="m-zone-edit" role="dialog" aria-modal="true" aria-labelledby="ze-title">
+  <div class="modal" style="max-width:400px">
+    <h3 id="ze-title">Edit Zone</h3>
+    <input type="hidden" id="ze-id">
+    <div style="margin-bottom:10px"><label data-i18n="zones.zoneName">Name</label><input id="ze-name" maxlength="50" style="width:100%;text-transform:uppercase"></div>
+    <div class="g2" style="margin-bottom:10px">
+      <div><label data-i18n="zones.zoneRole">Rolle</label>
+        <select id="ze-role">
+          <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
+          <option value="incubation" data-i18n="zones.roleIncubation">Incubation</option>
+          <option value="fruiting" data-i18n="zones.roleFruiting">Fruiting</option>
+          <option value="contaminated" data-i18n="zones.roleContaminated">Contaminated</option>
+        </select>
+      </div>
+      <div><label data-i18n="zones.zoneColor">Farbe</label><input id="ze-color" type="color" style="width:60px;height:32px;padding:2px;border-radius:6px;border:1px solid var(--c-border)"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" id="ze-cancel" data-i18n="nav.cancel">Cancel</button>
+      <button class="btn btn-p" id="ze-save" data-i18n="nav.save">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="p-zones">
   <div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
