@@ -285,8 +285,8 @@ const LANG = {
     'print.chooseBatch': '\u2014 choose batch \u2014',
     'print.labelContent': 'Label content',
     'print.barcodeIdOnly': 'Barcode + ID only',
-    'print.barcodeIdSpecies': 'Barcode + ID + species/strain',
-    'print.barcodeIdDate': 'Barcode + ID + species + due date',
+    'print.barcodeIdSpecies': 'Barcode + ID + strain/substrate',
+    'print.barcodeIdDate': 'Barcode + ID + strain/substrate + due date',
     'print.printRange': 'Print range',
     'print.allBags': 'All bags',
     'print.bagRange': 'Bag range (from\u2013to)',
@@ -942,8 +942,8 @@ const LANG = {
     'print.chooseBatch': '\u2014 Charge w\u00e4hlen \u2014',
     'print.labelContent': 'Etiketteninhalt',
     'print.barcodeIdOnly': 'Barcode + nur ID',
-    'print.barcodeIdSpecies': 'Barcode + ID + Art/Stamm',
-    'print.barcodeIdDate': 'Barcode + ID + Art + F\u00e4lligkeitsdatum',
+    'print.barcodeIdSpecies': 'Barcode + ID + Stamm/Substrat',
+    'print.barcodeIdDate': 'Barcode + ID + Stamm/Substrat + F\u00e4lligkeitsdatum',
     'print.printRange': 'Druckbereich',
     'print.allBags': 'Alle Beutel',
     'print.bagRange': 'Beutelbereich (von\u2013bis)',
@@ -1599,8 +1599,8 @@ const LANG = {
     'print.chooseBatch': '\u2014 escolher lote \u2014',
     'print.labelContent': 'Conte\u00fado da etiqueta',
     'print.barcodeIdOnly': 'C\u00f3digo + apenas ID',
-    'print.barcodeIdSpecies': 'C\u00f3digo + ID + esp\u00e9cie/cepa',
-    'print.barcodeIdDate': 'C\u00f3digo + ID + esp\u00e9cie + vencimento',
+    'print.barcodeIdSpecies': 'C\u00f3digo + ID + cepa/substrato',
+    'print.barcodeIdDate': 'C\u00f3digo + ID + cepa/substrato + vencimento',
     'print.printRange': 'Intervalo de impress\u00e3o',
     'print.allBags': 'Todos os sacos',
     'print.bagRange': 'Intervalo de sacos (de\u2013at\u00e9)',
@@ -3940,7 +3940,7 @@ async function sendToPrinter(zpl){
 
 function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
 
-function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview');if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;aspect-ratio:2/1;display:flex;align-items:center;justify-content:center;overflow:hidden';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:56px';cell.appendChild(svg);wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bagId,{format:'CODE128',width:1.4,height:32,displayValue:true,fontSize:10,margin:6,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview'),mode=document.getElementById('print-mode').value;if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';cell.appendChild(svg);const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap';idEl.textContent=bagId;cell.appendChild(idEl);if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='font-size:7px;color:#999;white-space:nowrap';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:1.4,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
@@ -4195,7 +4195,7 @@ function processScan(raw){
       const bSp=spAbbrev(b.species);
       const bSt=(b.strain||'000').slice(0,3).toUpperCase();
       const bDateParts=b.batchId.split('-');
-      const bMmdd=bDateParts[1]?bDateParts[1].slice(2):'';
+      const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
       return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
     });
     if(matchBatch){
