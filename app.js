@@ -719,6 +719,7 @@ const LANG = {
     'zones.errRackEmpty': 'Rack name cannot be empty',
     'zones.errTooManyRacks': 'Too many racks (max. 50)',
     'zones.hasBags': '{count} bags — remove first',
+    'zones.directBags': '{count} not in any rack',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Delete rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
@@ -1412,6 +1413,7 @@ const LANG = {
     'zones.errRackEmpty': 'Rack-Name darf nicht leer sein',
     'zones.errTooManyRacks': 'Zu viele Racks (max. 50)',
     'zones.hasBags': '{count} Bags — erst entfernen',
+    'zones.directBags': '{count} nicht in einem Rack',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Rack löschen?',
     'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
@@ -2104,6 +2106,7 @@ const LANG = {
     'zones.errRackEmpty': 'Nome do rack não pode estar vazio',
     'zones.errTooManyRacks': 'Muitos racks (máx. 50)',
     'zones.hasBags': '{count} bags — remova primeiro',
+    'zones.directBags': '{count} não está em nenhum rack',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Excluir rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
@@ -3634,12 +3637,15 @@ function renderZones(){
   if(!el)return;
   if(!zones.length){el.innerHTML='<div class="empty">'+esc(t('zones.empty'))+'</div>';return}
   el.innerHTML=zones.map(z=>{
-    const bagCount=Object.keys(getZoneBags(z.id)).length;
+    const zoneBags=getZoneBags(z.id);
+    const bagCount=Object.keys(zoneBags).length;
+    const rackIds=new Set(z.racks.map(r=>r.id));
+    const directCount=Object.values(zoneBags).filter(b=>!rackIds.has(b.loc)).length;
     const rackHtml=z.racks.length
       ?z.racks.map(r=>{
         const rBags=Object.keys(getRackBags(r.id)).length;
         return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
-      }).join('')
+      }).join('')+(directCount>0?`<span class="zone-rack-chip" style="border-color:var(--c-warning);color:var(--c-warning)">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:'')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
     return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
