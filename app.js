@@ -4467,7 +4467,7 @@ function collectCalendarEvents(){
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444'});
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
@@ -4476,7 +4476,7 @@ function collectCalendarEvents(){
   harvests.forEach(h=>{
     if(!h.time)return;
     const d=new Date(h.time);
-    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b'});
+    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
   });
   const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
   calendarEvents.forEach(ev=>{
@@ -4535,7 +4535,8 @@ function renderCalMonth(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+assigneeStr+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
     return o;
@@ -4586,7 +4587,8 @@ function renderCalWeek(){
     de.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -4616,7 +4618,8 @@ function renderCalWeek(){
         const el=document.createElement('div');
         el.className='cal-week-ev';
         el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:'+col;
-        let wkContent=esc(e.label);
+        const wkDot=e.species?spDot(e.species):'';
+        let wkContent=wkDot+esc(e.label);
         if(e.assignees&&e.assignees.length)wkContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
         if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
         if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
@@ -4669,7 +4672,8 @@ function renderCalDay(){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+esc(e.label)+'</div>';
+      const dot=e.species?spDot(e.species):'';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
   html+='</div>';
@@ -4691,7 +4695,8 @@ function renderCalDay(){
       const el=document.createElement('div');
       el.className='cal-day-ev';
       el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:2';
-      let dayContent='<strong>'+esc(e.label)+'</strong>';
+      const dayDot=e.species?spDot(e.species):'';
+      let dayContent=dayDot+'<strong>'+esc(e.label)+'</strong>';
       if(e.assignees&&e.assignees.length)dayContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
       if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
       if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
