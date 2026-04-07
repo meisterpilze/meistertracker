@@ -2152,7 +2152,7 @@ const LANG = {
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
-const toZone=loc=>{if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
+const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
@@ -6011,6 +6011,7 @@ function initEventListeners() {
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
   $('cal-entry-del-btn').addEventListener('click', deleteEntry);
   $('cal-entry-allday').addEventListener('change', toggleEntryTimeInputs);
+  $('cal-entry-type-select').addEventListener('change', function(){setEntryType(this.value)});
   $('m-cal-entry').addEventListener('click', e=>{if(e.target.id==='m-cal-entry')closeEntryModal()});
   $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
 
