@@ -713,3 +713,11 @@ tr:hover td{background:#f1f5f9}
   body{background:#fff}.card{border:none;box-shadow:none;padding:0}
 }
 #print-sheet,#ref-print-sheet{display:none}
+
+/* Zone management */
+.zone-row{padding:10px 12px;border-radius:8px;background:var(--c-surface);margin-bottom:8px}
+.zone-row-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.zone-row-name{font-weight:600;font-size:14px}
+.zone-row-racks{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.zone-rack-chip{font-size:11px;font-family:monospace;padding:2px 8px;border-radius:4px;background:var(--c-border-light);display:inline-flex;align-items:center;gap:3px}
+.zone-rack-del{padding:1px 4px!important;font-size:9px!important;margin-left:4px;line-height:1}

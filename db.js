@@ -228,6 +228,39 @@ const MIGRATIONS = [
       CREATE UNIQUE INDEX IF NOT EXISTS idx_calevents_caldav_uid ON calendar_events(caldav_uid) WHERE caldav_uid IS NOT NULL;
     `);
   }},
+  { version: 7, description: 'Add zones and racks tables for dynamic location management', fn(db) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS zones (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        role       TEXT NOT NULL,
+        color      TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        created    TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS racks (
+        id         TEXT PRIMARY KEY,
+        zone_id    TEXT NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+        sort_order INTEGER DEFAULT 0,
+        created    TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_racks_zone ON racks(zone_id);
+    `);
+    // Seed default zones
+    const now = new Date().toISOString();
+    const insZ = db.prepare('INSERT OR IGNORE INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)');
+    insZ.run('SPAWN', 'Spawn Run', 'spawn', '#8b5cf6', 1, now);
+    insZ.run('INC',   'Inkubation', 'incubation', '#3b82f6', 2, now);
+    insZ.run('TENT1', 'Zelt 1', 'fruiting', '#22c55e', 3, now);
+    insZ.run('TENT2', 'Zelt 2', 'fruiting', '#22c55e', 4, now);
+    insZ.run('TENT3', 'Zelt 3', 'fruiting', '#22c55e', 5, now);
+    insZ.run('CONTAM','Kontamination', 'contaminated', '#ef4444', 99, now);
+    // Seed default racks
+    const insR = db.prepare('INSERT OR IGNORE INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
+    insR.run('SPAWN_R1', 'SPAWN', 1, now);
+    insR.run('SPAWN_R2', 'SPAWN', 2, now);
+    for (let i = 1; i <= 10; i++) insR.run('INC_R' + i, 'INC', i, now);
+  }},
 ];
 
 function runMigrations(db) {
@@ -442,8 +475,20 @@ function readAll(db, opts = {}) {
     assignees: assigneeMap.get(r.id) || []
   }));
 
+  // Zones + Racks
+  const zoneRows = db.prepare('SELECT * FROM zones ORDER BY sort_order, id').all();
+  const rackStmt = db.prepare('SELECT id, zone_id, sort_order FROM racks WHERE zone_id = ? ORDER BY sort_order, id');
+  const zones = zoneRows.map(z => ({
+    id: z.id,
+    name: z.name,
+    role: z.role,
+    color: z.color,
+    sortOrder: z.sort_order,
+    racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order }))
+  }));
+
   const version = getDataVersion(db);
-  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents, version };
+  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents, zones, version };
 }
 
 // ── Data Versioning ─────────────────────────────────────────
@@ -1056,6 +1101,80 @@ function getAllCalendarEventAssignees(db) {
   return map;
 }
 
+// -- Zones & Racks --
+function insertZone(db, z) {
+  db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
+    z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
+  );
+  if (z.racks && z.racks.length) {
+    const ins = db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
+    z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
+  }
+  incrementDataVersion(db);
+}
+
+function updateZone(db, id, fields) {
+  const allowed = ['name', 'color', 'sort_order'];
+  const map = { sortOrder: 'sort_order' };
+  const sets = []; const vals = [];
+  for (const [k, v] of Object.entries(fields)) {
+    const col = map[k] || k;
+    if (!allowed.includes(col)) continue;
+    sets.push(col + '=?');
+    vals.push(v);
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  db.prepare('UPDATE zones SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
+  incrementDataVersion(db);
+}
+
+function zoneBagCount(db, zoneId) {
+  // Get all rack ids for this zone
+  const rackIds = db.prepare('SELECT id FROM racks WHERE zone_id=?').all(zoneId).map(r => r.id);
+  const allLocs = [zoneId, ...rackIds];
+  // Replay scan_log to count bags currently in this zone
+  const placeholders = allLocs.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to" IN (${placeholders}) OR "from" IN (${placeholders})) ORDER BY id`).all(...allLocs, ...allLocs);
+  const bags = new Set();
+  for (const r of rows) {
+    if ((r.action === 'ADD' || r.action === 'MOVE') && allLocs.includes(r.to)) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
+  }
+  return bags.size;
+}
+
+function deleteZone(db, id) {
+  const count = zoneBagCount(db, id);
+  if (count > 0) throw new Error('Zone has ' + count + ' bags — remove them first');
+  db.prepare('DELETE FROM zones WHERE id=?').run(id);
+  incrementDataVersion(db);
+}
+
+function insertRack(db, r) {
+  db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)').run(
+    r.id, r.zoneId, r.sortOrder || 0, r.created || new Date().toISOString()
+  );
+  incrementDataVersion(db);
+}
+
+function rackBagCount(db, rackId) {
+  const rows = db.prepare('SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to"=? OR "from"=?) ORDER BY id').all(rackId, rackId);
+  const bags = new Set();
+  for (const r of rows) {
+    if ((r.action === 'ADD' || r.action === 'MOVE') && r.to === rackId) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
+  }
+  return bags.size;
+}
+
+function deleteRack(db, id) {
+  const count = rackBagCount(db, id);
+  if (count > 0) throw new Error('Rack has ' + count + ' bags — remove them first');
+  db.prepare('DELETE FROM racks WHERE id=?').run(id);
+  incrementDataVersion(db);
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
@@ -1072,5 +1191,6 @@ module.exports = {
   updateCaldavCfg,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
-  setCalendarEventAssignees, getAllCalendarEventAssignees
+  setCalendarEventAssignees, getAllCalendarEventAssignees,
+  insertZone, updateZone, deleteZone, insertRack, deleteRack
 };

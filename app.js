@@ -38,6 +38,7 @@ const LANG = {
     'nav.batches': 'Batches',
     'nav.lab': 'Lab',
     'nav.inventory': 'Inventory',
+    'nav.zones': 'Zones',
     'nav.assets': 'Assets',
     'nav.print': 'Print',
     'nav.todo': 'To-do',
@@ -691,6 +692,23 @@ const LANG = {
     'asset.selectNone': 'None',
     'asset.print': 'Print',
     'asset.downloadZpl': 'Download ZPL',
+    // Zones
+    'zones.title': 'Zones & Racks',
+    'zones.desc': 'Manage your farm locations. Zones can only be deleted when empty.',
+    'zones.addTitle': 'Add zone',
+    'zones.zoneName': 'Name',
+    'zones.zoneRole': 'Role',
+    'zones.zoneColor': 'Color',
+    'zones.zoneRacks': 'Racks (optional, comma-separated)',
+    'zones.add': 'Add zone',
+    'zones.delete': 'Delete',
+    'zones.deleteTitle': 'Delete zone?',
+    'zones.deleteMsg': 'Zone "{name}" and all its racks will be removed.',
+    'zones.noRacks': 'No racks',
+    'zones.rackPrompt': 'Rack name (e.g. R3):',
+    'zones.errShort': 'Zone name too short (min. 2 chars)',
+    'zones.errExists': 'Zone already exists',
+    'zones.errRackExists': 'Rack already exists',
   },
   de: {
     // Nav
@@ -700,6 +718,7 @@ const LANG = {
     'nav.batches': 'Chargen',
     'nav.lab': 'Labor',
     'nav.inventory': 'Lager',
+    'nav.zones': 'Zonen',
     'nav.assets': 'Anlagen',
     'nav.print': 'Drucken',
     'nav.todo': 'Aufgaben',
@@ -1353,6 +1372,23 @@ const LANG = {
     'asset.selectNone': 'Keine',
     'asset.print': 'Drucken',
     'asset.downloadZpl': 'ZPL herunterladen',
+    // Zones
+    'zones.title': 'Zonen & Racks',
+    'zones.desc': 'Verwalte die Standorte deiner Farm. Zonen lassen sich nur löschen, wenn keine Bags darin sind.',
+    'zones.addTitle': 'Zone hinzufügen',
+    'zones.zoneName': 'Name',
+    'zones.zoneRole': 'Rolle',
+    'zones.zoneColor': 'Farbe',
+    'zones.zoneRacks': 'Racks (optional, kommagetrennt)',
+    'zones.add': 'Zone hinzufügen',
+    'zones.delete': 'Löschen',
+    'zones.deleteTitle': 'Zone löschen?',
+    'zones.deleteMsg': 'Zone „{name}" und alle zugehörigen Racks werden entfernt.',
+    'zones.noRacks': 'Keine Racks',
+    'zones.rackPrompt': 'Rack-Name (z.B. R3):',
+    'zones.errShort': 'Zonenname zu kurz (mind. 2 Zeichen)',
+    'zones.errExists': 'Zone existiert bereits',
+    'zones.errRackExists': 'Rack existiert bereits',
   },
   pt: {
     // Nav
@@ -1362,6 +1398,7 @@ const LANG = {
     'nav.batches': 'Lotes',
     'nav.lab': 'Laborat\u00f3rio',
     'nav.inventory': 'Invent\u00e1rio',
+    'nav.zones': 'Zonas',
     'nav.assets': 'Ativos',
     'nav.print': 'Imprimir',
     'nav.todo': 'Tarefas',
@@ -2014,31 +2051,55 @@ const LANG = {
     'asset.selectNone': 'Nenhum',
     'asset.print': 'Imprimir',
     'asset.downloadZpl': 'Baixar ZPL',
+    // Zones
+    'zones.title': 'Zonas & Racks',
+    'zones.desc': 'Gerencie os locais da sua fazenda. Zonas só podem ser excluídas quando vazias.',
+    'zones.addTitle': 'Adicionar zona',
+    'zones.zoneName': 'Nome',
+    'zones.zoneRole': 'Função',
+    'zones.zoneColor': 'Cor',
+    'zones.zoneRacks': 'Racks (opcional, separados por vírgula)',
+    'zones.add': 'Adicionar zona',
+    'zones.delete': 'Excluir',
+    'zones.deleteTitle': 'Excluir zona?',
+    'zones.deleteMsg': 'Zona "{name}" e todos os racks serão removidos.',
+    'zones.noRacks': 'Sem racks',
+    'zones.rackPrompt': 'Nome do rack (ex. R3):',
+    'zones.errShort': 'Nome da zona muito curto (mín. 2 caracteres)',
+    'zones.errExists': 'Zona já existe',
+    'zones.errRackExists': 'Rack já existe',
   }
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
-const ZONES=['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM'];
-const SPAWN_RACKS=['SPAWN_R1','SPAWN_R2'];
-const INC_RACKS=['INC_R1','INC_R2','INC_R3','INC_R4','INC_R5','INC_R6','INC_R7','INC_R8','INC_R9','INC_R10'];
-const ALL_RACKS=[...SPAWN_RACKS,...INC_RACKS];
-const LOCS=[...ZONES,...ALL_RACKS];
-const RACK_ZONE=Object.fromEntries([...SPAWN_RACKS.map(r=>[r,'SPAWN']),...INC_RACKS.map(r=>[r,'INC'])]);
+let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
 const toZone=loc=>RACK_ZONE[loc]||loc;
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
 const SP_COLORS=['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16'];
-const REF_GROUPS=[
-  {g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},
-  {g:'Zones',items:['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM']},
-  {g:'SPAWN racks',items:['SPAWN_R1','SPAWN_R2']},
-  {g:'INC racks 1–5',items:['INC_R1','INC_R2','INC_R3','INC_R4','INC_R5']},
-  {g:'INC racks 6–10',items:['INC_R6','INC_R7','INC_R8','INC_R9','INC_R10']},
-  {g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10']}
-];
+let REF_GROUPS=[];
+const KNOWN_ZONE_I18N={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
+function zoneDisplayName(id){if(KNOWN_ZONE_I18N[id])return t(KNOWN_ZONE_I18N[id]);const z=zones.find(x=>x.id===id);return z?z.name:id}
+function zoneByRole(role){return zones.filter(z=>z.role===role)}
+function rebuildZoneConstants(){
+  ZONES=zones.map(z=>z.id);
+  ALL_RACKS=zones.flatMap(z=>z.racks.map(r=>r.id));
+  LOCS=[...ZONES,...ALL_RACKS];
+  RACK_ZONE={};
+  zones.forEach(z=>z.racks.forEach(r=>{RACK_ZONE[r.id]=z.id}));
+  ZONE_LABELS={};ZONE_COLORS={};
+  zones.forEach(z=>{ZONE_LABELS[z.id]=KNOWN_ZONE_I18N[z.id]||z.name;ZONE_COLORS[z.id]=z.color});
+  locColor={...ZONE_COLORS};
+  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},{g:'Zones',items:[...ZONES]}];
+  zones.filter(z=>z.racks.length>0).forEach(z=>{
+    const rIds=z.racks.map(r=>r.id);
+    for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk})}
+  });
+  REF_GROUPS.push({g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10']});
+}
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[];
+let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],zones=[];
 let appUsers=[];let calEvSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
@@ -2109,7 +2170,8 @@ function applyData(d){
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
-  calendarEvents=d.calendarEvents||[];
+  calendarEvents=d.calendarEvents||[];zones=d.zones||[];
+  if(zones.length)rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -2216,6 +2278,7 @@ function go(page,btnId){
   if(page==='batch')renderBatches();
   if(page==='lab')renderCultures();
   if(page==='inv'){renderInvStock();}
+  if(page==='zones')renderZones();
   if(page==='assets')renderAssets();
   if(page==='print'){fillBatchSelect();renderLabList();}
   if(page==='cal'){renderCalendar();loadCalDAVImports().then(()=>renderCalendar());}
@@ -2297,7 +2360,7 @@ const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-sp
 
 // ─── STATUS CALC ─────────────────────────────────────────────
 function getStatus(id){
-  const c={SPAWN:0,INC:0,TENT1:0,TENT2:0,TENT3:0,CONTAM:0};
+  const c={};ZONES.forEach(z=>c[z]=0);
   scanLog.filter(e=>e.batch===id).forEach(e=>{
     const tz=toZone(e.to),fz=toZone(e.from);
     if(e.action==='ADD'&&e.to&&c[tz]!==undefined)c[tz]=Math.max(0,c[tz]+1);
@@ -2305,11 +2368,13 @@ function getStatus(id){
     if(e.action==='REMOVE'&&e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);
   });
   const total=Object.values(c).reduce((a,b)=>a+b,0);
+  // Aggregate by role
+  const byRole={};zones.forEach(z=>{if(!byRole[z.role])byRole[z.role]=0;byRole[z.role]+=c[z.id]||0});
   let status='EMPTY',action='';
-  if(c.TENT1+c.TENT2+c.TENT3>0){status='FRUITING';action=t('status.action.harvest')}
-  else if(c.INC>0){status='INCUBATING';action=t('status.action.moveTent')}
-  else if(c.SPAWN>0){status='SPAWN RUN';action=t('status.action.monitorSpawn')}
-  else if(c.CONTAM>0){status='CONTAM';action=t('status.action.discard')}
+  if(byRole.fruiting>0){status='FRUITING';action=t('status.action.harvest')}
+  else if(byRole.incubation>0){status='INCUBATING';action=t('status.action.moveTent')}
+  else if(byRole.spawn>0){status='SPAWN RUN';action=t('status.action.monitorSpawn')}
+  else if(byRole.contaminated>0){status='CONTAM';action=t('status.action.discard')}
   else if(total===0&&scanLog.some(e=>e.batch===id)){status='DONE'}
   return{c,total,status,action};
 }
@@ -2337,18 +2402,25 @@ function renderMetrics(tot,inc,tent,contam){
 }
 
 function renderPipelineChart(){
-  const stages=[
-    {label:'SPAWN',color:'#8b5cf6'},
-    {label:'INC',color:'#3b82f6'},
-    {label:'TENT',color:'#22c55e'},
-    {label:'DONE',color:'#e5e3dd'},
-    {label:'CONTAM',color:'#ef4444'}
+  const roleStages=[
+    {role:'spawn',label:'SPAWN',color:'#8b5cf6'},
+    {role:'incubation',label:'INC',color:'#3b82f6'},
+    {role:'fruiting',label:'TENT',color:'#22c55e'},
+    {role:null,label:'DONE',color:'#e5e3dd'},
+    {role:'contaminated',label:'CONTAM',color:'#ef4444'}
   ];
-  const counts={SPAWN:0,INC:0,TENT:0,DONE:0,CONTAM:0};
+  // Use first zone's color for each role if available
+  const stages=roleStages.map(s=>{
+    if(s.role){const z=zones.find(x=>x.role===s.role);if(z)return{...s,color:z.color}}
+    return s;
+  });
+  const counts={};stages.forEach(s=>counts[s.label]=0);
   batches.forEach(b=>{
     const{c,status}=getStatus(b.batchId);
-    counts.SPAWN+=c.SPAWN;counts.INC+=c.INC;
-    counts.TENT+=c.TENT1+c.TENT2+c.TENT3;counts.CONTAM+=c.CONTAM;
+    zones.forEach(z=>{
+      const stg=stages.find(s=>s.role===z.role);
+      if(stg)counts[stg.label]+=(c[z.id]||0);
+    });
     if(status==='DONE')counts.DONE++;
   });
   const max=Math.max(1,...Object.values(counts));
@@ -2386,8 +2458,8 @@ function renderHarvestChart(){
   });
 }
 
-const ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-const ZONE_COLORS={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+let ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
+let ZONE_COLORS={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
 
 function renderStatus(){
@@ -2400,10 +2472,14 @@ function renderStatus(){
   let ti=0,tt=0,tc=0;
   const batchData=batches.map(b=>{
     const{c,total,status}=getStatus(b.batchId);
-    ti+=c.INC;tt+=c.TENT1+c.TENT2+c.TENT3;tc+=c.CONTAM;
+    zones.forEach(z=>{
+      if(z.role==='spawn'||z.role==='incubation')ti+=c[z.id]||0;
+      if(z.role==='fruiting')tt+=c[z.id]||0;
+      if(z.role==='contaminated')tc+=c[z.id]||0;
+    });
     const harv=getHarvested(b.batchId);
     const due=new Date(b.due);
-    const ov=due<new Date()&&(c.INC>0||c.SPAWN>0);
+    const ov=due<new Date()&&zones.some(z=>(z.role==='incubation'||z.role==='spawn')&&(c[z.id]||0)>0);
     return{b,c,total,status,harv,due,ov};
   });
 
@@ -2411,15 +2487,18 @@ function renderStatus(){
   const filtered=batchData.filter(d=>!q||d.b.batchId.toLowerCase().includes(q)||d.b.species.toLowerCase().includes(q)||d.b.strain.toLowerCase().includes(q));
 
   let html='';
-  // ── Spawn Run section ──
-  html+=renderRackSection('SPAWN',SPAWN_RACKS,filtered);
-  // ── Incubation section ──
-  html+=renderRackSection('INC',INC_RACKS,filtered);
-  // ── Fruiting Tents section ──
-  html+=renderTentsSection(filtered);
-  // ── Contaminated section (only if bags exist) ──
-  const contamBags=getZoneBags('CONTAM');
-  if(Object.keys(contamBags).length>0)html+=renderContamSection(filtered);
+  // Render zones dynamically by role
+  const fruitingZones=zones.filter(z=>z.role==='fruiting');
+  const contamZones=zones.filter(z=>z.role==='contaminated');
+  zones.filter(z=>z.role!=='fruiting'&&z.role!=='contaminated').forEach(z=>{
+    if(z.racks.length>0)html+=renderRackSection(z.id,z.racks.map(r=>r.id),filtered);
+    else html+=renderSimpleZoneSection(z,filtered);
+  });
+  if(fruitingZones.length)html+=renderFruitingSection(fruitingZones,filtered);
+  contamZones.forEach(z=>{
+    const contamBags=getZoneBags(z.id);
+    if(Object.keys(contamBags).length>0)html+=renderContamSection(z,filtered);
+  });
 
   el.innerHTML=html;
   renderMetrics(batches.length,ti,tt,tc);
@@ -2477,24 +2556,25 @@ function renderRackSection(zone,racks,filtered){
     </div>`;
   }).join('');
 
-  const gridClass=zone==='INC'?'rack-grid rack-grid-5col':'rack-grid';
+  const rackCount=racks.length;
+  const gridClass=rackCount>4?'rack-grid rack-grid-5col':'rack-grid';
   return`<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${t(ZONE_LABELS[zone])}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
     <div class="${gridClass}">${rackCards}</div>
   </div>`;
 }
 
-function renderTentsSection(filtered){
-  const tents=['TENT1','TENT2','TENT3'];
+function renderFruitingSection(fruitingZones,filtered){
   let totalBags=0;
-  tents.forEach(tz=>totalBags+=Object.keys(getZoneBags(tz)).length);
+  fruitingZones.forEach(z=>totalBags+=Object.keys(getZoneBags(z.id)).length);
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
+  const color=fruitingZones[0]?.color||'#22c55e';
 
-  const tentCols=tents.map(tz=>{
-    const bags=getZoneBags(tz);
+  const tentCols=fruitingZones.map(z=>{
+    const bags=getZoneBags(z.id);
     const entries=Object.entries(bags);
     const byBatch={};
     entries.forEach(([bagId,d])=>{
@@ -2505,7 +2585,7 @@ function renderTentsSection(filtered){
 
     if(!batchEntries.length){
       return`<div class="tent-column">
-        <div class="tent-column-header">${t(ZONE_LABELS[tz])}</div>
+        <div class="tent-column-header">${zoneDisplayName(z.id)}</div>
         <div class="tent-column-empty">${t('dash.empty')}</div>
       </div>`;
     }
@@ -2533,22 +2613,53 @@ function renderTentsSection(filtered){
       </div>`;
     }).join('');
     return`<div class="tent-column">
-      <div class="tent-column-header">${t(ZONE_LABELS[tz])} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${entries.length})</span></div>
+      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${entries.length})</span></div>
       ${cards}
     </div>`;
   }).join('');
 
   return`<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#22c55e"></span>${t('dash.fruitingTents')}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
     <div class="tent-columns">${tentCols}</div>
   </div>`;
 }
 
-function renderContamSection(filtered){
-  const bags=getZoneBags('CONTAM');
+function renderSimpleZoneSection(zone,filtered){
+  const bags=getZoneBags(zone.id);
+  const entries=Object.entries(bags);
+  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
+  const byBatch={};
+  entries.forEach(([bagId,d])=>{
+    if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
+    byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
+  });
+  const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
+  const cards=batchEntries.map(([bid,d])=>{
+    d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
+    return`<div class="batch-card" onclick="this.classList.toggle('expanded')">
+      <div class="batch-card-header"><span class="batch-card-species">${spDot(d.sp)}${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
+      <div class="batch-card-meta"><span style="font-family:monospace;font-size:10px">${esc(bid)}</span><span>${esc(d.st)}</span></div>
+      <div class="batch-card-chips">${d.bags.map(bg=>{
+        const sel=selectedLocBags.has(bg.id);
+        return`<span class="bag-chip${sel?' selected':''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+  if(!cards)return'';
+  return`<div class="location-section">
+    <div class="location-section-header">
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${zoneDisplayName(zone.id)}</div>
+      <span class="location-section-count">${tp('dash.bags',entries.length)}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
+  </div>`;
+}
+
+function renderContamSection(zone,filtered){
+  const bags=getZoneBags(zone.id);
   const entries=Object.entries(bags);
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const byBatch={};
@@ -2579,7 +2690,7 @@ function renderContamSection(filtered){
 
   return`<div class="location-section contam-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#ef4444"></span>\u26a0 ${t(ZONE_LABELS.CONTAM)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${zoneDisplayName(zone.id)}</div>
       <span class="location-section-count">${tp('dash.bags',entries.length)}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
@@ -2684,8 +2795,8 @@ function openLocMovePopup(){
   const grid=document.getElementById('lm-grid');
   grid.style.display='flex';
   grid.innerHTML='<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">'+t('dash.zones')+'</div>'
-    +ZONES.map(z=>`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px">${t(ZONE_LABELS[z])}</button>`).join('')
-    +'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>'
+    +ZONES.map(z=>{const zObj=zones.find(x=>x.id===z);return`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color||'#888'}">${esc(zoneDisplayName(z))}</button>`}).join('')
+    +(ALL_RACKS.length?'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>':'')
     +ALL_RACKS.map(r=>`<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`).join('');
   m.classList.add('open');
 }
@@ -2884,7 +2995,7 @@ function renderBatches(){
     return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
-const locColor={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+let locColor={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
 function toggleBatchBags(batchId){
   const existing=document.getElementById('brow-'+batchId);
   if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
@@ -3466,6 +3577,79 @@ function restoreBackup(){
       document.getElementById('backup-restore-pw').value='';
       setTimeout(()=>window.location.reload(),1500);
     }catch(err){setStatus(st,'Restore failed',false)}
+  });
+}
+
+// ─── ZONES (Location Management) ────────────────────────────
+const ROLE_LABELS={spawn:'Spawn',incubation:'Inkubation',fruiting:'Fruchtung',contaminated:'Kontamination'};
+function renderZones(){
+  const el=document.getElementById('zones-list');
+  if(!el)return;
+  if(!zones.length){el.innerHTML='<div class="empty">Keine Zonen konfiguriert.</div>';return}
+  el.innerHTML=zones.map(z=>{
+    const bagCount=Object.keys(getZoneBags(z.id)).length;
+    const rackHtml=z.racks.length
+      ?z.racks.map(r=>{
+        const rBags=Object.keys(getRackBags(r.id)).length;
+        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" onclick="removeRack('${esc(r.id)}')" title="Rack löschen">&times;</button>`:''}</span>`;
+      }).join('')
+      :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
+    return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
+      <div class="zone-row-header">
+        <span class="zone-row-name">${esc(z.name)}</span>
+        <span class="badge">${esc(ROLE_LABELS[z.role]||z.role)}</span>
+        <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="addRackToZone('${esc(z.id)}')" style="font-size:11px">+ Rack</button>
+        ${bagCount===0?`<button class="btn btn-sm btn-r" onclick="removeZone('${esc(z.id)}')" style="font-size:11px">${t('zones.delete')}</button>`:''}
+      </div>
+      <div class="zone-row-racks">${rackHtml}</div>
+    </div>`;
+  }).join('');
+}
+async function addZone(){
+  const nameRaw=document.getElementById('zone-name').value.trim().toUpperCase();
+  const id=nameRaw.replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
+  if(!id||id.length<2){alert(t('zones.errShort'));return}
+  if(zones.some(z=>z.id===id)){alert(t('zones.errExists'));return}
+  const role=document.getElementById('zone-role').value;
+  const color=document.getElementById('zone-color').value;
+  const racksRaw=document.getElementById('zone-racks').value.trim();
+  const racks=racksRaw?racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'):[];
+  const now=new Date().toISOString();
+  const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
+  if(res.error){alert(res.error);return}
+  zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
+  rebuildZoneConstants();renderZones();renderStatus();
+  document.getElementById('zone-name').value='';
+  document.getElementById('zone-racks').value='';
+}
+function removeZone(id){
+  const z=zones.find(x=>x.id===id);if(!z)return;
+  confirm2(t('zones.deleteTitle'),t('zones.deleteMsg',{name:z.name}),t('zones.delete'),async()=>{
+    const res=await apiDelete('/api/zones/'+encodeURIComponent(id));
+    if(res.error){alert(res.error);return}
+    zones=zones.filter(x=>x.id!==id);
+    rebuildZoneConstants();renderZones();renderStatus();
+  });
+}
+function addRackToZone(zoneId){
+  const name=prompt(t('zones.rackPrompt'));
+  if(!name)return;
+  const rackId=zoneId+'_'+name.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(ALL_RACKS.includes(rackId)){alert(t('zones.errRackExists'));return}
+  apiPost('/api/zones/'+encodeURIComponent(zoneId)+'/racks',{id:rackId}).then(res=>{
+    if(res.error){alert(res.error);return}
+    const zone=zones.find(z=>z.id===zoneId);
+    if(zone)zone.racks.push({id:rackId,sortOrder:zone.racks.length+1});
+    rebuildZoneConstants();renderZones();renderStatus();
+  });
+}
+function removeRack(rackId){
+  apiDelete('/api/racks/'+encodeURIComponent(rackId)).then(res=>{
+    if(res.error){alert(res.error);return}
+    zones.forEach(z=>{z.racks=z.racks.filter(r=>r.id!==rackId)});
+    rebuildZoneConstants();renderZones();renderStatus();
   });
 }
 
@@ -5396,6 +5580,8 @@ function initEventListeners() {
   $('n-batch').addEventListener('click', () => { go('batch','n-batch'); });
   $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
   $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
+  $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
+  $('btn-add-zone').addEventListener('click', addZone);
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
