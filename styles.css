@@ -710,7 +710,7 @@ tr:hover td{background:#f1f5f9}
 /* ═══ PRINT ═════════════════════════════════════════════════════ */
 @media print{
   .sidebar,.mobile-topbar,.scan-float,.scan-toast,#harvest-panel,.no-print,.sb-overlay{display:none!important}
-  .content-wrap{margin-left:0!important}
+  .content-wrap{margin-left:0!important;min-height:0!important;display:none!important}
   .main{padding:0;max-width:100%}
   .page,.sp{display:none!important}
   #print-sheet,#ref-print-sheet{display:block!important;padding:10px}
