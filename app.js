@@ -595,6 +595,11 @@ const LANG = {
     'addBags.info': '{id} currently has {n} bags ({last} is last)',
     'addBags.enterQty': 'Enter at least 1',
     'addBags.added': 'Added {qty} to {id} (now {total} total)',
+    'addBags.addedTitle': 'Bags added',
+    'addBags.howMany': 'How many bags to add',
+    'addBags.printLabels': 'Print labels',
+    'addBags.printed': '{n} labels printed for {id}',
+    'addBags.close': 'Close',
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Delivery logged: +{kg}kg {mat} now {total}kg total',
     'inv.adjusted': 'Adjusted {mat}: {delta}kg now {total}kg total',
@@ -1252,6 +1257,11 @@ const LANG = {
     'addBags.info': '{id} hat aktuell {n} Beutel ({last} ist letzter)',
     'addBags.enterQty': 'Mindestens 1 eingeben',
     'addBags.added': '{qty} zu {id} hinzugef\u00fcgt (jetzt {total} gesamt)',
+    'addBags.addedTitle': 'Beutel hinzugef\u00fcgt',
+    'addBags.howMany': 'Wie viele Beutel hinzuf\u00fcgen',
+    'addBags.printLabels': 'Etiketten drucken',
+    'addBags.printed': '{n} Etiketten f\u00fcr {id} gedruckt',
+    'addBags.close': 'Schlie\u00dfen',
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Lieferung erfasst: +{kg}kg {mat} jetzt {total}kg gesamt',
     'inv.adjusted': '{mat} angepasst: {delta}kg jetzt {total}kg gesamt',
@@ -1908,6 +1918,11 @@ const LANG = {
     'addBags.info': '{id} tem atualmente {n} sacos ({last} \u00e9 o \u00faltimo)',
     'addBags.enterQty': 'Insira pelo menos 1',
     'addBags.added': '{qty} adicionados a {id} (agora {total} no total)',
+    'addBags.addedTitle': 'Sacos adicionados',
+    'addBags.howMany': 'Quantos sacos adicionar',
+    'addBags.printLabels': 'Imprimir etiquetas',
+    'addBags.printed': '{n} etiquetas impressas para {id}',
+    'addBags.close': 'Fechar',
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Entrega registrada: +{kg}kg {mat} agora {total}kg total',
     'inv.adjusted': '{mat} ajustado: {delta}kg agora {total}kg total',
@@ -2865,8 +2880,8 @@ function renderBatches(){
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" onclick="openNote('${esc(b.batchId)}')">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" onclick="openNote('${esc(b.batchId)}')">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">${t('batch.del')}</button></td></tr>`;
+    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
@@ -2893,10 +2908,14 @@ function toggleBatchBags(batchId){
   tr.appendChild(td);parentRow.after(tr);
 }
 let addBagsBatchId=null;
+let _lastNewBags=[];
 function openAddBags(batchId){
   const b=batches.find(x=>x.batchId===batchId);
   if(!b)return;
   addBagsBatchId=batchId;
+  document.getElementById('ab-phase-input').style.display='';
+  document.getElementById('ab-phase-result').style.display='none';
+  document.getElementById('m-addbags-title').textContent=t('addBags.title');
   document.getElementById('ab-info').textContent=t('addBags.info',{id:batchId,n:b.bags.length,last:b.bags[b.bags.length-1]});
   document.getElementById('ab-qty').value=1;
   document.getElementById('ab-preview').style.display='none';
@@ -2912,10 +2931,30 @@ function confirmAddBags(){
   const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
   b.bags=[...b.bags,...newBags];
   b.qty=b.bags.length;
+  _lastNewBags=newBags;
   apiPatch('/api/batches/'+encodeURIComponent(b.batchId)+'/bags',{add:newBags,newQty:b.qty});
-  document.getElementById('m-addbags').classList.remove('open');
+  // Switch to result phase
+  document.getElementById('ab-phase-input').style.display='none';
+  document.getElementById('m-addbags-title').textContent=t('addBags.addedTitle');
+  document.getElementById('ab-result-info').textContent=t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length});
+  document.getElementById('ab-new-bags').innerHTML=newBags.map(id=>
+    '<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">'+esc(id)+'</span>'
+  ).join('');
+  document.getElementById('ab-phase-result').style.display='';
   renderBatches();
-  setFb('ok',t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length}));
+}
+async function printNewBags(){
+  const b=batches.find(x=>x.batchId===addBagsBatchId);
+  if(!b||!_lastNewBags.length)return;
+  const zpl=makeBagZPL(_lastNewBags,b,'full');
+  const err=await sendToPrinter(zpl);
+  if(err){
+    const blob=new Blob([zpl],{type:'text/plain'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=b.batchId+'_new_labels.zpl';a.click();
+  }else{
+    setFb('ok',t('addBags.printed',{n:_lastNewBags.length,id:b.batchId}));
+  }
+  document.getElementById('m-addbags').classList.remove('open');
 }
 document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
 
@@ -5344,6 +5383,8 @@ function initEventListeners() {
   // Modals
   $('addbags-cancel-btn').addEventListener('click', () => { document.getElementById('m-addbags').classList.remove('open'); });
   $('addbags-confirm-btn').addEventListener('click', confirmAddBags);
+  $('ab-done-btn').addEventListener('click', () => { document.getElementById('m-addbags').classList.remove('open'); });
+  $('ab-print-btn').addEventListener('click', printNewBags);
   $('m-cancel').addEventListener('click', closeConfirm);
   $('change-pw-modal').addEventListener('click', function(e) { if(e.target===this) hideChangePasswordModal(); });
   $('btn-1').addEventListener('click', hideChangePasswordModal);
@@ -5399,7 +5440,18 @@ function initEventListeners() {
   $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
 
-  // Batches
+  // Batches — delegated actions for dynamically rendered rows (CSP-safe)
+  $('batches-body').addEventListener('click', function(e) {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const batch = el.dataset.batch;
+    switch(el.dataset.action) {
+      case 'toggle-bags': toggleBatchBags(batch); break;
+      case 'open-note': openNote(batch); break;
+      case 'add-bags': openAddBags(batch); break;
+      case 'del-batch': delBatch(batch); break;
+    }
+  });
   $('st-batch-list').addEventListener('click', () => { openStab('batch','list'); });
   $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
   $('st-batch-harvest').addEventListener('click', () => { openStab('batch','harvest'); });

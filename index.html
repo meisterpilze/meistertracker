@@ -22,16 +22,28 @@
 <div class="modal-bg" id="m-addbags" role="dialog" aria-modal="true" aria-labelledby="m-addbags-title">
   <div class="modal">
     <h3 id="m-addbags-title">Add bags to batch</h3>
-    <p id="ab-info" style="font-size:13px;color:#555;margin-bottom:12px"></p>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div><label>How many bags to add</label>
-        <input type="number" id="ab-qty" value="1" min="1" max="200" style="width:100px" />
+    <!-- Phase 1: input -->
+    <div id="ab-phase-input">
+      <p id="ab-info" style="font-size:13px;color:#555;margin-bottom:12px"></p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label data-i18n="addBags.howMany">How many bags to add</label>
+          <input type="number" id="ab-qty" value="1" min="1" max="200" style="width:100px" />
+        </div>
+        <div id="ab-preview" style="font-size:12px;color:#666;background:#f9f8f5;border-radius:7px;padding:8px 10px;display:none"></div>
       </div>
-      <div id="ab-preview" style="font-size:12px;color:#666;background:#f9f8f5;border-radius:7px;padding:8px 10px;display:none"></div>
+      <div class="modal-btns">
+        <button class="btn" id="addbags-cancel-btn">Cancel</button>
+        <button class="btn btn-p" id="addbags-confirm-btn">Add bags</button>
+      </div>
     </div>
-    <div class="modal-btns">
-      <button class="btn" id="addbags-cancel-btn">Cancel</button>
-      <button class="btn btn-p" id="addbags-confirm-btn">Add bags</button>
+    <!-- Phase 2: result + print -->
+    <div id="ab-phase-result" style="display:none">
+      <p id="ab-result-info" style="font-size:13px;color:#166534;margin-bottom:12px"></p>
+      <div id="ab-new-bags" style="display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow-y:auto"></div>
+      <div class="modal-btns">
+        <button class="btn" id="ab-done-btn" data-i18n="addBags.close">Close</button>
+        <button class="btn btn-p" id="ab-print-btn" data-i18n="addBags.printLabels">Print labels</button>
+      </div>
     </div>
   </div>
 </div>
