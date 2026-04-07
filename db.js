@@ -1155,7 +1155,12 @@ function getAllCalendarEventAssignees(db) {
 // -- Zones & Racks --
 function insertZone(db, z) {
   if (db.prepare('SELECT 1 FROM zones WHERE id=?').get(z.id)) throw new Error('Zone already exists: ' + z.id);
-  db.transaction(() => {
+  if (z.racks && z.racks.length) {
+    const existing = db.prepare('SELECT id FROM racks WHERE id IN (' + z.racks.map(() => '?').join(',') + ')').all(...z.racks);
+    if (existing.length) throw new Error('Rack already exists: ' + existing.map(r => r.id).join(', '));
+  }
+  db.exec('BEGIN');
+  try {
     db.prepare('INSERT INTO zones(id,name,role,color,sort_order,max_capacity,created) VALUES(?,?,?,?,?,?,?)').run(
       z.id, z.name, z.role, z.color, z.sortOrder || 0, z.maxCapacity || null, z.created || new Date().toISOString()
     );
@@ -1164,24 +1169,10 @@ function insertZone(db, z) {
       z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
     }
     incrementDataVersion(db);
-  })();
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
-function updateZone(db, id, fields) {
-  const allowed = ['name', 'role', 'color', 'sort_order', 'max_capacity'];
-  const map = { sortOrder: 'sort_order', maxCapacity: 'max_capacity' };
-  const sets = []; const vals = [];
-  for (const [k, v] of Object.entries(fields)) {
-    const col = map[k] || k;
-    if (!allowed.includes(col)) continue;
-    sets.push(col + '=?');
-    vals.push(v);
-  }
-  if (!sets.length) return;
-  vals.push(id);
-  db.prepare('UPDATE zones SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
-  incrementDataVersion(db);
-}
 
 function zoneBagCount(db, zoneId) {
   // Get all rack ids for this zone
@@ -1251,5 +1242,5 @@ module.exports = {
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
-  insertZone, updateZone, deleteZone, insertRack, deleteRack, zoneExists
+  insertZone, deleteZone, insertRack, deleteRack, zoneExists
 };

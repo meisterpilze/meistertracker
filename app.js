@@ -87,6 +87,7 @@ const LANG = {
     'dash.stock': 'Stock',
     'dash.noMatches': 'No batches match.',
     'dash.noBatches': 'No batches yet. Create one in Batches \u2192 New batch.',
+    'dash.noZones': 'No zones configured. Go to Tools \u2192 Zones to add zones.',
     'dash.harvestedAmount': '{g}g harvested',
     'dash.due': 'Due',
     'dash.bags.one': '{n} bag',
@@ -794,6 +795,7 @@ const LANG = {
     'dash.stock': 'Lager',
     'dash.noMatches': 'Keine Chargen gefunden.',
     'dash.noBatches': 'Noch keine Chargen. Erstelle eine unter Chargen \u2192 Neue Charge.',
+    'dash.noZones': 'Keine Zonen konfiguriert. Gehe zu Werkzeuge \u2192 Zonen, um Zonen anzulegen.',
     'dash.harvestedAmount': '{g}g geerntet',
     'dash.due': 'F\u00e4llig',
     'dash.bags.one': '{n} Beutel',
@@ -1501,6 +1503,7 @@ const LANG = {
     'dash.stock': 'Estoque',
     'dash.noMatches': 'Nenhum lote encontrado.',
     'dash.noBatches': 'Nenhum lote ainda. Crie um em Lotes \u2192 Novo lote.',
+    'dash.noZones': 'Nenhuma zona configurada. V\u00e1 para Ferramentas \u2192 Zonas para adicionar zonas.',
     'dash.harvestedAmount': '{g}g colhido',
     'dash.due': 'Vencimento',
     'dash.bags.one': '{n} saco',
@@ -2155,7 +2158,7 @@ const LANG = {
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
-const toZone=loc=>{if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
+const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
@@ -2256,7 +2259,7 @@ function applyData(d){
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
   calendarEvents=d.calendarEvents||[];zones=d.zones||[];
-  if(zones.length)rebuildZoneConstants();
+  rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
 }
@@ -2559,6 +2562,7 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
   if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
 
   // Compute per-batch status
@@ -3714,8 +3718,6 @@ function renderZones(){
         ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-warning)">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
-        <span style="display:inline-flex;gap:2px;margin-right:4px">${idx>0?`<button class="btn btn-sm" data-action="zone-up" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▲</button>`:''}${idx<zones.length-1?`<button class="btn btn-sm" data-action="zone-down" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▼</button>`:''}</span>
-        <button class="btn btn-sm" data-action="edit-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.edit'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
         <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
@@ -3745,16 +3747,21 @@ async function addZone(){
   const capVal=document.getElementById('zone-capacity').value.trim();
   const maxCapacity=capVal?parseInt(capVal,10):null;
   if(maxCapacity!==null&&(!Number.isFinite(maxCapacity)||maxCapacity<1)){alert(t('zones.errCapacity'));return}
-  const now=new Date().toISOString();
-  const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,maxCapacity,created:now});
-  if(res.error){alert(res.error);return}
-  zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,maxCapacity,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
-  rebuildZoneConstants();renderZones();renderStatus();
-  document.getElementById('zone-name').value='';
-  document.getElementById('zone-racks').value='';
-  document.getElementById('zone-color').value='#10b981';
-  document.getElementById('zone-role').value='fruiting';
-  document.getElementById('zone-capacity').value='';
+  try{
+    const now=new Date().toISOString();
+    const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,maxCapacity,created:now});
+    if(res.error){alert(res.error);return}
+    zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,maxCapacity,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
+    rebuildZoneConstants();renderZones();renderStatus();
+    document.getElementById('zone-name').value='';
+    document.getElementById('zone-racks').value='';
+    document.getElementById('zone-color').value='#10b981';
+    document.getElementById('zone-role').value='fruiting';
+    document.getElementById('zone-capacity').value='';
+  }catch(e){
+    console.error('addZone error:',e);
+    alert('Error creating zone: '+(e.message||'unknown error'));
+  }
 }
 function removeZone(id){
   const z=zones.find(x=>x.id===id);if(!z)return;
@@ -3787,44 +3794,6 @@ function removeRack(rackId){
     });
   });
 }
-function openZoneEdit(id){
-  const z=zones.find(x=>x.id===id);if(!z)return;
-  document.getElementById('ze-id').value=z.id;
-  document.getElementById('ze-name').value=z.name;
-  document.getElementById('ze-role').value=z.role;
-  document.getElementById('ze-color').value=z.color;
-  document.getElementById('ze-capacity').value=z.maxCapacity||'';
-  document.getElementById('ze-title').textContent=t('zones.editTitle');
-  document.getElementById('m-zone-edit').classList.add('open');
-  setTimeout(()=>document.getElementById('ze-name').focus(),50);
-}
-async function saveZoneEdit(){
-  const id=document.getElementById('ze-id').value;
-  const name=document.getElementById('ze-name').value.trim();
-  const role=document.getElementById('ze-role').value;
-  const color=document.getElementById('ze-color').value;
-  if(!name||name.length<2){alert(t('zones.errShort'));return}
-  if(name.length>50){alert(t('zones.errLong'));return}
-  const capVal=document.getElementById('ze-capacity').value.trim();
-  const maxCapacity=capVal?parseInt(capVal,10):null;
-  if(maxCapacity!==null&&(!Number.isFinite(maxCapacity)||maxCapacity<1)){alert(t('zones.errCapacity'));return}
-  const res=await apiPatch('/api/zones/'+encodeURIComponent(id),{name,role,color,maxCapacity});
-  if(res.error){alert(res.error);return}
-  const z=zones.find(x=>x.id===id);
-  if(z){z.name=name;z.role=role;z.color=color;z.maxCapacity=maxCapacity}
-  rebuildZoneConstants();renderZones();renderStatus();
-  document.getElementById('m-zone-edit').classList.remove('open');
-}
-async function moveZoneSort(id,dir){
-  const idx=zones.findIndex(z=>z.id===id);if(idx<0)return;
-  const swapIdx=idx+dir;
-  if(swapIdx<0||swapIdx>=zones.length)return;
-  [zones[idx],zones[swapIdx]]=[zones[swapIdx],zones[idx]];
-  const updates=zones.map((z,i)=>({id:z.id,sortOrder:i+1}));
-  updates.forEach(u=>{const z=zones.find(x=>x.id===u.id);if(z)z.sortOrder=u.sortOrder});
-  renderZones();
-  for(const u of updates)await apiPatch('/api/zones/'+encodeURIComponent(u.id),{sortOrder:u.sortOrder});
-}
 function bulkMoveToRack(zoneId){
   const z=zones.find(x=>x.id===zoneId);if(!z||!z.racks.length)return;
   const zoneBags=getZoneBags(zoneId);
@@ -3849,7 +3818,7 @@ async function executeBulkMoveToRack(zoneId,rackId){
   const rackIds=new Set(z.racks.map(r=>r.id));
   const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
   if(!directBags.length)return;
-  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,ts:new Date().toISOString()}));
+  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,time:new Date().toISOString()}));
   const res=await apiPost('/api/scan-log',{entries});
   if(res.error){alert(res.error);return}
   entries.forEach(e=>scanLog.push(e));
@@ -4926,12 +4895,18 @@ const CAL_HOURS_START=6,CAL_HOURS_END=22;
 function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
 function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
 
+function getBatchLoc(b){
+  const locs={};
+  b.bags.forEach(bag=>{const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());if(last&&last.action!=='REMOVE'&&last.to)locs[last.to]=(locs[last.to]||0)+1});
+  const entries=Object.entries(locs);if(!entries.length)return'';entries.sort((a,b)=>b[1]-a[1]);return entries[0][0];
+}
 function collectCalendarEvents(){
   const events=[];
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
+    const loc=getBatchLoc(b);
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
@@ -5922,14 +5897,8 @@ function initEventListeners() {
     else if(action==='del-rack')removeRack(btn.dataset.rack);
     else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
     else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
-    else if(action==='edit-zone')openZoneEdit(btn.dataset.zone);
-    else if(action==='zone-up')moveZoneSort(btn.dataset.zone,-1);
-    else if(action==='zone-down')moveZoneSort(btn.dataset.zone,1);
     else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
   });
-  $('ze-cancel').addEventListener('click', ()=>document.getElementById('m-zone-edit').classList.remove('open'));
-  $('ze-save').addEventListener('click', saveZoneEdit);
-  $('m-zone-edit').addEventListener('click', e=>{if(e.target.id==='m-zone-edit')e.target.classList.remove('open')});
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
@@ -6032,6 +6001,7 @@ function initEventListeners() {
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
   $('cal-entry-del-btn').addEventListener('click', deleteEntry);
   $('cal-entry-allday').addEventListener('change', toggleEntryTimeInputs);
+  $('cal-entry-type-select').addEventListener('change', function(){setEntryType(this.value)});
   $('m-cal-entry').addEventListener('click', e=>{if(e.target.id==='m-cal-entry')closeEntryModal()});
   $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
 

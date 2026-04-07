@@ -135,7 +135,7 @@ function jsonErr(res, code, msg) { res.writeHead(code,{'Content-Type':'applicati
 function safeErr(res, err) {
   const msg = err.message || '';
   // Known validation errors from db.js are safe to expose
-  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot/i.test(msg);
+  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot|constraint/i.test(msg);
   if (safe) { jsonErr(res, 400, msg); }
   else { log('error', 'Unexpected error', { error: msg, stack: err.stack }); jsonErr(res, 500, 'Internal server error'); }
 }
@@ -1900,19 +1900,6 @@ function handleRequest(req,res){
     });return;
   }
   const zoneMatch=req.url.match(/^\/api\/zones\/([^/]+)$/);
-  if(req.method==='PATCH'&&zoneMatch){
-    if(requireAdmin(req,res))return;
-    const id=decodeURIComponent(zoneMatch[1]);
-    jsonBody(req,res,(e,data)=>{
-      if(e){jsonErr(res,400,e.message);return}
-      if(data.name!==undefined){const vlen=validateLengths(data,{name:50});if(vlen){jsonErr(res,400,vlen);return}}
-      if(data.color&&!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
-      if(data.role){const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}}
-      if(data.maxCapacity!==undefined&&data.maxCapacity!==null){data.maxCapacity=parseInt(data.maxCapacity,10);if(!Number.isFinite(data.maxCapacity)||data.maxCapacity<1){jsonErr(res,400,'maxCapacity must be a positive integer');return}}
-      if(!db.zoneExists(database,id)){jsonErr(res,404,'Zone not found');return}
-      try{db.updateZone(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
-    });return;
-  }
   if(req.method==='DELETE'&&zoneMatch){
     if(requireAdmin(req,res))return;
     const id=decodeURIComponent(zoneMatch[1]);
