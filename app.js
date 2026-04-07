@@ -4180,8 +4180,10 @@ function newScanSession(){
 }
 let _scanTempIdCounter=0;
 function processScan(raw){
-  // Replace _ with - (German HID keyboard fix)
-  let val=raw.trim().toUpperCase().replace(/_/g,'-');if(!val)return;
+  // Keep underscores for locations (SPAWN_R1 etc); convert to hyphens only for bag/batch IDs
+  let val=raw.trim().toUpperCase();if(!val)return;
+  if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
+  else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
   // Decode new format: BO-ERL-0327-6 → full bag ID BLUES-260327-01-06
   // Parts: [spAbbrev, strainPrefix, MMDD, bagNum]
   const parts=val.split('-');
@@ -4285,13 +4287,16 @@ const SCAN_MAX_GAP=50;
 const SCAN_MIN_LEN=3;
 
 function isKnownBarcode(val){
-  val=val.toUpperCase().replace(/_/g,'-');
+  val=val.toUpperCase();
+  // Check actions/locations with underscores intact (barcode locations use underscores)
   if(ACTIONS.includes(val))return true;
   if(LOCS.includes(val))return true;
-  if(/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(val))return true;
-  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
-  if(/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(val))return true;
-  if(/^[A-Z]+-\d{6}-\d{2}$/.test(val))return true;
+  // For bag/batch patterns, convert underscores to hyphens
+  const h=val.replace(/_/g,'-');
+  if(/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(h))return true;
+  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(h))return true;
+  if(/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(h))return true;
+  if(/^[A-Z]+-\d{6}-\d{2}$/.test(h))return true;
   return false;
 }
 
@@ -4299,7 +4304,7 @@ function _flushScanBuf(){
   const raw=_scanBuf.chars.map(c=>c.ch).join('');
   _scanBuf.chars=[];
   if(raw.length<SCAN_MIN_LEN)return;
-  const cleaned=raw.trim().toUpperCase().replace(/_/g,'-');
+  const cleaned=raw.trim().toUpperCase();
   if(!isKnownBarcode(cleaned)){setFb('err',t('scanFb.unknownFormat',{val:cleaned})||'Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
   processScan(raw);
 }
