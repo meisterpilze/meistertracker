@@ -719,7 +719,8 @@ const LANG = {
     'zones.errRackEmpty': 'Rack name cannot be empty',
     'zones.errTooManyRacks': 'Too many racks (max. 50)',
     'zones.hasBags': '{count} bags — remove first',
-    'zones.directBags': '{count} not in any rack',
+    'zones.directBags': '{count} not in rack',
+    'zones.directBagsHint': 'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Delete rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
@@ -1413,7 +1414,8 @@ const LANG = {
     'zones.errRackEmpty': 'Rack-Name darf nicht leer sein',
     'zones.errTooManyRacks': 'Zu viele Racks (max. 50)',
     'zones.hasBags': '{count} Bags — erst entfernen',
-    'zones.directBags': '{count} nicht in einem Rack',
+    'zones.directBags': '{count} ohne Rack',
+    'zones.directBagsHint': 'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Rack löschen?',
     'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
@@ -2106,7 +2108,8 @@ const LANG = {
     'zones.errRackEmpty': 'Nome do rack não pode estar vazio',
     'zones.errTooManyRacks': 'Muitos racks (máx. 50)',
     'zones.hasBags': '{count} bags — remova primeiro',
-    'zones.directBags': '{count} não está em nenhum rack',
+    'zones.directBags': '{count} sem rack',
+    'zones.directBagsHint': 'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Excluir rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
@@ -3645,13 +3648,14 @@ function renderZones(){
       ?z.racks.map(r=>{
         const rBags=Object.keys(getRackBags(r.id)).length;
         return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
-      }).join('')+(directCount>0?`<span class="zone-rack-chip" style="border-color:var(--c-warning);color:var(--c-warning)">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:'')
+      }).join('')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
     return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-row-name">${esc(z.name)}</span>
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
+        ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         ${bagCount===0
