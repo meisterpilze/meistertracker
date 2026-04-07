@@ -709,6 +709,15 @@ const LANG = {
     'zones.errShort': 'Zone name too short (min. 2 chars)',
     'zones.errExists': 'Zone already exists',
     'zones.errRackExists': 'Rack already exists',
+    'zones.empty': 'No zones configured.',
+    'zones.roleSpawn': 'Spawn',
+    'zones.roleIncubation': 'Incubation',
+    'zones.roleFruiting': 'Fruiting',
+    'zones.roleContaminated': 'Contaminated',
+    'zones.errIdStart': 'Zone name must start with a letter (A-Z)',
+    'zones.addRack': '+ Rack',
+    'zones.rackDeleteTitle': 'Delete rack?',
+    'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
   },
   de: {
     // Nav
@@ -1389,6 +1398,15 @@ const LANG = {
     'zones.errShort': 'Zonenname zu kurz (mind. 2 Zeichen)',
     'zones.errExists': 'Zone existiert bereits',
     'zones.errRackExists': 'Rack existiert bereits',
+    'zones.empty': 'Keine Zonen konfiguriert.',
+    'zones.roleSpawn': 'Spawn',
+    'zones.roleIncubation': 'Inkubation',
+    'zones.roleFruiting': 'Fruchtung',
+    'zones.roleContaminated': 'Kontamination',
+    'zones.errIdStart': 'Zonenname muss mit einem Buchstaben (A-Z) beginnen',
+    'zones.addRack': '+ Rack',
+    'zones.rackDeleteTitle': 'Rack löschen?',
+    'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
   },
   pt: {
     // Nav
@@ -2068,6 +2086,15 @@ const LANG = {
     'zones.errShort': 'Nome da zona muito curto (mín. 2 caracteres)',
     'zones.errExists': 'Zona já existe',
     'zones.errRackExists': 'Rack já existe',
+    'zones.empty': 'Nenhuma zona configurada.',
+    'zones.roleSpawn': 'Spawn',
+    'zones.roleIncubation': 'Incubação',
+    'zones.roleFruiting': 'Frutificação',
+    'zones.roleContaminated': 'Contaminação',
+    'zones.errIdStart': 'Nome da zona deve começar com uma letra (A-Z)',
+    'zones.addRack': '+ Rack',
+    'zones.rackDeleteTitle': 'Excluir rack?',
+    'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
   }
 };
 
@@ -2327,6 +2354,13 @@ function confirm2(title,body,label,cb){document.getElementById('m-title').textCo
 function closeConfirm(){document.getElementById('m-confirm').classList.remove('open');confirmCb=null}
 document.getElementById('m-ok').onclick=()=>{if(confirmCb)confirmCb();closeConfirm()};
 document.getElementById('m-confirm').addEventListener('click',e=>{if(e.target.id==='m-confirm')closeConfirm()});
+let promptCb=null;
+function prompt2(title,placeholder,cb){document.getElementById('m-pr-title').textContent=title;const inp=document.getElementById('m-pr-input');inp.value='';inp.placeholder=placeholder||'';promptCb=cb;document.getElementById('m-prompt').classList.add('open');setTimeout(()=>inp.focus(),80)}
+function closePrompt(){document.getElementById('m-prompt').classList.remove('open');promptCb=null}
+document.getElementById('m-pr-ok').onclick=()=>{if(promptCb)promptCb(document.getElementById('m-pr-input').value.trim());closePrompt()};
+document.getElementById('m-pr-cancel').onclick=closePrompt;
+document.getElementById('m-prompt').addEventListener('click',e=>{if(e.target.id==='m-prompt')closePrompt()});
+document.getElementById('m-pr-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('m-pr-ok').click()}});
 function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent='Note — '+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
 function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
 function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();apiPatch('/api/batches/'+encodeURIComponent(noteId),{notes:b.notes});renderBatches()}closeNote()}
@@ -2767,7 +2801,7 @@ function getZoneBags(zone){
       if(tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
       if(fz===zone&&e.bag)delete bags[e.bag];
     }
-    if(e.action==='REMOVE'&&e.bag&&bags[e.bag])delete bags[e.bag];
+    if(e.action==='REMOVE'&&fz===zone&&e.bag)delete bags[e.bag];
   });
   return bags;
 }
@@ -2813,7 +2847,7 @@ function locPreConfirm(toLoc){
   c.innerHTML=`<div style="text-align:center;padding:12px 0">
     <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags',{n:n})}</div>
     <div style="font-size:11px;color:#888;margin-bottom:8px;font-family:monospace">${preview}</div>
-    <div style="font-size:20px;margin-bottom:16px">${fromLabel} \u2192 <strong>${toLoc}</strong></div>
+    <div style="font-size:20px;margin-bottom:16px">${esc(fromLabel)} \u2192 <strong>${esc(toLoc)}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
       <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">${t('nav.cancel')}</button>
       <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">${t('confirm.confirm')}</button>
@@ -3581,26 +3615,26 @@ function restoreBackup(){
 }
 
 // ─── ZONES (Location Management) ────────────────────────────
-const ROLE_LABELS={spawn:'Spawn',incubation:'Inkubation',fruiting:'Fruchtung',contaminated:'Kontamination'};
+const ROLE_LABELS={spawn:'zones.roleSpawn',incubation:'zones.roleIncubation',fruiting:'zones.roleFruiting',contaminated:'zones.roleContaminated'};
 function renderZones(){
   const el=document.getElementById('zones-list');
   if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">Keine Zonen konfiguriert.</div>';return}
+  if(!zones.length){el.innerHTML='<div class="empty">'+esc(t('zones.empty'))+'</div>';return}
   el.innerHTML=zones.map(z=>{
     const bagCount=Object.keys(getZoneBags(z.id)).length;
     const rackHtml=z.racks.length
       ?z.racks.map(r=>{
         const rBags=Object.keys(getRackBags(r.id)).length;
-        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" onclick="removeRack('${esc(r.id)}')" title="Rack löschen">&times;</button>`:''}</span>`;
+        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" onclick="removeRack('${esc(r.id)}')" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
       }).join('')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
     return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-row-name">${esc(z.name)}</span>
-        <span class="badge">${esc(ROLE_LABELS[z.role]||z.role)}</span>
+        <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
         <span style="flex:1"></span>
-        <button class="btn btn-sm" onclick="addRackToZone('${esc(z.id)}')" style="font-size:11px">+ Rack</button>
+        <button class="btn btn-sm" onclick="addRackToZone('${esc(z.id)}')" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         ${bagCount===0?`<button class="btn btn-sm btn-r" onclick="removeZone('${esc(z.id)}')" style="font-size:11px">${t('zones.delete')}</button>`:''}
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
@@ -3611,6 +3645,7 @@ async function addZone(){
   const nameRaw=document.getElementById('zone-name').value.trim().toUpperCase();
   const id=nameRaw.replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
   if(!id||id.length<2){alert(t('zones.errShort'));return}
+  if(!/^[A-Z]/.test(id)){alert(t('zones.errIdStart'));return}
   if(zones.some(z=>z.id===id)){alert(t('zones.errExists'));return}
   const role=document.getElementById('zone-role').value;
   const color=document.getElementById('zone-color').value;
@@ -3634,22 +3669,25 @@ function removeZone(id){
   });
 }
 function addRackToZone(zoneId){
-  const name=prompt(t('zones.rackPrompt'));
-  if(!name)return;
-  const rackId=zoneId+'_'+name.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(ALL_RACKS.includes(rackId)){alert(t('zones.errRackExists'));return}
-  apiPost('/api/zones/'+encodeURIComponent(zoneId)+'/racks',{id:rackId}).then(res=>{
-    if(res.error){alert(res.error);return}
-    const zone=zones.find(z=>z.id===zoneId);
-    if(zone)zone.racks.push({id:rackId,sortOrder:zone.racks.length+1});
-    rebuildZoneConstants();renderZones();renderStatus();
+  prompt2(t('zones.rackPrompt'),'R3',function(name){
+    if(!name)return;
+    const rackId=zoneId+'_'+name.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(ALL_RACKS.includes(rackId)){alert(t('zones.errRackExists'));return}
+    apiPost('/api/zones/'+encodeURIComponent(zoneId)+'/racks',{id:rackId}).then(res=>{
+      if(res.error){alert(res.error);return}
+      const zone=zones.find(z=>z.id===zoneId);
+      if(zone)zone.racks.push({id:rackId,sortOrder:zone.racks.length+1});
+      rebuildZoneConstants();renderZones();renderStatus();
+    });
   });
 }
 function removeRack(rackId){
-  apiDelete('/api/racks/'+encodeURIComponent(rackId)).then(res=>{
-    if(res.error){alert(res.error);return}
-    zones.forEach(z=>{z.racks=z.racks.filter(r=>r.id!==rackId)});
-    rebuildZoneConstants();renderZones();renderStatus();
+  confirm2(t('zones.rackDeleteTitle'),t('zones.rackDeleteMsg',{name:rackId}),t('zones.delete'),()=>{
+    apiDelete('/api/racks/'+encodeURIComponent(rackId)).then(res=>{
+      if(res.error){alert(res.error);return}
+      zones.forEach(z=>{z.racks=z.racks.filter(r=>r.id!==rackId)});
+      rebuildZoneConstants();renderZones();renderStatus();
+    });
   });
 }
 
@@ -5540,7 +5578,7 @@ if(typeof pushBatchCaldav==='undefined'){
 // Escape key closes the topmost open modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-confirm'];
+  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm'];
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
@@ -5630,6 +5668,7 @@ function initEventListeners() {
   $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
   $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
   $('btn-add-zone').addEventListener('click', addZone);
+  $('zone-role').addEventListener('change', function(){const c={spawn:'#a855f7',incubation:'#0ea5e9',fruiting:'#10b981',contaminated:'#ef4444'}[this.value];if(c)document.getElementById('zone-color').value=c});
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
