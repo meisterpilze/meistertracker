@@ -4955,7 +4955,7 @@ function openEventDetail(ev){
     if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
-    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#3b82f6'};
+    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
     badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3b82f6;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
     assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=t.description||'';
