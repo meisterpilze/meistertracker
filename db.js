@@ -1150,18 +1150,21 @@ function getAllCalendarEventAssignees(db) {
 
 // -- Zones & Racks --
 function insertZone(db, z) {
-  db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
-    z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
-  );
-  if (z.racks && z.racks.length) {
-    const ins = db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
-    z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
-  }
-  incrementDataVersion(db);
+  if (db.prepare('SELECT 1 FROM zones WHERE id=?').get(z.id)) throw new Error('Zone already exists: ' + z.id);
+  db.transaction(() => {
+    db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
+      z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
+    );
+    if (z.racks && z.racks.length) {
+      const ins = db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
+      z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
+    }
+    incrementDataVersion(db);
+  })();
 }
 
 function updateZone(db, id, fields) {
-  const allowed = ['name', 'color', 'sort_order'];
+  const allowed = ['name', 'role', 'color', 'sort_order'];
   const map = { sortOrder: 'sort_order' };
   const sets = []; const vals = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -1216,6 +1219,7 @@ function rackBagCount(db, rackId) {
 }
 
 function deleteRack(db, id) {
+  if (!db.prepare('SELECT 1 FROM racks WHERE id=?').get(id)) throw new Error('Rack not found: ' + id);
   const count = rackBagCount(db, id);
   if (count > 0) throw new Error('Rack has ' + count + ' bags — remove them first');
   db.prepare('DELETE FROM racks WHERE id=?').run(id);
