@@ -3696,8 +3696,6 @@ function renderZones(){
         ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-warning)">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
-        <span style="display:inline-flex;gap:2px;margin-right:4px">${idx>0?`<button class="btn btn-sm" data-action="zone-up" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▲</button>`:''}${idx<zones.length-1?`<button class="btn btn-sm" data-action="zone-down" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▼</button>`:''}</span>
-        <button class="btn btn-sm" data-action="edit-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.edit'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
         <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
@@ -3769,40 +3767,6 @@ function removeRack(rackId){
       rebuildZoneConstants();renderZones();renderStatus();
     });
   });
-}
-function openZoneEdit(id){
-  const z=zones.find(x=>x.id===id);if(!z)return;
-  document.getElementById('ze-id').value=z.id;
-  document.getElementById('ze-name').value=z.name;
-  document.getElementById('ze-role').value=z.role;
-  document.getElementById('ze-color').value=z.color;
-  document.getElementById('ze-title').textContent=t('zones.editTitle');
-  document.getElementById('m-zone-edit').classList.add('open');
-  setTimeout(()=>document.getElementById('ze-name').focus(),50);
-}
-async function saveZoneEdit(){
-  const id=document.getElementById('ze-id').value;
-  const name=document.getElementById('ze-name').value.trim();
-  const role=document.getElementById('ze-role').value;
-  const color=document.getElementById('ze-color').value;
-  if(!name||name.length<2){alert(t('zones.errShort'));return}
-  if(name.length>50){alert(t('zones.errLong'));return}
-  const res=await apiPatch('/api/zones/'+encodeURIComponent(id),{name,role,color});
-  if(res.error){alert(res.error);return}
-  const z=zones.find(x=>x.id===id);
-  if(z){z.name=name;z.role=role;z.color=color}
-  rebuildZoneConstants();renderZones();renderStatus();
-  document.getElementById('m-zone-edit').classList.remove('open');
-}
-async function moveZoneSort(id,dir){
-  const idx=zones.findIndex(z=>z.id===id);if(idx<0)return;
-  const swapIdx=idx+dir;
-  if(swapIdx<0||swapIdx>=zones.length)return;
-  [zones[idx],zones[swapIdx]]=[zones[swapIdx],zones[idx]];
-  const updates=zones.map((z,i)=>({id:z.id,sortOrder:i+1}));
-  updates.forEach(u=>{const z=zones.find(x=>x.id===u.id);if(z)z.sortOrder=u.sortOrder});
-  renderZones();
-  for(const u of updates)await apiPatch('/api/zones/'+encodeURIComponent(u.id),{sortOrder:u.sortOrder});
 }
 function bulkMoveToRack(zoneId){
   const z=zones.find(x=>x.id===zoneId);if(!z||!z.racks.length)return;
@@ -5901,14 +5865,8 @@ function initEventListeners() {
     else if(action==='del-rack')removeRack(btn.dataset.rack);
     else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
     else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
-    else if(action==='edit-zone')openZoneEdit(btn.dataset.zone);
-    else if(action==='zone-up')moveZoneSort(btn.dataset.zone,-1);
-    else if(action==='zone-down')moveZoneSort(btn.dataset.zone,1);
     else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
   });
-  $('ze-cancel').addEventListener('click', ()=>document.getElementById('m-zone-edit').classList.remove('open'));
-  $('ze-save').addEventListener('click', saveZoneEdit);
-  $('m-zone-edit').addEventListener('click', e=>{if(e.target.id==='m-zone-edit')e.target.classList.remove('open')});
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
