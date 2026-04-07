@@ -721,9 +721,15 @@ const LANG = {
     'zones.hasBags': '{count} bags — remove first',
     'zones.directBags': '{count} not in rack',
     'zones.directBagsHint': 'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
+    'zones.edit': 'Edit',
+    'zones.editTitle': 'Edit Zone',
+    'zones.moveToRack': 'Move to rack',
+    'zones.moveToRackTitle': 'Move {count} bags to a rack',
+    'zones.movedToRack': '{count} bags moved to {rack}',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Delete rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
+    'scanFb.preferRack': '⚠ "{loc}" is a zone — scan a rack for precise tracking (e.g. {example})',
   },
   de: {
     // Nav
@@ -1416,9 +1422,15 @@ const LANG = {
     'zones.hasBags': '{count} Bags — erst entfernen',
     'zones.directBags': '{count} ohne Rack',
     'zones.directBagsHint': 'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
+    'zones.edit': 'Bearbeiten',
+    'zones.editTitle': 'Zone bearbeiten',
+    'zones.moveToRack': 'In Rack verschieben',
+    'zones.moveToRackTitle': '{count} Bags in ein Rack verschieben',
+    'zones.movedToRack': '{count} Bags nach {rack} verschoben',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Rack löschen?',
     'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
+    'scanFb.preferRack': '⚠ „{loc}" ist eine Zone — scanne ein Rack für genaues Tracking (z.B. {example})',
   },
   pt: {
     // Nav
@@ -2110,16 +2122,22 @@ const LANG = {
     'zones.hasBags': '{count} bags — remova primeiro',
     'zones.directBags': '{count} sem rack',
     'zones.directBagsHint': 'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
+    'zones.edit': 'Editar',
+    'zones.editTitle': 'Editar zona',
+    'zones.moveToRack': 'Mover para rack',
+    'zones.moveToRackTitle': 'Mover {count} bags para um rack',
+    'zones.movedToRack': '{count} bags movidos para {rack}',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Excluir rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
+    'scanFb.preferRack': '⚠ "{loc}" é uma zona — escaneie um rack para rastreamento preciso (ex. {example})',
   }
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
-const toZone=loc=>RACK_ZONE[loc]||loc;
+const toZone=loc=>{if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
@@ -3639,7 +3657,7 @@ function renderZones(){
   const el=document.getElementById('zones-list');
   if(!el)return;
   if(!zones.length){el.innerHTML='<div class="empty">'+esc(t('zones.empty'))+'</div>';return}
-  el.innerHTML=zones.map(z=>{
+  el.innerHTML=zones.map((z,idx)=>{
     const zoneBags=getZoneBags(z.id);
     const bagCount=Object.keys(zoneBags).length;
     const rackIds=new Set(z.racks.map(r=>r.id));
@@ -3656,7 +3674,10 @@ function renderZones(){
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
         ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
+        ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-warning)">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
+        <span style="display:inline-flex;gap:2px;margin-right:4px">${idx>0?`<button class="btn btn-sm" data-action="zone-up" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▲</button>`:''}${idx<zones.length-1?`<button class="btn btn-sm" data-action="zone-down" data-zone="${esc(z.id)}" style="font-size:11px;padding:2px 6px">▼</button>`:''}</span>
+        <button class="btn btn-sm" data-action="edit-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.edit'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         ${bagCount===0
           ?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
@@ -3719,6 +3740,72 @@ function removeRack(rackId){
       rebuildZoneConstants();renderZones();renderStatus();
     });
   });
+}
+function openZoneEdit(id){
+  const z=zones.find(x=>x.id===id);if(!z)return;
+  document.getElementById('ze-id').value=z.id;
+  document.getElementById('ze-name').value=z.name;
+  document.getElementById('ze-role').value=z.role;
+  document.getElementById('ze-color').value=z.color;
+  document.getElementById('ze-title').textContent=t('zones.editTitle');
+  document.getElementById('m-zone-edit').classList.add('open');
+  setTimeout(()=>document.getElementById('ze-name').focus(),50);
+}
+async function saveZoneEdit(){
+  const id=document.getElementById('ze-id').value;
+  const name=document.getElementById('ze-name').value.trim();
+  const role=document.getElementById('ze-role').value;
+  const color=document.getElementById('ze-color').value;
+  if(!name||name.length<2){alert(t('zones.errShort'));return}
+  if(name.length>50){alert(t('zones.errLong'));return}
+  const res=await apiPatch('/api/zones/'+encodeURIComponent(id),{name,role,color});
+  if(res.error){alert(res.error);return}
+  const z=zones.find(x=>x.id===id);
+  if(z){z.name=name;z.role=role;z.color=color}
+  rebuildZoneConstants();renderZones();renderStatus();
+  document.getElementById('m-zone-edit').classList.remove('open');
+}
+async function moveZoneSort(id,dir){
+  const idx=zones.findIndex(z=>z.id===id);if(idx<0)return;
+  const swapIdx=idx+dir;
+  if(swapIdx<0||swapIdx>=zones.length)return;
+  [zones[idx],zones[swapIdx]]=[zones[swapIdx],zones[idx]];
+  const updates=zones.map((z,i)=>({id:z.id,sortOrder:i+1}));
+  updates.forEach(u=>{const z=zones.find(x=>x.id===u.id);if(z)z.sortOrder=u.sortOrder});
+  renderZones();
+  for(const u of updates)await apiPatch('/api/zones/'+encodeURIComponent(u.id),{sortOrder:u.sortOrder});
+}
+function bulkMoveToRack(zoneId){
+  const z=zones.find(x=>x.id===zoneId);if(!z||!z.racks.length)return;
+  const zoneBags=getZoneBags(zoneId);
+  const rackIds=new Set(z.racks.map(r=>r.id));
+  const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
+  if(!directBags.length)return;
+  const m=document.getElementById('m-locmove');
+  document.getElementById('lm-title').textContent=t('zones.moveToRackTitle',{count:directBags.length});
+  document.getElementById('lm-info').textContent=zoneDisplayName(zoneId);
+  document.getElementById('lm-confirm').style.display='none';
+  const grid=document.getElementById('lm-grid');
+  grid.style.display='flex';
+  grid.innerHTML=z.racks.map(r=>{
+    const rBags=Object.keys(getRackBags(r.id)).length;
+    return`<button class="btn btn-sm" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="font-size:12px;padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
+  }).join('');
+  m.classList.add('open');
+}
+async function executeBulkMoveToRack(zoneId,rackId){
+  const z=zones.find(x=>x.id===zoneId);if(!z)return;
+  const zoneBags=getZoneBags(zoneId);
+  const rackIds=new Set(z.racks.map(r=>r.id));
+  const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
+  if(!directBags.length)return;
+  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,ts:new Date().toISOString()}));
+  const res=await apiPost('/api/scan-log',{entries});
+  if(res.error){alert(res.error);return}
+  entries.forEach(e=>scanLog.push(e));
+  document.getElementById('m-locmove').classList.remove('open');
+  renderZones();renderStatus();
+  setFb('ok',t('zones.movedToRack',{count:directBags.length,rack:rackId}));
 }
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
@@ -4508,9 +4595,12 @@ function processScan(raw){
     setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
   }
   if(LOCS.includes(val)){
-    if(scan.action==='ADD'){scan.to=val;updateSD();setFb('ok',t('scanFb.location',{loc:val}));return}
+    // Warn if scanning a zone that has racks — suggest using a rack instead
+    const zoneObj=zones.find(z=>z.id===val);
+    const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
+    if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
     if(scan.action==='MOVE'&&!scan.from){scan.from=val;updateSD();setFb('ok',t('scanFb.from',{loc:val}));return}
-    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb('ok',t('scanFb.to',{loc:val}));return}
+    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
@@ -5680,6 +5770,10 @@ function initEventListeners() {
   $('act-8').addEventListener('click', confirmBatchAdd);
   $('m-locmove').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
   $('cls-9').addEventListener('click', () => { document.getElementById('m-locmove').classList.remove('open'); });
+  document.getElementById('lm-grid').addEventListener('click', e=>{
+    const btn=e.target.closest('[data-action="bulk-rack-target"]');if(!btn)return;
+    executeBulkMoveToRack(btn.dataset.zone,btn.dataset.rack);
+  });
   $('btn-10').addEventListener('click', locRemoveSelected);
   $('cls-11').addEventListener('click', () => { document.getElementById('m-baginfo').classList.remove('open'); });
   $('set-12').addEventListener('click', () => { biSetAction('ADD'); });
@@ -5706,7 +5800,14 @@ function initEventListeners() {
     if(action==='del-zone')removeZone(btn.dataset.zone);
     else if(action==='add-rack')addRackToZone(btn.dataset.zone);
     else if(action==='del-rack')removeRack(btn.dataset.rack);
+    else if(action==='edit-zone')openZoneEdit(btn.dataset.zone);
+    else if(action==='zone-up')moveZoneSort(btn.dataset.zone,-1);
+    else if(action==='zone-down')moveZoneSort(btn.dataset.zone,1);
+    else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
   });
+  $('ze-cancel').addEventListener('click', ()=>document.getElementById('m-zone-edit').classList.remove('open'));
+  $('ze-save').addEventListener('click', saveZoneEdit);
+  $('m-zone-edit').addEventListener('click', e=>{if(e.target.id==='m-zone-edit')e.target.classList.remove('open')});
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
   $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
