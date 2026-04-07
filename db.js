@@ -1151,6 +1151,10 @@ function getAllCalendarEventAssignees(db) {
 // -- Zones & Racks --
 function insertZone(db, z) {
   if (db.prepare('SELECT 1 FROM zones WHERE id=?').get(z.id)) throw new Error('Zone already exists: ' + z.id);
+  if (z.racks && z.racks.length) {
+    const existing = db.prepare('SELECT id FROM racks WHERE id IN (' + z.racks.map(() => '?').join(',') + ')').all(...z.racks);
+    if (existing.length) throw new Error('Rack already exists: ' + existing.map(r => r.id).join(', '));
+  }
   db.transaction(() => {
     db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
       z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
