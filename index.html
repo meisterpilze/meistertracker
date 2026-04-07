@@ -54,6 +54,13 @@
     <div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button><button class="btn btn-r" id="m-ok">Confirm</button></div>
   </div>
 </div>
+<!-- Prompt modal -->
+<div class="modal-bg" id="m-prompt" role="dialog" aria-modal="true" aria-labelledby="m-pr-title">
+  <div class="modal"><h3 id="m-pr-title"></h3>
+    <input type="text" id="m-pr-input" style="width:100%;margin:8px 0;padding:8px;border:1px solid var(--c-border);border-radius:6px;font-size:14px">
+    <div class="modal-btns"><button class="btn" id="m-pr-cancel" data-i18n="nav.cancel">Cancel</button><button class="btn btn-p" id="m-pr-ok">OK</button></div>
+  </div>
+</div>
 <!-- Change password modal -->
 <div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" aria-label="Change password" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
   <div class="modal" style="max-width:360px">
@@ -931,10 +938,10 @@
       <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. TENT4" style="text-transform:uppercase"></div>
       <div><label data-i18n="zones.zoneRole">Rolle</label>
         <select id="zone-role">
-          <option value="spawn">Spawn</option>
-          <option value="incubation">Inkubation</option>
-          <option value="fruiting" selected>Fruchtung</option>
-          <option value="contaminated">Kontamination</option>
+          <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
+          <option value="incubation" data-i18n="zones.roleIncubation">Incubation</option>
+          <option value="fruiting" selected data-i18n="zones.roleFruiting">Fruiting</option>
+          <option value="contaminated" data-i18n="zones.roleContaminated">Contaminated</option>
         </select>
       </div>
     </div>
