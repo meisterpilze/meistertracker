@@ -249,11 +249,11 @@ const MIGRATIONS = [
     // Seed default zones
     const now = new Date().toISOString();
     const insZ = db.prepare('INSERT OR IGNORE INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)');
-    insZ.run('SPAWN', 'Spawn Run', 'spawn', '#8b5cf6', 1, now);
-    insZ.run('INC',   'Inkubation', 'incubation', '#3b82f6', 2, now);
-    insZ.run('TENT1', 'Zelt 1', 'fruiting', '#22c55e', 3, now);
-    insZ.run('TENT2', 'Zelt 2', 'fruiting', '#22c55e', 4, now);
-    insZ.run('TENT3', 'Zelt 3', 'fruiting', '#22c55e', 5, now);
+    insZ.run('SPAWN', 'Spawn Run', 'spawn', '#a855f7', 1, now);
+    insZ.run('INC',   'Inkubation', 'incubation', '#0ea5e9', 2, now);
+    insZ.run('TENT1', 'Zelt 1', 'fruiting', '#10b981', 3, now);
+    insZ.run('TENT2', 'Zelt 2', 'fruiting', '#10b981', 4, now);
+    insZ.run('TENT3', 'Zelt 3', 'fruiting', '#10b981', 5, now);
     insZ.run('CONTAM','Kontamination', 'contaminated', '#ef4444', 99, now);
     // Seed default racks
     const insR = db.prepare('INSERT OR IGNORE INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');

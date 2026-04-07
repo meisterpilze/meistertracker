@@ -1023,7 +1023,7 @@ function handlePropfind(parts, body, req, res) {
         const displayName = cal === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : cal.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const compType = 'VTODO';
         const compType2v = 'VEVENT';
-        const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
+        const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#16a34a</x:calendar-color>' : '';
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(cal)}/</d:href>
     <d:propstat>
@@ -1060,7 +1060,7 @@ function handlePropfind(parts, body, req, res) {
     const displayName = calName === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : calName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const compType2 = 'VTODO';
     const compType2ev = 'VEVENT';
-    const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
+    const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#16a34a</x:calendar-color>' : '';
     let responses = `<d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/</d:href>
     <d:propstat>
@@ -2033,27 +2033,28 @@ function handleRequest(req,res){
         const raw=Buffer.concat(chunks);
         const password=new URL(req.url,'http://x').searchParams.get('pw')||req.headers['x-backup-password']||'';
         if(!password){jsonErr(res,400,'Password required');return}
-        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext + hmac(32)
+        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext [+ hmac(32)]
         if(raw.length<60+16){jsonErr(res,400,'File too small to be a valid backup');return}
-        // Check for HMAC suffix (last 32 bytes) — backups created with HMAC are 32 bytes longer
-        const hasHmac=raw.length>=60+16+32;
-        const payload=hasHmac?raw.subarray(0,raw.length-32):raw;
-        const salt=payload.subarray(0,32);
-        const iv=payload.subarray(32,44);
-        const tag=payload.subarray(44,60);
-        const ciphertext=payload.subarray(60);
+        const salt=raw.subarray(0,32);
+        const iv=raw.subarray(32,44);
         const key=crypto.scryptSync(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
-        // Verify HMAC if present
-        if(hasHmac){
-          const storedHmac=raw.subarray(raw.length-32);
-          const expectedHmac=crypto.createHmac('sha256',key).update(payload).digest();
-          if(!crypto.timingSafeEqual(storedHmac,expectedHmac)){jsonErr(res,401,'HMAC verification failed — wrong password or tampered file');return}
-        }
-        const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
-        decipher.setAuthTag(tag);
+        // Try with HMAC first (current format), fall back to legacy (no HMAC)
         let plain;
-        try{plain=Buffer.concat([decipher.update(ciphertext),decipher.final()])}
-        catch(decErr){jsonErr(res,401,'Wrong password or corrupted file');return}
+        function tryDecrypt(withHmac){
+          const payload=withHmac?raw.subarray(0,raw.length-32):raw;
+          const pTag=payload.subarray(44,60);
+          const pCipher=payload.subarray(60);
+          if(withHmac){
+            const storedHmac=raw.subarray(raw.length-32);
+            const expectedHmac=crypto.createHmac('sha256',key).update(payload).digest();
+            if(!crypto.timingSafeEqual(storedHmac,expectedHmac))return null;
+          }
+          const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
+          decipher.setAuthTag(pTag);
+          try{return Buffer.concat([decipher.update(pCipher),decipher.final()])}catch(e){return null}
+        }
+        plain=tryDecrypt(true)||tryDecrypt(false);
+        if(!plain){jsonErr(res,401,'Wrong password or corrupted file');return}
         // Validate SQLite header
         if(plain.length<16||plain.toString('utf8',0,15)!=='SQLite format 3'){jsonErr(res,400,'Decrypted file is not a valid database');return}
         // Write to temp with restrictive permissions, validate schema

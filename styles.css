@@ -368,6 +368,7 @@ tr:hover td{background:#f1f5f9}
 /* ═══ MISC ══════════════════════════════════════════════════════ */
 .empty{text-align:center;color:var(--c-text-muted);font-size:13px;padding:3rem}
 .sp-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.cal-event .sp-dot{width:8px;height:8px;border:1.5px solid rgba(255,255,255,.8);margin-right:4px}
 .sub-tag{font-size:11px;background:var(--c-bg);color:var(--c-text-sec);padding:3px 8px;border-radius:99px;margin-right:3px}
 .harvest-bar{height:5px;border-radius:3px;background:var(--c-border);overflow:hidden;margin-top:4px}
 .harvest-bar-fill{height:100%;border-radius:3px;background:#f59e0b}
@@ -423,6 +424,8 @@ tr:hover td{background:#f1f5f9}
 .cal-vbtn:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0}
 .cal-vbtn.active{background:var(--c-primary);color:#fff}
 .cal-vbtn:hover:not(.active){background:var(--c-primary-light);color:var(--c-primary)}
+.cal-print-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--c-border);border-radius:var(--radius-sm);background:var(--c-surface);color:var(--c-text-sec);cursor:pointer;font-size:16px;transition:all .15s;flex-shrink:0}
+.cal-print-btn:hover{background:var(--c-primary-light);border-color:var(--c-primary);color:var(--c-primary)}
 .cal-add-btn{height:36px;padding:0 16px;border:none;border-radius:var(--radius-sm);background:var(--c-primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
 .cal-add-btn:hover{background:var(--c-primary-hover)}
 .cal-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--c-text-sec);padding:8px 12px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-sm)}
@@ -431,7 +434,7 @@ tr:hover td{background:#f1f5f9}
 .cal-legend .leg-batch::before{background:#ef4444}
 .cal-legend .leg-task::before{background:#3b82f6}
 .cal-legend .leg-harvest::before{background:#f59e0b}
-.cal-legend .leg-custom::before{background:#22c55e}
+.cal-legend .leg-custom::before{background:#16a34a}
 .cal-legend .leg-meeting::before{background:#8b5cf6}
 .cal-legend .leg-delivery::before{background:#14b8a6}
 .cal-legend .leg-maintenance::before{background:#64748b}
@@ -711,6 +714,32 @@ tr:hover td{background:#f1f5f9}
   .page,.sp{display:none!important}
   #print-sheet,#ref-print-sheet{display:block!important;padding:10px}
   body{background:#fff}.card{border:none;box-shadow:none;padding:0}
+
+  /* Calendar print */
+  .cal-print-page{font-family:Arial,Helvetica,sans-serif}
+  .cal-print-header{margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #333}
+  .cal-print-legend{margin-bottom:10px;padding:6px 0}
+  .cal-print-body .cal-grid{border:1px solid #999;gap:0}
+  .cal-print-body .cal-hdr{background:#f0f0f0;border-bottom:1px solid #999;padding:6px 4px;font-size:10px}
+  .cal-print-body .cal-cell{border:0.5px solid #ccc;min-height:80px;padding:4px 5px}
+  .cal-print-body .cal-cell.today{background:#f0faf5}
+  .cal-print-body .cal-cell.other{background:#f8f8f8}
+  .cal-print-body .cal-day{font-size:11px;width:auto;height:auto}
+  .cal-print-body .cal-event{font-size:9px;padding:1px 5px;margin-bottom:2px;border-radius:3px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .cal-print-body .cal-more{font-size:9px}
+  .cal-print-body .cal-week{border:1px solid #999}
+  .cal-print-body .cal-week-hdr{border-bottom:1px solid #999}
+  .cal-print-body .cal-week-hdr-cell{padding:6px 4px;font-size:10px}
+  .cal-print-body .cal-week-hdr-cell .wk-day-num{font-size:16px}
+  .cal-print-body .cal-week-body{max-height:none;overflow:visible}
+  .cal-print-body .cal-week-ev{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:9px}
+  .cal-print-body .cal-week-slot{height:36px}
+  .cal-print-body .cal-week-time{height:36px;font-size:9px}
+  .cal-print-body .cal-day-view{border:1px solid #999}
+  .cal-print-body .cal-day-body{max-height:none;overflow:visible}
+  .cal-print-body .cal-day-ev{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:10px}
+  .cal-print-body .cal-day-slot{height:36px}
+  .cal-print-body .cal-day-time{height:36px;font-size:9px}
 }
 #print-sheet,#ref-print-sheet{display:none}
 
