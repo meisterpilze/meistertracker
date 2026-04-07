@@ -1890,6 +1890,7 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       const vr=validateRequired(data,['id','name','role','color']);if(vr){jsonErr(res,400,vr);return}
+      const vlen=validateLengths(data,{name:50});if(vlen){jsonErr(res,400,vlen);return}
       if(!/^[A-Z][A-Z0-9_]{0,19}$/.test(data.id)){jsonErr(res,400,'Zone ID must be uppercase letters/digits/underscore, 1-20 chars');return}
       const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}
       if(!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
@@ -1904,6 +1905,7 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       if(data.color&&!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
+      if(!db.zoneExists(database,id)){jsonErr(res,404,'Zone not found');return}
       try{db.updateZone(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
@@ -1919,6 +1921,7 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{
       if(e){jsonErr(res,400,e.message);return}
       if(!data.id||!/^[A-Z][A-Z0-9_]{0,29}$/.test(data.id)){jsonErr(res,400,'Invalid rack ID');return}
+      if(!db.zoneExists(database,zoneId)){jsonErr(res,404,'Zone not found');return}
       try{db.insertRack(database,{id:data.id,zoneId,sortOrder:data.sortOrder||0});broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
     });return;
   }
