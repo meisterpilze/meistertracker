@@ -715,6 +715,10 @@ const LANG = {
     'zones.roleFruiting': 'Fruiting',
     'zones.roleContaminated': 'Contaminated',
     'zones.errIdStart': 'Zone name must start with a letter (A-Z)',
+    'zones.errLong': 'Zone name too long (max. 50 chars)',
+    'zones.errRackEmpty': 'Rack name cannot be empty',
+    'zones.errTooManyRacks': 'Too many racks (max. 50)',
+    'zones.hasBags': '{count} bags — remove first',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Delete rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" will be removed.',
@@ -1404,6 +1408,10 @@ const LANG = {
     'zones.roleFruiting': 'Fruchtung',
     'zones.roleContaminated': 'Kontamination',
     'zones.errIdStart': 'Zonenname muss mit einem Buchstaben (A-Z) beginnen',
+    'zones.errLong': 'Zonenname zu lang (max. 50 Zeichen)',
+    'zones.errRackEmpty': 'Rack-Name darf nicht leer sein',
+    'zones.errTooManyRacks': 'Zu viele Racks (max. 50)',
+    'zones.hasBags': '{count} Bags — erst entfernen',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Rack löschen?',
     'zones.rackDeleteMsg': 'Rack „{name}" wird entfernt.',
@@ -2092,6 +2100,10 @@ const LANG = {
     'zones.roleFruiting': 'Frutificação',
     'zones.roleContaminated': 'Contaminação',
     'zones.errIdStart': 'Nome da zona deve começar com uma letra (A-Z)',
+    'zones.errLong': 'Nome da zona muito longo (máx. 50 caracteres)',
+    'zones.errRackEmpty': 'Nome do rack não pode estar vazio',
+    'zones.errTooManyRacks': 'Muitos racks (máx. 50)',
+    'zones.hasBags': '{count} bags — remova primeiro',
     'zones.addRack': '+ Rack',
     'zones.rackDeleteTitle': 'Excluir rack?',
     'zones.rackDeleteMsg': 'Rack "{name}" será removido.',
@@ -3636,7 +3648,9 @@ function renderZones(){
         <span style="font-size:11px;color:var(--c-text-muted)">${tp('dash.bags',bagCount)}</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
-        ${bagCount===0?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`:''}
+        ${bagCount===0
+          ?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
+          :`<button class="btn btn-sm btn-r" disabled title="${esc(t('zones.hasBags',{count:bagCount}))}" style="font-size:11px;opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`}
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
     </div>`;
@@ -3646,12 +3660,15 @@ async function addZone(){
   const nameRaw=document.getElementById('zone-name').value.trim().toUpperCase();
   const id=nameRaw.replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
   if(!id||id.length<2){alert(t('zones.errShort'));return}
+  if(nameRaw.length>50){alert(t('zones.errLong'));return}
   if(!/^[A-Z]/.test(id)){alert(t('zones.errIdStart'));return}
   if(zones.some(z=>z.id===id)){alert(t('zones.errExists'));return}
   const role=document.getElementById('zone-role').value;
   const color=document.getElementById('zone-color').value;
   const racksRaw=document.getElementById('zone-racks').value.trim();
   const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
+  if(racks.some(r=>r===id+'_'||r.length<=id.length+1)){alert(t('zones.errRackEmpty'));return}
+  if(racks.length>50){alert(t('zones.errTooManyRacks'));return}
   const now=new Date().toISOString();
   const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
   if(res.error){alert(res.error);return}
