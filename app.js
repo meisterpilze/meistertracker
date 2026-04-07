@@ -2012,7 +2012,7 @@ const LOCS=[...ZONES,...ALL_RACKS];
 const RACK_ZONE=Object.fromEntries([...SPAWN_RACKS.map(r=>[r,'SPAWN']),...INC_RACKS.map(r=>[r,'INC'])]);
 const toZone=loc=>RACK_ZONE[loc]||loc;
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
-const SP_COLORS=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a'];
+const SP_COLORS=['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16'];
 const REF_GROUPS=[
   {g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},
   {g:'Zones',items:['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM']},
@@ -2037,8 +2037,8 @@ function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function safeColor(c,fallback){
-  if(!c)return fallback||'#2ecc71';
-  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#2ecc71');
+  if(!c)return fallback||'#22c55e';
+  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#22c55e');
 }
 
 // ─── AUTH ────────────────────────────────────────────────────
@@ -2323,11 +2323,11 @@ function renderMetrics(tot,inc,tent,contam){
 
 function renderPipelineChart(){
   const stages=[
-    {label:'SPAWN',color:'#9b59b6'},
-    {label:'INC',color:'#3498db'},
-    {label:'TENT',color:'#2ecc71'},
+    {label:'SPAWN',color:'#8b5cf6'},
+    {label:'INC',color:'#3b82f6'},
+    {label:'TENT',color:'#22c55e'},
     {label:'DONE',color:'#e5e3dd'},
-    {label:'CONTAM',color:'#e74c3c'}
+    {label:'CONTAM',color:'#ef4444'}
   ];
   const counts={SPAWN:0,INC:0,TENT:0,DONE:0,CONTAM:0};
   batches.forEach(b=>{
@@ -2372,7 +2372,7 @@ function renderHarvestChart(){
 }
 
 const ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-const ZONE_COLORS={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
+const ZONE_COLORS={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
 
 function renderStatus(){
@@ -2525,7 +2525,7 @@ function renderTentsSection(filtered){
 
   return`<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#2ecc71"></span>${t('dash.fruitingTents')}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:#22c55e"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
     <div class="tent-columns">${tentCols}</div>
@@ -2564,7 +2564,7 @@ function renderContamSection(filtered){
 
   return`<div class="location-section contam-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#e74c3c"></span>\u26a0 ${t(ZONE_LABELS.CONTAM)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:#ef4444"></span>\u26a0 ${t(ZONE_LABELS.CONTAM)}</div>
       <span class="location-section-count">${tp('dash.bags',entries.length)}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
@@ -2869,7 +2869,7 @@ function renderBatches(){
     return`<tr><td style="font-family:monospace;font-size:10px"><span onclick="toggleBatchBags('${esc(b.batchId)}')" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="openAddBags('${esc(b.batchId)}')" style="margin-right:3px">+${t('batch.bags')}</button><button class="btn btn-sm btn-r" onclick="delBatch('${esc(b.batchId)}')">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
-const locColor={SPAWN:'#9b59b6',INC:'#3498db',TENT1:'#2ecc71',TENT2:'#2ecc71',TENT3:'#2ecc71',CONTAM:'#e74c3c'};
+const locColor={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
 function toggleBatchBags(batchId){
   const existing=document.getElementById('brow-'+batchId);
   if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
@@ -2993,7 +2993,7 @@ function renderHarvests(){
       type:'line',
       data:{
         labels:weekKeys.map(k=>{const d=new Date(k);return fmtDtShort(d)}),
-        datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f39c12',backgroundColor:'rgba(243,156,18,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f39c12'}]
+        datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f59e0b'}]
       },
       options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}}}}
     });
@@ -4428,16 +4428,16 @@ function collectCalendarEvents(){
   batches.forEach(b=>{
     if(!b.due)return;
     const d=new Date(b.due);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#e74c3c'});
+    events.push({date:d.toISOString().split('T')[0],label:b.batchId+' — '+b.species+(b.strain?' ('+b.strain+')':''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444'});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
-    events.push({date:t.dueDate.split('T')[0],label:t.text,type:'task-due',id:t.created,draggable:!t.done,allDay:true,color:'#3498db'});
+    events.push({date:t.dueDate.split('T')[0],label:t.text,type:'task-due',id:t.created,draggable:!t.done,allDay:true,color:'#3b82f6'});
   });
   harvests.forEach(h=>{
     if(!h.time)return;
     const d=new Date(h.time);
-    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f39c12'});
+    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b'});
   });
   const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
   calendarEvents.forEach(ev=>{
@@ -4445,7 +4445,7 @@ function collectCalendarEvents(){
     events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#22c55e',description:ev.description,assignees:ev.assignees||[]});
   });
   caldavImports.forEach(ev=>{
-    events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#9b59b6'});
+    events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#6366f1'});
   });
   return events;
 }
@@ -4916,8 +4916,8 @@ function openEventDetail(ev){
     if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
-    const prioColors={high:'#e74c3c',medium:'#f39c12',low:'#3498db'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3498db;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
+    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#3b82f6'};
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3b82f6;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
     assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=t.description||'';
     descEl.style.display=t.description?'':'none';
@@ -4930,7 +4930,7 @@ function openEventDetail(ev){
     let meta='Batch-Fälligkeitstermin';
     if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#e74c3c;color:#fff">Batch</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#ef4444;color:#fff">Batch</span>';
     assignEl.innerHTML='';
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
@@ -4942,7 +4942,7 @@ function openEventDetail(ev){
     if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#9b59b6;color:#fff">CalDAV</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#6366f1;color:#fff">CalDAV</span>';
     assignEl.innerHTML='';
     descEl.textContent=ev.description||'';
     descEl.style.display=ev.description?'':'none';
@@ -4989,7 +4989,7 @@ function deleteTaskFromCalendar(taskId){
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS={custom:'#22c55e',meeting:'#8b5cf6',delivery:'#f59e0b',maintenance:'#64748b'};
+const CATEGORY_COLORS={custom:'#22c55e',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
 let calEntryType='task';
 
 function setEntryType(type){
@@ -5330,7 +5330,7 @@ function updateOfflineBadge(count){
   if(!badge){
     badge=document.createElement('span');
     badge.id='offline-badge';
-    badge.style.cssText='display:inline-block;background:#e74c3c;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
+    badge.style.cssText='display:inline-block;background:#ef4444;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
     const syncEl=document.getElementById('sync-label');
     if(syncEl)syncEl.parentNode.appendChild(badge);
     else document.querySelector('.topbar')?.appendChild(badge);
