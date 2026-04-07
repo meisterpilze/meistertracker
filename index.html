@@ -935,7 +935,7 @@
   <div class="card">
     <div class="sec" data-i18n="zones.addTitle">Zone hinzufügen</div>
     <div class="g2">
-      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. TENT4" style="text-transform:uppercase"></div>
+      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. TENT4" maxlength="50" style="text-transform:uppercase"></div>
       <div><label data-i18n="zones.zoneRole">Rolle</label>
         <select id="zone-role">
           <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
@@ -947,7 +947,7 @@
     </div>
     <div class="g2">
       <div><label data-i18n="zones.zoneColor">Farbe</label><input id="zone-color" type="color" value="#10b981" style="width:60px;height:32px;padding:2px;border-radius:6px;border:1px solid var(--c-border)"></div>
-      <div><label data-i18n="zones.zoneRacks">Racks (optional, kommagetrennt)</label><input id="zone-racks" placeholder="z.B. R1, R2, R3"></div>
+      <div><label data-i18n="zones.zoneRacks">Racks (optional, kommagetrennt)</label><input id="zone-racks" placeholder="z.B. R1, R2, R3" maxlength="500"></div>
     </div>
     <button class="btn btn-green" id="btn-add-zone" style="margin-top:10px" data-i18n="zones.add">Zone hinzufügen</button>
   </div>
