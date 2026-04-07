@@ -1023,7 +1023,7 @@ function handlePropfind(parts, body, req, res) {
         const displayName = cal === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : cal.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const compType = 'VTODO';
         const compType2v = 'VEVENT';
-        const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
+        const colorProp = cal === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#16a34a</x:calendar-color>' : '';
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(cal)}/</d:href>
     <d:propstat>
@@ -1060,7 +1060,7 @@ function handlePropfind(parts, body, req, res) {
     const displayName = calName === 'meisterpilze' ? 'Meisterpilze (Betrieb)' : calName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const compType2 = 'VTODO';
     const compType2ev = 'VEVENT';
-    const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#22c55e</x:calendar-color>' : '';
+    const colorProp2 = calName === 'meisterpilze' ? '\n        <x:calendar-color xmlns:x="http://apple.com/ns/ical/">#16a34a</x:calendar-color>' : '';
     let responses = `<d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/</d:href>
     <d:propstat>
