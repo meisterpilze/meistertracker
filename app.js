@@ -2205,17 +2205,21 @@ function _apiCall(method,path,body){
   const opts={method,headers:{}};
   if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}
   return authFetch(path,opts).then(r=>{
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
-  }).then(d=>{
-    _mutating--;
-    if(_mutating===0)setSyncStatus('ok','Saved · gerade eben');
-    return d;
+    return r.json().catch(()=>({})).then(d=>{
+      _mutating--;
+      if(!r.ok){
+        const msg=d.error||('HTTP '+r.status);
+        setSyncStatus('err',msg);
+        return d.error?d:{error:msg};
+      }
+      if(_mutating===0)setSyncStatus('ok','Saved · gerade eben');
+      return d;
+    });
   }).catch(e=>{
     _mutating--;
     setSyncStatus('err','Save error: '+(e.message||'check server'));
     console.error('API error:',method,path,e);
-    return {};
+    return {error:e.message||'Network error'};
   });
 }
 function apiPost(path,body){return _apiCall('POST',path,body)}
@@ -3708,7 +3712,8 @@ async function addZone(){
   if(!id||id.length<2){alert(t('zones.errShort'));return}
   if(nameRaw.length>50){alert(t('zones.errLong'));return}
   if(!/^[A-Z]/.test(id)){alert(t('zones.errIdStart'));return}
-  if(zones.some(z=>z.id===id)){alert(t('zones.errExists'));return}
+  const dup=zones.find(z=>z.id===id);
+  if(dup){alert(t('zones.errExists')+' ('+dup.name+')');return}
   const role=document.getElementById('zone-role').value;
   const color=document.getElementById('zone-color').value;
   const racksRaw=document.getElementById('zone-racks').value.trim();
