@@ -5991,6 +5991,7 @@ function initEventListeners() {
   $('cv-week').addEventListener('click', () => { setCalView('week'); });
   $('cv-day').addEventListener('click', () => { setCalView('day'); });
   // Unified calendar entry modal
+  $('btn-cal-print').addEventListener('click', printCalendar);
   $('btn-cal-add').addEventListener('click', ()=>openEntryModal());
   $('cal-entry-cancel-btn').addEventListener('click', closeEntryModal);
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
