@@ -1884,6 +1884,51 @@ function handleRequest(req,res){
     try{db.deleteAssetById(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
+  // -- Zones --
+  if(req.method==='POST'&&req.url==='/api/zones'){
+    if(requireAdmin(req,res))return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      const vr=validateRequired(data,['id','name','role','color']);if(vr){jsonErr(res,400,vr);return}
+      if(!/^[A-Z][A-Z0-9_]{0,19}$/.test(data.id)){jsonErr(res,400,'Zone ID must be uppercase letters/digits/underscore, 1-20 chars');return}
+      const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}
+      if(!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
+      if(data.racks&&Array.isArray(data.racks)){for(const r of data.racks){if(!/^[A-Z][A-Z0-9_]{0,29}$/.test(r)){jsonErr(res,400,'Invalid rack ID: '+r);return}}}
+      try{db.insertZone(database,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
+    });return;
+  }
+  const zoneMatch=req.url.match(/^\/api\/zones\/([^/]+)$/);
+  if(req.method==='PATCH'&&zoneMatch){
+    if(requireAdmin(req,res))return;
+    const id=decodeURIComponent(zoneMatch[1]);
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      if(data.color&&!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
+      try{db.updateZone(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
+    });return;
+  }
+  if(req.method==='DELETE'&&zoneMatch){
+    if(requireAdmin(req,res))return;
+    const id=decodeURIComponent(zoneMatch[1]);
+    try{db.deleteZone(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+  }
+  const zoneRackMatch=req.url.match(/^\/api\/zones\/([^/]+)\/racks$/);
+  if(req.method==='POST'&&zoneRackMatch){
+    if(requireAdmin(req,res))return;
+    const zoneId=decodeURIComponent(zoneRackMatch[1]);
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      if(!data.id||!/^[A-Z][A-Z0-9_]{0,29}$/.test(data.id)){jsonErr(res,400,'Invalid rack ID');return}
+      try{db.insertRack(database,{id:data.id,zoneId,sortOrder:data.sortOrder||0});broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
+    });return;
+  }
+  const rackMatch=req.url.match(/^\/api\/racks\/([^/]+)$/);
+  if(req.method==='DELETE'&&rackMatch){
+    if(requireAdmin(req,res))return;
+    const id=decodeURIComponent(rackMatch[1]);
+    try{db.deleteRack(database,id);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+  }
+
   // -- CalDAV Config --
   if(req.method==='POST'&&req.url==='/api/caldav/config'){
     if(requireAdmin(req,res))return;
