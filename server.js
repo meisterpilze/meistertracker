@@ -1899,18 +1899,6 @@ function handleRequest(req,res){
     });return;
   }
   const zoneMatch=req.url.match(/^\/api\/zones\/([^/]+)$/);
-  if(req.method==='PATCH'&&zoneMatch){
-    if(requireAdmin(req,res))return;
-    const id=decodeURIComponent(zoneMatch[1]);
-    jsonBody(req,res,(e,data)=>{
-      if(e){jsonErr(res,400,e.message);return}
-      if(data.name!==undefined){const vlen=validateLengths(data,{name:50});if(vlen){jsonErr(res,400,vlen);return}}
-      if(data.color&&!/^#[0-9a-fA-F]{6}$/.test(data.color)){jsonErr(res,400,'Invalid color');return}
-      if(data.role){const ve=validateEnum(data.role,['spawn','incubation','fruiting','contaminated'],'role');if(ve){jsonErr(res,400,ve);return}}
-      if(!db.zoneExists(database,id)){jsonErr(res,404,'Zone not found');return}
-      try{db.updateZone(database,id,data);broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}
-    });return;
-  }
   if(req.method==='DELETE'&&zoneMatch){
     if(requireAdmin(req,res))return;
     const id=decodeURIComponent(zoneMatch[1]);
