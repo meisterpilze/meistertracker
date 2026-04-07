@@ -2027,7 +2027,7 @@ const LOCS=[...ZONES,...ALL_RACKS];
 const RACK_ZONE=Object.fromEntries([...SPAWN_RACKS.map(r=>[r,'SPAWN']),...INC_RACKS.map(r=>[r,'INC'])]);
 const toZone=loc=>RACK_ZONE[loc]||loc;
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
-const SP_COLORS=['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16'];
+const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 const REF_GROUPS=[
   {g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},
   {g:'Zones',items:['SPAWN','INC','TENT1','TENT2','TENT3','CONTAM']},
