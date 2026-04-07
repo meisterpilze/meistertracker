@@ -3792,7 +3792,7 @@ async function executeBulkMoveToRack(zoneId,rackId){
   const rackIds=new Set(z.racks.map(r=>r.id));
   const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
   if(!directBags.length)return;
-  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,ts:new Date().toISOString()}));
+  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,time:new Date().toISOString()}));
   const res=await apiPost('/api/scan-log',{entries});
   if(res.error){alert(res.error);return}
   entries.forEach(e=>scanLog.push(e));
