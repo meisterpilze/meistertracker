@@ -2052,8 +2052,8 @@ function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function safeColor(c,fallback){
-  if(!c)return fallback||'#22c55e';
-  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#22c55e');
+  if(!c)return fallback||'#16a34a';
+  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#16a34a');
 }
 
 // ─── AUTH ────────────────────────────────────────────────────
@@ -4481,7 +4481,7 @@ function collectCalendarEvents(){
   const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
   calendarEvents.forEach(ev=>{
     if(filterUserId&&ev.assignees&&ev.assignees.length&&!ev.assignees.some(a=>a.userId===filterUserId))return;
-    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#22c55e',description:ev.description,assignees:ev.assignees||[]});
+    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#16a34a',description:ev.description,assignees:ev.assignees||[]});
   });
   caldavImports.forEach(ev=>{
     events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#6366f1'});
@@ -5028,7 +5028,7 @@ function deleteTaskFromCalendar(taskId){
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS={custom:'#22c55e',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
+const CATEGORY_COLORS={custom:'#16a34a',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
 let calEntryType='task';
 
 function setEntryType(type){
@@ -5182,7 +5182,7 @@ function saveEntryEvent(){
     startTime:allDay?null:document.getElementById('cal-entry-start-time').value,
     endTime:allDay?null:document.getElementById('cal-entry-end-time').value,
     category:category,
-    color:CATEGORY_COLORS[category]||'#22c55e',
+    color:CATEGORY_COLORS[category]||'#16a34a',
     caldavUid:null,caldavSynced:null,
     created:new Date().toISOString(),
     assignees:getSelectedAssigneeIds().map(uid=>{const u=appUsers.find(x=>x.id===uid);return{userId:uid,username:u?u.username:'?'}})
