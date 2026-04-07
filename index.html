@@ -68,17 +68,39 @@
     <h3 id="cal-entry-title">Neuer Eintrag</h3>
     <input type="hidden" id="cal-entry-id" />
     <input type="hidden" id="cal-entry-mode" value="create" />
-    <div class="entry-type-toggle" style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--c-border);border-radius:var(--radius-sm);overflow:hidden">
-      <button type="button" class="entry-type-btn active" data-type="task" id="cal-entry-type-task" style="flex:1;padding:8px 0;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--c-primary);color:#fff">Aufgabe</button>
-      <button type="button" class="entry-type-btn" data-type="event" id="cal-entry-type-event" style="flex:1;padding:8px 0;border:none;border-left:1px solid var(--c-border);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--c-surface);color:var(--c-text)">Event</button>
-    </div>
     <div style="margin-bottom:8px">
-      <label id="cal-entry-name-label">Aufgabe</label>
+      <label>Titel</label>
       <input type="text" id="cal-entry-name" placeholder="z.B. Luftfeuchtezelt reinigen" />
     </div>
     <div class="g2" style="margin-bottom:8px">
-      <div><label id="cal-entry-date-label">Fälligkeitsdatum</label><input type="date" id="cal-entry-date" /></div>
-      <div id="cal-entry-enddate-wrap"><label>Bis (optional)</label><input type="date" id="cal-entry-end-date" /></div>
+      <div>
+        <label>Art</label>
+        <select id="cal-entry-type-select" onchange="setEntryType(this.value)">
+          <option value="task">Aufgabe</option>
+          <option value="event">Event</option>
+        </select>
+      </div>
+      <div id="cal-entry-prio-wrap">
+        <label>Priorität</label>
+        <select id="cal-entry-prio">
+          <option value="low">Niedrig</option>
+          <option value="med" selected>Mittel</option>
+          <option value="high">Hoch</option>
+        </select>
+      </div>
+      <div id="cal-entry-category-wrap" style="display:none">
+        <label>Kategorie</label>
+        <select id="cal-entry-category">
+          <option value="custom">Eigenes Event</option>
+          <option value="meeting">Meeting</option>
+          <option value="delivery">Lieferung</option>
+          <option value="maintenance">Wartung</option>
+        </select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div><label>Datum</label><input type="date" id="cal-entry-date" /></div>
+      <div id="cal-entry-enddate-wrap" style="display:none"><label>Bis (optional)</label><input type="date" id="cal-entry-end-date" /></div>
     </div>
     <div id="cal-entry-allday-wrap" style="margin-bottom:8px;display:none">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -88,23 +110,6 @@
     <div class="g2" id="cal-entry-times" style="margin-bottom:8px;display:none">
       <div><label>Von</label><input type="time" id="cal-entry-start-time" value="09:00" /></div>
       <div><label>Bis</label><input type="time" id="cal-entry-end-time" value="10:00" /></div>
-    </div>
-    <div id="cal-entry-category-wrap" style="margin-bottom:8px;display:none">
-      <label>Kategorie</label>
-      <select id="cal-entry-category">
-        <option value="custom">Eigenes Event</option>
-        <option value="meeting">Meeting</option>
-        <option value="delivery">Lieferung</option>
-        <option value="maintenance">Wartung</option>
-      </select>
-    </div>
-    <div id="cal-entry-prio-wrap" style="margin-bottom:8px">
-      <label>Priorität</label>
-      <select id="cal-entry-prio">
-        <option value="low">Niedrig</option>
-        <option value="med" selected>Mittel</option>
-        <option value="high">Hoch</option>
-      </select>
     </div>
     <div style="margin-bottom:8px">
       <label>Beschreibung (optional)</label>

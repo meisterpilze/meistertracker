@@ -4994,15 +4994,7 @@ let calEntryType='task';
 
 function setEntryType(type){
   calEntryType=type;
-  const taskBtn=document.getElementById('cal-entry-type-task');
-  const eventBtn=document.getElementById('cal-entry-type-event');
-  if(type==='task'){
-    taskBtn.style.background='var(--c-primary)';taskBtn.style.color='#fff';taskBtn.classList.add('active');
-    eventBtn.style.background='var(--c-surface)';eventBtn.style.color='var(--c-text)';eventBtn.classList.remove('active');
-  }else{
-    eventBtn.style.background='var(--c-primary)';eventBtn.style.color='#fff';eventBtn.classList.add('active');
-    taskBtn.style.background='var(--c-surface)';taskBtn.style.color='var(--c-text)';taskBtn.classList.remove('active');
-  }
+  document.getElementById('cal-entry-type-select').value=type;
   const isTask=type==='task';
   document.getElementById('cal-entry-enddate-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-allday-wrap').style.display=isTask?'none':'';
@@ -5011,37 +5003,23 @@ function setEntryType(type){
   document.getElementById('cal-entry-task-assign-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-private-wrap').style.display=isTask?'flex':'none';
-  if(isTask){
-    document.getElementById('cal-entry-name-label').textContent='Aufgabe';
-    document.getElementById('cal-entry-name').placeholder='z.B. Luftfeuchtezelt reinigen';
-    document.getElementById('cal-entry-date-label').textContent='Fälligkeitsdatum';
-  }else{
-    document.getElementById('cal-entry-name-label').textContent='Titel';
-    document.getElementById('cal-entry-name').placeholder='z.B. Team-Meeting';
-    document.getElementById('cal-entry-date-label').textContent='Datum';
-  }
+  document.getElementById('cal-entry-name').placeholder=isTask?'z.B. Luftfeuchtezelt reinigen':'z.B. Team-Meeting';
   toggleEntryTimeInputs();
 }
 
 function openEntryModal(type,date,time,existing){
   const modal=document.getElementById('m-cal-entry');
   const isEdit=!!existing;
-  document.getElementById('cal-entry-type-task').style.display='';
-  document.getElementById('cal-entry-type-event').style.display='';
   document.getElementById('cal-entry-name').disabled=false;
   document.getElementById('cal-entry-desc').closest('div').style.display='';
+  document.getElementById('cal-entry-type-select').closest('.g2').style.display='';
   const sel=document.getElementById('cal-entry-task-assignee');
   sel.innerHTML='<option value="">Alle (Betrieb)</option>'
     +teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
-  document.getElementById('cal-entry-type-task').disabled=isEdit;
-  document.getElementById('cal-entry-type-event').disabled=isEdit;
-  document.getElementById('cal-entry-type-task').style.opacity=isEdit?'0.6':'1';
-  document.getElementById('cal-entry-type-event').style.opacity=isEdit?'0.6':'1';
-  document.getElementById('cal-entry-type-task').style.cursor=isEdit?'default':'pointer';
-  document.getElementById('cal-entry-type-event').style.cursor=isEdit?'default':'pointer';
+  document.getElementById('cal-entry-type-select').disabled=isEdit;
   setEntryType(type||'task');
   if(type==='task'&&existing){
-    document.getElementById('cal-entry-title').textContent='Aufgabe bearbeiten';
+    document.getElementById('cal-entry-title').textContent='Eintrag bearbeiten';
     document.getElementById('cal-entry-mode').value='edit';
     document.getElementById('cal-entry-id').value=existing.id;
     document.getElementById('cal-entry-name').value=existing.text;
@@ -5052,7 +5030,7 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-private').checked=!!existing.private;
     document.getElementById('cal-entry-del-btn').style.display='';
   }else if(type==='event'&&existing){
-    document.getElementById('cal-entry-title').textContent='Event bearbeiten';
+    document.getElementById('cal-entry-title').textContent='Eintrag bearbeiten';
     document.getElementById('cal-entry-mode').value='edit';
     document.getElementById('cal-entry-id').value=existing.id;
     document.getElementById('cal-entry-name').value=existing.title;
@@ -5066,7 +5044,7 @@ function openEntryModal(type,date,time,existing){
     calEvSelectedAssignees=(existing.assignees||[]).map(a=>a.userId);renderAssigneePicker();
     document.getElementById('cal-entry-del-btn').style.display='';
   }else{
-    document.getElementById('cal-entry-title').textContent=type==='task'?'Neue Aufgabe':'Neues Event';
+    document.getElementById('cal-entry-title').textContent='Neuer Eintrag';
     document.getElementById('cal-entry-mode').value='create';
     document.getElementById('cal-entry-id').value='';
     document.getElementById('cal-entry-name').value='';
@@ -5234,8 +5212,7 @@ function openEventMoveModal(ev){
   document.getElementById('cal-entry-ev-assign-wrap').style.display='none';
   document.getElementById('cal-entry-private-wrap').style.display='none';
   document.getElementById('cal-entry-del-btn').style.display='none';
-  document.getElementById('cal-entry-type-task').style.display='none';
-  document.getElementById('cal-entry-type-event').style.display='none';
+  document.getElementById('cal-entry-type-select').closest('.g2').style.display='none';
   document.getElementById('cal-entry-id').dataset.moveType=ev.type;
   document.getElementById('cal-entry-id').dataset.moveId=ev.id;
   document.getElementById('m-cal-entry').classList.add('open');
@@ -5463,9 +5440,7 @@ function initEventListeners() {
   $('cv-week').addEventListener('click', () => { setCalView('week'); });
   $('cv-day').addEventListener('click', () => { setCalView('day'); });
   // Unified calendar entry modal
-  $('btn-cal-add').addEventListener('click', ()=>openEntryModal('task'));
-  $('cal-entry-type-task').addEventListener('click', ()=>{if(!document.getElementById('cal-entry-type-task').disabled)setEntryType('task')});
-  $('cal-entry-type-event').addEventListener('click', ()=>{if(!document.getElementById('cal-entry-type-event').disabled)setEntryType('event')});
+  $('btn-cal-add').addEventListener('click', ()=>openEntryModal());
   $('cal-entry-cancel-btn').addEventListener('click', closeEntryModal);
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
   $('cal-entry-del-btn').addEventListener('click', deleteEntry);
