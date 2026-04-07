@@ -2338,9 +2338,9 @@ function renderMetrics(tot,inc,tent,contam){
 
 function renderPipelineChart(){
   const stages=[
-    {label:'SPAWN',color:'#8b5cf6'},
-    {label:'INC',color:'#3b82f6'},
-    {label:'TENT',color:'#22c55e'},
+    {label:'SPAWN',color:'#a855f7'},
+    {label:'INC',color:'#0ea5e9'},
+    {label:'TENT',color:'#10b981'},
     {label:'DONE',color:'#e5e3dd'},
     {label:'CONTAM',color:'#ef4444'}
   ];
@@ -2387,7 +2387,7 @@ function renderHarvestChart(){
 }
 
 const ZONE_LABELS={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-const ZONE_COLORS={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+const ZONE_COLORS={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
 
 function renderStatus(){
@@ -2540,7 +2540,7 @@ function renderTentsSection(filtered){
 
   return`<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:#22c55e"></span>${t('dash.fruitingTents')}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:#10b981"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
     <div class="tent-columns">${tentCols}</div>
@@ -2884,7 +2884,7 @@ function renderBatches(){
     return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
-const locColor={SPAWN:'#8b5cf6',INC:'#3b82f6',TENT1:'#22c55e',TENT2:'#22c55e',TENT3:'#22c55e',CONTAM:'#ef4444'};
+const locColor={SPAWN:'#a855f7',INC:'#0ea5e9',TENT1:'#10b981',TENT2:'#10b981',TENT3:'#10b981',CONTAM:'#ef4444'};
 function toggleBatchBags(batchId){
   const existing=document.getElementById('brow-'+batchId);
   if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
