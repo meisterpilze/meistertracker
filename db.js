@@ -1155,7 +1155,8 @@ function insertZone(db, z) {
     const existing = db.prepare('SELECT id FROM racks WHERE id IN (' + z.racks.map(() => '?').join(',') + ')').all(...z.racks);
     if (existing.length) throw new Error('Rack already exists: ' + existing.map(r => r.id).join(', '));
   }
-  db.transaction(() => {
+  db.exec('BEGIN');
+  try {
     db.prepare('INSERT INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)').run(
       z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString()
     );
@@ -1164,7 +1165,8 @@ function insertZone(db, z) {
       z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
     }
     incrementDataVersion(db);
-  })();
+    db.exec('COMMIT');
+  } catch(e) { db.exec('ROLLBACK'); throw e; }
 }
 
 function updateZone(db, id, fields) {
