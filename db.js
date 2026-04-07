@@ -477,14 +477,15 @@ function readAll(db, opts = {}) {
 
   // Zones + Racks
   const zoneRows = db.prepare('SELECT * FROM zones ORDER BY sort_order, id').all();
-  const rackStmt = db.prepare('SELECT id, zone_id, sort_order FROM racks WHERE zone_id = ? ORDER BY sort_order, id');
+  const rackStmt = db.prepare('SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id');
   const zones = zoneRows.map(z => ({
     id: z.id,
     name: z.name,
     role: z.role,
     color: z.color,
     sortOrder: z.sort_order,
-    racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order }))
+    created: z.created,
+    racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
   }));
 
   const version = getDataVersion(db);
@@ -695,6 +696,52 @@ function writeAll(db, incoming) {
       for (const e of incoming.calendarEvents) {
         if (e.assignees && e.assignees.length) {
           for (const a of e.assignees) insAssignee.run(e.id, a.userId);
+        }
+      }
+    }
+
+    // ── Zones & Racks ──
+    if (incoming.zones) {
+      const existingZoneIds = new Set(db.prepare('SELECT id FROM zones').all().map(r => r.id));
+      const existingRackIds = new Set(db.prepare('SELECT id FROM racks').all().map(r => r.id));
+      const incomingZoneIds = new Set(incoming.zones.map(z => z.id));
+      const incomingRackIds = new Set(incoming.zones.flatMap(z => (z.racks || []).map(r => r.id)));
+
+      // Delete racks removed from zones that still exist
+      for (const id of existingRackIds) {
+        if (!incomingRackIds.has(id)) {
+          db.prepare('DELETE FROM racks WHERE id = ?').run(id);
+        }
+      }
+      // Delete zones missing from incoming (cascades remaining racks)
+      for (const id of existingZoneIds) {
+        if (!incomingZoneIds.has(id)) {
+          db.prepare('DELETE FROM zones WHERE id = ?').run(id);
+        }
+      }
+
+      const upsertZone = db.prepare(`
+        INSERT INTO zones(id, name, role, color, sort_order, created)
+        VALUES(?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name=excluded.name, role=excluded.role, color=excluded.color,
+          sort_order=excluded.sort_order, created=excluded.created
+      `);
+      for (const z of incoming.zones) {
+        upsertZone.run(z.id, z.name, z.role, z.color, z.sortOrder || 0,
+          z.created || new Date().toISOString());
+      }
+
+      const upsertRack = db.prepare(`
+        INSERT INTO racks(id, zone_id, sort_order, created)
+        VALUES(?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          zone_id=excluded.zone_id, sort_order=excluded.sort_order, created=excluded.created
+      `);
+      for (const z of incoming.zones) {
+        for (const r of (z.racks || [])) {
+          upsertRack.run(r.id, z.id, r.sortOrder || 0,
+            r.created || new Date().toISOString());
         }
       }
     }
@@ -1175,6 +1222,10 @@ function deleteRack(db, id) {
   incrementDataVersion(db);
 }
 
+function zoneExists(db, id) {
+  return !!db.prepare('SELECT 1 FROM zones WHERE id=?').get(id);
+}
+
 module.exports = {
   openDb, readAll, writeAll, backupDb, getDataVersion, readCaldavConfig, updateTaskCaldavUid,
   updateBatchDue, updateTaskDueDate,
@@ -1192,5 +1243,5 @@ module.exports = {
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
-  insertZone, updateZone, deleteZone, insertRack, deleteRack
+  insertZone, updateZone, deleteZone, insertRack, deleteRack, zoneExists
 };
