@@ -3651,7 +3651,7 @@ async function addZone(){
   const role=document.getElementById('zone-role').value;
   const color=document.getElementById('zone-color').value;
   const racksRaw=document.getElementById('zone-racks').value.trim();
-  const racks=racksRaw?racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'):[];
+  const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
   const now=new Date().toISOString();
   const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,created:now});
   if(res.error){alert(res.error);return}
@@ -3659,6 +3659,8 @@ async function addZone(){
   rebuildZoneConstants();renderZones();renderStatus();
   document.getElementById('zone-name').value='';
   document.getElementById('zone-racks').value='';
+  document.getElementById('zone-color').value='#10b981';
+  document.getElementById('zone-role').value='fruiting';
 }
 function removeZone(id){
   const z=zones.find(x=>x.id===id);if(!z)return;
