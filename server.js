@@ -695,6 +695,21 @@ function computeCtag(calName) {
 // CalDAV event color map — matches CATEGORY_COLORS in app.js
 const CALDAV_CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
 
+// RFC 5545 PRIORITY → app priority mapping (1=highest, 9=lowest, 0=undefined)
+const CALDAV_PRIO_MAP = { 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' };
+
+// Known calendar event categories
+const KNOWN_CATEGORIES = { custom:1, meeting:1, delivery:1, maintenance:1 };
+
+// Supported CalDAV report set XML (used in PROPFIND responses)
+const SUPPORTED_REPORT_SET = '<d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>';
+
+// Extract the VEVENT block from ICS content (avoids parsing VTIMEZONE properties)
+function extractVeventBlock(ics) {
+  const m = ics.match(/BEGIN:VEVENT([\s\S]*?)END:VEVENT/);
+  return m ? m[1] : '';
+}
+
 // Convert a task object to VTODO .ics content
 function taskToVTODO(task) {
   const uid = task.caldavUid || generateUID();
@@ -1257,7 +1272,7 @@ function handlePropfind(parts, body, req, res) {
         <c:supported-calendar-component-set><c:comp name="${compType}"/><c:comp name="${compType2v}"/></c:supported-calendar-component-set>${colorProp}
         <cs:getctag>${computeCtag(cal)}</cs:getctag>
         <d:sync-token>http://meisterpilze/sync/${getSyncToken(cal)}</d:sync-token>
-        <d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>
+        ${SUPPORTED_REPORT_SET}
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1296,7 +1311,7 @@ function handlePropfind(parts, body, req, res) {
         <c:supported-calendar-component-set><c:comp name="${compType2}"/><c:comp name="${compType2ev}"/></c:supported-calendar-component-set>${colorProp2}
         <cs:getctag>${computeCtag(calName)}</cs:getctag>
         <d:sync-token>http://meisterpilze/sync/${getSyncToken(calName)}</d:sync-token>
-        <d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>
+        ${SUPPORTED_REPORT_SET}
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1381,13 +1396,12 @@ function handleReport(parts, body, req, res) {
       const tokenStr = tokenMatch ? tokenMatch[1].trim() : '';
       const reqToken = parseInt((tokenStr.match(/\/sync\/(\d+)$/) || [])[1] || '0', 10);
 
-      // Validate token — if stale or unknown, tell client to do full sync
+      // Validate token — if stale or unknown, tell client to do full sync (RFC 6578 §3)
       const currentToken = getSyncToken(calName);
       const log = changeLog.get(calName);
-      if (reqToken > 0 && log) {
-        const minToken = Math.min(...[...log.values()].map(e => e.token));
-        if (reqToken < minToken) {
-          // Token too old — client must do a full sync
+      if (reqToken > 0) {
+        const invalid = !log || (log.size > 0 && reqToken < Math.min(...[...log.values()].map(e => e.token)));
+        if (invalid) {
           const errXml = `<?xml version="1.0" encoding="utf-8"?>
 <d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>`;
           res.writeHead(403, { 'Content-Type': 'application/xml; charset=utf-8' });
@@ -1397,7 +1411,7 @@ function handleReport(parts, body, req, res) {
       }
 
       let responses = '';
-      if (reqToken === 0 || !log) {
+      if (reqToken === 0) {
         // Initial sync — return all items
         const files = listIcsFiles(calName);
         for (const f of files) {
@@ -1570,7 +1584,7 @@ function handlePut(parts, body, req, res) {
               const sumMatch = unfolded.match(/SUMMARY:(.*)/);
               if (sumMatch) { const t = sumMatch[1].trim().replace(/\\n/g, '\n'); if (t !== task.text) fields.text = t; }
               const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
-              if (prioMatch) { const p = { 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' }[prioMatch[1]] || 'med'; if (p !== task.priority) fields.priority = p; }
+              if (prioMatch) { const p = CALDAV_PRIO_MAP[prioMatch[1]] || 'med'; if (p !== task.priority) fields.priority = p; }
               const statusMatch = unfolded.match(/STATUS:(.*)/);
               if (statusMatch) { const done = statusMatch[1].trim() === 'COMPLETED'; if (done !== task.done) fields.done = done; }
               const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
@@ -1593,7 +1607,7 @@ function handlePut(parts, body, req, res) {
               const sumMatch = unfolded.match(/SUMMARY:(.*)/);
               const text = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
               const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
-              const priority = prioMatch ? ({ 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' }[prioMatch[1]] || 'med') : 'med';
+              const priority = prioMatch ? (CALDAV_PRIO_MAP[prioMatch[1]] || 'med') : 'med';
               const statusMatch = unfolded.match(/STATUS:(.*)/);
               const done = statusMatch ? statusMatch[1].trim() === 'COMPLETED' : false;
               const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
@@ -1611,15 +1625,16 @@ function handlePut(parts, body, req, res) {
     // ── VEVENT sync-back: batch due dates, task due dates, custom events ──
     if (unfolded.includes('VEVENT')) {
       try {
-        const typeMatch = unfolded.match(/X-MEISTERPILZE-TYPE:(.*)/);
+        const veventBlock = extractVeventBlock(unfolded);
+        const typeMatch = veventBlock.match(/X-MEISTERPILZE-TYPE:(.*)/);
         const evType = typeMatch ? typeMatch[1].trim() : null;
 
         if (evType === 'batch-due' || evType === 'task-due') {
-          const dtMatch = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+          const dtMatch = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
           if (dtMatch) {
             const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
             if (evType === 'batch-due') {
-              const batchMatch = unfolded.match(/X-MEISTERPILZE-BATCH:(.*)/);
+              const batchMatch = veventBlock.match(/X-MEISTERPILZE-BATCH:(.*)/);
               if (batchMatch) {
                 const batchId = batchMatch[1].trim();
                 if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
@@ -1628,7 +1643,7 @@ function handlePut(parts, body, req, res) {
                 } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
               }
             } else {
-              const uidMatch = unfolded.match(/UID:(.*)/);
+              const uidMatch = veventBlock.match(/UID:(.*)/);
               if (uidMatch) {
                 const taskUid = uidMatch[1].trim().replace(/-event$/, '');
                 if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
@@ -1640,25 +1655,24 @@ function handlePut(parts, body, req, res) {
           }
         } else if (evType === 'custom-event') {
           // Custom event edited from external CalDAV client
-          const uidMatch = unfolded.match(/UID:(.*)/);
+          const uidMatch = veventBlock.match(/UID:(.*)/);
           if (uidMatch) {
             const uid = uidMatch[1].trim();
             const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
             if (idMatch) {
               const fields = {};
-              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
               if (sumMatch) fields.title = sumMatch[1].trim().replace(/\\n/g, '\n');
-              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
               if (descMatch) fields.description = descMatch[1].trim().replace(/\\n/g, '\n');
-              const catMatch = unfolded.match(/CATEGORIES:(.*)/);
+              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
               if (catMatch) {
                 const cat = catMatch[1].trim().toLowerCase();
-                const knownCats = { custom:1, meeting:1, delivery:1, maintenance:1 };
-                if (knownCats[cat]) fields.category = cat;
+                if (KNOWN_CATEGORIES[cat]) fields.category = cat;
               }
-              // Parse DTSTART: all-day (VALUE=DATE) or timed (TZID= or bare DATETIME)
-              const dtAllDay = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const dtTimed = unfolded.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              // Parse DTSTART from VEVENT block only (avoids VTIMEZONE false matches)
+              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (dtAllDay) {
                 fields.startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3];
                 fields.allDay = true;
@@ -1668,9 +1682,9 @@ function handlePut(parts, body, req, res) {
                 fields.startTime = dtTimed[4]+':'+dtTimed[5];
                 fields.allDay = false;
               }
-              // Parse DTEND
-              const deAllDay = unfolded.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const deTimed = unfolded.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              // Parse DTEND from VEVENT block only
+              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (deAllDay) {
                 // RFC 5545: DTEND for all-day is exclusive, subtract one day
                 const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]);
@@ -1689,29 +1703,29 @@ function handlePut(parts, body, req, res) {
           }
         } else if (!evType && calName === 'meisterpilze') {
           // New VEVENT from external CalDAV client — create as calendar event
-          const uidMatch = unfolded.match(/UID:(.*)/);
+          const uidMatch = veventBlock.match(/UID:(.*)/);
           if (uidMatch) {
             const uid = uidMatch[1].trim();
             // Check it doesn't already exist in DB
             const existing = db.readCalendarEventByCaldavUid(database, uid);
             if (!existing) {
-              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
               const title = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
-              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
               const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
-              const catMatch = unfolded.match(/CATEGORIES:(.*)/);
+              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
               let category = 'custom';
-              if (catMatch) { const c = catMatch[1].trim().toLowerCase(); if ({ custom:1, meeting:1, delivery:1, maintenance:1 }[c]) category = c; }
+              if (catMatch) { const c = catMatch[1].trim().toLowerCase(); if (KNOWN_CATEGORIES[c]) category = c; }
 
               let startDate = null, endDate = null, startTime = null, endTime = null, allDay = true;
-              const dtAllDay = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const dtTimed = unfolded.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (dtAllDay) { startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3]; }
               else if (dtTimed) { startDate = dtTimed[1]+'-'+dtTimed[2]+'-'+dtTimed[3]; startTime = dtTimed[4]+':'+dtTimed[5]; allDay = false; }
               if (!startDate) startDate = new Date().toISOString().split('T')[0];
 
-              const deAllDay = unfolded.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const deTimed = unfolded.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (deAllDay) { const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]); d.setDate(d.getDate()-1); endDate = d.toISOString().split('T')[0]; }
               else if (deTimed) { endDate = deTimed[1]+'-'+deTimed[2]+'-'+deTimed[3]; endTime = deTimed[4]+':'+deTimed[5]; }
 
@@ -1795,14 +1809,7 @@ function handleDelete(parts, req, res) {
     const evType = typeMatch ? typeMatch[1].trim() : null;
 
     if (evType === 'batch-due') {
-      // Clear batch due date (don't delete the batch itself)
-      const batchMatch = content.match(/X-MEISTERPILZE-BATCH:(.*)/);
-      if (batchMatch) {
-        const batchId = batchMatch[1].trim();
-        if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
-          try { db.updateBatchDue(database, batchId, null); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE batch-due sync failed',{batchId,error:e.message}); }
-        }
-      }
+      // Batch due dates are mandatory — ignore delete, autoSync will recreate the file
     } else if (evType === 'task-due') {
       // Clear task due date (don't delete the task)
       const uidMatch = content.match(/UID:(.*)/);
