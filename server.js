@@ -2967,10 +2967,9 @@ function handleRequest(req, res) {
       issuer: base,
       authorization_endpoint: base + '/oauth/authorize',
       token_endpoint: base + '/oauth/token',
-      registration_endpoint: base + '/oauth/register',
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['none'],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
       code_challenge_methods_supported: ['S256']
     }));
     return;
@@ -2986,39 +2985,9 @@ function handleRequest(req, res) {
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
-    // Dynamic Client Registration (RFC 7591) — public
+    // Dynamic Client Registration — disabled, clients must be created via admin UI
     if (req.method === 'POST' && req.url === '/oauth/register') {
-      jsonBody(req, res, (e, data) => {
-        if (e) return;
-        try {
-          const clientId = data.client_id || crypto.randomUUID();
-          const redirectUris = data.redirect_uris || [];
-          if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
-            return jsonErr(res, 400, 'redirect_uris required');
-          }
-          for (const uri of redirectUris) {
-            if (typeof uri !== 'string') return jsonErr(res, 400, 'redirect_uris must be strings');
-            let parsed;
-            try { parsed = new URL(uri); } catch { return jsonErr(res, 400, 'invalid redirect_uri: ' + uri); }
-            if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
-              return jsonErr(res, 400, 'redirect_uri must use HTTPS (except localhost)');
-            }
-          }
-          const client = db.registerOAuthClient(database, {
-            clientId,
-            clientName: data.client_name || '',
-            redirectUris
-          });
-          jsonOk(res, {
-            client_id: client.client_id,
-            client_name: client.client_name,
-            redirect_uris: JSON.parse(client.redirect_uris || '[]'),
-            token_endpoint_auth_method: 'none',
-            grant_types: ['authorization_code', 'refresh_token'],
-            response_types: ['code']
-          });
-        } catch (err) { safeErr(res, err); }
-      });
+      jsonErr(res, 403, 'Dynamic registration disabled. Create clients in MeisterTracker Settings > MCP.');
       return;
     }
 
@@ -3029,6 +2998,14 @@ function handleRequest(req, res) {
       parser(req, res, (e, data) => {
         if (e) return;
         try {
+          // Validate client_secret if client has one
+          const tokenClient = db.getOAuthClient(database, data.client_id);
+          if (!tokenClient) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client"}'); return; }
+          if (tokenClient.hasSecret) {
+            if (!data.client_secret) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client","error_description":"client_secret required"}'); return; }
+            if (!db.verifyOAuthClientSecret(database, data.client_id, data.client_secret)) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client"}'); return; }
+          }
+
           if (data.grant_type === 'authorization_code') {
             if (!data.code || !data.code_verifier || !data.client_id || !data.redirect_uri) {
               return jsonErr(res, 400, 'missing required parameters');
@@ -4450,6 +4427,44 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     try {
       const cfg = db.getMcpCfg(database);
       jsonOk(res, { enabled: cfg.enabled, hasToken: cfg.hasToken, activeSessions: mcpSessions.size });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // -- OAuth Client Management API --
+  if (req.method === 'GET' && req.url === '/api/mcp/oauth-clients') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const clients = db.listOAuthClients(database);
+      jsonOk(res, { clients });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/mcp/oauth-clients') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      try {
+        const clientName = (data.client_name || '').trim();
+        if (!clientName) { jsonErr(res, 400, 'client_name required'); return; }
+        const result = db.createOAuthClient(database, { clientName, redirectUris: data.redirect_uris || [] });
+        log('info', 'OAuth client created', { actor: req.authUser.username, clientId: result.clientId, clientName });
+        jsonOk(res, { client_id: result.clientId, client_secret: result.clientSecret, client_name: result.clientName });
+      } catch (err) { safeErr(res, err); }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && req.url.startsWith('/api/mcp/oauth-clients/')) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const clientId = decodeURIComponent(req.url.split('/').pop());
+      db.deleteOAuthClient(database, clientId);
+      log('info', 'OAuth client deleted', { actor: req.authUser.username, clientId });
+      jsonOk(res);
     } catch (err) {
       safeErr(res, err);
     }
