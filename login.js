@@ -10,7 +10,7 @@
   // Already logged in?
   try{
     const me=await fetch('/api/auth/me');
-    if(me.ok){window.location.href='/';return;}
+    if(me.ok){const p=new URLSearchParams(window.location.search);const r=p.get('redirect');window.location.href=(r&&r.startsWith('/'))?r:'/';return;}
   }catch{}
 
   // Setup mode?
@@ -85,7 +85,7 @@
         resetBtn();
         return;
       }
-      window.location.href='/';
+      const rp=new URLSearchParams(window.location.search);const rd=rp.get('redirect');window.location.href=(rd&&rd.startsWith('/'))?rd:'/';
     }catch(err){
       showError('Connection error \u2014 is the server running?');
       resetBtn();

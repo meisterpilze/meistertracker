@@ -339,7 +339,7 @@ const MIGRATIONS = [
   },
   {
     version: 12,
-    description: 'Drop unused caldav_username/caldav_password columns',
+    description: 'Drop unused caldav_username/caldav_password columns (rebuild caldav_config)',
     fn(db) {
       const row = db.prepare('SELECT enabled, per_person_calendars FROM caldav_config WHERE id = 1').get();
       db.exec('DROP TABLE IF EXISTS caldav_config');
@@ -354,6 +354,39 @@ const MIGRATIONS = [
           row.per_person_calendars || 0
         );
       }
+    }
+  }
+  {
+    version: 13,
+    description: 'Add OAuth 2.0 tables for MCP authentication',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS oauth_clients (
+        client_id     TEXT PRIMARY KEY,
+        client_name   TEXT DEFAULT '',
+        redirect_uris TEXT NOT NULL DEFAULT '[]',
+        created       TEXT NOT NULL DEFAULT (datetime('now'))
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS oauth_codes (
+        code                  TEXT PRIMARY KEY,
+        client_id             TEXT NOT NULL,
+        user_id               INTEGER NOT NULL,
+        redirect_uri          TEXT NOT NULL,
+        code_challenge        TEXT NOT NULL,
+        code_challenge_method TEXT NOT NULL DEFAULT 'S256',
+        expires               TEXT NOT NULL,
+        used                  INTEGER DEFAULT 0
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS oauth_tokens (
+        token             TEXT PRIMARY KEY,
+        token_type        TEXT NOT NULL,
+        client_id         TEXT NOT NULL,
+        user_id           INTEGER NOT NULL,
+        expires           TEXT NOT NULL,
+        revoked           INTEGER DEFAULT 0,
+        created           TEXT NOT NULL DEFAULT (datetime('now')),
+        refresh_token_ref TEXT
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_tokens(expires)`);
     }
   }
 ];
@@ -1822,6 +1855,71 @@ function generateMcpToken(db) {
   return token; // plaintext returned once to show to user; only hash is stored
 }
 
+// ── OAuth 2.0 ───────────────────────────────────────────────
+function registerOAuthClient(db, { clientId, clientName, redirectUris }) {
+  const existing = db.prepare('SELECT client_id FROM oauth_clients WHERE client_id = ?').get(clientId);
+  if (existing) {
+    db.prepare('UPDATE oauth_clients SET client_name = ?, redirect_uris = ? WHERE client_id = ?')
+      .run(clientName || '', JSON.stringify(redirectUris), clientId);
+  } else {
+    db.prepare('INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created) VALUES (?, ?, ?, ?)')
+      .run(clientId, clientName || '', JSON.stringify(redirectUris), new Date().toISOString());
+  }
+  return db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId);
+}
+
+function getOAuthClient(db, clientId) {
+  const row = db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId);
+  if (!row) return null;
+  return { clientId: row.client_id, clientName: row.client_name, redirectUris: JSON.parse(row.redirect_uris || '[]'), created: row.created };
+}
+
+function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod }) {
+  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+  db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires);
+}
+
+function getOAuthCode(db, code) {
+  const row = db.prepare('SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > datetime(\'now\')').get(code);
+  if (!row) return null;
+  return {
+    code: row.code, clientId: row.client_id, userId: row.user_id, redirectUri: row.redirect_uri,
+    codeChallenge: row.code_challenge, codeChallengeMethod: row.code_challenge_method, expires: row.expires
+  };
+}
+
+function markOAuthCodeUsed(db, code) {
+  db.prepare('UPDATE oauth_codes SET used = 1 WHERE code = ?').run(code);
+}
+
+function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSeconds, refreshTokenRef }) {
+  const expires = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+  db.prepare('INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires, created, refresh_token_ref) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(token, tokenType, clientId, userId, expires, new Date().toISOString(), refreshTokenRef || null);
+}
+
+function getOAuthAccessToken(db, tokenHash) {
+  const row = db.prepare("SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > datetime('now')").get(tokenHash);
+  if (!row) return null;
+  return { token: row.token, clientId: row.client_id, userId: row.user_id, expires: row.expires };
+}
+
+function getOAuthRefreshToken(db, tokenHash) {
+  const row = db.prepare("SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > datetime('now')").get(tokenHash);
+  if (!row) return null;
+  return { token: row.token, clientId: row.client_id, userId: row.user_id, expires: row.expires };
+}
+
+function revokeOAuthTokensByRefresh(db, refreshHash) {
+  db.prepare("UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token_ref = ? OR token = ?").run(refreshHash, refreshHash);
+}
+
+function deleteExpiredOAuthData(db) {
+  db.prepare("DELETE FROM oauth_codes WHERE expires < datetime('now') OR used = 1").run();
+  db.prepare("DELETE FROM oauth_tokens WHERE expires < datetime('now') OR revoked = 1").run();
+}
+
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
 function mapBatchRow(r, bagStmt) {
   return {
@@ -1958,6 +2056,16 @@ module.exports = {
   getMcpToken,
   updateMcpCfg,
   generateMcpToken,
+  registerOAuthClient,
+  getOAuthClient,
+  createOAuthCode,
+  getOAuthCode,
+  markOAuthCodeUsed,
+  createOAuthToken,
+  getOAuthAccessToken,
+  getOAuthRefreshToken,
+  revokeOAuthTokensByRefresh,
+  deleteExpiredOAuthData,
   getAllBatches,
   getAllTasks,
   getAllHarvests,
