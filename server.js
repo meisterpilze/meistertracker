@@ -2500,6 +2500,15 @@ function handleRequest(req,res){
     return;
   }
 
+  // POST /api/internal/notify — MCP server triggers SSE broadcast, localhost only
+  if(req.method==='POST'&&url==='/api/internal/notify'){
+    const ip=req.socket.remoteAddress;
+    if(ip!=='127.0.0.1'&&ip!=='::1'&&ip!=='::ffff:127.0.0.1'){res.writeHead(403);res.end();return;}
+    broadcastSSE(null);
+    res.writeHead(200,{'Content-Type':'text/plain'});res.end('ok');
+    return;
+  }
+
   // GET /api/data
   if(req.method==='GET'&&url==='/api/data'){
     res.writeHead(200,{'Content-Type':'application/json'});
