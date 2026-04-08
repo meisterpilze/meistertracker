@@ -562,6 +562,11 @@ function foldIcsLines(icsText) {
   }).join('\r\n');
 }
 
+// Unfold RFC 5545 §3.1 folded lines (CRLF + space/tab → join)
+function unfoldIcs(text) {
+  return text.replace(/\r?\n[ \t]/g, '');
+}
+
 function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
