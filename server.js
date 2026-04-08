@@ -662,6 +662,9 @@ function computeCtag(calName) {
   return ctag;
 }
 
+// CalDAV event color map — matches CATEGORY_COLORS in app.js
+const CALDAV_CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+
 // Convert a task object to VTODO .ics content
 function taskToVTODO(task) {
   const uid = task.caldavUid || generateUID();
@@ -690,6 +693,7 @@ function taskToVTODO(task) {
   if (task.done) lines.push('PERCENT-COMPLETE:100');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
   if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
+  lines.push('COLOR:#3b82f6');
   lines.push('END:VTODO', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
@@ -725,6 +729,7 @@ function batchToVEVENT(batch) {
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:batch-due',
     'X-MEISTERPILZE-BATCH:' + batch.batchId,
+    'COLOR:#ef4444',
     'END:VEVENT',
     'END:VCALENDAR'
   ];
@@ -751,6 +756,7 @@ function taskDueToVEVENT(task) {
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:task-due',
+    'COLOR:#3b82f6',
     'END:VEVENT',
     'END:VCALENDAR'
   ];
@@ -817,6 +823,7 @@ function customEventToVEVENT(event) {
   if (event.assignees && event.assignees.length) {
     for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
   }
+  lines.push('COLOR:' + (event.color || CALDAV_CATEGORY_COLORS[event.category] || '#16a34a'));
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
