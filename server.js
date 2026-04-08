@@ -331,55 +331,167 @@ function startDuckdnsUpdater() {
 
 startDuckdnsUpdater();
 
-// ── LET'S ENCRYPT CERT MANAGEMENT ─────────────────────────
-const IS_WIN = process.platform === 'win32';
-const ACME_HOME = path.join(DIR, '.acme.sh');
-const ACME_SH = path.join(ACME_HOME, 'acme.sh');
+// ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
+// Pure Node.js — no bash, curl, or acme.sh required.
+// Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
 
-// Convert Windows path to POSIX for bash (C:\foo\bar → /c/foo/bar)
-function bashPath(p) {
-  if (!IS_WIN) return p;
-  return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => '/' + d.toLowerCase());
+const ACME_DIR_URL = 'https://acme-v2.api.letsencrypt.org/directory';
+const ACME_ACCOUNT_KEY_PATH = path.join(DIR, 'certs', 'acme-account-key.pem');
+
+function base64url(data) {
+  return (Buffer.isBuffer(data) ? data : Buffer.from(data)).toString('base64url');
 }
 
-// Locate bash — required for acme.sh on all platforms
-function findBash() {
-  if (!IS_WIN) return 'bash';
-  // Git for Windows ships bash in <git>/bin/bash.exe
-  const dirs = [
-    process.env.ProgramFiles,
-    process.env['ProgramFiles(x86)'],
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : null,
-  ].filter(Boolean);
-  for (const d of dirs) {
-    const candidate = path.join(d, 'Git', 'bin', 'bash.exe');
-    if (fs.existsSync(candidate)) return candidate;
+// ── DER / ASN.1 encoding helpers ──
+function derLen(len) {
+  if (len < 0x80) return Buffer.from([len]);
+  if (len < 0x100) return Buffer.from([0x81, len]);
+  return Buffer.from([0x82, len >> 8, len & 0xff]);
+}
+function derWrap(tag, buf) {
+  return Buffer.concat([Buffer.from([tag]), derLen(buf.length), buf]);
+}
+function derSeq(...items)  { return derWrap(0x30, Buffer.concat(items)); }
+function derSet(...items)  { return derWrap(0x31, Buffer.concat(items)); }
+function derOid(bytes)     { return derWrap(0x06, Buffer.from(bytes)); }
+function derUtf8(str)      { return derWrap(0x0c, Buffer.from(str, 'utf8')); }
+function derBitStr(buf)    { return derWrap(0x03, Buffer.concat([Buffer.from([0x00]), buf])); }
+function derOctStr(buf)    { return derWrap(0x04, buf); }
+function derInt(n)         { return derWrap(0x02, Buffer.from([n])); }
+
+// ── HTTPS JSON request helper ──
+function _acmeHttps(method, url, body, extraHeaders, callback) {
+  if (typeof extraHeaders === 'function') { callback = extraHeaders; extraHeaders = {}; }
+  const u = new URL(url);
+  const opts = {
+    hostname: u.hostname, port: u.port || 443,
+    path: u.pathname + u.search, method,
+    headers: Object.assign({}, extraHeaders)
+  };
+  let bodyStr = null;
+  if (body) {
+    bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    if (!opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/jose+json';
+    opts.headers['Content-Length'] = Buffer.byteLength(bodyStr);
   }
-  return 'bash'; // fallback — hope it's in PATH
-}
-const BASH = findBash();
-
-// Run acme.sh with arguments — always goes through bash
-function runAcmeSh(args, env, timeout, callback) {
-  execFile(BASH, [bashPath(ACME_SH), ...args], { env, timeout }, callback);
-}
-
-function ensureAcmeSh(callback) {
-  if (fs.existsSync(ACME_SH)) return callback(null);
-  log('info', 'acme.sh not found, installing automatically...');
-  const homeArg = bashPath(ACME_HOME);
-  execFile(BASH, ['-c',
-    'curl -sSL https://get.acme.sh | sh -s -- --install-online --home \'' + homeArg + '\' --no-cron'
-  ], { timeout: 60000 }, (err, stdout, stderr) => {
-    if (err || !fs.existsSync(ACME_SH)) {
-      log('error', 'acme.sh auto-install failed', { error: err ? err.message : 'binary not found', stderr });
-      return callback(new Error('acme.sh installation failed — ensure curl and bash (Git for Windows) are available'));
-    }
-    log('info', 'acme.sh installed', { home: ACME_HOME });
-    callback(null);
+  const req = https.request(opts, res => {
+    let raw = '';
+    res.on('data', c => { raw += c; });
+    res.on('end', () => {
+      let json = null;
+      if (raw) try { json = JSON.parse(raw); } catch (_) {} // eslint-disable-line no-empty
+      callback(null, res.statusCode, res.headers, json || raw);
+    });
   });
+  req.on('error', callback);
+  req.setTimeout(30000, () => req.destroy(new Error('ACME request timeout')));
+  if (bodyStr) req.write(bodyStr);
+  req.end();
 }
 
+// ── Sequential async helper ──
+function waterfall(fns, done) {
+  let i = 0;
+  (function next(err) {
+    if (err || i >= fns.length) return done(err);
+    try { fns[i++](next); } catch (e) { done(e); }
+  })(null);
+}
+
+// ── ECDSA P-256 account key (persists in certs/) ──
+function loadOrCreateAccountKey() {
+  if (fs.existsSync(ACME_ACCOUNT_KEY_PATH)) {
+    return crypto.createPrivateKey(fs.readFileSync(ACME_ACCOUNT_KEY_PATH));
+  }
+  log('info', 'Generating ACME account key...');
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const dir = path.dirname(ACME_ACCOUNT_KEY_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+  return privateKey;
+}
+
+function getAccountJwk(key) {
+  const j = crypto.createPublicKey(key).export({ format: 'jwk' });
+  return { crv: j.crv, kty: j.kty, x: j.x, y: j.y };
+}
+
+function getJwkThumbprint(jwk) {
+  const ordered = JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y });
+  return base64url(crypto.createHash('sha256').update(ordered).digest());
+}
+
+// ── JWS signing ──
+function signJws(key, protectedHeader, payload) {
+  const protB64 = base64url(JSON.stringify(protectedHeader));
+  const payB64 = payload === '' ? '' : base64url(JSON.stringify(payload));
+  const sig = crypto.sign('sha256', Buffer.from(protB64 + '.' + payB64), {
+    key, dsaEncoding: 'ieee-p1363'
+  });
+  return JSON.stringify({ protected: protB64, payload: payB64, signature: base64url(sig) });
+}
+
+// ── DuckDNS TXT record helpers ──
+function setDuckdnsTxt(domain, token, value, callback) {
+  const url = 'https://www.duckdns.org/update?domains=' +
+    encodeURIComponent(domain) + '&token=' +
+    encodeURIComponent(token) + '&txt=' +
+    encodeURIComponent(value) + '&verbose=true';
+  https.get(url, resp => {
+    let data = '';
+    resp.on('data', c => { data += c; });
+    resp.on('end', () => {
+      data.trim().startsWith('OK') ? callback(null) :
+        callback(new Error('DuckDNS TXT update failed: ' + data.trim()));
+    });
+  }).on('error', callback);
+}
+
+function clearDuckdnsTxt(domain, token) {
+  const url = 'https://www.duckdns.org/update?domains=' +
+    encodeURIComponent(domain) + '&token=' +
+    encodeURIComponent(token) + '&txt=&clear=true&verbose=true';
+  https.get(url, () => {}).on('error', () => {});
+}
+
+// ── PKCS#10 CSR construction ──
+function buildCsr(domain) {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const spki = publicKey.export({ type: 'spki', format: 'der' });
+
+  // Subject: CN=domain
+  const subject = derSeq(derSet(derSeq(
+    derOid([0x55, 0x04, 0x03]),
+    derUtf8(domain)
+  )));
+
+  // SAN extension in extensionRequest attribute
+  const dnsName = Buffer.concat([
+    Buffer.from([0x82]), derLen(Buffer.byteLength(domain, 'ascii')),
+    Buffer.from(domain, 'ascii')
+  ]);
+  const sanExt = derSeq(
+    derOid([0x55, 0x1d, 0x11]),
+    derOctStr(derSeq(dnsName))
+  );
+  const extReq = derSeq(
+    derOid([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x09, 0x0e]),
+    derSet(derSeq(sanExt))
+  );
+  const attrs = derWrap(0xa0, extReq);
+
+  // CertificationRequestInfo
+  const reqInfo = derSeq(derInt(0), subject, spki, attrs);
+  const sig = crypto.sign('sha256', reqInfo, privateKey);
+  const sigAlg = derSeq(
+    derOid([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]),
+    Buffer.from([0x05, 0x00])
+  );
+
+  return { der: derSeq(reqInfo, sigAlg, derBitStr(sig)), privateKey };
+}
+
+// ── Main certificate request orchestrator ──
 function requestLetsEncryptCert(callback) {
   const cfg = db.getDuckdnsCfg(database);
   if (!cfg.domain || !cfg.token) {
@@ -387,49 +499,173 @@ function requestLetsEncryptCert(callback) {
   }
 
   const fullDomain = cfg.domain + '.duckdns.org';
+  let accountKey, jwk, thumbprint;
+  let acmeDir, accountUrl, nonce;
+  let order, orderUrl, challenge, certPem, domainKey;
 
-  ensureAcmeSh((installErr) => {
-    if (installErr) return callback(installErr);
-
-    const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
-    const home = bashPath(ACME_HOME);
-
-    runAcmeSh([
-      '--issue', '--dns', 'dns_duckdns',
-      '-d', fullDomain,
-      '--home', home,
-      '--server', 'letsencrypt',
-      '--force'
-    ], env, 120000, (err, stdout, stderr) => {
-      if (err) {
-        log('error', 'acme.sh issue failed', { error: err.message, stderr });
-        return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
-      }
-      log('info', 'acme.sh issue succeeded', { domain: fullDomain });
-
-      runAcmeSh([
-        '--install-cert', '-d', fullDomain,
-        '--key-file', bashPath(CERT_KEY),
-        '--fullchain-file', bashPath(CERT_CRT),
-        '--home', home
-      ], env, 30000, (err2, stdout2, stderr2) => {
-        if (err2) {
-          log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
-          return callback(new Error('Certificate installation failed'));
+  // Signed ACME POST with nonce tracking + badNonce retry
+  function acmePost(url, payload, useJwk, cb) {
+    let retries = 0;
+    (function attempt() {
+      const hdr = { alg: 'ES256', nonce, url };
+      if (useJwk) hdr.jwk = jwk; else hdr.kid = accountUrl;
+      const body = signJws(accountKey, hdr, payload);
+      _acmeHttps('POST', url, body, (err, status, headers, data) => {
+        if (err) return cb(err);
+        nonce = headers['replay-nonce'] || nonce;
+        if (data && data.type === 'urn:ietf:params:acme:error:badNonce' && ++retries < 3) {
+          return attempt();
         }
-
-        const now = new Date();
-        const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-        db.updateDuckdnsStatus(database, {
-          leLastRenewal: now.toISOString(),
-          leExpiry: expiry.toISOString()
-        });
-
-        reloadTlsCerts();
-        log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
-        callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
+        if (status >= 400) {
+          const detail = data && data.detail ? data.detail : JSON.stringify(data);
+          return cb(new Error('ACME error (' + status + '): ' + detail));
+        }
+        cb(null, status, headers, data);
       });
+    })();
+  }
+
+  // Poll until target status
+  function poll(url, target, maxAttempts, cb) {
+    let attempts = 0;
+    (function check() {
+      acmePost(url, '', false, (err, _s, _h, data) => {
+        if (err) return cb(err);
+        if (data.status === target) return cb(null, data);
+        if (data.status === 'invalid') {
+          const msg = (data.challenges || []).map(c => c.error && c.error.detail).filter(Boolean).join('; ');
+          return cb(new Error('Validation failed: ' + (msg || JSON.stringify(data))));
+        }
+        if (++attempts >= maxAttempts) return cb(new Error('ACME polling timed out'));
+        setTimeout(check, 3000);
+      });
+    })();
+  }
+
+  log('info', 'Requesting Let\'s Encrypt certificate...', { domain: fullDomain });
+
+  waterfall([
+    // 1. Load/create account key
+    next => {
+      try { accountKey = loadOrCreateAccountKey(); } catch (e) { return next(e); }
+      jwk = getAccountJwk(accountKey);
+      thumbprint = getJwkThumbprint(jwk);
+      next(null);
+    },
+    // 2. Fetch ACME directory
+    next => {
+      _acmeHttps('GET', ACME_DIR_URL, null, (err, _s, _h, data) => {
+        if (err) return next(err);
+        acmeDir = data;
+        next(null);
+      });
+    },
+    // 3. Get initial nonce
+    next => {
+      _acmeHttps('HEAD', acmeDir.newNonce, null, (err, _s, headers) => {
+        if (err) return next(err);
+        nonce = headers['replay-nonce'];
+        next(null);
+      });
+    },
+    // 4. Create or find account
+    next => {
+      acmePost(acmeDir.newAccount, { termsOfServiceAgreed: true }, true, (err, _s, headers) => {
+        if (err) return next(err);
+        accountUrl = headers.location;
+        log('info', 'ACME account ready', { url: accountUrl });
+        next(null);
+      });
+    },
+    // 5. Create order
+    next => {
+      acmePost(acmeDir.newOrder, {
+        identifiers: [{ type: 'dns', value: fullDomain }]
+      }, false, (err, _s, headers, data) => {
+        if (err) return next(err);
+        order = data;
+        orderUrl = headers.location;
+        next(null);
+      });
+    },
+    // 6. Get authorization + dns-01 challenge
+    next => {
+      acmePost(order.authorizations[0], '', false, (err, _s, _h, data) => {
+        if (err) return next(err);
+        challenge = (data.challenges || []).find(c => c.type === 'dns-01');
+        if (!challenge) return next(new Error('No dns-01 challenge offered'));
+        next(null);
+      });
+    },
+    // 7. Set TXT record via DuckDNS
+    next => {
+      const keyAuth = challenge.token + '.' + thumbprint;
+      const dns01 = base64url(crypto.createHash('sha256').update(keyAuth).digest());
+      log('info', 'Setting DuckDNS TXT record...', { domain: cfg.domain });
+      setDuckdnsTxt(cfg.domain, cfg.token, dns01, next);
+    },
+    // 8. Wait for DNS propagation
+    next => { log('info', 'Waiting for DNS propagation (15s)...'); setTimeout(next, 15000); },
+    // 9. Respond to challenge
+    next => { acmePost(challenge.url, {}, false, err => next(err)); },
+    // 10. Poll authorization until valid
+    next => {
+      poll(order.authorizations[0], 'valid', 40, err => {
+        if (err) return next(err);
+        log('info', 'DNS-01 challenge validated');
+        next(null);
+      });
+    },
+    // 11. Build CSR and finalize order
+    next => {
+      const csr = buildCsr(fullDomain);
+      domainKey = csr.privateKey;
+      acmePost(order.finalize, { csr: base64url(csr.der) }, false, err => next(err));
+    },
+    // 12. Poll order until cert ready
+    next => {
+      poll(orderUrl, 'valid', 20, (err, data) => {
+        if (err) return next(err);
+        order = data;
+        next(null);
+      });
+    },
+    // 13. Download certificate
+    next => {
+      acmePost(order.certificate, '', false, (err, _s, _h, data) => {
+        if (err) return next(err);
+        certPem = typeof data === 'string' ? data : '';
+        if (!certPem || !certPem.includes('BEGIN CERTIFICATE')) {
+          return next(new Error('Invalid certificate response'));
+        }
+        next(null);
+      });
+    },
+    // 14. Save certificate and key
+    next => {
+      try {
+        const certsDir = path.dirname(CERT_KEY);
+        if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+        fs.writeFileSync(CERT_CRT, certPem);
+        fs.writeFileSync(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
+      } catch (e) { return next(e); }
+      next(null);
+    }
+  ], err => {
+    clearDuckdnsTxt(cfg.domain, cfg.token);
+    if (err) {
+      log('error', 'Let\'s Encrypt request failed', { error: err.message });
+      return callback(err);
+    }
+    const now = new Date();
+    const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    db.updateDuckdnsStatus(database, {
+      leLastRenewal: now.toISOString(),
+      leExpiry: expiry.toISOString()
     });
+    reloadTlsCerts();
+    log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
+    callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
   });
 }
 
