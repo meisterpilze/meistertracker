@@ -633,17 +633,47 @@ const ctagCache = new Map();
 
 function invalidateCtag(calName) { ctagCache.delete(calName); }
 
-// Write an .ics file and invalidate the CTag cache
+// ── RFC 6578 sync-token tracking ──
+const syncTokens = new Map();   // calName → current monotonic counter
+const changeLog = new Map();    // calName → Map<fileName, {action:'changed'|'deleted', token}>
+const CHANGE_LOG_MAX = 1000;    // max entries per calendar before trimming
+
+function bumpSyncToken(calName) {
+  const next = (syncTokens.get(calName) || 0) + 1;
+  syncTokens.set(calName, next);
+  return next;
+}
+
+function recordChange(calName, fileName, action) {
+  const token = bumpSyncToken(calName);
+  if (!changeLog.has(calName)) changeLog.set(calName, new Map());
+  const log = changeLog.get(calName);
+  log.set(fileName, { action, token });
+  // Trim oldest entries if over limit
+  if (log.size > CHANGE_LOG_MAX) {
+    const entries = [...log.entries()].sort((a, b) => a[1].token - b[1].token);
+    while (log.size > CHANGE_LOG_MAX) log.delete(entries.shift()[0]);
+  }
+}
+
+function getSyncToken(calName) { return syncTokens.get(calName) || 0; }
+
+// Write an .ics file and invalidate caches / record change
 function writeIcsFile(calName, fileName, content) {
   const dir = ensureCalDir(calName);
   fs.writeFileSync(path.join(dir, fileName), content, 'utf8');
   invalidateCtag(calName);
+  recordChange(calName, fileName, 'changed');
 }
 
-// Delete an .ics file and invalidate the CTag cache
+// Delete an .ics file and invalidate caches / record change
 function deleteIcsFile(calName, fileName) {
   const filePath = path.join(CAL_DIR, calName, fileName);
-  if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); }
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+    invalidateCtag(calName);
+    recordChange(calName, fileName, 'deleted');
+  }
 }
 
 // Compute a stable ctag for a calendar based on file contents (cached)
@@ -985,7 +1015,7 @@ function _doAutoSyncAllCaldav(data) {
       for (const f of existing) {
         const filePath = path.join(sharedDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
-        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); }
+        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); recordChange('meisterpilze', f, 'deleted'); }
       }
     } catch (e) { log('warn','CalDAV: failed to clean orphaned files',{error:e.message}); }
   } catch (e) { log('error','autoSyncAllCaldav failed',{error:e.message}); }
@@ -1070,7 +1100,7 @@ function syncAllTasksLocal(data) {
     for (const f of existing) {
       const filePath = path.join(sharedDir, f);
       const content = fs.readFileSync(filePath, 'utf8');
-      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); }
+      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); recordChange('meisterpilze', f, 'deleted'); }
     }
   } catch (e) { /* ignore cleanup errors */ }
 
@@ -1081,7 +1111,7 @@ function syncAllTasksLocal(data) {
 // Handles requests under /caldav/
 function handleCaldav(req, res) {
   // DAV headers for all CalDAV responses (no CORS — CalDAV clients don't need it)
-  res.setHeader('DAV', '1, 2, 3, calendar-access');
+  res.setHeader('DAV', '1, 2, 3, calendar-access, extended-mkcol');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -1226,6 +1256,8 @@ function handlePropfind(parts, body, req, res) {
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="${compType}"/><c:comp name="${compType2v}"/></c:supported-calendar-component-set>${colorProp}
         <cs:getctag>${computeCtag(cal)}</cs:getctag>
+        <d:sync-token>http://meisterpilze/sync/${getSyncToken(cal)}</d:sync-token>
+        <d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1263,6 +1295,8 @@ function handlePropfind(parts, body, req, res) {
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="${compType2}"/><c:comp name="${compType2ev}"/></c:supported-calendar-component-set>${colorProp2}
         <cs:getctag>${computeCtag(calName)}</cs:getctag>
+        <d:sync-token>http://meisterpilze/sync/${getSyncToken(calName)}</d:sync-token>
+        <d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1338,6 +1372,78 @@ function handleReport(parts, body, req, res) {
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
       res.end('Calendar not found');
+      return;
+    }
+
+    // ── RFC 6578 sync-collection REPORT ──
+    if (body.includes('sync-collection')) {
+      const tokenMatch = body.match(/<d:sync-token>([^<]*)<\/d:sync-token>/i);
+      const tokenStr = tokenMatch ? tokenMatch[1].trim() : '';
+      const reqToken = parseInt((tokenStr.match(/\/sync\/(\d+)$/) || [])[1] || '0', 10);
+
+      // Validate token — if stale or unknown, tell client to do full sync
+      const currentToken = getSyncToken(calName);
+      const log = changeLog.get(calName);
+      if (reqToken > 0 && log) {
+        const minToken = Math.min(...[...log.values()].map(e => e.token));
+        if (reqToken < minToken) {
+          // Token too old — client must do a full sync
+          const errXml = `<?xml version="1.0" encoding="utf-8"?>
+<d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>`;
+          res.writeHead(403, { 'Content-Type': 'application/xml; charset=utf-8' });
+          res.end(errXml);
+          return;
+        }
+      }
+
+      let responses = '';
+      if (reqToken === 0 || !log) {
+        // Initial sync — return all items
+        const files = listIcsFiles(calName);
+        for (const f of files) {
+          const fPath = path.join(calDir, f);
+          const stat = fs.statSync(fPath);
+          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>${etag}</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>`;
+        }
+      } else {
+        // Incremental sync — only items changed since reqToken
+        for (const [fileName, entry] of log.entries()) {
+          if (entry.token <= reqToken) continue;
+          if (entry.action === 'deleted') {
+            responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
+    <d:status>HTTP/1.1 404 Not Found</d:status>
+  </d:response>`;
+          } else {
+            const fPath = path.join(calDir, fileName);
+            if (fs.existsSync(fPath)) {
+              const stat = fs.statSync(fPath);
+              const etag = '"' + stat.mtimeMs.toString(36) + '"';
+              responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>${etag}</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>`;
+            }
+          }
+        }
+      }
+
+      const xml = `<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:sync-token>http://meisterpilze/sync/${currentToken}</d:sync-token>${responses}
+</d:multistatus>`;
+      res.writeHead(207, { 'Content-Type': 'application/xml; charset=utf-8' });
+      res.end(xml);
       return;
     }
 
@@ -1446,6 +1552,7 @@ function handlePut(parts, body, req, res) {
 
     fs.writeFileSync(filePath, body, 'utf8');
     invalidateCtag(calName);
+    recordChange(calName, fileName, 'changed');
 
     // Bidirectional sync: parse incoming content and update DB
     const unfolded = unfoldIcs(body);
@@ -1618,6 +1725,7 @@ function handlePut(parts, body, req, res) {
                 const { uid: newUid, ics } = customEventToVEVENT(ev);
                 fs.writeFileSync(filePath, ics, 'utf8');
                 invalidateCtag(calName);
+                recordChange(calName, fileName, 'changed');
               }
               broadcastSSE();
             }
@@ -1742,7 +1850,7 @@ function handleDelete(parts, req, res) {
     }
     // External events (no X-MEISTERPILZE-TYPE, no VTODO) — just delete file
 
-    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); }
+    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); recordChange(calName, fileName, 'deleted'); }
     res.writeHead(204);
     res.end();
     return;
