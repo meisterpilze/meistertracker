@@ -1043,6 +1043,12 @@ function readTaskById(db, id) {
   return { id: r.id, text: r.text, priority: r.priority, done: r.done===1, created: r.created, assignee: r.assignee, dueDate: r.due_date, description: r.description, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced, private: r.private===1 };
 }
 
+function readTaskByCaldavUid(db, caldavUid) {
+  const r = db.prepare('SELECT * FROM manual_tasks WHERE caldav_uid = ?').get(caldavUid);
+  if (!r) return null;
+  return { id: r.id, text: r.text, priority: r.priority, done: r.done===1, created: r.created, assignee: r.assignee, dueDate: r.due_date, description: r.description, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced, private: r.private===1 };
+}
+
 function readBatchById(db, batchId) {
   const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
   if (!r) return null;
@@ -1204,6 +1210,12 @@ function deleteCalendarEvent(db, id) {
   incrementDataVersion(db);
 }
 
+function readCalendarEventByCaldavUid(db, caldavUid) {
+  const r = db.prepare('SELECT * FROM calendar_events WHERE caldav_uid = ?').get(caldavUid);
+  if (!r) return null;
+  return { id: r.id, title: r.title, description: r.description, startDate: r.start_date, endDate: r.end_date, allDay: r.all_day === 1, startTime: r.start_time, endTime: r.end_time, category: r.category, color: r.color, caldavUid: r.caldav_uid, caldavSynced: r.caldav_synced, created: r.created };
+}
+
 function setCalendarEventAssignees(db, eventId, userIds) {
   db.prepare('DELETE FROM calendar_event_assignees WHERE event_id=?').run(eventId);
   const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
@@ -1309,13 +1321,13 @@ module.exports = {
   insertBatch, updateBatchField, addBagsToBatch, deleteBatchById,
   appendScanEntries, deleteLastScanEntries, deleteScanEntryById, clearScanLog,
   insertHarvest, insertCultures, updateCulture,
-  insertTask, updateTaskById, deleteTaskById, readTaskById, readBatchById,
+  insertTask, updateTaskById, deleteTaskById, readTaskById, readTaskByCaldavUid, readBatchById,
   insertMember, deleteMember,
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
   getDuckdnsCfg, updateDuckdnsCfg, updateDuckdnsStatus,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
-  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent, readCalendarEventByCaldavUid,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
   insertZone, deleteZone, insertRack, deleteRack, zoneExists
 };
