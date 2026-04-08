@@ -121,8 +121,6 @@ CREATE INDEX IF NOT EXISTS idx_invlog_time ON inventory_log(time);
 CREATE TABLE IF NOT EXISTS caldav_config (
   id                   INTEGER PRIMARY KEY CHECK (id = 1),
   enabled              INTEGER DEFAULT 0,
-  caldav_username      TEXT DEFAULT '',
-  caldav_password      TEXT DEFAULT '',
   per_person_calendars INTEGER DEFAULT 0
 );
 
@@ -337,6 +335,25 @@ const MIGRATIONS = [
       enabled   INTEGER DEFAULT 0,
       api_token TEXT DEFAULT ''
     )`);
+    }
+  },
+  {
+    version: 12,
+    description: 'Drop unused caldav_username/caldav_password columns',
+    fn(db) {
+      const row = db.prepare('SELECT enabled, per_person_calendars FROM caldav_config WHERE id = 1').get();
+      db.exec('DROP TABLE IF EXISTS caldav_config');
+      db.exec(`CREATE TABLE caldav_config (
+        id                   INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled              INTEGER DEFAULT 0,
+        per_person_calendars INTEGER DEFAULT 0
+      )`);
+      if (row) {
+        db.prepare('INSERT INTO caldav_config (id, enabled, per_person_calendars) VALUES (1, ?, ?)').run(
+          row.enabled || 0,
+          row.per_person_calendars || 0
+        );
+      }
     }
   }
 ];
