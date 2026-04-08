@@ -1804,6 +1804,72 @@ function generateMcpToken(db) {
   return token; // plaintext returned once to show to user; only hash is stored
 }
 
+// ── Targeted queries for MCP tools (avoid full readAll) ─────
+function mapBatchRow(r, bagStmt) {
+  return {
+    batchId: r.batch_id, species: r.species, strain: r.strain, qty: r.qty, days: r.days,
+    substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
+    bagKg: r.bag_kg, batchType: r.batch_type, sourceId: r.source_id, notes: r.notes,
+    created: r.created, due: r.due, bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
+  };
+}
+function getAllBatches(db) {
+  const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  return db.prepare('SELECT * FROM batches ORDER BY created').all().map(r => mapBatchRow(r, bagStmt));
+}
+function getAllTasks(db) {
+  return db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
+    id: r.id, text: r.text, priority: r.priority, done: r.done === 1, created: r.created,
+    assignee: r.assignee, dueDate: r.due_date, description: r.description
+  }));
+}
+function getAllHarvests(db) {
+  return db.prepare('SELECT * FROM harvests ORDER BY id').all().map(r => ({
+    id: r.id, time: r.time, batch: r.batch, bag: r.bag,
+    species: r.species, strain: r.strain, grams: r.grams, flush: r.flush
+  }));
+}
+function getAllCultures(db) {
+  return db.prepare('SELECT * FROM cultures ORDER BY created').all().map(r => ({
+    id: r.id, type: r.type, species: r.species, strain: r.strain,
+    parentId: r.parent_id, source: r.source, status: r.status, notes: r.notes, created: r.created
+  }));
+}
+function getScanLog(db) {
+  return db.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id').all().map(r => ({
+    id: r.id, time: r.time, action: r.action, batch: r.batch, bag: r.bag,
+    from: r.from, to: r.to, species: r.species, strain: r.strain
+  }));
+}
+function getCalendarEvents(db) {
+  const assigneeMap = getAllCalendarEventAssignees(db);
+  return db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
+    id: r.id, title: r.title, description: r.description, startDate: r.start_date,
+    endDate: r.end_date, allDay: r.all_day === 1, startTime: r.start_time, endTime: r.end_time,
+    category: r.category, color: r.color, assignees: assigneeMap.get(r.id) || []
+  }));
+}
+function getInventory(db, logLimit) {
+  const inv = db.prepare('SELECT * FROM inventory WHERE id = 1').get();
+  const logRows = logLimit
+    ? db.prepare('SELECT * FROM inventory_log ORDER BY id DESC LIMIT ?').all(logLimit).reverse()
+    : db.prepare('SELECT * FROM inventory_log ORDER BY id').all();
+  return {
+    stock: { hardwood: inv.stock_hardwood, wheatbran: inv.stock_wheatbran, gypsum: inv.stock_gypsum, grain: inv.stock_grain },
+    thresholds: { hardwood: { minKg: inv.thresh_hardwood }, wheatbran: { minKg: inv.thresh_wheatbran }, gypsum: { minKg: inv.thresh_gypsum }, grain: { minKg: inv.thresh_grain } },
+    avgComposition: { hwPct: inv.avg_hw_pct, wbPct: inv.avg_wb_pct, rhPct: inv.avg_rh_pct, bagKg: inv.avg_bag_kg, grainBagKg: inv.avg_grain_bag_kg },
+    log: logRows.map(r => ({ time: r.time, mat: r.mat, deltaKg: r.delta_kg, running: r.running, type: r.type, ref: r.ref }))
+  };
+}
+function getZonesWithRacks(db) {
+  const rackStmt = db.prepare('SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id');
+  return db.prepare('SELECT * FROM zones ORDER BY sort_order, id').all().map(z => ({
+    id: z.id, name: z.name, role: z.role, color: z.color, sortOrder: z.sort_order,
+    maxCapacity: z.max_capacity || null, created: z.created,
+    racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
+  }));
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -1873,5 +1939,13 @@ module.exports = {
   getMcpCfg,
   getMcpToken,
   updateMcpCfg,
-  generateMcpToken
+  generateMcpToken,
+  getAllBatches,
+  getAllTasks,
+  getAllHarvests,
+  getAllCultures,
+  getScanLog,
+  getCalendarEvents,
+  getInventory,
+  getZonesWithRacks
 };
