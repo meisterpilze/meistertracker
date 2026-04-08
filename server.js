@@ -4321,6 +4321,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        if (!data.token) {
+          const existing = db.getDuckdnsCfg(database);
+          data.token = existing.token || '';
+        }
         db.updateDuckdnsCfg(database, data);
         startDuckdnsUpdater();
         log('info', 'DuckDNS config updated', { actor: req.authUser.username });
@@ -4334,7 +4338,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/duckdns/config') {
     if (requireAdmin(req, res)) return;
     try {
-      jsonOk(res, db.getDuckdnsCfg(database));
+      const cfg = db.getDuckdnsCfg(database);
+      cfg.hasToken = !!(cfg.token);
+      delete cfg.token;
+      jsonOk(res, cfg);
     } catch (err) {
       safeErr(res, err);
     }
