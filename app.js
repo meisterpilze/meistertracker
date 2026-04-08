@@ -2240,7 +2240,7 @@ async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
-  showServerTab();
+  showServerTab();showMcpTab();
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3448,6 +3448,12 @@ async function requestLeCert(){
     else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'#166534');refreshDuckdnsStatus()}
   }catch(e){showLeStatus('Fehler: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
+}
+
+// ─── MCP TAB (admin-only) ───────────────────────────────────
+function showMcpTab(){
+  const btn=document.getElementById('st-settings-mcp');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
 }
 
 // ─── SERVER TAB ─────────────────────────────────────────────
