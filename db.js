@@ -355,7 +355,7 @@ const MIGRATIONS = [
         );
       }
     }
-  }
+  },
   {
     version: 13,
     description: 'Add OAuth 2.0 tables for MCP authentication',
