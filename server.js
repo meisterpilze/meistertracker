@@ -628,8 +628,27 @@ function listIcsFiles(calName) {
   return fs.readdirSync(dir).filter(f => f.endsWith('.ics'));
 }
 
-// Compute a stable ctag for a calendar based on file contents
+// CTag cache — avoids filesystem scan on every PROPFIND poll
+const ctagCache = new Map();
+
+function invalidateCtag(calName) { ctagCache.delete(calName); }
+
+// Write an .ics file and invalidate the CTag cache
+function writeIcsFile(calName, fileName, content) {
+  const dir = ensureCalDir(calName);
+  fs.writeFileSync(path.join(dir, fileName), content, 'utf8');
+  invalidateCtag(calName);
+}
+
+// Delete an .ics file and invalidate the CTag cache
+function deleteIcsFile(calName, fileName) {
+  const filePath = path.join(CAL_DIR, calName, fileName);
+  if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); }
+}
+
+// Compute a stable ctag for a calendar based on file contents (cached)
 function computeCtag(calName) {
+  if (ctagCache.has(calName)) return ctagCache.get(calName);
   const dir = path.join(CAL_DIR, calName);
   if (!fs.existsSync(dir)) return '0';
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.ics')).sort();
@@ -638,7 +657,9 @@ function computeCtag(calName) {
     const stat = fs.statSync(path.join(dir, f));
     hash.update(f + ':' + stat.mtimeMs + ':' + stat.size + '\n');
   }
-  return hash.digest('hex').slice(0, 16);
+  const ctag = hash.digest('hex').slice(0, 16);
+  ctagCache.set(calName, ctag);
+  return ctag;
 }
 
 // Convert a task object to VTODO .ics content
@@ -676,10 +697,9 @@ function taskToVTODO(task) {
 // Write a task as .ics file to the appropriate calendar
 function writeTaskToCalendar(task, calName) {
   calName = calName || 'meisterpilze';
-  const dir = ensureCalDir(calName);
   if (!task.caldavUid) task.caldavUid = generateUID();
   const { uid, ics } = taskToVTODO(task);
-  fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+  writeIcsFile(calName, uid + '.ics', ics);
   task.caldavSynced = new Date().toISOString();
   return uid;
 }
@@ -804,8 +824,7 @@ function customEventToVEVENT(event) {
 // Delete a task's .ics file
 function deleteTaskFromCalendar(uid, calName) {
   calName = calName || 'meisterpilze';
-  const file = path.join(CAL_DIR, calName, uid + '.ics');
-  if (fs.existsSync(file)) fs.unlinkSync(file);
+  deleteIcsFile(calName, uid + '.ics');
 }
 
 // ── Auto CalDAV sync helpers ───────────────────────────────
@@ -815,9 +834,8 @@ function autoPushBatchCaldav(batch) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     if (!batch || !batch.due) return;
-    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = batchToVEVENT(batch);
-    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+    writeIcsFile('meisterpilze', uid + '.ics', ics);
   } catch (e) { log('error','autoPushBatchCaldav failed',{error:e.message}); }
 }
 
@@ -827,8 +845,7 @@ function autoDeleteBatchCaldav(batchId) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = 'batch-' + batchId + '@meisterpilze';
-    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+    deleteIcsFile('meisterpilze', uid + '.ics');
   } catch (e) { log('error','autoDeleteBatchCaldav failed',{error:e.message}); }
 }
 
@@ -849,9 +866,8 @@ function autoPushTaskCaldav(task) {
     }
     // Due-date VEVENT: respect privacy — only shared if not private
     if (task.dueDate && !isPrivate) {
-      const dir = ensureCalDir('meisterpilze');
       const { uid, ics } = taskDueToVEVENT(task);
-      fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
     }
   } catch (e) { log('error','autoPushTaskCaldav failed',{error:e.message}); }
 }
@@ -871,8 +887,7 @@ function autoDeleteTaskCaldav(taskId) {
         deleteTaskFromCalendar(task.caldavUid, slug);
       }
       // Also remove VEVENT for due date
-      const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
-      if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+      deleteIcsFile('meisterpilze', task.caldavUid + '-event.ics');
     }
   } catch (e) { log('error','autoDeleteTaskCaldav failed',{error:e.message}); }
 }
@@ -886,9 +901,8 @@ function autoSyncCalendarEvent(ev) {
     const normalized = { id: ev.id, title: ev.title, startDate: ev.startDate || ev.start_date, endDate: ev.endDate || ev.end_date, allDay: ev.allDay != null ? ev.allDay : ev.all_day, startTime: ev.startTime || ev.start_time, endTime: ev.endTime || ev.end_time, category: ev.category, description: ev.description, caldavUid: ev.caldavUid || ev.caldav_uid };
     const aMap = db.getAllCalendarEventAssignees(database);
     normalized.assignees = aMap.get(ev.id) || [];
-    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = customEventToVEVENT(normalized);
-    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+    writeIcsFile('meisterpilze', uid + '.ics', ics);
   } catch (e) { log('error','autoSyncCalendarEvent failed',{error:e.message}); }
 }
 
@@ -898,8 +912,7 @@ function autoDeleteCalendarEventCaldav(eventId) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = 'cev-' + eventId + '@meisterpilze';
-    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+    deleteIcsFile('meisterpilze', uid + '.ics');
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
 
@@ -935,7 +948,7 @@ function _doAutoSyncAllCaldav(data) {
     // Batch due dates → shared calendar
     for (const b of (data.batches || [])) {
       if (!b.due) continue;
-      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write batch event',{batchId:b.batchId,error:e.message}); }
+      try { const { uid, ics } = batchToVEVENT(b); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write batch event',{batchId:b.batchId,error:e.message}); }
     }
     // Task VTODOs → shared + personal calendars
     for (const t of (data.manualTasks || [])) {
@@ -953,11 +966,11 @@ function _doAutoSyncAllCaldav(data) {
       if (!t.dueDate) continue;
       const isPrivate = t.private === 1 || t.private === true;
       if (isPrivate) continue;
-      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write task due event',{taskText:t.text?.slice(0,50),error:e.message}); }
+      try { const { uid, ics } = taskDueToVEVENT(t); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write task due event',{taskText:t.text?.slice(0,50),error:e.message}); }
     }
     // Custom events → shared calendar
     for (const ev of (data.calendarEvents || [])) {
-      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write calendar event',{eventId:ev.id,error:e.message}); }
+      try { const { uid, ics } = customEventToVEVENT(ev); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write calendar event',{eventId:ev.id,error:e.message}); }
     }
     // Clean orphaned meisterpilze-generated files in shared calendar
     try {
@@ -965,7 +978,7 @@ function _doAutoSyncAllCaldav(data) {
       for (const f of existing) {
         const filePath = path.join(sharedDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
-        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
+        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); }
       }
     } catch (e) { log('warn','CalDAV: failed to clean orphaned files',{error:e.message}); }
   } catch (e) { log('error','autoSyncAllCaldav failed',{error:e.message}); }
@@ -1014,7 +1027,7 @@ function syncAllTasksLocal(data) {
     if (!b.due) continue;
     try {
       const { uid, ics } = batchToVEVENT(b);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1027,7 +1040,7 @@ function syncAllTasksLocal(data) {
     if (isPrivate) continue;
     try {
       const { uid, ics } = taskDueToVEVENT(task);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1038,7 +1051,7 @@ function syncAllTasksLocal(data) {
   for (const ev of customEvents) {
     try {
       const { uid, ics } = customEventToVEVENT(ev);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1050,7 +1063,7 @@ function syncAllTasksLocal(data) {
     for (const f of existing) {
       const filePath = path.join(sharedDir, f);
       const content = fs.readFileSync(filePath, 'utf8');
-      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
+      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); }
     }
   } catch (e) { /* ignore cleanup errors */ }
 
@@ -1425,6 +1438,7 @@ function handlePut(parts, body, req, res) {
     }
 
     fs.writeFileSync(filePath, body, 'utf8');
+    invalidateCtag(calName);
 
     // Bidirectional sync: parse incoming content and update DB
     const unfolded = unfoldIcs(body);
@@ -1596,6 +1610,7 @@ function handlePut(parts, body, req, res) {
                 ev.assignees = [];
                 const { uid: newUid, ics } = customEventToVEVENT(ev);
                 fs.writeFileSync(filePath, ics, 'utf8');
+                invalidateCtag(calName);
               }
               broadcastSSE();
             }
@@ -1702,18 +1717,15 @@ function handleDelete(parts, req, res) {
           try {
             db.deleteTaskById(database, task.id);
             // Clean up companion due-date VEVENT
-            const eventFile = path.join(CAL_DIR, 'meisterpilze', uid + '-event.ics');
-            if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+            deleteIcsFile('meisterpilze', uid + '-event.ics');
             // Clean up mirror in shared/personal calendar
             if (calName !== 'meisterpilze') {
-              const sharedFile = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
-              if (fs.existsSync(sharedFile)) fs.unlinkSync(sharedFile);
+              deleteIcsFile('meisterpilze', uid + '.ics');
             }
             if (task.assignee) {
               const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
               if (calName !== slug) {
-                const personalFile = path.join(CAL_DIR, slug, uid + '.ics');
-                if (fs.existsSync(personalFile)) fs.unlinkSync(personalFile);
+                deleteIcsFile(slug, uid + '.ics');
               }
             }
             broadcastSSE();
@@ -1723,7 +1735,7 @@ function handleDelete(parts, req, res) {
     }
     // External events (no X-MEISTERPILZE-TYPE, no VTODO) — just delete file
 
-    fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); }
     res.writeHead(204);
     res.end();
     return;
@@ -2639,9 +2651,8 @@ function handleRequest(req,res){
       if(aborted)return;
       try{
         const{event}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=customEventToVEVENT(event);
-        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        writeIcsFile('meisterpilze',uid+'.ics',ics);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
@@ -2659,9 +2670,8 @@ function handleRequest(req,res){
       if(aborted)return;
       try{
         const{batch}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=batchToVEVENT(batch);
-        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        writeIcsFile('meisterpilze',uid+'.ics',ics);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
