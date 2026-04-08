@@ -388,6 +388,14 @@ const MIGRATIONS = [
       )`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_tokens(expires)`);
     }
+  },
+  {
+    version: 14,
+    description: 'Add client_secret_hash and revoked to oauth_clients for admin-managed OAuth',
+    fn(db) {
+      db.exec(`ALTER TABLE oauth_clients ADD COLUMN client_secret_hash TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE oauth_clients ADD COLUMN revoked INTEGER DEFAULT 0`);
+    }
   }
 ];
 
@@ -1871,7 +1879,8 @@ function registerOAuthClient(db, { clientId, clientName, redirectUris }) {
 function getOAuthClient(db, clientId) {
   const row = db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId);
   if (!row) return null;
-  return { clientId: row.client_id, clientName: row.client_name, redirectUris: JSON.parse(row.redirect_uris || '[]'), created: row.created };
+  if (row.revoked === 1) return null;
+  return { clientId: row.client_id, clientName: row.client_name, redirectUris: JSON.parse(row.redirect_uris || '[]'), created: row.created, hasSecret: !!row.client_secret_hash, secretHash: row.client_secret_hash };
 }
 
 function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod }) {
@@ -1918,6 +1927,38 @@ function revokeOAuthTokensByRefresh(db, refreshHash) {
 function deleteExpiredOAuthData(db) {
   db.prepare("DELETE FROM oauth_codes WHERE expires < datetime('now') OR used = 1").run();
   db.prepare("DELETE FROM oauth_tokens WHERE expires < datetime('now') OR revoked = 1").run();
+}
+
+function createOAuthClient(db, { clientName, redirectUris }) {
+  const clientId = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString('hex');
+  const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+  db.prepare('INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_secret_hash, created) VALUES (?, ?, ?, ?, ?)')
+    .run(clientId, clientName || '', JSON.stringify(redirectUris || []), secretHash, new Date().toISOString());
+  return { clientId, clientSecret: secret, clientName: clientName || '', redirectUris: redirectUris || [], created: new Date().toISOString() };
+}
+
+function listOAuthClients(db) {
+  const rows = db.prepare(`SELECT c.client_id, c.client_name, c.redirect_uris, c.created, c.revoked,
+    (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > datetime('now')) as active_sessions
+    FROM oauth_clients c ORDER BY c.created DESC`).all();
+  return rows.map(r => ({
+    clientId: r.client_id, clientName: r.client_name, redirectUris: JSON.parse(r.redirect_uris || '[]'),
+    created: r.created, revoked: r.revoked === 1, activeSessions: r.active_sessions
+  }));
+}
+
+function deleteOAuthClient(db, clientId) {
+  db.prepare('DELETE FROM oauth_tokens WHERE client_id = ?').run(clientId);
+  db.prepare('DELETE FROM oauth_codes WHERE client_id = ?').run(clientId);
+  db.prepare('DELETE FROM oauth_clients WHERE client_id = ?').run(clientId);
+}
+
+function verifyOAuthClientSecret(db, clientId, secret) {
+  const row = db.prepare('SELECT client_secret_hash FROM oauth_clients WHERE client_id = ? AND revoked = 0').get(clientId);
+  if (!row || !row.client_secret_hash) return false;
+  const hash = crypto.createHash('sha256').update(secret).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(row.client_secret_hash));
 }
 
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
@@ -2066,6 +2107,10 @@ module.exports = {
   getOAuthRefreshToken,
   revokeOAuthTokensByRefresh,
   deleteExpiredOAuthData,
+  createOAuthClient,
+  listOAuthClients,
+  deleteOAuthClient,
+  verifyOAuthClientSecret,
   getAllBatches,
   getAllTasks,
   getAllHarvests,
