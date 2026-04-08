@@ -1466,29 +1466,83 @@ function handlePut(parts, body, req, res) {
       } catch (e) { log('error','CalDAV VTODO bidirectional sync error',{error:e.message}); }
     }
 
-    // ── VEVENT sync-back: batch due dates, task due dates ──
+    // ── VEVENT sync-back: batch due dates, task due dates, custom events ──
     if (unfolded.includes('VEVENT')) {
       try {
-        const dtMatch = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
         const typeMatch = unfolded.match(/X-MEISTERPILZE-TYPE:(.*)/);
-        const batchMatch = unfolded.match(/X-MEISTERPILZE-BATCH:(.*)/);
-        if (dtMatch && typeMatch) {
-          const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
-          const evType = typeMatch[1].trim();
-          if (evType === 'batch-due' && batchMatch) {
-            const batchId = batchMatch[1].trim();
-            if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
-              db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
-              broadcastSSE();
-            } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
-          } else if (evType === 'task-due') {
-            const uidMatch = unfolded.match(/UID:(.*)/);
-            if (uidMatch) {
-              const taskUid = uidMatch[1].trim().replace(/-event$/, '');
-              if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
-                db.updateTaskDueDate(database, taskUid, newDate);
+        const evType = typeMatch ? typeMatch[1].trim() : null;
+
+        if (evType === 'batch-due' || evType === 'task-due') {
+          const dtMatch = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+          if (dtMatch) {
+            const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
+            if (evType === 'batch-due') {
+              const batchMatch = unfolded.match(/X-MEISTERPILZE-BATCH:(.*)/);
+              if (batchMatch) {
+                const batchId = batchMatch[1].trim();
+                if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
+                  db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+                  broadcastSSE();
+                } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
+              }
+            } else {
+              const uidMatch = unfolded.match(/UID:(.*)/);
+              if (uidMatch) {
+                const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+                if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+                  db.updateTaskDueDate(database, taskUid, newDate);
+                  broadcastSSE();
+                } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
+              }
+            }
+          }
+        } else if (evType === 'custom-event') {
+          // Custom event edited from external CalDAV client
+          const uidMatch = unfolded.match(/UID:(.*)/);
+          if (uidMatch) {
+            const uid = uidMatch[1].trim();
+            const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
+            if (idMatch) {
+              const fields = {};
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              if (sumMatch) fields.title = sumMatch[1].trim().replace(/\\n/g, '\n');
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              if (descMatch) fields.description = descMatch[1].trim().replace(/\\n/g, '\n');
+              const catMatch = unfolded.match(/CATEGORIES:(.*)/);
+              if (catMatch) {
+                const cat = catMatch[1].trim().toLowerCase();
+                const knownCats = { custom:1, meeting:1, delivery:1, maintenance:1 };
+                if (knownCats[cat]) fields.category = cat;
+              }
+              // Parse DTSTART: all-day (VALUE=DATE) or timed (TZID= or bare DATETIME)
+              const dtAllDay = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = unfolded.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (dtAllDay) {
+                fields.startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3];
+                fields.allDay = true;
+                fields.startTime = null;
+              } else if (dtTimed) {
+                fields.startDate = dtTimed[1]+'-'+dtTimed[2]+'-'+dtTimed[3];
+                fields.startTime = dtTimed[4]+':'+dtTimed[5];
+                fields.allDay = false;
+              }
+              // Parse DTEND
+              const deAllDay = unfolded.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = unfolded.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (deAllDay) {
+                // RFC 5545: DTEND for all-day is exclusive, subtract one day
+                const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]);
+                d.setDate(d.getDate() - 1);
+                fields.endDate = d.toISOString().split('T')[0];
+                fields.endTime = null;
+              } else if (deTimed) {
+                fields.endDate = deTimed[1]+'-'+deTimed[2]+'-'+deTimed[3];
+                fields.endTime = deTimed[4]+':'+deTimed[5];
+              }
+              if (Object.keys(fields).length > 0) {
+                db.updateCalendarEvent(database, idMatch[1], fields);
                 broadcastSSE();
-              } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
+              }
             }
           }
         }
