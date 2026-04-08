@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
 
 // ── CONFIGURATION ────────────────────────────────────────────
@@ -331,55 +331,172 @@ function startDuckdnsUpdater() {
 
 startDuckdnsUpdater();
 
-// ── LET'S ENCRYPT CERT MANAGEMENT ─────────────────────────
-const IS_WIN = process.platform === 'win32';
-const ACME_HOME = path.join(DIR, '.acme.sh');
-const ACME_SH = path.join(ACME_HOME, 'acme.sh');
+// ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
+// Pure Node.js — no bash, curl, or acme.sh required.
+// Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
 
-// Convert Windows path to POSIX for bash (C:\foo\bar → /c/foo/bar)
-function bashPath(p) {
-  if (!IS_WIN) return p;
-  return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => '/' + d.toLowerCase());
+const ACME_DIR_URL = 'https://acme-v02.api.letsencrypt.org/directory';
+const ACME_ACCOUNT_KEY_PATH = path.join(DIR, 'certs', 'acme-account-key.pem');
+
+function base64url(data) {
+  return (Buffer.isBuffer(data) ? data : Buffer.from(data)).toString('base64url');
 }
 
-// Locate bash — required for acme.sh on all platforms
-function findBash() {
-  if (!IS_WIN) return 'bash';
-  // Git for Windows ships bash in <git>/bin/bash.exe
-  const dirs = [
-    process.env.ProgramFiles,
-    process.env['ProgramFiles(x86)'],
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : null,
-  ].filter(Boolean);
-  for (const d of dirs) {
-    const candidate = path.join(d, 'Git', 'bin', 'bash.exe');
-    if (fs.existsSync(candidate)) return candidate;
+// ── DER / ASN.1 encoding helpers ──
+function derLen(len) {
+  if (len < 0x80) return Buffer.from([len]);
+  if (len < 0x100) return Buffer.from([0x81, len]);
+  return Buffer.from([0x82, len >> 8, len & 0xff]);
+}
+function derWrap(tag, buf) {
+  return Buffer.concat([Buffer.from([tag]), derLen(buf.length), buf]);
+}
+function derSeq(...items)  { return derWrap(0x30, Buffer.concat(items)); }
+function derSet(...items)  { return derWrap(0x31, Buffer.concat(items)); }
+function derOid(bytes)     { return derWrap(0x06, Buffer.from(bytes)); }
+function derUtf8(str)      { return derWrap(0x0c, Buffer.from(str, 'utf8')); }
+function derBitStr(buf)    { return derWrap(0x03, Buffer.concat([Buffer.from([0x00]), buf])); }
+function derOctStr(buf)    { return derWrap(0x04, buf); }
+function derInt(n)         { return derWrap(0x02, Buffer.from([n])); }
+
+// ── HTTPS JSON request helper ──
+function _acmeHttps(method, url, body, extraHeaders, callback) {
+  if (typeof extraHeaders === 'function') { callback = extraHeaders; extraHeaders = {}; }
+  const u = new URL(url);
+  const opts = {
+    hostname: u.hostname, port: u.port || 443,
+    path: u.pathname + u.search, method,
+    headers: Object.assign({}, extraHeaders)
+  };
+  let bodyStr = null;
+  if (body) {
+    bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    if (!opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/jose+json';
+    opts.headers['Content-Length'] = Buffer.byteLength(bodyStr);
   }
-  return 'bash'; // fallback — hope it's in PATH
-}
-const BASH = findBash();
-
-// Run acme.sh with arguments — always goes through bash
-function runAcmeSh(args, env, timeout, callback) {
-  execFile(BASH, [bashPath(ACME_SH), ...args], { env, timeout }, callback);
-}
-
-function ensureAcmeSh(callback) {
-  if (fs.existsSync(ACME_SH)) return callback(null);
-  log('info', 'acme.sh not found, installing automatically...');
-  const homeArg = bashPath(ACME_HOME);
-  execFile(BASH, ['-c',
-    'curl -sSL https://get.acme.sh | sh -s -- --install-online --home \'' + homeArg + '\' --no-cron'
-  ], { timeout: 60000 }, (err, stdout, stderr) => {
-    if (err || !fs.existsSync(ACME_SH)) {
-      log('error', 'acme.sh auto-install failed', { error: err ? err.message : 'binary not found', stderr });
-      return callback(new Error('acme.sh installation failed — ensure curl and bash (Git for Windows) are available'));
-    }
-    log('info', 'acme.sh installed', { home: ACME_HOME });
-    callback(null);
+  const req = https.request(opts, res => {
+    let raw = '';
+    res.on('data', c => { raw += c; });
+    res.on('end', () => {
+      let json = null;
+      if (raw) try { json = JSON.parse(raw); } catch (_) {} // eslint-disable-line no-empty
+      callback(null, res.statusCode, res.headers, json || raw);
+    });
   });
+  req.on('error', err => {
+    if (err.code === 'ENOTFOUND') return callback(new Error('Server hat keinen Internetzugang (DNS-Auflösung fehlgeschlagen)'));
+    if (err.code === 'ECONNREFUSED') return callback(new Error('Verbindung zum ACME-Server abgelehnt'));
+    if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT') return callback(new Error('Zeitüberschreitung bei Verbindung zum ACME-Server'));
+    callback(err);
+  });
+  req.setTimeout(30000, () => req.destroy(new Error('ACME request timeout')));
+  if (bodyStr) req.write(bodyStr);
+  req.end();
 }
 
+// ── Sequential async helper ──
+function waterfall(fns, done) {
+  let i = 0;
+  (function next(err) {
+    if (err || i >= fns.length) return done(err);
+    try { fns[i++](next); } catch (e) { done(e); }
+  })(null);
+}
+
+// ── ECDSA P-256 account key (persists in certs/) ──
+function loadOrCreateAccountKey() {
+  if (fs.existsSync(ACME_ACCOUNT_KEY_PATH)) {
+    return crypto.createPrivateKey(fs.readFileSync(ACME_ACCOUNT_KEY_PATH));
+  }
+  log('info', 'Generating ACME account key...');
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const dir = path.dirname(ACME_ACCOUNT_KEY_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+  return privateKey;
+}
+
+function getAccountJwk(key) {
+  const j = crypto.createPublicKey(key).export({ format: 'jwk' });
+  return { crv: j.crv, kty: j.kty, x: j.x, y: j.y };
+}
+
+function getJwkThumbprint(jwk) {
+  const ordered = JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y });
+  return base64url(crypto.createHash('sha256').update(ordered).digest());
+}
+
+// ── JWS signing ──
+function signJws(key, protectedHeader, payload) {
+  const protB64 = base64url(JSON.stringify(protectedHeader));
+  const payB64 = payload === '' ? '' : base64url(JSON.stringify(payload));
+  const sig = crypto.sign('sha256', Buffer.from(protB64 + '.' + payB64), {
+    key, dsaEncoding: 'ieee-p1363'
+  });
+  return JSON.stringify({ protected: protB64, payload: payB64, signature: base64url(sig) });
+}
+
+// ── DuckDNS TXT record helpers ──
+function setDuckdnsTxt(domain, token, value, callback) {
+  const url = 'https://www.duckdns.org/update?domains=' +
+    encodeURIComponent(domain) + '&token=' +
+    encodeURIComponent(token) + '&txt=' +
+    encodeURIComponent(value) + '&verbose=true';
+  https.get(url, resp => {
+    let data = '';
+    resp.on('data', c => { data += c; });
+    resp.on('end', () => {
+      data.trim().startsWith('OK') ? callback(null) :
+        callback(new Error('DuckDNS TXT update failed: ' + data.trim()));
+    });
+  }).on('error', callback);
+}
+
+function clearDuckdnsTxt(domain, token) {
+  const url = 'https://www.duckdns.org/update?domains=' +
+    encodeURIComponent(domain) + '&token=' +
+    encodeURIComponent(token) + '&txt=&clear=true&verbose=true';
+  https.get(url, () => {}).on('error', () => {});
+}
+
+// ── PKCS#10 CSR construction ──
+function buildCsr(domain) {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const spki = publicKey.export({ type: 'spki', format: 'der' });
+
+  // Subject: CN=domain
+  const subject = derSeq(derSet(derSeq(
+    derOid([0x55, 0x04, 0x03]),
+    derUtf8(domain)
+  )));
+
+  // SAN extension in extensionRequest attribute
+  const dnsName = Buffer.concat([
+    Buffer.from([0x82]), derLen(Buffer.byteLength(domain, 'ascii')),
+    Buffer.from(domain, 'ascii')
+  ]);
+  const sanExt = derSeq(
+    derOid([0x55, 0x1d, 0x11]),
+    derOctStr(derSeq(dnsName))
+  );
+  const extReq = derSeq(
+    derOid([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x09, 0x0e]),
+    derSet(derSeq(sanExt))
+  );
+  const attrs = derWrap(0xa0, extReq);
+
+  // CertificationRequestInfo
+  const reqInfo = derSeq(derInt(0), subject, spki, attrs);
+  const sig = crypto.sign('sha256', reqInfo, privateKey);
+  const sigAlg = derSeq(
+    derOid([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]),
+    Buffer.from([0x05, 0x00])
+  );
+
+  return { der: derSeq(reqInfo, sigAlg, derBitStr(sig)), privateKey };
+}
+
+// ── Main certificate request orchestrator ──
 function requestLetsEncryptCert(callback) {
   const cfg = db.getDuckdnsCfg(database);
   if (!cfg.domain || !cfg.token) {
@@ -387,49 +504,173 @@ function requestLetsEncryptCert(callback) {
   }
 
   const fullDomain = cfg.domain + '.duckdns.org';
+  let accountKey, jwk, thumbprint;
+  let acmeDir, accountUrl, nonce;
+  let order, orderUrl, challenge, certPem, domainKey;
 
-  ensureAcmeSh((installErr) => {
-    if (installErr) return callback(installErr);
-
-    const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
-    const home = bashPath(ACME_HOME);
-
-    runAcmeSh([
-      '--issue', '--dns', 'dns_duckdns',
-      '-d', fullDomain,
-      '--home', home,
-      '--server', 'letsencrypt',
-      '--force'
-    ], env, 120000, (err, stdout, stderr) => {
-      if (err) {
-        log('error', 'acme.sh issue failed', { error: err.message, stderr });
-        return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
-      }
-      log('info', 'acme.sh issue succeeded', { domain: fullDomain });
-
-      runAcmeSh([
-        '--install-cert', '-d', fullDomain,
-        '--key-file', bashPath(CERT_KEY),
-        '--fullchain-file', bashPath(CERT_CRT),
-        '--home', home
-      ], env, 30000, (err2, stdout2, stderr2) => {
-        if (err2) {
-          log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
-          return callback(new Error('Certificate installation failed'));
+  // Signed ACME POST with nonce tracking + badNonce retry
+  function acmePost(url, payload, useJwk, cb) {
+    let retries = 0;
+    (function attempt() {
+      const hdr = { alg: 'ES256', nonce, url };
+      if (useJwk) hdr.jwk = jwk; else hdr.kid = accountUrl;
+      const body = signJws(accountKey, hdr, payload);
+      _acmeHttps('POST', url, body, (err, status, headers, data) => {
+        if (err) return cb(err);
+        nonce = headers['replay-nonce'] || nonce;
+        if (data && data.type === 'urn:ietf:params:acme:error:badNonce' && ++retries < 3) {
+          return attempt();
         }
-
-        const now = new Date();
-        const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-        db.updateDuckdnsStatus(database, {
-          leLastRenewal: now.toISOString(),
-          leExpiry: expiry.toISOString()
-        });
-
-        reloadTlsCerts();
-        log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
-        callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
+        if (status >= 400) {
+          const detail = data && data.detail ? data.detail : JSON.stringify(data);
+          return cb(new Error('ACME error (' + status + '): ' + detail));
+        }
+        cb(null, status, headers, data);
       });
+    })();
+  }
+
+  // Poll until target status
+  function poll(url, target, maxAttempts, cb) {
+    let attempts = 0;
+    (function check() {
+      acmePost(url, '', false, (err, _s, _h, data) => {
+        if (err) return cb(err);
+        if (data.status === target) return cb(null, data);
+        if (data.status === 'invalid') {
+          const msg = (data.challenges || []).map(c => c.error && c.error.detail).filter(Boolean).join('; ');
+          return cb(new Error('Validation failed: ' + (msg || JSON.stringify(data))));
+        }
+        if (++attempts >= maxAttempts) return cb(new Error('ACME polling timed out'));
+        setTimeout(check, 3000);
+      });
+    })();
+  }
+
+  log('info', 'Requesting Let\'s Encrypt certificate...', { domain: fullDomain });
+
+  waterfall([
+    // 1. Load/create account key
+    next => {
+      try { accountKey = loadOrCreateAccountKey(); } catch (e) { return next(e); }
+      jwk = getAccountJwk(accountKey);
+      thumbprint = getJwkThumbprint(jwk);
+      next(null);
+    },
+    // 2. Fetch ACME directory
+    next => {
+      _acmeHttps('GET', ACME_DIR_URL, null, (err, _s, _h, data) => {
+        if (err) return next(err);
+        acmeDir = data;
+        next(null);
+      });
+    },
+    // 3. Get initial nonce
+    next => {
+      _acmeHttps('HEAD', acmeDir.newNonce, null, (err, _s, headers) => {
+        if (err) return next(err);
+        nonce = headers['replay-nonce'];
+        next(null);
+      });
+    },
+    // 4. Create or find account
+    next => {
+      acmePost(acmeDir.newAccount, { termsOfServiceAgreed: true }, true, (err, _s, headers) => {
+        if (err) return next(err);
+        accountUrl = headers.location;
+        log('info', 'ACME account ready', { url: accountUrl });
+        next(null);
+      });
+    },
+    // 5. Create order
+    next => {
+      acmePost(acmeDir.newOrder, {
+        identifiers: [{ type: 'dns', value: fullDomain }]
+      }, false, (err, _s, headers, data) => {
+        if (err) return next(err);
+        order = data;
+        orderUrl = headers.location;
+        next(null);
+      });
+    },
+    // 6. Get authorization + dns-01 challenge
+    next => {
+      acmePost(order.authorizations[0], '', false, (err, _s, _h, data) => {
+        if (err) return next(err);
+        challenge = (data.challenges || []).find(c => c.type === 'dns-01');
+        if (!challenge) return next(new Error('No dns-01 challenge offered'));
+        next(null);
+      });
+    },
+    // 7. Set TXT record via DuckDNS
+    next => {
+      const keyAuth = challenge.token + '.' + thumbprint;
+      const dns01 = base64url(crypto.createHash('sha256').update(keyAuth).digest());
+      log('info', 'Setting DuckDNS TXT record...', { domain: cfg.domain });
+      setDuckdnsTxt(cfg.domain, cfg.token, dns01, next);
+    },
+    // 8. Wait for DNS propagation
+    next => { log('info', 'Waiting for DNS propagation (15s)...'); setTimeout(next, 15000); },
+    // 9. Respond to challenge
+    next => { acmePost(challenge.url, {}, false, err => next(err)); },
+    // 10. Poll authorization until valid
+    next => {
+      poll(order.authorizations[0], 'valid', 40, err => {
+        if (err) return next(err);
+        log('info', 'DNS-01 challenge validated');
+        next(null);
+      });
+    },
+    // 11. Build CSR and finalize order
+    next => {
+      const csr = buildCsr(fullDomain);
+      domainKey = csr.privateKey;
+      acmePost(order.finalize, { csr: base64url(csr.der) }, false, err => next(err));
+    },
+    // 12. Poll order until cert ready
+    next => {
+      poll(orderUrl, 'valid', 20, (err, data) => {
+        if (err) return next(err);
+        order = data;
+        next(null);
+      });
+    },
+    // 13. Download certificate
+    next => {
+      acmePost(order.certificate, '', false, (err, _s, _h, data) => {
+        if (err) return next(err);
+        certPem = typeof data === 'string' ? data : '';
+        if (!certPem || !certPem.includes('BEGIN CERTIFICATE')) {
+          return next(new Error('Invalid certificate response'));
+        }
+        next(null);
+      });
+    },
+    // 14. Save certificate and key
+    next => {
+      try {
+        const certsDir = path.dirname(CERT_KEY);
+        if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+        fs.writeFileSync(CERT_CRT, certPem);
+        fs.writeFileSync(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
+      } catch (e) { return next(e); }
+      next(null);
+    }
+  ], err => {
+    clearDuckdnsTxt(cfg.domain, cfg.token);
+    if (err) {
+      log('error', 'Let\'s Encrypt request failed', { error: err.message });
+      return callback(err);
+    }
+    const now = new Date();
+    const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    db.updateDuckdnsStatus(database, {
+      leLastRenewal: now.toISOString(),
+      leExpiry: expiry.toISOString()
     });
+    reloadTlsCerts();
+    log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
+    callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
   });
 }
 
@@ -562,6 +803,11 @@ function foldIcsLines(icsText) {
   }).join('\r\n');
 }
 
+// Unfold RFC 5545 §3.1 folded lines (CRLF + space/tab → join)
+function unfoldIcs(text) {
+  return text.replace(/\r?\n[ \t]/g, '');
+}
+
 function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
@@ -623,8 +869,57 @@ function listIcsFiles(calName) {
   return fs.readdirSync(dir).filter(f => f.endsWith('.ics'));
 }
 
-// Compute a stable ctag for a calendar based on file contents
+// CTag cache — avoids filesystem scan on every PROPFIND poll
+const ctagCache = new Map();
+
+function invalidateCtag(calName) { ctagCache.delete(calName); }
+
+// ── RFC 6578 sync-token tracking ──
+const syncTokens = new Map();   // calName → current monotonic counter
+const changeLog = new Map();    // calName → Map<fileName, {action:'changed'|'deleted', token}>
+const CHANGE_LOG_MAX = 1000;    // max entries per calendar before trimming
+
+function bumpSyncToken(calName) {
+  const next = (syncTokens.get(calName) || 0) + 1;
+  syncTokens.set(calName, next);
+  return next;
+}
+
+function recordChange(calName, fileName, action) {
+  const token = bumpSyncToken(calName);
+  if (!changeLog.has(calName)) changeLog.set(calName, new Map());
+  const log = changeLog.get(calName);
+  log.set(fileName, { action, token });
+  // Trim oldest entries if over limit
+  if (log.size > CHANGE_LOG_MAX) {
+    const entries = [...log.entries()].sort((a, b) => a[1].token - b[1].token);
+    while (log.size > CHANGE_LOG_MAX) log.delete(entries.shift()[0]);
+  }
+}
+
+function getSyncToken(calName) { return syncTokens.get(calName) || 0; }
+
+// Write an .ics file and invalidate caches / record change
+function writeIcsFile(calName, fileName, content) {
+  const dir = ensureCalDir(calName);
+  fs.writeFileSync(path.join(dir, fileName), content, 'utf8');
+  invalidateCtag(calName);
+  recordChange(calName, fileName, 'changed');
+}
+
+// Delete an .ics file and invalidate caches / record change
+function deleteIcsFile(calName, fileName) {
+  const filePath = path.join(CAL_DIR, calName, fileName);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+    invalidateCtag(calName);
+    recordChange(calName, fileName, 'deleted');
+  }
+}
+
+// Compute a stable ctag for a calendar based on file contents (cached)
 function computeCtag(calName) {
+  if (ctagCache.has(calName)) return ctagCache.get(calName);
   const dir = path.join(CAL_DIR, calName);
   if (!fs.existsSync(dir)) return '0';
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.ics')).sort();
@@ -633,7 +928,27 @@ function computeCtag(calName) {
     const stat = fs.statSync(path.join(dir, f));
     hash.update(f + ':' + stat.mtimeMs + ':' + stat.size + '\n');
   }
-  return hash.digest('hex').slice(0, 16);
+  const ctag = hash.digest('hex').slice(0, 16);
+  ctagCache.set(calName, ctag);
+  return ctag;
+}
+
+// CalDAV event color map — matches CATEGORY_COLORS in app.js
+const CALDAV_CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+
+// RFC 5545 PRIORITY → app priority mapping (1=highest, 9=lowest, 0=undefined)
+const CALDAV_PRIO_MAP = { 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' };
+
+// Known calendar event categories
+const KNOWN_CATEGORIES = { custom:1, meeting:1, delivery:1, maintenance:1 };
+
+// Supported CalDAV report set XML (used in PROPFIND responses)
+const SUPPORTED_REPORT_SET = '<d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>';
+
+// Extract the VEVENT block from ICS content (avoids parsing VTIMEZONE properties)
+function extractVeventBlock(ics) {
+  const m = ics.match(/BEGIN:VEVENT([\s\S]*?)END:VEVENT/);
+  return m ? m[1] : '';
 }
 
 // Convert a task object to VTODO .ics content
@@ -665,6 +980,7 @@ function taskToVTODO(task) {
   lines.push('X-MEISTERPILZE-TYPE:task');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
   if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
+  lines.push('COLOR:#3b82f6');
   lines.push('END:VTODO', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
@@ -672,10 +988,9 @@ function taskToVTODO(task) {
 // Write a task as .ics file to the appropriate calendar
 function writeTaskToCalendar(task, calName) {
   calName = calName || 'meisterpilze';
-  const dir = ensureCalDir(calName);
   if (!task.caldavUid) task.caldavUid = generateUID();
   const { uid, ics } = taskToVTODO(task);
-  fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+  writeIcsFile(calName, uid + '.ics', ics);
   task.caldavSynced = new Date().toISOString();
   return uid;
 }
@@ -701,6 +1016,7 @@ function batchToVEVENT(batch) {
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:batch-due',
     'X-MEISTERPILZE-BATCH:' + batch.batchId,
+    'COLOR:#ef4444',
     'END:VEVENT',
     'END:VCALENDAR'
   ];
@@ -727,6 +1043,7 @@ function taskDueToVEVENT(task) {
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:task-due',
+    'COLOR:#3b82f6',
     'END:VEVENT',
     'END:VCALENDAR'
   ];
@@ -793,6 +1110,7 @@ function customEventToVEVENT(event) {
   if (event.assignees && event.assignees.length) {
     for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
   }
+  lines.push('COLOR:' + (event.color || CALDAV_CATEGORY_COLORS[event.category] || '#16a34a'));
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
@@ -800,8 +1118,7 @@ function customEventToVEVENT(event) {
 // Delete a task's .ics file
 function deleteTaskFromCalendar(uid, calName) {
   calName = calName || 'meisterpilze';
-  const file = path.join(CAL_DIR, calName, uid + '.ics');
-  if (fs.existsSync(file)) fs.unlinkSync(file);
+  deleteIcsFile(calName, uid + '.ics');
 }
 
 // ── Auto CalDAV sync helpers ───────────────────────────────
@@ -811,9 +1128,8 @@ function autoPushBatchCaldav(batch) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     if (!batch || !batch.due) return;
-    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = batchToVEVENT(batch);
-    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+    writeIcsFile('meisterpilze', uid + '.ics', ics);
   } catch (e) { log('error','autoPushBatchCaldav failed',{error:e.message}); }
 }
 
@@ -823,8 +1139,7 @@ function autoDeleteBatchCaldav(batchId) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = 'batch-' + batchId + '@meisterpilze';
-    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+    deleteIcsFile('meisterpilze', uid + '.ics');
   } catch (e) { log('error','autoDeleteBatchCaldav failed',{error:e.message}); }
 }
 
@@ -845,9 +1160,8 @@ function autoPushTaskCaldav(task) {
     }
     // Due-date VEVENT: respect privacy — only shared if not private
     if (task.dueDate && !isPrivate) {
-      const dir = ensureCalDir('meisterpilze');
       const { uid, ics } = taskDueToVEVENT(task);
-      fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
     }
   } catch (e) { log('error','autoPushTaskCaldav failed',{error:e.message}); }
 }
@@ -867,8 +1181,7 @@ function autoDeleteTaskCaldav(task) {
       deleteTaskFromCalendar(task.caldavUid, slug);
     }
     // Also remove VEVENT for due date
-    const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
-    if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+    deleteIcsFile('meisterpilze', task.caldavUid + '-event.ics');
   } catch (e) { log('error','autoDeleteTaskCaldav failed',{error:e.message}); }
 }
 
@@ -881,9 +1194,8 @@ function autoSyncCalendarEvent(ev) {
     const normalized = { id: ev.id, title: ev.title, startDate: ev.startDate || ev.start_date, endDate: ev.endDate || ev.end_date, allDay: ev.allDay != null ? ev.allDay : ev.all_day, startTime: ev.startTime || ev.start_time, endTime: ev.endTime || ev.end_time, category: ev.category, description: ev.description, caldavUid: ev.caldavUid || ev.caldav_uid };
     const aMap = db.getAllCalendarEventAssignees(database);
     normalized.assignees = aMap.get(ev.id) || [];
-    const dir = ensureCalDir('meisterpilze');
     const { uid, ics } = customEventToVEVENT(normalized);
-    fs.writeFileSync(path.join(dir, uid + '.ics'), ics, 'utf8');
+    writeIcsFile('meisterpilze', uid + '.ics', ics);
   } catch (e) { log('error','autoSyncCalendarEvent failed',{error:e.message}); }
 }
 
@@ -894,8 +1206,7 @@ function autoDeleteCalendarEventCaldav(eventId, caldavUid) {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
     const uid = caldavUid || ('cev-' + eventId + '@meisterpilze');
-    const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
-    if (fs.existsSync(file)) fs.unlinkSync(file);
+    deleteIcsFile('meisterpilze', uid + '.ics');
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
 
@@ -931,7 +1242,7 @@ function _doAutoSyncAllCaldav(data) {
     // Batch due dates → shared calendar
     for (const b of (data.batches || [])) {
       if (!b.due) continue;
-      try { const { uid, ics } = batchToVEVENT(b); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write batch event',{batchId:b.batchId,error:e.message}); }
+      try { const { uid, ics } = batchToVEVENT(b); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write batch event',{batchId:b.batchId,error:e.message}); }
     }
     // Task VTODOs → shared + personal calendars
     for (const t of (data.manualTasks || [])) {
@@ -949,11 +1260,11 @@ function _doAutoSyncAllCaldav(data) {
       if (!t.dueDate) continue;
       const isPrivate = t.private === 1 || t.private === true;
       if (isPrivate) continue;
-      try { const { uid, ics } = taskDueToVEVENT(t); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write task due event',{taskText:t.text?.slice(0,50),error:e.message}); }
+      try { const { uid, ics } = taskDueToVEVENT(t); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write task due event',{taskText:t.text?.slice(0,50),error:e.message}); }
     }
     // Custom events → shared calendar
     for (const ev of (data.calendarEvents || [])) {
-      try { const { uid, ics } = customEventToVEVENT(ev); fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8'); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write calendar event',{eventId:ev.id,error:e.message}); }
+      try { const { uid, ics } = customEventToVEVENT(ev); writeIcsFile('meisterpilze', uid + '.ics', ics); writtenUids.add(uid + '.ics'); } catch (e) { log('warn','CalDAV: failed to write calendar event',{eventId:ev.id,error:e.message}); }
     }
     // Clean orphaned meisterpilze-generated files in shared calendar
     try {
@@ -961,7 +1272,7 @@ function _doAutoSyncAllCaldav(data) {
       for (const f of existing) {
         const filePath = path.join(sharedDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
-        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
+        if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); recordChange('meisterpilze', f, 'deleted'); }
       }
     } catch (e) { log('warn','CalDAV: failed to clean orphaned files',{error:e.message}); }
   } catch (e) { log('error','autoSyncAllCaldav failed',{error:e.message}); }
@@ -1010,7 +1321,7 @@ function syncAllTasksLocal(data) {
     if (!b.due) continue;
     try {
       const { uid, ics } = batchToVEVENT(b);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1023,7 +1334,7 @@ function syncAllTasksLocal(data) {
     if (isPrivate) continue;
     try {
       const { uid, ics } = taskDueToVEVENT(task);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1034,7 +1345,7 @@ function syncAllTasksLocal(data) {
   for (const ev of customEvents) {
     try {
       const { uid, ics } = customEventToVEVENT(ev);
-      fs.writeFileSync(path.join(sharedDir, uid + '.ics'), ics, 'utf8');
+      writeIcsFile('meisterpilze', uid + '.ics', ics);
       writtenUids.add(uid + '.ics');
       results.pushed++;
     } catch (e) { results.errors++; }
@@ -1046,7 +1357,7 @@ function syncAllTasksLocal(data) {
     for (const f of existing) {
       const filePath = path.join(sharedDir, f);
       const content = fs.readFileSync(filePath, 'utf8');
-      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) fs.unlinkSync(filePath);
+      if (content.includes('X-MEISTERPILZE-TYPE') && !writtenUids.has(f)) { fs.unlinkSync(filePath); invalidateCtag('meisterpilze'); recordChange('meisterpilze', f, 'deleted'); }
     }
   } catch (e) { /* ignore cleanup errors */ }
 
@@ -1057,7 +1368,7 @@ function syncAllTasksLocal(data) {
 // Handles requests under /caldav/
 function handleCaldav(req, res) {
   // DAV headers for all CalDAV responses (no CORS — CalDAV clients don't need it)
-  res.setHeader('DAV', '1, 2, 3, calendar-access');
+  res.setHeader('DAV', '1, 2, 3, calendar-access, extended-mkcol');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
@@ -1211,6 +1522,8 @@ function handlePropfind(parts, body, req, res) {
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="${compType}"/><c:comp name="${compType2v}"/></c:supported-calendar-component-set>${colorProp}
         <cs:getctag>${computeCtag(cal)}</cs:getctag>
+        <d:sync-token>http://meisterpilze/sync/${getSyncToken(cal)}</d:sync-token>
+        ${SUPPORTED_REPORT_SET}
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1253,6 +1566,8 @@ function handlePropfind(parts, body, req, res) {
         <d:displayname>${escapeXml(displayName)}</d:displayname>
         <c:supported-calendar-component-set><c:comp name="${compType2}"/><c:comp name="${compType2ev}"/></c:supported-calendar-component-set>${colorProp2}
         <cs:getctag>${computeCtag(calName)}</cs:getctag>
+        <d:sync-token>http://meisterpilze/sync/${getSyncToken(calName)}</d:sync-token>
+        ${SUPPORTED_REPORT_SET}
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -1330,6 +1645,77 @@ function handleReport(parts, body, req, res) {
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
       res.end('Calendar not found');
+      return;
+    }
+
+    // ── RFC 6578 sync-collection REPORT ──
+    if (body.includes('sync-collection')) {
+      const tokenMatch = body.match(/<d:sync-token>([^<]*)<\/d:sync-token>/i);
+      const tokenStr = tokenMatch ? tokenMatch[1].trim() : '';
+      const reqToken = parseInt((tokenStr.match(/\/sync\/(\d+)$/) || [])[1] || '0', 10);
+
+      // Validate token — if stale or unknown, tell client to do full sync (RFC 6578 §3)
+      const currentToken = getSyncToken(calName);
+      const log = changeLog.get(calName);
+      if (reqToken > 0) {
+        const invalid = !log || (log.size > 0 && reqToken < Math.min(...[...log.values()].map(e => e.token)));
+        if (invalid) {
+          const errXml = `<?xml version="1.0" encoding="utf-8"?>
+<d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>`;
+          res.writeHead(403, { 'Content-Type': 'application/xml; charset=utf-8' });
+          res.end(errXml);
+          return;
+        }
+      }
+
+      let responses = '';
+      if (reqToken === 0) {
+        // Initial sync — return all items
+        const files = listIcsFiles(calName);
+        for (const f of files) {
+          const fPath = path.join(calDir, f);
+          const stat = fs.statSync(fPath);
+          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>${etag}</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>`;
+        }
+      } else {
+        // Incremental sync — only items changed since reqToken
+        for (const [fileName, entry] of log.entries()) {
+          if (entry.token <= reqToken) continue;
+          if (entry.action === 'deleted') {
+            responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
+    <d:status>HTTP/1.1 404 Not Found</d:status>
+  </d:response>`;
+          } else {
+            const fPath = path.join(calDir, fileName);
+            if (fs.existsSync(fPath)) {
+              const stat = fs.statSync(fPath);
+              const etag = '"' + stat.mtimeMs.toString(36) + '"';
+              responses += `\n  <d:response>
+    <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>${etag}</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>`;
+            }
+          }
+        }
+      }
+
+      const xml = `<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:sync-token>http://meisterpilze/sync/${currentToken}</d:sync-token>${responses}
+</d:multistatus>`;
+      res.writeHead(207, { 'Content-Type': 'application/xml; charset=utf-8' });
+      res.end(xml);
       return;
     }
 
@@ -1439,28 +1825,183 @@ function handlePut(parts, body, req, res) {
     }
 
     fs.writeFileSync(filePath, body, 'utf8');
+    invalidateCtag(calName);
+    recordChange(calName, fileName, 'changed');
 
-    // Bidirectional sync: if a VEVENT in shared calendar is updated via CalDAV client, update DB
-    if (calName === 'meisterpilze' && body.includes('VEVENT')) {
+    // Bidirectional sync: parse incoming content and update DB
+    const unfolded = unfoldIcs(body);
+
+    // ── VTODO sync-back: task text, priority, completion, due date ──
+    if (unfolded.includes('VTODO')) {
       try {
-        const dtMatch = body.match(/^DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/m);
-        const typeMatch = body.match(/^X-MEISTERPILZE-TYPE:(.*)/m);
-        const batchMatch = body.match(/^X-MEISTERPILZE-BATCH:(.*)/m);
-        if (dtMatch && typeMatch) {
-          const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
-          const evType = typeMatch[1].trim();
-          if (evType === 'batch-due' && batchMatch) {
-            const batchId = batchMatch[1].trim();
-            if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
-              db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
-            } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
-          } else if (evType === 'task-due') {
-            const uidMatch = body.match(/^UID:(.*)/m);
-            if (uidMatch) {
-              const taskUid = uidMatch[1].trim().replace(/-event$/, '');
-              if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
-                db.updateTaskDueDate(database, taskUid, newDate);
-              } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
+        const uidMatch = unfolded.match(/UID:(.*)/);
+        if (uidMatch) {
+          const uid = uidMatch[1].trim();
+          if (/^[A-Za-z0-9\-_.@]+$/.test(uid)) {
+            const task = db.readTaskByCaldavUid(database, uid);
+            if (task) {
+              const fields = {};
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              if (sumMatch) { const t = sumMatch[1].trim().replace(/\\n/g, '\n'); if (t !== task.text) fields.text = t; }
+              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
+              if (prioMatch) { const p = CALDAV_PRIO_MAP[prioMatch[1]] || 'med'; if (p !== task.priority) fields.priority = p; }
+              const statusMatch = unfolded.match(/STATUS:(.*)/);
+              if (statusMatch) { const done = statusMatch[1].trim() === 'COMPLETED'; if (done !== task.done) fields.done = done; }
+              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              if (dueMatch) { const d = dueMatch[1]+'-'+dueMatch[2]+'-'+dueMatch[3]; if (d !== (task.dueDate||'').slice(0,10)) fields.dueDate = d; }
+              else if (!unfolded.includes('DUE') && task.dueDate) { fields.dueDate = null; }
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              if (descMatch) { const d = descMatch[1].trim().replace(/\\n/g, '\n'); if (d !== (task.description||'')) fields.description = d; }
+              const assigneeMatch = unfolded.match(/X-MEISTERPILZE-ASSIGNEE:(.*)/);
+              if (assigneeMatch) { const a = assigneeMatch[1].trim(); if (a !== (task.assignee||'')) fields.assignee = a; }
+
+              if (Object.keys(fields).length > 0) {
+                db.updateTaskById(database, task.id, fields);
+                // Re-read and push to all calendars for consistency
+                const updated = db.readTaskById(database, task.id);
+                if (updated) autoPushTaskCaldav(updated);
+                broadcastSSE();
+              }
+            } else {
+              // New task created from external CalDAV client
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              const text = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
+              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
+              const priority = prioMatch ? (CALDAV_PRIO_MAP[prioMatch[1]] || 'med') : 'med';
+              const statusMatch = unfolded.match(/STATUS:(.*)/);
+              const done = statusMatch ? statusMatch[1].trim() === 'COMPLETED' : false;
+              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dueDate = dueMatch ? dueMatch[1]+'-'+dueMatch[2]+'-'+dueMatch[3] : null;
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
+              db.insertTask(database, { text, priority, done, created: new Date().toISOString(), dueDate, description, caldavUid: uid, caldavSynced: new Date().toISOString() });
+              broadcastSSE();
+            }
+          }
+        }
+      } catch (e) { log('error','CalDAV VTODO bidirectional sync error',{error:e.message}); }
+    }
+
+    // ── VEVENT sync-back: batch due dates, task due dates, custom events ──
+    if (unfolded.includes('VEVENT')) {
+      try {
+        const veventBlock = extractVeventBlock(unfolded);
+        const typeMatch = veventBlock.match(/X-MEISTERPILZE-TYPE:(.*)/);
+        const evType = typeMatch ? typeMatch[1].trim() : null;
+
+        if (evType === 'batch-due' || evType === 'task-due') {
+          const dtMatch = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+          if (dtMatch) {
+            const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
+            if (evType === 'batch-due') {
+              const batchMatch = veventBlock.match(/X-MEISTERPILZE-BATCH:(.*)/);
+              if (batchMatch) {
+                const batchId = batchMatch[1].trim();
+                if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
+                  db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+                  broadcastSSE();
+                } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
+              }
+            } else {
+              const uidMatch = veventBlock.match(/UID:(.*)/);
+              if (uidMatch) {
+                const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+                if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+                  db.updateTaskDueDate(database, taskUid, newDate);
+                  broadcastSSE();
+                } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
+              }
+            }
+          }
+        } else if (evType === 'custom-event') {
+          // Custom event edited from external CalDAV client
+          const uidMatch = veventBlock.match(/UID:(.*)/);
+          if (uidMatch) {
+            const uid = uidMatch[1].trim();
+            const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
+            if (idMatch) {
+              const fields = {};
+              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
+              if (sumMatch) fields.title = sumMatch[1].trim().replace(/\\n/g, '\n');
+              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
+              if (descMatch) fields.description = descMatch[1].trim().replace(/\\n/g, '\n');
+              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
+              if (catMatch) {
+                const cat = catMatch[1].trim().toLowerCase();
+                if (KNOWN_CATEGORIES[cat]) fields.category = cat;
+              }
+              // Parse DTSTART from VEVENT block only (avoids VTIMEZONE false matches)
+              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (dtAllDay) {
+                fields.startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3];
+                fields.allDay = true;
+                fields.startTime = null;
+              } else if (dtTimed) {
+                fields.startDate = dtTimed[1]+'-'+dtTimed[2]+'-'+dtTimed[3];
+                fields.startTime = dtTimed[4]+':'+dtTimed[5];
+                fields.allDay = false;
+              }
+              // Parse DTEND from VEVENT block only
+              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (deAllDay) {
+                // RFC 5545: DTEND for all-day is exclusive, subtract one day
+                const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]);
+                d.setDate(d.getDate() - 1);
+                fields.endDate = d.toISOString().split('T')[0];
+                fields.endTime = null;
+              } else if (deTimed) {
+                fields.endDate = deTimed[1]+'-'+deTimed[2]+'-'+deTimed[3];
+                fields.endTime = deTimed[4]+':'+deTimed[5];
+              }
+              if (Object.keys(fields).length > 0) {
+                db.updateCalendarEvent(database, idMatch[1], fields);
+                broadcastSSE();
+              }
+            }
+          }
+        } else if (!evType && calName === 'meisterpilze') {
+          // New VEVENT from external CalDAV client — create as calendar event
+          const uidMatch = veventBlock.match(/UID:(.*)/);
+          if (uidMatch) {
+            const uid = uidMatch[1].trim();
+            // Check it doesn't already exist in DB
+            const existing = db.readCalendarEventByCaldavUid(database, uid);
+            if (!existing) {
+              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
+              const title = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
+              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
+              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
+              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
+              let category = 'custom';
+              if (catMatch) { const c = catMatch[1].trim().toLowerCase(); if (KNOWN_CATEGORIES[c]) category = c; }
+
+              let startDate = null, endDate = null, startTime = null, endTime = null, allDay = true;
+              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (dtAllDay) { startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3]; }
+              else if (dtTimed) { startDate = dtTimed[1]+'-'+dtTimed[2]+'-'+dtTimed[3]; startTime = dtTimed[4]+':'+dtTimed[5]; allDay = false; }
+              if (!startDate) startDate = new Date().toISOString().split('T')[0];
+
+              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (deAllDay) { const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]); d.setDate(d.getDate()-1); endDate = d.toISOString().split('T')[0]; }
+              else if (deTimed) { endDate = deTimed[1]+'-'+deTimed[2]+'-'+deTimed[3]; endTime = deTimed[4]+':'+deTimed[5]; }
+
+              const eventId = 'cev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+              const caldavUid = uid;
+              db.insertCalendarEvent(database, { id: eventId, title, description, startDate, endDate, allDay, startTime, endTime, category, caldavUid, caldavSynced: new Date().toISOString() }, null);
+              // Re-write .ics with X-MEISTERPILZE-TYPE marker so future syncs recognize it
+              const ev = db.readCalendarEventByCaldavUid(database, caldavUid);
+              if (ev) {
+                ev.assignees = [];
+                const { uid: newUid, ics } = customEventToVEVENT(ev);
+                fs.writeFileSync(filePath, ics, 'utf8');
+                invalidateCtag(calName);
+                recordChange(calName, fileName, 'changed');
+              }
+              broadcastSSE();
             }
           }
         }
@@ -1512,14 +2053,73 @@ function handleGet(parts, req, res) {
 function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
-    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    const calName = parts[1];
+    const fileName = parts[2];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
+    const filePath = path.join(CAL_DIR, calName, fileName);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
       return;
     }
-    fs.unlinkSync(filePath);
+
+    // Read content before deleting to sync back to DB
+    let content = '';
+    try { content = unfoldIcs(fs.readFileSync(filePath, 'utf8')); } catch {}
+
+    const typeMatch = content.match(/X-MEISTERPILZE-TYPE:(.*)/);
+    const evType = typeMatch ? typeMatch[1].trim() : null;
+
+    if (evType === 'batch-due') {
+      // Batch due dates are mandatory — ignore delete, autoSync will recreate the file
+    } else if (evType === 'task-due') {
+      // Clear task due date (don't delete the task)
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+        if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+          try { db.updateTaskDueDate(database, taskUid, null); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE task-due sync failed',{taskUid,error:e.message}); }
+        }
+      }
+    } else if (evType === 'custom-event') {
+      // Delete custom calendar event from DB
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const uid = uidMatch[1].trim();
+        const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
+        if (idMatch) {
+          try { db.deleteCalendarEvent(database, idMatch[1]); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE custom-event sync failed',{uid,error:e.message}); }
+        }
+      }
+    } else if (!evType && content.includes('VTODO')) {
+      // Task VTODO — delete the task from DB
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const uid = uidMatch[1].trim();
+        const task = db.readTaskByCaldavUid(database, uid);
+        if (task) {
+          try {
+            db.deleteTaskById(database, task.id);
+            // Clean up companion due-date VEVENT
+            deleteIcsFile('meisterpilze', uid + '-event.ics');
+            // Clean up mirror in shared/personal calendar
+            if (calName !== 'meisterpilze') {
+              deleteIcsFile('meisterpilze', uid + '.ics');
+            }
+            if (task.assignee) {
+              const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              if (calName !== slug) {
+                deleteIcsFile(slug, uid + '.ics');
+              }
+            }
+            broadcastSSE();
+          } catch (e) { log('warn','CalDAV DELETE VTODO sync failed',{uid,error:e.message}); }
+        }
+      }
+    }
+    // External events (no X-MEISTERPILZE-TYPE, no VTODO) — just delete file
+
+    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); invalidateCtag(calName); recordChange(calName, fileName, 'deleted'); }
     res.writeHead(204);
     res.end();
     return;
@@ -1877,6 +2477,8 @@ function handleRequest(req,res){
       version:require('./package.json').version
     };
     if(authUser){
+      health.platform=process.platform;
+      health.nodeVersion=process.version;
       health.sseClients=sseClients.size;
       health.memory={
         rss:Math.round(mem.rss/1024/1024),
@@ -2184,6 +2786,22 @@ function handleRequest(req,res){
     return;
   }
 
+  // -- Server Restart --
+  if(req.method==='POST'&&req.url==='/api/server/restart'){
+    if(requireAdmin(req,res))return;
+    log('info','Server restart requested via web UI',{actor:req.authUser.username});
+    jsonOk(res,{ok:true,message:'Server is restarting...'});
+    setTimeout(()=>{
+      const scriptDir=path.resolve(__dirname);
+      if(process.platform==='win32'){
+        spawn('cmd.exe',['/c','START.bat'],{cwd:scriptDir,detached:true,stdio:'ignore'}).unref();
+      }else{
+        spawn('bash',['update_server.sh'],{cwd:scriptDir,detached:true,stdio:'ignore'}).unref();
+      }
+    },500);
+    return;
+  }
+
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
     jsonBody(req,res,(e,data)=>{
@@ -2439,9 +3057,8 @@ function handleRequest(req,res){
       if(aborted)return;
       try{
         const{event}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=customEventToVEVENT(event);
-        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        writeIcsFile('meisterpilze',uid+'.ics',ics);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
@@ -2459,9 +3076,8 @@ function handleRequest(req,res){
       if(aborted)return;
       try{
         const{batch}=JSON.parse(body);
-        const dir=ensureCalDir('meisterpilze');
         const{uid,ics}=batchToVEVENT(batch);
-        fs.writeFileSync(path.join(dir,uid+'.ics'),ics,'utf8');
+        writeIcsFile('meisterpilze',uid+'.ics',ics);
         res.writeHead(200,{'Content-Type':'application/json'});
         res.end(JSON.stringify({ok:true,uid}));
       }catch(e){
@@ -2622,6 +3238,16 @@ server.listen(PORT,'0.0.0.0',()=>{
   console.log('');
   console.log('  Data saved to: '+DB_FILE);
   console.log('  Press Ctrl+C to stop.');
+
+  // Auto-sync CalDAV on startup if enabled
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (cfg.enabled) {
+      log('info', 'CalDAV sync enabled — running initial sync...');
+      autoSyncAllCaldav(readData());
+      log('info', 'CalDAV initial sync complete');
+    }
+  } catch (e) { log('error', 'CalDAV startup sync failed', { error: e.message }); }
 });
 
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────

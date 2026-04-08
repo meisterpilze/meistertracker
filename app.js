@@ -2240,6 +2240,7 @@ async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
+  showServerTab();
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3315,16 +3316,10 @@ function loadCaldavSettings(){
   // Show the CalDAV URL for this server
   const url=location.protocol+'//'+location.hostname+':'+location.port+'/caldav/calendars/';
   document.getElementById('caldav-url-display').textContent=url;
-  document.getElementById('caldav-user').value=caldav.caldavUsername||'';
-  document.getElementById('caldav-pass').value=caldav.caldavPassword||'';
   document.getElementById('caldav-enabled').checked=!!caldav.enabled;
-  document.getElementById('caldav-per-person').checked=!!caldav.perPersonCalendars;
 }
 function saveCaldavSettings(){
-  caldav.caldavUsername=document.getElementById('caldav-user').value.trim();
-  caldav.caldavPassword=document.getElementById('caldav-pass').value;
   caldav.enabled=document.getElementById('caldav-enabled').checked;
-  caldav.perPersonCalendars=document.getElementById('caldav-per-person').checked;
   apiPost('/api/caldav/config',caldav);
   showCaldavStatus('Settings saved.','#166534');
 }
@@ -3452,6 +3447,53 @@ async function requestLeCert(){
     else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'#166534');refreshDuckdnsStatus()}
   }catch(e){showLeStatus('Fehler: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
+}
+
+// ─── SERVER TAB ─────────────────────────────────────────────
+function showServerTab(){
+  const btn=document.getElementById('st-settings-server');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+}
+async function loadServerTab(){
+  const el=document.getElementById('server-info');
+  if(!el)return;
+  if(!currentUser||currentUser.role!=='admin'){el.textContent='Admin access required.';return}
+  try{
+    const r=await authFetch('/api/health');
+    const h=await r.json();
+    const uptimeH=Math.floor(h.uptime/3600);
+    const uptimeM=Math.floor((h.uptime%3600)/60);
+    const platLabel=h.platform==='win32'?'Windows':h.platform==='darwin'?'macOS':'Linux';
+    el.innerHTML='<div><b>Status:</b> '+esc(h.status)+'</div>'+
+      '<div><b>Version:</b> '+esc(h.version)+'</div>'+
+      '<div><b>Plattform:</b> '+platLabel+'</div>'+
+      '<div><b>Node.js:</b> '+esc(h.nodeVersion||'–')+'</div>'+
+      '<div><b>Uptime:</b> '+uptimeH+'h '+uptimeM+'m</div>'+
+      '<div><b>SSE Clients:</b> '+h.sseClients+'</div>'+
+      (h.memory?'<div><b>RAM:</b> '+h.memory.rss+' MB</div>':'');
+  }catch(e){el.textContent='Fehler beim Laden.'}
+}
+function restartServer(){
+  confirm2('Server neustarten?','Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.','Ja, neustarten',async()=>{
+    const btn=document.getElementById('btn-server-restart');
+    const status=document.getElementById('server-restart-status');
+    btn.disabled=true;btn.textContent='Wird neugestartet...';
+    status.style.display='block';status.style.color='#888';
+    status.textContent='Server wird aktualisiert und neugestartet...';
+    try{
+      await authFetch('/api/server/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      status.textContent='Server startet neu. Warte auf Verbindung...';
+      let attempts=0;
+      const poll=setInterval(async()=>{
+        attempts++;
+        try{
+          const r=await fetch('/api/health');
+          if(r.ok){clearInterval(poll);window.location.reload()}
+        }catch(e){/* still down */}
+        if(attempts>60){clearInterval(poll);status.textContent='Server antwortet nicht. Bitte manuell prüfen.';status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+      },3000);
+    }catch(e){status.textContent='Fehler: '+e.message;status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+  });
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6108,6 +6150,8 @@ function initEventListeners() {
   $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
   $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
   $('st-settings-duckdns').addEventListener('click', () => { openStab('settings','duckdns'); });
+  $('st-settings-server').addEventListener('click', () => { openStab('settings','server'); loadServerTab(); });
+  $('btn-server-restart').addEventListener('click', restartServer);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
