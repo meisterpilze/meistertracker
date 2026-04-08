@@ -3430,7 +3430,9 @@ async function loadDuckdnsSettings(){
     const cfg=await r.json();
     document.getElementById('duckdns-enabled').checked=!!cfg.enabled;
     document.getElementById('duckdns-domain').value=cfg.domain||'';
-    document.getElementById('duckdns-token').value=cfg.token||'';
+    const tokenEl=document.getElementById('duckdns-token');
+    tokenEl.value='';
+    tokenEl.placeholder=cfg.hasToken?'••••••••••':'';
     document.getElementById('duckdns-le-enabled').checked=!!cfg.leEnabled;
   }catch(e){/* non-admin */}
   await refreshDuckdnsStatus();
@@ -3479,14 +3481,15 @@ function showLeStatus(msg,color){
   setTimeout(()=>{el.style.display='none'},15000);
 }
 async function saveDuckdnsSettings(){
+  const tokenVal=document.getElementById('duckdns-token').value.trim();
   const cfg={
     enabled:document.getElementById('duckdns-enabled').checked,
     domain:document.getElementById('duckdns-domain').value.trim().toLowerCase(),
-    token:document.getElementById('duckdns-token').value.trim(),
     leEnabled:document.getElementById('duckdns-le-enabled').checked
   };
+  if(tokenVal)cfg.token=tokenVal;
   if(cfg.enabled&&!cfg.domain){showDuckdnsStatus('Subdomain ist erforderlich.','#b91c1c');return}
-  if(cfg.enabled&&!cfg.token){showDuckdnsStatus('Token ist erforderlich.','#b91c1c');return}
+  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus('Token ist erforderlich.','#b91c1c');return}
   try{
     const r=await apiPost('/api/duckdns/config',cfg);
     if(r.error){showDuckdnsStatus('Fehler: '+r.error,'#b91c1c')}
