@@ -984,6 +984,23 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Read only the first N bytes of a file (for orphan cleanup — avoids reading entire ICS)
+function readFileHead(filePath, bytes) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(bytes);
+    const bytesRead = fs.readSync(fd, buf, 0, bytes, 0);
+    return buf.toString('utf8', 0, bytesRead);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Escape iCalendar TEXT values per RFC 5545 §3.3.11
+function escapeIcsText(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
 // Sanitize URL path parts to prevent directory traversal attacks
 function sanitizePart(s) {
   const clean = path.basename(s);
@@ -1087,9 +1104,33 @@ function listIcsFiles(calName) {
 
 // CTag cache — avoids filesystem scan on every PROPFIND poll
 const ctagCache = new Map();
+// ETag cache — avoids stat() on every PROPFIND/REPORT item
+const etagCache = new Map();
+
+function invalidateCalendarCache(calName) {
+  ctagCache.delete(calName);
+  // Clear all etags for this calendar
+  const prefix = calName + '/';
+  for (const key of etagCache.keys()) {
+    if (key.startsWith(prefix)) etagCache.delete(key);
+  }
+}
 
 function invalidateCtag(calName) {
-  ctagCache.delete(calName);
+  invalidateCalendarCache(calName);
+}
+
+function getEtag(calName, fileName) {
+  const key = calName + '/' + fileName;
+  if (etagCache.has(key)) return etagCache.get(key);
+  try {
+    const stat = fs.statSync(path.join(CAL_DIR, calName, fileName));
+    const etag = '"' + stat.mtimeMs.toString(36) + '"';
+    etagCache.set(key, etag);
+    return etag;
+  } catch {
+    return null;
+  }
 }
 
 // ── RFC 6578 sync-token tracking ──
@@ -1200,7 +1241,7 @@ function taskToVTODO(task) {
     'DTSTAMP:' + now,
     'CREATED:' + created,
     'LAST-MODIFIED:' + now,
-    'SUMMARY:' + (task.text || '').replace(/\n/g, '\\n')
+    'SUMMARY:' + escapeIcsText(task.text || '')
   ];
   if (task.dueDate) {
     const d = new Date(task.dueDate).toISOString().replace(/[-:]/g, '').split('T')[0];
@@ -1212,7 +1253,7 @@ function taskToVTODO(task) {
   if (task.done) lines.push('PERCENT-COMPLETE:100');
   lines.push('X-MEISTERPILZE-TYPE:task');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
-  if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
+  if (task.description) lines.push('DESCRIPTION:' + escapeIcsText(task.description));
   lines.push('COLOR:#3b82f6');
   lines.push('END:VTODO', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
@@ -1236,7 +1277,7 @@ function batchToVEVENT(batch, scanLog) {
   // DTEND is next day for all-day events per RFC 5545
   const endDate = new Date(new Date(batch.due).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
   const loc = scanLog ? getBatchLocServer(batch, scanLog) : '';
-  const summary = (batch.batchId + (loc ? ' — ' + loc : '')).replace(/\n/g, '\\n');
+  const summary = escapeIcsText(batch.batchId + (loc ? ' — ' + loc : ''));
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -1249,9 +1290,9 @@ function batchToVEVENT(batch, scanLog) {
     'SUMMARY:' + summary,
     'CATEGORIES:Fälligkeiten'
   ];
-  if (loc) lines.push('LOCATION:' + loc.replace(/\n/g, '\\n'));
+  if (loc) lines.push('LOCATION:' + escapeIcsText(loc));
   lines.push(
-    'DESCRIPTION:' + ((batch.species || '') + (batch.strain ? ' (' + batch.strain + ')' : '')).replace(/\n/g, '\\n'),
+    'DESCRIPTION:' + escapeIcsText((batch.species || '') + (batch.strain ? ' (' + batch.strain + ')' : '')),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:batch-due',
     'X-MEISTERPILZE-BATCH:' + batch.batchId,
@@ -1280,7 +1321,7 @@ function taskDueToVEVENT(task) {
     'DTSTAMP:' + now,
     'DTSTART;VALUE=DATE:' + dueDate,
     'DTEND;VALUE=DATE:' + endDate,
-    'SUMMARY:' + (task.text || '').replace(/\n/g, '\\n'),
+    'SUMMARY:' + escapeIcsText(task.text || ''),
     'CATEGORIES:Aufgaben',
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
     'TRANSP:TRANSPARENT',
@@ -1340,14 +1381,14 @@ function customEventToVEVENT(event) {
     'DTSTAMP:' + now,
     dtstart,
     dtend,
-    'SUMMARY:' + (event.title || '').replace(/\n/g, '\\n'),
+    'SUMMARY:' + escapeIcsText(event.title || ''),
     'CATEGORIES:' + (event.category || 'Benutzerdefiniert'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:custom-event'
   );
-  if (event.description) lines.push('DESCRIPTION:' + event.description.replace(/\n/g, '\\n'));
+  if (event.description) lines.push('DESCRIPTION:' + escapeIcsText(event.description));
   if (event.assignees && event.assignees.length) {
-    for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
+    for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':mailto:noreply@localhost');
   }
   lines.push('COLOR:' + (event.color || CALDAV_CATEGORY_COLORS[event.category] || '#16a34a'));
   lines.push('END:VEVENT', 'END:VCALENDAR');
@@ -1577,8 +1618,8 @@ function _doAutoSyncAllCaldav(data) {
         const existing = fs.readdirSync(dir).filter((f) => f.endsWith('.ics'));
         for (const f of existing) {
           const filePath = path.join(dir, f);
-          const content = fs.readFileSync(filePath, 'utf8');
-          if (content.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
+          const head = readFileHead(filePath, 500);
+          if (head.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
             fs.unlinkSync(filePath);
             invalidateCtag(calSlug);
             recordChange(calSlug, f, 'deleted');
@@ -1593,11 +1634,11 @@ function _doAutoSyncAllCaldav(data) {
       const sharedDir = path.join(CAL_DIR, 'meisterpilze');
       if (fs.existsSync(sharedDir)) {
         for (const f of fs.readdirSync(sharedDir).filter((f) => f.endsWith('.ics'))) {
-          const content = fs.readFileSync(path.join(sharedDir, f), 'utf8');
+          const head = readFileHead(path.join(sharedDir, f), 500);
           if (
-            content.includes('X-MEISTERPILZE-TYPE:batch-due') ||
-            content.includes('X-MEISTERPILZE-TYPE:task-due') ||
-            content.includes('X-MEISTERPILZE-TYPE:custom-event')
+            head.includes('X-MEISTERPILZE-TYPE:batch-due') ||
+            head.includes('X-MEISTERPILZE-TYPE:task-due') ||
+            head.includes('X-MEISTERPILZE-TYPE:custom-event')
           ) {
             fs.unlinkSync(path.join(sharedDir, f));
             invalidateCtag('meisterpilze');
@@ -1697,8 +1738,8 @@ function syncAllTasksLocal(data) {
     try {
       const existing = fs.readdirSync(dir).filter((f) => f.endsWith('.ics'));
       for (const f of existing) {
-        const content = fs.readFileSync(path.join(dir, f), 'utf8');
-        if (content.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
+        const head = readFileHead(path.join(dir, f), 500);
+        if (head.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
           fs.unlinkSync(path.join(dir, f));
           invalidateCtag(calSlug);
           recordChange(calSlug, f, 'deleted');
@@ -1713,11 +1754,11 @@ function syncAllTasksLocal(data) {
     const sharedDir = path.join(CAL_DIR, 'meisterpilze');
     if (fs.existsSync(sharedDir)) {
       for (const f of fs.readdirSync(sharedDir).filter((f) => f.endsWith('.ics'))) {
-        const content = fs.readFileSync(path.join(sharedDir, f), 'utf8');
+        const head = readFileHead(path.join(sharedDir, f), 500);
         if (
-          content.includes('X-MEISTERPILZE-TYPE:batch-due') ||
-          content.includes('X-MEISTERPILZE-TYPE:task-due') ||
-          content.includes('X-MEISTERPILZE-TYPE:custom-event')
+          head.includes('X-MEISTERPILZE-TYPE:batch-due') ||
+          head.includes('X-MEISTERPILZE-TYPE:task-due') ||
+          head.includes('X-MEISTERPILZE-TYPE:custom-event')
         ) {
           fs.unlinkSync(path.join(sharedDir, f));
           invalidateCtag('meisterpilze');
@@ -1784,13 +1825,27 @@ function handleCaldav(req, res) {
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
-  const rawPath = decodeURIComponent(req.url.split('?')[0]).replace(/\/+/g, '/');
+  let rawPath;
+  try {
+    rawPath = decodeURIComponent(req.url.split('?')[0]).replace(/\/+/g, '/');
+  } catch (e) {
+    res.writeHead(400);
+    res.end('Bad Request: malformed URL encoding');
+    return;
+  }
   const parts = rawPath
     .replace(/^\/caldav\/?/, '')
     .replace(/\/$/, '')
     .split('/')
     .filter(Boolean);
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
+
+  // Validate root path segment
+  if (parts.length > 0 && parts[0] !== 'calendars') {
+    res.writeHead(400);
+    res.end('Invalid path');
+    return;
+  }
 
   // Sanitize path parts to prevent directory traversal
   for (let i = 1; i < parts.length; i++) {
@@ -1956,9 +2011,8 @@ function handlePropfind(parts, body, req, res) {
     if (depth !== '0') {
       const files = listIcsFiles(calName);
       for (const f of files) {
-        const fPath = path.join(calDir, f);
-        const stat = fs.statSync(fPath);
-        const etag = '"' + stat.mtimeMs.toString(36) + '"';
+        const etag = getEtag(calName, f);
+        if (!etag) continue;
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -1990,13 +2044,12 @@ function handlePropfind(parts, body, req, res) {
       return;
     }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
-    if (!fs.existsSync(filePath)) {
+    const etag = getEtag(parts[1], parts[2]);
+    if (!etag) {
       res.writeHead(404);
       res.end('Not found');
       return;
     }
-    const stat = fs.statSync(filePath);
-    const etag = '"' + stat.mtimeMs.toString(36) + '"';
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -2061,9 +2114,8 @@ function handleReport(parts, body, req, res) {
         // Initial sync — return all items
         const files = listIcsFiles(calName);
         for (const f of files) {
-          const fPath = path.join(calDir, f);
-          const stat = fs.statSync(fPath);
-          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          const etag = getEtag(calName, f);
+          if (!etag) continue;
           responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2082,10 +2134,8 @@ function handleReport(parts, body, req, res) {
     <d:status>HTTP/1.1 404 Not Found</d:status>
   </d:response>`;
           } else {
-            const fPath = path.join(calDir, fileName);
-            if (fs.existsSync(fPath)) {
-              const stat = fs.statSync(fPath);
-              const etag = '"' + stat.mtimeMs.toString(36) + '"';
+            const etag = getEtag(calName, fileName);
+            if (etag) {
               responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
     <d:propstat>
@@ -2120,8 +2170,7 @@ function handleReport(parts, body, req, res) {
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
-          const stat = fs.statSync(filePath);
-          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          const etag = getEtag(calName, filename);
           responses += `\n  <d:response>
     <d:href>${escapeXml(href)}</d:href>
     <d:propstat>
@@ -2140,8 +2189,7 @@ function handleReport(parts, body, req, res) {
       for (const f of files) {
         const filePath = path.join(calDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
-        const stat = fs.statSync(filePath);
-        const etag = '"' + stat.mtimeMs.toString(36) + '"';
+        const etag = getEtag(calName, f);
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2169,6 +2217,11 @@ function handleReport(parts, body, req, res) {
 }
 
 function handleMkcalendar(parts, body, req, res) {
+  if (req.caldavUser.role !== 'admin') {
+    res.writeHead(403);
+    res.end('Forbidden: only admins can create calendars');
+    return;
+  }
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
     // Block UUID-like calendar names (auto-created by CalDAV clients like iOS)
@@ -2507,8 +2560,7 @@ function handleGet(parts, req, res) {
       return;
     }
     const content = fs.readFileSync(filePath, 'utf8');
-    const stat = fs.statSync(filePath);
-    const etag = '"' + stat.mtimeMs.toString(36) + '"';
+    const etag = getEtag(calName, parts[2]);
     res.writeHead(200, {
       'Content-Type': 'text/calendar; charset=utf-8',
       ETag: etag
@@ -2536,6 +2588,18 @@ function handleDelete(parts, req, res) {
     if (!checkCalendarAccess(calName)) {
       res.writeHead(403);
       res.end('Forbidden');
+      return;
+    }
+    // Only allow deleting from own calendar or shared calendar if admin
+    const userSlug = req.caldavUserSlug;
+    if (calName !== userSlug && calName !== 'meisterpilze' && req.caldavUser.role !== 'admin') {
+      res.writeHead(403);
+      res.end('Forbidden: cannot delete from other users\' calendars');
+      return;
+    }
+    if (calName === 'meisterpilze' && req.caldavUser.role !== 'admin') {
+      res.writeHead(403);
+      res.end('Forbidden: only admins can delete from shared calendar');
       return;
     }
     const filePath = path.join(CAL_DIR, calName, fileName);
@@ -4446,39 +4510,19 @@ function handleRequest(req, res) {
   }
 
   // POST /api/caldav/sync — write all tasks to local calendar files
+  // Reads all data from DB only — ignores request body to prevent client-supplied data injection
   if (req.method === 'POST' && req.url === '/api/caldav/sync') {
-    let body = '';
-    let bodySize = 0;
-    let aborted = false;
-    req.on('data', (c) => {
-      bodySize += c.length;
-      if (bodySize > MAX_BODY_SIZE) {
-        aborted = true;
-        jsonErr(res, 413, 'Payload too large');
-        req.destroy();
-        return;
-      }
-      body += c;
-    });
-    req.on('end', () => {
-      if (aborted) return;
-      try {
-        const data = readData();
-        const incoming = JSON.parse(body);
-        if (incoming.caldav) data.caldav = incoming.caldav;
-        if (incoming.teamMembers) data.teamMembers = incoming.teamMembers;
-        if (incoming.manualTasks) data.manualTasks = incoming.manualTasks;
-
-        const result = syncAllTasksLocal(data);
-        writeData(data);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
-      } catch (e) {
-        log('error', 'CalDAV sync error', { error: e.message });
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: e.message }));
-      }
-    });
+    try {
+      const data = readData();
+      const result = syncAllTasksLocal(data);
+      writeData(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      log('error', 'CalDAV sync error', { error: e.message });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
     return;
   }
 
