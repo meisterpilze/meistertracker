@@ -1337,5 +1337,5 @@ module.exports = {
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, getCalendarEventById, deleteCalendarEvent, readCalendarEventByCaldavUid,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
-  insertZone, deleteZone, insertRack, deleteRack, zoneExists
+  insertZone, deleteZone, insertRack, deleteRack, zoneExists, zoneBagCount, rackBagCount
 };
