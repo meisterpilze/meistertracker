@@ -51,14 +51,18 @@ function createMcpServer(database, onWrite) {
     "Get today's briefing: batches due today/overdue, open tasks by assignee, low-stock alerts, and today's calendar events",
     { date: z.string().optional().describe('ISO date (YYYY-MM-DD), defaults to today') },
     async ({ date }) => {
-      const data = db.readAll(database, { inventoryLogLimit: 20 });
+      const batches = db.getAllBatches(database);
+      const scanLog = db.getScanLog(database);
+      const manualTasks = db.getAllTasks(database);
+      const inventory = db.getInventory(database, 20);
+      const calendarEvents = db.getCalendarEvents(database);
       const target = date || today();
 
       // Batches due today or overdue
-      const bagLoc = buildBagLocationMap(data.scanLog);
+      const bagLoc = buildBagLocationMap(scanLog);
       const dueToday = [];
       const overdue = [];
-      for (const b of data.batches) {
+      for (const b of batches) {
         if (!b.due) continue;
         const dueDate = b.due.slice(0, 10);
         const activeBags = b.bags.filter((id) => bagLoc.has(id));
@@ -84,7 +88,7 @@ function createMcpServer(database, onWrite) {
       }
 
       // Open tasks grouped by assignee
-      const openTasks = data.manualTasks.filter((t) => !t.done);
+      const openTasks = manualTasks.filter((t) => !t.done);
       const tasksByAssignee = {};
       for (const t of openTasks) {
         const key = t.assignee || 'Unassigned';
@@ -93,7 +97,7 @@ function createMcpServer(database, onWrite) {
       }
 
       // Low-stock alerts
-      const inv = data.inventory;
+      const inv = inventory;
       const lowStock = [];
       for (const mat of ['hardwood', 'wheatbran', 'gypsum', 'grain']) {
         const stock = inv.stock[mat];
@@ -102,7 +106,7 @@ function createMcpServer(database, onWrite) {
       }
 
       // Calendar events for today
-      const todayEvents = data.calendarEvents.filter((e) => {
+      const todayEvents = calendarEvents.filter((e) => {
         const start = e.startDate;
         const end = e.endDate || e.startDate;
         return start <= target && end >= target;
@@ -141,8 +145,7 @@ function createMcpServer(database, onWrite) {
       dueAfter: z.string().optional().describe('ISO date — batches due after this date')
     },
     async (params) => {
-      const data = db.readAll(database);
-      let batches = data.batches;
+      let batches = db.getAllBatches(database);
 
       if (params.species) {
         const s = params.species.toLowerCase();
@@ -178,13 +181,13 @@ function createMcpServer(database, onWrite) {
     'Get full details for a single batch including bags, scan history, harvest totals, and current bag locations',
     { batchId: z.string().describe('Batch ID') },
     async ({ batchId }) => {
-      const data = db.readAll(database);
-      const batch = data.batches.find((b) => b.batchId === batchId);
+      const batch = db.readBatchById(database, batchId);
       if (!batch) return errResult('Batch not found: ' + batchId);
 
-      const bagLoc = buildBagLocationMap(data.scanLog);
-      const scans = data.scanLog.filter((e) => e.batch === batchId);
-      const harvests = data.harvests.filter((h) => h.batch === batchId);
+      const scanLog = db.getScanLog(database);
+      const bagLoc = buildBagLocationMap(scanLog);
+      const scans = scanLog.filter((e) => e.batch === batchId);
+      const harvests = db.getAllHarvests(database).filter((h) => h.batch === batchId);
 
       const totalGrams = harvests.reduce((sum, h) => sum + h.grams, 0);
       const byFlush = {};
@@ -213,9 +216,7 @@ function createMcpServer(database, onWrite) {
     'Get all zones with rack counts, current bag counts, and capacity utilization',
     {},
     async () => {
-      const data = db.readAll(database);
-
-      const zones = data.zones.map((z) => {
+      const zones = db.getZonesWithRacks(database).map((z) => {
         const bagCount = db.zoneBagCount(database, z.id);
         const racks = z.racks.map((r) => ({
           id: r.id,
@@ -242,8 +243,7 @@ function createMcpServer(database, onWrite) {
     'Get current substrate inventory levels, thresholds, and low-stock alerts',
     {},
     async () => {
-      const data = db.readAll(database, { inventoryLogLimit: 20 });
-      const inv = data.inventory;
+      const inv = db.getInventory(database, 20);
       const alerts = [];
       for (const mat of ['hardwood', 'wheatbran', 'gypsum', 'grain']) {
         if (inv.stock[mat] < inv.thresholds[mat].minKg) {
@@ -271,8 +271,7 @@ function createMcpServer(database, onWrite) {
       dueAfter: z.string().optional().describe('ISO date — tasks due after this date')
     },
     async (params) => {
-      const data = db.readAll(database);
-      let tasks = data.manualTasks;
+      let tasks = db.getAllTasks(database);
 
       if (params.assignee) {
         const a = params.assignee.toLowerCase();
@@ -307,11 +306,10 @@ function createMcpServer(database, onWrite) {
       category: z.string().optional().describe('Filter by event category')
     },
     async (params) => {
-      const data = db.readAll(database);
       const start = params.startDate || today();
       const end = params.endDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
-      let events = data.calendarEvents.filter((e) => {
+      let events = db.getCalendarEvents(database).filter((e) => {
         const eStart = e.startDate;
         const eEnd = e.endDate || e.startDate;
         return eEnd >= start && eStart <= end;
@@ -346,8 +344,7 @@ function createMcpServer(database, onWrite) {
       status: z.string().optional().describe('Filter by status (e.g. active, archived, contaminated)')
     },
     async (params) => {
-      const data = db.readAll(database);
-      let cultures = data.cultures;
+      let cultures = db.getAllCultures(database);
 
       if (params.type) cultures = cultures.filter((c) => c.type === params.type);
       if (params.species) {
@@ -371,8 +368,7 @@ function createMcpServer(database, onWrite) {
       endDate: z.string().optional().describe('ISO date — harvests before this date')
     },
     async (params) => {
-      const data = db.readAll(database);
-      let harvests = data.harvests;
+      let harvests = db.getAllHarvests(database);
 
       if (params.batchId) harvests = harvests.filter((h) => h.batch === params.batchId);
       if (params.species) {
@@ -418,8 +414,7 @@ function createMcpServer(database, onWrite) {
       endDate: z.string().optional().describe('ISO date — entries before this date')
     },
     async (params) => {
-      const data = db.readAll(database);
-      let log = data.scanLog;
+      let log = db.getScanLog(database);
 
       if (params.batchId) log = log.filter((e) => e.batch === params.batchId);
       if (params.bagId) log = log.filter((e) => e.bag === params.bagId);
