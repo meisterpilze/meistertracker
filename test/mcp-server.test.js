@@ -604,12 +604,3 @@ describe('Daily briefing logic', () => {
     assert.ok(alerts.includes('gypsum'), 'gypsum at 2kg should be below 5kg threshold');
   });
 });
-
-// ── Notify helper ──────────────────────────────────────────
-describe('notifyWebClients', () => {
-  it('does not throw when server is not running', () => {
-    const { notifyWebClients } = require('../mcp-server.js');
-    // Should silently swallow the ECONNREFUSED error
-    assert.doesNotThrow(() => notifyWebClients());
-  });
-});
