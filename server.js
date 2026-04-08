@@ -1062,6 +1062,14 @@ function getBatchLocServer(batch, scanLog) {
   return entries[0][0];
 }
 
+// Per-calendar access control: personal calendars are only accessible by that user (or admins)
+// Shared 'meisterpilze' calendar is accessible by all authenticated users
+function checkCalendarAccess(req, calName) {
+  if (calName === 'meisterpilze') return true;
+  if (req.caldavUser.role === 'admin') return true;
+  return req.caldavUserSlug === calName;
+}
+
 // Get display name and color for a calendar
 function getCalDisplayInfo(calName) {
   if (CALDAV_CATEGORY_CALS[calName]) {
@@ -1890,14 +1898,6 @@ function handleCaldav(req, res) {
     parts[i] = clean;
   }
 
-  // Per-calendar access control: personal calendars are only accessible by that user (or admins)
-  // Shared 'meisterpilze' calendar is accessible by all authenticated users
-  function checkCalendarAccess(calName) {
-    if (calName === 'meisterpilze') return true;
-    if (req.caldavUser.role === 'admin') return true;
-    return req.caldavUserSlug === calName;
-  }
-
   if (method === 'OPTIONS') {
     res.writeHead(200, {
       Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH'
@@ -1985,7 +1985,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/ — list all calendars
   if (parts.length === 1 && parts[0] === 'calendars') {
-    const cals = listCalendars().filter((c) => checkCalendarAccess(c));
+    const cals = listCalendars().filter((c) => checkCalendarAccess(req, c));
     let responses = `<d:response>
     <d:href>/caldav/calendars/</d:href>
     <d:propstat>
@@ -2032,7 +2032,7 @@ function handlePropfind(parts, body, req, res) {
   // /caldav/calendars/<cal>/ — list items in a calendar
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
-    if (!checkCalendarAccess(calName)) {
+    if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2067,13 +2067,15 @@ function handlePropfind(parts, body, req, res) {
       for (const f of files) {
         const etag = getEtag(calName, f);
         if (!etag) continue;
+        let fileSize = 0;
+        try { fileSize = fs.statSync(path.join(CAL_DIR, calName, f)).size; } catch {}
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
       <d:prop>
         <d:getetag>${etag}</d:getetag>
         <d:getcontenttype>text/calendar; charset=utf-8</d:getcontenttype>
-        <d:getcontentlength>${stat.size}</d:getcontentlength>
+        <d:getcontentlength>${fileSize}</d:getcontentlength>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -2092,7 +2094,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/<file>.ics — single item props
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    if (!checkCalendarAccess(parts[1])) {
+    if (!checkCalendarAccess(req, parts[1])) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2104,6 +2106,8 @@ function handlePropfind(parts, body, req, res) {
       res.end('Not found');
       return;
     }
+    let fileSize = 0;
+    try { fileSize = fs.statSync(filePath).size; } catch {}
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -2112,7 +2116,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:getetag>${etag}</d:getetag>
         <d:getcontenttype>text/calendar; charset=utf-8</d:getcontenttype>
-        <d:getcontentlength>${stat.size}</d:getcontentlength>
+        <d:getcontentlength>${fileSize}</d:getcontentlength>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -2131,7 +2135,7 @@ function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
-    if (!checkCalendarAccess(calName)) {
+    if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2286,7 +2290,7 @@ function handleMkcalendar(parts, body, req, res) {
       res.end();
       return;
     }
-    if (!checkCalendarAccess(calName)) {
+    if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2305,7 +2309,7 @@ function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const calName = parts[1];
-    if (!checkCalendarAccess(calName)) {
+    if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2602,7 +2606,7 @@ function handlePut(parts, body, req, res) {
 function handleGet(parts, req, res) {
   // GET /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    if (!checkCalendarAccess(parts[1])) {
+    if (!checkCalendarAccess(req, parts[1])) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -2639,7 +2643,7 @@ function handleDelete(parts, req, res) {
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const calName = parts[1];
     const fileName = parts[2];
-    if (!checkCalendarAccess(calName)) {
+    if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
