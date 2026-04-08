@@ -1798,9 +1798,10 @@ function updateMcpCfg(db, cfg) {
 }
 function generateMcpToken(db) {
   const token = crypto.randomBytes(32).toString('hex');
-  db.prepare('UPDATE mcp_config SET api_token=? WHERE id=1').run(token);
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  db.prepare('UPDATE mcp_config SET api_token=? WHERE id=1').run(hash);
   incrementDataVersion(db);
-  return token;
+  return token; // plaintext returned once to show to user; only hash is stored
 }
 
 module.exports = {

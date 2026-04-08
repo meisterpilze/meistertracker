@@ -93,8 +93,10 @@ function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) return false;
   const token = auth.slice(7);
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
   const stored = db.getMcpToken(database);
-  return stored && token === stored;
+  if (!stored) return false;
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(stored));
 }
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
