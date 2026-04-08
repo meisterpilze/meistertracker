@@ -2394,7 +2394,11 @@ function handleRequest(req,res){
           const slug=task.assignee.toLowerCase().replace(/[^a-z0-9]+/g,'-');
           uid=writeTaskToCalendar(task,slug);
         }
-        if(!uid) uid=writeTaskToCalendar(task,'meisterpilze'); // fallback if private + unassigned
+        // Private + unassigned: no calendar to write to, just generate a UID
+        if(!uid){
+          if(!task.caldavUid) task.caldavUid=generateUID();
+          uid=task.caldavUid;
+        }
         const synced=task.caldavSynced||new Date().toISOString();
         db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
