@@ -270,7 +270,32 @@ exit /b %errorlevel%
 
 :ensure_certs
 if exist "certs\server.key" if exist "certs\server.crt" (
-    echo  -^> TLS certificates found.
+    REM Check if it's a Let's Encrypt cert and try auto-renewal
+    where bash >nul 2>&1
+    if !errorlevel! equ 0 (
+        for /f "tokens=*" %%R in ('bash -c "openssl x509 -in certs/server.crt -issuer -noout 2>/dev/null" 2^>nul') do set "CERT_ISSUER=%%R"
+        echo !CERT_ISSUER! | findstr /i "Let's Encrypt R3 R10 R11" >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo  -^> Let's Encrypt TLS certificate found.
+            REM Check days until expiry and renew if ^< 30
+            for /f "tokens=*" %%D in ('bash -c "openssl x509 -in certs/server.crt -noout -enddate 2>/dev/null | sed 's/notAfter=//'" 2^>nul') do set "CERT_END=%%D"
+            if defined CERT_END (
+                for /f "tokens=*" %%L in ('bash -c "exp=$(date -d \"!CERT_END!\" +%%s 2>/dev/null); now=$(date +%%s); echo $(( (exp - now) / 86400 ))" 2^>nul') do set "DAYS_LEFT=%%L"
+                if defined DAYS_LEFT (
+                    if !DAYS_LEFT! LSS 30 (
+                        echo  -^> Certificate expires in !DAYS_LEFT! days, renewing...
+                        call :renew_le_cert
+                    ) else (
+                        echo  -^> Valid for !DAYS_LEFT! more days.
+                    )
+                )
+            )
+        ) else (
+            echo  -^> Self-signed TLS certificate found.
+        )
+    ) else (
+        echo  -^> TLS certificates found.
+    )
     exit /b 0
 )
 if exist "gen-cert.ps1" (
@@ -295,6 +320,32 @@ if exist "gen-cert.sh" (
 )
 echo  -^> WARNING: Could not generate TLS certificates.
 echo     Server will start in HTTP-only mode ^(iOS camera will not work^).
+exit /b 0
+
+:renew_le_cert
+where bash >nul 2>&1
+if !errorlevel! neq 0 (
+    echo  -^> bash not available, skipping renewal ^(server handles it^).
+    exit /b 0
+)
+if not exist ".acme.sh\acme.sh" (
+    echo  -^> acme.sh not found, skipping renewal ^(server handles it^).
+    exit /b 0
+)
+REM Read domain and token from DB via bash+sqlite3
+for /f "tokens=*" %%D in ('bash -c "sqlite3 meistertracker.db \"SELECT domain FROM duckdns_config WHERE id=1\" 2>/dev/null"') do set "DDNS_DOMAIN=%%D"
+for /f "tokens=*" %%T in ('bash -c "sqlite3 meistertracker.db \"SELECT token FROM duckdns_config WHERE id=1\" 2>/dev/null"') do set "DDNS_TOKEN=%%T"
+if not defined DDNS_DOMAIN (
+    echo  -^> No DuckDNS config in DB, skipping renewal.
+    exit /b 0
+)
+set "FULL_DOMAIN=%DDNS_DOMAIN%.duckdns.org"
+bash -c "DuckDNS_Token='%DDNS_TOKEN%' .acme.sh/acme.sh --renew -d '%FULL_DOMAIN%' --home .acme.sh --force 2>/dev/null; DuckDNS_Token='%DDNS_TOKEN%' .acme.sh/acme.sh --install-cert -d '%FULL_DOMAIN%' --key-file certs/server.key --fullchain-file certs/server.crt --home .acme.sh 2>/dev/null"
+if !errorlevel! equ 0 (
+    echo  -^> Let's Encrypt certificate renewed for %FULL_DOMAIN%.
+) else (
+    echo  -^> WARNING: Renewal failed, server will retry automatically.
+)
 exit /b 0
 
 :refresh_path
