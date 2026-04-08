@@ -2562,6 +2562,18 @@ function handleDelete(parts, req, res) {
       res.end('Forbidden');
       return;
     }
+    // Only allow deleting from own calendar or shared calendar if admin
+    const userSlug = req.caldavUserSlug;
+    if (calName !== userSlug && calName !== 'meisterpilze' && req.caldavUser.role !== 'admin') {
+      res.writeHead(403);
+      res.end('Forbidden: cannot delete from other users\' calendars');
+      return;
+    }
+    if (calName === 'meisterpilze' && req.caldavUser.role !== 'admin') {
+      res.writeHead(403);
+      res.end('Forbidden: only admins can delete from shared calendar');
+      return;
+    }
     const filePath = path.join(CAL_DIR, calName, fileName);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
