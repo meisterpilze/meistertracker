@@ -120,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_invlog_time ON inventory_log(time);
 
 CREATE TABLE IF NOT EXISTS caldav_config (
   id                   INTEGER PRIMARY KEY CHECK (id = 1),
-  enabled              INTEGER DEFAULT 1,
+  enabled              INTEGER DEFAULT 0,
   caldav_username      TEXT DEFAULT '',
   caldav_password      TEXT DEFAULT '',
   per_person_calendars INTEGER DEFAULT 0
