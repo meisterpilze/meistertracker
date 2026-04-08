@@ -42,7 +42,11 @@ ensure_pm2() {
 
 ensure_certs() {
     if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
-        echo "  -> TLS certificates found."
+        if command -v openssl &>/dev/null && openssl x509 -in certs/server.crt -issuer -noout 2>/dev/null | grep -qi "Let's Encrypt\|R3\|R10\|R11"; then
+            echo "  -> Let's Encrypt TLS certificate found."
+        else
+            echo "  -> Self-signed TLS certificate found."
+        fi
         return
     fi
     echo "  -> TLS certificates not found, generating..."
@@ -172,27 +176,88 @@ do_gen_cert() {
     fi
 }
 
+do_install_acme() {
+    echo "==== Installing acme.sh ===="
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    ACME_HOME="$SCRIPT_DIR/.acme.sh"
+
+    if ! command -v curl &> /dev/null; then
+        echo "Error: curl is required but not installed."
+        exit 1
+    fi
+
+    if [ -f "$ACME_HOME/acme.sh" ]; then
+        echo "acme.sh already installed at $ACME_HOME"
+        echo "Updating..."
+        "$ACME_HOME/acme.sh" --upgrade --home "$ACME_HOME"
+    else
+        echo "Downloading acme.sh..."
+        curl https://get.acme.sh | sh -s -- --install-online --home "$ACME_HOME" --no-cron
+    fi
+    echo "==== acme.sh installed at $ACME_HOME ===="
+    echo ""
+    echo "Now configure DuckDNS in the web UI (Settings → DuckDNS)"
+    echo "then click 'Zertifikat jetzt anfordern' to get a Let's Encrypt cert."
+}
+
+do_renew_cert() {
+    echo "==== Renewing Let's Encrypt Certificate ===="
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    ACME_HOME="$SCRIPT_DIR/.acme.sh"
+
+    if [ ! -f "$ACME_HOME/acme.sh" ]; then
+        echo "Error: acme.sh not installed. Run: bash update_server.sh install-acme"
+        exit 1
+    fi
+
+    "$ACME_HOME/acme.sh" --renew-all --home "$ACME_HOME"
+
+    # Read domain from database and install certs
+    if command -v sqlite3 &>/dev/null; then
+        DOMAIN=$(sqlite3 "$SCRIPT_DIR/meistertracker.db" "SELECT domain FROM duckdns_config WHERE id=1" 2>/dev/null)
+    fi
+    if [ -n "$DOMAIN" ]; then
+        FULL_DOMAIN="${DOMAIN}.duckdns.org"
+        "$ACME_HOME/acme.sh" --install-cert -d "$FULL_DOMAIN" \
+            --key-file "$SCRIPT_DIR/certs/server.key" \
+            --fullchain-file "$SCRIPT_DIR/certs/server.crt" \
+            --home "$ACME_HOME"
+        echo "Certificate renewed and installed for $FULL_DOMAIN"
+        echo "Restarting server..."
+        if command -v pm2 &> /dev/null && pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
+            pm2 restart "$PM2_PROCESS_NAME"
+        fi
+    else
+        echo "Warning: No DuckDNS domain configured in database (or sqlite3 not available)."
+        echo "Certs renewed but not installed. Configure domain in web UI."
+    fi
+}
+
 show_usage() {
     echo "Usage: bash update_server.sh [command]"
     echo ""
     echo "Commands:"
-    echo "  (no command)   Update code from GitHub, back up data, restart server"
-    echo "  start          Start the server (without pulling updates)"
-    echo "  stop           Stop the server"
-    echo "  status         Show PM2 process status"
-    echo "  gen-cert       Generate TLS certificate for HTTPS (iOS camera support)"
-    echo "  help           Show this help message"
+    echo "  (no command)    Update code from GitHub, back up data, restart server"
+    echo "  start           Start the server (without pulling updates)"
+    echo "  stop            Stop the server"
+    echo "  status          Show PM2 process status"
+    echo "  gen-cert        Generate self-signed TLS certificate"
+    echo "  install-acme    Install acme.sh for Let's Encrypt certificates"
+    echo "  renew-cert      Manually renew Let's Encrypt certificate"
+    echo "  help            Show this help message"
 }
 
 # ---- Main ----
 
 case "${1:-update}" in
-    update)   do_update   ;;
-    start)    do_start    ;;
-    stop)     do_stop     ;;
-    status)   do_status   ;;
-    gen-cert) do_gen_cert ;;
-    help|-h|--help)  show_usage ;;
+    update)       do_update       ;;
+    start)        do_start        ;;
+    stop)         do_stop         ;;
+    status)       do_status       ;;
+    gen-cert)     do_gen_cert     ;;
+    install-acme) do_install_acme ;;
+    renew-cert)   do_renew_cert   ;;
+    help|-h|--help)  show_usage   ;;
     *)
         echo "Unknown command: $1"
         show_usage
