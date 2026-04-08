@@ -42,28 +42,8 @@ ensure_pm2() {
 
 ensure_certs() {
     if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
-        if command -v openssl &>/dev/null && openssl x509 -in certs/server.crt -issuer -noout 2>/dev/null | grep -qi "Let's Encrypt\|R3\|R10\|R11"; then
-            echo "  -> Let's Encrypt TLS certificate found."
-            # Auto-renew if close to expiry
-            local end_date days_left
-            end_date=$(openssl x509 -in certs/server.crt -noout -enddate 2>/dev/null | sed 's/notAfter=//')
-            if [ -n "$end_date" ]; then
-                local exp_ts now_ts
-                exp_ts=$(date -d "$end_date" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$end_date" +%s 2>/dev/null || echo "")
-                now_ts=$(date +%s)
-                if [ -n "$exp_ts" ]; then
-                    days_left=$(( (exp_ts - now_ts) / 86400 ))
-                    if [ "$days_left" -lt 30 ]; then
-                        echo "  -> Certificate expires in $days_left days, renewing..."
-                        renew_le_cert
-                    else
-                        echo "  -> Valid for $days_left more days."
-                    fi
-                fi
-            fi
-        else
-            echo "  -> Self-signed TLS certificate found."
-        fi
+        echo "  -> TLS certificates found."
+        # LE cert renewal is handled by the server on startup.
         return
     fi
     echo "  -> TLS certificates not found, generating..."
@@ -77,40 +57,6 @@ ensure_certs() {
         bash gen-cert.sh
     else
         echo "  -> WARNING: gen-cert.sh not found — skipping HTTPS setup."
-    fi
-}
-
-renew_le_cert() {
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    local acme_home="$SCRIPT_DIR/.acme.sh"
-    local acme_sh="$acme_home/acme.sh"
-
-    if [ ! -f "$acme_sh" ]; then
-        echo "  -> acme.sh not found, skipping renewal (server handles it)."
-        return
-    fi
-
-    # Read domain + token from database
-    local domain="" token=""
-    if command -v sqlite3 &>/dev/null; then
-        domain=$(sqlite3 "$SCRIPT_DIR/meistertracker.db" "SELECT domain FROM duckdns_config WHERE id=1" 2>/dev/null)
-        token=$(sqlite3 "$SCRIPT_DIR/meistertracker.db" "SELECT token FROM duckdns_config WHERE id=1" 2>/dev/null)
-    fi
-    if [ -z "$domain" ] || [ -z "$token" ]; then
-        echo "  -> No DuckDNS config in DB, skipping renewal."
-        return
-    fi
-
-    local full_domain="${domain}.duckdns.org"
-    DuckDNS_Token="$token" "$acme_sh" --renew -d "$full_domain" --home "$acme_home" --force 2>/dev/null
-    DuckDNS_Token="$token" "$acme_sh" --install-cert -d "$full_domain" \
-        --key-file "$SCRIPT_DIR/certs/server.key" \
-        --fullchain-file "$SCRIPT_DIR/certs/server.crt" \
-        --home "$acme_home" 2>/dev/null
-    if [ $? -eq 0 ]; then
-        echo "  -> Let's Encrypt certificate renewed for $full_domain."
-    else
-        echo "  -> WARNING: Renewal failed, server will retry automatically."
     fi
 }
 

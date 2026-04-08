@@ -332,19 +332,48 @@ function startDuckdnsUpdater() {
 startDuckdnsUpdater();
 
 // ── LET'S ENCRYPT CERT MANAGEMENT ─────────────────────────
+const IS_WIN = process.platform === 'win32';
 const ACME_HOME = path.join(DIR, '.acme.sh');
 const ACME_SH = path.join(ACME_HOME, 'acme.sh');
+
+// Convert Windows path to POSIX for bash (C:\foo\bar → /c/foo/bar)
+function bashPath(p) {
+  if (!IS_WIN) return p;
+  return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => '/' + d.toLowerCase());
+}
+
+// Locate bash — required for acme.sh on all platforms
+function findBash() {
+  if (!IS_WIN) return 'bash';
+  // Git for Windows ships bash in <git>/bin/bash.exe
+  const dirs = [
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : null,
+  ].filter(Boolean);
+  for (const d of dirs) {
+    const candidate = path.join(d, 'Git', 'bin', 'bash.exe');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'bash'; // fallback — hope it's in PATH
+}
+const BASH = findBash();
+
+// Run acme.sh with arguments — always goes through bash
+function runAcmeSh(args, env, timeout, callback) {
+  execFile(BASH, [bashPath(ACME_SH), ...args], { env, timeout }, callback);
+}
 
 function ensureAcmeSh(callback) {
   if (fs.existsSync(ACME_SH)) return callback(null);
   log('info', 'acme.sh not found, installing automatically...');
-  execFile('bash', ['-c',
-    'curl -sSL https://get.acme.sh | sh -s -- --install-online --home ' +
-    JSON.stringify(ACME_HOME) + ' --no-cron'
+  const homeArg = bashPath(ACME_HOME);
+  execFile(BASH, ['-c',
+    'curl -sSL https://get.acme.sh | sh -s -- --install-online --home \'' + homeArg + '\' --no-cron'
   ], { timeout: 60000 }, (err, stdout, stderr) => {
     if (err || !fs.existsSync(ACME_SH)) {
       log('error', 'acme.sh auto-install failed', { error: err ? err.message : 'binary not found', stderr });
-      return callback(new Error('acme.sh installation failed — ensure curl and bash are available'));
+      return callback(new Error('acme.sh installation failed — ensure curl and bash (Git for Windows) are available'));
     }
     log('info', 'acme.sh installed', { home: ACME_HOME });
     callback(null);
@@ -363,26 +392,27 @@ function requestLetsEncryptCert(callback) {
     if (installErr) return callback(installErr);
 
     const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
+    const home = bashPath(ACME_HOME);
 
-    execFile(ACME_SH, [
+    runAcmeSh([
       '--issue', '--dns', 'dns_duckdns',
       '-d', fullDomain,
-      '--home', ACME_HOME,
+      '--home', home,
       '--server', 'letsencrypt',
       '--force'
-    ], { env, timeout: 120000 }, (err, stdout, stderr) => {
+    ], env, 120000, (err, stdout, stderr) => {
       if (err) {
         log('error', 'acme.sh issue failed', { error: err.message, stderr });
         return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
       }
       log('info', 'acme.sh issue succeeded', { domain: fullDomain });
 
-      execFile(ACME_SH, [
+      runAcmeSh([
         '--install-cert', '-d', fullDomain,
-        '--key-file', CERT_KEY,
-        '--fullchain-file', CERT_CRT,
-        '--home', ACME_HOME
-      ], { env, timeout: 30000 }, (err2, stdout2, stderr2) => {
+        '--key-file', bashPath(CERT_KEY),
+        '--fullchain-file', bashPath(CERT_CRT),
+        '--home', home
+      ], env, 30000, (err2, stdout2, stderr2) => {
         if (err2) {
           log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
           return callback(new Error('Certificate installation failed'));
