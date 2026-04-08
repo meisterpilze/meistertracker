@@ -1799,6 +1799,13 @@ function handleCaldav(req, res) {
     .filter(Boolean);
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
 
+  // Validate root path segment
+  if (parts.length > 0 && parts[0] !== 'calendars') {
+    res.writeHead(400);
+    res.end('Invalid path');
+    return;
+  }
+
   // Sanitize path parts to prevent directory traversal
   for (let i = 1; i < parts.length; i++) {
     const clean = sanitizePart(parts[i]);
