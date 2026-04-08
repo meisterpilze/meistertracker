@@ -332,6 +332,25 @@ function startDuckdnsUpdater() {
 startDuckdnsUpdater();
 
 // ── LET'S ENCRYPT CERT MANAGEMENT ─────────────────────────
+const ACME_HOME = path.join(DIR, '.acme.sh');
+const ACME_SH = path.join(ACME_HOME, 'acme.sh');
+
+function ensureAcmeSh(callback) {
+  if (fs.existsSync(ACME_SH)) return callback(null);
+  log('info', 'acme.sh not found, installing automatically...');
+  execFile('bash', ['-c',
+    'curl -sSL https://get.acme.sh | sh -s -- --install-online --home ' +
+    JSON.stringify(ACME_HOME) + ' --no-cron'
+  ], { timeout: 60000 }, (err, stdout, stderr) => {
+    if (err || !fs.existsSync(ACME_SH)) {
+      log('error', 'acme.sh auto-install failed', { error: err ? err.message : 'binary not found', stderr });
+      return callback(new Error('acme.sh installation failed — ensure curl and bash are available'));
+    }
+    log('info', 'acme.sh installed', { home: ACME_HOME });
+    callback(null);
+  });
+}
+
 function requestLetsEncryptCert(callback) {
   const cfg = db.getDuckdnsCfg(database);
   if (!cfg.domain || !cfg.token) {
@@ -339,49 +358,47 @@ function requestLetsEncryptCert(callback) {
   }
 
   const fullDomain = cfg.domain + '.duckdns.org';
-  const acmeHome = path.join(DIR, '.acme.sh');
-  const acmeSh = path.join(acmeHome, 'acme.sh');
 
-  if (!fs.existsSync(acmeSh)) {
-    return callback(new Error('acme.sh not installed. Run: bash update_server.sh install-acme'));
-  }
+  ensureAcmeSh((installErr) => {
+    if (installErr) return callback(installErr);
 
-  const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
+    const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
 
-  execFile(acmeSh, [
-    '--issue', '--dns', 'dns_duckdns',
-    '-d', fullDomain,
-    '--home', acmeHome,
-    '--server', 'letsencrypt',
-    '--force'
-  ], { env, timeout: 120000 }, (err, stdout, stderr) => {
-    if (err) {
-      log('error', 'acme.sh issue failed', { error: err.message, stderr });
-      return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
-    }
-    log('info', 'acme.sh issue succeeded', { domain: fullDomain });
-
-    execFile(acmeSh, [
-      '--install-cert', '-d', fullDomain,
-      '--key-file', CERT_KEY,
-      '--fullchain-file', CERT_CRT,
-      '--home', acmeHome
-    ], { env, timeout: 30000 }, (err2, stdout2, stderr2) => {
-      if (err2) {
-        log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
-        return callback(new Error('Certificate installation failed'));
+    execFile(ACME_SH, [
+      '--issue', '--dns', 'dns_duckdns',
+      '-d', fullDomain,
+      '--home', ACME_HOME,
+      '--server', 'letsencrypt',
+      '--force'
+    ], { env, timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) {
+        log('error', 'acme.sh issue failed', { error: err.message, stderr });
+        return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
       }
+      log('info', 'acme.sh issue succeeded', { domain: fullDomain });
 
-      const now = new Date();
-      const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-      db.updateDuckdnsStatus(database, {
-        leLastRenewal: now.toISOString(),
-        leExpiry: expiry.toISOString()
+      execFile(ACME_SH, [
+        '--install-cert', '-d', fullDomain,
+        '--key-file', CERT_KEY,
+        '--fullchain-file', CERT_CRT,
+        '--home', ACME_HOME
+      ], { env, timeout: 30000 }, (err2, stdout2, stderr2) => {
+        if (err2) {
+          log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
+          return callback(new Error('Certificate installation failed'));
+        }
+
+        const now = new Date();
+        const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+        db.updateDuckdnsStatus(database, {
+          leLastRenewal: now.toISOString(),
+          leExpiry: expiry.toISOString()
+        });
+
+        reloadTlsCerts();
+        log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
+        callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
       });
-
-      reloadTlsCerts();
-      log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
-      callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
     });
   });
 }
