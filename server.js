@@ -662,6 +662,7 @@ function taskToVTODO(task) {
   lines.push('PRIORITY:' + (prioMap[task.priority] || 0));
   lines.push('STATUS:' + (task.done ? 'COMPLETED' : 'NEEDS-ACTION'));
   if (task.done) lines.push('PERCENT-COMPLETE:100');
+  lines.push('X-MEISTERPILZE-TYPE:task');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
   if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
   lines.push('END:VTODO', 'END:VCALENDAR');
