@@ -28,7 +28,10 @@ async function queuePendingScan(body) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).add({ body, queuedAt: new Date().toISOString() });
-    tx.oncomplete = () => { resolve(); notifyClients(); };
+    tx.oncomplete = () => {
+      resolve();
+      notifyClients();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -75,31 +78,34 @@ async function replayPendingScans() {
 }
 
 function notifyClients() {
-  self.clients.matchAll().then(clients => {
-    getPendingScans().then(pending => {
-      const msg = { type: 'offline-queue-update', pendingCount: pending.length };
-      clients.forEach(c => c.postMessage(msg));
-    }).catch(() => {});
+  self.clients.matchAll().then((clients) => {
+    getPendingScans()
+      .then((pending) => {
+        const msg = { type: 'offline-queue-update', pendingCount: pending.length };
+        clients.forEach((c) => c.postMessage(msg));
+      })
+      .catch(() => {});
   });
 }
 
 // ── Service Worker lifecycle ────────────────────────────────
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(ASSETS))
+      .catch(() => {})
+  );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
+self.addEventListener('activate', (e) => {
   // Evict all caches that don't match the current version
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));
   self.clients.claim();
 });
 
-self.addEventListener('message', e => {
+self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'replay-pending') {
     replayPendingScans();
   }
@@ -109,7 +115,7 @@ self.addEventListener('message', e => {
 });
 
 // ── Fetch handler ───────────────────────────────────────────
-self.addEventListener('fetch', e => {
+self.addEventListener('fetch', (e) => {
   // API calls
   if (e.request.url.includes('/api/')) {
     // Special: queue scan-log POSTs when offline
@@ -118,18 +124,17 @@ self.addEventListener('fetch', e => {
         fetch(e.request.clone()).catch(async () => {
           const body = await e.request.json();
           await queuePendingScan(body);
-          return new Response(
-            JSON.stringify({ ok: true, queued: true }),
-            { headers: { 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ ok: true, queued: true }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
         })
       );
       return;
     }
     // All other API calls: network only, offline error fallback
     e.respondWith(
-      fetch(e.request).catch(() =>
-        new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
+      fetch(e.request).catch(
+        () => new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
       )
     );
     return;
@@ -142,9 +147,9 @@ self.addEventListener('fetch', e => {
   // Everything else — network first, fall back to cache for offline
   e.respondWith(
     fetch(e.request)
-      .then(res => {
+      .then((res) => {
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then((c) => c.put(e.request, clone));
         // Opportunistically replay queued scans when network is available
         replayPendingScans();
         return res;

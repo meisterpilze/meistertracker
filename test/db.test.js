@@ -13,8 +13,13 @@ function tmpDb() {
 
 describe('db – schema & init', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('opens a fresh database without error', () => {
     assert.ok(d);
@@ -50,10 +55,13 @@ describe('db – schema & init', () => {
       cultures: ['idx_cultures_parent'],
       manual_tasks: ['idx_tasks_assignee', 'idx_tasks_due'],
       calendar_events: ['idx_calevents_start'],
-      calendar_event_assignees: ['idx_calassign_user'],
+      calendar_event_assignees: ['idx_calassign_user']
     };
     for (const [table, names] of Object.entries(expected)) {
-      const indexes = d.prepare(`SELECT name FROM pragma_index_list('${table}')`).all().map(r => r.name);
+      const indexes = d
+        .prepare(`SELECT name FROM pragma_index_list('${table}')`)
+        .all()
+        .map((r) => r.name);
       for (const name of names) {
         assert.ok(indexes.includes(name), `Missing index ${name} on ${table}`);
       }
@@ -61,13 +69,13 @@ describe('db – schema & init', () => {
   });
 
   it('migration v6 creates unique caldav_uid indexes', () => {
-    const taskIndexes = d.prepare("SELECT name, \"unique\" as u FROM pragma_index_list('manual_tasks')").all();
-    const ti = taskIndexes.find(r => r.name === 'idx_tasks_caldav_uid');
+    const taskIndexes = d.prepare('SELECT name, "unique" as u FROM pragma_index_list(\'manual_tasks\')').all();
+    const ti = taskIndexes.find((r) => r.name === 'idx_tasks_caldav_uid');
     assert.ok(ti, 'Missing unique index idx_tasks_caldav_uid on manual_tasks');
     assert.equal(ti.u, 1, 'idx_tasks_caldav_uid should be unique');
 
-    const eventIndexes = d.prepare("SELECT name, \"unique\" as u FROM pragma_index_list('calendar_events')").all();
-    const ei = eventIndexes.find(r => r.name === 'idx_calevents_caldav_uid');
+    const eventIndexes = d.prepare('SELECT name, "unique" as u FROM pragma_index_list(\'calendar_events\')').all();
+    const ei = eventIndexes.find((r) => r.name === 'idx_calevents_caldav_uid');
     assert.ok(ei, 'Missing unique index idx_calevents_caldav_uid on calendar_events');
     assert.equal(ei.u, 1, 'idx_calevents_caldav_uid should be unique');
   });
@@ -75,8 +83,13 @@ describe('db – schema & init', () => {
 
 describe('db – auth (users & sessions)', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('createUser stores a user', () => {
     const u = db.createUser(d, 'alice', 'password123', 'admin');
@@ -156,8 +169,13 @@ describe('db – auth (users & sessions)', () => {
 
 describe('db – batches CRUD', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   const batch = {
     batchId: 'B-001',
@@ -216,17 +234,37 @@ describe('db – scan log', () => {
   before(() => {
     ({ db: d, path: p } = tmpDb());
     db.insertBatch(d, {
-      batchId: 'B-002', species: 'Lentinula edodes', strain: null, qty: 1,
-      days: 90, created: '2024-01-01T00:00:00Z', due: '2024-04-01T00:00:00Z', bags: ['B-002-01']
+      batchId: 'B-002',
+      species: 'Lentinula edodes',
+      strain: null,
+      qty: 1,
+      days: 90,
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-04-01T00:00:00Z',
+      bags: ['B-002-01']
     });
   });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('appendScanEntries adds entries and returns IDs', () => {
-    const ids = db.appendScanEntries(d, [
-      { time: '2024-01-02T10:00:00Z', action: 'ADD', batch: 'B-002', bag: 'B-002-01', from: null, to: 'Inoculation' },
-      { time: '2024-01-02T11:00:00Z', action: 'MOVE', batch: 'B-002', bag: 'B-002-01', from: 'Inoculation', to: 'Incubation' }
-    ], null);
+    const ids = db.appendScanEntries(
+      d,
+      [
+        { time: '2024-01-02T10:00:00Z', action: 'ADD', batch: 'B-002', bag: 'B-002-01', from: null, to: 'Inoculation' },
+        {
+          time: '2024-01-02T11:00:00Z',
+          action: 'MOVE',
+          batch: 'B-002',
+          bag: 'B-002-01',
+          from: 'Inoculation',
+          to: 'Incubation'
+        }
+      ],
+      null
+    );
     assert.equal(ids.length, 2);
   });
 
@@ -245,13 +283,23 @@ describe('db – scan log', () => {
 
 describe('db – harvests', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('insertHarvest returns an ID', () => {
     const id = db.insertHarvest(d, {
-      time: '2024-03-01T08:00:00Z', batch: 'B-002', bag: 'B-002-01',
-      species: 'Lentinula edodes', strain: null, grams: 250, flush: 1
+      time: '2024-03-01T08:00:00Z',
+      batch: 'B-002',
+      bag: 'B-002-01',
+      species: 'Lentinula edodes',
+      strain: null,
+      grams: 250,
+      flush: 1
     });
     assert.ok(id);
   });
@@ -263,21 +311,43 @@ describe('db – harvests', () => {
   });
 
   it('insertHarvest rejects negative grams', () => {
-    assert.throws(() => db.insertHarvest(d, {
-      time: '2024-03-01T08:00:00Z', batch: 'B-002', bag: 'B-002-01',
-      species: 'Lentinula edodes', strain: null, grams: -5, flush: 1
-    }), /grams must be >= 0/);
+    assert.throws(
+      () =>
+        db.insertHarvest(d, {
+          time: '2024-03-01T08:00:00Z',
+          batch: 'B-002',
+          bag: 'B-002-01',
+          species: 'Lentinula edodes',
+          strain: null,
+          grams: -5,
+          flush: 1
+        }),
+      /grams must be >= 0/
+    );
   });
 });
 
 describe('db – cultures', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('insertCultures adds cultures', () => {
     db.insertCultures(d, [
-      { id: 'C-001', type: 'mother', species: 'Pleurotus', strain: 'HK35', status: 'active', notes: '', created: '2024-01-01T00:00:00Z' }
+      {
+        id: 'C-001',
+        type: 'mother',
+        species: 'Pleurotus',
+        strain: 'HK35',
+        status: 'active',
+        notes: '',
+        created: '2024-01-01T00:00:00Z'
+      }
     ]);
     const data = db.readAll(d);
     assert.equal(data.cultures.length, 1);
@@ -293,8 +363,13 @@ describe('db – cultures', () => {
 
 describe('db – tasks', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('insertTask returns an ID', () => {
     const id = db.insertTask(d, { text: 'Clean lab', priority: 'high', done: false, created: '2024-01-01T00:00:00Z' });
@@ -317,8 +392,13 @@ describe('db – tasks', () => {
 
 describe('db – team members', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('insertMember returns an ID', () => {
     const id = db.insertMember(d, { name: 'Max', role: 'Technician', added: '2024-01-01T00:00:00Z' });
@@ -334,8 +414,13 @@ describe('db – team members', () => {
 
 describe('db – inventory', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('applyInventoryDelta adds stock', () => {
     const val = db.applyInventoryDelta(d, 'hardwood', 100, 'delivery', 'Lieferung #1');
@@ -371,13 +456,22 @@ describe('db – inventory', () => {
 
 describe('db – assets', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('upsertAsset creates an asset', () => {
     db.upsertAsset(d, {
-      assetId: 'A-001', name: 'Autoclave', category: 'Equipment',
-      entryDate: '2024-01-01', purchasePrice: 5000, usefulLife: 10,
+      assetId: 'A-001',
+      name: 'Autoclave',
+      category: 'Equipment',
+      entryDate: '2024-01-01',
+      purchasePrice: 5000,
+      usefulLife: 10,
       created: '2024-01-01T00:00:00Z'
     });
     const data = db.readAll(d);
@@ -387,8 +481,12 @@ describe('db – assets', () => {
 
   it('upsertAsset updates existing asset', () => {
     db.upsertAsset(d, {
-      assetId: 'A-001', name: 'Autoclave XL', category: 'Equipment',
-      entryDate: '2024-01-01', purchasePrice: 7000, usefulLife: 10,
+      assetId: 'A-001',
+      name: 'Autoclave XL',
+      category: 'Equipment',
+      entryDate: '2024-01-01',
+      purchasePrice: 7000,
+      usefulLife: 10,
       created: '2024-01-01T00:00:00Z'
     });
     const data = db.readAll(d);
@@ -408,12 +506,19 @@ describe('db – calendar events', () => {
     ({ db: d, path: p } = tmpDb());
     db.createUser(d, 'cal-user', 'password123', 'user');
   });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('insertCalendarEvent creates an event', () => {
     db.insertCalendarEvent(d, {
-      id: 'ev-001', title: 'Inoculation day', startDate: '2024-02-01',
-      endDate: '2024-02-01', allDay: true, category: 'custom'
+      id: 'ev-001',
+      title: 'Inoculation day',
+      startDate: '2024-02-01',
+      endDate: '2024-02-01',
+      allDay: true,
+      category: 'custom'
     });
     const data = db.readAll(d);
     assert.equal(data.calendarEvents.length, 1);
@@ -442,8 +547,13 @@ describe('db – calendar events', () => {
 
 describe('db – data versioning', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('version increments on mutations', () => {
     const v0 = db.getDataVersion(d);
@@ -455,8 +565,13 @@ describe('db – data versioning', () => {
 
 describe('db – backup', () => {
   let d, p;
-  before(() => { ({ db: d, path: p } = tmpDb()); });
-  after(() => { d.close(); fs.unlinkSync(p); });
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
 
   it('backupDb creates a valid copy', () => {
     db.insertTask(d, { text: 'Backup test', priority: 'low', done: false, created: '2024-01-01T00:00:00Z' });
@@ -465,7 +580,7 @@ describe('db – backup', () => {
     assert.ok(fs.existsSync(dest));
     const d2 = db.openDb(dest);
     const data = db.readAll(d2);
-    assert.ok(data.manualTasks.some(t => t.text === 'Backup test'));
+    assert.ok(data.manualTasks.some((t) => t.text === 'Backup test'));
     d2.close();
     fs.unlinkSync(dest);
   });

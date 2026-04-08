@@ -2398,6 +2398,7 @@ function openStab(page,sub){
   if(page==='cal'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='duckdns')loadDuckdnsSettings();
+  if(page==='settings'&&sub==='mcp')loadMcpSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
@@ -3494,6 +3495,63 @@ function restartServer(){
       },3000);
     }catch(e){status.textContent='Fehler: '+e.message;status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
   });
+}
+
+// ─── MCP SETTINGS ───────────────────────────────────────────
+let _mcpToken='';
+async function loadMcpSettings(){
+  try{
+    const r=await authFetch('/api/mcp/config');
+    if(!r.ok)return;
+    const cfg=await r.json();
+    $('mcp-enabled').checked=cfg.enabled;
+    $('mcp-url').value=cfg.connectorUrl||'';
+    toggleMcpSections(cfg.enabled);
+    const banner=$('mcp-status-banner');
+    if(cfg.enabled&&cfg.hasToken){
+      banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+      banner.textContent='MCP Server aktiv';
+    }else if(cfg.enabled){
+      banner.style.display='block';banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
+      banner.textContent='MCP aktiviert, aber kein API-Schlüssel generiert.';
+    }else{banner.style.display='none'}
+    const statusR=await authFetch('/api/mcp/status');
+    if(statusR.ok){
+      const st=await statusR.json();
+      if(st.activeSessions>0){
+        banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+        banner.textContent='MCP Server aktiv — '+st.activeSessions+' Sitzung'+(st.activeSessions>1?'en':'');
+      }
+    }
+  }catch(e){/* non-admin */}
+}
+function toggleMcpSections(enabled){
+  $('mcp-url-section').style.display=enabled?'block':'none';
+  $('mcp-token-section').style.display=enabled?'block':'none';
+}
+function showMcpStatus(msg,color){
+  const el=$('mcp-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},8000);
+}
+async function saveMcpSettings(){
+  try{
+    const r=await apiPost('/api/mcp/config',{enabled:$('mcp-enabled').checked});
+    if(r.error){showMcpStatus('Fehler: '+r.error,'#b91c1c')}
+    else{showMcpStatus('Einstellungen gespeichert.','#166534');loadMcpSettings()}
+  }catch(e){showMcpStatus('Fehler: '+e.message,'#b91c1c')}
+}
+async function generateMcpToken(){
+  try{
+    const r=await authFetch('/api/mcp/generate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const data=await r.json();
+    if(data.error){showMcpStatus('Fehler: '+data.error,'#b91c1c');return}
+    _mcpToken=data.token;
+    $('mcp-token-display').textContent=data.token;
+    $('mcp-token-display').style.display='block';
+    $('mcp-copy-token-btn').style.display='inline-flex';
+    showMcpStatus('API-Schlüssel generiert. Jetzt kopieren!','#166534');
+  }catch(e){showMcpStatus('Fehler: '+e.message,'#b91c1c')}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6150,11 +6208,17 @@ function initEventListeners() {
   $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
   $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
   $('st-settings-duckdns').addEventListener('click', () => { openStab('settings','duckdns'); });
+  $('st-settings-mcp').addEventListener('click', () => { openStab('settings','mcp'); });
   $('st-settings-server').addEventListener('click', () => { openStab('settings','server'); loadServerTab(); });
   $('btn-server-restart').addEventListener('click', restartServer);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
+  $('mcp-save-btn').addEventListener('click', saveMcpSettings);
+  $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
+  $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
+  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus('URL kopiert!','#166534');});
+  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus('Schlüssel kopiert!','#166534');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
