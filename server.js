@@ -1784,7 +1784,14 @@ function handleCaldav(req, res) {
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
-  const rawPath = decodeURIComponent(req.url.split('?')[0]).replace(/\/+/g, '/');
+  let rawPath;
+  try {
+    rawPath = decodeURIComponent(req.url.split('?')[0]).replace(/\/+/g, '/');
+  } catch (e) {
+    res.writeHead(400);
+    res.end('Bad Request: malformed URL encoding');
+    return;
+  }
   const parts = rawPath
     .replace(/^\/caldav\/?/, '')
     .replace(/\/$/, '')
