@@ -4482,39 +4482,19 @@ function handleRequest(req, res) {
   }
 
   // POST /api/caldav/sync — write all tasks to local calendar files
+  // Reads all data from DB only — ignores request body to prevent client-supplied data injection
   if (req.method === 'POST' && req.url === '/api/caldav/sync') {
-    let body = '';
-    let bodySize = 0;
-    let aborted = false;
-    req.on('data', (c) => {
-      bodySize += c.length;
-      if (bodySize > MAX_BODY_SIZE) {
-        aborted = true;
-        jsonErr(res, 413, 'Payload too large');
-        req.destroy();
-        return;
-      }
-      body += c;
-    });
-    req.on('end', () => {
-      if (aborted) return;
-      try {
-        const data = readData();
-        const incoming = JSON.parse(body);
-        if (incoming.caldav) data.caldav = incoming.caldav;
-        if (incoming.teamMembers) data.teamMembers = incoming.teamMembers;
-        if (incoming.manualTasks) data.manualTasks = incoming.manualTasks;
-
-        const result = syncAllTasksLocal(data);
-        writeData(data);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
-      } catch (e) {
-        log('error', 'CalDAV sync error', { error: e.message });
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: e.message }));
-      }
-    });
+    try {
+      const data = readData();
+      const result = syncAllTasksLocal(data);
+      writeData(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      log('error', 'CalDAV sync error', { error: e.message });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
     return;
   }
 
