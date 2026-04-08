@@ -99,9 +99,18 @@ function checkMcpAuth(req) {
   if (!auth.startsWith('Bearer ')) return false;
   const token = auth.slice(7);
   const hash = crypto.createHash('sha256').update(token).digest('hex');
+
+  // Try legacy static API token
   const stored = db.getMcpToken(database);
-  if (!stored) return false;
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(stored));
+  if (stored && crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(stored))) {
+    return true;
+  }
+
+  // Try OAuth access token
+  const oauthToken = db.getOAuthAccessToken(database, hash);
+  if (oauthToken) return true;
+
+  return false;
 }
 
 // Simple sliding-window rate limiter for MCP endpoint (60 requests/minute)
@@ -192,6 +201,40 @@ function jsonBody(req, res, cb) {
     }
   });
 }
+function formBody(req, res, cb) {
+  let body = '';
+  let sz = 0;
+  let aborted = false;
+  req.on('data', (c) => {
+    sz += c.length;
+    if (sz > MAX_BODY_SIZE) {
+      aborted = true;
+      jsonErr(res, 413, 'Payload too large');
+      req.destroy();
+      return;
+    }
+    body += c;
+  });
+  req.on('end', () => {
+    if (aborted) return;
+    try {
+      const params = new URLSearchParams(body);
+      cb(null, Object.fromEntries(params.entries()));
+    } catch (e) {
+      jsonErr(res, 400, 'bad form data');
+    }
+  });
+}
+
+function verifyPkce(codeVerifier, storedCodeChallenge) {
+  return crypto.createHash('sha256').update(codeVerifier).digest('base64url') === storedCodeChallenge;
+}
+
+function getBaseUrl(req) {
+  const host = req.headers.host || 'localhost:' + PORT;
+  return protocol + '://' + host;
+}
+
 function jsonOk(res, data) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data || { ok: true }));
@@ -309,9 +352,13 @@ function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', 'session=; ' + cookieFlags() + ' Max-Age=0');
 }
 
-// Clean expired sessions on startup and hourly
+// Clean expired sessions + OAuth data on startup and hourly
 db.deleteExpiredSessions(database);
-setInterval(() => db.deleteExpiredSessions(database), 60 * 60 * 1000);
+db.deleteExpiredOAuthData(database);
+setInterval(() => {
+  db.deleteExpiredSessions(database);
+  db.deleteExpiredOAuthData(database);
+}, 60 * 60 * 1000);
 
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
@@ -2896,6 +2943,248 @@ function handleRequest(req, res) {
     return handleCaldav(req, res);
   }
 
+  // ── OAuth 2.0 well-known endpoints (public, no auth) ──
+  if (req.method === 'GET' && req.url === '/.well-known/oauth-protected-resource') {
+    const base = getBaseUrl(req);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      resource: base,
+      authorization_servers: [base],
+      bearer_methods_supported: ['header']
+    }));
+    return;
+  }
+  if (req.method === 'GET' && req.url === '/.well-known/oauth-authorization-server') {
+    const base = getBaseUrl(req);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      issuer: base,
+      authorization_endpoint: base + '/oauth/authorize',
+      token_endpoint: base + '/oauth/token',
+      registration_endpoint: base + '/oauth/register',
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      token_endpoint_auth_methods_supported: ['none'],
+      code_challenge_methods_supported: ['S256']
+    }));
+    return;
+  }
+
+  // ── OAuth 2.0 endpoints (before auth gate) ──
+  if (req.url.startsWith('/oauth/')) {
+    // CORS for token + register endpoints
+    if (req.url === '/oauth/token' || req.url === '/oauth/register') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    }
+
+    // Dynamic Client Registration (RFC 7591) — public
+    if (req.method === 'POST' && req.url === '/oauth/register') {
+      jsonBody(req, res, (e, data) => {
+        if (e) return;
+        try {
+          const clientId = data.client_id || crypto.randomUUID();
+          const redirectUris = data.redirect_uris || [];
+          if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
+            return jsonErr(res, 400, 'redirect_uris required');
+          }
+          const client = db.registerOAuthClient(database, {
+            clientId,
+            clientName: data.client_name || '',
+            redirectUris
+          });
+          jsonOk(res, {
+            client_id: client.client_id,
+            client_name: client.client_name,
+            redirect_uris: JSON.parse(client.redirect_uris || '[]'),
+            token_endpoint_auth_method: 'none',
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code']
+          });
+        } catch (err) { safeErr(res, err); }
+      });
+      return;
+    }
+
+    // Token endpoint — public
+    if (req.method === 'POST' && req.url === '/oauth/token') {
+      const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+      const parser = ct === 'application/json' ? jsonBody : formBody;
+      parser(req, res, (e, data) => {
+        if (e) return;
+        try {
+          if (data.grant_type === 'authorization_code') {
+            if (!data.code || !data.code_verifier || !data.client_id || !data.redirect_uri) {
+              return jsonErr(res, 400, 'missing required parameters');
+            }
+            const codeHash = crypto.createHash('sha256').update(data.code).digest('hex');
+            const codeRow = db.getOAuthCode(database, codeHash);
+            if (!codeRow) return jsonErr(res, 400, 'invalid_grant');
+            if (codeRow.clientId !== data.client_id) return jsonErr(res, 400, 'invalid_grant');
+            if (codeRow.redirectUri !== data.redirect_uri) return jsonErr(res, 400, 'invalid_grant');
+            if (!verifyPkce(data.code_verifier, codeRow.codeChallenge)) return jsonErr(res, 400, 'invalid_grant');
+
+            db.markOAuthCodeUsed(database, codeHash);
+
+            const accessToken = crypto.randomBytes(32).toString('hex');
+            const refreshToken = crypto.randomBytes(32).toString('hex');
+            const accessHash = crypto.createHash('sha256').update(accessToken).digest('hex');
+            const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+            db.createOAuthToken(database, { token: accessHash, tokenType: 'access', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 3600, refreshTokenRef: refreshHash });
+            db.createOAuthToken(database, { token: refreshHash, tokenType: 'refresh', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 30 * 24 * 3600 });
+
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ access_token: accessToken, token_type: 'bearer', expires_in: 3600, refresh_token: refreshToken }));
+          } else if (data.grant_type === 'refresh_token') {
+            if (!data.refresh_token || !data.client_id) return jsonErr(res, 400, 'missing required parameters');
+            const refreshHash = crypto.createHash('sha256').update(data.refresh_token).digest('hex');
+            const refreshRow = db.getOAuthRefreshToken(database, refreshHash);
+            if (!refreshRow) return jsonErr(res, 400, 'invalid_grant');
+            if (refreshRow.clientId !== data.client_id) return jsonErr(res, 400, 'invalid_grant');
+
+            // Revoke old tokens (rotation)
+            db.revokeOAuthTokensByRefresh(database, refreshHash);
+
+            const newAccessToken = crypto.randomBytes(32).toString('hex');
+            const newRefreshToken = crypto.randomBytes(32).toString('hex');
+            const newAccessHash = crypto.createHash('sha256').update(newAccessToken).digest('hex');
+            const newRefreshHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+
+            db.createOAuthToken(database, { token: newAccessHash, tokenType: 'access', clientId: data.client_id, userId: refreshRow.userId, expiresInSeconds: 3600, refreshTokenRef: newRefreshHash });
+            db.createOAuthToken(database, { token: newRefreshHash, tokenType: 'refresh', clientId: data.client_id, userId: refreshRow.userId, expiresInSeconds: 30 * 24 * 3600 });
+
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ access_token: newAccessToken, token_type: 'bearer', expires_in: 3600, refresh_token: newRefreshToken }));
+          } else {
+            jsonErr(res, 400, 'unsupported_grant_type');
+          }
+        } catch (err) { safeErr(res, err); }
+      });
+      return;
+    }
+
+    // Authorization endpoint — requires session cookie
+    if (req.url.startsWith('/oauth/authorize')) {
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      if (req.method === 'GET') {
+        const authUser = checkAuth(req);
+        if (!authUser) {
+          res.writeHead(302, { Location: '/login.html?redirect=' + encodeURIComponent(req.url) });
+          res.end();
+          return;
+        }
+        const clientId = parsedUrl.searchParams.get('client_id') || '';
+        const redirectUri = parsedUrl.searchParams.get('redirect_uri') || '';
+        const state = parsedUrl.searchParams.get('state') || '';
+        const codeChallenge = parsedUrl.searchParams.get('code_challenge') || '';
+        const codeChallengeMethod = parsedUrl.searchParams.get('code_challenge_method') || '';
+        const responseType = parsedUrl.searchParams.get('response_type') || '';
+
+        if (responseType !== 'code') { jsonErr(res, 400, 'unsupported_response_type'); return; }
+        if (codeChallengeMethod !== 'S256') { jsonErr(res, 400, 'invalid code_challenge_method'); return; }
+        if (!codeChallenge) { jsonErr(res, 400, 'code_challenge required'); return; }
+
+        const client = db.getOAuthClient(database, clientId);
+        if (!client) { jsonErr(res, 400, 'invalid client_id'); return; }
+        if (!client.redirectUris.includes(redirectUri)) { jsonErr(res, 400, 'invalid redirect_uri'); return; }
+
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const clientName = client.clientName || clientId;
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Authorize – Meisterpilze</title><link rel="icon" href="/favicon.ico">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b;font-size:15px;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:36px;width:100%;max-width:420px;margin:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.07)}
+.logo{text-align:center;margin-bottom:8px;color:#16a34a}
+h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
+.sub{color:#64748b;font-size:14px;text-align:center;margin-bottom:24px}
+.client{font-weight:600;color:#1e293b}
+.perms{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px;color:#166534}
+.perms li{margin:4px 0;list-style:disc inside}
+.btns{display:flex;gap:12px}
+.btn{flex:1;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
+.btn-allow{background:#16a34a;color:#fff}.btn-allow:hover{background:#15803d}
+.btn-deny{background:#e2e8f0;color:#475569}.btn-deny:hover{background:#cbd5e1}
+</style></head><body>
+<div class="card">
+  <div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M12 13v5M8 21h8M9 3c0 0-2-2-2-3M15 3c0 0 2-2 2-3"/></svg></div>
+  <h1>Authorize Access</h1>
+  <p class="sub"><span class="client">${esc(clientName)}</span> wants to access<br>Meisterpilze Lab Tracker</p>
+  <ul class="perms">
+    <li>Read batches, tasks, calendar, inventory</li>
+    <li>Create and update batches, tasks, events</li>
+    <li>Log harvests and bag movements</li>
+  </ul>
+  <form method="POST" action="/oauth/authorize">
+    <input type="hidden" name="client_id" value="${esc(clientId)}">
+    <input type="hidden" name="redirect_uri" value="${esc(redirectUri)}">
+    <input type="hidden" name="state" value="${esc(state)}">
+    <input type="hidden" name="code_challenge" value="${esc(codeChallenge)}">
+    <input type="hidden" name="code_challenge_method" value="${esc(codeChallengeMethod)}">
+    <input type="hidden" name="response_type" value="code">
+    <div class="btns">
+      <button type="submit" name="action" value="deny" class="btn btn-deny">Deny</button>
+      <button type="submit" name="action" value="allow" class="btn btn-allow">Allow</button>
+    </div>
+  </form>
+</div></body></html>`);
+        return;
+      }
+
+      if (req.method === 'POST') {
+        const authUser = checkAuth(req);
+        if (!authUser) { jsonErr(res, 401, 'unauthorized'); return; }
+        formBody(req, res, (e, data) => {
+          if (e) return;
+          const redirectUri = data.redirect_uri || '';
+          const state = data.state || '';
+
+          if (data.action === 'deny') {
+            const sep = redirectUri.includes('?') ? '&' : '?';
+            res.writeHead(302, { Location: redirectUri + sep + 'error=access_denied' + (state ? '&state=' + encodeURIComponent(state) : '') });
+            res.end();
+            return;
+          }
+
+          const clientId = data.client_id || '';
+          const client = db.getOAuthClient(database, clientId);
+          if (!client || !client.redirectUris.includes(redirectUri)) {
+            jsonErr(res, 400, 'invalid client or redirect_uri');
+            return;
+          }
+
+          const code = crypto.randomBytes(32).toString('hex');
+          const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+          db.createOAuthCode(database, {
+            code: codeHash,
+            clientId,
+            userId: authUser.id,
+            redirectUri,
+            codeChallenge: data.code_challenge || '',
+            codeChallengeMethod: data.code_challenge_method || 'S256'
+          });
+
+          const sep = redirectUri.includes('?') ? '&' : '?';
+          res.writeHead(302, { Location: redirectUri + sep + 'code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '') });
+          res.end();
+        });
+        return;
+      }
+    }
+
+    // Unknown /oauth/ endpoint
+    jsonErr(res, 404, 'not found');
+    return;
+  }
+
   // ── MCP endpoint (own CORS + bearer auth, before cookie auth gate) ──
   if (req.url === '/mcp' || req.url.startsWith('/mcp?')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -2914,7 +3203,11 @@ function handleRequest(req, res) {
       return;
     }
     if (!checkMcpAuth(req)) {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
+      const base = getBaseUrl(req);
+      res.writeHead(401, {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer, resource_metadata="' + base + '/.well-known/oauth-protected-resource"'
+      });
       res.end('{"error":"unauthorized"}');
       return;
     }
