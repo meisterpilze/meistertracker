@@ -284,6 +284,128 @@ function scheduleDailyBackup(){
 }
 scheduleDailyBackup();
 
+// ── DUCKDNS IP UPDATE ──────────────────────────────────────
+let duckdnsInterval = null;
+
+function updateDuckdnsIP(callback) {
+  const cfg = db.getDuckdnsCfg(database);
+  if (!cfg.enabled || !cfg.domain || !cfg.token) { if (callback) callback(null); return; }
+
+  const url = 'https://www.duckdns.org/update?domains=' +
+    encodeURIComponent(cfg.domain) + '&token=' +
+    encodeURIComponent(cfg.token) + '&verbose=true';
+
+  https.get(url, (resp) => {
+    let data = '';
+    resp.on('data', c => { data += c; });
+    resp.on('end', () => {
+      const lines = data.trim().split('\n');
+      const ok = lines[0] === 'OK';
+      const ip = lines.length > 1 ? lines[1] : null;
+      if (ok) {
+        db.updateDuckdnsStatus(database, {
+          lastIpUpdate: new Date().toISOString(),
+          lastIp: ip || cfg.lastIp
+        });
+        log('info', 'DuckDNS IP updated', { domain: cfg.domain, ip });
+      } else {
+        log('warn', 'DuckDNS update failed', { domain: cfg.domain, response: data.trim() });
+      }
+      if (callback) callback(ok ? null : new Error('DuckDNS returned: ' + lines[0]));
+    });
+  }).on('error', (e) => {
+    log('error', 'DuckDNS update error', { error: e.message });
+    if (callback) callback(e);
+  });
+}
+
+function startDuckdnsUpdater() {
+  if (duckdnsInterval) { clearInterval(duckdnsInterval); duckdnsInterval = null; }
+  const cfg = db.getDuckdnsCfg(database);
+  if (cfg.enabled && cfg.domain && cfg.token) {
+    updateDuckdnsIP();
+    duckdnsInterval = setInterval(updateDuckdnsIP, 5 * 60 * 1000);
+    log('info', 'DuckDNS updater started', { domain: cfg.domain + '.duckdns.org' });
+  }
+}
+
+startDuckdnsUpdater();
+
+// ── LET'S ENCRYPT CERT MANAGEMENT ─────────────────────────
+function requestLetsEncryptCert(callback) {
+  const cfg = db.getDuckdnsCfg(database);
+  if (!cfg.domain || !cfg.token) {
+    return callback(new Error('DuckDNS domain and token required'));
+  }
+
+  const fullDomain = cfg.domain + '.duckdns.org';
+  const acmeHome = path.join(DIR, '.acme.sh');
+  const acmeSh = path.join(acmeHome, 'acme.sh');
+
+  if (!fs.existsSync(acmeSh)) {
+    return callback(new Error('acme.sh not installed. Run: bash update_server.sh install-acme'));
+  }
+
+  const env = Object.assign({}, process.env, { DuckDNS_Token: cfg.token });
+
+  execFile(acmeSh, [
+    '--issue', '--dns', 'dns_duckdns',
+    '-d', fullDomain,
+    '--home', acmeHome,
+    '--server', 'letsencrypt',
+    '--force'
+  ], { env, timeout: 120000 }, (err, stdout, stderr) => {
+    if (err) {
+      log('error', 'acme.sh issue failed', { error: err.message, stderr });
+      return callback(new Error('Certificate request failed: ' + (stderr || err.message)));
+    }
+    log('info', 'acme.sh issue succeeded', { domain: fullDomain });
+
+    execFile(acmeSh, [
+      '--install-cert', '-d', fullDomain,
+      '--key-file', CERT_KEY,
+      '--fullchain-file', CERT_CRT,
+      '--home', acmeHome
+    ], { env, timeout: 30000 }, (err2, stdout2, stderr2) => {
+      if (err2) {
+        log('error', 'acme.sh install-cert failed', { error: err2.message, stderr: stderr2 });
+        return callback(new Error('Certificate installation failed'));
+      }
+
+      const now = new Date();
+      const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      db.updateDuckdnsStatus(database, {
+        leLastRenewal: now.toISOString(),
+        leExpiry: expiry.toISOString()
+      });
+
+      reloadTlsCerts();
+      log('info', 'Let\'s Encrypt cert installed', { domain: fullDomain, expiry: expiry.toISOString() });
+      callback(null, { domain: fullDomain, expiry: expiry.toISOString() });
+    });
+  });
+}
+
+function checkCertRenewal() {
+  const cfg = db.getDuckdnsCfg(database);
+  if (!cfg.leEnabled || !cfg.domain || !cfg.token) return;
+  if (!cfg.leExpiry) return;
+
+  const expiry = new Date(cfg.leExpiry);
+  const daysLeft = (expiry - Date.now()) / (24 * 60 * 60 * 1000);
+
+  if (daysLeft < 30) {
+    log('info', 'Let\'s Encrypt cert expires in ' + Math.round(daysLeft) + ' days, renewing...');
+    requestLetsEncryptCert((err, result) => {
+      if (err) log('error', 'Auto-renewal failed', { error: err.message });
+      else log('info', 'Auto-renewal succeeded', result);
+    });
+  }
+}
+
+checkCertRenewal();
+setInterval(checkCertRenewal, 12 * 60 * 60 * 1000);
+
 // Send raw ZPL to the GK420d via Windows
 function printZPL(zplData, callback){
   const tmp=path.join(os.tmpdir(),'mp_label_'+Date.now()+'.zpl');
@@ -1930,6 +2052,70 @@ function handleRequest(req,res){
     jsonBody(req,res,(e,data)=>{if(e){jsonErr(res,400,e.message);return}try{db.updateCaldavCfg(database,data);log('info','CalDAV config updated',{actor:req.authUser.username});jsonOk(res)}catch(err){safeErr(res,err)}});return;
   }
 
+  // -- DuckDNS Config --
+  if(req.method==='POST'&&req.url==='/api/duckdns/config'){
+    if(requireAdmin(req,res))return;
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
+      if(data.domain&&!/^[a-zA-Z0-9-]+$/.test(data.domain)){jsonErr(res,400,'Domain must contain only letters, numbers, and hyphens');return}
+      if(data.token&&!/^[a-f0-9-]+$/i.test(data.token)){jsonErr(res,400,'Invalid DuckDNS token format');return}
+      try{
+        db.updateDuckdnsCfg(database,data);
+        startDuckdnsUpdater();
+        log('info','DuckDNS config updated',{actor:req.authUser.username});
+        jsonOk(res);
+      }catch(err){safeErr(res,err)}
+    });return;
+  }
+  if(req.method==='GET'&&req.url==='/api/duckdns/config'){
+    if(requireAdmin(req,res))return;
+    try{jsonOk(res,db.getDuckdnsCfg(database))}catch(err){safeErr(res,err)}return;
+  }
+  if(req.method==='POST'&&req.url==='/api/duckdns/update-ip'){
+    if(requireAdmin(req,res))return;
+    updateDuckdnsIP((err)=>{
+      if(err)jsonErr(res,500,err.message);
+      else{
+        const cfg=db.getDuckdnsCfg(database);
+        jsonOk(res,{lastIp:cfg.lastIp,lastIpUpdate:cfg.lastIpUpdate});
+      }
+    });
+    return;
+  }
+  if(req.method==='POST'&&req.url==='/api/duckdns/request-cert'){
+    if(requireAdmin(req,res))return;
+    requestLetsEncryptCert((err,result)=>{
+      if(err)jsonErr(res,500,err.message);
+      else jsonOk(res,result);
+    });
+    return;
+  }
+  if(req.method==='GET'&&req.url==='/api/duckdns/status'){
+    if(requireAdmin(req,res))return;
+    try{
+      const cfg=db.getDuckdnsCfg(database);
+      let certInfo={type:'none',exists:false};
+      try{
+        if(fs.existsSync(CERT_CRT)){
+          const certPem=fs.readFileSync(CERT_CRT,'utf8');
+          const isLE=certPem.includes('Let\'s Encrypt')||certPem.includes('R3')||certPem.includes('R10')||certPem.includes('R11');
+          certInfo={type:isLE?'letsencrypt':'self-signed',exists:true};
+        }
+      }catch(e){/* ignore */}
+      jsonOk(res,{
+        enabled:cfg.enabled,
+        domain:cfg.domain?cfg.domain+'.duckdns.org':null,
+        lastIpUpdate:cfg.lastIpUpdate,
+        lastIp:cfg.lastIp,
+        leEnabled:cfg.leEnabled,
+        leExpiry:cfg.leExpiry,
+        cert:certInfo,
+        updaterRunning:!!duckdnsInterval
+      });
+    }catch(err){safeErr(res,err)}
+    return;
+  }
+
   // -- Calendar Events --
   if(req.method==='POST'&&req.url==='/api/calendar-events'){
     jsonBody(req,res,(e,data)=>{
@@ -2297,6 +2483,19 @@ function handleRequest(req,res){
     res.writeHead(200,headers);
     res.end(data);
   });
+}
+
+// ── TLS HOT-RELOAD ──────────────────────────────────────────
+function reloadTlsCerts() {
+  if (protocol !== 'https' || !server) return;
+  try {
+    const newKey = fs.readFileSync(CERT_KEY);
+    const newCert = fs.readFileSync(CERT_CRT);
+    server.setSecureContext({ key: newKey, cert: newCert });
+    log('info', 'TLS certificates reloaded');
+  } catch (e) {
+    log('error', 'Failed to reload TLS certificates', { error: e.message });
+  }
 }
 
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
