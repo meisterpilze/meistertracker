@@ -1101,6 +1101,7 @@ function handleCaldav(req, res) {
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
   req.caldavUser = caldavUser;
+  req.caldavUserSlug = caldavUser.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
@@ -1117,6 +1118,14 @@ function handleCaldav(req, res) {
       return;
     }
     parts[i] = clean;
+  }
+
+  // Per-calendar access control: personal calendars are only accessible by that user (or admins)
+  // Shared 'meisterpilze' calendar is accessible by all authenticated users
+  function checkCalendarAccess(calName) {
+    if (calName === 'meisterpilze') return true;
+    if (req.caldavUser.role === 'admin') return true;
+    return req.caldavUserSlug === calName;
   }
 
   if (method === 'OPTIONS') {
@@ -1176,7 +1185,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/ — list all calendars
   if (parts.length === 1 && parts[0] === 'calendars') {
-    const cals = listCalendars();
+    const cals = listCalendars().filter(c => checkCalendarAccess(c));
     let responses = `<d:response>
     <d:href>/caldav/calendars/</d:href>
     <d:propstat>
@@ -1221,6 +1230,11 @@ function handlePropfind(parts, body, req, res) {
   // /caldav/calendars/<cal>/ — list items in a calendar
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -1275,6 +1289,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/<file>.ics — single item props
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
+    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
@@ -1310,6 +1325,7 @@ function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -1381,10 +1397,11 @@ function handleReport(parts, body, req, res) {
 function handleMkcalendar(parts, body, req, res) {
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
-    log('info','CalDAV calendar created',{name:calName});
+    log('info','CalDAV calendar created',{name:calName,actor:req.caldavUser.username});
     return;
   }
   res.writeHead(403);
@@ -1395,6 +1412,7 @@ function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     const fileName = parts[2];
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
@@ -1462,6 +1480,7 @@ function handlePut(parts, body, req, res) {
 function handleGet(parts, req, res) {
   // GET /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
+    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
@@ -1493,6 +1512,7 @@ function handleGet(parts, req, res) {
 function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
+    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
