@@ -271,6 +271,7 @@ exit /b %errorlevel%
 :ensure_certs
 if exist "certs\server.key" if exist "certs\server.crt" (
     echo  -^> TLS certificates found.
+    REM LE cert renewal is handled by the server on startup.
     exit /b 0
 )
 if exist "gen-cert.ps1" (

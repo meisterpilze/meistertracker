@@ -126,6 +126,18 @@ CREATE TABLE IF NOT EXISTS caldav_config (
   per_person_calendars INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS duckdns_config (
+  id              INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled         INTEGER DEFAULT 0,
+  domain          TEXT DEFAULT '',
+  token           TEXT DEFAULT '',
+  last_ip_update  TEXT,
+  last_ip         TEXT,
+  le_enabled      INTEGER DEFAULT 0,
+  le_last_renewal TEXT,
+  le_expiry       TEXT
+);
+
 CREATE TABLE IF NOT EXISTS calendar_events (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL,
@@ -264,6 +276,19 @@ const MIGRATIONS = [
   { version: 8, description: 'Add optional max_capacity to zones', fn(db) {
     db.exec('ALTER TABLE zones ADD COLUMN max_capacity INTEGER DEFAULT NULL');
   }},
+  { version: 9, description: 'Add duckdns_config table for DuckDNS and Let\'s Encrypt', fn(db) {
+    db.exec(`CREATE TABLE IF NOT EXISTS duckdns_config (
+      id              INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled         INTEGER DEFAULT 0,
+      domain          TEXT DEFAULT '',
+      token           TEXT DEFAULT '',
+      last_ip_update  TEXT,
+      last_ip         TEXT,
+      le_enabled      INTEGER DEFAULT 0,
+      le_last_renewal TEXT,
+      le_expiry       TEXT
+    )`);
+  }},
 ];
 
 function runMigrations(db) {
@@ -305,6 +330,7 @@ function openDb(dbPath) {
   // Ensure singleton rows exist
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();
+  db.prepare(`INSERT OR IGNORE INTO duckdns_config(id) VALUES(1)`).run();
   return db;
 }
 
@@ -440,6 +466,19 @@ function readAll(db, opts = {}) {
     enabled: cal.enabled === 1 ? true : false
   };
 
+  // DuckDNS config (expose hasToken flag, never the actual token)
+  const ddns = db.prepare('SELECT * FROM duckdns_config WHERE id = 1').get();
+  const duckdns = {
+    enabled: ddns.enabled === 1,
+    domain: ddns.domain || '',
+    hasToken: !!(ddns.token),
+    lastIpUpdate: ddns.last_ip_update || null,
+    lastIp: ddns.last_ip || null,
+    leEnabled: ddns.le_enabled === 1,
+    leLastRenewal: ddns.le_last_renewal || null,
+    leExpiry: ddns.le_expiry || null
+  };
+
   // Assets
   const assets = db.prepare('SELECT * FROM assets ORDER BY asset_id').all().map(r => ({
     assetId: r.asset_id,
@@ -493,7 +532,7 @@ function readAll(db, opts = {}) {
   }));
 
   const version = getDataVersion(db);
-  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, assets, calendarEvents, zones, version };
+  return { batches, scanLog, manualTasks, harvests, cultures, inventory, teamMembers, caldav, duckdns, assets, calendarEvents, zones, version };
 }
 
 // ── Data Versioning ─────────────────────────────────────────
@@ -1045,6 +1084,41 @@ function updateCaldavCfg(db, c) {
   incrementDataVersion(db);
 }
 
+// -- DuckDNS Config --
+function getDuckdnsCfg(db) {
+  const row = db.prepare('SELECT * FROM duckdns_config WHERE id = 1').get();
+  return {
+    enabled: row.enabled === 1,
+    domain: row.domain || '',
+    token: row.token || '',
+    lastIpUpdate: row.last_ip_update || null,
+    lastIp: row.last_ip || null,
+    leEnabled: row.le_enabled === 1,
+    leLastRenewal: row.le_last_renewal || null,
+    leExpiry: row.le_expiry || null
+  };
+}
+
+function updateDuckdnsCfg(db, cfg) {
+  db.prepare(`UPDATE duckdns_config SET enabled=?, domain=?, token=?, le_enabled=? WHERE id=1`).run(
+    cfg.enabled ? 1 : 0,
+    cfg.domain || '',
+    cfg.token || '',
+    cfg.leEnabled ? 1 : 0
+  );
+  incrementDataVersion(db);
+}
+
+function updateDuckdnsStatus(db, fields) {
+  const sets = [];
+  const vals = [];
+  if (fields.lastIpUpdate !== undefined) { sets.push('last_ip_update=?'); vals.push(fields.lastIpUpdate); }
+  if (fields.lastIp !== undefined) { sets.push('last_ip=?'); vals.push(fields.lastIp); }
+  if (fields.leLastRenewal !== undefined) { sets.push('le_last_renewal=?'); vals.push(fields.leLastRenewal); }
+  if (fields.leExpiry !== undefined) { sets.push('le_expiry=?'); vals.push(fields.leExpiry); }
+  if (sets.length) db.prepare('UPDATE duckdns_config SET ' + sets.join(',') + ' WHERE id=1').run(...vals);
+}
+
 // -- Inventory Delta --
 const VALID_MATS = ['hardwood','wheatbran','gypsum','grain'];
 
@@ -1239,6 +1313,7 @@ module.exports = {
   insertMember, deleteMember,
   upsertAsset, deleteAssetById,
   updateCaldavCfg,
+  getDuckdnsCfg, updateDuckdnsCfg, updateDuckdnsStatus,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
   insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
