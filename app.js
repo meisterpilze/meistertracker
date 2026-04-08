@@ -628,6 +628,29 @@ const LANG = {
     'settings.from': 'From',
     'settings.to': 'To',
     'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'mcp.title': 'MCP Server',
+    'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Use the URL and API key as a Custom Connector in Claude.',
+    'mcp.enable': 'Enable MCP server',
+    'mcp.connectorUrl': 'Connector URL',
+    'mcp.copy': 'Copy',
+    'mcp.apiKey': 'API Key',
+    'mcp.generateKey': 'Generate API key',
+    'mcp.keyHint': 'The key is only shown once. Generate a new one if lost.',
+    'mcp.save': 'Save',
+    'mcp.active': 'MCP server active',
+    'mcp.noKey': 'MCP enabled, but no API key generated.',
+    'mcp.sessions': 'MCP server active \u2014 {n} session(s)',
+    'mcp.urlCopied': 'URL copied!',
+    'mcp.keyCopied': 'Key copied!',
+    'mcp.keyGenerated': 'API key generated. Copy it now!',
+    'mcp.saved': 'Settings saved.',
+    'mcp.error': 'Error: {msg}',
+    'mcp.guideTitle': 'Setup guide',
+    'mcp.step1': '1. Enable MCP server and save',
+    'mcp.step2': '2. Generate API key and copy',
+    'mcp.step3': '3. In Claude Desktop: Settings \u2192 Integrations \u2192 Add Custom Connector',
+    'mcp.step4': '4. Paste connector URL and API key',
+    'mcp.features': 'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
     'caldav.passwordLabel': 'Password',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
@@ -1336,6 +1359,29 @@ const LANG = {
     'settings.from': 'Von',
     'settings.to': 'Nach',
     'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
+    'mcp.title': 'MCP Server',
+    'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Verwende die URL und den API-Schlüssel als Custom Connector in Claude.',
+    'mcp.enable': 'MCP Server aktivieren',
+    'mcp.connectorUrl': 'Connector URL',
+    'mcp.copy': 'Kopieren',
+    'mcp.apiKey': 'API-Schlüssel',
+    'mcp.generateKey': 'API-Schlüssel generieren',
+    'mcp.keyHint': 'Der Schlüssel wird nur einmal angezeigt. Bei Verlust neuen generieren.',
+    'mcp.save': 'Speichern',
+    'mcp.active': 'MCP Server aktiv',
+    'mcp.noKey': 'MCP aktiviert, aber kein API-Schlüssel generiert.',
+    'mcp.sessions': 'MCP Server aktiv \u2014 {n} Sitzung(en)',
+    'mcp.urlCopied': 'URL kopiert!',
+    'mcp.keyCopied': 'Schlüssel kopiert!',
+    'mcp.keyGenerated': 'API-Schlüssel generiert. Jetzt kopieren!',
+    'mcp.saved': 'Einstellungen gespeichert.',
+    'mcp.error': 'Fehler: {msg}',
+    'mcp.guideTitle': 'Anleitung',
+    'mcp.step1': '1. MCP Server aktivieren und speichern',
+    'mcp.step2': '2. API-Schlüssel generieren und kopieren',
+    'mcp.step3': '3. In Claude Desktop: Einstellungen \u2192 Integrationen \u2192 Custom Connector hinzufügen',
+    'mcp.step4': '4. Connector URL und API-Schlüssel einfügen',
+    'mcp.features': 'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
     'caldav.passwordLabel': 'Passwort',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
@@ -2043,6 +2089,29 @@ const LANG = {
     'settings.from': 'De',
     'settings.to': 'Para',
     'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'mcp.title': 'Servidor MCP',
+    'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. Use a URL e a chave de API como Custom Connector no Claude.',
+    'mcp.enable': 'Ativar servidor MCP',
+    'mcp.connectorUrl': 'URL do Connector',
+    'mcp.copy': 'Copiar',
+    'mcp.apiKey': 'Chave de API',
+    'mcp.generateKey': 'Gerar chave de API',
+    'mcp.keyHint': 'A chave é exibida apenas uma vez. Gere uma nova se perder.',
+    'mcp.save': 'Salvar',
+    'mcp.active': 'Servidor MCP ativo',
+    'mcp.noKey': 'MCP ativado, mas nenhuma chave de API gerada.',
+    'mcp.sessions': 'Servidor MCP ativo \u2014 {n} sessão(ões)',
+    'mcp.urlCopied': 'URL copiada!',
+    'mcp.keyCopied': 'Chave copiada!',
+    'mcp.keyGenerated': 'Chave de API gerada. Copie agora!',
+    'mcp.saved': 'Configurações salvas.',
+    'mcp.error': 'Erro: {msg}',
+    'mcp.guideTitle': 'Guia de configuração',
+    'mcp.step1': '1. Ativar servidor MCP e salvar',
+    'mcp.step2': '2. Gerar chave de API e copiar',
+    'mcp.step3': '3. No Claude Desktop: Configurações \u2192 Integrações \u2192 Adicionar Custom Connector',
+    'mcp.step4': '4. Colar URL do connector e chave de API',
+    'mcp.features': 'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
     'caldav.passwordLabel': 'Senha',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
@@ -2240,7 +2309,7 @@ async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
-  showServerTab();
+  showServerTab();showMcpTab();
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3450,6 +3519,12 @@ async function requestLeCert(){
   finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
 }
 
+// ─── MCP TAB (admin-only) ───────────────────────────────────
+function showMcpTab(){
+  const btn=document.getElementById('st-settings-mcp');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+}
+
 // ─── SERVER TAB ─────────────────────────────────────────────
 function showServerTab(){
   const btn=document.getElementById('st-settings-server');
@@ -3510,17 +3585,17 @@ async function loadMcpSettings(){
     const banner=$('mcp-status-banner');
     if(cfg.enabled&&cfg.hasToken){
       banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
-      banner.textContent='MCP Server aktiv';
+      banner.textContent=t('mcp.active');
     }else if(cfg.enabled){
       banner.style.display='block';banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
-      banner.textContent='MCP aktiviert, aber kein API-Schlüssel generiert.';
+      banner.textContent=t('mcp.noKey');
     }else{banner.style.display='none'}
     const statusR=await authFetch('/api/mcp/status');
     if(statusR.ok){
       const st=await statusR.json();
       if(st.activeSessions>0){
         banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
-        banner.textContent='MCP Server aktiv — '+st.activeSessions+' Sitzung'+(st.activeSessions>1?'en':'');
+        banner.textContent=t('mcp.sessions').replace('{n}',st.activeSessions);
       }
     }
   }catch(e){/* non-admin */}
@@ -3537,21 +3612,21 @@ function showMcpStatus(msg,color){
 async function saveMcpSettings(){
   try{
     const r=await apiPost('/api/mcp/config',{enabled:$('mcp-enabled').checked});
-    if(r.error){showMcpStatus('Fehler: '+r.error,'#b91c1c')}
-    else{showMcpStatus('Einstellungen gespeichert.','#166534');loadMcpSettings()}
-  }catch(e){showMcpStatus('Fehler: '+e.message,'#b91c1c')}
+    if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'#b91c1c')}
+    else{showMcpStatus(t('mcp.saved'),'#166534');loadMcpSettings()}
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
 async function generateMcpToken(){
   try{
     const r=await authFetch('/api/mcp/generate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showMcpStatus('Fehler: '+data.error,'#b91c1c');return}
+    if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
     _mcpToken=data.token;
     $('mcp-token-display').textContent=data.token;
     $('mcp-token-display').style.display='block';
     $('mcp-copy-token-btn').style.display='inline-flex';
-    showMcpStatus('API-Schlüssel generiert. Jetzt kopieren!','#166534');
-  }catch(e){showMcpStatus('Fehler: '+e.message,'#b91c1c')}
+    showMcpStatus(t('mcp.keyGenerated'),'#166534');
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6217,8 +6292,8 @@ function initEventListeners() {
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);
   $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
   $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
-  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus('URL kopiert!','#166534');});
-  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus('Schlüssel kopiert!','#166534');});
+  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
+  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
