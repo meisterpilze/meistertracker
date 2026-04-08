@@ -335,7 +335,7 @@ startDuckdnsUpdater();
 // Pure Node.js — no bash, curl, or acme.sh required.
 // Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
 
-const ACME_DIR_URL = 'https://acme-v2.api.letsencrypt.org/directory';
+const ACME_DIR_URL = 'https://acme-v02.api.letsencrypt.org/directory';
 const ACME_ACCOUNT_KEY_PATH = path.join(DIR, 'certs', 'acme-account-key.pem');
 
 function base64url(data) {
