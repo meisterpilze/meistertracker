@@ -628,7 +628,29 @@ const LANG = {
     'settings.from': 'From',
     'settings.to': 'To',
     'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
-    'caldav.passwordLabel': 'Password',
+    'mcp.title': 'MCP Server',
+    'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Use the URL and API key as a Custom Connector in Claude.',
+    'mcp.enable': 'Enable MCP server',
+    'mcp.connectorUrl': 'Connector URL',
+    'mcp.copy': 'Copy',
+    'mcp.apiKey': 'API Key',
+    'mcp.generateKey': 'Generate API key',
+    'mcp.keyHint': 'The key is only shown once. Generate a new one if lost.',
+    'mcp.save': 'Save',
+    'mcp.active': 'MCP server active',
+    'mcp.noKey': 'MCP enabled, but no API key generated.',
+    'mcp.sessions': 'MCP server active \u2014 {n} session(s)',
+    'mcp.urlCopied': 'URL copied!',
+    'mcp.keyCopied': 'Key copied!',
+    'mcp.keyGenerated': 'API key generated. Copy it now!',
+    'mcp.saved': 'Settings saved.',
+    'mcp.error': 'Error: {msg}',
+    'mcp.guideTitle': 'Setup guide',
+    'mcp.step1': '1. Enable MCP server and save',
+    'mcp.step2': '2. Generate API key and copy',
+    'mcp.step3': '3. In Claude Desktop: Settings \u2192 Integrations \u2192 Add Custom Connector',
+    'mcp.step4': '4. Paste connector URL and API key',
+    'mcp.features': 'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
     'inv.hardwood': 'Hardwood pellets',
@@ -1336,7 +1358,29 @@ const LANG = {
     'settings.from': 'Von',
     'settings.to': 'Nach',
     'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
-    'caldav.passwordLabel': 'Passwort',
+    'mcp.title': 'MCP Server',
+    'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Verwende die URL und den API-Schlüssel als Custom Connector in Claude.',
+    'mcp.enable': 'MCP Server aktivieren',
+    'mcp.connectorUrl': 'Connector URL',
+    'mcp.copy': 'Kopieren',
+    'mcp.apiKey': 'API-Schlüssel',
+    'mcp.generateKey': 'API-Schlüssel generieren',
+    'mcp.keyHint': 'Der Schlüssel wird nur einmal angezeigt. Bei Verlust neuen generieren.',
+    'mcp.save': 'Speichern',
+    'mcp.active': 'MCP Server aktiv',
+    'mcp.noKey': 'MCP aktiviert, aber kein API-Schlüssel generiert.',
+    'mcp.sessions': 'MCP Server aktiv \u2014 {n} Sitzung(en)',
+    'mcp.urlCopied': 'URL kopiert!',
+    'mcp.keyCopied': 'Schlüssel kopiert!',
+    'mcp.keyGenerated': 'API-Schlüssel generiert. Jetzt kopieren!',
+    'mcp.saved': 'Einstellungen gespeichert.',
+    'mcp.error': 'Fehler: {msg}',
+    'mcp.guideTitle': 'Anleitung',
+    'mcp.step1': '1. MCP Server aktivieren und speichern',
+    'mcp.step2': '2. API-Schlüssel generieren und kopieren',
+    'mcp.step3': '3. In Claude Desktop: Einstellungen \u2192 Integrationen \u2192 Custom Connector hinzufügen',
+    'mcp.step4': '4. Connector URL und API-Schlüssel einfügen',
+    'mcp.features': 'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
     'inv.hardwood': 'Hartholzpellets',
@@ -2043,7 +2087,29 @@ const LANG = {
     'settings.from': 'De',
     'settings.to': 'Para',
     'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
-    'caldav.passwordLabel': 'Senha',
+    'mcp.title': 'Servidor MCP',
+    'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. Use a URL e a chave de API como Custom Connector no Claude.',
+    'mcp.enable': 'Ativar servidor MCP',
+    'mcp.connectorUrl': 'URL do Connector',
+    'mcp.copy': 'Copiar',
+    'mcp.apiKey': 'Chave de API',
+    'mcp.generateKey': 'Gerar chave de API',
+    'mcp.keyHint': 'A chave é exibida apenas uma vez. Gere uma nova se perder.',
+    'mcp.save': 'Salvar',
+    'mcp.active': 'Servidor MCP ativo',
+    'mcp.noKey': 'MCP ativado, mas nenhuma chave de API gerada.',
+    'mcp.sessions': 'Servidor MCP ativo \u2014 {n} sessão(ões)',
+    'mcp.urlCopied': 'URL copiada!',
+    'mcp.keyCopied': 'Chave copiada!',
+    'mcp.keyGenerated': 'Chave de API gerada. Copie agora!',
+    'mcp.saved': 'Configurações salvas.',
+    'mcp.error': 'Erro: {msg}',
+    'mcp.guideTitle': 'Guia de configuração',
+    'mcp.step1': '1. Ativar servidor MCP e salvar',
+    'mcp.step2': '2. Gerar chave de API e copiar',
+    'mcp.step3': '3. No Claude Desktop: Configurações \u2192 Integrações \u2192 Adicionar Custom Connector',
+    'mcp.step4': '4. Colar URL do connector e chave de API',
+    'mcp.features': 'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
     'inv.hardwood': 'Pellets de madeira dura',
@@ -2240,6 +2306,7 @@ async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
+  showServerTab();showMcpTab();
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -2397,6 +2464,7 @@ function openStab(page,sub){
   if(page==='cal'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='settings'&&sub==='caldav')loadCaldavSettings();
   if(page==='settings'&&sub==='duckdns')loadDuckdnsSettings();
+  if(page==='settings'&&sub==='mcp')loadMcpSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
@@ -3448,6 +3516,116 @@ async function requestLeCert(){
     else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'#166534');refreshDuckdnsStatus()}
   }catch(e){showLeStatus('Fehler: '+e.message,'#b91c1c')}
   finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
+}
+
+// ─── MCP TAB (admin-only) ───────────────────────────────────
+function showMcpTab(){
+  const btn=document.getElementById('st-settings-mcp');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+}
+
+// ─── SERVER TAB ─────────────────────────────────────────────
+function showServerTab(){
+  const btn=document.getElementById('st-settings-server');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+}
+async function loadServerTab(){
+  const el=document.getElementById('server-info');
+  if(!el)return;
+  if(!currentUser||currentUser.role!=='admin'){el.textContent='Admin access required.';return}
+  try{
+    const r=await authFetch('/api/health');
+    const h=await r.json();
+    const uptimeH=Math.floor(h.uptime/3600);
+    const uptimeM=Math.floor((h.uptime%3600)/60);
+    const platLabel=h.platform==='win32'?'Windows':h.platform==='darwin'?'macOS':'Linux';
+    el.innerHTML='<div><b>Status:</b> '+esc(h.status)+'</div>'+
+      '<div><b>Version:</b> '+esc(h.version)+'</div>'+
+      '<div><b>Plattform:</b> '+platLabel+'</div>'+
+      '<div><b>Node.js:</b> '+esc(h.nodeVersion||'–')+'</div>'+
+      '<div><b>Uptime:</b> '+uptimeH+'h '+uptimeM+'m</div>'+
+      '<div><b>SSE Clients:</b> '+h.sseClients+'</div>'+
+      (h.memory?'<div><b>RAM:</b> '+h.memory.rss+' MB</div>':'');
+  }catch(e){el.textContent='Fehler beim Laden.'}
+}
+function restartServer(){
+  confirm2('Server neustarten?','Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.','Ja, neustarten',async()=>{
+    const btn=document.getElementById('btn-server-restart');
+    const status=document.getElementById('server-restart-status');
+    btn.disabled=true;btn.textContent='Wird neugestartet...';
+    status.style.display='block';status.style.color='#888';
+    status.textContent='Server wird aktualisiert und neugestartet...';
+    try{
+      await authFetch('/api/server/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      status.textContent='Server startet neu. Warte auf Verbindung...';
+      let attempts=0;
+      const poll=setInterval(async()=>{
+        attempts++;
+        try{
+          const r=await fetch('/api/health');
+          if(r.ok){clearInterval(poll);window.location.reload()}
+        }catch(e){/* still down */}
+        if(attempts>60){clearInterval(poll);status.textContent='Server antwortet nicht. Bitte manuell prüfen.';status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+      },3000);
+    }catch(e){status.textContent='Fehler: '+e.message;status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+  });
+}
+
+// ─── MCP SETTINGS ───────────────────────────────────────────
+let _mcpToken='';
+async function loadMcpSettings(){
+  try{
+    const r=await authFetch('/api/mcp/config');
+    if(!r.ok)return;
+    const cfg=await r.json();
+    document.getElementById('mcp-enabled').checked=cfg.enabled;
+    document.getElementById('mcp-url').value=cfg.connectorUrl||'';
+    toggleMcpSections(cfg.enabled);
+    const banner=document.getElementById('mcp-status-banner');
+    if(cfg.enabled&&cfg.hasToken){
+      banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+      banner.textContent=t('mcp.active');
+    }else if(cfg.enabled){
+      banner.style.display='block';banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
+      banner.textContent=t('mcp.noKey');
+    }else{banner.style.display='none'}
+    const statusR=await authFetch('/api/mcp/status');
+    if(statusR.ok){
+      const st=await statusR.json();
+      if(st.activeSessions>0){
+        banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+        banner.textContent=t('mcp.sessions').replace('{n}',st.activeSessions);
+      }
+    }
+  }catch(e){/* non-admin */}
+}
+function toggleMcpSections(enabled){
+  document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
+  document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
+}
+function showMcpStatus(msg,color){
+  const el=document.getElementById('mcp-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},8000);
+}
+async function saveMcpSettings(){
+  try{
+    const r=await apiPost('/api/mcp/config',{enabled:document.getElementById('mcp-enabled').checked});
+    if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'#b91c1c')}
+    else{showMcpStatus(t('mcp.saved'),'#166534');loadMcpSettings()}
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+}
+async function generateMcpToken(){
+  try{
+    const r=await authFetch('/api/mcp/generate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const data=await r.json();
+    if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
+    _mcpToken=data.token;
+    document.getElementById('mcp-token-display').textContent=data.token;
+    document.getElementById('mcp-token-display').style.display='block';
+    document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
+    showMcpStatus(t('mcp.keyGenerated'),'#166534');
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6104,9 +6282,17 @@ function initEventListeners() {
   $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
   $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
   $('st-settings-duckdns').addEventListener('click', () => { openStab('settings','duckdns'); });
+  $('st-settings-mcp').addEventListener('click', () => { openStab('settings','mcp'); });
+  $('st-settings-server').addEventListener('click', () => { openStab('settings','server'); loadServerTab(); });
+  $('btn-server-restart').addEventListener('click', restartServer);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
+  $('mcp-save-btn').addEventListener('click', saveMcpSettings);
+  $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
+  $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
+  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
+  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
