@@ -1104,9 +1104,33 @@ function listIcsFiles(calName) {
 
 // CTag cache — avoids filesystem scan on every PROPFIND poll
 const ctagCache = new Map();
+// ETag cache — avoids stat() on every PROPFIND/REPORT item
+const etagCache = new Map();
+
+function invalidateCalendarCache(calName) {
+  ctagCache.delete(calName);
+  // Clear all etags for this calendar
+  const prefix = calName + '/';
+  for (const key of etagCache.keys()) {
+    if (key.startsWith(prefix)) etagCache.delete(key);
+  }
+}
 
 function invalidateCtag(calName) {
-  ctagCache.delete(calName);
+  invalidateCalendarCache(calName);
+}
+
+function getEtag(calName, fileName) {
+  const key = calName + '/' + fileName;
+  if (etagCache.has(key)) return etagCache.get(key);
+  try {
+    const stat = fs.statSync(path.join(CAL_DIR, calName, fileName));
+    const etag = '"' + stat.mtimeMs.toString(36) + '"';
+    etagCache.set(key, etag);
+    return etag;
+  } catch {
+    return null;
+  }
 }
 
 // ── RFC 6578 sync-token tracking ──
@@ -1987,9 +2011,8 @@ function handlePropfind(parts, body, req, res) {
     if (depth !== '0') {
       const files = listIcsFiles(calName);
       for (const f of files) {
-        const fPath = path.join(calDir, f);
-        const stat = fs.statSync(fPath);
-        const etag = '"' + stat.mtimeMs.toString(36) + '"';
+        const etag = getEtag(calName, f);
+        if (!etag) continue;
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2021,13 +2044,12 @@ function handlePropfind(parts, body, req, res) {
       return;
     }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
-    if (!fs.existsSync(filePath)) {
+    const etag = getEtag(parts[1], parts[2]);
+    if (!etag) {
       res.writeHead(404);
       res.end('Not found');
       return;
     }
-    const stat = fs.statSync(filePath);
-    const etag = '"' + stat.mtimeMs.toString(36) + '"';
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -2092,9 +2114,8 @@ function handleReport(parts, body, req, res) {
         // Initial sync — return all items
         const files = listIcsFiles(calName);
         for (const f of files) {
-          const fPath = path.join(calDir, f);
-          const stat = fs.statSync(fPath);
-          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          const etag = getEtag(calName, f);
+          if (!etag) continue;
           responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2113,10 +2134,8 @@ function handleReport(parts, body, req, res) {
     <d:status>HTTP/1.1 404 Not Found</d:status>
   </d:response>`;
           } else {
-            const fPath = path.join(calDir, fileName);
-            if (fs.existsSync(fPath)) {
-              const stat = fs.statSync(fPath);
-              const etag = '"' + stat.mtimeMs.toString(36) + '"';
+            const etag = getEtag(calName, fileName);
+            if (etag) {
               responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(fileName)}</d:href>
     <d:propstat>
@@ -2151,8 +2170,7 @@ function handleReport(parts, body, req, res) {
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
           const content = fs.readFileSync(filePath, 'utf8');
-          const stat = fs.statSync(filePath);
-          const etag = '"' + stat.mtimeMs.toString(36) + '"';
+          const etag = getEtag(calName, filename);
           responses += `\n  <d:response>
     <d:href>${escapeXml(href)}</d:href>
     <d:propstat>
@@ -2171,8 +2189,7 @@ function handleReport(parts, body, req, res) {
       for (const f of files) {
         const filePath = path.join(calDir, f);
         const content = fs.readFileSync(filePath, 'utf8');
-        const stat = fs.statSync(filePath);
-        const etag = '"' + stat.mtimeMs.toString(36) + '"';
+        const etag = getEtag(calName, f);
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2543,8 +2560,7 @@ function handleGet(parts, req, res) {
       return;
     }
     const content = fs.readFileSync(filePath, 'utf8');
-    const stat = fs.statSync(filePath);
-    const etag = '"' + stat.mtimeMs.toString(36) + '"';
+    const etag = getEtag(calName, parts[2]);
     res.writeHead(200, {
       'Content-Type': 'text/calendar; charset=utf-8',
       ETag: etag
