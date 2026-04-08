@@ -86,8 +86,8 @@ let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
 // ── MCP (Model Context Protocol) server ────────────────────
-const mcpSessions = new Map();
-const mcpServer = createMcpServer(database, () => broadcastSSE(null));
+// Each session gets its own McpServer + transport (SDK requires one server per transport).
+const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
 
 function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
@@ -2775,43 +2775,50 @@ function handleRequest(req, res) {
     }
     const sessionId = req.headers['mcp-session-id'];
     if (req.method === 'POST') {
-      jsonBody(req, res, (e, body) => {
+      jsonBody(req, res, async (e, body) => {
         if (e) return;
-        let transport = sessionId ? mcpSessions.get(sessionId) : null;
-        if (!transport) {
-          transport = new StreamableHTTPServerTransport({
+        let session = sessionId ? mcpSessions.get(sessionId) : null;
+        if (!session) {
+          const server = createMcpServer(database, () => broadcastSSE(null));
+          const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
-            onsessioninitialized: (id) => {
-              mcpSessions.set(id, transport);
+            onsessioninitialized: (sid) => {
+              mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
             }
           });
           transport.onclose = () => {
-            if (transport.sessionId) mcpSessions.delete(transport.sessionId);
+            const sid = transport.sessionId;
+            if (sid) mcpSessions.delete(sid);
+            server.close().catch(() => {});
           };
-          mcpServer.connect(transport);
+          await server.connect(transport);
+          session = { transport, server, lastActive: Date.now() };
+        } else {
+          session.lastActive = Date.now();
         }
-        transport.handleRequest(req, res, body);
+        session.transport.handleRequest(req, res, body);
       });
       return;
     }
     if (req.method === 'GET') {
-      const transport = sessionId ? mcpSessions.get(sessionId) : null;
-      if (!transport) {
+      const session = sessionId ? mcpSessions.get(sessionId) : null;
+      if (!session) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"no session"}');
         return;
       }
-      transport.handleRequest(req, res);
+      session.lastActive = Date.now();
+      session.transport.handleRequest(req, res);
       return;
     }
     if (req.method === 'DELETE') {
-      const transport = sessionId ? mcpSessions.get(sessionId) : null;
-      if (!transport) {
+      const session = sessionId ? mcpSessions.get(sessionId) : null;
+      if (!session) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"no session"}');
         return;
       }
-      transport.handleRequest(req, res);
+      session.transport.handleRequest(req, res);
       return;
     }
     res.writeHead(405);
