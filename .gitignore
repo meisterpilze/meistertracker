@@ -20,5 +20,8 @@ calendars/
 # TLS certificates
 certs/
 
+# acme.sh (Let's Encrypt)
+.acme.sh/
+
 # Environment
 .env
