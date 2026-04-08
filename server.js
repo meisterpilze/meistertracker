@@ -2996,6 +2996,14 @@ function handleRequest(req, res) {
           if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
             return jsonErr(res, 400, 'redirect_uris required');
           }
+          for (const uri of redirectUris) {
+            if (typeof uri !== 'string') return jsonErr(res, 400, 'redirect_uris must be strings');
+            let parsed;
+            try { parsed = new URL(uri); } catch { return jsonErr(res, 400, 'invalid redirect_uri: ' + uri); }
+            if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+              return jsonErr(res, 400, 'redirect_uri must use HTTPS (except localhost)');
+            }
+          }
           const client = db.registerOAuthClient(database, {
             clientId,
             clientName: data.client_name || '',
@@ -4317,6 +4325,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        if (!data.token) {
+          const existing = db.getDuckdnsCfg(database);
+          data.token = existing.token || '';
+        }
         db.updateDuckdnsCfg(database, data);
         startDuckdnsUpdater();
         log('info', 'DuckDNS config updated', { actor: req.authUser.username });
@@ -4330,7 +4342,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/duckdns/config') {
     if (requireAdmin(req, res)) return;
     try {
-      jsonOk(res, db.getDuckdnsCfg(database));
+      const cfg = db.getDuckdnsCfg(database);
+      cfg.hasToken = !!(cfg.token);
+      delete cfg.token;
+      jsonOk(res, cfg);
     } catch (err) {
       safeErr(res, err);
     }
@@ -4842,7 +4857,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       try {
         const { zpl } = JSON.parse(body);
         if (!zpl) {
-          res.writeHead(400);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end('{"error":"no zpl"}');
           return;
         }
@@ -4857,7 +4872,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
         });
       } catch {
-        res.writeHead(400);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"bad json"}');
       }
     });
