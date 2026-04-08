@@ -646,10 +646,27 @@ const LANG = {
     'mcp.saved': 'Settings saved.',
     'mcp.error': 'Error: {msg}',
     'mcp.guideTitle': 'Setup guide',
+    'mcp.oauthTitle': 'OAuth Clients',
+    'mcp.oauthDesc': 'Create OAuth clients for Claude and other MCP connectors. Each client gets a unique ID and secret for secure authentication.',
+    'mcp.createClient': 'Create Client',
+    'mcp.clientNamePlaceholder': 'Client name (e.g. Claude Desktop)',
+    'mcp.newClientCreated': 'Client created \u2014 copy these credentials now:',
+    'mcp.secretOnce': 'The client secret is only shown once. Store it securely.',
+    'mcp.noClients': 'No OAuth clients yet. Create one to connect Claude.',
+    'mcp.clientName': 'Name',
+    'mcp.created': 'Created',
+    'mcp.activeSessions': 'Sessions',
+    'mcp.deleteClient': 'Delete',
+    'mcp.confirmDelete': 'Delete this client? All its active sessions will be revoked.',
+    'mcp.clientCreated': 'Client created. Copy the credentials now!',
+    'mcp.clientDeleted': 'Client deleted.',
+    'mcp.clientNameRequired': 'Please enter a client name.',
+    'mcp.idCopied': 'Client ID copied!',
+    'mcp.secretCopied': 'Client secret copied!',
     'mcp.step1': '1. Enable MCP server and save',
-    'mcp.step2': '2. In Claude: Settings \u2192 Connectors \u2192 Add Custom Connector',
-    'mcp.step3': '3. Paste the connector URL and click Add',
-    'mcp.step4': '4. Click Connect \u2014 log in and authorize when prompted',
+    'mcp.step2': '2. Create an OAuth client below and copy the ID + Secret',
+    'mcp.step3': '3. In Claude: Settings \u2192 Connectors \u2192 Add Custom Connector',
+    'mcp.step4': '4. Paste the URL, Client ID, and Client Secret \u2192 Connect',
     'mcp.features': 'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
@@ -1376,10 +1393,27 @@ const LANG = {
     'mcp.saved': 'Einstellungen gespeichert.',
     'mcp.error': 'Fehler: {msg}',
     'mcp.guideTitle': 'Anleitung',
+    'mcp.oauthTitle': 'OAuth-Clients',
+    'mcp.oauthDesc': 'Erstelle OAuth-Clients für Claude und andere MCP-Connectors. Jeder Client erhält eine eindeutige ID und ein Geheimnis zur sicheren Authentifizierung.',
+    'mcp.createClient': 'Client erstellen',
+    'mcp.clientNamePlaceholder': 'Client-Name (z.B. Claude Desktop)',
+    'mcp.newClientCreated': 'Client erstellt \u2014 kopiere diese Zugangsdaten jetzt:',
+    'mcp.secretOnce': 'Das Client-Geheimnis wird nur einmal angezeigt. Sicher aufbewahren.',
+    'mcp.noClients': 'Noch keine OAuth-Clients. Erstelle einen, um Claude zu verbinden.',
+    'mcp.clientName': 'Name',
+    'mcp.created': 'Erstellt',
+    'mcp.activeSessions': 'Sitzungen',
+    'mcp.deleteClient': 'Löschen',
+    'mcp.confirmDelete': 'Diesen Client löschen? Alle aktiven Sitzungen werden widerrufen.',
+    'mcp.clientCreated': 'Client erstellt. Jetzt Zugangsdaten kopieren!',
+    'mcp.clientDeleted': 'Client gelöscht.',
+    'mcp.clientNameRequired': 'Bitte einen Client-Namen eingeben.',
+    'mcp.idCopied': 'Client-ID kopiert!',
+    'mcp.secretCopied': 'Client-Geheimnis kopiert!',
     'mcp.step1': '1. MCP Server aktivieren und speichern',
-    'mcp.step2': '2. In Claude: Einstellungen \u2192 Connectors \u2192 Custom Connector hinzufügen',
-    'mcp.step3': '3. Connector URL einfügen und auf Hinzufügen klicken',
-    'mcp.step4': '4. Auf Verbinden klicken \u2014 anmelden und autorisieren',
+    'mcp.step2': '2. Unten einen OAuth-Client erstellen und ID + Secret kopieren',
+    'mcp.step3': '3. In Claude: Einstellungen \u2192 Connectors \u2192 Custom Connector hinzufügen',
+    'mcp.step4': '4. URL, Client-ID und Client-Secret einfügen \u2192 Verbinden',
     'mcp.features': 'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
@@ -2105,10 +2139,27 @@ const LANG = {
     'mcp.saved': 'Configurações salvas.',
     'mcp.error': 'Erro: {msg}',
     'mcp.guideTitle': 'Guia de configuração',
+    'mcp.oauthTitle': 'Clientes OAuth',
+    'mcp.oauthDesc': 'Crie clientes OAuth para o Claude e outros conectores MCP. Cada cliente recebe um ID e segredo únicos para autenticação segura.',
+    'mcp.createClient': 'Criar Cliente',
+    'mcp.clientNamePlaceholder': 'Nome do cliente (ex. Claude Desktop)',
+    'mcp.newClientCreated': 'Cliente criado \u2014 copie estas credenciais agora:',
+    'mcp.secretOnce': 'O segredo do cliente é exibido apenas uma vez. Guarde-o com segurança.',
+    'mcp.noClients': 'Nenhum cliente OAuth ainda. Crie um para conectar o Claude.',
+    'mcp.clientName': 'Nome',
+    'mcp.created': 'Criado',
+    'mcp.activeSessions': 'Sessões',
+    'mcp.deleteClient': 'Excluir',
+    'mcp.confirmDelete': 'Excluir este cliente? Todas as sessões ativas serão revogadas.',
+    'mcp.clientCreated': 'Cliente criado. Copie as credenciais agora!',
+    'mcp.clientDeleted': 'Cliente excluído.',
+    'mcp.clientNameRequired': 'Por favor, insira um nome de cliente.',
+    'mcp.idCopied': 'Client ID copiado!',
+    'mcp.secretCopied': 'Segredo do cliente copiado!',
     'mcp.step1': '1. Ativar servidor MCP e salvar',
-    'mcp.step2': '2. No Claude: Configurações \u2192 Connectors \u2192 Adicionar Custom Connector',
-    'mcp.step3': '3. Colar URL do connector e clicar em Adicionar',
-    'mcp.step4': '4. Clicar em Conectar \u2014 fazer login e autorizar',
+    'mcp.step2': '2. Criar um cliente OAuth abaixo e copiar ID + Secret',
+    'mcp.step3': '3. No Claude: Configurações \u2192 Connectors \u2192 Adicionar Custom Connector',
+    'mcp.step4': '4. Colar a URL, Client ID e Client Secret \u2192 Conectar',
     'mcp.features': 'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
@@ -3597,11 +3648,13 @@ async function loadMcpSettings(){
         banner.textContent=t('mcp.sessions').replace('{n}',st.activeSessions);
       }
     }
+    if(cfg.enabled) loadOAuthClients();
   }catch(e){/* non-admin */}
 }
 function toggleMcpSections(enabled){
   document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
   document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
+  document.getElementById('mcp-oauth-card').style.display=enabled?'block':'none';
 }
 function showMcpStatus(msg,color){
   const el=document.getElementById('mcp-status');
@@ -3626,6 +3679,69 @@ async function generateMcpToken(){
     document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
     showMcpStatus(t('mcp.keyGenerated'),'#166534');
   }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+}
+
+// ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
+let _oauthNewId='',_oauthNewSecret='';
+function showOAuthStatus(msg,color){
+  const el=document.getElementById('oauth-client-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},8000);
+}
+async function loadOAuthClients(){
+  try{
+    const r=await authFetch('/api/mcp/oauth-clients');
+    if(!r.ok)return;
+    const data=await r.json();
+    const list=document.getElementById('oauth-client-list');
+    if(!list)return;
+    if(!data.clients||data.clients.length===0){
+      list.innerHTML='<p style="color:#888;font-size:12px">'+t('mcp.noClients')+'</p>';
+      return;
+    }
+    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientName')+'</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Client ID</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.created')+'</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.activeSessions')+'</th>'+
+      '<th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
+      data.clients.map(c=>'<tr>'+
+        '<td style="padding:6px">'+esc(c.clientName)+'</td>'+
+        '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
+        '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
+        '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
+        '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\')">'+t('mcp.deleteClient')+'</button></td></tr>').join('')+
+      '</tbody></table>';
+  }catch(e){console.error('loadOAuthClients:',e)}
+}
+async function createOAuthClient(){
+  const nameEl=document.getElementById('oauth-client-name');
+  const name=nameEl.value.trim();
+  if(!name){showOAuthStatus(t('mcp.clientNameRequired'),'#b91c1c');return}
+  try{
+    const r=await authFetch('/api/mcp/oauth-clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:name})});
+    const data=await r.json();
+    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
+    nameEl.value='';
+    _oauthNewId=data.client_id;
+    _oauthNewSecret=data.client_secret;
+    document.getElementById('oauth-new-client-id').value=data.client_id;
+    document.getElementById('oauth-new-client-secret').value=data.client_secret;
+    document.getElementById('oauth-secret-display').style.display='block';
+    showOAuthStatus(t('mcp.clientCreated'),'#166534');
+    loadOAuthClients();
+  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+}
+async function deleteOAuthClient(clientId){
+  if(!confirm(t('mcp.confirmDelete')))return;
+  try{
+    const r=await authFetch('/api/mcp/oauth-clients/'+encodeURIComponent(clientId),{method:'DELETE'});
+    const data=await r.json();
+    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
+    showOAuthStatus(t('mcp.clientDeleted'),'#166534');
+    loadOAuthClients();
+  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6293,6 +6409,9 @@ function initEventListeners() {
   $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
   $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
   $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
+  $('oauth-create-client-btn').addEventListener('click', createOAuthClient);
+  $('oauth-copy-id-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_oauthNewId);showOAuthStatus(t('mcp.idCopied'),'#166534');});
+  $('oauth-copy-secret-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_oauthNewSecret);showOAuthStatus(t('mcp.secretCopied'),'#166534');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
