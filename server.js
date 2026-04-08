@@ -984,6 +984,11 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Escape iCalendar TEXT values per RFC 5545 §3.3.11
+function escapeIcsText(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
 // Sanitize URL path parts to prevent directory traversal attacks
 function sanitizePart(s) {
   const clean = path.basename(s);
@@ -1200,7 +1205,7 @@ function taskToVTODO(task) {
     'DTSTAMP:' + now,
     'CREATED:' + created,
     'LAST-MODIFIED:' + now,
-    'SUMMARY:' + (task.text || '').replace(/\n/g, '\\n')
+    'SUMMARY:' + escapeIcsText(task.text || '')
   ];
   if (task.dueDate) {
     const d = new Date(task.dueDate).toISOString().replace(/[-:]/g, '').split('T')[0];
@@ -1212,7 +1217,7 @@ function taskToVTODO(task) {
   if (task.done) lines.push('PERCENT-COMPLETE:100');
   lines.push('X-MEISTERPILZE-TYPE:task');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
-  if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
+  if (task.description) lines.push('DESCRIPTION:' + escapeIcsText(task.description));
   lines.push('COLOR:#3b82f6');
   lines.push('END:VTODO', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
@@ -1236,7 +1241,7 @@ function batchToVEVENT(batch, scanLog) {
   // DTEND is next day for all-day events per RFC 5545
   const endDate = new Date(new Date(batch.due).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
   const loc = scanLog ? getBatchLocServer(batch, scanLog) : '';
-  const summary = (batch.batchId + (loc ? ' — ' + loc : '')).replace(/\n/g, '\\n');
+  const summary = escapeIcsText(batch.batchId + (loc ? ' — ' + loc : ''));
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -1249,9 +1254,9 @@ function batchToVEVENT(batch, scanLog) {
     'SUMMARY:' + summary,
     'CATEGORIES:Fälligkeiten'
   ];
-  if (loc) lines.push('LOCATION:' + loc.replace(/\n/g, '\\n'));
+  if (loc) lines.push('LOCATION:' + escapeIcsText(loc));
   lines.push(
-    'DESCRIPTION:' + ((batch.species || '') + (batch.strain ? ' (' + batch.strain + ')' : '')).replace(/\n/g, '\\n'),
+    'DESCRIPTION:' + escapeIcsText((batch.species || '') + (batch.strain ? ' (' + batch.strain + ')' : '')),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:batch-due',
     'X-MEISTERPILZE-BATCH:' + batch.batchId,
@@ -1280,7 +1285,7 @@ function taskDueToVEVENT(task) {
     'DTSTAMP:' + now,
     'DTSTART;VALUE=DATE:' + dueDate,
     'DTEND;VALUE=DATE:' + endDate,
-    'SUMMARY:' + (task.text || '').replace(/\n/g, '\\n'),
+    'SUMMARY:' + escapeIcsText(task.text || ''),
     'CATEGORIES:Aufgaben',
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
     'TRANSP:TRANSPARENT',
@@ -1340,12 +1345,12 @@ function customEventToVEVENT(event) {
     'DTSTAMP:' + now,
     dtstart,
     dtend,
-    'SUMMARY:' + (event.title || '').replace(/\n/g, '\\n'),
+    'SUMMARY:' + escapeIcsText(event.title || ''),
     'CATEGORIES:' + (event.category || 'Benutzerdefiniert'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:custom-event'
   );
-  if (event.description) lines.push('DESCRIPTION:' + event.description.replace(/\n/g, '\\n'));
+  if (event.description) lines.push('DESCRIPTION:' + escapeIcsText(event.description));
   if (event.assignees && event.assignees.length) {
     for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
   }
