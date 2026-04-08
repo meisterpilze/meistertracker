@@ -1425,9 +1425,9 @@ function handlePut(parts, body, req, res) {
     // Bidirectional sync: if a VEVENT in shared calendar is updated via CalDAV client, update DB
     if (calName === 'meisterpilze' && body.includes('VEVENT')) {
       try {
-        const dtMatch = body.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-        const typeMatch = body.match(/X-MEISTERPILZE-TYPE:(.*)/);
-        const batchMatch = body.match(/X-MEISTERPILZE-BATCH:(.*)/);
+        const dtMatch = body.match(/^DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/m);
+        const typeMatch = body.match(/^X-MEISTERPILZE-TYPE:(.*)/m);
+        const batchMatch = body.match(/^X-MEISTERPILZE-BATCH:(.*)/m);
         if (dtMatch && typeMatch) {
           const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
           const evType = typeMatch[1].trim();
@@ -1437,7 +1437,7 @@ function handlePut(parts, body, req, res) {
               db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
             } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
           } else if (evType === 'task-due') {
-            const uidMatch = body.match(/UID:(.*)/);
+            const uidMatch = body.match(/^UID:(.*)/m);
             if (uidMatch) {
               const taskUid = uidMatch[1].trim().replace(/-event$/, '');
               if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
