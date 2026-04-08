@@ -1352,7 +1352,7 @@ function customEventToVEVENT(event) {
   );
   if (event.description) lines.push('DESCRIPTION:' + escapeIcsText(event.description));
   if (event.assignees && event.assignees.length) {
-    for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':invalid:nomail');
+    for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':mailto:noreply@localhost');
   }
   lines.push('COLOR:' + (event.color || CALDAV_CATEGORY_COLORS[event.category] || '#16a34a'));
   lines.push('END:VEVENT', 'END:VCALENDAR');
