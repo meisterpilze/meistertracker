@@ -1460,6 +1460,20 @@ function handlePut(parts, body, req, res) {
                 if (updated) autoPushTaskCaldav(updated);
                 broadcastSSE();
               }
+            } else {
+              // New task created from external CalDAV client
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              const text = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
+              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
+              const priority = prioMatch ? ({ 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' }[prioMatch[1]] || 'med') : 'med';
+              const statusMatch = unfolded.match(/STATUS:(.*)/);
+              const done = statusMatch ? statusMatch[1].trim() === 'COMPLETED' : false;
+              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dueDate = dueMatch ? dueMatch[1]+'-'+dueMatch[2]+'-'+dueMatch[3] : null;
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
+              db.insertTask(database, { text, priority, done, created: new Date().toISOString(), dueDate, description, caldavUid: uid, caldavSynced: new Date().toISOString() });
+              broadcastSSE();
             }
           }
         }
@@ -1543,6 +1557,47 @@ function handlePut(parts, body, req, res) {
                 db.updateCalendarEvent(database, idMatch[1], fields);
                 broadcastSSE();
               }
+            }
+          }
+        } else if (!evType && calName === 'meisterpilze') {
+          // New VEVENT from external CalDAV client — create as calendar event
+          const uidMatch = unfolded.match(/UID:(.*)/);
+          if (uidMatch) {
+            const uid = uidMatch[1].trim();
+            // Check it doesn't already exist in DB
+            const existing = db.readCalendarEventByCaldavUid(database, uid);
+            if (!existing) {
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              const title = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
+              const catMatch = unfolded.match(/CATEGORIES:(.*)/);
+              let category = 'custom';
+              if (catMatch) { const c = catMatch[1].trim().toLowerCase(); if ({ custom:1, meeting:1, delivery:1, maintenance:1 }[c]) category = c; }
+
+              let startDate = null, endDate = null, startTime = null, endTime = null, allDay = true;
+              const dtAllDay = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const dtTimed = unfolded.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (dtAllDay) { startDate = dtAllDay[1]+'-'+dtAllDay[2]+'-'+dtAllDay[3]; }
+              else if (dtTimed) { startDate = dtTimed[1]+'-'+dtTimed[2]+'-'+dtTimed[3]; startTime = dtTimed[4]+':'+dtTimed[5]; allDay = false; }
+              if (!startDate) startDate = new Date().toISOString().split('T')[0];
+
+              const deAllDay = unfolded.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              const deTimed = unfolded.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+              if (deAllDay) { const d = new Date(deAllDay[1]+'-'+deAllDay[2]+'-'+deAllDay[3]); d.setDate(d.getDate()-1); endDate = d.toISOString().split('T')[0]; }
+              else if (deTimed) { endDate = deTimed[1]+'-'+deTimed[2]+'-'+deTimed[3]; endTime = deTimed[4]+':'+deTimed[5]; }
+
+              const eventId = 'cev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+              const caldavUid = uid;
+              db.insertCalendarEvent(database, { id: eventId, title, description, startDate, endDate, allDay, startTime, endTime, category, caldavUid, caldavSynced: new Date().toISOString() }, null);
+              // Re-write .ics with X-MEISTERPILZE-TYPE marker so future syncs recognize it
+              const ev = db.readCalendarEventByCaldavUid(database, caldavUid);
+              if (ev) {
+                ev.assignees = [];
+                const { uid: newUid, ics } = customEventToVEVENT(ev);
+                fs.writeFileSync(filePath, ics, 'utf8');
+              }
+              broadcastSSE();
             }
           }
         }
