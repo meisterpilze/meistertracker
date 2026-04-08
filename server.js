@@ -4853,7 +4853,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       try {
         const { zpl } = JSON.parse(body);
         if (!zpl) {
-          res.writeHead(400);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end('{"error":"no zpl"}');
           return;
         }
@@ -4868,7 +4868,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
         });
       } catch {
-        res.writeHead(400);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"bad json"}');
       }
     });
