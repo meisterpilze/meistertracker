@@ -2259,7 +2259,7 @@ function handleRequest(req,res){
       let tmpPath;
       try{
         const raw=Buffer.concat(chunks);
-        const password=new URL(req.url,'http://x').searchParams.get('pw')||req.headers['x-backup-password']||'';
+        const password=req.headers['x-backup-password']||'';
         if(!password){jsonErr(res,400,'Password required');return}
         // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext [+ hmac(32)]
         if(raw.length<60+16){jsonErr(res,400,'File too small to be a valid backup');return}
