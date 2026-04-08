@@ -43,6 +43,7 @@ ensure_pm2() {
 ensure_certs() {
     if [ -f certs/server.key ] && [ -f certs/server.crt ]; then
         echo "  -> TLS certificates found."
+        # LE cert renewal is handled by the server on startup.
         return
     fi
     echo "  -> TLS certificates not found, generating..."
@@ -180,7 +181,7 @@ show_usage() {
     echo "  start          Start the server (without pulling updates)"
     echo "  stop           Stop the server"
     echo "  status         Show PM2 process status"
-    echo "  gen-cert       Generate TLS certificate for HTTPS (iOS camera support)"
+    echo "  gen-cert       Generate self-signed TLS certificate"
     echo "  help           Show this help message"
 }
 
