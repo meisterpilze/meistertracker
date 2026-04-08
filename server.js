@@ -1497,12 +1497,81 @@ function handleGet(parts, req, res) {
 function handleDelete(parts, req, res) {
   // DELETE /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
-    const filePath = path.join(CAL_DIR, parts[1], parts[2]);
+    const calName = parts[1];
+    const fileName = parts[2];
+    const filePath = path.join(CAL_DIR, calName, fileName);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
       return;
     }
+
+    // Read content before deleting to sync back to DB
+    let content = '';
+    try { content = unfoldIcs(fs.readFileSync(filePath, 'utf8')); } catch {}
+
+    const typeMatch = content.match(/X-MEISTERPILZE-TYPE:(.*)/);
+    const evType = typeMatch ? typeMatch[1].trim() : null;
+
+    if (evType === 'batch-due') {
+      // Clear batch due date (don't delete the batch itself)
+      const batchMatch = content.match(/X-MEISTERPILZE-BATCH:(.*)/);
+      if (batchMatch) {
+        const batchId = batchMatch[1].trim();
+        if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
+          try { db.updateBatchDue(database, batchId, null); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE batch-due sync failed',{batchId,error:e.message}); }
+        }
+      }
+    } else if (evType === 'task-due') {
+      // Clear task due date (don't delete the task)
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+        if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+          try { db.updateTaskDueDate(database, taskUid, null); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE task-due sync failed',{taskUid,error:e.message}); }
+        }
+      }
+    } else if (evType === 'custom-event') {
+      // Delete custom calendar event from DB
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const uid = uidMatch[1].trim();
+        const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
+        if (idMatch) {
+          try { db.deleteCalendarEvent(database, idMatch[1]); broadcastSSE(); } catch (e) { log('warn','CalDAV DELETE custom-event sync failed',{uid,error:e.message}); }
+        }
+      }
+    } else if (!evType && content.includes('VTODO')) {
+      // Task VTODO — delete the task from DB
+      const uidMatch = content.match(/UID:(.*)/);
+      if (uidMatch) {
+        const uid = uidMatch[1].trim();
+        const task = db.readTaskByCaldavUid(database, uid);
+        if (task) {
+          try {
+            db.deleteTaskById(database, task.id);
+            // Clean up companion due-date VEVENT
+            const eventFile = path.join(CAL_DIR, 'meisterpilze', uid + '-event.ics');
+            if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+            // Clean up mirror in shared/personal calendar
+            if (calName !== 'meisterpilze') {
+              const sharedFile = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
+              if (fs.existsSync(sharedFile)) fs.unlinkSync(sharedFile);
+            }
+            if (task.assignee) {
+              const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              if (calName !== slug) {
+                const personalFile = path.join(CAL_DIR, slug, uid + '.ics');
+                if (fs.existsSync(personalFile)) fs.unlinkSync(personalFile);
+              }
+            }
+            broadcastSSE();
+          } catch (e) { log('warn','CalDAV DELETE VTODO sync failed',{uid,error:e.message}); }
+        }
+      }
+    }
+    // External events (no X-MEISTERPILZE-TYPE, no VTODO) — just delete file
+
     fs.unlinkSync(filePath);
     res.writeHead(204);
     res.end();
