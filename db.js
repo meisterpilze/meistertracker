@@ -1200,6 +1200,10 @@ function updateCalendarEvent(db, id, fields) {
   incrementDataVersion(db);
 }
 
+function getCalendarEventById(db, id) {
+  return db.prepare('SELECT * FROM calendar_events WHERE id=?').get(id) || null;
+}
+
 function deleteCalendarEvent(db, id) {
   db.prepare('DELETE FROM calendar_events WHERE id=?').run(id);
   incrementDataVersion(db);
@@ -1316,7 +1320,7 @@ module.exports = {
   updateCaldavCfg,
   getDuckdnsCfg, updateDuckdnsCfg, updateDuckdnsStatus,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
-  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+  insertCalendarEvent, updateCalendarEvent, getCalendarEventById, deleteCalendarEvent,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
   insertZone, deleteZone, insertRack, deleteRack, zoneExists
 };

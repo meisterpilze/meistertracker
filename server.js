@@ -853,23 +853,22 @@ function autoPushTaskCaldav(task) {
 }
 
 // Remove a task's CalDAV files (VTODO + VEVENT) from all calendars
-function autoDeleteTaskCaldav(taskId) {
+// Pass task object (with caldavUid/assignee) BEFORE deleting from DB
+function autoDeleteTaskCaldav(task) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const task = db.readTaskById(database, taskId);
-    if (task && task.caldavUid) {
-      // Remove from shared calendar
-      deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
-      // Remove from personal calendar if assigned
-      if (task.assignee) {
-        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        deleteTaskFromCalendar(task.caldavUid, slug);
-      }
-      // Also remove VEVENT for due date
-      const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
-      if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
+    if (!task || !task.caldavUid) return;
+    // Remove from shared calendar
+    deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
+    // Remove from personal calendar if assigned
+    if (task.assignee) {
+      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      deleteTaskFromCalendar(task.caldavUid, slug);
     }
+    // Also remove VEVENT for due date
+    const eventFile = path.join(CAL_DIR, 'meisterpilze', task.caldavUid + '-event.ics');
+    if (fs.existsSync(eventFile)) fs.unlinkSync(eventFile);
   } catch (e) { log('error','autoDeleteTaskCaldav failed',{error:e.message}); }
 }
 
@@ -889,11 +888,12 @@ function autoSyncCalendarEvent(ev) {
 }
 
 // Remove a custom calendar event's CalDAV file
-function autoDeleteCalendarEventCaldav(eventId) {
+// Pass caldavUid if known (from event object before deletion), falls back to default UID format
+function autoDeleteCalendarEventCaldav(eventId, caldavUid) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const uid = 'cev-' + eventId + '@meisterpilze';
+    const uid = caldavUid || ('cev-' + eventId + '@meisterpilze');
     const file = path.join(CAL_DIR, 'meisterpilze', uid + '.ics');
     if (fs.existsSync(file)) fs.unlinkSync(file);
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
@@ -2033,7 +2033,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+    try{const task=db.readTaskById(database,id);db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(task)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Team Members --
@@ -2204,7 +2204,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    try{db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+    try{const ev=db.getCalendarEventById(database,id);db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id,ev&&ev.caldav_uid)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Inventory Delta --
