@@ -1565,6 +1565,8 @@ function _doAutoSyncAllCaldav(data) {
         log('warn', 'CalDAV: failed to write batch event', { batchId: b.batchId, error: e.message });
       }
     }
+    // Track written UIDs per personal calendar for orphan cleanup
+    const personalWrittenUids = new Map(); // calSlug → Set<filename>
     // Task VTODOs → meisterpilze + personal calendars
     for (const t of data.manualTasks || []) {
       try {
@@ -1575,6 +1577,10 @@ function _doAutoSyncAllCaldav(data) {
         if (t.assignee) {
           const slug = t.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
           writeTaskToCalendar(t, slug);
+          if (t.caldavUid) {
+            if (!personalWrittenUids.has(slug)) personalWrittenUids.set(slug, new Set());
+            personalWrittenUids.get(slug).add(t.caldavUid + '.ics');
+          }
         }
       } catch (e) {
         log('warn', 'CalDAV: failed to write task VTODO', { taskText: t.text?.slice(0, 50), error: e.message });
@@ -1643,6 +1649,29 @@ function _doAutoSyncAllCaldav(data) {
       }
     } catch (e) {
       log('warn', 'CalDAV: failed to clean migrated events from meisterpilze', { error: e.message });
+    }
+    // Clean orphaned VTODOs in personal calendars
+    const categoryCals = new Set(Object.keys(CALDAV_CATEGORY_CALS));
+    categoryCals.add('meisterpilze');
+    try {
+      const allCals = listCalendars();
+      for (const cal of allCals) {
+        if (categoryCals.has(cal)) continue; // already handled above
+        const calDir = path.join(CAL_DIR, cal);
+        const written = personalWrittenUids.get(cal) || new Set();
+        const files = fs.readdirSync(calDir).filter((f) => f.endsWith('.ics'));
+        for (const f of files) {
+          if (written.has(f)) continue;
+          const head = readFileHead(path.join(calDir, f), 500);
+          if (head.includes('PRODID:-//Meisterpilze')) {
+            fs.unlinkSync(path.join(calDir, f));
+            invalidateCtag(cal);
+            recordChange(cal, f, 'deleted');
+          }
+        }
+      }
+    } catch (e) {
+      log('warn', 'CalDAV: failed to clean orphaned personal files', { error: e.message });
     }
   } catch (e) {
     log('error', 'autoSyncAllCaldav failed', { error: e.message });
@@ -1771,6 +1800,14 @@ function syncAllTasksLocal(data) {
 // ── CalDAV HTTP handler ─────────────────────────────────────
 // Handles requests under /caldav/
 function handleCaldav(req, res) {
+  // Reject requests if CalDAV is not enabled in config
+  const caldavCfg = db.readCaldavConfig(database);
+  if (!caldavCfg.enabled) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' });
+    res.end('CalDAV is not enabled');
+    return;
+  }
+
   // DAV headers for all CalDAV responses (no CORS — CalDAV clients don't need it)
   res.setHeader('DAV', '1, 2, 3, calendar-access, extended-mkcol');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
@@ -1836,7 +1873,7 @@ function handleCaldav(req, res) {
   // parts: [] = root, ['calendars'] = calendar-home, ['calendars','name'] = calendar, ['calendars','name','file.ics'] = item
 
   // Validate root path segment
-  if (parts.length > 0 && parts[0] !== 'calendars') {
+  if (parts.length > 0 && parts[0] !== 'calendars' && parts[0] !== 'principal') {
     res.writeHead(400);
     res.end('Invalid path');
     return;
@@ -1911,9 +1948,31 @@ function handlePropfind(parts, body, req, res) {
     <d:propstat>
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
-        <d:current-user-principal><d:href>/caldav/</d:href></d:current-user-principal>
-        <c:calendar-home-set><d:href>/caldav/calendars/</d:href></c:calendar-home-set>
+        <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
         <d:displayname>Meisterpilze</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`;
+    res.writeHead(207, { 'Content-Type': 'application/xml; charset=utf-8' });
+    res.end(xml);
+    return;
+  }
+
+  // /caldav/principal/ — user principal resource (returns calendar-home-set)
+  if (parts.length === 1 && parts[0] === 'principal') {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">
+  <d:response>
+    <d:href>/caldav/principal/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><d:principal/></d:resourcetype>
+        <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
+        <d:principal-URL><d:href>/caldav/principal/</d:href></d:principal-URL>
+        <c:calendar-home-set><d:href>/caldav/calendars/</d:href></c:calendar-home-set>
+        <d:displayname>${escapeXml(req.caldavUser.username)}</d:displayname>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -3924,8 +3983,18 @@ function handleRequest(req, res) {
         return;
       }
       try {
+        const wasBefore = db.readCaldavConfig(database);
         db.updateCaldavCfg(database, data);
         log('info', 'CalDAV config updated', { actor: req.authUser.username });
+        // Trigger full sync when CalDAV is newly enabled
+        if (data.enabled && !wasBefore.enabled) {
+          try {
+            autoSyncAllCaldav(readData());
+            log('info', 'CalDAV initial sync triggered on enable');
+          } catch (ce) {
+            log('error', 'CalDAV initial sync failed', { error: ce.message });
+          }
+        }
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
