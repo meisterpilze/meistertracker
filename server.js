@@ -1333,14 +1333,14 @@ function handleReport(parts, body, req, res) {
       return;
     }
 
-    // Parse requested hrefs from the XML body
-    const hrefMatches = body.match(/<d:href>([^<]+)<\/d:href>/gi) || [];
+    // Parse requested hrefs from the XML body — handle any namespace prefix (d:href, D:href, href, etc.)
+    const hrefMatches = body.match(/<(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>([^<]+)<\/(?:[a-zA-Z0-9]+:)?href>/gi) || [];
     let responses = '';
 
     // If calendar-multiget with specific hrefs
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
-        const href = hrefTag.replace(/<\/?d:href>/gi, '');
+        const href = hrefTag.replace(/<\/?(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>/gi, '');
         const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
         if (!filename) continue;
         const filePath = path.join(calDir, filename);
