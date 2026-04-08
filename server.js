@@ -2597,6 +2597,16 @@ server.listen(PORT,'0.0.0.0',()=>{
   console.log('');
   console.log('  Data saved to: '+DB_FILE);
   console.log('  Press Ctrl+C to stop.');
+
+  // Auto-sync CalDAV on startup if enabled
+  try {
+    const cfg = db.readCaldavConfig(database);
+    if (cfg.enabled) {
+      log('info', 'CalDAV sync enabled — running initial sync...');
+      autoSyncAllCaldav(readData());
+      log('info', 'CalDAV initial sync complete');
+    }
+  } catch (e) { log('error', 'CalDAV startup sync failed', { error: e.message }); }
 });
 
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
