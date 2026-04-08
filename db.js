@@ -804,8 +804,9 @@ function writeAll(db, incoming) {
 
 // ── Backup ───────────────────────────────────────────────────
 function backupDb(db, destPath) {
-  const escaped = destPath.replace(/'/g, "''");
-  db.exec(`VACUUM INTO '${escaped}'`);
+  // VACUUM INTO doesn't support bound parameters — validate path to prevent injection
+  if (/['\x00]/.test(destPath)) throw new Error('Backup path contains unsafe characters');
+  db.exec(`VACUUM INTO '${destPath}'`);
   return Promise.resolve();
 }
 
