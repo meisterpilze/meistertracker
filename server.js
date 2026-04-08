@@ -109,6 +109,21 @@ function checkMcpAuth(req) {
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(stored));
 }
 
+// Simple sliding-window rate limiter for MCP endpoint (60 requests/minute)
+const MCP_RATE_LIMIT = 60;
+const MCP_RATE_WINDOW = 60 * 1000;
+const mcpRateMap = new Map(); // ip → { timestamps[] }
+function checkMcpRate(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let bucket = mcpRateMap.get(ip);
+  if (!bucket) { bucket = { timestamps: [] }; mcpRateMap.set(ip, bucket); }
+  bucket.timestamps = bucket.timestamps.filter(ts => now - ts < MCP_RATE_WINDOW);
+  if (bucket.timestamps.length >= MCP_RATE_LIMIT) return false;
+  bucket.timestamps.push(now);
+  return true;
+}
+
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
 // Uses a Set for O(1) add/delete instead of array splice.
 const sseClients = new Set();
@@ -2783,6 +2798,11 @@ function handleRequest(req, res) {
     if (!checkMcpAuth(req)) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end('{"error":"unauthorized"}');
+      return;
+    }
+    if (!checkMcpRate(req)) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      res.end('{"error":"rate limit exceeded"}');
       return;
     }
     const sessionId = req.headers['mcp-session-id'];
