@@ -3387,8 +3387,10 @@ function loadCaldavSettings(){
 }
 function saveCaldavSettings(){
   caldav.enabled=document.getElementById('caldav-enabled').checked;
-  apiPost('/api/caldav/config',caldav);
-  showCaldavStatus('Settings saved.','#166534');
+  apiPost('/api/caldav/config',caldav).then(r=>{
+    if(r.error){showCaldavStatus(r.error,'#b91c1c')}
+    else{showCaldavStatus(t('caldav.settingsSaved'),'#166534')}
+  });
 }
 function showCaldavStatus(msg,color){
   const el=document.getElementById('caldav-status');
