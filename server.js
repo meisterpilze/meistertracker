@@ -984,6 +984,18 @@ function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// Read only the first N bytes of a file (for orphan cleanup — avoids reading entire ICS)
+function readFileHead(filePath, bytes) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(bytes);
+    const bytesRead = fs.readSync(fd, buf, 0, bytes, 0);
+    return buf.toString('utf8', 0, bytesRead);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // Escape iCalendar TEXT values per RFC 5545 §3.3.11
 function escapeIcsText(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
@@ -1582,8 +1594,8 @@ function _doAutoSyncAllCaldav(data) {
         const existing = fs.readdirSync(dir).filter((f) => f.endsWith('.ics'));
         for (const f of existing) {
           const filePath = path.join(dir, f);
-          const content = fs.readFileSync(filePath, 'utf8');
-          if (content.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
+          const head = readFileHead(filePath, 500);
+          if (head.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
             fs.unlinkSync(filePath);
             invalidateCtag(calSlug);
             recordChange(calSlug, f, 'deleted');
@@ -1598,11 +1610,11 @@ function _doAutoSyncAllCaldav(data) {
       const sharedDir = path.join(CAL_DIR, 'meisterpilze');
       if (fs.existsSync(sharedDir)) {
         for (const f of fs.readdirSync(sharedDir).filter((f) => f.endsWith('.ics'))) {
-          const content = fs.readFileSync(path.join(sharedDir, f), 'utf8');
+          const head = readFileHead(path.join(sharedDir, f), 500);
           if (
-            content.includes('X-MEISTERPILZE-TYPE:batch-due') ||
-            content.includes('X-MEISTERPILZE-TYPE:task-due') ||
-            content.includes('X-MEISTERPILZE-TYPE:custom-event')
+            head.includes('X-MEISTERPILZE-TYPE:batch-due') ||
+            head.includes('X-MEISTERPILZE-TYPE:task-due') ||
+            head.includes('X-MEISTERPILZE-TYPE:custom-event')
           ) {
             fs.unlinkSync(path.join(sharedDir, f));
             invalidateCtag('meisterpilze');
@@ -1702,8 +1714,8 @@ function syncAllTasksLocal(data) {
     try {
       const existing = fs.readdirSync(dir).filter((f) => f.endsWith('.ics'));
       for (const f of existing) {
-        const content = fs.readFileSync(path.join(dir, f), 'utf8');
-        if (content.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
+        const head = readFileHead(path.join(dir, f), 500);
+        if (head.includes('X-MEISTERPILZE-TYPE') && !written.has(f)) {
           fs.unlinkSync(path.join(dir, f));
           invalidateCtag(calSlug);
           recordChange(calSlug, f, 'deleted');
@@ -1718,11 +1730,11 @@ function syncAllTasksLocal(data) {
     const sharedDir = path.join(CAL_DIR, 'meisterpilze');
     if (fs.existsSync(sharedDir)) {
       for (const f of fs.readdirSync(sharedDir).filter((f) => f.endsWith('.ics'))) {
-        const content = fs.readFileSync(path.join(sharedDir, f), 'utf8');
+        const head = readFileHead(path.join(sharedDir, f), 500);
         if (
-          content.includes('X-MEISTERPILZE-TYPE:batch-due') ||
-          content.includes('X-MEISTERPILZE-TYPE:task-due') ||
-          content.includes('X-MEISTERPILZE-TYPE:custom-event')
+          head.includes('X-MEISTERPILZE-TYPE:batch-due') ||
+          head.includes('X-MEISTERPILZE-TYPE:task-due') ||
+          head.includes('X-MEISTERPILZE-TYPE:custom-event')
         ) {
           fs.unlinkSync(path.join(sharedDir, f));
           invalidateCtag('meisterpilze');
