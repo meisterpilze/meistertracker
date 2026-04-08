@@ -54,11 +54,6 @@ if (PORT_RAW < 1 || PORT_RAW > 65535) {
   log('error', 'Invalid PORT, using default 3000', { value: PORT_RAW });
 }
 const PORT = PORT_RAW >= 1 && PORT_RAW <= 65535 ? PORT_RAW : 3000;
-const HTTPS_PORT_RAW = parseInt(process.env.HTTPS_PORT, 10) || 3443;
-if (HTTPS_PORT_RAW < 1 || HTTPS_PORT_RAW > 65535) {
-  log('error', 'Invalid HTTPS_PORT, using default 3443', { value: HTTPS_PORT_RAW });
-}
-const HTTPS_PORT = HTTPS_PORT_RAW >= 1 && HTTPS_PORT_RAW <= 65535 ? HTTPS_PORT_RAW : 3443;
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
@@ -3077,24 +3072,18 @@ function handleRequest(req, res) {
       res.end(JSON.stringify({ error: 'admin required' }));
       return;
     }
-    let body = '';
-    req.on('data', (c) => (body += c));
-    req.on('end', () => {
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
       try {
-        const { username, password, role } = JSON.parse(body);
+        const { username, password, role } = data;
         if (!username || !password || password.length < 8) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Username and password (min 8 chars) required' }));
+          jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
         const user = db.createUser(database, username, password, role || 'user');
         log('info', 'User created', { actor: req.authUser.username, newUser: username, role: role || 'user' });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(user));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+        jsonOk(res, user);
+      } catch (e) { safeErr(res, e); }
     });
     return;
   }
@@ -4351,7 +4340,7 @@ function handleRequest(req, res) {
       let tmpPath;
       try {
         const raw = Buffer.concat(chunks);
-        const password = new URL(req.url, 'http://x').searchParams.get('pw') || req.headers['x-backup-password'] || '';
+        const password = req.headers['x-backup-password'] || '';
         if (!password) {
           jsonErr(res, 400, 'Password required');
           return;
