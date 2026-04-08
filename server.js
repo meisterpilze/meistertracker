@@ -1426,12 +1426,52 @@ function handlePut(parts, body, req, res) {
 
     fs.writeFileSync(filePath, body, 'utf8');
 
-    // Bidirectional sync: if a VEVENT in shared calendar is updated via CalDAV client, update DB
-    if (calName === 'meisterpilze' && body.includes('VEVENT')) {
+    // Bidirectional sync: parse incoming content and update DB
+    const unfolded = unfoldIcs(body);
+
+    // ── VTODO sync-back: task text, priority, completion, due date ──
+    if (unfolded.includes('VTODO')) {
       try {
-        const dtMatch = body.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-        const typeMatch = body.match(/X-MEISTERPILZE-TYPE:(.*)/);
-        const batchMatch = body.match(/X-MEISTERPILZE-BATCH:(.*)/);
+        const uidMatch = unfolded.match(/UID:(.*)/);
+        if (uidMatch) {
+          const uid = uidMatch[1].trim();
+          if (/^[A-Za-z0-9\-_.@]+$/.test(uid)) {
+            const task = db.readTaskByCaldavUid(database, uid);
+            if (task) {
+              const fields = {};
+              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
+              if (sumMatch) { const t = sumMatch[1].trim().replace(/\\n/g, '\n'); if (t !== task.text) fields.text = t; }
+              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
+              if (prioMatch) { const p = { 1:'high', 2:'high', 3:'high', 4:'high', 5:'med', 6:'low', 7:'low', 8:'low', 9:'low', 0:'med' }[prioMatch[1]] || 'med'; if (p !== task.priority) fields.priority = p; }
+              const statusMatch = unfolded.match(/STATUS:(.*)/);
+              if (statusMatch) { const done = statusMatch[1].trim() === 'COMPLETED'; if (done !== task.done) fields.done = done; }
+              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+              if (dueMatch) { const d = dueMatch[1]+'-'+dueMatch[2]+'-'+dueMatch[3]; if (d !== (task.dueDate||'').slice(0,10)) fields.dueDate = d; }
+              else if (!unfolded.includes('DUE') && task.dueDate) { fields.dueDate = null; }
+              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
+              if (descMatch) { const d = descMatch[1].trim().replace(/\\n/g, '\n'); if (d !== (task.description||'')) fields.description = d; }
+              const assigneeMatch = unfolded.match(/X-MEISTERPILZE-ASSIGNEE:(.*)/);
+              if (assigneeMatch) { const a = assigneeMatch[1].trim(); if (a !== (task.assignee||'')) fields.assignee = a; }
+
+              if (Object.keys(fields).length > 0) {
+                db.updateTaskById(database, task.id, fields);
+                // Re-read and push to all calendars for consistency
+                const updated = db.readTaskById(database, task.id);
+                if (updated) autoPushTaskCaldav(updated);
+                broadcastSSE();
+              }
+            }
+          }
+        }
+      } catch (e) { log('error','CalDAV VTODO bidirectional sync error',{error:e.message}); }
+    }
+
+    // ── VEVENT sync-back: batch due dates, task due dates ──
+    if (unfolded.includes('VEVENT')) {
+      try {
+        const dtMatch = unfolded.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
+        const typeMatch = unfolded.match(/X-MEISTERPILZE-TYPE:(.*)/);
+        const batchMatch = unfolded.match(/X-MEISTERPILZE-BATCH:(.*)/);
         if (dtMatch && typeMatch) {
           const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
           const evType = typeMatch[1].trim();
@@ -1439,13 +1479,15 @@ function handlePut(parts, body, req, res) {
             const batchId = batchMatch[1].trim();
             if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
               db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
+              broadcastSSE();
             } else { log('warn','CalDAV PUT rejected invalid batchId',{batchId}); }
           } else if (evType === 'task-due') {
-            const uidMatch = body.match(/UID:(.*)/);
+            const uidMatch = unfolded.match(/UID:(.*)/);
             if (uidMatch) {
               const taskUid = uidMatch[1].trim().replace(/-event$/, '');
               if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
                 db.updateTaskDueDate(database, taskUid, newDate);
+                broadcastSSE();
               } else { log('warn','CalDAV PUT rejected invalid taskUid',{taskUid}); }
             }
           }
