@@ -1112,7 +1112,7 @@ function getBatchLocServer(batch, scanLog) {
 // Per-calendar access control: personal calendars are only accessible by that user (or admins)
 // Shared 'meisterpilze' calendar is accessible by all authenticated users
 function checkCalendarAccess(req, calName) {
-  if (calName === 'meisterpilze') return true;
+  if (CALDAV_CATEGORY_CALS[calName]) return true;
   if (req.caldavUser.role === 'admin') return true;
   return req.caldavUserSlug === calName;
 }
@@ -4302,6 +4302,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        if (!data.token) {
+          const existing = db.getDuckdnsCfg(database);
+          data.token = existing.token || '';
+        }
         db.updateDuckdnsCfg(database, data);
         startDuckdnsUpdater();
         log('info', 'DuckDNS config updated', { actor: req.authUser.username });
@@ -4315,7 +4319,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/duckdns/config') {
     if (requireAdmin(req, res)) return;
     try {
-      jsonOk(res, db.getDuckdnsCfg(database));
+      const cfg = db.getDuckdnsCfg(database);
+      cfg.hasToken = !!(cfg.token);
+      delete cfg.token;
+      jsonOk(res, cfg);
     } catch (err) {
       safeErr(res, err);
     }
@@ -4865,7 +4872,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       try {
         const { zpl } = JSON.parse(body);
         if (!zpl) {
-          res.writeHead(400);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end('{"error":"no zpl"}');
           return;
         }
@@ -4880,7 +4887,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
         });
       } catch {
-        res.writeHead(400);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"bad json"}');
       }
     });
