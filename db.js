@@ -837,6 +837,7 @@ function updateTaskDueDate(db, caldavUid, newDueDate) {
 // ── Read only CalDAV config (lightweight, for auth checks) ──
 function readCaldavConfig(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
+  if (!cal) return { enabled: false };
   return {
     enabled: cal.enabled === 1
   };
