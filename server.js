@@ -2992,6 +2992,14 @@ function handleRequest(req, res) {
           if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
             return jsonErr(res, 400, 'redirect_uris required');
           }
+          for (const uri of redirectUris) {
+            if (typeof uri !== 'string') return jsonErr(res, 400, 'redirect_uris must be strings');
+            let parsed;
+            try { parsed = new URL(uri); } catch { return jsonErr(res, 400, 'invalid redirect_uri: ' + uri); }
+            if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+              return jsonErr(res, 400, 'redirect_uri must use HTTPS (except localhost)');
+            }
+          }
           const client = db.registerOAuthClient(database, {
             clientId,
             clientName: data.client_name || '',
