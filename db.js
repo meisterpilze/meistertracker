@@ -840,6 +840,7 @@ function updateTaskDueDate(db, caldavUid, newDueDate) {
 // ── Read only CalDAV config (lightweight, for auth checks) ──
 function readCaldavConfig(db) {
   const cal = db.prepare('SELECT * FROM caldav_config WHERE id = 1').get();
+  if (!cal) return { enabled: false };
   return {
     enabled: cal.enabled === 1
   };
@@ -1208,6 +1209,10 @@ function updateCalendarEvent(db, id, fields) {
   incrementDataVersion(db);
 }
 
+function getCalendarEventById(db, id) {
+  return db.prepare('SELECT * FROM calendar_events WHERE id=?').get(id) || null;
+}
+
 function deleteCalendarEvent(db, id) {
   db.prepare('DELETE FROM calendar_events WHERE id=?').run(id);
   incrementDataVersion(db);
@@ -1330,7 +1335,7 @@ module.exports = {
   updateCaldavCfg,
   getDuckdnsCfg, updateDuckdnsCfg, updateDuckdnsStatus,
   applyInventoryDelta, setInventoryAbsolute, updateInventoryConfig,
-  insertCalendarEvent, updateCalendarEvent, deleteCalendarEvent, readCalendarEventByCaldavUid,
+  insertCalendarEvent, updateCalendarEvent, getCalendarEventById, deleteCalendarEvent, readCalendarEventByCaldavUid,
   setCalendarEventAssignees, getAllCalendarEventAssignees,
   insertZone, deleteZone, insertRack, deleteRack, zoneExists
 };
