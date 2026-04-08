@@ -2183,7 +2183,7 @@ function rebuildZoneConstants(){
 }
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},assets=[],zones=[];
+let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[];
 let appUsers=[];let calEvSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
@@ -2257,7 +2257,7 @@ function applyData(d){
   batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
-  teamMembers=d.teamMembers||[];caldav=d.caldav||{};assets=d.assets||[];
+  teamMembers=d.teamMembers||[];caldav=d.caldav||{};duckdns=d.duckdns||{};assets=d.assets||[];
   calendarEvents=d.calendarEvents||[];zones=d.zones||[];
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
@@ -2396,6 +2396,7 @@ function openStab(page,sub){
   if(page==='print'&&sub==='ref')renderRefBarcodes();
   if(page==='cal'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='settings'&&sub==='caldav')loadCaldavSettings();
+  if(page==='settings'&&sub==='duckdns')loadDuckdnsSettings();
   if(page==='settings'&&sub==='log')renderLog();
 }
 function refresh(){
@@ -3355,6 +3356,102 @@ async function pushTaskCaldav(task){
     const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
     if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();apiPatch('/api/tasks/'+task.id,{caldavUid:task.caldavUid,caldavSynced:task.caldavSynced});renderCalendar()}
   }catch(e){console.error('CalDAV push error:',e)}
+}
+
+// ─── DUCKDNS ────────────────────────────────────────────────
+async function loadDuckdnsSettings(){
+  try{
+    const r=await authFetch('/api/duckdns/config');
+    if(!r.ok)return;
+    const cfg=await r.json();
+    document.getElementById('duckdns-enabled').checked=!!cfg.enabled;
+    document.getElementById('duckdns-domain').value=cfg.domain||'';
+    document.getElementById('duckdns-token').value=cfg.token||'';
+    document.getElementById('duckdns-le-enabled').checked=!!cfg.leEnabled;
+  }catch(e){/* non-admin */}
+  await refreshDuckdnsStatus();
+}
+async function refreshDuckdnsStatus(){
+  try{
+    const r=await authFetch('/api/duckdns/status');
+    if(!r.ok)return;
+    const s=await r.json();
+    const banner=document.getElementById('duckdns-status-banner');
+    if(s.enabled&&s.domain){
+      banner.style.display='block';
+      if(s.lastIp){
+        banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+        banner.innerHTML='<strong>'+s.domain+'</strong> &rarr; '+s.lastIp+(s.lastIpUpdate?' <span style="color:#888">('+fmtDtTime(s.lastIpUpdate)+')</span>':'');
+      }else{
+        banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
+        banner.textContent='DuckDNS aktiviert, aber noch kein IP-Update durchgeführt.';
+      }
+    }else{banner.style.display='none'}
+    const certEl=document.getElementById('le-cert-status');
+    if(s.cert&&s.cert.exists){
+      certEl.style.display='block';
+      if(s.cert.type==='letsencrypt'&&s.leExpiry){
+        const daysLeft=Math.round((new Date(s.leExpiry)-Date.now())/86400000);
+        const ok=daysLeft>30,warn=daysLeft>7;
+        certEl.style.background=ok?'#f0fdf4':warn?'#fffbeb':'#fef2f2';
+        certEl.style.border='1px solid '+(ok?'#bbf7d0':warn?'#fde68a':'#fecaca');
+        certEl.style.color=ok?'#166534':warn?'#92400e':'#b91c1c';
+        certEl.innerHTML='Let\'s Encrypt Zertifikat aktiv. Ablauf: '+fmtDt(s.leExpiry)+' ('+daysLeft+' Tage)';
+      }else{
+        certEl.style.background='#eff6ff';certEl.style.border='1px solid #bfdbfe';certEl.style.color='#1e40af';
+        certEl.textContent='Aktuelles Zertifikat: '+s.cert.type;
+      }
+    }else{certEl.style.display='none'}
+  }catch(e){/* non-admin */}
+}
+function showDuckdnsStatus(msg,color){
+  const el=document.getElementById('duckdns-ip-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},8000);
+}
+function showLeStatus(msg,color){
+  const el=document.getElementById('le-status');
+  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
+  setTimeout(()=>{el.style.display='none'},15000);
+}
+async function saveDuckdnsSettings(){
+  const cfg={
+    enabled:document.getElementById('duckdns-enabled').checked,
+    domain:document.getElementById('duckdns-domain').value.trim().toLowerCase(),
+    token:document.getElementById('duckdns-token').value.trim(),
+    leEnabled:document.getElementById('duckdns-le-enabled').checked
+  };
+  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus('Subdomain ist erforderlich.','#b91c1c');return}
+  if(cfg.enabled&&!cfg.token){showDuckdnsStatus('Token ist erforderlich.','#b91c1c');return}
+  try{
+    const r=await apiPost('/api/duckdns/config',cfg);
+    if(r.error){showDuckdnsStatus('Fehler: '+r.error,'#b91c1c')}
+    else{showDuckdnsStatus('Einstellungen gespeichert.','#166534');refreshDuckdnsStatus()}
+  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'#b91c1c')}
+}
+async function triggerDuckdnsUpdate(){
+  const btn=document.getElementById('duckdns-update-btn');
+  btn.disabled=true;btn.textContent='Aktualisiere...';
+  showDuckdnsStatus('Sende IP-Update an DuckDNS...','#888');
+  try{
+    const r=await authFetch('/api/duckdns/update-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const data=await r.json();
+    if(data.error){showDuckdnsStatus('Fehler: '+data.error,'#b91c1c')}
+    else{showDuckdnsStatus('IP aktualisiert: '+data.lastIp,'#166534');refreshDuckdnsStatus()}
+  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'#b91c1c')}
+  finally{btn.disabled=false;btn.textContent='IP jetzt aktualisieren'}
+}
+async function requestLeCert(){
+  const btn=document.getElementById('le-request-btn');
+  btn.disabled=true;btn.textContent='Wird angefordert...';
+  showLeStatus('Zertifikat wird bei Let\'s Encrypt angefordert (kann 1-2 Minuten dauern)...','#888');
+  try{
+    const r=await authFetch('/api/duckdns/request-cert',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const data=await r.json();
+    if(data.error){showLeStatus('Fehler: '+data.error,'#b91c1c')}
+    else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'#166534');refreshDuckdnsStatus()}
+  }catch(e){showLeStatus('Fehler: '+e.message,'#b91c1c')}
+  finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -6010,6 +6107,10 @@ function initEventListeners() {
   $('st-settings-backup').addEventListener('click', () => { openStab('settings','backup'); });
   $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
   $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
+  $('st-settings-duckdns').addEventListener('click', () => { openStab('settings','duckdns'); });
+  $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
+  $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
+  $('le-request-btn').addEventListener('click', requestLeCert);
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);

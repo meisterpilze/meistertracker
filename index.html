@@ -703,6 +703,7 @@
     <button class="stab" id="st-settings-backup" data-i18n="settings.backup">Backup</button>
     <button class="stab" id="st-settings-users">Users</button>
     <button class="stab" id="st-settings-caldav">CalDAV</button>
+    <button class="stab" id="st-settings-duckdns">DuckDNS</button>
   </div>
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
@@ -822,6 +823,55 @@
         <p style="margin-top:6px"><strong>Persönliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zusätzlich.</p>
         <p style="margin-top:6px"><strong>Sichtbarkeit:</strong> Standardmäßig sind alle Aufgaben für alle sichtbar (im Betriebskalender). Einzelne Aufgaben können als "Nur für zugewiesene Person" markiert werden — diese erscheinen dann nur im persönlichen Kalender.</p>
         <p style="margin-top:6px"><strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. Änderungen in der Kalender-App werden zurückgespeichert.</p>
+      </div>
+    </div>
+  </div>
+  <!-- DuckDNS -->
+  <div class="sp" id="sp-settings-duckdns">
+    <div class="card">
+      <div class="sec">DuckDNS Dynamic DNS</div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain für Zugriff über das Internet. Die öffentliche IP wird automatisch alle 5 Minuten aktualisiert.</p>
+      <div id="duckdns-status-banner" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+          <input type="checkbox" id="duckdns-enabled" style="width:auto" />
+          <span>DuckDNS aktivieren</span>
+        </label>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">Subdomain</label>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="text" id="duckdns-domain" placeholder="meinserver" style="flex:1;max-width:200px" />
+            <span style="font-size:13px;color:#888">.duckdns.org</span>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">DuckDNS Token</label>
+          <input type="password" id="duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="max-width:350px;width:100%" />
+          <div style="font-size:11px;color:#888;margin-top:2px">Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <button id="duckdns-save-btn" class="btn btn-sm btn-p">Einstellungen speichern</button>
+          <button id="duckdns-update-btn" class="btn btn-sm">IP jetzt aktualisieren</button>
+        </div>
+        <div id="duckdns-ip-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec">Let's Encrypt TLS-Zertifikat</div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">Kostenloses, vertrauenswürdiges TLS-Zertifikat von Let's Encrypt für deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.</p>
+      <div id="le-cert-status" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+          <input type="checkbox" id="duckdns-le-enabled" style="width:auto" />
+          <span>Let's Encrypt Auto-Renewal aktivieren</span>
+        </label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="le-request-btn" class="btn btn-sm btn-p">Zertifikat jetzt anfordern</button>
+        </div>
+        <div id="le-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:#888;line-height:1.6">
+        <strong>Voraussetzung:</strong> curl und bash müssen auf dem Server verfügbar sein. acme.sh wird automatisch installiert.
       </div>
     </div>
   </div>
