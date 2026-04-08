@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
 
 // ── CONFIGURATION ────────────────────────────────────────────
@@ -1856,6 +1856,8 @@ function handleRequest(req,res){
       version:require('./package.json').version
     };
     if(authUser){
+      health.platform=process.platform;
+      health.nodeVersion=process.version;
       health.sseClients=sseClients.size;
       health.memory={
         rss:Math.round(mem.rss/1024/1024),
@@ -2160,6 +2162,22 @@ function handleRequest(req,res){
         updaterRunning:!!duckdnsInterval
       });
     }catch(err){safeErr(res,err)}
+    return;
+  }
+
+  // -- Server Restart --
+  if(req.method==='POST'&&req.url==='/api/server/restart'){
+    if(requireAdmin(req,res))return;
+    log('info','Server restart requested via web UI',{actor:req.authUser.username});
+    jsonOk(res,{ok:true,message:'Server is restarting...'});
+    setTimeout(()=>{
+      const scriptDir=path.resolve(__dirname);
+      if(process.platform==='win32'){
+        spawn('cmd.exe',['/c','START.bat'],{cwd:scriptDir,detached:true,stdio:'ignore'}).unref();
+      }else{
+        spawn('bash',['update_server.sh'],{cwd:scriptDir,detached:true,stdio:'ignore'}).unref();
+      }
+    },500);
     return;
   }
 
