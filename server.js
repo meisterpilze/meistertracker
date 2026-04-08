@@ -1758,23 +1758,15 @@ function handleRequest(req,res){
       res.writeHead(403,{'Content-Type':'application/json'});
       res.end(JSON.stringify({error:'admin required'}));return;
     }
-    let body='';
-    req.on('data',c=>body+=c);
-    req.on('end',()=>{
+    jsonBody(req,res,(e,data)=>{
+      if(e){jsonErr(res,400,e.message);return}
       try{
-        const{username,password,role}=JSON.parse(body);
-        if(!username||!password||password.length<8){
-          res.writeHead(400,{'Content-Type':'application/json'});
-          res.end(JSON.stringify({error:'Username and password (min 8 chars) required'}));return;
-        }
+        const{username,password,role}=data;
+        if(!username||!password||password.length<8){jsonErr(res,400,'Username and password (min 8 chars) required');return}
         const user=db.createUser(database,username,password,role||'user');
         log('info','User created',{actor:req.authUser.username,newUser:username,role:role||'user'});
-        res.writeHead(200,{'Content-Type':'application/json'});
-        res.end(JSON.stringify(user));
-      }catch(e){
-        res.writeHead(400,{'Content-Type':'application/json'});
-        res.end(JSON.stringify({error:e.message}));
-      }
+        jsonOk(res,user);
+      }catch(e){safeErr(res,e)}
     });return;
   }
 
