@@ -3576,10 +3576,10 @@ async function loadMcpSettings(){
     const r=await authFetch('/api/mcp/config');
     if(!r.ok)return;
     const cfg=await r.json();
-    $('mcp-enabled').checked=cfg.enabled;
-    $('mcp-url').value=cfg.connectorUrl||'';
+    document.getElementById('mcp-enabled').checked=cfg.enabled;
+    document.getElementById('mcp-url').value=cfg.connectorUrl||'';
     toggleMcpSections(cfg.enabled);
-    const banner=$('mcp-status-banner');
+    const banner=document.getElementById('mcp-status-banner');
     if(cfg.enabled&&cfg.hasToken){
       banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
       banner.textContent=t('mcp.active');
@@ -3598,17 +3598,17 @@ async function loadMcpSettings(){
   }catch(e){/* non-admin */}
 }
 function toggleMcpSections(enabled){
-  $('mcp-url-section').style.display=enabled?'block':'none';
-  $('mcp-token-section').style.display=enabled?'block':'none';
+  document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
+  document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
 }
 function showMcpStatus(msg,color){
-  const el=$('mcp-status');
+  const el=document.getElementById('mcp-status');
   el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
   setTimeout(()=>{el.style.display='none'},8000);
 }
 async function saveMcpSettings(){
   try{
-    const r=await apiPost('/api/mcp/config',{enabled:$('mcp-enabled').checked});
+    const r=await apiPost('/api/mcp/config',{enabled:document.getElementById('mcp-enabled').checked});
     if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'#b91c1c')}
     else{showMcpStatus(t('mcp.saved'),'#166534');loadMcpSettings()}
   }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
@@ -3619,9 +3619,9 @@ async function generateMcpToken(){
     const data=await r.json();
     if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
     _mcpToken=data.token;
-    $('mcp-token-display').textContent=data.token;
-    $('mcp-token-display').style.display='block';
-    $('mcp-copy-token-btn').style.display='inline-flex';
+    document.getElementById('mcp-token-display').textContent=data.token;
+    document.getElementById('mcp-token-display').style.display='block';
+    document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
     showMcpStatus(t('mcp.keyGenerated'),'#166534');
   }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
