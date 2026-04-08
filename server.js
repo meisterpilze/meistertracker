@@ -977,6 +977,7 @@ function taskToVTODO(task) {
   lines.push('PRIORITY:' + (prioMap[task.priority] || 0));
   lines.push('STATUS:' + (task.done ? 'COMPLETED' : 'NEEDS-ACTION'));
   if (task.done) lines.push('PERCENT-COMPLETE:100');
+  lines.push('X-MEISTERPILZE-TYPE:task');
   if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
   if (task.description) lines.push('DESCRIPTION:' + task.description.replace(/\n/g, '\\n'));
   lines.push('COLOR:#3b82f6');
@@ -1166,22 +1167,21 @@ function autoPushTaskCaldav(task) {
 }
 
 // Remove a task's CalDAV files (VTODO + VEVENT) from all calendars
-function autoDeleteTaskCaldav(taskId) {
+// Pass task object (with caldavUid/assignee) BEFORE deleting from DB
+function autoDeleteTaskCaldav(task) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const task = db.readTaskById(database, taskId);
-    if (task && task.caldavUid) {
-      // Remove from shared calendar
-      deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
-      // Remove from personal calendar if assigned
-      if (task.assignee) {
-        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        deleteTaskFromCalendar(task.caldavUid, slug);
-      }
-      // Also remove VEVENT for due date
-      deleteIcsFile('meisterpilze', task.caldavUid + '-event.ics');
+    if (!task || !task.caldavUid) return;
+    // Remove from shared calendar
+    deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
+    // Remove from personal calendar if assigned
+    if (task.assignee) {
+      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      deleteTaskFromCalendar(task.caldavUid, slug);
     }
+    // Also remove VEVENT for due date
+    deleteIcsFile('meisterpilze', task.caldavUid + '-event.ics');
   } catch (e) { log('error','autoDeleteTaskCaldav failed',{error:e.message}); }
 }
 
@@ -1200,11 +1200,12 @@ function autoSyncCalendarEvent(ev) {
 }
 
 // Remove a custom calendar event's CalDAV file
-function autoDeleteCalendarEventCaldav(eventId) {
+// Pass caldavUid if known (from event object before deletion), falls back to default UID format
+function autoDeleteCalendarEventCaldav(eventId, caldavUid) {
   try {
     const cfg = db.readCaldavConfig(database);
     if (!cfg.enabled) return;
-    const uid = 'cev-' + eventId + '@meisterpilze';
+    const uid = caldavUid || ('cev-' + eventId + '@meisterpilze');
     deleteIcsFile('meisterpilze', uid + '.ics');
   } catch (e) { log('error','autoDeleteCalendarEventCaldav failed',{error:e.message}); }
 }
@@ -1411,6 +1412,7 @@ function handleCaldav(req, res) {
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
   req.caldavUser = caldavUser;
+  req.caldavUserSlug = caldavUser.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
@@ -1427,6 +1429,14 @@ function handleCaldav(req, res) {
       return;
     }
     parts[i] = clean;
+  }
+
+  // Per-calendar access control: personal calendars are only accessible by that user (or admins)
+  // Shared 'meisterpilze' calendar is accessible by all authenticated users
+  function checkCalendarAccess(calName) {
+    if (calName === 'meisterpilze') return true;
+    if (req.caldavUser.role === 'admin') return true;
+    return req.caldavUserSlug === calName;
   }
 
   if (method === 'OPTIONS') {
@@ -1486,7 +1496,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/ — list all calendars
   if (parts.length === 1 && parts[0] === 'calendars') {
-    const cals = listCalendars();
+    const cals = listCalendars().filter(c => checkCalendarAccess(c));
     let responses = `<d:response>
     <d:href>/caldav/calendars/</d:href>
     <d:propstat>
@@ -1533,6 +1543,11 @@ function handlePropfind(parts, body, req, res) {
   // /caldav/calendars/<cal>/ — list items in a calendar
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -1589,6 +1604,7 @@ function handlePropfind(parts, body, req, res) {
 
   // /caldav/calendars/<cal>/<file>.ics — single item props
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
+    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
@@ -1624,6 +1640,7 @@ function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     const calDir = path.join(CAL_DIR, calName);
     if (!fs.existsSync(calDir)) {
       res.writeHead(404);
@@ -1702,14 +1719,14 @@ function handleReport(parts, body, req, res) {
       return;
     }
 
-    // Parse requested hrefs from the XML body
-    const hrefMatches = body.match(/<d:href>([^<]+)<\/d:href>/gi) || [];
+    // Parse requested hrefs from the XML body — handle any namespace prefix (d:href, D:href, href, etc.)
+    const hrefMatches = body.match(/<(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>([^<]+)<\/(?:[a-zA-Z0-9]+:)?href>/gi) || [];
     let responses = '';
 
     // If calendar-multiget with specific hrefs
     if (hrefMatches.length > 0) {
       for (const hrefTag of hrefMatches) {
-        const href = hrefTag.replace(/<\/?d:href>/gi, '');
+        const href = hrefTag.replace(/<\/?(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>/gi, '');
         const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
         if (!filename) continue;
         const filePath = path.join(calDir, filename);
@@ -1766,10 +1783,11 @@ function handleReport(parts, body, req, res) {
 function handleMkcalendar(parts, body, req, res) {
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     ensureCalDir(calName);
     res.writeHead(201);
     res.end();
-    log('info','CalDAV calendar created',{name:calName});
+    log('info','CalDAV calendar created',{name:calName,actor:req.caldavUser.username});
     return;
   }
   res.writeHead(403);
@@ -1780,6 +1798,7 @@ function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const calName = parts[1];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     const fileName = parts[2];
     const dir = ensureCalDir(calName);
     const filePath = path.join(dir, fileName);
@@ -2002,6 +2021,7 @@ function handlePut(parts, body, req, res) {
 function handleGet(parts, req, res) {
   // GET /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
+    if (!checkCalendarAccess(parts[1])) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, parts[1], parts[2]);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
@@ -2035,6 +2055,7 @@ function handleDelete(parts, req, res) {
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
     const calName = parts[1];
     const fileName = parts[2];
+    if (!checkCalendarAccess(calName)) { res.writeHead(403); res.end('Forbidden'); return; }
     const filePath = path.join(CAL_DIR, calName, fileName);
     if (!fs.existsSync(filePath)) {
       res.writeHead(404);
@@ -2614,7 +2635,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&taskMatch){
     const id=parseInt(taskMatch[1]);
-    try{db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+    try{const task=db.readTaskById(database,id);db.deleteTaskById(database,id);try{autoDeleteTaskCaldav(task)}catch(ce){log('warn','CalDAV cleanup failed after task delete',{taskId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Team Members --
@@ -2801,7 +2822,7 @@ function handleRequest(req,res){
   }
   if(req.method==='DELETE'&&calEvMatch){
     const id=decodeURIComponent(calEvMatch[1]);
-    try{db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
+    try{const ev=db.getCalendarEventById(database,id);db.deleteCalendarEvent(database,id);try{autoDeleteCalendarEventCaldav(id,ev&&ev.caldav_uid)}catch(ce){log('warn','CalDAV cleanup failed after event delete',{eventId:id,error:ce.message})}broadcastSSE(res);jsonOk(res)}catch(err){safeErr(res,err)}return;
   }
 
   // -- Inventory Delta --
@@ -3012,7 +3033,11 @@ function handleRequest(req,res){
           const slug=task.assignee.toLowerCase().replace(/[^a-z0-9]+/g,'-');
           uid=writeTaskToCalendar(task,slug);
         }
-        if(!uid) uid=writeTaskToCalendar(task,'meisterpilze'); // fallback if private + unassigned
+        // Private + unassigned: no calendar to write to, just generate a UID
+        if(!uid){
+          if(!task.caldavUid) task.caldavUid=generateUID();
+          uid=task.caldavUid;
+        }
         const synced=task.caldavSynced||new Date().toISOString();
         db.updateTaskCaldavUid(database,task.text,task.created,uid,synced);
         res.writeHead(200,{'Content-Type':'application/json'});
