@@ -3315,18 +3315,14 @@ function loadCaldavSettings(){
   // Show the CalDAV URL for this server
   const url=location.protocol+'//'+location.hostname+':'+location.port+'/caldav/calendars/';
   document.getElementById('caldav-url-display').textContent=url;
-  document.getElementById('caldav-user').value=caldav.caldavUsername||'';
-  document.getElementById('caldav-pass').value=caldav.caldavPassword||'';
   document.getElementById('caldav-enabled').checked=!!caldav.enabled;
-  document.getElementById('caldav-per-person').checked=!!caldav.perPersonCalendars;
 }
 function saveCaldavSettings(){
-  caldav.caldavUsername=document.getElementById('caldav-user').value.trim();
-  caldav.caldavPassword=document.getElementById('caldav-pass').value;
   caldav.enabled=document.getElementById('caldav-enabled').checked;
-  caldav.perPersonCalendars=document.getElementById('caldav-per-person').checked;
-  apiPost('/api/caldav/config',caldav);
-  showCaldavStatus('Settings saved.','#166534');
+  apiPost('/api/caldav/config',caldav).then(r=>{
+    if(r.error){showCaldavStatus(r.error,'#b91c1c')}
+    else{showCaldavStatus(t('caldav.settingsSaved'),'#166534')}
+  });
 }
 function showCaldavStatus(msg,color){
   const el=document.getElementById('caldav-status');
