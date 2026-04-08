@@ -2188,6 +2188,11 @@ function handleReport(parts, body, req, res) {
 }
 
 function handleMkcalendar(parts, body, req, res) {
+  if (req.caldavUser.role !== 'admin') {
+    res.writeHead(403);
+    res.end('Forbidden: only admins can create calendars');
+    return;
+  }
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
     // Block UUID-like calendar names (auto-created by CalDAV clients like iOS)
