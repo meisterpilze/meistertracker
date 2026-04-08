@@ -45,9 +45,6 @@ function log(level, msg, meta) {
 const PORT_RAW = parseInt(process.env.PORT, 10) || 3000;
 if (PORT_RAW < 1 || PORT_RAW > 65535) { log('error', 'Invalid PORT, using default 3000', { value: PORT_RAW }); }
 const PORT = (PORT_RAW >= 1 && PORT_RAW <= 65535) ? PORT_RAW : 3000;
-const HTTPS_PORT_RAW = parseInt(process.env.HTTPS_PORT, 10) || 3443;
-if (HTTPS_PORT_RAW < 1 || HTTPS_PORT_RAW > 65535) { log('error', 'Invalid HTTPS_PORT, using default 3443', { value: HTTPS_PORT_RAW }); }
-const HTTPS_PORT = (HTTPS_PORT_RAW >= 1 && HTTPS_PORT_RAW <= 65535) ? HTTPS_PORT_RAW : 3443;
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
