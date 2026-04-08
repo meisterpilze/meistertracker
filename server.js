@@ -1112,7 +1112,7 @@ function getBatchLocServer(batch, scanLog) {
 // Per-calendar access control: personal calendars are only accessible by that user (or admins)
 // Shared 'meisterpilze' calendar is accessible by all authenticated users
 function checkCalendarAccess(req, calName) {
-  if (calName === 'meisterpilze') return true;
+  if (CALDAV_CATEGORY_CALS[calName]) return true;
   if (req.caldavUser.role === 'admin') return true;
   return req.caldavUserSlug === calName;
 }
