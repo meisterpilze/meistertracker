@@ -120,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_invlog_time ON inventory_log(time);
 
 CREATE TABLE IF NOT EXISTS caldav_config (
   id                   INTEGER PRIMARY KEY CHECK (id = 1),
-  enabled              INTEGER DEFAULT 0,
+  enabled              INTEGER DEFAULT 1,
   caldav_username      TEXT DEFAULT '',
   caldav_password      TEXT DEFAULT '',
   per_person_calendars INTEGER DEFAULT 0
@@ -288,6 +288,9 @@ const MIGRATIONS = [
       le_last_renewal TEXT,
       le_expiry       TEXT
     )`);
+  }},
+  { version: 10, description: 'Enable CalDAV sync by default', fn(db) {
+    db.prepare('UPDATE caldav_config SET enabled = 1 WHERE id = 1').run();
   }},
 ];
 
