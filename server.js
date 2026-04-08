@@ -88,6 +88,16 @@ if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 // ── MCP (Model Context Protocol) server ────────────────────
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
+const MCP_SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [sid, s] of mcpSessions) {
+    if (now - s.lastActive > MCP_SESSION_TTL) {
+      s.server.close().catch(() => {});
+      mcpSessions.delete(sid);
+    }
+  }
+}, 5 * 60 * 1000); // check every 5 minutes
 
 function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
