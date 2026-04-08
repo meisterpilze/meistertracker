@@ -383,7 +383,12 @@ function _acmeHttps(method, url, body, extraHeaders, callback) {
       callback(null, res.statusCode, res.headers, json || raw);
     });
   });
-  req.on('error', callback);
+  req.on('error', err => {
+    if (err.code === 'ENOTFOUND') return callback(new Error('Server hat keinen Internetzugang (DNS-Auflösung fehlgeschlagen)'));
+    if (err.code === 'ECONNREFUSED') return callback(new Error('Verbindung zum ACME-Server abgelehnt'));
+    if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT') return callback(new Error('Zeitüberschreitung bei Verbindung zum ACME-Server'));
+    callback(err);
+  });
   req.setTimeout(30000, () => req.destroy(new Error('ACME request timeout')));
   if (bodyStr) req.write(bodyStr);
   req.end();
