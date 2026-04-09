@@ -4983,13 +4983,14 @@ const bcY=mode==='date'?50:mode==='full'?52:56;
 const bcH=mode==='date'?60:mode==='full'?70:90;
 const idY=bcY+bcH+6;
 batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;background:#fff;overflow:hidden;position:relative;aspect-ratio:5/3';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}
+const bc=bcParams(bcVal);const bcLeft=(bc.x/400*100).toFixed(1);const bcW=((400-2*bc.x)/400*100).toFixed(1);
 const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-svg.style.cssText='position:absolute;left:5%;width:90%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
+svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+bcW+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
 cell.appendChild(svg);
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;top:'+(idY/240*100).toFixed(1)+'%';idEl.textContent=bagId;cell.appendChild(idEl);
 if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+((idY+42)/240*100).toFixed(1)+'%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}
 if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:#999;white-space:nowrap;top:'+((idY+72)/240*100).toFixed(1)+'%';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}
-wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:2,height:Math.round(bcH*0.6),displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:Math.round(bcH*0.6),displayValue:false,margin:0,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
@@ -4998,22 +4999,24 @@ function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:docu
 function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
 // ZPL lab label: 400 dots wide × 240 dots tall
 ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const sp=(c.species||'')+(c.strain?' / '+c.strain:'');const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
-const bcH=lines>=3?50:lines>=2?60:lines>=1?70:90;
-const bcY=52;
+const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
+const bcY=16;
 const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;background:#fff;aspect-ratio:5/3;overflow:hidden;position:relative';
 let ty;
 if(opts.bc){
+  const bcVal=id.replace(/-/g,'_');const bc=bcParams(bcVal,5);
+  const bcLeft=(bc.x/400*100).toFixed(1);const bcW=((400-2*bc.x)/400*100).toFixed(1);
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.style.cssText='position:absolute;left:5%;width:'+(opts.qr?'63%':'90%')+';top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
+  svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+(opts.qr?Math.min(parseFloat(bcW),68).toFixed(1):bcW)+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
   cell.appendChild(svg);
-  setTimeout(()=>{try{JsBarcode(svg,id.replace(/-/g,'_'),{format:'CODE128',width:2,height:Math.round(bcH*0.6),displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15);
+  setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:Math.round(bcH*0.6),displayValue:false,margin:0,background:'#fff',lineColor:'#000'})}catch{}},30+i*15);
   ty=bcY+bcH+6;
 }else{ty=12}
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';idEl.textContent=id;cell.appendChild(idEl);ty+=34;
 if(opts.sp&&sp){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=sp;cell.appendChild(e2);ty+=26}
 if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:#888;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent='Parent: '+c.parentId;cell.appendChild(e2);ty+=22}
 if(opts.dt){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:#aaa;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=fmtDt(c.created);cell.appendChild(e2);ty+=22}
-if(opts.qr){const qrdiv=document.createElement('div');qrdiv.style.cssText='position:absolute;right:5%;top:'+(bcY/240*100).toFixed(1)+'%;width:22%;display:flex;justify-content:center';cell.appendChild(qrdiv);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:48,height:48,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}
+if(opts.qr){const qrdiv=document.createElement('div');qrdiv.style.cssText='position:absolute;left:'+(272/400*100).toFixed(1)+'%;top:'+(16/240*100).toFixed(1)+'%;width:'+(120/400*100).toFixed(1)+'%;display:flex;justify-content:center';cell.appendChild(qrdiv);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:48,height:48,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}
 wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
 
 // ─── REF BARCODES ────────────────────────────────────────────
