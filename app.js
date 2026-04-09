@@ -5045,7 +5045,13 @@ function newScanSession(){
 }
 let _scanTempIdCounter=0;
 function processScan(raw){
-  // Keep underscores for locations (SPAWN_R1 etc); convert to hyphens only for bag/batch IDs
+  // Underscore/hyphen convention:
+  // - Location barcodes use UNDERSCORES (e.g. INC_BUERO_01, SPAWN_R1) — kept as-is
+  // - Action commands use UNDERSCORES — kept as-is
+  // - Bag/batch IDs use HYPHENS internally (e.g. BLUES-260327-01-06)
+  // German HID barcode scanners send underscores for hyphens, so we convert
+  // only for non-location, non-action values. Adding new location formats that
+  // use hyphens would break this logic — always use underscores for locations.
   let val=raw.trim().toUpperCase();if(!val)return;
   if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
   else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
