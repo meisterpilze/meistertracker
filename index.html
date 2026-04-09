@@ -943,28 +943,6 @@
       <div class="sec" data-i18n="mcp.oauthTitle">Connected Clients</div>
       <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="mcp.oauthDesc"></p>
       <div id="oauth-client-list" style="margin-bottom:12px"></div>
-      <div id="oauth-secret-display" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:12px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="mcp.newClientCreated"></div>
-        <div style="margin-bottom:6px">
-          <label style="font-size:11px;color:#555">Client ID</label>
-          <div style="display:flex;gap:4px;align-items:center">
-            <input type="text" id="oauth-new-client-id" readonly style="flex:1;background:#f9f8f5;font-family:monospace;font-size:12px" />
-            <button class="btn btn-sm" id="oauth-copy-id-btn" data-i18n="mcp.copy"></button>
-          </div>
-        </div>
-        <div style="margin-bottom:6px">
-          <label style="font-size:11px;color:#555">Client Secret</label>
-          <div style="display:flex;gap:4px;align-items:center">
-            <input type="text" id="oauth-new-client-secret" readonly style="flex:1;background:#f9f8f5;font-family:monospace;font-size:12px" />
-            <button class="btn btn-sm" id="oauth-copy-secret-btn" data-i18n="mcp.copy"></button>
-          </div>
-        </div>
-        <div style="font-size:11px;color:#92400e;margin-top:4px" data-i18n="mcp.secretOnce"></div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" id="oauth-client-name" placeholder="" data-i18n-placeholder="mcp.clientNamePlaceholder" style="flex:1;font-size:13px" />
-        <button id="oauth-create-client-btn" class="btn btn-sm" data-i18n="mcp.createClient"></button>
-      </div>
       <div id="oauth-client-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none;margin-top:8px"></div>
     </div>
   </div>
