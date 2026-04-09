@@ -24,12 +24,12 @@
     <h3 id="m-addbags-title">Add bags to batch</h3>
     <!-- Phase 1: input -->
     <div id="ab-phase-input">
-      <p id="ab-info" style="font-size:13px;color:#555;margin-bottom:12px"></p>
+      <p id="ab-info" style="font-size:13px;color:var(--c-text-sec);margin-bottom:12px"></p>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div><label data-i18n="addBags.howMany">How many bags to add</label>
           <input type="number" id="ab-qty" value="1" min="1" max="200" style="width:100px" />
         </div>
-        <div id="ab-preview" style="font-size:12px;color:#666;background:#f9f8f5;border-radius:7px;padding:8px 10px;display:none"></div>
+        <div id="ab-preview" style="font-size:12px;color:var(--c-text-sec);background:var(--c-bg);border-radius:7px;padding:8px 10px;display:none"></div>
       </div>
       <div class="modal-btns">
         <button class="btn" id="addbags-cancel-btn">Cancel</button>
@@ -38,7 +38,7 @@
     </div>
     <!-- Phase 2: result + print -->
     <div id="ab-phase-result" style="display:none">
-      <p id="ab-result-info" style="font-size:13px;color:#166534;margin-bottom:12px"></p>
+      <p id="ab-result-info" style="font-size:13px;color:var(--c-green-dark);margin-bottom:12px"></p>
       <div id="ab-new-bags" style="display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow-y:auto"></div>
       <div class="modal-btns">
         <button class="btn" id="ab-done-btn" data-i18n="addBags.close">Close</button>
@@ -126,7 +126,7 @@
     </div>
     <div style="margin-bottom:8px">
       <label>Beschreibung (optional)</label>
-      <textarea id="cal-entry-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+      <textarea id="cal-entry-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
     </div>
     <div id="cal-entry-task-assign-wrap" style="margin-bottom:8px">
       <label>Zuweisen an</label>
@@ -136,11 +136,11 @@
     </div>
     <div id="cal-entry-ev-assign-wrap" style="margin-bottom:8px;display:none">
       <label>Zugewiesen an</label>
-      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid #e5e3dd;border-radius:6px;cursor:pointer"><span style="color:#aaa;font-size:12px">Niemand zugewiesen</span></div>
-      <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid #e5e3dd;border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
+      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px">Niemand zugewiesen</span></div>
+      <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid var(--c-border);border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
     </div>
     <div id="cal-entry-private-wrap" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:#888">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:var(--c-text-muted)">
         <input type="checkbox" id="cal-entry-private" style="width:auto" /> Nur für zugewiesene Person sichtbar
       </label>
     </div>
@@ -169,7 +169,7 @@
     <div style="display:flex;flex-direction:column;gap:8px">
       <div><label>Batch</label><select id="ba-batch"><option value="">— choose batch —</option></select></div>
       <div><label>Location / rack</label><select id="ba-loc"></select></div>
-      <div id="ba-prev" style="font-size:12px;color:#666;min-height:16px"></div>
+      <div id="ba-prev" style="font-size:12px;color:var(--c-text-sec);min-height:16px"></div>
     </div>
     <div class="modal-btns"><button id="cls-7" class="btn">Cancel</button><button id="act-8" class="btn btn-p">Add all bags</button></div>
   </div>
@@ -182,11 +182,11 @@
       <h3 id="lm-title" style="font-family:monospace;font-size:15px">Bag</h3>
       <button id="cls-9" class="btn btn-sm">Close</button>
     </div>
-    <div id="lm-info" style="font-size:12px;color:#888;margin-bottom:12px"></div>
+    <div id="lm-info" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px"></div>
     <div style="font-size:12px;font-weight:600;margin-bottom:8px">Move to:</div>
     <div id="lm-grid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     <div id="lm-confirm" style="display:none"></div>
-    <div style="border-top:1px solid #e5e3dd;margin-top:14px;padding-top:12px">
+    <div style="border-top:1px solid var(--c-border);margin-top:14px;padding-top:12px">
       <button id="btn-10" class="btn btn-sm btn-r" style="width:100%">Remove this bag</button>
     </div>
   </div>
@@ -307,9 +307,9 @@
 <!-- Harvest panel -->
 <div id="harvest-panel">
   <div class="inner">
-    <div><div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:3px" id="hp-lbl" data-i18n="harvest.logHarvest">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:#fff8e7" /></div>
-    <div><label style="color:#92400e;font-size:11px" data-i18n="harvest.grams">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
-    <div><label style="color:#92400e;font-size:11px" data-i18n="harvest.flush">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
+    <div><div style="font-size:11px;color:var(--c-amber-dark);font-weight:600;margin-bottom:3px" id="hp-lbl" data-i18n="harvest.logHarvest">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:var(--c-amber-light)" /></div>
+    <div><label style="color:var(--c-amber-dark);font-size:11px" data-i18n="harvest.grams">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
+    <div><label style="color:var(--c-amber-dark);font-size:11px" data-i18n="harvest.flush">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
     <button id="act-21" class="btn btn-p btn-sm" data-i18n="harvest.logHarvest">Log harvest</button>
     <button id="btn-22" class="btn btn-sm" data-i18n="harvest.cancel">Cancel</button>
   </div>
@@ -334,7 +334,7 @@
   <div class="card" id="dash-batch-tasks-card" style="padding:12px 16px;margin-bottom:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
-      <select id="dash-batch-filter" style="width:auto;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid #e5e3dd">
+      <select id="dash-batch-filter" style="width:auto;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--c-border)">
         <option value="all" data-i18n="todo.all">All</option>
         <option value="urgent" data-i18n="todo.urgentOnly">Urgent only</option>
       </select>
@@ -419,8 +419,8 @@
             <div><label data-i18n="batch.qty">Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" /></div>
             <div><label data-i18n="batch.incDays">Incubation days</label><input type="number" id="nb-days" value="14" min="1" max="90" /></div>
           </div>
-          <details style="background:#f9f8f5;border-radius:8px;padding:10px">
-            <summary style="font-size:12px;color:#666;cursor:pointer" data-i18n="batch.substrate">Substrate (optional)</summary>
+          <details style="background:var(--c-bg);border-radius:8px;padding:10px">
+            <summary style="font-size:12px;color:var(--c-text-sec);cursor:pointer" data-i18n="batch.substrate">Substrate (optional)</summary>
             <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
               <div class="g2">
                 <div><label data-i18n="batch.hardwood">Hardwood %</label><input type="number" id="nb-hw" placeholder="80" min="0" max="100" /></div>
@@ -430,23 +430,23 @@
                 <div><label data-i18n="batch.fieldCapacity">Field capacity %RH</label><input type="number" id="nb-rh" placeholder="65" min="0" max="100" /></div>
                 <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
                   <input type="checkbox" id="nb-gyp" style="width:16px;height:16px;margin:0" />
-                  <label style="margin:0;font-size:13px;color:#444;cursor:pointer" for="nb-gyp" data-i18n="batch.gypsumAdded">Gypsum added</label>
+                  <label style="margin:0;font-size:13px;color:var(--c-text);cursor:pointer" for="nb-gyp" data-i18n="batch.gypsumAdded">Gypsum added</label>
                 </div>
               </div>
-              <div id="nb-subsum" style="font-size:11px;color:#888"></div>
+              <div id="nb-subsum" style="font-size:11px;color:var(--c-text-muted)"></div>
             </div>
           </details>
-          <div><label data-i18n="batch.sourceCulture">Source culture (optional)</label><select id="nb-culture"><option value="" data-i18n="batch.none">— none —</option></select><div style="font-size:11px;color:#aaa;margin-top:3px" data-i18n="batch.sourceCultureHint">Link to the PD or LC used to inoculate this batch</div></div>
+          <div><label data-i18n="batch.sourceCulture">Source culture (optional)</label><select id="nb-culture"><option value="" data-i18n="batch.none">— none —</option></select><div style="font-size:11px;color:var(--c-text-muted);margin-top:3px" data-i18n="batch.sourceCultureHint">Link to the PD or LC used to inoculate this batch</div></div>
           <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="nb-notes" rows="2" placeholder="Any notes..."></textarea></div>
           <div class="met"><div class="met-l" data-i18n="batch.idPreview">Batch ID preview</div><div id="nb-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
-          <div id="nb-mat-preview" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#166534;line-height:1.8"></div>
+          <div id="nb-mat-preview" style="display:none;background:var(--c-primary-light);border:1px solid var(--c-green-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--c-green-dark);line-height:1.8"></div>
           <button id="btn-24" class="btn btn-p" data-i18n="batch.create">Create batch</button>
         </div>
       </div>
       <div class="card" id="nb-result" style="display:none">
         <div class="sec" data-i18n="batch.generatedIds">Generated bag IDs</div>
         <div id="nb-bags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:250px;overflow-y:auto"></div>
-        <div style="border-top:1px solid #e5e3dd;margin-top:12px;padding-top:12px">
+        <div style="border-top:1px solid var(--c-border);margin-top:12px;padding-top:12px">
           <button id="prt-25" class="btn btn-p" style="width:100%" data-i18n="batch.printLabels">Print labels for this batch</button>
         </div>
       </div>
@@ -545,8 +545,8 @@
           </div>
           <div><label id="lw-qty-lbl" data-i18n="lab.qtyMade">Quantity made</label><input type="number" id="lw-qty" value="1" min="1" max="50" /></div>
           <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="lw-notes" rows="2" data-i18n-placeholder="lab.observations" placeholder="Observations, conditions..."></textarea></div>
-          <div id="lw-prev-box" style="display:none;background:#f9f8f5;border-radius:8px;padding:8px 10px">
-            <div style="font-size:10px;color:#999;margin-bottom:3px" data-i18n="lab.idsCreated">IDs that will be created</div>
+          <div id="lw-prev-box" style="display:none;background:var(--c-bg);border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;color:var(--c-text-muted);margin-bottom:3px" data-i18n="lab.idsCreated">IDs that will be created</div>
             <div id="lw-prev" style="font-family:monospace;font-size:12px;line-height:1.8"></div>
           </div>
           <button id="btn-26" class="btn btn-p" data-i18n="lab.logWorkBtn">Log work</button>
@@ -578,8 +578,8 @@
 <!-- ══ PRINT ══ -->
 <div class="page" id="p-print">
   <!-- Printer status — always shown at top -->
-  <div class="card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:10px">
-    <div style="font-size:12px;color:#166534;line-height:1.7">
+  <div class="card" style="background:var(--c-primary-light);border-color:var(--c-green-border);margin-bottom:10px">
+    <div style="font-size:12px;color:var(--c-green-dark);line-height:1.7">
       <strong data-i18n="print.printerInfo">Printing directly to ZDesigner GK420d</strong> <span data-i18n="print.printerInfoDetail">via the server — no dialog needed. Make sure the server is running and the printer is on.</span>
       <br><br>
     </div>
@@ -619,7 +619,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="prt-27" class="btn btn-p" data-i18n="print.printDirect">Print labels (direct)</button>
       </div>
-      <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 · GK420d 203dpi</p>
+      <p style="font-size:11px;color:var(--c-text-muted);margin-top:8px">50×30mm · Code 128 · GK420d 203dpi</p>
     </div>
     <div class="card"><div class="sec" data-i18n="print.preview">Preview</div><div id="bag-preview" style="margin-top:8px"></div></div>
   </div>
@@ -636,21 +636,21 @@
             <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
             <option value="today" data-i18n="print.createdToday">Created today</option>
           </select>
-          <div id="lab-list" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:7px;padding:6px"></div>
+          <div id="lab-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--c-border);border-radius:7px;padding:6px"></div>
         </div>
         <div>
           <label data-i18n="print.labelIncludes">Label includes</label>
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:3px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-bc" checked style="width:auto;margin:0"> <span data-i18n="print.code128barcode">Code 128 barcode</span></label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-qr" checked style="width:auto;margin:0"> <span data-i18n="print.qrCode">QR code</span></label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-sp" checked style="width:auto;margin:0"> <span data-i18n="print.speciesStrain">Species + strain</span></label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-par" checked style="width:auto;margin:0"> <span data-i18n="print.parentId">Parent ID</span></label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer;margin:0"><input type="checkbox" id="lp-dt" checked style="width:auto;margin:0"> <span data-i18n="print.dateCreated">Date created</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c-text);cursor:pointer;margin:0"><input type="checkbox" id="lp-bc" checked style="width:auto;margin:0"> <span data-i18n="print.code128barcode">Code 128 barcode</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c-text);cursor:pointer;margin:0"><input type="checkbox" id="lp-qr" checked style="width:auto;margin:0"> <span data-i18n="print.qrCode">QR code</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c-text);cursor:pointer;margin:0"><input type="checkbox" id="lp-sp" checked style="width:auto;margin:0"> <span data-i18n="print.speciesStrain">Species + strain</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c-text);cursor:pointer;margin:0"><input type="checkbox" id="lp-par" checked style="width:auto;margin:0"> <span data-i18n="print.parentId">Parent ID</span></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c-text);cursor:pointer;margin:0"><input type="checkbox" id="lp-dt" checked style="width:auto;margin:0"> <span data-i18n="print.dateCreated">Date created</span></label>
           </div>
           <div style="margin-top:12px;display:flex;gap:8px">
             <button id="prt-28" class="btn btn-p" data-i18n="print.printLabDirect">Print labels (direct)</button>
           </div>
-          <p style="font-size:11px;color:#aaa;margin-top:8px">50×30mm · Code 128 + QR · 203dpi</p>
+          <p style="font-size:11px;color:var(--c-text-muted);margin-top:8px">50×30mm · Code 128 + QR · 203dpi</p>
         </div>
       </div>
     </div>
@@ -662,13 +662,13 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec" style="margin:0" data-i18n="print.refBarcodesTitle">Reference barcodes — print &amp; hang on wall</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:#444;margin:0">
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--c-text);margin:0">
             <input type="checkbox" id="ref-qr" style="width:auto;margin:0" /> <span data-i18n="print.qrCodes">QR codes</span>
           </label>
           <button id="prt-29" class="btn btn-sm btn-p" data-i18n="print.printSheet">Print sheet</button>
         </div>
       </div>
-      <p style="font-size:12px;color:#666" data-i18n="print.scanInfo">Scanning works on every tab — just scan from this sheet at any time.</p>
+      <p style="font-size:12px;color:var(--c-text-sec)" data-i18n="print.scanInfo">Scanning works on every tab — just scan from this sheet at any time.</p>
     </div>
     <div id="ref-grid"></div>
   </div>
@@ -684,7 +684,7 @@
         <span class="cal-title" id="cal-title"></span>
       </div>
       <div class="cal-toolbar-right">
-        <select id="cal-filter-user" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid #e5e3dd">
+        <select id="cal-filter-user" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--c-border)">
           <option value="">Alle Benutzer</option>
         </select>
         <div class="cal-view-toggle">
@@ -755,16 +755,16 @@
   <div class="sp" id="sp-settings-backup">
     <div class="card">
       <div class="sec" data-i18n="settings.downloadBackupTitle">Download backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n="settings.downloadBackupDesc">Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.</p>
+      <p style="font-size:13px;color:var(--c-text-sec);margin-bottom:12px;line-height:1.6" data-i18n="settings.downloadBackupDesc">Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="password" id="backup-dl-pw" placeholder="Encryption password" style="flex:1;min-width:140px" />
         <button id="btn-41" class="btn btn-p" data-i18n="settings.downloadBackupBtn">Download backup</button>
       </div>
-      <div id="backup-dl-status" style="margin-top:8px;font-size:12px;color:#666"></div>
+      <div id="backup-dl-status" style="margin-top:8px;font-size:12px;color:var(--c-text-sec)"></div>
     </div>
     <div class="card">
       <div class="sec" data-i18n="settings.restoreBackupTitle">Restore backup</div>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6" data-i18n-html="settings.restoreDescHtml">Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong></p>
+      <p style="font-size:13px;color:var(--c-text-sec);margin-bottom:12px;line-height:1.6" data-i18n-html="settings.restoreDescHtml">Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong></p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="file" id="restore-file" accept=".enc" style="width:auto;flex:1" />
       </div>
@@ -772,27 +772,27 @@
         <input type="password" id="backup-restore-pw" placeholder="Decryption password" style="flex:1;min-width:140px" />
         <button id="btn-42" class="btn btn-r" data-i18n="settings.restoreBtn">Restore</button>
       </div>
-      <div id="backup-restore-status" style="margin-top:8px;font-size:12px;color:#666"></div>
+      <div id="backup-restore-status" style="margin-top:8px;font-size:12px;color:var(--c-text-sec)"></div>
     </div>
     <div class="card">
       <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
-      <p style="font-size:12px;color:#888;line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored on the server — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
+      <p style="font-size:12px;color:var(--c-text-muted);line-height:1.7" data-i18n-html="settings.syncInfoDesc">All data is stored on the server — shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.</p>
     </div>
   </div>
   <!-- Users -->
   <div class="sp" id="sp-settings-users">
     <div class="card">
       <div class="sec">Account</div>
-      <p id="users-account" style="font-size:13px;color:#555;margin-bottom:8px"></p>
+      <p id="users-account" style="font-size:13px;color:var(--c-text-sec);margin-bottom:8px"></p>
       <button id="btn-43" class="btn btn-r" style="margin-top:4px">Logout</button>
     </div>
     <div class="card">
       <div class="sec">Manage users</div>
       <div id="users-table" style="margin-bottom:12px"></div>
-      <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #eee">
-        <div><label style="font-size:11px;color:#888">Username</label><input type="text" id="new-username" style="width:120px;font-size:13px" /></div>
-        <div><label style="font-size:11px;color:#888">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
-        <div><label style="font-size:11px;color:#888">Role</label><select id="new-role" style="width:auto;font-size:13px;padding:6px"><option value="user">user</option><option value="admin">admin</option></select></div>
+      <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--c-border)">
+        <div><label style="font-size:11px;color:var(--c-text-muted)">Username</label><input type="text" id="new-username" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:var(--c-text-muted)">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:var(--c-text-muted)">Role</label><select id="new-role" style="width:auto;font-size:13px;padding:6px"><option value="user">user</option><option value="admin">admin</option></select></div>
         <button id="btn-44" class="btn btn-p" style="font-size:12px">Add user</button>
       </div>
     </div>
@@ -801,15 +801,15 @@
   <div class="sp" id="sp-settings-caldav">
     <div class="card">
       <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
-      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:#166534;font-weight:600;margin-bottom:4px">CalDAV URL (in deiner Kalender-App eintragen)</div>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
+      <div style="background:var(--c-primary-light);border:1px solid var(--c-green-border);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--c-green-dark);font-weight:600;margin-bottom:4px">CalDAV URL (in deiner Kalender-App eintragen)</div>
         <div style="display:flex;align-items:center;gap:8px">
-          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:#1a1a1a;flex:1">Lade...</code>
+          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:var(--c-text);flex:1">Lade...</code>
           <button id="btn-45" class="btn btn-sm" title="URL kopieren" style="white-space:nowrap;padding:4px 8px;font-size:11px">Kopieren</button>
         </div>
       </div>
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">
+      <div style="background:var(--c-blue-light);border:1px solid var(--c-blue-border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--c-blue-dark);line-height:1.6">
         <strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -822,12 +822,12 @@
           <button id="act-46" class="btn btn-sm btn-p">Einstellungen speichern</button>
           <button class="btn btn-sm" id="caldav-sync-btn">Alle Aufgaben jetzt synchronisieren</button>
         </div>
-        <div id="caldav-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+        <div id="caldav-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
     </div>
     <div class="card">
       <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">
+      <div style="font-size:12px;color:var(--c-text-sec);line-height:1.7">
         <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
         <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
         <p style="margin-top:6px"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
@@ -835,7 +835,7 @@
     </div>
     <div class="card">
       <div class="sec">So funktioniert es</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">
+      <div style="font-size:12px;color:var(--c-text-sec);line-height:1.7">
         <p><strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-Fälligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.</p>
         <p style="margin-top:6px"><strong>Persönliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zusätzlich.</p>
         <p style="margin-top:6px"><strong>Sichtbarkeit:</strong> Standardmäßig sind alle Aufgaben für alle sichtbar (im Betriebskalender). Einzelne Aufgaben können als "Nur für zugewiesene Person" markiert werden — diese erscheinen dann nur im persönlichen Kalender.</p>
@@ -847,7 +847,7 @@
   <div class="sp" id="sp-settings-duckdns">
     <div class="card">
       <div class="sec">DuckDNS Dynamic DNS</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain für Zugriff über das Internet. Die öffentliche IP wird automatisch alle 5 Minuten aktualisiert.</p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain für Zugriff über das Internet. Die öffentliche IP wird automatisch alle 5 Minuten aktualisiert.</p>
       <div id="duckdns-status-banner" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
@@ -855,27 +855,27 @@
           <span>DuckDNS aktivieren</span>
         </label>
         <div>
-          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">Subdomain</label>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px">Subdomain</label>
           <div style="display:flex;align-items:center;gap:4px">
             <input type="text" id="duckdns-domain" placeholder="meinserver" style="flex:1;max-width:200px" />
-            <span style="font-size:13px;color:#888">.duckdns.org</span>
+            <span style="font-size:13px;color:var(--c-text-muted)">.duckdns.org</span>
           </div>
         </div>
         <div>
-          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">DuckDNS Token</label>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px">DuckDNS Token</label>
           <input type="password" id="duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="max-width:350px;width:100%" />
-          <div style="font-size:11px;color:#888;margin-top:2px">Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login</div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
           <button id="duckdns-save-btn" class="btn btn-sm btn-p">Einstellungen speichern</button>
           <button id="duckdns-update-btn" class="btn btn-sm">IP jetzt aktualisieren</button>
         </div>
-        <div id="duckdns-ip-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+        <div id="duckdns-ip-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
     </div>
     <div class="card">
       <div class="sec">Let's Encrypt TLS-Zertifikat</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">Kostenloses, vertrauenswürdiges TLS-Zertifikat von Let's Encrypt für deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.</p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Kostenloses, vertrauenswürdiges TLS-Zertifikat von Let's Encrypt für deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.</p>
       <div id="le-cert-status" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
@@ -885,9 +885,9 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button id="le-request-btn" class="btn btn-sm btn-p">Zertifikat jetzt anfordern</button>
         </div>
-        <div id="le-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none"></div>
+        <div id="le-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
-      <div style="margin-top:12px;font-size:11px;color:#888;line-height:1.6">
+      <div style="margin-top:12px;font-size:11px;color:var(--c-text-muted);line-height:1.6">
         Keine zusätzliche Software erforderlich — funktioniert auf allen Betriebssystemen (Linux, macOS, Windows).
       </div>
     </div>
@@ -895,7 +895,7 @@
   <div class="sp" id="sp-settings-mcp">
     <div class="card">
       <div class="sec" data-i18n="mcp.title">MCP Server</div>
-      <p id="mcp-desc" style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="mcp.desc"></p>
+      <p id="mcp-desc" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="mcp.desc"></p>
       <div id="mcp-status-banner" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
@@ -903,30 +903,30 @@
           <span data-i18n="mcp.enable"></span>
         </label>
         <div id="mcp-url-section" style="display:none">
-          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px" data-i18n="mcp.connectorUrl"></label>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px" data-i18n="mcp.connectorUrl"></label>
           <div style="display:flex;gap:4px;align-items:center">
-            <input type="text" id="mcp-url" readonly style="flex:1;background:#f9f8f5;font-family:monospace;font-size:12px" />
+            <input type="text" id="mcp-url" readonly style="flex:1;background:var(--c-bg);font-family:monospace;font-size:12px" />
             <button id="mcp-copy-url-btn" class="btn btn-sm" data-i18n="mcp.copy"></button>
           </div>
         </div>
         <div id="mcp-token-section" style="display:none">
-          <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px" data-i18n="mcp.apiKey"></label>
-          <div id="mcp-token-display" style="display:none;font-family:monospace;font-size:12px;padding:8px;background:#f9f8f5;border-radius:6px;word-break:break-all;margin-bottom:6px"></div>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px" data-i18n="mcp.apiKey"></label>
+          <div id="mcp-token-display" style="display:none;font-family:monospace;font-size:12px;padding:8px;background:var(--c-bg);border-radius:6px;word-break:break-all;margin-bottom:6px"></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button id="mcp-gen-token-btn" class="btn btn-sm btn-p" data-i18n="mcp.generateKey"></button>
             <button id="mcp-copy-token-btn" class="btn btn-sm" style="display:none" data-i18n="mcp.copy"></button>
           </div>
-          <div style="font-size:11px;color:#888;margin-top:4px" data-i18n="mcp.keyHint"></div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-top:4px" data-i18n="mcp.keyHint"></div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
           <button id="mcp-save-btn" class="btn btn-sm btn-p" data-i18n="mcp.save"></button>
         </div>
-        <div id="mcp-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none;margin-top:4px"></div>
+        <div id="mcp-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none;margin-top:4px"></div>
       </div>
     </div>
     <div class="card" id="mcp-guide-card" style="display:none">
       <div class="sec" data-i18n="mcp.guideTitle"></div>
-      <div style="font-size:12px;color:#666;line-height:1.7">
+      <div style="font-size:12px;color:var(--c-text-sec);line-height:1.7">
         <p data-i18n="mcp.step1"></p>
         <p data-i18n="mcp.step2"></p>
         <p data-i18n="mcp.step3"></p>
@@ -936,25 +936,25 @@
     </div>
     <div class="card" id="mcp-diag-card" style="display:none">
       <div class="sec" data-i18n="mcp.diagTitle">Diagnostics</div>
-      <div id="mcp-diag-result" style="font-size:12px;color:#555;line-height:1.7;margin-bottom:8px"></div>
+      <div id="mcp-diag-result" style="font-size:12px;color:var(--c-text-sec);line-height:1.7;margin-bottom:8px"></div>
       <button id="mcp-diag-btn" class="btn btn-sm" data-i18n="mcp.runDiag">Run Diagnostics</button>
     </div>
     <div class="card" id="mcp-oauth-card" style="display:none">
       <div class="sec" data-i18n="mcp.oauthTitle">Connected Clients</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6" data-i18n="mcp.oauthDesc"></p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="mcp.oauthDesc"></p>
       <div id="oauth-client-list" style="margin-bottom:12px"></div>
-      <div id="oauth-client-status" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px;display:none;margin-top:8px"></div>
+      <div id="oauth-client-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none;margin-top:8px"></div>
     </div>
   </div>
   <!-- Server -->
   <div class="sp" id="sp-settings-server">
     <div class="card">
       <div class="sec">Server Info</div>
-      <div id="server-info" style="font-size:13px;color:#555;line-height:1.8;margin-bottom:12px">Lade...</div>
+      <div id="server-info" style="font-size:13px;color:var(--c-text-sec);line-height:1.8;margin-bottom:12px">Lade...</div>
     </div>
     <div class="card">
       <div class="sec">Update & Restart</div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.</p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.</p>
       <button id="btn-server-restart" class="btn btn-r">Server aktualisieren & neustarten</button>
       <div id="server-restart-status" style="margin-top:10px;font-size:12px;display:none"></div>
     </div>
@@ -975,7 +975,7 @@
     <div id="inv-cards" class="g3" style="margin-bottom:10px"></div>
     <div class="card">
       <div class="sec" data-i18n="inv.alertThresholds">Alert thresholds</div>
-      <p style="font-size:12px;color:#888;margin-bottom:10px" data-i18n="inv.alertThresholdsDesc">Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".</p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px" data-i18n="inv.alertThresholdsDesc">Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".</p>
       <div id="inv-thresholds"></div>
     </div>
   </div>
@@ -994,18 +994,18 @@
               <option value="grain" data-i18n="inv.grain">Grain</option>
             </select>
           </div>
-          <div id="del-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
+          <div id="del-current" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px"></div>
           <div><label data-i18n="inv.amountReceived">Amount received (kg)</label>
             <input type="text" inputmode="decimal" id="del-kg" placeholder="e.g. 1000 or 847.5" style="font-size:16px;padding:10px 12px" autocomplete="off" />
           </div>
-          <div id="del-preview" style="display:none;font-size:12px;color:#166534;background:#f0fdf4;border-radius:7px;padding:8px 10px"></div>
+          <div id="del-preview" style="display:none;font-size:12px;color:var(--c-green-dark);background:var(--c-primary-light);border-radius:7px;padding:8px 10px"></div>
           <div><label data-i18n="inv.supplierNote">Supplier / note (optional)</label><input type="text" id="del-note" placeholder="e.g. Agrobs, batch 2025-03" /></div>
           <button id="btn-47" class="btn btn-p" data-i18n="inv.addToStock">Add to stock</button>
         </div>
       </div>
       <div class="card">
         <div class="sec" data-i18n="inv.manualAdj">Manual adjustment</div>
-        <p style="font-size:12px;color:#888;margin-bottom:10px" data-i18n="inv.manualAdjDesc">Use this to correct stock after a physical count, spoilage, or any discrepancy.</p>
+        <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px" data-i18n="inv.manualAdjDesc">Use this to correct stock after a physical count, spoilage, or any discrepancy.</p>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div><label data-i18n="inv.material">Material</label>
             <select id="adj-mat">
@@ -1015,17 +1015,17 @@
               <option value="grain" data-i18n="inv.grain">Grain</option>
             </select>
           </div>
-          <div id="adj-current" style="font-size:12px;color:#888;padding:6px 10px;background:#f9f8f5;border-radius:7px"></div>
+          <div id="adj-current" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px"></div>
           <div class="g2">
             <div><label data-i18n="inv.setStockTo">Set stock to (kg)</label>
               <input type="text" inputmode="decimal" id="adj-absolute" placeholder="e.g. 847.5" style="font-size:15px;padding:9px 12px" autocomplete="off" />
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:#aaa;font-style:italic" data-i18n="inv.orAddSubtract">or add / subtract</div>
+            <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:var(--c-text-muted);font-style:italic" data-i18n="inv.orAddSubtract">or add / subtract</div>
           </div>
           <div><label data-i18n="inv.adjustBy">Adjust by (kg) — negative to subtract</label>
             <input type="text" inputmode="decimal" id="adj-delta" placeholder="e.g. -5  or  +20" style="font-size:15px;padding:9px 12px" autocomplete="off" />
           </div>
-          <div id="adj-preview" style="display:none;font-size:12px;background:#f9f8f5;border-radius:7px;padding:8px 10px"></div>
+          <div id="adj-preview" style="display:none;font-size:12px;background:var(--c-bg);border-radius:7px;padding:8px 10px"></div>
           <div><label data-i18n="inv.reason">Reason</label><input type="text" id="adj-reason" placeholder="e.g. Spoilage, stock count" /></div>
           <button id="btn-48" class="btn btn-sm btn-p" data-i18n="inv.apply">Apply</button>
         </div>
@@ -1060,7 +1060,7 @@
         <div class="sec" style="margin:0" data-i18n="inv.suppliers">Suppliers</div>
         <button class="btn btn-sm btn-p" onclick="editSupplier()" data-i18n="inv.addSupplier">+ Add supplier</button>
       </div>
-      <p style="font-size:12px;color:#888;margin-bottom:12px" data-i18n="inv.suppliersDesc">Manage suppliers for each material so you know where to reorder.</p>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px" data-i18n="inv.suppliersDesc">Manage suppliers for each material so you know where to reorder.</p>
       <div id="suppliers-list"></div>
     </div>
   </div>
@@ -1144,7 +1144,7 @@
   <div class="sp" id="sp-assets-add">
     <div class="card">
       <div class="sec" data-i18n="asset.recordAsset">Anlage erfassen</div>
-      <div id="asset-id-preview" style="font-family:monospace;font-size:13px;margin-bottom:10px;color:#555"></div>
+      <div id="asset-id-preview" style="font-family:monospace;font-size:13px;margin-bottom:10px;color:var(--c-text-sec)"></div>
       <div class="g2">
         <div><label data-i18n="asset.designation">Bezeichnung *</label><input id="asset-name" data-i18n-placeholder="asset.designationPh" placeholder="z.B. Autoklav 50L"></div>
         <div><label data-i18n="asset.category">Kategorie *</label><select id="asset-category">
@@ -1190,7 +1190,7 @@
     <div class="g2">
       <div class="card">
         <div class="sec" data-i18n="asset.csvExport">CSV-Export</div>
-        <p style="font-size:12px;color:#666;margin-bottom:10px" data-i18n="asset.csvExportDesc">Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV für den Steuerberater.</p>
+        <p style="font-size:12px;color:var(--c-text-sec);margin-bottom:10px" data-i18n="asset.csvExportDesc">Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV für den Steuerberater.</p>
         <button id="set-51" class="btn btn-green" data-i18n="asset.exportCsv">CSV exportieren</button>
       </div>
       <div class="card">
