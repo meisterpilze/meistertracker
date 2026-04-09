@@ -566,7 +566,7 @@ const LANG = {
     'note.cancel': 'Cancel',
     // Scan feedback
     'scanFb.actionAdd': 'Action: ADD \u2192 scan location or rack, then bags',
-    'scanFb.actionMove': 'Action: MOVE \u2192 scan FROM location',
+    'scanFb.actionMove': 'Action: MOVE \u2192 scan destination location, then bags',
     'scanFb.actionRemove': 'Action: REMOVE \u2192 scan bags',
     'scanFb.actionHarvest': 'Action: HARVEST \u2192 scan a bag to log its weight',
     'scanFb.location': 'Location: {loc} \u2192 now scan bags (location stays until you change it)',
@@ -575,7 +575,11 @@ const LANG = {
     'scanFb.setAction': 'Set an action first \u2014 scan ADD, MOVE, REMOVE or HARVEST.',
     'scanFb.scanLocFirst': 'Scan a location or rack first.',
     'scanFb.scanFromTo': 'Scan FROM and TO locations first.',
+    'scanFb.scanToFirst': 'Scan the destination location first.',
     'scanFb.logged': 'Logged: {action} {val}{to} [{n} this session]',
+    'scanFb.bagNotPlaced': '{bag} has no known location \u2014 use ADD first',
+    'scanFb.bagRemoved': '{bag} was removed \u2014 use ADD to place it again',
+    'scanFb.bagAlreadyAt': '{bag} is already at {loc}',
     'scanFb.unknown': 'Unknown barcode: {val}. Check the batch exists first.',
     'scanFb.unknownFormat': 'Unknown format: {val} — check barcode.',
     'scanFb.matched': 'Matched: {val} from {batch}',
@@ -1314,7 +1318,7 @@ const LANG = {
     'note.cancel': 'Abbrechen',
     // Scan feedback
     'scanFb.actionAdd': 'Aktion: ADD \u2192 Standort/Regal scannen, dann Beutel',
-    'scanFb.actionMove': 'Aktion: MOVE \u2192 VON-Standort scannen',
+    'scanFb.actionMove': 'Aktion: MOVE \u2192 Ziel-Standort scannen, dann Beutel',
     'scanFb.actionRemove': 'Aktion: REMOVE \u2192 Beutel scannen',
     'scanFb.actionHarvest': 'Aktion: HARVEST \u2192 Beutel f\u00fcr Gewichtserfassung scannen',
     'scanFb.location': 'Standort: {loc} \u2192 jetzt Beutel scannen',
@@ -1323,7 +1327,11 @@ const LANG = {
     'scanFb.setAction': 'Zuerst Aktion setzen \u2014 scanne ADD, MOVE, REMOVE oder HARVEST.',
     'scanFb.scanLocFirst': 'Zuerst Standort oder Regal scannen.',
     'scanFb.scanFromTo': 'Erst VON- und NACH-Standort scannen.',
+    'scanFb.scanToFirst': 'Erst Ziel-Standort scannen.',
     'scanFb.logged': 'Erfasst: {action} {val}{to} [{n} diese Sitzung]',
+    'scanFb.bagNotPlaced': '{bag} hat keinen bekannten Standort \u2014 erst mit ADD platzieren',
+    'scanFb.bagRemoved': '{bag} wurde entfernt \u2014 erst mit ADD neu platzieren',
+    'scanFb.bagAlreadyAt': '{bag} ist bereits an {loc}',
     'scanFb.unknown': 'Unbekannter Barcode: {val}. Pr\u00fcfe ob die Charge existiert.',
     'scanFb.unknownFormat': 'Unbekanntes Format: {val} — Barcode pr\u00fcfen.',
     'scanFb.matched': 'Zugeordnet: {val} aus {batch}',
@@ -2062,7 +2070,7 @@ const LANG = {
     'note.cancel': 'Cancelar',
     // Scan feedback
     'scanFb.actionAdd': 'A\u00e7\u00e3o: ADD \u2192 escaneie local/estante, depois sacos',
-    'scanFb.actionMove': 'A\u00e7\u00e3o: MOVE \u2192 escaneie local DE origem',
+    'scanFb.actionMove': 'A\u00e7\u00e3o: MOVE \u2192 escaneie local de destino, depois sacos',
     'scanFb.actionRemove': 'A\u00e7\u00e3o: REMOVE \u2192 escaneie sacos',
     'scanFb.actionHarvest': 'A\u00e7\u00e3o: HARVEST \u2192 escaneie um saco para registrar peso',
     'scanFb.location': 'Local: {loc} \u2192 agora escaneie sacos',
@@ -2071,7 +2079,11 @@ const LANG = {
     'scanFb.setAction': 'Defina uma a\u00e7\u00e3o primeiro \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST.',
     'scanFb.scanLocFirst': 'Escaneie um local ou estante primeiro.',
     'scanFb.scanFromTo': 'Escaneie os locais DE e PARA primeiro.',
+    'scanFb.scanToFirst': 'Escaneie o local de destino primeiro.',
     'scanFb.logged': 'Registrado: {action} {val}{to} [{n} nesta sess\u00e3o]',
+    'scanFb.bagNotPlaced': '{bag} n\u00e3o tem local conhecido \u2014 use ADD primeiro',
+    'scanFb.bagRemoved': '{bag} foi removido \u2014 use ADD para recolocar',
+    'scanFb.bagAlreadyAt': '{bag} j\u00e1 est\u00e1 em {loc}',
     'scanFb.unknown': 'C\u00f3digo desconhecido: {val}. Verifique se o lote existe.',
     'scanFb.matched': 'Correspondido: {val} de {batch}',
     'scanFb.noBatchFound': 'Nenhum lote encontrado para {val} \u2014 verifique esp\u00e9cie/cepa/data',
@@ -4944,17 +4956,12 @@ function updateCamHud(){
   const fromChip=document.getElementById('cam-chip-from');
   const arrowChip=document.getElementById('cam-chip-arrow');
   const toChip=document.getElementById('cam-chip-to');
-  const showFrom=scan.action==='MOVE';
-  fromChip.style.display=showFrom?'':'none';
-  arrowChip.style.display=showFrom?'':'none';
-  // Set values
-  if(showFrom){
-    fromChip.className='cam-chip'+(scan.from?' ch-set':'');
-    fromChip.classList.toggle('ch-pulse',!scan.from);
-  }
+  // MOVE no longer needs FROM — FROM is auto-derived per bag
+  fromChip.style.display='none';
+  arrowChip.style.display='none';
   toChip.className='cam-chip'+((scan.action==='ADD'||scan.action==='MOVE')&&scan.to?' ch-set':'');
   toChip.style.display=(scan.action==='ADD'||scan.action==='MOVE')?'':'none';
-  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&scan.from&&!scan.to);
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to);
   toChip.classList.toggle('ch-pulse',toPulse);
   // Count chip highlight
   const countChip=document.getElementById('cam-chip-count');
@@ -4968,20 +4975,13 @@ function updateSD(){
   // Action-colored header
   const modal=document.getElementById('scan-modal');
   modal.className='scan-modal'+(scan.action?' scan-action-'+scan.action.toLowerCase():'');
-  // MOVE: combined from→to chip
+  // MOVE: hide FROM chip — FROM is auto-derived per bag
   const fromChip=document.getElementById('chip-from');
-  if(scan.action==='MOVE'&&scan.from&&scan.to){
-    fromChip.style.display='none';
-    document.getElementById('s-to').textContent=scan.from+' → '+scan.to;
-  }else{
-    fromChip.style.display='';
-  }
+  fromChip.style.display=scan.action==='MOVE'?'none':'';
   // Chip pulse hints
   const chipTo=document.getElementById('chip-to');
-  const chipFrom=document.getElementById('chip-from');
-  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&scan.from&&!scan.to);
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to);
   chipTo.classList.toggle('chip-pulse',toPulse);
-  chipFrom.classList.toggle('chip-pulse',scan.action==='MOVE'&&!scan.from);
   // Last scan chip
   const lastChip=document.getElementById('chip-last');
   if(_lastScanVal){lastChip.style.display='';document.getElementById('s-last').textContent=_lastScanVal}
@@ -5152,8 +5152,7 @@ function processScan(raw){
     const zoneObj=zones.find(z=>z.id===val);
     const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
     if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
-    if(scan.action==='MOVE'&&!scan.from){scan.from=val;updateSD();setFb('ok',t('scanFb.from',{loc:val}));return}
-    if(scan.action==='MOVE'&&scan.from){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
+    if(scan.action==='MOVE'&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
@@ -5168,7 +5167,16 @@ function processScan(raw){
     if(!scan.action){openBagInfo(val,batchId,batch);return}
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
-    if(scan.action==='MOVE'&&(!scan.from||!scan.to)){setFb('err',t('scanFb.scanFromTo'));return}
+    if(scan.action==='MOVE'&&!scan.to){setFb('err',t('scanFb.scanToFirst'));return}
+    // MOVE: auto-derive FROM from bag's last known location
+    if(scan.action==='MOVE'){
+      const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
+      if(!bagLast){_scanBeep(300,150);setFb('err',t('scanFb.bagNotPlaced',{bag:val}));return}
+      if(bagLast.action==='REMOVE'){_scanBeep(300,150);setFb('err',t('scanFb.bagRemoved',{bag:val}));return}
+      const curLoc=bagLast.to||null;
+      if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){_scanBeep(500,120);setFb('err',t('scanFb.bagAlreadyAt',{bag:val,loc:scan.to}));return}
+      scan.from=curLoc;
+    }
     // REMOVE confirmation: require scanning same bag twice within 5s
     if(scan.action==='REMOVE'){
       if(_pendingRemove&&_pendingRemove.val===val){
@@ -5222,7 +5230,8 @@ function processScan(raw){
       }
     });
     _lastScanVal=isBag?val:batchId;
-    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}),entry);
+    const fbTo=scan.action==='MOVE'&&scan.from?' '+scan.from+' \u2192 '+scan.to:scan.to?' \u2192 '+scan.to:'';
+    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:fbTo,n:scan.count}),entry);
     updateSD();return;
   }
   // URL QR codes: inform user instead of showing "unknown"
