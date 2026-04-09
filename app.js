@@ -2327,7 +2327,7 @@ const LANG = {
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const ACTIONS=['ADD','MOVE','REMOVE','HARVEST'];
+const ACTIONS=['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
 const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
 const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
@@ -2345,7 +2345,7 @@ function rebuildZoneConstants(){
   ZONE_LABELS={};ZONE_COLORS={};
   zones.forEach(z=>{ZONE_LABELS[z.id]=KNOWN_ZONE_I18N[z.id]||z.name;ZONE_COLORS[z.id]=z.color});
   locColor={...ZONE_COLORS};
-  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','REMOVE','HARVEST']},{g:'Zones',items:[...ZONES]}];
+  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST']},{g:'Zones',items:[...ZONES]}];
   zones.filter(z=>z.racks.length>0).forEach(z=>{
     const rIds=z.racks.map(r=>r.id);
     for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk})}
@@ -5160,10 +5160,10 @@ function updateSD(){
   modal.className='scan-modal'+(scan.action?' scan-action-'+scan.action.toLowerCase():'');
   // MOVE: hide FROM chip — FROM is auto-derived per bag
   const fromChip=document.getElementById('chip-from');
-  fromChip.style.display=scan.action==='MOVE'?'none':'';
+  fromChip.style.display=(scan.action==='MOVE'||scan.action==='MOVE_BATCH')?'none':'';
   // Chip pulse hints
   const chipTo=document.getElementById('chip-to');
-  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to);
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to)||(scan.action==='MOVE_BATCH'&&!scan.to);
   chipTo.classList.toggle('chip-pulse',toPulse);
   // Last scan chip
   const lastChip=document.getElementById('chip-last');
@@ -5323,19 +5323,19 @@ function processScan(raw){
     }
   }
   if(ACTIONS.includes(val)){
-    scan.action=val;scan.from=null;scan.to=null;scan.harvestBag=null;
+    const keepTo=(val===scan.action&&scan.to);scan.action=val;scan.from=null;scan.to=keepTo?scan.to:null;scan.harvestBag=null;
     document.getElementById('harvest-panel').style.display='none';
     _pendingDupe=null;_pendingRemove=null;
     clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
     updateSD();
-    setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
+    setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),MOVE_BATCH:'MOVE BATCH — Ziel scannen',REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
   }
   if(LOCS.includes(val)){
     // Warn if scanning a zone that has racks — suggest using a rack instead
     const zoneObj=zones.find(z=>z.id===val);
     const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
     if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
-    if(scan.action==='MOVE'&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
+    if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
@@ -5350,7 +5350,28 @@ function processScan(raw){
     if(!scan.action){openBagInfo(val,batchId,batch);return}
     if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
     if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
-    if(scan.action==='MOVE'&&!scan.to){setFb('err',t('scanFb.scanToFirst'));return}
+    if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){setFb('err',t('scanFb.scanToFirst'));return}
+    // MOVE_BATCH: scan any bag or batch ID → move entire batch
+    if(scan.action==='MOVE_BATCH'&&batch){
+      const now=new Date().toISOString();const entries=[];let skipped=0;
+      batch.bags.forEach(bagId=>{
+        const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
+        if(!bagLast||bagLast.action==='REMOVE')return;
+        const curLoc=bagLast.to||null;
+        if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){skipped++;return}
+        const tempId='s'+(++_scanTempIdCounter);
+        const entry={time:now,action:'MOVE',batch:batch.batchId,bag:bagId,from:curLoc,to:scan.to,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
+        scanLog.push(entry);movements.push(entry);entries.push(entry);
+        if(!sessionStartTime)sessionStartTime=Date.now();
+        sessionEntries.push(entry);
+        scan.count++;
+      });
+      if(!entries.length){_scanBeep(500,120);setFb('err','Batch '+batch.batchId+': keine Bags zum Verschieben'+(skipped?' ('+skipped+' bereits in '+scan.to+')':''));updateSD();return}
+      if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
+      apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
+      setFb('ok','MOVE BATCH '+batch.batchId+': '+entries.length+' Bags → '+scan.to+(skipped?' ('+skipped+' übersprungen)':''));
+      updateSD();return;
+    }
     // MOVE: auto-derive FROM from bag's last known location
     if(scan.action==='MOVE'){
       const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
