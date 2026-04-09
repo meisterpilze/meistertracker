@@ -658,8 +658,8 @@ body {
 .cam-fab {
   display: none;
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  right: calc(24px + env(safe-area-inset-right, 0px));
   z-index: 850;
   width: 56px;
   height: 56px;
