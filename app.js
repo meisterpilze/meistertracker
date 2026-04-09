@@ -629,13 +629,13 @@ const LANG = {
     'settings.to': 'To',
     'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
     'mcp.title': 'MCP Server',
-    'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Add the connector URL in Claude to connect.',
+    'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Claude connects automatically via OAuth \u2014 just paste the URL.',
     'mcp.enable': 'Enable MCP server',
     'mcp.connectorUrl': 'Connector URL',
     'mcp.copy': 'Copy',
-    'mcp.apiKey': 'API Key (advanced)',
+    'mcp.apiKey': 'API Key (scripts / automation)',
     'mcp.generateKey': 'Generate API key',
-    'mcp.keyHint': 'Optional: For direct API access without OAuth. The key is only shown once.',
+    'mcp.keyHint': 'For scripts or tools that cannot use OAuth. Use as Bearer token in the Authorization header. The key is only shown once.',
     'mcp.save': 'Save',
     'mcp.active': 'MCP server active',
     'mcp.noKey': 'MCP enabled \u2014 ready to connect via OAuth.',
@@ -646,14 +646,18 @@ const LANG = {
     'mcp.saved': 'Settings saved.',
     'mcp.error': 'Error: {msg}',
     'mcp.guideTitle': 'Setup guide',
-    'mcp.oauthTitle': 'OAuth Clients',
-    'mcp.oauthDesc': 'Create OAuth clients for Claude and other MCP connectors. Each client gets a unique ID and secret for secure authentication.',
-    'mcp.createClient': 'Create Client',
-    'mcp.clientNamePlaceholder': 'Client name (e.g. Claude Desktop)',
+    'mcp.oauthTitle': 'Connected Clients',
+    'mcp.oauthDesc': 'All clients connected to the MCP server. Claude registers automatically \u2014 no manual setup needed. Manually created clients are for third-party tools that require a client secret.',
+    'mcp.createClient': 'Create manual client',
+    'mcp.clientNamePlaceholder': 'Client name (e.g. Custom Script)',
     'mcp.newClientCreated': 'Client created \u2014 copy these credentials now:',
     'mcp.secretOnce': 'The client secret is only shown once. Store it securely.',
-    'mcp.noClients': 'No OAuth clients yet. Create one to connect Claude.',
+    'mcp.noClients': 'No connected clients yet. Connect Claude by pasting the URL above.',
     'mcp.clientName': 'Name',
+    'mcp.clientType': 'Type',
+    'mcp.autoClient': 'Auto',
+    'mcp.manualClient': 'Manual',
+    'mcp.unnamed': '(unnamed)',
     'mcp.created': 'Created',
     'mcp.activeSessions': 'Sessions',
     'mcp.deleteClient': 'Delete',
@@ -664,9 +668,9 @@ const LANG = {
     'mcp.idCopied': 'Client ID copied!',
     'mcp.secretCopied': 'Client secret copied!',
     'mcp.step1': '1. Enable MCP server and save',
-    'mcp.step2': '2. Create an OAuth client below and copy the ID + Secret',
-    'mcp.step3': '3. In Claude: Settings \u2192 Connectors \u2192 Add Custom Connector',
-    'mcp.step4': '4. Paste the URL, Client ID, and Client Secret \u2192 Connect',
+    'mcp.step2': '2. Copy the connector URL above',
+    'mcp.step3': '3. In Claude: Settings \u2192 Connectors \u2192 Add \u2192 paste the URL',
+    'mcp.step4': '4. Log in when prompted \u2014 done! Claude connects automatically via OAuth.',
     'mcp.features': 'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
@@ -1376,13 +1380,13 @@ const LANG = {
     'settings.to': 'Nach',
     'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
     'mcp.title': 'MCP Server',
-    'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Füge die Connector URL in Claude ein, um eine Verbindung herzustellen.',
+    'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Claude verbindet sich automatisch per OAuth \u2014 einfach die URL einfügen.',
     'mcp.enable': 'MCP Server aktivieren',
     'mcp.connectorUrl': 'Connector URL',
     'mcp.copy': 'Kopieren',
-    'mcp.apiKey': 'API-Schlüssel (erweitert)',
+    'mcp.apiKey': 'API-Schlüssel (Skripte / Automatisierung)',
     'mcp.generateKey': 'API-Schlüssel generieren',
-    'mcp.keyHint': 'Optional: Für direkten API-Zugriff ohne OAuth. Der Schlüssel wird nur einmal angezeigt.',
+    'mcp.keyHint': 'Für Skripte oder Tools, die kein OAuth unterstützen. Als Bearer-Token im Authorization-Header verwenden. Wird nur einmal angezeigt.',
     'mcp.save': 'Speichern',
     'mcp.active': 'MCP Server aktiv',
     'mcp.noKey': 'MCP aktiviert \u2014 bereit zur Verbindung über OAuth.',
@@ -1393,14 +1397,18 @@ const LANG = {
     'mcp.saved': 'Einstellungen gespeichert.',
     'mcp.error': 'Fehler: {msg}',
     'mcp.guideTitle': 'Anleitung',
-    'mcp.oauthTitle': 'OAuth-Clients',
-    'mcp.oauthDesc': 'Erstelle OAuth-Clients für Claude und andere MCP-Connectors. Jeder Client erhält eine eindeutige ID und ein Geheimnis zur sicheren Authentifizierung.',
-    'mcp.createClient': 'Client erstellen',
-    'mcp.clientNamePlaceholder': 'Client-Name (z.B. Claude Desktop)',
+    'mcp.oauthTitle': 'Verbundene Clients',
+    'mcp.oauthDesc': 'Alle mit dem MCP Server verbundenen Clients. Claude registriert sich automatisch \u2014 kein manuelles Setup nötig. Manuelle Clients sind für Drittanbieter-Tools, die ein Client-Secret benötigen.',
+    'mcp.createClient': 'Manuellen Client erstellen',
+    'mcp.clientNamePlaceholder': 'Client-Name (z.B. Eigenes Skript)',
     'mcp.newClientCreated': 'Client erstellt \u2014 kopiere diese Zugangsdaten jetzt:',
     'mcp.secretOnce': 'Das Client-Geheimnis wird nur einmal angezeigt. Sicher aufbewahren.',
-    'mcp.noClients': 'Noch keine OAuth-Clients. Erstelle einen, um Claude zu verbinden.',
+    'mcp.noClients': 'Noch keine verbundenen Clients. Verbinde Claude, indem du die URL oben einfügst.',
     'mcp.clientName': 'Name',
+    'mcp.clientType': 'Typ',
+    'mcp.autoClient': 'Auto',
+    'mcp.manualClient': 'Manuell',
+    'mcp.unnamed': '(unbenannt)',
     'mcp.created': 'Erstellt',
     'mcp.activeSessions': 'Sitzungen',
     'mcp.deleteClient': 'Löschen',
@@ -1411,9 +1419,9 @@ const LANG = {
     'mcp.idCopied': 'Client-ID kopiert!',
     'mcp.secretCopied': 'Client-Geheimnis kopiert!',
     'mcp.step1': '1. MCP Server aktivieren und speichern',
-    'mcp.step2': '2. Unten einen OAuth-Client erstellen und ID + Secret kopieren',
-    'mcp.step3': '3. In Claude: Einstellungen \u2192 Connectors \u2192 Custom Connector hinzufügen',
-    'mcp.step4': '4. URL, Client-ID und Client-Secret einfügen \u2192 Verbinden',
+    'mcp.step2': '2. Connector URL oben kopieren',
+    'mcp.step3': '3. In Claude: Einstellungen \u2192 Connectors \u2192 Hinzufügen \u2192 URL einfügen',
+    'mcp.step4': '4. Bei Aufforderung einloggen \u2014 fertig! Claude verbindet sich automatisch per OAuth.',
     'mcp.features': 'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
@@ -2122,13 +2130,13 @@ const LANG = {
     'settings.to': 'Para',
     'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
     'mcp.title': 'Servidor MCP',
-    'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. Adicione a URL do connector no Claude para conectar.',
+    'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. O Claude conecta automaticamente via OAuth \u2014 basta colar a URL.',
     'mcp.enable': 'Ativar servidor MCP',
     'mcp.connectorUrl': 'URL do Connector',
     'mcp.copy': 'Copiar',
-    'mcp.apiKey': 'Chave de API (avançado)',
+    'mcp.apiKey': 'Chave de API (scripts / automação)',
     'mcp.generateKey': 'Gerar chave de API',
-    'mcp.keyHint': 'Opcional: Para acesso direto à API sem OAuth. A chave é exibida apenas uma vez.',
+    'mcp.keyHint': 'Para scripts ou ferramentas que não suportam OAuth. Use como Bearer token no header Authorization. A chave é exibida apenas uma vez.',
     'mcp.save': 'Salvar',
     'mcp.active': 'Servidor MCP ativo',
     'mcp.noKey': 'MCP ativado \u2014 pronto para conectar via OAuth.',
@@ -2139,14 +2147,18 @@ const LANG = {
     'mcp.saved': 'Configurações salvas.',
     'mcp.error': 'Erro: {msg}',
     'mcp.guideTitle': 'Guia de configuração',
-    'mcp.oauthTitle': 'Clientes OAuth',
-    'mcp.oauthDesc': 'Crie clientes OAuth para o Claude e outros conectores MCP. Cada cliente recebe um ID e segredo únicos para autenticação segura.',
-    'mcp.createClient': 'Criar Cliente',
-    'mcp.clientNamePlaceholder': 'Nome do cliente (ex. Claude Desktop)',
+    'mcp.oauthTitle': 'Clientes Conectados',
+    'mcp.oauthDesc': 'Todos os clientes conectados ao servidor MCP. O Claude se registra automaticamente \u2014 nenhuma configuração manual necessária. Clientes manuais são para ferramentas de terceiros que precisam de client secret.',
+    'mcp.createClient': 'Criar cliente manual',
+    'mcp.clientNamePlaceholder': 'Nome do cliente (ex. Script Próprio)',
     'mcp.newClientCreated': 'Cliente criado \u2014 copie estas credenciais agora:',
     'mcp.secretOnce': 'O segredo do cliente é exibido apenas uma vez. Guarde-o com segurança.',
-    'mcp.noClients': 'Nenhum cliente OAuth ainda. Crie um para conectar o Claude.',
+    'mcp.noClients': 'Nenhum cliente conectado ainda. Conecte o Claude colando a URL acima.',
     'mcp.clientName': 'Nome',
+    'mcp.clientType': 'Tipo',
+    'mcp.autoClient': 'Auto',
+    'mcp.manualClient': 'Manual',
+    'mcp.unnamed': '(sem nome)',
     'mcp.created': 'Criado',
     'mcp.activeSessions': 'Sessões',
     'mcp.deleteClient': 'Excluir',
@@ -2157,9 +2169,9 @@ const LANG = {
     'mcp.idCopied': 'Client ID copiado!',
     'mcp.secretCopied': 'Segredo do cliente copiado!',
     'mcp.step1': '1. Ativar servidor MCP e salvar',
-    'mcp.step2': '2. Criar um cliente OAuth abaixo e copiar ID + Secret',
-    'mcp.step3': '3. No Claude: Configurações \u2192 Connectors \u2192 Adicionar Custom Connector',
-    'mcp.step4': '4. Colar a URL, Client ID e Client Secret \u2192 Conectar',
+    'mcp.step2': '2. Copiar a URL do connector acima',
+    'mcp.step3': '3. No Claude: Configurações \u2192 Connectors \u2192 Adicionar \u2192 colar a URL',
+    'mcp.step4': '4. Faça login quando solicitado \u2014 pronto! O Claude conecta automaticamente via OAuth.',
     'mcp.features': 'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
@@ -3636,12 +3648,9 @@ async function loadMcpSettings(){
     document.getElementById('mcp-url').value=cfg.connectorUrl||'';
     toggleMcpSections(cfg.enabled);
     const banner=document.getElementById('mcp-status-banner');
-    if(cfg.enabled&&cfg.hasToken){
+    if(cfg.enabled){
       banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
       banner.textContent=t('mcp.active');
-    }else if(cfg.enabled){
-      banner.style.display='block';banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
-      banner.textContent=t('mcp.noKey');
     }else{banner.style.display='none'}
     const statusR=await authFetch('/api/mcp/status');
     if(statusR.ok){
@@ -3657,6 +3666,7 @@ async function loadMcpSettings(){
 function toggleMcpSections(enabled){
   document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
   document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
+  document.getElementById('mcp-guide-card').style.display=enabled?'block':'none';
   document.getElementById('mcp-oauth-card').style.display=enabled?'block':'none';
 }
 function showMcpStatus(msg,color){
@@ -3705,16 +3715,24 @@ async function loadOAuthClients(){
     const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientName')+'</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientType')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Client ID</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.created')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.activeSessions')+'</th>'+
       '<th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
-      data.clients.map(c=>'<tr>'+
-        '<td style="padding:6px">'+esc(c.clientName)+'</td>'+
-        '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
-        '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
-        '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-        '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\')">'+t('mcp.deleteClient')+'</button></td></tr>').join('')+
+      data.clients.map(c=>{
+        const typeBadge=c.autoRegistered
+          ?'<span style="background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-size:10px">'+t('mcp.autoClient')+'</span>'
+          :'<span style="background:#f3e8ff;color:#6b21a8;padding:1px 6px;border-radius:4px;font-size:10px">'+t('mcp.manualClient')+'</span>';
+        const name=c.clientName||t('mcp.unnamed');
+        return '<tr>'+
+          '<td style="padding:6px">'+esc(name)+'</td>'+
+          '<td style="padding:6px">'+typeBadge+'</td>'+
+          '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
+          '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
+          '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
+          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\')">'+t('mcp.deleteClient')+'</button></td></tr>';
+      }).join('')+
       '</tbody></table>';
   }catch(e){console.error('loadOAuthClients:',e)}
 }
