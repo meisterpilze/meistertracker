@@ -1452,16 +1452,8 @@ function readTaskByCaldavUid(db, caldavUid) {
 function readBatchById(db, batchId) {
   const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
   if (!r) return null;
-  return {
-    batchId: r.batch_id,
-    species: r.species,
-    strain: r.strain,
-    qty: r.qty,
-    days: r.days,
-    due: r.due,
-    created: r.created,
-    notes: r.notes
-  };
+  const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  return mapBatchRow(r, bagStmt);
 }
 
 function deleteTaskById(db, id) {
