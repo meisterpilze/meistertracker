@@ -339,9 +339,9 @@ function createMcpServer(database, onWrite) {
     'list_cultures',
     'List mushroom cultures with optional filters for type, species, or status',
     {
-      type: z.string().optional().describe('Culture type (e.g. mother, PD, LC)'),
+      type: z.string().optional().describe('Culture type (MC, PD, or LC)'),
       species: z.string().optional().describe('Filter by species (partial match)'),
-      status: z.string().optional().describe('Filter by status (e.g. active, archived, contaminated)')
+      status: z.string().optional().describe('Filter by status (e.g. active, stored, used, contam)')
     },
     async (params) => {
       let cultures = db.getAllCultures(database);
