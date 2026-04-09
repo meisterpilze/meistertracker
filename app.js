@@ -646,6 +646,13 @@ const LANG = {
     'mcp.saved': 'Settings saved.',
     'mcp.error': 'Error: {msg}',
     'mcp.guideTitle': 'Setup guide',
+    'mcp.diagTitle': 'Diagnostics',
+    'mcp.runDiag': 'Run Diagnostics',
+    'mcp.diagRunning': 'Running diagnostics...',
+    'mcp.diagFailed': 'Failed to run diagnostics',
+    'mcp.diagAutoClients': 'Auto-registered clients',
+    'mcp.diagManualClients': 'Manual clients',
+    'mcp.diagSessions': 'Active MCP sessions',
     'mcp.oauthTitle': 'Connected Clients',
     'mcp.oauthDesc': 'All clients connected to the MCP server. Claude registers automatically \u2014 no manual setup needed. Manually created clients are for third-party tools that require a client secret.',
     'mcp.createClient': 'Create manual client',
@@ -1398,6 +1405,13 @@ const LANG = {
     'mcp.saved': 'Einstellungen gespeichert.',
     'mcp.error': 'Fehler: {msg}',
     'mcp.guideTitle': 'Anleitung',
+    'mcp.diagTitle': 'Diagnose',
+    'mcp.runDiag': 'Diagnose starten',
+    'mcp.diagRunning': 'Diagnose läuft...',
+    'mcp.diagFailed': 'Diagnose fehlgeschlagen',
+    'mcp.diagAutoClients': 'Auto-registrierte Clients',
+    'mcp.diagManualClients': 'Manuelle Clients',
+    'mcp.diagSessions': 'Aktive MCP-Sitzungen',
     'mcp.oauthTitle': 'Verbundene Clients',
     'mcp.oauthDesc': 'Alle mit dem MCP Server verbundenen Clients. Claude registriert sich automatisch \u2014 kein manuelles Setup nötig. Manuelle Clients sind für Drittanbieter-Tools, die ein Client-Secret benötigen.',
     'mcp.createClient': 'Manuellen Client erstellen',
@@ -2149,6 +2163,13 @@ const LANG = {
     'mcp.saved': 'Configurações salvas.',
     'mcp.error': 'Erro: {msg}',
     'mcp.guideTitle': 'Guia de configuração',
+    'mcp.diagTitle': 'Diagnóstico',
+    'mcp.runDiag': 'Executar diagnóstico',
+    'mcp.diagRunning': 'Executando diagnóstico...',
+    'mcp.diagFailed': 'Falha no diagnóstico',
+    'mcp.diagAutoClients': 'Clientes auto-registrados',
+    'mcp.diagManualClients': 'Clientes manuais',
+    'mcp.diagSessions': 'Sessões MCP ativas',
     'mcp.oauthTitle': 'Clientes Conectados',
     'mcp.oauthDesc': 'Todos os clientes conectados ao servidor MCP. O Claude se registra automaticamente \u2014 nenhuma configuração manual necessária. Clientes manuais são para ferramentas de terceiros que precisam de client secret.',
     'mcp.createClient': 'Criar cliente manual',
@@ -3671,6 +3692,7 @@ function toggleMcpSections(enabled){
   document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
   document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
   document.getElementById('mcp-guide-card').style.display=enabled?'block':'none';
+  document.getElementById('mcp-diag-card').style.display=enabled?'block':'none';
   document.getElementById('mcp-oauth-card').style.display=enabled?'block':'none';
 }
 function showMcpStatus(msg,color){
@@ -3696,6 +3718,32 @@ async function generateMcpToken(){
     document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
     showMcpStatus(t('mcp.keyGenerated'),'#166534');
   }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+}
+
+async function runMcpDiagnostics(){
+  const el=document.getElementById('mcp-diag-result');
+  el.innerHTML='<p style="color:#888">'+t('mcp.diagRunning')+'</p>';
+  try{
+    const r=await authFetch('/api/mcp/diagnostics');
+    if(!r.ok){el.innerHTML='<p style="color:#b91c1c">'+t('mcp.diagFailed')+'</p>';return}
+    const d=await r.json();
+    const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    let html='<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    const row=(label,val,color)=>'<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">'+label+'</td><td style="padding:4px 8px;color:'+(color||'#333')+'">'+val+'</td></tr>';
+    const checks=d.checks||{};
+    for(const[k,v]of Object.entries(checks)){
+      const pass=v.startsWith('PASS');
+      html+=row(k,esc(v),pass?'#166534':'#b91c1c');
+    }
+    html+=row('Protocol',esc(d.protocol));
+    html+=row('Base URL','<code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">'+esc(d.connectorUrl)+'</code>');
+    html+=row(t('mcp.diagAutoClients'),String(d.oauthClients?.auto||0));
+    html+=row(t('mcp.diagManualClients'),String(d.oauthClients?.manual||0));
+    html+=row(t('mcp.diagSessions'),String(d.activeSessions||0));
+    html+='</table>';
+    if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534">'+esc(d.hint)+'</div>';
+    el.innerHTML=html;
+  }catch(e){el.innerHTML='<p style="color:#b91c1c">Error: '+e.message+'</p>'}
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
@@ -6561,6 +6609,7 @@ function initEventListeners() {
   $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
   $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
   $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
+  $('mcp-diag-btn').addEventListener('click', runMcpDiagnostics);
   $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
   $('oauth-create-client-btn').addEventListener('click', createOAuthClient);
   $('oauth-copy-id-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_oauthNewId);showOAuthStatus(t('mcp.idCopied'),'#166534');});
