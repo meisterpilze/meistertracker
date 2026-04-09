@@ -6239,7 +6239,7 @@ function openCamScan(){
   var scanner=_camScanner;
   scanner.start(
     {facingMode:_camFacingMode},
-    {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
+    {fps:10,qrbox:function(vw,vh){var s=Math.min(250,Math.floor(Math.min(vw,vh)*0.7));return{width:s,height:s}},aspectRatio:1.0},
     function(decoded){
       if(scanner!==_camScanner)return;
       scanner.pause(true);
