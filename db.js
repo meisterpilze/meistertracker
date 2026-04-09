@@ -1899,8 +1899,18 @@ function getOAuthClient(db, clientId) {
 
 function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod, resource }) {
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
-  db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires, resource || '');
+  try {
+    db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires, resource || '');
+  } catch (e) {
+    // Fallback if resource column doesn't exist yet (migration v15 not run)
+    if (e.message && e.message.includes('resource')) {
+      db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires);
+    } else {
+      throw e;
+    }
+  }
 }
 
 function getOAuthCode(db, code) {
