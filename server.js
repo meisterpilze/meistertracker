@@ -2972,6 +2972,7 @@ function handleRequest(req, res) {
     return;
   }
   // RFC 9728: serve protected resource metadata at both path-aware and root URLs
+  const MCP_SCOPE = 'mcp:full';
   if (req.method === 'GET' && (req.url === '/.well-known/oauth-protected-resource/mcp' || req.url === '/.well-known/oauth-protected-resource')) {
     const base = getBaseUrl(req);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -2980,7 +2981,8 @@ function handleRequest(req, res) {
     res.end(JSON.stringify({
       resource: base + '/mcp',
       authorization_servers: [base],
-      bearer_methods_supported: ['header']
+      bearer_methods_supported: ['header'],
+      scopes_supported: [MCP_SCOPE]
     }));
     return;
   }
@@ -2997,7 +2999,8 @@ function handleRequest(req, res) {
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-      code_challenge_methods_supported: ['S256']
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: [MCP_SCOPE]
     }));
     return;
   }
@@ -3026,6 +3029,7 @@ function handleRequest(req, res) {
           const clientId = crypto.randomUUID();
           const clientName = typeof data.client_name === 'string' ? data.client_name : '';
           db.registerOAuthClient(database, { clientId, clientName, redirectUris });
+          log('info', 'OAuth client registered via DCR', { clientId, clientName });
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             client_id: clientId,
@@ -3063,10 +3067,12 @@ function handleRequest(req, res) {
             }
             const codeHash = crypto.createHash('sha256').update(data.code).digest('hex');
             const codeRow = db.getOAuthCode(database, codeHash);
-            if (!codeRow) return jsonErr(res, 400, 'invalid_grant');
-            if (codeRow.clientId !== data.client_id) return jsonErr(res, 400, 'invalid_grant');
-            if (codeRow.redirectUri !== data.redirect_uri) return jsonErr(res, 400, 'invalid_grant');
-            if (!verifyPkce(data.code_verifier, codeRow.codeChallenge)) return jsonErr(res, 400, 'invalid_grant');
+            if (!codeRow) { log('warn', 'OAuth token failed: invalid code', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
+            if (codeRow.clientId !== data.client_id) { log('warn', 'OAuth token failed: client mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
+            if (codeRow.redirectUri !== data.redirect_uri) { log('warn', 'OAuth token failed: redirect mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
+            if (!verifyPkce(data.code_verifier, codeRow.codeChallenge)) { log('warn', 'OAuth token failed: PKCE mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
+            // RFC 8707: validate resource indicator if both sides provided one
+            if (data.resource && codeRow.resource && data.resource !== codeRow.resource) { log('warn', 'OAuth token failed: resource mismatch', { clientId: data.client_id, expected: codeRow.resource, got: data.resource }); return jsonErr(res, 400, 'invalid_grant'); }
 
             db.markOAuthCodeUsed(database, codeHash);
 
@@ -3078,6 +3084,7 @@ function handleRequest(req, res) {
             db.createOAuthToken(database, { token: accessHash, tokenType: 'access', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 3600, refreshTokenRef: refreshHash });
             db.createOAuthToken(database, { token: refreshHash, tokenType: 'refresh', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 30 * 24 * 3600 });
 
+            log('info', 'OAuth token issued', { clientId: data.client_id });
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ access_token: accessToken, token_type: 'bearer', expires_in: 3600, refresh_token: refreshToken }));
           } else if (data.grant_type === 'refresh_token') {
@@ -3124,6 +3131,7 @@ function handleRequest(req, res) {
         const codeChallenge = parsedUrl.searchParams.get('code_challenge') || '';
         const codeChallengeMethod = parsedUrl.searchParams.get('code_challenge_method') || '';
         const responseType = parsedUrl.searchParams.get('response_type') || '';
+        const resource = parsedUrl.searchParams.get('resource') || '';
 
         if (responseType !== 'code') { jsonErr(res, 400, 'unsupported_response_type'); return; }
         if (codeChallengeMethod !== 'S256') { jsonErr(res, 400, 'invalid code_challenge_method'); return; }
@@ -3135,6 +3143,7 @@ function handleRequest(req, res) {
 
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const clientName = client.clientName || clientId;
+        log('info', 'OAuth consent shown', { clientId, clientName, user: authUser.username });
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -3170,6 +3179,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     <input type="hidden" name="code_challenge" value="${esc(codeChallenge)}">
     <input type="hidden" name="code_challenge_method" value="${esc(codeChallengeMethod)}">
     <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="resource" value="${esc(resource)}">
     <div class="btns">
       <button type="submit" name="action" value="deny" class="btn btn-deny">Deny</button>
       <button type="submit" name="action" value="allow" class="btn btn-allow">Allow</button>
@@ -3201,6 +3211,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             return;
           }
 
+          log('info', 'OAuth authorization granted', { clientId, user: authUser.username });
           const code = crypto.randomBytes(32).toString('hex');
           const codeHash = crypto.createHash('sha256').update(code).digest('hex');
           db.createOAuthCode(database, {
@@ -3209,7 +3220,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             userId: authUser.id,
             redirectUri,
             codeChallenge: data.code_challenge || '',
-            codeChallengeMethod: data.code_challenge_method || 'S256'
+            codeChallengeMethod: data.code_challenge_method || 'S256',
+            resource: data.resource || ''
           });
 
           const sep = redirectUri.includes('?') ? '&' : '?';
@@ -3246,7 +3258,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const base = getBaseUrl(req);
       res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp"'
+        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp", scope="mcp:full"'
       });
       res.end('{"error":"unauthorized"}');
       return;
@@ -4513,7 +4525,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       const clientId = decodeURIComponent(req.url.split('/').pop());
-      db.deleteOAuthClient(database, clientId);
+      const deleted = db.deleteOAuthClient(database, clientId);
+      if (deleted === 0) { jsonErr(res, 404, 'client not found'); return; }
       log('info', 'OAuth client deleted', { actor: req.authUser.username, clientId });
       jsonOk(res);
     } catch (err) {

@@ -396,6 +396,13 @@ const MIGRATIONS = [
       db.exec(`ALTER TABLE oauth_clients ADD COLUMN client_secret_hash TEXT DEFAULT NULL`);
       db.exec(`ALTER TABLE oauth_clients ADD COLUMN revoked INTEGER DEFAULT 0`);
     }
+  },
+  {
+    version: 15,
+    description: 'Add resource column to oauth_codes for RFC 8707 resource indicator support',
+    fn(db) {
+      db.exec(`ALTER TABLE oauth_codes ADD COLUMN resource TEXT DEFAULT ''`);
+    }
   }
 ];
 
@@ -1887,10 +1894,10 @@ function getOAuthClient(db, clientId) {
   return { clientId: row.client_id, clientName: row.client_name, redirectUris: JSON.parse(row.redirect_uris || '[]'), created: row.created, hasSecret: !!row.client_secret_hash, secretHash: row.client_secret_hash };
 }
 
-function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod }) {
+function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod, resource }) {
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
-  db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires);
+  db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires, resource || '');
 }
 
 function getOAuthCode(db, code) {
@@ -1898,7 +1905,8 @@ function getOAuthCode(db, code) {
   if (!row) return null;
   return {
     code: row.code, clientId: row.client_id, userId: row.user_id, redirectUri: row.redirect_uri,
-    codeChallenge: row.code_challenge, codeChallengeMethod: row.code_challenge_method, expires: row.expires
+    codeChallenge: row.code_challenge, codeChallengeMethod: row.code_challenge_method, expires: row.expires,
+    resource: row.resource || ''
   };
 }
 
@@ -1955,7 +1963,8 @@ function listOAuthClients(db) {
 function deleteOAuthClient(db, clientId) {
   db.prepare('DELETE FROM oauth_tokens WHERE client_id = ?').run(clientId);
   db.prepare('DELETE FROM oauth_codes WHERE client_id = ?').run(clientId);
-  db.prepare('DELETE FROM oauth_clients WHERE client_id = ?').run(clientId);
+  const result = db.prepare('DELETE FROM oauth_clients WHERE client_id = ?').run(clientId);
+  return result.changes;
 }
 
 function verifyOAuthClientSecret(db, clientId, secret) {
