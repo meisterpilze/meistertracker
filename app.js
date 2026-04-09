@@ -4595,7 +4595,7 @@ function lwUpdate(){
   else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
   lwPreview();
 }
-function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">— none / new isolation —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)}</option>`).join('');if(cur)s.value=cur}
+function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
@@ -4627,9 +4627,9 @@ function logLabWork(){
 function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'\u2014'}</td><td>${spDot(c.species)}${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
-function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">— select —</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
+function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">'+t('lab.selectCultureBatch')+'</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
 function buildTree(rootId,rootType){
-  const getAnc=id=>{const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
+  const seen=new Set();const getAnc=id=>{if(seen.has(id))return[];seen.add(id);const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
   const getDesc=(id,depth)=>{if(depth>6)return[];const ch=[];cultures.filter(c=>c.parentId===id).forEach(c=>ch.push({...c,harvest:0,children:getDesc(c.id,depth+1)}));batches.filter(b=>b.sourceId===id).forEach(b=>{const{status}=getStatus(b.batchId);ch.push({id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]})});return ch};
   if(rootType==='C'){const anc=getAnc(rootId);const c=cultures.find(x=>x.id===rootId);if(!c)return null;const root={...anc[anc.length-1]||{id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created}};root.children=getDesc(rootId,0);if(anc.length>1){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=i===anc.length-1?root.children:[];cur.children=[anc[i]];cur=anc[i]}return tree}return root}
   else{const b=batches.find(x=>x.batchId===rootId);if(!b)return null;const{status}=getStatus(b.batchId);const bn={id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]};if(b.sourceId){const anc=getAnc(b.sourceId);if(anc.length){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=[];cur.children=[anc[i]];cur=anc[i]}cur.children=[bn];return tree}}return bn}
@@ -4637,7 +4637,7 @@ function buildTree(rootId,rootType){
 const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
 const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
 function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:#666">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:#888">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
-function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">Select a culture or batch above.</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">No lineage data found.</div>'}
+function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">'+t('lab.selectAbove')+'</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">'+t('lab.noLineageData')+'</div>'}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
 let biBagId=null,biBatchId=null;
@@ -5166,7 +5166,7 @@ function processScan(raw){
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
-  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val)){
+  if(/^(MC|PD|LC)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)){
     const c=cultures.find(x=>x.id.toUpperCase()===val);
     if(c){closeCamScan();go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok',t('scanFb.cultureScanned',{val:val}));return}
   }
