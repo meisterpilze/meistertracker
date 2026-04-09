@@ -6229,8 +6229,32 @@ function updateOfflineBadge(count){
 }
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
-function openCamScan(){document.getElementById('m-camscan').classList.add('open')}
-function closeCamScan(){document.getElementById('m-camscan').classList.remove('open')}
+let _camScanner=null;
+function openCamScan(){
+  document.getElementById('m-camscan').classList.add('open');
+  if(_camScanner)return;
+  _camScanner=new Html5Qrcode('cam-reader');
+  _camScanner.start(
+    {facingMode:'environment'},
+    {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
+    function(decoded){
+      _camScanner.pause(true);
+      processScan(decoded);
+      setTimeout(function(){try{_camScanner.resume()}catch(e){}},1500);
+    },
+    function(){}
+  ).catch(function(err){
+    console.error('Camera start failed:',err);
+    setFb('err','Kamera konnte nicht gestartet werden: '+err);
+    closeCamScan();
+  });
+}
+function closeCamScan(){
+  document.getElementById('m-camscan').classList.remove('open');
+  if(_camScanner){
+    _camScanner.stop().then(function(){_camScanner.clear();_camScanner=null}).catch(function(){_camScanner=null});
+  }
+}
 function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent='Kopiert!';setTimeout(()=>{b.textContent='Kopieren'},2000)}).catch(()=>{})}
 
 function initEventListeners() {
