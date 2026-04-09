@@ -193,12 +193,15 @@ function jsonBody(req, res, cb) {
   });
   req.on('end', () => {
     if (aborted) return;
+    let parsed;
     try {
-      cb(null, JSON.parse(body));
+      parsed = JSON.parse(body);
     } catch (e) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end('{"error":"bad json"}');
+      return;
     }
+    cb(null, parsed);
   });
 }
 function formBody(req, res, cb) {
