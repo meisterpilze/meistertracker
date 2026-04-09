@@ -3322,6 +3322,7 @@ function showHarvestPanel(bagId,batchId){
   scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
   document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
   document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+  closeCamScan();
   closeScanModal();
   document.getElementById('harvest-panel').style.display='block';
   setTimeout(()=>document.getElementById('hp-grams').focus(),80);
@@ -4675,6 +4676,7 @@ function openBagInfo(bagId,batchId,batch){
     </div>
     ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
+  closeCamScan();
   closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
   setFb('info',t('scanFb.bagInfo',{bag:bagId}),{noModal:true});
@@ -4906,9 +4908,17 @@ function _addLogEntry(type,msg,entryData){
   while(log.children.length>80)log.lastChild.remove();
 }
 let _toastTimer=null;
+let _camHudToastTimer=null;
 function setFb(type,msg,opts){
   const entryData=opts&&opts._tempId?opts:null;
-  if(!opts||!opts.noModal)openScanModal();
+  // When camera is active, show feedback on camera HUD instead of scan overlay
+  if(_camScanner&&(!opts||!opts.noModal)){
+    _showCamHudToast(type,msg);
+    updateCamHud();
+  }else{
+    if(!opts||!opts.noModal)openScanModal();
+  }
+  // Always update scan overlay toast + log (for when user opens it later)
   const el=document.getElementById('scan-toast');
   el.className='scan-toast-inline fb-'+type;
   el.textContent=msg;
@@ -4919,6 +4929,42 @@ function setFb(type,msg,opts){
   if(type==='ok')_scanBeep(800,80);
   else if(type==='err')_scanBeep(200,200);
   _addLogEntry(type,msg,entryData);
+}
+function _showCamHudToast(type,msg){
+  const el=document.getElementById('cam-hud-toast');
+  el.className='cam-hud-toast ht-'+type;
+  el.textContent=msg;
+  requestAnimationFrame(()=>el.classList.add('visible'));
+  clearTimeout(_camHudToastTimer);
+  _camHudToastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+}
+function updateCamHud(){
+  document.getElementById('ch-action').textContent=scan.action||'—';
+  document.getElementById('ch-from').textContent=scan.from||'—';
+  document.getElementById('ch-to').textContent=scan.to||'—';
+  document.getElementById('ch-count').textContent=scan.count;
+  // Action chip color
+  const actionChip=document.getElementById('cam-chip-action');
+  actionChip.className='cam-chip'+(scan.action?' ch-set ch-'+scan.action.toLowerCase():'');
+  // Show/hide from/arrow chips based on action
+  const fromChip=document.getElementById('cam-chip-from');
+  const arrowChip=document.getElementById('cam-chip-arrow');
+  const toChip=document.getElementById('cam-chip-to');
+  const showFrom=scan.action==='MOVE';
+  fromChip.style.display=showFrom?'':'none';
+  arrowChip.style.display=showFrom?'':'none';
+  // Set values
+  if(showFrom){
+    fromChip.className='cam-chip'+(scan.from?' ch-set':'');
+    fromChip.classList.toggle('ch-pulse',!scan.from);
+  }
+  toChip.className='cam-chip'+((scan.action==='ADD'||scan.action==='MOVE')&&scan.to?' ch-set':'');
+  toChip.style.display=(scan.action==='ADD'||scan.action==='MOVE')?'':'none';
+  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&scan.from&&!scan.to);
+  toChip.classList.toggle('ch-pulse',toPulse);
+  // Count chip highlight
+  const countChip=document.getElementById('cam-chip-count');
+  countChip.className='cam-chip'+(scan.count>0?' ch-set':'');
 }
 function updateSD(){
   document.getElementById('s-action').textContent=scan.action||'—';
@@ -4951,6 +4997,8 @@ function updateSD(){
   if(scan.count>0)countChip.classList.add('count-bump');
   // Session end button
   document.getElementById('btn-end-session').style.display=sessionEntries.length>0?'':'none';
+  // Also sync camera HUD if it exists
+  updateCamHud();
 }
 function resetScan(){
   scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};
@@ -5117,7 +5165,7 @@ function processScan(raw){
   // Culture ID scan → open lineage
   if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(val)){
     const c=cultures.find(x=>x.id.toUpperCase()===val);
-    if(c){go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok',t('scanFb.cultureScanned',{val:val}));return}
+    if(c){closeCamScan();go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok',t('scanFb.cultureScanned',{val:val}));return}
   }
   const isBag=/-\d{2}$/.test(val);
   const batchId=isBag?val.split('-').slice(0,-1).join('-'):val;
@@ -6282,6 +6330,7 @@ let _camFacingMode='environment';
 function openCamScan(){
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
+  updateCamHud(); // Sync HUD with current scan state
   if(_camScanner||_camClosing)return;
   _camScanner=new Html5Qrcode('cam-reader');
   var scanner=_camScanner;
@@ -6402,6 +6451,7 @@ function initEventListeners() {
   $('set-19').addEventListener('click', resetScan);
   $('btn-20').addEventListener('click', openBatchAdd);
   $('btn-end-session').addEventListener('click', endScanSession);
+  $('btn-scan-cam').addEventListener('click', function() { openCamScan(); });
   $('btn-scan-audio').addEventListener('click', function() { scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4; });
 
   // Harvest panel
