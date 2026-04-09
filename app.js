@@ -2801,9 +2801,9 @@ function renderRackSection(zone,racks,filtered){
       const bd=filtered.find(f=>f.b.batchId===bid);
       const ov=bd?bd.ov:false;
       d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-      return`<div class="batch-card${ov?' batch-overdue':''}" onclick="this.classList.toggle('expanded')">
+      return`<div class="batch-card${ov?' batch-overdue':''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
-          <span class="batch-card-species">${spDot(d.sp)}${esc(d.sp)}</span>
+          <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
         </div>
         <div class="batch-card-meta">
@@ -2872,9 +2872,9 @@ function renderFruitingSection(fruitingZones,filtered){
       const due=bd?bd.due:null;
       const ov=bd?bd.ov:false;
       d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-      return`<div class="batch-card${ov?' batch-overdue':''}" onclick="this.classList.toggle('expanded')">
+      return`<div class="batch-card${ov?' batch-overdue':''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
-          <span class="batch-card-species">${spDot(d.sp)}${esc(d.sp)}</span>
+          <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
         </div>
         <div class="batch-card-meta">
@@ -2921,8 +2921,8 @@ function renderSimpleZoneSection(zone,filtered){
   const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
   const cards=batchEntries.map(([bid,d])=>{
     d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-    return`<div class="batch-card" onclick="this.classList.toggle('expanded')">
-      <div class="batch-card-header"><span class="batch-card-species">${spDot(d.sp)}${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
+    return`<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+      <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
       <div class="batch-card-meta"><span style="font-family:monospace;font-size:10px">${esc(bid)}</span><span>${esc(d.st)}</span></div>
       <div class="batch-card-chips">${d.bags.map(bg=>{
         const sel=selectedLocBags.has(bg.id);
@@ -2959,9 +2959,9 @@ function renderContamSection(zone,filtered){
 
   const cards=batchEntries.map(([bid,d])=>{
     d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-    return`<div class="batch-card" onclick="this.classList.toggle('expanded')">
+    return`<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header">
-        <span class="batch-card-species">${spDot(d.sp)}${esc(d.sp)}</span>
+        <span class="batch-card-species">${esc(d.sp)}</span>
         <span class="batch-card-count">${d.bags.length}</span>
       </div>
       <div class="batch-card-meta">
