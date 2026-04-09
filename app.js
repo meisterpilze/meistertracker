@@ -4911,8 +4911,8 @@ function makeLabZPL(ids,opts){
     const bc=bcParams(bcVal,5); // reduced quiet zone for wider bars
     // Calculate how many text lines we need below the barcode
     const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
-    const bcH=lines>=3?50:lines>=2?60:lines>=1?70:90;
-    const bcY=52; // shifted down 5mm (40 dots)
+    const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
+    const bcY=16; // 2mm from top (16 dots at 203dpi)
     if(opts.bc)z+='^FO'+bc.x+','+bcY+'^BY'+bc.mw+',2.0,'+bcH+'^BCN,'+bcH+',N,N,N^FD'+bcVal+'^FS';
     let ty=opts.bc?bcY+bcH+6:12;
     z+='^FO0,'+ty+'^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';ty+=34;
