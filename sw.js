@@ -63,10 +63,15 @@ async function replayPendingScans() {
       const resp = await fetch('/api/scan-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin', // Include session cookie for user attribution
         body: JSON.stringify(item.body)
       });
       if (resp.ok) {
         await deletePendingScan(item.id);
+      } else if (resp.status === 401) {
+        // Session expired — keep scans queued, notify client to re-auth
+        notifyClients();
+        return;
       } else {
         break; // Server error — stop replay, retry later
       }
