@@ -4571,20 +4571,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
-  if (req.method === 'POST' && req.url === '/api/mcp/oauth-clients') {
-    if (requireAdmin(req, res)) return;
-    jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
-      try {
-        const clientName = (data.client_name || '').trim();
-        if (!clientName) { jsonErr(res, 400, 'client_name required'); return; }
-        const result = db.createOAuthClient(database, { clientName, redirectUris: data.redirect_uris || [] });
-        log('info', 'OAuth client created', { actor: req.authUser.username, clientId: result.clientId, clientName });
-        jsonOk(res, { client_id: result.clientId, client_secret: result.clientSecret, client_name: result.clientName });
-      } catch (err) { safeErr(res, err); }
-    });
-    return;
-  }
   if (req.method === 'DELETE' && req.url.startsWith('/api/mcp/oauth-clients/')) {
     if (requireAdmin(req, res)) return;
     try {
