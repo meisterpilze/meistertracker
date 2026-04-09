@@ -2041,6 +2041,7 @@ tr:hover td {
   border-radius: var(--radius-sm);
   background: var(--c-bg);
   border: 1px solid var(--c-border-light);
+  border-left: 3px solid var(--sp-color, var(--c-border-light));
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -2050,6 +2051,7 @@ tr:hover td {
 }
 .batch-card.batch-overdue {
   border-color: #fecaca;
+  border-left-color: var(--sp-color, #fecaca);
   background: #fff5f5;
 }
 .batch-card-header {
