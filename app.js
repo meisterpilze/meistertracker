@@ -5159,6 +5159,11 @@ function processScan(raw){
     setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}),entry);
     updateSD();return;
   }
+  // URL QR codes: inform user instead of showing "unknown"
+  if(/^https?:\/\//i.test(raw.trim())){
+    setFb('info','QR-Code enthält URL: '+raw.trim().slice(0,80)+(raw.trim().length>80?'…':''));
+    return;
+  }
   setFb('err',t('scanFb.unknown',{val:val}));
 }
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
