@@ -93,6 +93,10 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // check every 5 minutes
+// Clean up expired OAuth codes and revoked tokens every hour
+setInterval(() => {
+  try { db.deleteExpiredOAuthData(database); } catch (e) { log('error', 'OAuth cleanup failed', { error: e.message }); }
+}, 60 * 60 * 1000);
 
 function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
@@ -113,20 +117,28 @@ function checkMcpAuth(req) {
   return false;
 }
 
-// Simple sliding-window rate limiter for MCP endpoint (60 requests/minute)
-const MCP_RATE_LIMIT = 60;
+// Simple sliding-window rate limiter (shared for MCP + OAuth endpoints)
 const MCP_RATE_WINDOW = 60 * 1000;
-const mcpRateMap = new Map(); // ip → { timestamps[] }
-function checkMcpRate(req) {
+const rateLimits = new Map(); // ip → { timestamps[] }
+function checkRate(req, limit) {
   const ip = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
-  let bucket = mcpRateMap.get(ip);
-  if (!bucket) { bucket = { timestamps: [] }; mcpRateMap.set(ip, bucket); }
+  let bucket = rateLimits.get(ip);
+  if (!bucket) { bucket = { timestamps: [] }; rateLimits.set(ip, bucket); }
   bucket.timestamps = bucket.timestamps.filter(ts => now - ts < MCP_RATE_WINDOW);
-  if (bucket.timestamps.length >= MCP_RATE_LIMIT) return false;
+  if (bucket.timestamps.length >= limit) return false;
   bucket.timestamps.push(now);
   return true;
 }
+function checkMcpRate(req) { return checkRate(req, 60); }   // 60 req/min for MCP
+function checkOAuthRate(req) { return checkRate(req, 20); } // 20 req/min for OAuth endpoints
+// Evict stale IPs every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - MCP_RATE_WINDOW;
+  for (const [ip, bucket] of rateLimits) {
+    if (bucket.timestamps.every(ts => ts < cutoff)) rateLimits.delete(ip);
+  }
+}, 10 * 60 * 1000);
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
 // Uses a Set for O(1) add/delete instead of array splice.
@@ -3023,6 +3035,11 @@ function handleRequest(req, res) {
 
     // Dynamic Client Registration (RFC 7591) — required by MCP OAuth spec
     if (req.method === 'POST' && req.url === '/oauth/register') {
+      if (!checkOAuthRate(req)) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+        res.end('{"error":"too_many_requests"}');
+        return;
+      }
       jsonBody(req, res, (e, data) => {
         if (e) return;
         try {
@@ -3031,6 +3048,21 @@ function handleRequest(req, res) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris required"}');
             return;
+          }
+          // Validate redirect URIs are http(s) URLs
+          for (const uri of redirectUris) {
+            try {
+              const u = new URL(uri);
+              if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris must be http or https URLs"}');
+                return;
+              }
+            } catch {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end('{"error":"invalid_client_metadata","error_description":"invalid redirect_uri"}');
+              return;
+            }
           }
           const clientId = crypto.randomUUID();
           const clientName = typeof data.client_name === 'string' ? data.client_name : '';
@@ -3054,6 +3086,11 @@ function handleRequest(req, res) {
 
     // Token endpoint — public
     if (req.method === 'POST' && req.url === '/oauth/token') {
+      if (!checkOAuthRate(req)) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+        res.end('{"error":"too_many_requests"}');
+        return;
+      }
       const ct = (req.headers['content-type'] || '').split(';')[0].trim();
       const parser = ct === 'application/json' ? jsonBody : formBody;
       parser(req, res, (e, data) => {
@@ -3203,18 +3240,19 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           try {
           const redirectUri = data.redirect_uri || '';
           const state = data.state || '';
+          const clientId = data.client_id || '';
+
+          // Validate client and redirect_uri BEFORE any redirect (prevents open redirect)
+          const client = db.getOAuthClient(database, clientId);
+          if (!client || !client.redirectUris.includes(redirectUri)) {
+            jsonErr(res, 400, 'invalid client or redirect_uri');
+            return;
+          }
 
           if (data.action === 'deny') {
             const sep = redirectUri.includes('?') ? '&' : '?';
             res.writeHead(302, { Location: redirectUri + sep + 'error=access_denied' + (state ? '&state=' + encodeURIComponent(state) : '') });
             res.end();
-            return;
-          }
-
-          const clientId = data.client_id || '';
-          const client = db.getOAuthClient(database, clientId);
-          if (!client || !client.redirectUris.includes(redirectUri)) {
-            jsonErr(res, 400, 'invalid client or redirect_uri');
             return;
           }
 
