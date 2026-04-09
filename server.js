@@ -3221,7 +3221,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           db.createOAuthCode(database, {
             code: codeHash,
             clientId,
-            userId: authUser.id,
+            userId: authUser.user_id,
             redirectUri,
             codeChallenge: data.code_challenge || '',
             codeChallengeMethod: data.code_challenge_method || 'S256',
