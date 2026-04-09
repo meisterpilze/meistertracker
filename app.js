@@ -6231,13 +6231,14 @@ function updateOfflineBadge(count){
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
 let _camScanner=null;
 let _camClosing=false;
+let _camFacingMode='environment';
 function openCamScan(){
   document.getElementById('m-camscan').classList.add('open');
   if(_camScanner||_camClosing)return;
   _camScanner=new Html5Qrcode('cam-reader');
   var scanner=_camScanner;
   scanner.start(
-    {facingMode:'environment'},
+    {facingMode:_camFacingMode},
     {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
     function(decoded){
       if(scanner!==_camScanner)return;
@@ -6267,6 +6268,10 @@ function closeCamScan(){
 }
 // Stop camera when tab is hidden (saves battery, prevents "camera in use" on other apps)
 document.addEventListener('visibilitychange',function(){if(document.hidden&&_camScanner)closeCamScan()});
+function flipCamera(){
+  _camFacingMode=_camFacingMode==='environment'?'user':'environment';
+  if(_camScanner){closeCamScan();setTimeout(openCamScan,300)}
+}
 function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent='Kopiert!';setTimeout(()=>{b.textContent='Kopieren'},2000)}).catch(()=>{})}
 
 function initEventListeners() {
@@ -6302,6 +6307,7 @@ function initEventListeners() {
   $('set-15').addEventListener('click', () => { biSetAction('REMOVE'); });
   $('m-camscan').addEventListener('click', function(e) { if(e.target===this) closeCamScan(); });
   $('cls-16').addEventListener('click', closeCamScan);
+  $('btn-flip-cam').addEventListener('click', flipCamera);
 
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
