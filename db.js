@@ -118,6 +118,15 @@ CREATE TABLE IF NOT EXISTS inventory_log (
 );
 CREATE INDEX IF NOT EXISTS idx_invlog_time ON inventory_log(time);
 
+CREATE TABLE IF NOT EXISTS suppliers (
+  id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  mat   TEXT NOT NULL,
+  name  TEXT NOT NULL,
+  url   TEXT,
+  phone TEXT,
+  notes TEXT
+);
+
 CREATE TABLE IF NOT EXISTS caldav_config (
   id                   INTEGER PRIMARY KEY CHECK (id = 1),
   enabled              INTEGER DEFAULT 0,
@@ -686,6 +695,9 @@ function readAll(db, opts = {}) {
     racks: rackStmt.all(z.id).map((r) => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
   }));
 
+  // Suppliers
+  const suppliers = db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
+
   const version = getDataVersion(db);
   return {
     batches,
@@ -700,6 +712,7 @@ function readAll(db, opts = {}) {
     assets,
     calendarEvents,
     zones,
+    suppliers,
     version
   };
 }
@@ -1626,6 +1639,29 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   incrementDataVersion(db);
 }
 
+// ── Supplier CRUD ──────────────────────────────────────────
+function listSuppliers(db) {
+  return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
+}
+
+function upsertSupplier(db, s) {
+  if (!s.mat || !s.name) throw new Error('mat and name are required');
+  if (!VALID_MATS.includes(s.mat)) throw new Error('invalid material: ' + s.mat);
+  if (s.id) {
+    db.prepare('UPDATE suppliers SET mat=?,name=?,url=?,phone=?,notes=? WHERE id=?').run(s.mat, s.name, s.url || null, s.phone || null, s.notes || null, s.id);
+    incrementDataVersion(db);
+    return s.id;
+  }
+  const info = db.prepare('INSERT INTO suppliers(mat,name,url,phone,notes) VALUES(?,?,?,?,?)').run(s.mat, s.name, s.url || null, s.phone || null, s.notes || null);
+  incrementDataVersion(db);
+  return Number(info.lastInsertRowid);
+}
+
+function deleteSupplier(db, id) {
+  db.prepare('DELETE FROM suppliers WHERE id=?').run(id);
+  incrementDataVersion(db);
+}
+
 // ── Calendar Event CRUD ─────────────────────────────────────
 function insertCalendarEvent(db, ev, assigneeIds) {
   db.exec('BEGIN');
@@ -2089,6 +2125,9 @@ module.exports = {
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,
+  listSuppliers,
+  upsertSupplier,
+  deleteSupplier,
   insertCalendarEvent,
   updateCalendarEvent,
   getCalendarEventById,

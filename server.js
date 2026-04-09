@@ -4814,6 +4814,35 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Suppliers CRUD --
+  if (req.method === 'GET' && req.url === '/api/suppliers') {
+    try {
+      jsonOk(res, db.listSuppliers(database));
+    } catch (err) { safeErr(res, err); }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/suppliers') {
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      if (!data.mat || !data.name) { jsonErr(res, 400, 'mat and name required'); return; }
+      try {
+        const id = db.upsertSupplier(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) { safeErr(res, err); }
+    });
+    return;
+  }
+  const supDelMatch = req.method === 'DELETE' && req.url.match(/^\/api\/suppliers\/(\d+)$/);
+  if (supDelMatch) {
+    try {
+      db.deleteSupplier(database, parseInt(supDelMatch[1]));
+      broadcastSSE(res);
+      jsonOk(res, { ok: true });
+    } catch (err) { safeErr(res, err); }
+    return;
+  }
+
   // -- Backup Download (encrypted .db) --
   if (req.method === 'POST' && req.url === '/api/backup/download') {
     if (requireAdmin(req, res)) return;
