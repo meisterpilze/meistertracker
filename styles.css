@@ -2083,6 +2083,8 @@ tr:hover td {
   z-index: 200;
   align-items: center;
   justify-content: center;
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 .modal-bg.open {
   display: flex;
