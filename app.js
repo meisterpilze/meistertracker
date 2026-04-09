@@ -605,6 +605,19 @@ const LANG = {
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Delivery logged: +{kg}kg {mat} now {total}kg total',
     'inv.adjusted': 'Adjusted {mat}: {delta}kg now {total}kg total',
+    'inv.suppliers': 'Suppliers',
+    'inv.suppliersDesc': 'Manage suppliers for each material so you know where to reorder.',
+    'inv.addSupplier': 'Add supplier',
+    'inv.supplierName': 'Name',
+    'inv.supplierUrl': 'Website',
+    'inv.supplierPhone': 'Phone',
+    'inv.supplierNotes': 'Notes',
+    'inv.noSuppliers': 'No suppliers added yet.',
+    'inv.reorderFrom': 'Reorder from',
+    'inv.editSupplier': 'Edit',
+    'inv.deleteSupplier': 'Delete',
+    'inv.supplierSaved': 'Supplier saved',
+    'inv.supplierDeleted': 'Supplier deleted',
     // Print feedback
     'print.printed': 'Printed {n} labels for {id}',
     'print.printedLabels': 'Printed {n} lab label(s)',
@@ -1353,6 +1366,19 @@ const LANG = {
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Lieferung erfasst: +{kg}kg {mat} jetzt {total}kg gesamt',
     'inv.adjusted': '{mat} angepasst: {delta}kg jetzt {total}kg gesamt',
+    'inv.suppliers': 'Lieferanten',
+    'inv.suppliersDesc': 'Lieferanten pro Material verwalten, damit Sie wissen, wo nachbestellt werden kann.',
+    'inv.addSupplier': 'Lieferant hinzuf\u00fcgen',
+    'inv.supplierName': 'Name',
+    'inv.supplierUrl': 'Website',
+    'inv.supplierPhone': 'Telefon',
+    'inv.supplierNotes': 'Notizen',
+    'inv.noSuppliers': 'Noch keine Lieferanten hinzugef\u00fcgt.',
+    'inv.reorderFrom': 'Nachbestellen bei',
+    'inv.editSupplier': 'Bearbeiten',
+    'inv.deleteSupplier': 'L\u00f6schen',
+    'inv.supplierSaved': 'Lieferant gespeichert',
+    'inv.supplierDeleted': 'Lieferant gel\u00f6scht',
     // Print feedback
     'print.printed': '{n} Etiketten f\u00fcr {id} gedruckt',
     'print.printedLabels': '{n} Labor-Etikett(en) gedruckt',
@@ -2100,6 +2126,19 @@ const LANG = {
     // Delivery/adjustment feedback
     'inv.deliveryLogged': 'Entrega registrada: +{kg}kg {mat} agora {total}kg total',
     'inv.adjusted': '{mat} ajustado: {delta}kg agora {total}kg total',
+    'inv.suppliers': 'Fornecedores',
+    'inv.suppliersDesc': 'Gerencie fornecedores para cada material para saber onde reabastecer.',
+    'inv.addSupplier': 'Adicionar fornecedor',
+    'inv.supplierName': 'Nome',
+    'inv.supplierUrl': 'Site',
+    'inv.supplierPhone': 'Telefone',
+    'inv.supplierNotes': 'Notas',
+    'inv.noSuppliers': 'Nenhum fornecedor adicionado ainda.',
+    'inv.reorderFrom': 'Reabastecer de',
+    'inv.editSupplier': 'Editar',
+    'inv.deleteSupplier': 'Excluir',
+    'inv.supplierSaved': 'Fornecedor salvo',
+    'inv.supplierDeleted': 'Fornecedor exclu\u00eddo',
     // Print feedback
     'print.printed': '{n} etiquetas impressas para {id}',
     'print.printedLabels': '{n} etiqueta(s) de lab impressa(s)',
@@ -2303,7 +2342,7 @@ function rebuildZoneConstants(){
 }
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[];
+let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
 let appUsers=[];let calEvSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
@@ -2379,7 +2418,7 @@ function applyData(d){
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};duckdns=d.duckdns||{};assets=d.assets||[];
-  calendarEvents=d.calendarEvents||[];zones=d.zones||[];
+  calendarEvents=d.calendarEvents||[];zones=d.zones||[];suppliers=d.suppliers||[];
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
@@ -3877,6 +3916,11 @@ function renderInvStock(){
       <div style="font-size:12px;color:#555;line-height:1.6">${estNote}</div>
       ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'#b91c1c':'#aaa'};margin-top:2px">Alert below ${thresh.minKg}kg</div>`:''}
       <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">+ Log delivery</button>
+      ${(()=>{const sups=getSuppliersForMat(mat);if(!sups.length)return'';
+        return`<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:#666">
+          <span style="font-weight:600;color:${low?'#b91c1c':'#888'}">${low?t('inv.reorderFrom'):t('inv.suppliers')}:</span>
+          ${sups.map(s=>s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#2563eb;margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
+        </div>`;})()}
     </div>`;
   }).join('');
   renderThresholds();
@@ -4052,8 +4096,81 @@ function getInvAlerts(){
     const stock=inventory.stock[mat]||0;
     const thresh=inventory.thresholds[mat].minKg;
     const {bags}=estBagsFromMat(mat,stock);
-    return{text:`Low stock: ${MAT_LABELS[mat]}`,detail:`${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold`,urgent:stock<thresh*0.5,warn:true,species:null};
+    const sups=getSuppliersForMat(mat);
+    const supNote=sups.length?` — ${t('inv.reorderFrom')}: ${sups.map(s=>s.name).join(', ')}`:'';
+    return{text:`Low stock: ${MAT_LABELS[mat]}`,detail:`${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold${supNote}`,urgent:stock<thresh*0.5,warn:true,species:null};
   });
+}
+
+// ─── SUPPLIERS ───────────────────────────────────────────────
+function renderSuppliers(){
+  const el=document.getElementById('suppliers-list');
+  if(!el)return;
+  if(!suppliers.length){el.innerHTML=`<p style="color:#aaa;font-size:13px">${t('inv.noSuppliers')}</p>`;return}
+  const grouped={};
+  Object.keys(MAT_LABELS).forEach(m=>grouped[m]=[]);
+  suppliers.forEach(s=>{if(grouped[s.mat])grouped[s.mat].push(s)});
+  el.innerHTML=Object.keys(MAT_LABELS).map(mat=>{
+    const list=grouped[mat];
+    if(!list.length)return'';
+    return`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]};margin-bottom:6px">${MAT_LABELS[mat]}</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>${t('inv.supplierName')}</th><th>${t('inv.supplierUrl')}</th><th>${t('inv.supplierPhone')}</th><th>${t('inv.supplierNotes')}</th><th></th></tr></thead>
+        <tbody>${list.map(s=>`<tr>
+          <td style="font-weight:500">${esc(s.name)}</td>
+          <td>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#2563eb;font-size:12px">${esc(s.url)}</a>`:'-'}</td>
+          <td style="font-size:12px">${s.phone?esc(s.phone):'-'}</td>
+          <td style="font-size:12px;color:#666">${s.notes?esc(s.notes):'-'}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm" onclick="editSupplier(${s.id})" style="font-size:11px">${t('inv.editSupplier')}</button>
+            <button class="btn btn-sm" onclick="removeSupplier(${s.id})" style="font-size:11px;color:#b91c1c">${t('inv.deleteSupplier')}</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+}
+
+function editSupplier(id){
+  const existing=id?suppliers.find(s=>s.id===id):null;
+  const matOpts=Object.keys(MAT_LABELS).map(m=>`<option value="${m}"${existing&&existing.mat===m?' selected':''}>${MAT_LABELS[m]}</option>`).join('');
+  const html=`<div style="display:flex;flex-direction:column;gap:10px">
+    <div><label>${t('inv.material')}</label><select id="sup-mat">${matOpts}</select></div>
+    <div><label>${t('inv.supplierName')}</label><input type="text" id="sup-name" value="${existing?esc(existing.name):''}" placeholder="e.g. Agrobs GmbH" /></div>
+    <div><label>${t('inv.supplierUrl')}</label><input type="text" id="sup-url" value="${existing&&existing.url?esc(existing.url):''}" placeholder="https://..." /></div>
+    <div><label>${t('inv.supplierPhone')}</label><input type="text" id="sup-phone" value="${existing&&existing.phone?esc(existing.phone):''}" placeholder="+49..." /></div>
+    <div><label>${t('inv.supplierNotes')}</label><input type="text" id="sup-notes" value="${existing&&existing.notes?esc(existing.notes):''}" placeholder="e.g. order number, contact person" /></div>
+  </div>`;
+  document.getElementById('m-title').textContent=existing?t('inv.editSupplier'):t('inv.addSupplier');
+  document.getElementById('m-body').innerHTML=html;
+  document.getElementById('m-ok').textContent=existing?t('inv.editSupplier'):t('inv.addSupplier');
+  confirmCb=async()=>{
+    const s={mat:document.getElementById('sup-mat').value,name:document.getElementById('sup-name').value.trim(),url:document.getElementById('sup-url').value.trim(),phone:document.getElementById('sup-phone').value.trim(),notes:document.getElementById('sup-notes').value.trim()};
+    if(!s.name){alert('Name is required');return}
+    if(existing)s.id=existing.id;
+    const r=await apiPost('/api/suppliers',s);
+    if(r&&r.id&&!existing){s.id=r.id;suppliers.push(s)}
+    else if(existing){Object.assign(existing,s)}
+    renderSuppliers();renderInvStock();
+    setFb('ok',t('inv.supplierSaved'));
+  };
+  document.getElementById('m-confirm').classList.add('open');
+}
+
+async function removeSupplier(id){
+  const s=suppliers.find(x=>x.id===id);
+  if(!s)return;
+  confirm2(t('inv.deleteSupplier'),'Remove '+s.name+' ('+MAT_LABELS[s.mat]+')?',t('inv.deleteSupplier'),async()=>{
+    await apiDelete('/api/suppliers/'+id);
+    suppliers=suppliers.filter(x=>x.id!==id);
+    renderSuppliers();renderInvStock();
+    setFb('ok',t('inv.supplierDeleted'));
+  });
+}
+
+function getSuppliersForMat(mat){
+  return suppliers.filter(s=>s.mat===mat);
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
@@ -6583,6 +6700,7 @@ function initEventListeners() {
   $('st-inv-stock').addEventListener('click', () => { openStab('inv','stock'); });
   $('st-inv-delivery').addEventListener('click', () => { openStab('inv','delivery'); });
   $('st-inv-log').addEventListener('click', () => { openStab('inv','log'); });
+  $('st-inv-suppliers').addEventListener('click', () => { openStab('inv','suppliers');renderSuppliers(); });
   $('del-mat').addEventListener('change', delMatChange);
   $('del-kg').addEventListener('input', delPreview);
   $('btn-47').addEventListener('click', logDelivery);

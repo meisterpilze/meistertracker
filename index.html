@@ -967,6 +967,7 @@
     <button class="stab active" id="st-inv-stock" data-i18n="inv.stock">Stock</button>
     <button class="stab" id="st-inv-delivery" data-i18n="inv.logDelivery">Log delivery</button>
     <button class="stab" id="st-inv-log" data-i18n="inv.usageLog">Usage log</button>
+    <button class="stab" id="st-inv-suppliers" data-i18n="inv.suppliers">Suppliers</button>
   </div>
 
   <!-- Stock overview -->
@@ -1049,6 +1050,18 @@
         <thead><tr><th data-i18n="inv.date">Date</th><th data-i18n="inv.material">Material</th><th data-i18n="inv.changeKg">Change (kg)</th><th data-i18n="inv.runningTotal">Running total</th><th data-i18n="inv.type">Type</th><th data-i18n="inv.reference">Reference</th></tr></thead>
         <tbody id="inv-log-body"></tbody>
       </table></div>
+    </div>
+  </div>
+
+  <!-- Suppliers -->
+  <div class="sp" id="sp-inv-suppliers">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0" data-i18n="inv.suppliers">Suppliers</div>
+        <button class="btn btn-sm btn-p" onclick="editSupplier()" data-i18n="inv.addSupplier">+ Add supplier</button>
+      </div>
+      <p style="font-size:12px;color:#888;margin-bottom:12px" data-i18n="inv.suppliersDesc">Manage suppliers for each material so you know where to reorder.</p>
+      <div id="suppliers-list"></div>
     </div>
   </div>
 </div>
