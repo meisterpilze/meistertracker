@@ -4822,11 +4822,17 @@ let _lastScanVal=null;
 // Audio feedback
 let _scanAudioCtx=null;
 let scanAudioEnabled=true;
+// iOS requires AudioContext creation during a user gesture; call this from gesture handlers
+function _initScanAudio(){
+  if(!_scanAudioCtx){try{_scanAudioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch{}}
+  if(_scanAudioCtx&&_scanAudioCtx.state==='suspended')_scanAudioCtx.resume().catch(function(){});
+}
 function _scanBeep(freq,dur){
   if(!scanAudioEnabled)return;
   try{
-    if(!_scanAudioCtx)_scanAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    const o=_scanAudioCtx.createOscillator();const g=_scanAudioCtx.createGain();
+    _initScanAudio();
+    if(!_scanAudioCtx)return;
+    var o=_scanAudioCtx.createOscillator();var g=_scanAudioCtx.createGain();
     o.connect(g);g.connect(_scanAudioCtx.destination);
     o.frequency.value=freq;g.gain.value=0.15;o.start();
     g.gain.exponentialRampToValueAtTime(0.001,_scanAudioCtx.currentTime+dur/1000);
@@ -6233,6 +6239,7 @@ let _camScanner=null;
 let _camClosing=false;
 let _camFacingMode='environment';
 function openCamScan(){
+  _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
   if(_camScanner||_camClosing)return;
   _camScanner=new Html5Qrcode('cam-reader');
