@@ -60,6 +60,13 @@ const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
 const DB_FILE = path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
+// ── Let's Encrypt auto-certification ────────────────────────
+const LE_DOMAIN = process.env.LE_DOMAIN || '';
+const LE_EMAIL = process.env.LE_EMAIL || '';
+const LE_STAGING = process.env.LE_STAGING === 'true' || process.env.LE_STAGING === '1';
+const LE_DIR = path.join(DIR, 'certs', 'letsencrypt');
+const acmeChallenges = new Map(); // token → keyAuthorization (ACME HTTP-01)
+
 // Windows printer name — must match exactly what shows in Devices and Printers
 // Validated to prevent command injection via PowerShell/WMI
 const PRINTER_NAME_RAW = process.env.PRINTER_NAME || 'ZDesigner GK420d';
@@ -2935,6 +2942,17 @@ function handleRequest(req, res) {
   if (protocol === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
+  // ── ACME HTTP-01 challenge (Let's Encrypt) ──
+  if (req.url.startsWith('/.well-known/acme-challenge/')) {
+    const token = req.url.split('/').pop();
+    const keyAuth = acmeChallenges.get(token);
+    if (keyAuth) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(keyAuth);
+      return;
+    }
+  }
+
   // ── Well-known CalDAV discovery (RFC 6764) ──
   if (req.url.startsWith('/.well-known/caldav')) {
     res.writeHead(301, { Location: '/caldav/' });
@@ -5180,15 +5198,141 @@ function reloadTlsCerts() {
   }
 }
 
+// ── LET'S ENCRYPT AUTO-CERTIFICATION ────────────────────────
+// At startup: if valid LE certs exist, copy them to the main cert location.
+// After server starts: attempt LE issuance/renewal asynchronously, hot-reload on success.
+(function copyLeCertsAtStartup() {
+  if (!LE_DOMAIN) return;
+  const leKey = path.join(LE_DIR, 'privkey.pem');
+  const leCrt = path.join(LE_DIR, 'fullchain.pem');
+  if (!fs.existsSync(leKey) || !fs.existsSync(leCrt)) return;
+  try {
+    const certPem = fs.readFileSync(leCrt, 'utf8');
+    const x509 = new crypto.X509Certificate(certPem);
+    const daysLeft = (new Date(x509.validTo) - Date.now()) / 86400000;
+    if (daysLeft > 0) {
+      if (!fs.existsSync(path.dirname(CERT_KEY))) fs.mkdirSync(path.dirname(CERT_KEY), { recursive: true });
+      fs.copyFileSync(leKey, CERT_KEY);
+      fs.copyFileSync(leCrt, CERT_CRT);
+      log('info', "Using Let's Encrypt certificate", { domain: LE_DOMAIN, daysUntilExpiry: Math.floor(daysLeft) });
+    }
+  } catch (e) {
+    log('warn', 'Could not load LE certs at startup', { error: e.message });
+  }
+})();
+
+async function initLetsEncrypt() {
+  if (!LE_DOMAIN || !LE_EMAIL) return;
+
+  if (!fs.existsSync(LE_DIR)) fs.mkdirSync(LE_DIR, { recursive: true });
+
+  // Check if existing LE cert is valid and not expiring within 30 days
+  const leCrt = path.join(LE_DIR, 'fullchain.pem');
+  if (fs.existsSync(leCrt)) {
+    try {
+      const certPem = fs.readFileSync(leCrt, 'utf8');
+      const x509 = new crypto.X509Certificate(certPem);
+      const daysLeft = (new Date(x509.validTo) - Date.now()) / 86400000;
+      if (daysLeft > 30) {
+        log('info', "Let's Encrypt cert valid", { domain: LE_DOMAIN, daysUntilExpiry: Math.floor(daysLeft) });
+        return;
+      }
+      log('info', "Let's Encrypt cert expires soon, renewing...", { daysLeft: Math.floor(daysLeft) });
+    } catch (e) {
+      log('warn', 'Could not read existing LE cert, re-issuing', { error: e.message });
+    }
+  }
+
+  log('info', "Requesting Let's Encrypt certificate...", { domain: LE_DOMAIN, staging: LE_STAGING });
+
+  try {
+    const acme = require('acme-client');
+
+    // Load or generate ACME account key
+    const accountKeyPath = path.join(LE_DIR, 'account.key');
+    let accountKey;
+    if (fs.existsSync(accountKeyPath)) {
+      accountKey = fs.readFileSync(accountKeyPath);
+    } else {
+      accountKey = await acme.crypto.createPrivateKey();
+      fs.writeFileSync(accountKeyPath, accountKey, { mode: 0o600 });
+    }
+
+    const client = new acme.Client({
+      directoryUrl: LE_STAGING
+        ? acme.directory.letsencrypt.staging
+        : acme.directory.letsencrypt.production,
+      accountKey,
+    });
+
+    const [key, csr] = await acme.crypto.createCsr({ commonName: LE_DOMAIN });
+
+    const cert = await client.auto({
+      csr,
+      email: LE_EMAIL,
+      termsOfServiceAgreed: true,
+      challengeCreateFn: async (_authz, challenge, keyAuthorization) => {
+        if (challenge.type === 'http-01') {
+          acmeChallenges.set(challenge.token, keyAuthorization);
+          log('info', 'ACME HTTP-01 challenge ready', { token: challenge.token });
+        }
+      },
+      challengeRemoveFn: async (_authz, challenge) => {
+        if (challenge.type === 'http-01') {
+          acmeChallenges.delete(challenge.token);
+        }
+      },
+    });
+
+    // Save LE certs (backup location)
+    const leKey = path.join(LE_DIR, 'privkey.pem');
+    fs.writeFileSync(leKey, key, { mode: 0o600 });
+    fs.writeFileSync(leCrt, cert);
+
+    // Copy to main cert location
+    if (!fs.existsSync(path.dirname(CERT_KEY))) fs.mkdirSync(path.dirname(CERT_KEY), { recursive: true });
+    fs.writeFileSync(CERT_KEY, key, { mode: 0o600 });
+    fs.writeFileSync(CERT_CRT, cert);
+
+    // Hot-reload TLS context if server is already running HTTPS
+    if (protocol === 'https' && server) {
+      server.setSecureContext({
+        key: fs.readFileSync(CERT_KEY),
+        cert: fs.readFileSync(CERT_CRT),
+        minVersion: 'TLSv1.2',
+      });
+      log('info', "Let's Encrypt certificate installed and loaded", { domain: LE_DOMAIN });
+    } else {
+      log('info', "Let's Encrypt certificate saved — restart server for HTTPS", { domain: LE_DOMAIN });
+    }
+  } catch (e) {
+    log('error', "Let's Encrypt certificate request failed", { domain: LE_DOMAIN, error: e.message });
+    if (!fs.existsSync(CERT_KEY)) {
+      log('error', 'No TLS certificate available. Run: bash gen-cert.sh');
+    }
+  }
+}
+
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
+const HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT, 10) || 80;
 let server;
 if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   const tlsOpts = { key: fs.readFileSync(CERT_KEY), cert: fs.readFileSync(CERT_CRT), minVersion: 'TLSv1.2' };
   server = https.createServer(tlsOpts, handleRequest);
   protocol = 'https';
 
-  // HTTP→HTTPS redirect server: redirect all non-localhost requests to HTTPS
+  // HTTP→HTTPS redirect server with ACME HTTP-01 challenge support
   const redirectServer = http.createServer((req, res) => {
+    // ACME HTTP-01 challenges always served first (Let's Encrypt)
+    if (req.url.startsWith('/.well-known/acme-challenge/')) {
+      const token = req.url.split('/').pop();
+      const keyAuth = acmeChallenges.get(token);
+      if (keyAuth) {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(keyAuth);
+        return;
+      }
+    }
     const host = (req.headers.host || '').replace(/:.*$/, '');
     // Allow localhost HTTP for local development
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -5199,7 +5343,6 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
     res.writeHead(301, { Location: target });
     res.end();
   });
-  const HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT, 10) || 80;
   redirectServer
     .listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {
       log('info', 'HTTP→HTTPS redirect active on port ' + HTTP_REDIRECT_PORT);
@@ -5216,6 +5359,33 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   log('warn', 'TLS certificates not found — falling back to HTTP. Run: bash gen-cert.sh');
   server = http.createServer(handleRequest);
   protocol = 'http';
+
+  // If Let's Encrypt is configured, start ACME challenge server on port 80
+  // so we can obtain the first certificate even when starting without HTTPS
+  if (LE_DOMAIN && LE_EMAIL && PORT !== HTTP_REDIRECT_PORT) {
+    const acmeServer = http.createServer((req, res) => {
+      if (req.url.startsWith('/.well-known/acme-challenge/')) {
+        const token = req.url.split('/').pop();
+        const keyAuth = acmeChallenges.get(token);
+        if (keyAuth) {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(keyAuth);
+          return;
+        }
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    acmeServer
+      .listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {
+        log('info', 'ACME challenge server active on port ' + HTTP_REDIRECT_PORT);
+      })
+      .on('error', (e) => {
+        if (e.code === 'EACCES' || e.code === 'EADDRINUSE') {
+          log('warn', 'Could not start ACME server on port ' + HTTP_REDIRECT_PORT + ' — LE will fail without port 80');
+        }
+      });
+  }
 }
 
 server.listen(PORT, '0.0.0.0', () => {
@@ -5249,6 +5419,19 @@ server.listen(PORT, '0.0.0.0', () => {
     }
   } catch (e) {
     log('error', 'CalDAV startup sync failed', { error: e.message });
+  }
+
+  // Let's Encrypt: attempt certificate issuance/renewal on startup and daily
+  if (LE_DOMAIN && LE_EMAIL) {
+    console.log("  Let's Encrypt:        " + LE_DOMAIN + (LE_STAGING ? ' (staging)' : ''));
+    initLetsEncrypt().catch((e) => {
+      log('error', "Let's Encrypt init failed", { error: e.message });
+    });
+    setInterval(() => {
+      initLetsEncrypt().catch((e) => {
+        log('error', "Let's Encrypt renewal check failed", { error: e.message });
+      });
+    }, 24 * 60 * 60 * 1000); // Check daily
   }
 });
 

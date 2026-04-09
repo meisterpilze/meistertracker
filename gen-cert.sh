@@ -2,15 +2,20 @@
 # Generate a self-signed TLS certificate for local/LAN HTTPS.
 # Required for camera access (getUserMedia) on iOS Safari.
 #
-# Usage: bash gen-cert.sh
+# Usage: bash gen-cert.sh [domain]
+#   domain  Optional domain name to include in the certificate (e.g. myhost.duckdns.org)
+#           Can also be set via CERT_DOMAIN environment variable.
 #
-# The certificate is valid for 365 days and covers localhost + LAN IPs.
+# The certificate is valid for 365 days and covers localhost + LAN IPs + optional domain.
 # Compatible with both OpenSSL and LibreSSL (macOS).
 
 set -e
 
 CERT_DIR="certs"
 mkdir -p "$CERT_DIR"
+
+# Domain from first argument or CERT_DOMAIN env var
+DOMAIN="${1:-${CERT_DOMAIN:-}}"
 
 # Detect LAN IP (Linux then macOS fallback)
 LAN_IP=""
@@ -26,6 +31,15 @@ fi
 
 echo "Generating self-signed certificate..."
 echo "  LAN IP: $LAN_IP"
+if [ -n "$DOMAIN" ]; then
+  echo "  Domain: $DOMAIN"
+fi
+
+# Build SAN list: domain first (if provided), then localhost + LAN IP
+SAN="DNS:localhost,IP:127.0.0.1,IP:$LAN_IP"
+if [ -n "$DOMAIN" ]; then
+  SAN="DNS:$DOMAIN,$SAN"
+fi
 
 # Use a config file for SAN (works with both OpenSSL and LibreSSL)
 TMPCONF=$(mktemp)
@@ -41,7 +55,7 @@ x509_extensions = v3_ext
 CN = Meisterpilze Lab Tracker
 
 [v3_ext]
-subjectAltName = DNS:localhost,IP:127.0.0.1,IP:$LAN_IP
+subjectAltName = $SAN
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment
 CONF
@@ -58,6 +72,12 @@ echo ""
 echo "Certificate generated in $CERT_DIR/"
 echo "  $CERT_DIR/server.key"
 echo "  $CERT_DIR/server.crt"
+if [ -n "$DOMAIN" ]; then
+  echo "  SAN: $SAN"
+fi
 echo ""
 echo "On iOS Safari, open https://$LAN_IP:3000 and accept the certificate warning."
+if [ -n "$DOMAIN" ]; then
+  echo "Or use https://$DOMAIN:3000 (certificate covers this domain)."
+fi
 echo "Restart the server for HTTPS to take effect."
