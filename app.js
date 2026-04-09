@@ -4530,11 +4530,12 @@ function makeAssetZPL(ids){
     const bcVal=id.replace(/-/g,'_');
     const loc=(a.category||'')+(a.location?' / '+a.location:'');
     const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
+    const bc=bcParams(bcVal);
     return'^XA^PW400^LL240^CI28^LH0,0'+
-      '^FO10,20^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS'+
-      '^FO0,100^FB400,1,0,C^A0N,30,30^FD'+id+'^FS'+
-      '^FO0,136^FB400,1,0,C^A0N,22,22^FD'+nameTrunc+'^FS'+
-      '^FO0,162^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
+      '^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS'+
+      '^FO0,120^FB400,1,0,C^A0N,30,30^FD'+id+'^FS'+
+      '^FO0,156^FB400,1,0,C^A0N,22,22^FD'+nameTrunc+'^FS'+
+      '^FO0,182^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
       '^XZ';
   }).filter(Boolean).join('\n');
 }
@@ -4703,6 +4704,11 @@ function spAbbrev(species){
   if(words.length===1)return words[0].slice(0,2).toUpperCase();
   return(words[0][0]+words[1][0]).toUpperCase();
 }
+// Calculate Code 128 module width + centered x-offset for ZPL labels.
+// Label is 400 dots wide; need 20-dot quiet zone each side → 360 usable dots.
+// Code 128 symbol ≈ (35 + chars*11) modules. Use mw=2 if it fits, else mw=1.
+// Returns {mw, x} where x centers the barcode horizontally (min 20 for quiet zone).
+function bcParams(val){const mods=35+val.length*11;const mw=mods*2<=360?2:1;const w=mods*mw;return{mw,x:Math.max(20,Math.round((400-w)/2))}}
 
 function makeBagZPL(bags,batch,mode){
   return bags.map(bagId=>{
@@ -4720,8 +4726,9 @@ function makeBagZPL(bags,batch,mode){
     }else{
       bcVal=bagId.replace(/-/g,'_');
     }
-    z+='^FO10,5^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
-    z+='^FO0,84^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
+    const bc=bcParams(bcVal);
+    z+='^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
+    z+='^FO0,120^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
     if(mode==='full'||mode==='date'){
       // Strain + substrate on one line
       let infoLine=batch.strain||'';
@@ -4732,12 +4739,12 @@ function makeBagZPL(bags,batch,mode){
         const subStr=(hw?'HW'+hw+'%':'')+( wb?' WB'+wb+'%':'')+( rh?' RH'+rh+'%':'');
         if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
       }
-      if(infoLine) z+='^FO0,130^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
+      if(infoLine) z+='^FO0,166^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
     }
     if(mode==='date'){
       const due=new Date(batch.due);
       const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-      z+='^FO0,168^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
+      z+='^FO0,200^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
     }
     z+='^XZ';
     return z;
@@ -4751,12 +4758,13 @@ function makeLabZPL(ids,opts){
     const ds=fmtDt(c.created);
     const bcVal=id.replace(/-/g,'_');
     let z='^XA^PW400^LL240^CI28^LH0,0';
-    if(opts.bc)z+='^FO10,20^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
-    z+='^FO0,100^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';
-    if(opts.sp&&sp)z+='^FO0,136^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';
-    if(opts.par&&c.parentId)z+='^FO0,162^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';
-    if(opts.dt)z+='^FO0,184^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';
-    if(opts.qr)z+='^FO272,20^BQN,2,3^FDMM,A'+id+'^FS';
+    const bc=bcParams(bcVal);
+    if(opts.bc)z+='^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
+    z+='^FO0,120^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';
+    if(opts.sp&&sp)z+='^FO0,156^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';
+    if(opts.par&&c.parentId)z+='^FO0,182^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';
+    if(opts.dt)z+='^FO0,204^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';
+    if(opts.qr)z+='^FO272,40^BQN,2,3^FDMM,A'+id+'^FS';
     return z+'^XZ';
   }).filter(Boolean).join('\n');
 }
