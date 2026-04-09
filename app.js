@@ -6487,6 +6487,11 @@ function initEventListeners() {
   $('prt-55').addEventListener('click', printAssetLabels);
   $('set-56').addEventListener('click', downloadAssetZPL);
 
-  // Camera FAB (element is after the script tag, may not exist yet)
-  if($('cam-fab')) $('cam-fab').addEventListener('click', openCamScan);
 }
+
+// Camera FAB is in the HTML *after* the <script> tag, so it doesn't exist
+// when initEventListeners() runs. Bind it once the full DOM is ready.
+document.addEventListener('DOMContentLoaded', function() {
+  var fab = document.getElementById('cam-fab');
+  if(fab) fab.addEventListener('click', openCamScan);
+});
