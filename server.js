@@ -76,24 +76,6 @@ function getClientIP(req) {
   return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
 }
 
-// Check if an IP address belongs to a private/local network (RFC 1918 / RFC 4193)
-function isPrivateIP(ip) {
-  if (!ip) return false;
-  // Normalize IPv4-mapped IPv6 (::ffff:192.168.1.1 → 192.168.1.1)
-  const addr = ip.replace(/^::ffff:/, '');
-  if (addr === '127.0.0.1' || addr === '::1' || addr === 'localhost') return true;
-  // 10.0.0.0/8
-  if (/^10\./.test(addr)) return true;
-  // 172.16.0.0/12
-  const m = addr.match(/^172\.(\d+)\./);
-  if (m && +m[1] >= 16 && +m[1] <= 31) return true;
-  // 192.168.0.0/16
-  if (/^192\.168\./.test(addr)) return true;
-  // IPv6 link-local (fe80::) and unique-local (fc00::/7)
-  if (/^fe80:/i.test(ip) || /^fc/i.test(ip) || /^fd/i.test(ip)) return true;
-  return false;
-}
-
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
@@ -1886,13 +1868,10 @@ function handleCaldav(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, OPTIONS, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Depth, Authorization, If-Match, If-None-Match');
 
-  // Reject Basic auth over plain HTTP from public networks to prevent credential sniffing.
-  // Allow local/private network IPs (RFC 1918) so CalDAV works on LAN without TLS —
-  // iOS CalDAV clients often can't connect when the server uses a self-signed certificate.
+  // Reject Basic auth over plain HTTP (except localhost) to prevent credential sniffing
   if (!req.socket.encrypted) {
     const host = (req.headers.host || '').replace(/:.*$/, '');
-    const clientIP = getClientIP(req);
-    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]' && !isPrivateIP(clientIP)) {
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
       res.writeHead(403);
       res.end('CalDAV requires HTTPS');
       return;
@@ -5208,19 +5187,11 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   server = https.createServer(tlsOpts, handleRequest);
   protocol = 'https';
 
-  // HTTP→HTTPS redirect server: redirect all non-localhost requests to HTTPS.
-  // Exception: CalDAV and well-known discovery from private/LAN IPs are served
-  // directly over HTTP so iOS/Android CalDAV clients work with self-signed certs.
+  // HTTP→HTTPS redirect server: redirect all non-localhost requests to HTTPS
   const redirectServer = http.createServer((req, res) => {
     const host = (req.headers.host || '').replace(/:.*$/, '');
     // Allow localhost HTTP for local development
     if (host === 'localhost' || host === '127.0.0.1') {
-      handleRequest(req, res);
-      return;
-    }
-    // Allow CalDAV over HTTP for local network clients (iOS can't use self-signed certs)
-    const clientIP = getClientIP(req);
-    if (isPrivateIP(clientIP) && (req.url.startsWith('/caldav') || req.url.startsWith('/.well-known/caldav'))) {
       handleRequest(req, res);
       return;
     }
