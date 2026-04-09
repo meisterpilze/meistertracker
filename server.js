@@ -2948,12 +2948,23 @@ function handleRequest(req, res) {
   }
 
   // ── OAuth 2.0 well-known endpoints (public, no auth) ──
-  if (req.method === 'GET' && req.url === '/.well-known/oauth-protected-resource') {
+  // CORS preflight for well-known endpoints (MCP clients send MCP-Protocol-Version header)
+  if (req.method === 'OPTIONS' && req.url.startsWith('/.well-known/oauth-')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version');
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  // RFC 9728: serve protected resource metadata at both path-aware and root URLs
+  if (req.method === 'GET' && (req.url === '/.well-known/oauth-protected-resource/mcp' || req.url === '/.well-known/oauth-protected-resource')) {
     const base = getBaseUrl(req);
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      resource: base,
+      resource: base + '/mcp',
       authorization_servers: [base],
       bearer_methods_supported: ['header']
     }));
@@ -2962,6 +2973,7 @@ function handleRequest(req, res) {
   if (req.method === 'GET' && req.url === '/.well-known/oauth-authorization-server') {
     const base = getBaseUrl(req);
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       issuer: base,
@@ -2982,7 +2994,7 @@ function handleRequest(req, res) {
     if (req.url === '/oauth/token' || req.url === '/oauth/register') {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, MCP-Protocol-Version');
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -3203,7 +3215,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.url === '/mcp' || req.url.startsWith('/mcp?')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -3220,7 +3232,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const base = getBaseUrl(req);
       res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource"'
+        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp"'
       });
       res.end('{"error":"unauthorized"}');
       return;
