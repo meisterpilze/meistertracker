@@ -6249,7 +6249,14 @@ function openCamScan(){
     function(){}
   ).catch(function(err){
     console.error('Camera start failed:',err);
-    setFb('err','Kamera konnte nicht gestartet werden: '+err);
+    var msg;var s=String(err);
+    if(/NotAllowedError|Permission/.test(s))msg='Kamera-Berechtigung verweigert. Bitte in den Browser-Einstellungen erlauben.';
+    else if(/NotFoundError/.test(s))msg='Keine Kamera gefunden.';
+    else if(/NotReadableError|TrackStartError/.test(s))msg='Kamera wird von anderer App verwendet.';
+    else if(/OverconstrainedError/.test(s))msg='Kamera unterstützt die gewünschte Auflösung nicht.';
+    else if(/InsecureContext|https/.test(s))msg='Kamera benötigt HTTPS. Bitte sichere Verbindung verwenden.';
+    else msg='Kamera konnte nicht gestartet werden: '+err;
+    setFb('err',msg);
     closeCamScan();
   });
 }
