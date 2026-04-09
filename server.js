@@ -3974,7 +3974,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.insertCultures(database, data.cultures || []);
+        const arr = data.cultures || [];
+        for (const c of arr) {
+          const vr = validateRequired(c, ['id', 'type', 'created']);
+          if (vr) { jsonErr(res, 400, vr); return; }
+        }
+        db.insertCultures(database, arr);
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
