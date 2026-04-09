@@ -1192,6 +1192,7 @@ tr:hover td {
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
   border: 1px solid var(--c-border);
+  border-left: 3px solid var(--sp-color, var(--c-border));
   background: var(--c-surface);
   transition: box-shadow 0.15s;
 }
@@ -1200,10 +1201,12 @@ tr:hover td {
 }
 .todo-row.urgent {
   border-color: #fecaca;
+  border-left-color: var(--sp-color, #fecaca);
   background: #fff5f5;
 }
 .todo-row.warn {
   border-color: #fde68a;
+  border-left-color: var(--sp-color, #fde68a);
   background: #fffbeb;
 }
 .todo-row input[type='checkbox'] {
