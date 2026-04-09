@@ -6230,17 +6230,20 @@ function updateOfflineBadge(count){
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
 let _camScanner=null;
+let _camClosing=false;
 function openCamScan(){
   document.getElementById('m-camscan').classList.add('open');
-  if(_camScanner)return;
+  if(_camScanner||_camClosing)return;
   _camScanner=new Html5Qrcode('cam-reader');
-  _camScanner.start(
+  var scanner=_camScanner;
+  scanner.start(
     {facingMode:'environment'},
     {fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},
     function(decoded){
-      _camScanner.pause(true);
+      if(scanner!==_camScanner)return;
+      scanner.pause(true);
       processScan(decoded);
-      setTimeout(function(){try{_camScanner.resume()}catch(e){}},1500);
+      setTimeout(function(){if(scanner===_camScanner){try{scanner.resume()}catch(e){}}},1500);
     },
     function(){}
   ).catch(function(err){
@@ -6251,10 +6254,19 @@ function openCamScan(){
 }
 function closeCamScan(){
   document.getElementById('m-camscan').classList.remove('open');
-  if(_camScanner){
-    _camScanner.stop().then(function(){_camScanner.clear();_camScanner=null}).catch(function(){_camScanner=null});
-  }
+  if(!_camScanner)return;
+  var scanner=_camScanner;
+  _camScanner=null;
+  _camClosing=true;
+  scanner.stop().then(function(){scanner.clear()}).catch(function(){
+    // Force-stop media tracks if library cleanup fails (iOS Safari)
+    var vids=document.getElementById('cam-reader').querySelectorAll('video');
+    vids.forEach(function(v){if(v.srcObject)v.srcObject.getTracks().forEach(function(t){t.stop()})});
+    try{scanner.clear()}catch(e){}
+  }).finally(function(){_camClosing=false});
 }
+// Stop camera when tab is hidden (saves battery, prevents "camera in use" on other apps)
+document.addEventListener('visibilitychange',function(){if(document.hidden&&_camScanner)closeCamScan()});
 function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent='Kopiert!';setTimeout(()=>{b.textContent='Kopieren'},2000)}).catch(()=>{})}
 
 function initEventListeners() {
