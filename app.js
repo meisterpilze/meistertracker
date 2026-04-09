@@ -3001,10 +3001,13 @@ function updateActionBar(){
 }
 
 function locSelectAllVisible(){
-  // Select all bags visible across all zones
+  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   ZONES.forEach(z=>{
     const bags=getZoneBags(z);
-    Object.entries(bags).forEach(([bagId,d])=>selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc}));
+    Object.entries(bags).forEach(([bagId,d])=>{
+      if(!q||bagId.toLowerCase().includes(q)||(d.batchId||'').toLowerCase().includes(q)||(d.species||'').toLowerCase().includes(q)||(d.strain||'').toLowerCase().includes(q))
+        selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc});
+    });
   });
   renderStatus();
 }
@@ -3121,7 +3124,8 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;const entries=[];
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const b=batches.find(x=>x.id===d.batchId);
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3495,7 +3499,7 @@ function addMember(){
   const member={name,role:role||null,added:new Date().toISOString()};
   teamMembers.push(member);
   document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  apiPost('/api/team',member).then(r=>{if(r.id)member.id=r.id});renderTeam();
+  apiPost('/api/team',member).then(r=>{if(r.id)member.id=r.id;renderTeam()});
 }
 function removeMember(id){const m=teamMembers.find(x=>x.id===id);if(!m)return;confirm2('Remove member?','Remove '+m.name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers=teamMembers.filter(x=>x.id!==id);apiDelete('/api/team/'+id);renderTeam()})}
 
@@ -3760,7 +3764,6 @@ async function runMcpDiagnostics(){
     const r=await authFetch('/api/mcp/diagnostics');
     if(!r.ok){el.innerHTML='<p style="color:#b91c1c">'+t('mcp.diagFailed')+'</p>';return}
     const d=await r.json();
-    const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
     let html='<table style="width:100%;font-size:12px;border-collapse:collapse">';
     const row=(label,val,color)=>'<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">'+label+'</td><td style="padding:4px 8px;color:'+(color||'#333')+'">'+val+'</td></tr>';
     const checks=d.checks||{};
@@ -4827,7 +4830,8 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
+    const lastLoc=[...scanLog].reverse().find(e=>e.bag===biBagId&&(e.action==='ADD'||e.action==='MOVE'));
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:lastLoc?.to||null,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
     scan.count++;apiPost('/api/scan-log',{entries:[entry]});updateSD();
     setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
   }else{
@@ -6160,9 +6164,8 @@ function deleteCalEventFromDetail(id){
   closeEventDetail();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    if(typeof saveData==='function')saveData();
     renderCalendar();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
   });
 }
 
@@ -6316,11 +6319,11 @@ function saveEntryTask(){
   }else{
     const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
     manualTasks.push(task);
-    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id});
+    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id;renderCalendar();updateTodoBadge()});
     if(caldav.enabled&&due)pushTaskCaldav(task);
   }
   closeEntryModal();
-  renderCalendar();updateTodoBadge();
+  if(document.getElementById('cal-entry-id').value){renderCalendar();updateTodoBadge()}
 }
 
 function saveEntryEvent(){
