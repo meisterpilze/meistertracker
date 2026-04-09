@@ -392,7 +392,7 @@ const LANG = {
     'settings.downloadBackupDesc': 'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
     'settings.downloadBackupBtn': 'Download backup',
     'settings.restoreBackupTitle': 'Restore backup',
-    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
     'settings.restoreBtn': 'Restore',
     'settings.syncInfo': 'Sync info',
     'settings.syncInfoDesc': 'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
@@ -440,7 +440,7 @@ const LANG = {
     'inv.enterQty': 'Enter a quantity greater than 0',
     'inv.enterAmount': 'Enter either a new total or an adjustment amount',
     'inv.grainBags': '\u2248 {n} grain bags @ {kg}kg each',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocks <span style="font-size:10px;color:#aaa">(avg estimate)</span>',
+    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>',
     'inv.avgComposition': 'Average composition used for estimates',
     'inv.avgCompDesc': 'These averages are used to calculate "\u007eX bags" on the stock cards. They are <strong>estimates only</strong> \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
     'inv.hardwoodPct': 'Hardwood %',
@@ -644,7 +644,7 @@ const LANG = {
     'settings.bag': 'Bag',
     'settings.from': 'From',
     'settings.to': 'To',
-    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:#b91c1c">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
     'mcp.title': 'MCP Server',
     'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Claude connects automatically via OAuth \u2014 just paste the URL.',
     'mcp.enable': 'Enable MCP server',
@@ -1157,7 +1157,7 @@ const LANG = {
     'settings.downloadBackupDesc': 'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
     'settings.downloadBackupBtn': 'Backup herunterladen',
     'settings.restoreBackupTitle': 'Backup wiederherstellen',
-    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
     'settings.restoreBtn': 'Wiederherstellen',
     'settings.syncInfo': 'Sync-Info',
     'settings.syncInfoDesc': 'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',
@@ -1205,7 +1205,7 @@ const LANG = {
     'inv.enterQty': 'Bitte eine Menge gr\u00f6\u00dfer als 0 eingeben',
     'inv.enterAmount': 'Bitte einen neuen Gesamtwert oder Anpassungsbetrag eingeben',
     'inv.grainBags': '\u2248 {n} K\u00f6rnerbeutel \u00e0 {kg}kg',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg Bl\u00f6cke <span style="font-size:10px;color:#aaa">(Sch\u00e4tzung)</span>',
+    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg Bl\u00f6cke <span style="font-size:10px;color:var(--c-text-muted)">(Sch\u00e4tzung)</span>',
     'inv.avgComposition': 'Durchschnittszusammensetzung f\u00fcr Sch\u00e4tzungen',
     'inv.avgCompDesc': 'Diese Durchschnittswerte berechnen "\u007eX Beutel" auf den Bestandskarten. Nur <strong>Sch\u00e4tzwerte</strong> \u2014 exakter Verbrauch wird bei Chargenerstellung mit Substratrezept erfasst.',
     'inv.hardwoodPct': 'Hartholz %',
@@ -1409,7 +1409,7 @@ const LANG = {
     'settings.bag': 'Beutel',
     'settings.from': 'Von',
     'settings.to': 'Nach',
-    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:#b91c1c">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
+    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
     'mcp.title': 'MCP Server',
     'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Claude verbindet sich automatisch per OAuth \u2014 einfach die URL einfügen.',
     'mcp.enable': 'MCP Server aktivieren',
@@ -1922,7 +1922,7 @@ const LANG = {
     'settings.downloadBackupDesc': 'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
     'settings.downloadBackupBtn': 'Baixar backup',
     'settings.restoreBackupTitle': 'Restaurar backup',
-    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
     'settings.restoreBtn': 'Restaurar',
     'settings.syncInfo': 'Info de sincronização',
     'settings.syncInfoDesc': 'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
@@ -1970,7 +1970,7 @@ const LANG = {
     'inv.enterQty': 'Insira uma quantidade maior que 0',
     'inv.enterAmount': 'Insira um novo total ou valor de ajuste',
     'inv.grainBags': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocos <span style="font-size:10px;color:#aaa">(estimativa)</span>',
+    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocos <span style="font-size:10px;color:var(--c-text-muted)">(estimativa)</span>',
     'inv.avgComposition': 'Composi\u00e7\u00e3o m\u00e9dia para estimativas',
     'inv.avgCompDesc': 'Estas m\u00e9dias calculam "\u007eX sacos" nos cart\u00f5es de estoque. S\u00e3o apenas <strong>estimativas</strong> \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica.',
     'inv.hardwoodPct': 'Madeira dura %',
@@ -2173,7 +2173,7 @@ const LANG = {
     'settings.bag': 'Saco',
     'settings.from': 'De',
     'settings.to': 'Para',
-    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:#b91c1c">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
     'mcp.title': 'Servidor MCP',
     'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. O Claude conecta automaticamente via OAuth \u2014 basta colar a URL.',
     'mcp.enable': 'Ativar servidor MCP',
@@ -2880,8 +2880,8 @@ function renderFruitingSection(fruitingZones,filtered){
         <div class="batch-card-meta">
           <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
           <span>${esc(d.st)}</span>
-          ${harv>0?`<span style="color:#92400e;font-weight:500">${t('dash.harvested')}: ${harv}g</span>`:''}
-          ${due?`<span style="color:${ov?'#b91c1c':'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov?' \u26a0':''}</span>`:''}
+          ${harv>0?`<span style="color:var(--c-amber-dark);font-weight:500">${t('dash.harvested')}: ${harv}g</span>`:''}
+          ${due?`<span style="color:${ov?'var(--c-red-dark)':'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov?' \u26a0':''}</span>`:''}
         </div>
         <div class="batch-card-chips">${d.bags.map(bg=>{
           const sel=selectedLocBags.has(bg.id);
@@ -3014,7 +3014,7 @@ function renderDashAlerts(){
   const el=document.getElementById('dash-alerts');
   if(!invAlerts.length){card.style.display='none';return}
   card.style.display='';
-  el.innerHTML=invAlerts.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'#fef2f2':'#fffbeb'};border-left:3px solid ${tk.urgent?'#dc2626':'#f59e0b'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(tk.text)}</div><button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button></div>`).join('');
+  el.innerHTML=invAlerts.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'var(--c-red-light)':'var(--c-amber-light)'};border-left:3px solid ${tk.urgent?'var(--c-red)':'var(--c-amber)'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(tk.text)}</div><button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button></div>`).join('');
 }
 function renderDashBatchTasks(){
   const filter=document.getElementById('dash-batch-filter')?.value||'all';
@@ -3026,7 +3026,7 @@ function renderDashBatchTasks(){
   el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px;--sp-color:'+spColor(tk.species)+'">'
     +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
     +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(tk.text)+'</div>'
-    +'<div style="font-size:11px;color:#888;margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
+    +'<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
     :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
 }
 
@@ -3081,9 +3081,9 @@ function openLocMovePopup(){
   document.getElementById('lm-confirm').style.display='none';
   const grid=document.getElementById('lm-grid');
   grid.style.display='flex';
-  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">'+t('dash.zones')+'</div>'
+  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">'+t('dash.zones')+'</div>'
     +ZONES.map(z=>{const zObj=zones.find(x=>x.id===z);return`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color||'#888'}">${esc(zoneDisplayName(z))}</button>`}).join('')
-    +(ALL_RACKS.length?'<div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>':'')
+    +(ALL_RACKS.length?'<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>':'')
     +ALL_RACKS.map(r=>`<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`).join('');
   m.classList.add('open');
 }
@@ -3099,7 +3099,7 @@ function locPreConfirm(toLoc){
   const fromLabel=fromLocs.size===1?[...fromLocs][0]:'Mixed';
   c.innerHTML=`<div style="text-align:center;padding:12px 0">
     <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags',{n:n})}</div>
-    <div style="font-size:11px;color:#888;margin-bottom:8px;font-family:monospace">${preview}</div>
+    <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px;font-family:monospace">${preview}</div>
     <div style="font-size:20px;margin-bottom:16px">${esc(fromLabel)} \u2192 <strong>${esc(toLoc)}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
       <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">${t('nav.cancel')}</button>
@@ -3263,7 +3263,7 @@ function createBatch(){
     if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);deltas.push({mat:'gypsum',deltaKg:-gypUsed,type:'batch',ref:batchId})}
   }
   if(deltas.length)invDeltas(deltas);
-  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">${esc(b)}</span>`).join('');
+  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
   document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
   document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
@@ -3276,10 +3276,10 @@ function renderBatches(){
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
     const{status}=getStatus(b.batchId);
-    const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:#f0fdf4;color:#166534">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
-    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:#6b21a8">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:#555;cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:#888">${fmtDt(b.created)}</td><td style="font-size:10px;color:#888">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
+    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
+    const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -3290,7 +3290,7 @@ function toggleBatchBags(batchId){
   document.getElementById('btog-'+batchId).innerHTML='&#9660;';
   const parentRow=document.getElementById('btog-'+batchId).closest('tr');
   const tr=document.createElement('tr');tr.id='brow-'+batchId;
-  const td=document.createElement('td');td.colSpan=12;td.style.cssText='background:#f9f8f5;padding:8px 12px';
+  const td=document.createElement('td');td.colSpan=12;td.style.cssText='background:var(--c-bg);padding:8px 12px';
   td.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px">'+b.bags.map(bag=>{
     const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
     let loc='—',color='#aaa';
@@ -3299,7 +3299,7 @@ function toggleBatchBags(batchId){
       else if(last.to){loc=last.to;const z=toZone(last.to);color=locColor[z]||'#888'}
     }
     const num=bag.split('-').pop();
-    return`<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid #e5e3dd;display:inline-flex;align-items:center;gap:3px${last&&last.action==='REMOVE'?';text-decoration:line-through;opacity:.5':''}">
+    return`<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last&&last.action==='REMOVE'?';text-decoration:line-through;opacity:.5':''}">
       ${num} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
     </span>`;
   }).join('')+'</div>';
@@ -3336,7 +3336,7 @@ function confirmAddBags(){
   document.getElementById('m-addbags-title').textContent=t('addBags.addedTitle');
   document.getElementById('ab-result-info').textContent=t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length});
   document.getElementById('ab-new-bags').innerHTML=newBags.map(id=>
-    '<span style="font-size:10px;font-family:monospace;background:#f5f4f0;padding:2px 6px;border-radius:4px;color:#555">'+esc(id)+'</span>'
+    '<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">'+esc(id)+'</span>'
   ).join('');
   document.getElementById('ab-phase-result').style.display='';
   renderBatches();
@@ -3399,7 +3399,7 @@ document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='E
 function renderHarvests(){
   const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
   const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'\u2014'}</td><td>${h.species?spDot(h.species)+esc(h.species):'\u2014'}</td><td>${esc(h.strain)||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:#92400e">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
+  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'\u2014'}</td><td>${h.species?spDot(h.species)+esc(h.species):'\u2014'}</td><td>${esc(h.strain)||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
 
   const byBatch={};
   harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
@@ -3409,7 +3409,7 @@ function renderHarvests(){
     [t('harvest.totalHarvested'),tot>=1000?(tot/1000).toFixed(1)+'kg':tot+'g'],
     [t('harvest.batchesWithYield'),ids.length],
     [t('harvest.topBatch'),ids[0]?byBatch[ids[0]].total+'g':'\u2014']
-  ].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:#92400e">${v}</div></div>`).join(''):'';
+  ].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:var(--c-amber-dark)">${v}</div></div>`).join(''):'';
 
   if(!ids.length){
     document.getElementById('harvest-totals').innerHTML='<div class="empty">'+t('harvest.noData')+'</div>';
@@ -3456,7 +3456,7 @@ function renderHarvests(){
   const max=byBatch[ids[0]].total;
   document.getElementById('harvest-totals').innerHTML=ids.map(id=>{
     const d=byBatch[id],pct=Math.round((d.total/max)*100);
-    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:#92400e">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:#888;margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
+    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
   }).join('');
 }
 
@@ -3486,7 +3486,7 @@ function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const e
 function renderTeam(){
   const el=document.getElementById('team-list');
   if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
-  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:#888">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
+  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:var(--c-text-muted)">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
 }
 function addMember(){
   const name=document.getElementById('member-name').value.trim();if(!name)return;
@@ -3509,8 +3509,8 @@ function loadCaldavSettings(){
 function saveCaldavSettings(){
   caldav.enabled=document.getElementById('caldav-enabled').checked;
   apiPost('/api/caldav/config',caldav).then(r=>{
-    if(r.error){showCaldavStatus(r.error,'#b91c1c')}
-    else{showCaldavStatus(t('caldav.settingsSaved'),'#166534')}
+    if(r.error){showCaldavStatus(r.error,'var(--c-red-dark)')}
+    else{showCaldavStatus(t('caldav.settingsSaved'),'var(--c-green-dark)')}
   });
 }
 function showCaldavStatus(msg,color){
@@ -3524,15 +3524,15 @@ async function syncCaldavNow(){
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
     const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
-    if(r.error){showCaldavStatus('Sync failed: '+r.error,'#b91c1c')}
+    if(r.error){showCaldavStatus('Sync failed: '+r.error,'var(--c-red-dark)')}
     else{
-      showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'#92400e':'#166534');
+      showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'var(--c-amber-dark)':'var(--c-green-dark)');
       // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
       // instead of loadData() which would overwrite ALL local state
       try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
       renderCalendar();
     }
-  }catch(e){showCaldavStatus('Sync error: '+e.message,'#b91c1c')}
+  }catch(e){showCaldavStatus('Sync error: '+e.message,'var(--c-red-dark)')}
   finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
 }
 async function pushTaskCaldav(task){
@@ -3567,10 +3567,10 @@ async function refreshDuckdnsStatus(){
     if(s.enabled&&s.domain){
       banner.style.display='block';
       if(s.lastIp){
-        banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
-        banner.innerHTML='<strong>'+s.domain+'</strong> &rarr; '+s.lastIp+(s.lastIpUpdate?' <span style="color:#888">('+fmtDtTime(s.lastIpUpdate)+')</span>':'');
+        banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
+        banner.innerHTML='<strong>'+s.domain+'</strong> &rarr; '+s.lastIp+(s.lastIpUpdate?' <span style="color:var(--c-text-muted)">('+fmtDtTime(s.lastIpUpdate)+')</span>':'');
       }else{
-        banner.style.background='#fffbeb';banner.style.border='1px solid #fde68a';banner.style.color='#92400e';
+        banner.style.background='var(--c-amber-light)';banner.style.border='1px solid var(--c-amber-border)';banner.style.color='var(--c-amber-dark)';
         banner.textContent='DuckDNS aktiviert, aber noch kein IP-Update durchgeführt.';
       }
     }else{banner.style.display='none'}
@@ -3580,12 +3580,12 @@ async function refreshDuckdnsStatus(){
       if(s.cert.type==='letsencrypt'&&s.leExpiry){
         const daysLeft=Math.round((new Date(s.leExpiry)-Date.now())/86400000);
         const ok=daysLeft>30,warn=daysLeft>7;
-        certEl.style.background=ok?'#f0fdf4':warn?'#fffbeb':'#fef2f2';
-        certEl.style.border='1px solid '+(ok?'#bbf7d0':warn?'#fde68a':'#fecaca');
-        certEl.style.color=ok?'#166534':warn?'#92400e':'#b91c1c';
+        certEl.style.background=ok?'var(--c-primary-light)':warn?'var(--c-amber-light)':'var(--c-red-light)';
+        certEl.style.border='1px solid '+(ok?'var(--c-green-border)':warn?'var(--c-amber-border)':'var(--c-red-border)');
+        certEl.style.color=ok?'var(--c-green-dark)':warn?'var(--c-amber-dark)':'var(--c-red-dark)';
         certEl.innerHTML='Let\'s Encrypt Zertifikat aktiv. Ablauf: '+fmtDt(s.leExpiry)+' ('+daysLeft+' Tage)';
       }else{
-        certEl.style.background='#eff6ff';certEl.style.border='1px solid #bfdbfe';certEl.style.color='#1e40af';
+        certEl.style.background='var(--c-blue-light)';certEl.style.border='1px solid var(--c-blue-border)';certEl.style.color='var(--c-blue-dark)';
         certEl.textContent='Aktuelles Zertifikat: '+s.cert.type;
       }
     }else{certEl.style.display='none'}
@@ -3609,13 +3609,13 @@ async function saveDuckdnsSettings(){
     leEnabled:document.getElementById('duckdns-le-enabled').checked
   };
   if(tokenVal)cfg.token=tokenVal;
-  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus('Subdomain ist erforderlich.','#b91c1c');return}
-  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus('Token ist erforderlich.','#b91c1c');return}
+  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus('Subdomain ist erforderlich.','var(--c-red-dark)');return}
+  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus('Token ist erforderlich.','var(--c-red-dark)');return}
   try{
     const r=await apiPost('/api/duckdns/config',cfg);
-    if(r.error){showDuckdnsStatus('Fehler: '+r.error,'#b91c1c')}
-    else{showDuckdnsStatus('Einstellungen gespeichert.','#166534');refreshDuckdnsStatus()}
-  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'#b91c1c')}
+    if(r.error){showDuckdnsStatus('Fehler: '+r.error,'var(--c-red-dark)')}
+    else{showDuckdnsStatus('Einstellungen gespeichert.','var(--c-green-dark)');refreshDuckdnsStatus()}
+  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'var(--c-red-dark)')}
 }
 async function triggerDuckdnsUpdate(){
   const btn=document.getElementById('duckdns-update-btn');
@@ -3624,9 +3624,9 @@ async function triggerDuckdnsUpdate(){
   try{
     const r=await authFetch('/api/duckdns/update-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showDuckdnsStatus('Fehler: '+data.error,'#b91c1c')}
-    else{showDuckdnsStatus('IP aktualisiert: '+data.lastIp,'#166534');refreshDuckdnsStatus()}
-  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'#b91c1c')}
+    if(data.error){showDuckdnsStatus('Fehler: '+data.error,'var(--c-red-dark)')}
+    else{showDuckdnsStatus('IP aktualisiert: '+data.lastIp,'var(--c-green-dark)');refreshDuckdnsStatus()}
+  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'var(--c-red-dark)')}
   finally{btn.disabled=false;btn.textContent='IP jetzt aktualisieren'}
 }
 async function requestLeCert(){
@@ -3636,9 +3636,9 @@ async function requestLeCert(){
   try{
     const r=await authFetch('/api/duckdns/request-cert',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showLeStatus('Fehler: '+data.error,'#b91c1c')}
-    else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'#166534');refreshDuckdnsStatus()}
-  }catch(e){showLeStatus('Fehler: '+e.message,'#b91c1c')}
+    if(data.error){showLeStatus('Fehler: '+data.error,'var(--c-red-dark)')}
+    else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'var(--c-green-dark)');refreshDuckdnsStatus()}
+  }catch(e){showLeStatus('Fehler: '+e.message,'var(--c-red-dark)')}
   finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
 }
 
@@ -3677,7 +3677,7 @@ function restartServer(){
     const btn=document.getElementById('btn-server-restart');
     const status=document.getElementById('server-restart-status');
     btn.disabled=true;btn.textContent='Wird neugestartet...';
-    status.style.display='block';status.style.color='#888';
+    status.style.display='block';status.style.color='var(--c-text-muted)';
     status.textContent='Server wird aktualisiert und neugestartet...';
     try{
       await authFetch('/api/server/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -3689,9 +3689,9 @@ function restartServer(){
           const r=await fetch('/api/health');
           if(r.ok){clearInterval(poll);window.location.reload()}
         }catch(e){/* still down */}
-        if(attempts>60){clearInterval(poll);status.textContent='Server antwortet nicht. Bitte manuell prüfen.';status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+        if(attempts>60){clearInterval(poll);status.textContent='Server antwortet nicht. Bitte manuell prüfen.';status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
       },3000);
-    }catch(e){status.textContent='Fehler: '+e.message;status.style.color='#b91c1c';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+    }catch(e){status.textContent='Fehler: '+e.message;status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
   });
 }
 
@@ -3707,14 +3707,14 @@ async function loadMcpSettings(){
     toggleMcpSections(cfg.enabled);
     const banner=document.getElementById('mcp-status-banner');
     if(cfg.enabled){
-      banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+      banner.style.display='block';banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
       banner.textContent=t('mcp.active');
     }else{banner.style.display='none'}
     const statusR=await authFetch('/api/mcp/status');
     if(statusR.ok){
       const st=await statusR.json();
       if(st.activeSessions>0){
-        banner.style.display='block';banner.style.background='#f0fdf4';banner.style.border='1px solid #bbf7d0';banner.style.color='#166534';
+        banner.style.display='block';banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
         banner.textContent=t('mcp.sessions').replace('{n}',st.activeSessions);
       }
     }
@@ -3736,29 +3736,29 @@ function showMcpStatus(msg,color){
 async function saveMcpSettings(){
   try{
     const r=await apiPost('/api/mcp/config',{enabled:document.getElementById('mcp-enabled').checked});
-    if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'#b91c1c')}
-    else{showMcpStatus(t('mcp.saved'),'#166534');loadMcpSettings()}
-  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+    if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'var(--c-red-dark)')}
+    else{showMcpStatus(t('mcp.saved'),'var(--c-green-dark)');loadMcpSettings()}
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
 }
 async function generateMcpToken(){
   try{
     const r=await authFetch('/api/mcp/generate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
+    if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'var(--c-red-dark)');return}
     _mcpToken=data.token;
     document.getElementById('mcp-token-display').textContent=data.token;
     document.getElementById('mcp-token-display').style.display='block';
     document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
-    showMcpStatus(t('mcp.keyGenerated'),'#166534');
-  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+    showMcpStatus(t('mcp.keyGenerated'),'var(--c-green-dark)');
+  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
 }
 
 async function runMcpDiagnostics(){
   const el=document.getElementById('mcp-diag-result');
-  el.innerHTML='<p style="color:#888">'+t('mcp.diagRunning')+'</p>';
+  el.innerHTML='<p style="color:var(--c-text-muted)">'+t('mcp.diagRunning')+'</p>';
   try{
     const r=await authFetch('/api/mcp/diagnostics');
-    if(!r.ok){el.innerHTML='<p style="color:#b91c1c">'+t('mcp.diagFailed')+'</p>';return}
+    if(!r.ok){el.innerHTML='<p style="color:var(--c-red-dark)">'+t('mcp.diagFailed')+'</p>';return}
     const d=await r.json();
     const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
     let html='<table style="width:100%;font-size:12px;border-collapse:collapse">';
@@ -3766,7 +3766,7 @@ async function runMcpDiagnostics(){
     const checks=d.checks||{};
     for(const[k,v]of Object.entries(checks)){
       const pass=v.startsWith('PASS');
-      html+=row(k,esc(v),pass?'#166534':'#b91c1c');
+      html+=row(k,esc(v),pass?'var(--c-green-dark)':'var(--c-red-dark)');
     }
     html+=row('Protocol',esc(d.protocol));
     html+=row('Base URL','<code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">'+esc(d.connectorUrl)+'</code>');
@@ -3774,9 +3774,9 @@ async function runMcpDiagnostics(){
     html+=row(t('mcp.diagManualClients'),String(d.oauthClients?.manual||0));
     html+=row(t('mcp.diagSessions'),String(d.activeSessions||0));
     html+='</table>';
-    if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534">'+esc(d.hint)+'</div>';
+    if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">'+esc(d.hint)+'</div>';
     el.innerHTML=html;
-  }catch(e){el.innerHTML='<p style="color:#b91c1c">Error: '+e.message+'</p>'}
+  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+e.message+'</p>'}
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
@@ -3793,16 +3793,16 @@ async function loadOAuthClients(){
     const list=document.getElementById('oauth-client-list');
     if(!list)return;
     if(!data.clients||data.clients.length===0){
-      list.innerHTML='<p style="color:#888;font-size:12px">'+t('mcp.noClients')+'</p>';
+      list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
       return;
     }
     const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientName')+'</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Client ID</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.created')+'</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.activeSessions')+'</th>'+
-      '<th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.created')+'</th>'+
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.activeSessions')+'</th>'+
+      '<th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>'+
       data.clients.map(c=>{
         const name=c.clientName||t('mcp.unnamed');
         return '<tr>'+
@@ -3810,7 +3810,7 @@ async function loadOAuthClients(){
           '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
           '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
           '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\','+c.autoRegistered+')">'+t('mcp.deleteClient')+'</button></td></tr>';
+          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\','+c.autoRegistered+')">'+t('mcp.deleteClient')+'</button></td></tr>';
       }).join('')+
       '</tbody></table>';
   }catch(e){console.error('loadOAuthClients:',e)}
@@ -3820,10 +3820,10 @@ async function deleteOAuthClient(clientId,isAuto){
   try{
     const r=await authFetch('/api/mcp/oauth-clients/'+encodeURIComponent(clientId),{method:'DELETE'});
     const data=await r.json();
-    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
-    showOAuthStatus(t('mcp.clientDeleted'),'#166534');
+    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'var(--c-red-dark)');return}
+    showOAuthStatus(t('mcp.clientDeleted'),'var(--c-green-dark)');
     loadOAuthClients();
-  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
+  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
@@ -3857,7 +3857,7 @@ function renderLog(){
   const now=Date.now(),h24=24*60*60*1000;
   body.innerHTML=items.length?items.map(e=>{
     const isRecent=(now-new Date(e.time).getTime())<h24;
-    return `<tr><td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
+    return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
   const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
 }
 function deleteLogEntry(btn,time,batch,action){
@@ -3930,23 +3930,23 @@ function renderInvStock(){
     const pct=thresh.minKg>0?Math.min(100,Math.round((stock/Math.max(stock,thresh.minKg*3))*100)):Math.min(100,Math.round((stock/Math.max(stock,100))*100));
     const estNote=isGrain
       ? `≈ ${bags} grain bags @ ${bagKg}kg each`
-      : `≈ <strong>${bags}</strong> × ${bagKg}kg blocks <span style="font-size:10px;color:#aaa">(avg estimate)</span>`;
-    return`<div style="background:${MAT_BG[mat]};border:1px solid ${low?'#f87171':MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
+      : `≈ <strong>${bags}</strong> × ${bagKg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>`;
+    return`<div style="background:${MAT_BG[mat]};border:1px solid ${low?'var(--c-red)':MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
-        ${low?`<span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:99px;font-weight:600">LOW STOCK</span>`:''}
+        ${low?`<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">LOW STOCK</span>`:''}
       </div>
-      <div style="font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:#888">kg</span></div>
+      <div style="font-size:26px;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:var(--c-text-muted)">kg</span></div>
       <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
-        <div style="height:100%;border-radius:3px;background:${low?'#f87171':MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
+        <div style="height:100%;border-radius:3px;background:${low?'var(--c-red)':MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
       </div>
-      <div style="font-size:12px;color:#555;line-height:1.6">${estNote}</div>
-      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'#b91c1c':'#aaa'};margin-top:2px">Alert below ${thresh.minKg}kg</div>`:''}
+      <div style="font-size:12px;color:var(--c-text-sec);line-height:1.6">${estNote}</div>
+      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'};margin-top:2px">Alert below ${thresh.minKg}kg</div>`:''}
       <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">+ Log delivery</button>
       ${(()=>{const sups=getSuppliersForMat(mat);if(!sups.length)return'';
-        return`<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:#666">
-          <span style="font-weight:600;color:${low?'#b91c1c':'#888'}">${low?t('inv.reorderFrom'):t('inv.suppliers')}:</span>
-          ${sups.map(s=>s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#2563eb;margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
+        return`<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:var(--c-text-sec)">
+          <span style="font-weight:600;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'}">${low?t('inv.reorderFrom'):t('inv.suppliers')}:</span>
+          ${sups.map(s=>s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
         </div>`;})()}
     </div>`;
   }).join('');
@@ -3970,18 +3970,18 @@ function renderThresholds(){
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
         <td><input type="text" inputmode="decimal" value="${t.minKg}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
-        <td style="font-size:12px;color:#666">~${bags} bags <span style="font-size:10px;color:#aaa">(avg)</span></td>
+        <td style="font-size:12px;color:var(--c-text-sec)">~${bags} bags <span style="font-size:10px;color:var(--c-text-muted)">(avg)</span></td>
       </tr>`;
     }).join('')}
     </tbody>
   </table></div>`;
 
   // Average composition settings
-  const compHtml=`<div style="background:#f9f8f5;border-radius:8px;padding:12px">
-    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
+  const compHtml=`<div style="background:var(--c-bg);border-radius:8px;padding:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
       Average composition used for estimates
     </div>
-    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">
+    <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
       These averages are used to calculate "~X bags" on the stock cards. 
       They are <strong>estimates only</strong> — exact usage is tracked when you create a batch with a specific substrate recipe.
     </p>
@@ -3997,7 +3997,7 @@ function renderThresholds(){
       <div><label style="font-size:11px">Grain bag (kg)</label>
         <input type="text" inputmode="decimal" value="${c.grainBagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
-    <div style="margin-top:8px;font-size:11px;color:#aaa">
+    <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
       With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg*(1-c.rhPct/100)*(c.hwPct/100)).toFixed(3)}kg hardwood + ~${(c.bagKg*(1-c.rhPct/100)*(c.wbPct/100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
     </div>
   </div>`;
@@ -4103,12 +4103,12 @@ function renderInvLog(){
   const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
   // Build running totals per material going forwards for display
   body.innerHTML=rows.map(e=>`<tr>
-    <td style="font-size:10px;color:#aaa">${fmtDtTime(e.time)}</td>
+    <td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td>
     <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
-    <td style="font-weight:600;color:${e.deltaKg<0?'#991b1b':'#166534'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
+    <td style="font-weight:600;color:${e.deltaKg<0?'var(--c-red-dark)':'var(--c-green-dark)'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
     <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
     <td><span class="badge ${e.type==='delivery'?'b-add':e.type==='adjustment'?'b-move':'b-harvest'}">${e.type}</span></td>
-    <td style="font-size:11px;color:#666">${esc(e.ref)||'—'}</td>
+    <td style="font-size:11px;color:var(--c-text-sec)">${esc(e.ref)||'—'}</td>
   </tr>`).join('');
 }
 
@@ -4133,7 +4133,7 @@ function getInvAlerts(){
 function renderSuppliers(){
   const el=document.getElementById('suppliers-list');
   if(!el)return;
-  if(!suppliers.length){el.innerHTML=`<p style="color:#aaa;font-size:13px">${t('inv.noSuppliers')}</p>`;return}
+  if(!suppliers.length){el.innerHTML=`<p style="color:var(--c-text-muted);font-size:13px">${t('inv.noSuppliers')}</p>`;return}
   const grouped={};
   Object.keys(MAT_LABELS).forEach(m=>grouped[m]=[]);
   suppliers.forEach(s=>{if(grouped[s.mat])grouped[s.mat].push(s)});
@@ -4146,12 +4146,12 @@ function renderSuppliers(){
         <thead><tr><th>${t('inv.supplierName')}</th><th>${t('inv.supplierUrl')}</th><th>${t('inv.supplierPhone')}</th><th>${t('inv.supplierNotes')}</th><th></th></tr></thead>
         <tbody>${list.map(s=>`<tr>
           <td style="font-weight:500">${esc(s.name)}</td>
-          <td>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#2563eb;font-size:12px">${esc(s.url)}</a>`:'-'}</td>
+          <td>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>`:'-'}</td>
           <td style="font-size:12px">${s.phone?esc(s.phone):'-'}</td>
-          <td style="font-size:12px;color:#666">${s.notes?esc(s.notes):'-'}</td>
+          <td style="font-size:12px;color:var(--c-text-sec)">${s.notes?esc(s.notes):'-'}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-sm" onclick="editSupplier(${s.id})" style="font-size:11px">${t('inv.editSupplier')}</button>
-            <button class="btn btn-sm" onclick="removeSupplier(${s.id})" style="font-size:11px;color:#b91c1c">${t('inv.deleteSupplier')}</button>
+            <button class="btn btn-sm" onclick="removeSupplier(${s.id})" style="font-size:11px;color:var(--c-red-dark)">${t('inv.deleteSupplier')}</button>
           </td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -4201,7 +4201,7 @@ function getSuppliersForMat(mat){
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function setStatus(el,msg,ok){el.style.color=ok?'#166534':'#b91c1c';el.textContent=msg}
+function setStatus(el,msg,ok){el.style.color=ok?'var(--c-green-dark)':'var(--c-red-dark)';el.textContent=msg}
 async function downloadBackup(){
   const pw=document.getElementById('backup-dl-pw').value;
   const st=document.getElementById('backup-dl-status');
@@ -4433,7 +4433,7 @@ async function printQrSheet(items,title){
   row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';
   for(const val of items){
     const cell=document.createElement('div');
-    cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';
+    cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';
     const img=await makeQR(val);
     if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}
     const lbl=document.createElement('div');
@@ -4517,11 +4517,11 @@ function renderAssets(){
       <td style="text-align:right">${formatEur(a.purchasePrice)}</td>
       <td style="text-align:right">${formatEur(d.bookValue)}</td>
       <td>${assetStatusBadge(a.status)}</td>
-      <td style="font-size:11px;color:#555">${esc(a.location)||'—'}</td>
+      <td style="font-size:11px;color:var(--c-text-sec)">${esc(a.location)||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">Bearb.</button>
         <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">Druck</button>
-        <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:#991b1b">×</button>
+        <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:var(--c-red-dark)">×</button>
       </td>
     </tr>`}).join('');
 }
@@ -4639,7 +4639,7 @@ function renderStichtagReport(){
     return`<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
   });
   document.getElementById('stichtag-result').innerHTML=
-    `<div style="font-size:12px;color:#555;margin-bottom:6px">Stichtag: ${fmtDE(ref)} — ${aktiv.length} aktive Anlagen</div>`+
+    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">Stichtag: ${fmtDE(ref)} — ${aktiv.length} aktive Anlagen</div>`+
     `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>`+
     rows.join('')+
     `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>`+
@@ -4655,8 +4655,8 @@ function renderAssetLabelList(){
     return`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
       <input type="checkbox" ${chk} onchange="toggleAssetLabel('${esc(a.assetId)}',this.checked)">
       <span style="font-family:monospace;font-weight:500">${esc(a.assetId)}</span>
-      <span style="color:#555">${esc(a.name)}</span>
-      <span style="color:#999;font-size:11px">${esc(a.category)}</span>
+      <span style="color:var(--c-text-sec)">${esc(a.name)}</span>
+      <span style="color:var(--c-text-muted);font-size:11px">${esc(a.category)}</span>
     </label>`;
   }).join('');
 }
@@ -4715,7 +4715,7 @@ function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:#888">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:#555;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
 
@@ -4760,7 +4760,7 @@ function logLabWork(){
     setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:#aaa">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:#888">${esc(c.parentId)||'\u2014'}</td><td>${spDot(c.species)}${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
+function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td>${spDot(c.species)}${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
 function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">'+t('lab.selectCultureBatch')+'</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
@@ -4772,7 +4772,7 @@ function buildTree(rootId,rootType){
 }
 const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
 const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
-function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid #e5e3dd;margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:#555">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:#666">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:#888">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:#aaa">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
+function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid var(--c-border);margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:var(--c-text-sec)">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:var(--c-text-sec)">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:var(--c-text-muted)">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:var(--c-text-muted)">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
 function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">'+t('lab.selectAbove')+'</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">'+t('lab.noLineageData')+'</div>'}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
@@ -4781,7 +4781,7 @@ function openBagInfo(bagId,batchId,batch){
   biBagId=bagId;biBatchId=batchId;
   const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
   const el=document.getElementById('bi-body');
-  if(!b){el.innerHTML='<p style="color:#b91c1c">'+t('batch.notFound')+': '+esc(batchId)+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
+  if(!b){el.innerHTML='<p style="color:var(--c-red-dark)">'+t('batch.notFound')+': '+esc(batchId)+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
   document.getElementById('bi-title').textContent=bagId;
   // Current location
   const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
@@ -4798,22 +4798,22 @@ function openBagInfo(bagId,batchId,batch){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
       <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${esc(b.strain)||'\u2014'}</div></div>
-      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:#1e40af">${esc(currentLoc)}</div></div>
-      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:#92400e">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
+      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
+      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
+    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags.map(bag=>{
         const isThis=bag.toUpperCase()===bagId.toUpperCase();
         const bagNum=bag.split('-').pop();
         const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
         const loc=!bagLast?'—':bagLast.action==='REMOVE'?'✗':bagLast.to||'?';
-        return`<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis?'#1a1a1a':'#f5f4f0'};color:${isThis?'#fff':'#555'};border:1px solid ${isThis?'#1a1a1a':'#e5e3dd'}" title="${loc}">
-          ${bagNum} <span style="font-size:9px;color:${isThis?'#aaa':'#bbb'}">${loc}</span>
+        return`<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis?'var(--c-text)':'var(--c-bg)'};color:${isThis?'#fff':'var(--c-text-sec)'};border:1px solid ${isThis?'var(--c-text)':'var(--c-border)'}" title="${loc}">
+          ${bagNum} <span style="font-size:9px;color:${isThis?'var(--c-text-muted)':'var(--c-border)'}">${loc}</span>
         </span>`;
       }).join('')}
     </div>
-    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:#92400e"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
+    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:var(--c-amber-dark)"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
   `;
   closeCamScan();
   closeScanModal();
@@ -4982,18 +4982,18 @@ function renderBagPreview(){const id=document.getElementById('print-batch').valu
 const bcY=mode==='date'?50:mode==='full'?52:56;
 const bcH=mode==='date'?60:mode==='full'?70:90;
 const idY=bcY+bcH+6;
-batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;background:#fff;overflow:hidden;position:relative;aspect-ratio:5/3';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}
+batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;background:#fff;overflow:hidden;position:relative;aspect-ratio:5/3';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}
 const bc=bcParams(bcVal);const bcLeft=(bc.x/400*100).toFixed(1);const bcW=((400-2*bc.x)/400*100).toFixed(1);
 const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
 svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+bcW+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
 cell.appendChild(svg);
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;top:'+(idY/240*100).toFixed(1)+'%';idEl.textContent=bagId;cell.appendChild(idEl);
-if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+((idY+42)/240*100).toFixed(1)+'%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}
-if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:#999;white-space:nowrap;top:'+((idY+72)/240*100).toFixed(1)+'%';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}
+if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+((idY+42)/240*100).toFixed(1)+'%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}
+if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-muted);white-space:nowrap;top:'+((idY+72)/240*100).toFixed(1)+'%';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}
 wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:Math.round(bcH*0.6),displayValue:false,margin:0,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
-function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
+function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
 function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
@@ -5001,7 +5001,7 @@ function renderLabPreview(){const el=document.getElementById('lab-preview');cons
 ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const sp=(c.species||'')+(c.strain?' / '+c.strain:'');const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
 const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
 const bcY=16;
-const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;background:#fff;aspect-ratio:5/3;overflow:hidden;position:relative';
+const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:6px;background:#fff;aspect-ratio:5/3;overflow:hidden;position:relative';
 let ty;
 if(opts.bc){
   const bcVal=id.replace(/-/g,'_');const bc=bcParams(bcVal,5);
@@ -5013,17 +5013,17 @@ if(opts.bc){
   ty=bcY+bcH+6;
 }else{ty=12}
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';idEl.textContent=id;cell.appendChild(idEl);ty+=34;
-if(opts.sp&&sp){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=sp;cell.appendChild(e2);ty+=26}
-if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:#888;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent='Parent: '+c.parentId;cell.appendChild(e2);ty+=22}
-if(opts.dt){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:#aaa;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=fmtDt(c.created);cell.appendChild(e2);ty+=22}
+if(opts.sp&&sp){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:8px;color:var(--c-text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=sp;cell.appendChild(e2);ty+=26}
+if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:var(--c-text-muted);top:'+(ty/240*100).toFixed(1)+'%';e2.textContent='Parent: '+c.parentId;cell.appendChild(e2);ty+=22}
+if(opts.dt){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:var(--c-text-muted);top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=fmtDt(c.created);cell.appendChild(e2);ty+=22}
 if(opts.qr){const qrdiv=document.createElement('div');qrdiv.style.cssText='position:absolute;left:'+(272/400*100).toFixed(1)+'%;top:'+(16/240*100).toFixed(1)+'%;width:'+(120/400*100).toFixed(1)+'%;display:flex;justify-content:center';cell.appendChild(qrdiv);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:48,height:48,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}
 wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
 
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
 
-async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const val of group.items){const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:#555;margin-top:3px';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
-async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 7px;text-align:center;background:#fff;page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
+async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const val of group.items){const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
+async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 // Session tracking
@@ -5491,7 +5491,7 @@ async function loadUsersTab(){
   if(acct&&currentUser)acct.innerHTML=`Logged in as <b>${esc(currentUser.username)}</b> (${esc(currentUser.role)}) <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">Change Password</button>`;
   if(!currentUser||currentUser.role!=='admin'){
     const tbl=document.getElementById('users-table');
-    if(tbl)tbl.innerHTML='<p style="color:#888">Admin access required to manage users.</p>';
+    if(tbl)tbl.innerHTML='<p style="color:var(--c-text-muted)">Admin access required to manage users.</p>';
     return;
   }
   try{
@@ -5499,7 +5499,7 @@ async function loadUsersTab(){
     const users=await r.json();
     const tbl=document.getElementById('users-table');
     if(!tbl)return;
-    tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Created</th><th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
+    tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>'+
       users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?fmtDt(u.created):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
       '</tbody></table>';
   }catch(e){console.error('Failed to load users:',e)}
@@ -5651,12 +5651,12 @@ function printCalendar(){
     {cls:'leg-maintenance',color:'#64748b',label:'Wartung'},
     {cls:'leg-import',color:'#6366f1',label:'Externe Termine'}
   ];
-  const legendHtml=legendItems.map(l=>'<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#555"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+l.color+'"></span>'+l.label+'</span>').join('&nbsp;&nbsp;');
+  const legendHtml=legendItems.map(l=>'<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--c-text-sec)"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+l.color+'"></span>'+l.label+'</span>').join('&nbsp;&nbsp;');
 
   sheet.innerHTML='<div class="cal-print-page">'+
     '<div class="cal-print-header">'+
-      '<div style="font-size:18px;font-weight:800;color:#1a1a1a">'+titleText+'</div>'+
-      '<div style="font-size:12px;color:#888;margin-top:2px">'+viewLabel+' — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--c-text)">'+titleText+'</div>'+
+      '<div style="font-size:12px;color:var(--c-text-muted);margin-top:2px">'+viewLabel+' — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
     '</div>'+
     '<div class="cal-print-legend">'+legendHtml+'</div>'+
     '<div class="cal-print-body"></div>'+
@@ -6117,7 +6117,7 @@ function openEventDetail(ev){
     metaEl.textContent=meta;
     const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
     const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#3b82f6;color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
     assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=t.description||'';
     descEl.style.display=t.description?'':'none';
@@ -6130,7 +6130,7 @@ function openEventDetail(ev){
     let meta='Batch-Fälligkeitstermin';
     if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#ef4444;color:#fff">Batch</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">Batch</span>';
     assignEl.innerHTML='';
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
@@ -6142,7 +6142,7 @@ function openEventDetail(ev){
     if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:#6366f1;color:#fff">CalDAV</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">CalDAV</span>';
     assignEl.innerHTML='';
     descEl.textContent=ev.description||'';
     descEl.style.display=ev.description?'':'none';
@@ -6434,7 +6434,7 @@ function fillCalendarUserFilter(){
 function renderAssigneePicker(){
   const box=document.getElementById('cal-ev-assignees');if(!box)return;
   const dd=document.getElementById('cal-ev-assignee-dropdown');
-  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:#aaa;font-size:12px">Niemand zugewiesen</span>'}
+  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">Niemand zugewiesen</span>'}
   else{box.innerHTML=calEvSelectedAssignees.map(uid=>{const u=appUsers.find(x=>x.id===uid);return'<span class="assignee-chip">'+esc(u?u.username:'?')+' <button onclick="event.stopPropagation();toggleAssignee('+uid+')">×</button></span>'}).join('')}
   if(dd){dd.innerHTML=appUsers.map(u=>{const checked=calEvSelectedAssignees.includes(u.id);return'<label style="'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee('+u.id+')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(u.username)+'</label>'}).join('')}
 }
@@ -6504,7 +6504,7 @@ function updateOfflineBadge(count){
   if(!badge){
     badge=document.createElement('span');
     badge.id='offline-badge';
-    badge.style.cssText='display:inline-block;background:#ef4444;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
+    badge.style.cssText='display:inline-block;background:var(--c-red);color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
     const syncEl=document.getElementById('sync-label');
     if(syncEl)syncEl.parentNode.appendChild(badge);
     else document.querySelector('.topbar')?.appendChild(badge);
@@ -6746,9 +6746,9 @@ function initEventListeners() {
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);
   $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
   $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
-  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
+  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'var(--c-green-dark)');});
   $('mcp-diag-btn').addEventListener('click', runMcpDiagnostics);
-  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
+  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'var(--c-green-dark)');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
