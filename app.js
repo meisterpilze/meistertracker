@@ -4531,10 +4531,10 @@ function makeAssetZPL(ids){
     const loc=(a.category||'')+(a.location?' / '+a.location:'');
     const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
     return'^XA^PW400^LL240^CI28^LH0,0'+
-      '^FO20,10^BY2,2.0,60^BCN,60,N,N,N^FD'+bcVal+'^FS'+
-      '^FO8,78^A0N,28,28^FD'+id+'^FS'+
-      '^FO8,110^A0N,20,20^FD'+nameTrunc+'^FS'+
-      '^FO8,135^A0N,16,16^FD'+loc.slice(0,36)+'^FS'+
+      '^FO10,20^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS'+
+      '^FO0,100^FB400,1,0,C^A0N,30,30^FD'+id+'^FS'+
+      '^FO0,136^FB400,1,0,C^A0N,22,22^FD'+nameTrunc+'^FS'+
+      '^FO0,162^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
       '^XZ';
   }).filter(Boolean).join('\n');
 }
@@ -4751,12 +4751,12 @@ function makeLabZPL(ids,opts){
     const ds=fmtDt(c.created);
     const bcVal=id.replace(/-/g,'_');
     let z='^XA^PW400^LL240^CI28^LH0,0';
-    if(opts.bc)z+='^FO20,10^BY2,2.0,60^BCN,60,N,N,N^FD'+bcVal+'^FS';
-    z+='^FO8,78^A0N,28,28^FD'+id+'^FS';
-    if(opts.sp&&sp)z+='^FO8,110^A0N,20,20^FD'+sp+'^FS';
-    if(opts.par&&c.parentId)z+='^FO8,135^A0N,17,17^FDParent: '+c.parentId+'^FS';
-    if(opts.dt)z+='^FO8,156^A0N,16,16^FD'+ds+'^FS';
-    if(opts.qr)z+='^FO272,10^BQN,2,3^FDMM,A'+id+'^FS';
+    if(opts.bc)z+='^FO10,20^BY2,2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
+    z+='^FO0,100^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';
+    if(opts.sp&&sp)z+='^FO0,136^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';
+    if(opts.par&&c.parentId)z+='^FO0,162^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';
+    if(opts.dt)z+='^FO0,184^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';
+    if(opts.qr)z+='^FO272,20^BQN,2,3^FDMM,A'+id+'^FS';
     return z+'^XZ';
   }).filter(Boolean).join('\n');
 }
