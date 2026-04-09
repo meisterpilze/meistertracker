@@ -368,6 +368,10 @@ body {
   background: #eff6ff;
   border-bottom-color: #93c5fd;
 }
+.scan-modal.scan-action-move_batch .scan-modal-header {
+  background: #eef2ff;
+  border-bottom-color: #a5b4fc;
+}
 .scan-modal.scan-action-remove .scan-modal-header {
   background: #fef2f2;
   border-bottom-color: #fca5a5;
