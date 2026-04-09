@@ -3356,7 +3356,22 @@ async function printNewBags(){
 }
 document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
 
-function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{batches=batches.filter(b=>b.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus()})}
+function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{
+  const b=batches.find(x=>x.batchId===id);
+  // Reverse inventory deductions locally
+  if(b&&inventory.stock){
+    if(b.batchType==='grain'){
+      inventory.stock.grain=(inventory.stock.grain||0)+b.qty*(b.bagKg||3);
+    }else if(b.substrate){
+      const rh=b.substrate.rh||0,bagKg=b.bagKg||3;
+      const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
+      if(b.substrate.hardwood)inventory.stock.hardwood=(inventory.stock.hardwood||0)+b.qty*dryKgPerBag*(b.substrate.hardwood/100);
+      if(b.substrate.wheatbran)inventory.stock.wheatbran=(inventory.stock.wheatbran||0)+b.qty*dryKgPerBag*(b.substrate.wheatbran/100);
+      if(b.substrate.gypsum)inventory.stock.gypsum=(inventory.stock.gypsum||0)+b.qty*dryKgPerBag*0.01;
+    }
+  }
+  batches=batches.filter(x=>x.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus();
+})}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
