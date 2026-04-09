@@ -2985,9 +2985,33 @@ function handleRequest(req, res) {
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
-    // Dynamic Client Registration — disabled, clients must be created via admin UI
+    // Dynamic Client Registration (RFC 7591) — required by MCP OAuth spec
     if (req.method === 'POST' && req.url === '/oauth/register') {
-      jsonErr(res, 403, 'Dynamic registration disabled. Create clients in MeisterTracker Settings > MCP.');
+      jsonBody(req, res, (e, data) => {
+        if (e) return;
+        try {
+          const redirectUris = data.redirect_uris;
+          if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris required"}');
+            return;
+          }
+          const clientId = crypto.randomUUID();
+          const clientName = typeof data.client_name === 'string' ? data.client_name : '';
+          db.registerOAuthClient(database, { clientId, clientName, redirectUris });
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            client_id: clientId,
+            client_name: clientName,
+            redirect_uris: redirectUris,
+            grant_types: data.grant_types || ['authorization_code', 'refresh_token'],
+            response_types: data.response_types || ['code'],
+            token_endpoint_auth_method: 'none'
+          }));
+        } catch (err) {
+          safeErr(res, err);
+        }
+      });
       return;
     }
 
@@ -3195,7 +3219,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const base = getBaseUrl(req);
       res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer, resource_metadata="' + base + '/.well-known/oauth-protected-resource"'
+        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource"'
       });
       res.end('{"error":"unauthorized"}');
       return;
