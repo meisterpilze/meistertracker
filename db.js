@@ -1298,8 +1298,53 @@ function addBagsToBatch(db, batchId, newBags, newQty) {
 }
 
 function deleteBatchById(db, batchId) {
-  db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
-  incrementDataVersion(db);
+  db.exec('BEGIN');
+  try {
+    // Read batch before deleting so we can reverse inventory deductions
+    const row = db.prepare('SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum FROM batches WHERE batch_id=?').get(batchId);
+    if (row) {
+      const deltas = computeBatchMaterialDeltas(row);
+      // Reverse each delta (add materials back)
+      for (const d of deltas) {
+        const col = 'stock_' + d.mat;
+        db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(d.deltaKg);
+        const cur = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
+        db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
+          new Date().toISOString(), d.mat, d.deltaKg, cur.val, 'batch-delete', batchId
+        );
+      }
+    }
+    db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+/** Compute material kg used by a batch row (positive values = what was consumed) */
+function computeBatchMaterialDeltas(row) {
+  const deltas = [];
+  const qty = row.qty;
+  const bagKg = row.bag_kg || 3;
+  if (row.batch_type === 'grain') {
+    deltas.push({ mat: 'grain', deltaKg: qty * bagKg });
+  } else {
+    const hw = row.sub_hardwood || 0;
+    const wb = row.sub_wheatbran || 0;
+    const rh = row.sub_rh || 0;
+    const gyp = row.sub_gypsum;
+    if (hw || wb) {
+      const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+      const hwUsed = qty * dryKgPerBag * (hw / 100);
+      const wbUsed = qty * dryKgPerBag * (wb / 100);
+      if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
+      if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+      if (gyp) deltas.push({ mat: 'gypsum', deltaKg: qty * dryKgPerBag * 0.01 });
+    }
+  }
+  return deltas;
 }
 
 // -- Scan Log --
