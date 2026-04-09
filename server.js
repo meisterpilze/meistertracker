@@ -2851,14 +2851,14 @@ function handleProppatch(parts, body, req, res) {
 // ── RATE LIMITING ────────────────────────────────────────────
 const RATE_WINDOW_MS = 60000;
 const RATE_MAX_REQUESTS = 300;
-const rateLimits = new Map();
+const httpRateLimits = new Map();
 
 function checkRateLimit(ip) {
   const now = Date.now();
-  let entry = rateLimits.get(ip);
+  let entry = httpRateLimits.get(ip);
   if (!entry || now - entry.start > RATE_WINDOW_MS) {
     entry = { start: now, count: 0 };
-    rateLimits.set(ip, entry);
+    httpRateLimits.set(ip, entry);
   }
   entry.count++;
   return entry.count <= RATE_MAX_REQUESTS;
@@ -2866,8 +2866,8 @@ function checkRateLimit(ip) {
 
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, entry] of rateLimits) {
-    if (now - entry.start > RATE_WINDOW_MS) rateLimits.delete(ip);
+  for (const [ip, entry] of httpRateLimits) {
+    if (now - entry.start > RATE_WINDOW_MS) httpRateLimits.delete(ip);
   }
 }, RATE_WINDOW_MS);
 
