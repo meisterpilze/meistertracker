@@ -654,27 +654,16 @@ const LANG = {
     'mcp.diagManualClients': 'Manual clients',
     'mcp.diagSessions': 'Active MCP sessions',
     'mcp.oauthTitle': 'Connected Clients',
-    'mcp.oauthDesc': 'All clients connected to the MCP server. Claude registers automatically \u2014 no manual setup needed. Manually created clients are for third-party tools that require a client secret.',
-    'mcp.createClient': 'Create manual client',
-    'mcp.clientNamePlaceholder': 'Client name (e.g. Custom Script)',
-    'mcp.newClientCreated': 'Client created \u2014 copy these credentials now:',
-    'mcp.secretOnce': 'The client secret is only shown once. Store it securely.',
+    'mcp.oauthDesc': 'Clients that connected via OAuth. Claude registers automatically when you add the connector URL.',
     'mcp.noClients': 'No connected clients yet. Connect Claude by pasting the URL above.',
     'mcp.clientName': 'Name',
-    'mcp.clientType': 'Type',
-    'mcp.autoClient': 'Auto',
-    'mcp.manualClient': 'Manual',
     'mcp.unnamed': '(unnamed)',
     'mcp.created': 'Created',
     'mcp.activeSessions': 'Sessions',
     'mcp.deleteClient': 'Delete',
     'mcp.confirmDelete': 'Delete this client? All its active sessions will be revoked.',
     'mcp.confirmDeleteAuto': 'Revoke this auto-registered client? Claude will register a new client on its next connection.',
-    'mcp.clientCreated': 'Client created. Copy the credentials now!',
     'mcp.clientDeleted': 'Client deleted.',
-    'mcp.clientNameRequired': 'Please enter a client name.',
-    'mcp.idCopied': 'Client ID copied!',
-    'mcp.secretCopied': 'Client secret copied!',
     'mcp.step1': '1. Enable MCP server and save',
     'mcp.step2': '2. Copy the connector URL above',
     'mcp.step3': '3. In Claude: Settings \u2192 Connectors \u2192 Add \u2192 paste the URL',
@@ -1413,27 +1402,16 @@ const LANG = {
     'mcp.diagManualClients': 'Manuelle Clients',
     'mcp.diagSessions': 'Aktive MCP-Sitzungen',
     'mcp.oauthTitle': 'Verbundene Clients',
-    'mcp.oauthDesc': 'Alle mit dem MCP Server verbundenen Clients. Claude registriert sich automatisch \u2014 kein manuelles Setup nötig. Manuelle Clients sind für Drittanbieter-Tools, die ein Client-Secret benötigen.',
-    'mcp.createClient': 'Manuellen Client erstellen',
-    'mcp.clientNamePlaceholder': 'Client-Name (z.B. Eigenes Skript)',
-    'mcp.newClientCreated': 'Client erstellt \u2014 kopiere diese Zugangsdaten jetzt:',
-    'mcp.secretOnce': 'Das Client-Geheimnis wird nur einmal angezeigt. Sicher aufbewahren.',
+    'mcp.oauthDesc': 'Clients, die sich per OAuth verbunden haben. Claude registriert sich automatisch, wenn du die Connector-URL hinzufügst.',
     'mcp.noClients': 'Noch keine verbundenen Clients. Verbinde Claude, indem du die URL oben einfügst.',
     'mcp.clientName': 'Name',
-    'mcp.clientType': 'Typ',
-    'mcp.autoClient': 'Auto',
-    'mcp.manualClient': 'Manuell',
     'mcp.unnamed': '(unbenannt)',
     'mcp.created': 'Erstellt',
     'mcp.activeSessions': 'Sitzungen',
     'mcp.deleteClient': 'Löschen',
     'mcp.confirmDelete': 'Diesen Client löschen? Alle aktiven Sitzungen werden widerrufen.',
     'mcp.confirmDeleteAuto': 'Diesen auto-registrierten Client widerrufen? Claude registriert sich bei der nächsten Verbindung erneut.',
-    'mcp.clientCreated': 'Client erstellt. Jetzt Zugangsdaten kopieren!',
     'mcp.clientDeleted': 'Client gelöscht.',
-    'mcp.clientNameRequired': 'Bitte einen Client-Namen eingeben.',
-    'mcp.idCopied': 'Client-ID kopiert!',
-    'mcp.secretCopied': 'Client-Geheimnis kopiert!',
     'mcp.step1': '1. MCP Server aktivieren und speichern',
     'mcp.step2': '2. Connector URL oben kopieren',
     'mcp.step3': '3. In Claude: Einstellungen \u2192 Connectors \u2192 Hinzufügen \u2192 URL einfügen',
@@ -2171,27 +2149,16 @@ const LANG = {
     'mcp.diagManualClients': 'Clientes manuais',
     'mcp.diagSessions': 'Sessões MCP ativas',
     'mcp.oauthTitle': 'Clientes Conectados',
-    'mcp.oauthDesc': 'Todos os clientes conectados ao servidor MCP. O Claude se registra automaticamente \u2014 nenhuma configuração manual necessária. Clientes manuais são para ferramentas de terceiros que precisam de client secret.',
-    'mcp.createClient': 'Criar cliente manual',
-    'mcp.clientNamePlaceholder': 'Nome do cliente (ex. Script Próprio)',
-    'mcp.newClientCreated': 'Cliente criado \u2014 copie estas credenciais agora:',
-    'mcp.secretOnce': 'O segredo do cliente é exibido apenas uma vez. Guarde-o com segurança.',
+    'mcp.oauthDesc': 'Clientes conectados via OAuth. O Claude se registra automaticamente ao adicionar a URL do connector.',
     'mcp.noClients': 'Nenhum cliente conectado ainda. Conecte o Claude colando a URL acima.',
     'mcp.clientName': 'Nome',
-    'mcp.clientType': 'Tipo',
-    'mcp.autoClient': 'Auto',
-    'mcp.manualClient': 'Manual',
     'mcp.unnamed': '(sem nome)',
     'mcp.created': 'Criado',
     'mcp.activeSessions': 'Sessões',
     'mcp.deleteClient': 'Excluir',
     'mcp.confirmDelete': 'Excluir este cliente? Todas as sessões ativas serão revogadas.',
     'mcp.confirmDeleteAuto': 'Revogar este cliente auto-registrado? O Claude registrará um novo cliente na próxima conexão.',
-    'mcp.clientCreated': 'Cliente criado. Copie as credenciais agora!',
     'mcp.clientDeleted': 'Cliente excluído.',
-    'mcp.clientNameRequired': 'Por favor, insira um nome de cliente.',
-    'mcp.idCopied': 'Client ID copiado!',
-    'mcp.secretCopied': 'Segredo do cliente copiado!',
     'mcp.step1': '1. Ativar servidor MCP e salvar',
     'mcp.step2': '2. Copiar a URL do connector acima',
     'mcp.step3': '3. No Claude: Configurações \u2192 Connectors \u2192 Adicionar \u2192 colar a URL',
@@ -3747,7 +3714,6 @@ async function runMcpDiagnostics(){
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
-let _oauthNewId='',_oauthNewSecret='';
 function showOAuthStatus(msg,color){
   const el=document.getElementById('oauth-client-status');
   el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
@@ -3767,19 +3733,14 @@ async function loadOAuthClients(){
     const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientName')+'</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.clientType')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">Client ID</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.created')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">'+t('mcp.activeSessions')+'</th>'+
       '<th style="padding:6px;border-bottom:1px solid #ddd"></th></tr></thead><tbody>'+
       data.clients.map(c=>{
-        const typeBadge=c.autoRegistered
-          ?'<span style="background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-size:10px">'+t('mcp.autoClient')+'</span>'
-          :'<span style="background:#f3e8ff;color:#6b21a8;padding:1px 6px;border-radius:4px;font-size:10px">'+t('mcp.manualClient')+'</span>';
         const name=c.clientName||t('mcp.unnamed');
         return '<tr>'+
           '<td style="padding:6px">'+esc(name)+'</td>'+
-          '<td style="padding:6px">'+typeBadge+'</td>'+
           '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
           '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
           '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
@@ -3787,24 +3748,6 @@ async function loadOAuthClients(){
       }).join('')+
       '</tbody></table>';
   }catch(e){console.error('loadOAuthClients:',e)}
-}
-async function createOAuthClient(){
-  const nameEl=document.getElementById('oauth-client-name');
-  const name=nameEl.value.trim();
-  if(!name){showOAuthStatus(t('mcp.clientNameRequired'),'#b91c1c');return}
-  try{
-    const r=await authFetch('/api/mcp/oauth-clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:name})});
-    const data=await r.json();
-    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'#b91c1c');return}
-    nameEl.value='';
-    _oauthNewId=data.client_id;
-    _oauthNewSecret=data.client_secret;
-    document.getElementById('oauth-new-client-id').value=data.client_id;
-    document.getElementById('oauth-new-client-secret').value=data.client_secret;
-    document.getElementById('oauth-secret-display').style.display='block';
-    showOAuthStatus(t('mcp.clientCreated'),'#166534');
-    loadOAuthClients();
-  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
 async function deleteOAuthClient(clientId,isAuto){
   if(!confirm(isAuto?t('mcp.confirmDeleteAuto'):t('mcp.confirmDelete')))return;
@@ -6611,9 +6554,6 @@ function initEventListeners() {
   $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'#166534');});
   $('mcp-diag-btn').addEventListener('click', runMcpDiagnostics);
   $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'#166534');});
-  $('oauth-create-client-btn').addEventListener('click', createOAuthClient);
-  $('oauth-copy-id-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_oauthNewId);showOAuthStatus(t('mcp.idCopied'),'#166534');});
-  $('oauth-copy-secret-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_oauthNewSecret);showOAuthStatus(t('mcp.secretCopied'),'#166534');});
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
