@@ -340,8 +340,8 @@ describe('db – cultures', () => {
   it('insertCultures adds cultures', () => {
     db.insertCultures(d, [
       {
-        id: 'C-001',
-        type: 'mother',
+        id: 'MC-PLEU-010124-01',
+        type: 'MC',
         species: 'Pleurotus',
         strain: 'HK35',
         status: 'active',
@@ -351,11 +351,11 @@ describe('db – cultures', () => {
     ]);
     const data = db.readAll(d);
     assert.equal(data.cultures.length, 1);
-    assert.equal(data.cultures[0].type, 'mother');
+    assert.equal(data.cultures[0].type, 'MC');
   });
 
   it('updateCulture updates status', () => {
-    db.updateCulture(d, 'C-001', { status: 'retired' });
+    db.updateCulture(d, 'MC-PLEU-010124-01', { status: 'retired' });
     const data = db.readAll(d);
     assert.equal(data.cultures[0].status, 'retired');
   });
