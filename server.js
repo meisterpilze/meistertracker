@@ -2942,7 +2942,7 @@ function handleRequest(req, res) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; report-uri /api/csp-reports"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; report-uri /api/csp-reports"
   );
   if (protocol === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -4490,6 +4490,54 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     try {
       const cfg = db.getMcpCfg(database);
       jsonOk(res, { enabled: cfg.enabled, hasToken: cfg.hasToken, activeSessions: mcpSessions.size });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // -- MCP Diagnostics --
+  if (req.method === 'GET' && req.url === '/api/mcp/diagnostics') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const cfg = db.getMcpCfg(database);
+      const base = getBaseUrl(req);
+      const clients = db.listOAuthClients(database);
+      const autoClients = clients.filter(c => c.autoRegistered);
+      const manualClients = clients.filter(c => !c.autoRegistered);
+
+      // Check TLS
+      const hasTls = protocol === 'https';
+
+      // Check discovery endpoints return correct data
+      const prm = { resource: base + '/mcp', authorization_servers: [base], bearer_methods_supported: ['header'], scopes_supported: ['mcp:full'] };
+      const asm = { issuer: base, authorization_endpoint: base + '/oauth/authorize', token_endpoint: base + '/oauth/token', registration_endpoint: base + '/oauth/register' };
+
+      const diag = {
+        mcpEnabled: cfg.enabled,
+        hasApiToken: cfg.hasToken,
+        protocol,
+        baseUrl: base,
+        connectorUrl: base + '/mcp',
+        tls: hasTls,
+        tlsRequired: 'OAuth requires HTTPS — Claude Desktop will not connect over plain HTTP',
+        oauthClients: { auto: autoClients.length, manual: manualClients.length },
+        activeSessions: mcpSessions.size,
+        protectedResourceMetadata: prm,
+        authServerMetadata: asm,
+        checks: {
+          mcpEnabled: cfg.enabled ? 'PASS' : 'FAIL — enable MCP in settings',
+          httpsActive: hasTls ? 'PASS' : 'FAIL — no TLS certificates found, OAuth requires HTTPS',
+          registrationEndpoint: 'PASS — /oauth/register available',
+          discoveryEndpoints: 'PASS — /.well-known/oauth-protected-resource/mcp and /.well-known/oauth-authorization-server available'
+        },
+        hint: !hasTls
+          ? 'Claude Desktop requires HTTPS. Configure Let\'s Encrypt via DuckDNS or add TLS certificates.'
+          : autoClients.length === 0
+            ? 'No auto-registered clients yet. Claude Desktop will auto-register when it connects. Make sure the connector URL is reachable from your machine.'
+            : 'Server looks configured correctly. If Claude still fails, check: 1) DuckDNS domain resolves to this server, 2) Port is reachable, 3) No firewall blocking.'
+      };
+      jsonOk(res, diag);
     } catch (err) {
       safeErr(res, err);
     }
