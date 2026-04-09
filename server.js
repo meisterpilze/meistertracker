@@ -1063,19 +1063,30 @@ function extractBasicAuthUsername(req) {
   return idx >= 0 ? decoded.slice(0, idx) : null;
 }
 
-// Check CalDAV basic auth against user accounts
+// Check CalDAV basic auth against user accounts.
+// Handles charset mismatches: iOS/Safari may send Basic Auth as ISO-8859-1
+// (latin1) when the WWW-Authenticate header lacks charset="UTF-8".
+// Also tries case-insensitive username lookup as fallback.
 function checkCaldavAuth(req) {
   const authHeader = req.headers['authorization'] || '';
   if (!authHeader.startsWith('Basic ')) return false;
-  const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
-  const idx = decoded.indexOf(':');
-  if (idx < 0) return false;
-  const user = decoded.slice(0, idx);
-  const pass = decoded.slice(idx + 1);
-  const account = db.getUserByUsername(database, user);
-  if (!account) return false;
-  if (!db.verifyPassword(account.hash, account.salt, pass)) return false;
-  return account; // Return user object so handler knows who is authenticated
+  const raw = Buffer.from(authHeader.slice(6), 'base64');
+
+  // Try UTF-8 first (standard), then latin1 (legacy Basic Auth default per RFC 2617)
+  for (const encoding of ['utf8', 'latin1']) {
+    const decoded = raw.toString(encoding);
+    const idx = decoded.indexOf(':');
+    if (idx < 0) continue;
+    const user = decoded.slice(0, idx);
+    const pass = decoded.slice(idx + 1);
+
+    // Try exact username match, then case-insensitive fallback
+    const account = db.getUserByUsername(database, user)
+      || db.getUserByUsernameCaseInsensitive(database, user);
+    if (!account) continue;
+    if (db.verifyPassword(account.hash, account.salt, pass)) return account;
+  }
+  return false;
 }
 
 // ── CalDAV category calendars with colors matching web calendar ──
@@ -1899,7 +1910,7 @@ function handleCaldav(req, res) {
       recordLoginFailure(caldavUserKey + '@' + caldavIP);
       recordLoginFailurePerUser(caldavUserKey);
     }
-    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Meisterpilze CalDAV"' });
+    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Meisterpilze CalDAV", charset="UTF-8"' });
     res.end('Unauthorized');
     return;
   }
@@ -2039,6 +2050,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
         <d:displayname>Calendars</d:displayname>
+        <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -2936,8 +2948,10 @@ function handleRequest(req, res) {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   // ── Well-known CalDAV discovery (RFC 6764) ──
+  // Use 308 (Permanent Redirect) instead of 301 so that iOS/CalDAV clients
+  // preserve the PROPFIND method across the redirect (301 allows changing to GET).
   if (req.url.startsWith('/.well-known/caldav')) {
-    res.writeHead(301, { Location: '/caldav/' });
+    res.writeHead(308, { Location: '/caldav/' });
     res.end();
     return;
   }
