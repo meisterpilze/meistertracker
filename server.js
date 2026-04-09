@@ -217,12 +217,15 @@ function formBody(req, res, cb) {
   });
   req.on('end', () => {
     if (aborted) return;
+    let parsed;
     try {
       const params = new URLSearchParams(body);
-      cb(null, Object.fromEntries(params.entries()));
+      parsed = Object.fromEntries(params.entries());
     } catch (e) {
       jsonErr(res, 400, 'bad form data');
+      return;
     }
+    cb(null, parsed);
   });
 }
 
@@ -3194,6 +3197,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (!authUser) { jsonErr(res, 401, 'unauthorized'); return; }
         formBody(req, res, (e, data) => {
           if (e) return;
+          try {
           const redirectUri = data.redirect_uri || '';
           const state = data.state || '';
 
@@ -3227,6 +3231,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           const sep = redirectUri.includes('?') ? '&' : '?';
           res.writeHead(302, { Location: redirectUri + sep + 'code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '') });
           res.end();
+          } catch (err) {
+            log('error', 'OAuth authorize POST failed', { error: err.message });
+            safeErr(res, err);
+          }
         });
         return;
       }
