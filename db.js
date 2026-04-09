@@ -1340,8 +1340,11 @@ function insertHarvest(db, h) {
 
 // -- Cultures --
 function insertCultures(db, cultures) {
+  if (!cultures.length) return;
   const ins = db.prepare(
-    'INSERT INTO cultures(id,type,species,strain,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?)'
+    `INSERT INTO cultures(id,type,species,strain,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain,
+       parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created`
   );
   for (const c of cultures) {
     ins.run(
