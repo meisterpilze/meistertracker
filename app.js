@@ -662,6 +662,7 @@ const LANG = {
     'mcp.activeSessions': 'Sessions',
     'mcp.deleteClient': 'Delete',
     'mcp.confirmDelete': 'Delete this client? All its active sessions will be revoked.',
+    'mcp.confirmDeleteAuto': 'Revoke this auto-registered client? Claude will register a new client on its next connection.',
     'mcp.clientCreated': 'Client created. Copy the credentials now!',
     'mcp.clientDeleted': 'Client deleted.',
     'mcp.clientNameRequired': 'Please enter a client name.',
@@ -1413,6 +1414,7 @@ const LANG = {
     'mcp.activeSessions': 'Sitzungen',
     'mcp.deleteClient': 'Löschen',
     'mcp.confirmDelete': 'Diesen Client löschen? Alle aktiven Sitzungen werden widerrufen.',
+    'mcp.confirmDeleteAuto': 'Diesen auto-registrierten Client widerrufen? Claude registriert sich bei der nächsten Verbindung erneut.',
     'mcp.clientCreated': 'Client erstellt. Jetzt Zugangsdaten kopieren!',
     'mcp.clientDeleted': 'Client gelöscht.',
     'mcp.clientNameRequired': 'Bitte einen Client-Namen eingeben.',
@@ -2163,6 +2165,7 @@ const LANG = {
     'mcp.activeSessions': 'Sessões',
     'mcp.deleteClient': 'Excluir',
     'mcp.confirmDelete': 'Excluir este cliente? Todas as sessões ativas serão revogadas.',
+    'mcp.confirmDeleteAuto': 'Revogar este cliente auto-registrado? O Claude registrará um novo cliente na próxima conexão.',
     'mcp.clientCreated': 'Cliente criado. Copie as credenciais agora!',
     'mcp.clientDeleted': 'Cliente excluído.',
     'mcp.clientNameRequired': 'Por favor, insira um nome de cliente.',
@@ -3732,7 +3735,7 @@ async function loadOAuthClients(){
           '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
           '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
           '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\')">'+t('mcp.deleteClient')+'</button></td></tr>';
+          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:#b91c1c" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\','+c.autoRegistered+')">'+t('mcp.deleteClient')+'</button></td></tr>';
       }).join('')+
       '</tbody></table>';
   }catch(e){console.error('loadOAuthClients:',e)}
@@ -3755,8 +3758,8 @@ async function createOAuthClient(){
     loadOAuthClients();
   }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'#b91c1c')}
 }
-async function deleteOAuthClient(clientId){
-  if(!confirm(t('mcp.confirmDelete')))return;
+async function deleteOAuthClient(clientId,isAuto){
+  if(!confirm(isAuto?t('mcp.confirmDeleteAuto'):t('mcp.confirmDelete')))return;
   try{
     const r=await authFetch('/api/mcp/oauth-clients/'+encodeURIComponent(clientId),{method:'DELETE'});
     const data=await r.json();
