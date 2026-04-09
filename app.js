@@ -5142,7 +5142,19 @@ function processScan(raw){
     sessionEntries.push(entry);
     if(scanChannel)scanChannel.postMessage({type:'scan-entry',entry:{bag:entry.bag,batch:entry.batch,action:entry.action,to:entry.to}});
     scan.count++;
-    apiPost('/api/scan-log',{entries:[entry]}).then(r=>{if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
+    apiPost('/api/scan-log',{entries:[entry]}).then(function(r){
+      if(r&&r.ids&&r.ids[0]){entry._serverId=r.ids[0];return}
+      if(r&&r.error){
+        // Retry once after 3s on server error
+        console.warn('Scan log POST failed, retrying:',r.error);
+        setTimeout(function(){
+          apiPost('/api/scan-log',{entries:[entry]}).then(function(r2){
+            if(r2&&r2.ids&&r2.ids[0])entry._serverId=r2.ids[0];
+            else if(r2&&r2.error)setFb('err','Scan gespeichert lokal, Server-Sync fehlgeschlagen: '+r2.error);
+          });
+        },3000);
+      }
+    });
     _lastScanVal=isBag?val:batchId;
     setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:scan.to?' \u2192 '+scan.to:'',n:scan.count}),entry);
     updateSD();return;
