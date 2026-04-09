@@ -1133,6 +1133,10 @@ function getUserByUsername(db, username) {
   return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
 }
 
+function getUserByUsernameCaseInsensitive(db, username) {
+  return db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
+}
+
 function verifyPassword(storedHash, salt, password) {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   return crypto.timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hash, 'hex'));
@@ -2039,6 +2043,7 @@ module.exports = {
   updateTaskDueDate,
   createUser,
   getUserByUsername,
+  getUserByUsernameCaseInsensitive,
   verifyPassword,
   createSession,
   getSession,
