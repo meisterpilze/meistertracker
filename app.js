@@ -4836,8 +4836,9 @@ function spAbbrev(species){
 // Calculate Code 128 module width + centered x-offset for ZPL labels.
 // Label is 400 dots wide; need 20-dot quiet zone each side → 360 usable dots.
 // Code 128 symbol ≈ (35 + chars*11) modules. Use mw=2 if it fits, else mw=1.
-// Returns {mw, x} where x centers the barcode horizontally (min 20 for quiet zone).
-function bcParams(val){const mods=35+val.length*11;const mw=mods*2<=360?2:1;const w=mods*mw;return{mw,x:Math.max(20,Math.round((400-w)/2))}}
+// Returns {mw, x} where x centers the barcode horizontally with minimum quiet zones.
+// Code 128 quiet zone = 10× module width. Try mw=3, then 2, then 1.
+function bcParams(val){const mods=35+val.length*11;let mw=3;const qz=m=>m*10;while(mw>1&&mods*mw+2*qz(mw)>400)mw--;const w=mods*mw;return{mw,x:Math.max(qz(mw),Math.round((400-w)/2))}}
 
 function makeBagZPL(bags,batch,mode){
   return bags.map(bagId=>{
@@ -4856,8 +4857,12 @@ function makeBagZPL(bags,batch,mode){
       bcVal=bagId.replace(/-/g,'_');
     }
     const bc=bcParams(bcVal);
-    z+='^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
-    z+='^FO0,120^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
+    // Maximize barcode: taller height, reduced top margin based on mode
+    const bcY=mode==='date'?10:mode==='full'?12:16;
+    const bcH=mode==='date'?100:mode==='full'?110:130;
+    z+='^FO'+bc.x+','+bcY+'^BY'+bc.mw+',2.0,'+bcH+'^BCN,'+bcH+',N,N,N^FD'+bcVal+'^FS';
+    const idY=bcY+bcH+6;
+    z+='^FO0,'+idY+'^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
     if(mode==='full'||mode==='date'){
       // Strain + substrate on one line
       let infoLine=batch.strain||'';
@@ -4868,12 +4873,12 @@ function makeBagZPL(bags,batch,mode){
         const subStr=(hw?'HW'+hw+'%':'')+( wb?' WB'+wb+'%':'')+( rh?' RH'+rh+'%':'');
         if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
       }
-      if(infoLine) z+='^FO0,166^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
+      if(infoLine) z+='^FO0,'+(idY+42)+'^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
     }
     if(mode==='date'){
       const due=new Date(batch.due);
       const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-      z+='^FO0,200^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
+      z+='^FO0,'+(idY+72)+'^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
     }
     z+='^XZ';
     return z;
@@ -4888,12 +4893,17 @@ function makeLabZPL(ids,opts){
     const bcVal=id.replace(/-/g,'_');
     let z='^XA^PW400^LL240^CI28^LH0,0';
     const bc=bcParams(bcVal);
-    if(opts.bc)z+='^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS';
-    z+='^FO0,120^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';
-    if(opts.sp&&sp)z+='^FO0,156^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';
-    if(opts.par&&c.parentId)z+='^FO0,182^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';
-    if(opts.dt)z+='^FO0,204^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';
-    if(opts.qr)z+='^FO272,40^BQN,2,3^FDMM,A'+id+'^FS';
+    // Calculate how many text lines we need below the barcode
+    const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
+    const bcH=lines>=3?90:lines>=2?100:lines>=1?110:130;
+    const bcY=12;
+    if(opts.bc)z+='^FO'+bc.x+','+bcY+'^BY'+bc.mw+',2.0,'+bcH+'^BCN,'+bcH+',N,N,N^FD'+bcVal+'^FS';
+    let ty=opts.bc?bcY+bcH+6:12;
+    z+='^FO0,'+ty+'^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';ty+=34;
+    if(opts.sp&&sp){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';ty+=26}
+    if(opts.par&&c.parentId){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';ty+=22}
+    if(opts.dt){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';ty+=22}
+    if(opts.qr)z+='^FO'+Math.max(272,400-120)+','+(bcY)+'^BQN,2,4^FDMM,A'+id+'^FS';
     return z+'^XZ';
   }).filter(Boolean).join('\n');
 }
@@ -4950,13 +4960,13 @@ async function sendToPrinter(zpl){
 
 function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
 
-function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview'),mode=document.getElementById('print-mode').value;if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px;text-align:center;background:#fff;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';cell.appendChild(svg);const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap';idEl.textContent=bagId;cell.appendChild(idEl);if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='font-size:7px;color:#999;white-space:nowrap';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:1.4,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview'),mode=document.getElementById('print-mode').value;if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:5px;padding:4px 6px;text-align:center;background:#fff;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;aspect-ratio:5/3';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');const bcH=mode==='date'?42:mode==='full'?46:54;svg.style.cssText='display:block;width:100%;height:'+bcH+'px;flex-shrink:0';cell.appendChild(svg);const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap';idEl.textContent=bagId;cell.appendChild(idEl);if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='font-size:7px;color:#999;white-space:nowrap';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:2,height:bcH,displayValue:false,margin:4,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:#888">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:#aaa;padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
-function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:2/1;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px';if(opts.bc){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;max-height:32px';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id.replace(/-/g,'_'),{format:'CODE128',width:1,height:24,displayValue:false,margin:2,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&(c.species||c.strain)){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=(c.species||'')+(c.strain?' / '+c.strain:'');left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='↑ '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=fmtDt(c.created);left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:44,height:44,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
+function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const sp=(c.species||'')+(c.strain?' / '+c.strain:'');const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);const cell=document.createElement('div');cell.style.cssText='border:1px solid #e5e3dd;border-radius:6px;padding:6px;background:#fff;aspect-ratio:5/3;overflow:hidden;display:flex;gap:4px';const left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;gap:2px';if(opts.bc){const bcH=lines>=3?38:lines>=2?42:lines>=1?46:54;const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block;width:100%;height:'+bcH+'px;flex-shrink:0';left.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,id.replace(/-/g,'_'),{format:'CODE128',width:2,height:bcH,displayValue:false,margin:4,background:'#fff',lineColor:'#000'})}catch{}},30+i*15)}const idEl=document.createElement('div');idEl.style.cssText='font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';idEl.textContent=id;left.appendChild(idEl);if(opts.sp&&sp){const e2=document.createElement('div');e2.style.cssText='font-size:8px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';e2.textContent=sp;left.appendChild(e2)}if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#888';e2.textContent='\u2191 '+c.parentId;left.appendChild(e2)}if(opts.dt){const e2=document.createElement('div');e2.style.cssText='font-size:7px;color:#aaa';e2.textContent=fmtDt(c.created);left.appendChild(e2)}cell.appendChild(left);if(opts.qr){const right=document.createElement('div');right.style.cssText='width:52px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:center;padding-top:2px';const qrdiv=document.createElement('div');right.appendChild(qrdiv);cell.appendChild(right);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:48,height:48,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
 
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
