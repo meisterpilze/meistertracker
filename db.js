@@ -1939,12 +1939,12 @@ function createOAuthClient(db, { clientName, redirectUris }) {
 }
 
 function listOAuthClients(db) {
-  const rows = db.prepare(`SELECT c.client_id, c.client_name, c.redirect_uris, c.created, c.revoked,
+  const rows = db.prepare(`SELECT c.client_id, c.client_name, c.redirect_uris, c.client_secret_hash, c.created,
     (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > datetime('now')) as active_sessions
-    FROM oauth_clients c ORDER BY c.created DESC`).all();
+    FROM oauth_clients c WHERE c.revoked = 0 ORDER BY c.created DESC`).all();
   return rows.map(r => ({
     clientId: r.client_id, clientName: r.client_name, redirectUris: JSON.parse(r.redirect_uris || '[]'),
-    created: r.created, revoked: r.revoked === 1, activeSessions: r.active_sessions
+    created: r.created, activeSessions: r.active_sessions, autoRegistered: !r.client_secret_hash
   }));
 }
 
