@@ -3023,9 +3023,9 @@ function renderDashBatchTasks(){
   const el=document.getElementById('dash-batch-tasks');
   if(!el)return;
   if(!tasks.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';return}
-  el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px">'
+  el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px;--sp-color:'+spColor(tk.species)+'">'
     +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
-    +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+spDot(tk.species)+esc(tk.text)+'</div>'
+    +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(tk.text)+'</div>'
     +'<div style="font-size:11px;color:#888;margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
     :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
 }
