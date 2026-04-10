@@ -297,17 +297,30 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       <span>Scan-Modus</span>
     </div>
-    <div class="scan-modal-body" id="scan-modal-body">
-    <div class="scan-modal-chips">
-      <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
-      <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
-      <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
-      <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-      <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
+    <div class="scan-modal-tabs" id="scan-modal-tabs" role="tablist">
+      <button type="button" class="scan-tab active" data-scan-tab="current" role="tab">Aktueller Scan</button>
+      <button type="button" class="scan-tab" data-scan-tab="successes" role="tab">Letzte Erfolge <span class="scan-tab-count" id="scan-tab-succ-count">0</span></button>
+      <button type="button" class="scan-tab" data-scan-tab="all" role="tab">Gesamt-Log</button>
     </div>
-    <div id="scan-toast" class="scan-toast-inline"></div>
-    <div class="scan-modal-log" id="scan-modal-log"></div>
-    <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
+    <div class="scan-modal-body" id="scan-modal-body">
+    <div class="scan-tab-panel active" data-scan-panel="current">
+      <div class="scan-modal-chips">
+        <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+        <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+        <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+        <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
+        <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
+      </div>
+      <div id="scan-toast" class="scan-toast-inline"></div>
+      <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
+    </div>
+    <div class="scan-tab-panel" data-scan-panel="successes">
+      <div class="scan-successes-empty" id="scan-successes-empty">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
+      <div class="scan-successes-list" id="scan-successes-list"></div>
+    </div>
+    <div class="scan-tab-panel" data-scan-panel="all">
+      <div class="scan-modal-log" id="scan-modal-log"></div>
+    </div>
     </div>
     <div class="scan-modal-btns">
       <button id="set-19" class="btn-xs" data-i18n="scan.reset">Reset</button>
