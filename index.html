@@ -612,16 +612,12 @@
                 <option value="G2G" data-i18n="lab.g2g">Grain-to-grain (G2G)</option>
               </select>
             </div>
-            <div><label data-i18n="th.species">Species</label>
-              <input type="text" id="lw-sp" placeholder="e.g. Kings" list="sp-list" />
-              <datalist id="sp-list"></datalist>
+            <div>
+              <label data-i18n="strains.pilzsorte">Pilzsorte</label>
+              <select id="lw-st" required>
+                <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
+              </select>
             </div>
-          </div>
-          <div>
-            <label data-i18n="strains.pilzsorte">Pilzsorte</label>
-            <select id="lw-st">
-              <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
-            </select>
           </div>
           <div id="lw-parent-row">
             <label id="lw-parent-lbl" data-i18n="lab.parentCulture">Parent culture</label>
