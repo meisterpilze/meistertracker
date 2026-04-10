@@ -1988,6 +1988,8 @@ function handleCaldav(req, res) {
   req.on('data', (c) => {
     bodySize += c.length;
     if (bodySize > MAX_BODY_SIZE) {
+      res.writeHead(413, { 'Content-Type': 'text/plain' });
+      res.end('Request body too large');
       req.destroy();
       return;
     }
@@ -2695,7 +2697,7 @@ function handleGet(parts, req, res) {
       return;
     }
     const content = fs.readFileSync(filePath, 'utf8');
-    const etag = getEtag(calName, parts[2]);
+    const etag = getEtag(parts[1], parts[2]);
     res.writeHead(200, {
       'Content-Type': 'text/calendar; charset=utf-8',
       ETag: etag
