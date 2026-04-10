@@ -803,6 +803,92 @@ const LANG = {
     'zones.capacity': 'Max. capacity (bags)',
     'zones.errCapacity': 'Capacity must be a positive number',
     'scanFb.preferRack': '⚠ "{loc}" is a zone — scan a rack for precise tracking (e.g. {example})',
+    // Calendar entry modal
+    'calEntry.titleNew': 'New entry',
+    'calEntry.titleEdit': 'Edit entry',
+    'calEntry.name': 'Title',
+    'calEntry.namePhTask': 'e.g. Clean humidity tent',
+    'calEntry.namePhEvent': 'e.g. Team meeting',
+    'calEntry.category': 'Category',
+    'calEntry.cat.task': 'Task',
+    'calEntry.cat.custom': 'Custom event',
+    'calEntry.cat.meeting': 'Meeting',
+    'calEntry.cat.delivery': 'Delivery',
+    'calEntry.cat.maintenance': 'Maintenance',
+    'calEntry.prio': 'Priority',
+    'calEntry.prio.low': 'Low',
+    'calEntry.prio.med': 'Medium',
+    'calEntry.prio.high': 'High',
+    'calEntry.date': 'Date',
+    'calEntry.endDate': 'Until (optional)',
+    'calEntry.allDay': 'All day',
+    'calEntry.from': 'From',
+    'calEntry.to': 'To',
+    'calEntry.recurrence': 'Repeat',
+    'calEntry.rec.none': 'None',
+    'calEntry.rec.daily': 'Daily',
+    'calEntry.rec.weekly': 'Weekly',
+    'calEntry.rec.monthly': 'Monthly',
+    'calEntry.recurrenceUntil': 'Repeat until (optional)',
+    'calEntry.desc': 'Description (optional)',
+    'calEntry.descPh': 'Details...',
+    'calEntry.assignTo': 'Assign to',
+    'calEntry.assignTo.all': 'Everyone (company)',
+    'calEntry.assignedTo': 'Assigned to',
+    'calEntry.allClickToSelect': 'Everyone (click to select)',
+    'calEntry.noMembers': 'No team members yet. Add them in the Team tab first.',
+    'calEntry.private': 'Only visible to the assigned person',
+    'calEntry.cancel': 'Cancel',
+    'calEntry.save': 'Save',
+    'calEntry.delete': 'Delete',
+    'calEntry.deleteTask': 'Delete task?',
+    'calEntry.deleteEvent': 'Delete event?',
+    'calEntry.deleteTaskMsg': 'This task will be permanently removed.',
+    'calEntry.deleteEventMsg': 'This event will be permanently removed.',
+    // Calendar views
+    'cal.allDay': 'All day',
+    'cal.allDayShort': 'All-d.',
+    'cal.noAllDay': 'No all-day events',
+    'cal.more': 'more',
+    'cal.title': 'Calendar',
+    'cal.monthView': 'Month view',
+    'cal.weekView': 'Week view',
+    'cal.dayView': 'Day view',
+    'cal.printed': 'printed on',
+    'cal.legend.batches': 'Due dates',
+    'cal.legend.tasks': 'Tasks',
+    'cal.legend.harvests': 'Harvests',
+    'cal.legend.custom': 'Custom events',
+    'cal.legend.meetings': 'Meetings',
+    'cal.legend.deliveries': 'Deliveries',
+    'cal.legend.maintenance': 'Maintenance',
+    'cal.legend.external': 'External events',
+    'cal.days': 'Mo,Tu,We,Th,Fr,Sa,Su',
+    'cal.months': 'January,February,March,April,May,June,July,August,September,October,November,December',
+    'calEntry.moveTitle': 'Move entry',
+    'calDetail.close': 'Close',
+    'calDetail.edit': 'Edit',
+    'calDetail.assignedTo': 'Assigned to',
+    'calDetail.everyone': 'Everyone',
+    'calDetail.taskDue': 'Task',
+    'calDetail.dueLabel': 'Due',
+    'calDetail.markDone': 'Mark as done',
+    'calDetail.markUndone': 'Mark as not done',
+    'calDetail.batchDue': 'Batch due',
+    'calDetail.harvest': 'Harvest',
+    'calDetail.external': 'External event',
+    'calEntry.until': 'until',
+    'cal.monthShort': 'Month',
+    'cal.weekShort': 'Week',
+    'cal.dayShort': 'Day',
+    'cal.printTitle': 'Print calendar',
+    'cal.newEntry': '+ New',
+    'cal.taskListTitle': 'Task list',
+    'cal.entries': 'entries',
+    'cal.noTasks': 'no tasks',
+    'cal.printChooseRange': 'Choose the range for the task list:',
+    'cal.printWeek': 'Week — task list for the current week',
+    'cal.printMonth': 'Month — task list for the current month',
   },
   de: {
     // Nav
@@ -1577,6 +1663,92 @@ const LANG = {
     'zones.capacity': 'Max. Kapazität (Bags)',
     'zones.errCapacity': 'Kapazität muss eine positive Zahl sein',
     'scanFb.preferRack': '⚠ „{loc}" ist eine Zone — scanne ein Rack für genaues Tracking (z.B. {example})',
+    // Calendar entry modal
+    'calEntry.titleNew': 'Neuer Eintrag',
+    'calEntry.titleEdit': 'Eintrag bearbeiten',
+    'calEntry.name': 'Titel',
+    'calEntry.namePhTask': 'z.B. Luftfeuchtezelt reinigen',
+    'calEntry.namePhEvent': 'z.B. Team-Meeting',
+    'calEntry.category': 'Kategorie',
+    'calEntry.cat.task': 'Aufgabe',
+    'calEntry.cat.custom': 'Eigener Termin',
+    'calEntry.cat.meeting': 'Meeting',
+    'calEntry.cat.delivery': 'Lieferung',
+    'calEntry.cat.maintenance': 'Wartung',
+    'calEntry.prio': 'Priorität',
+    'calEntry.prio.low': 'Niedrig',
+    'calEntry.prio.med': 'Mittel',
+    'calEntry.prio.high': 'Hoch',
+    'calEntry.date': 'Datum',
+    'calEntry.endDate': 'Bis (optional)',
+    'calEntry.allDay': 'Ganztägig',
+    'calEntry.from': 'Von',
+    'calEntry.to': 'Bis',
+    'calEntry.recurrence': 'Wiederholung',
+    'calEntry.rec.none': 'Keine',
+    'calEntry.rec.daily': 'Täglich',
+    'calEntry.rec.weekly': 'Wöchentlich',
+    'calEntry.rec.monthly': 'Monatlich',
+    'calEntry.recurrenceUntil': 'Wiederholen bis (optional)',
+    'calEntry.desc': 'Beschreibung (optional)',
+    'calEntry.descPh': 'Details...',
+    'calEntry.assignTo': 'Zuweisen an',
+    'calEntry.assignTo.all': 'Alle (Betrieb)',
+    'calEntry.assignedTo': 'Zugewiesen an',
+    'calEntry.allClickToSelect': 'Alle (klicken um auszuwählen)',
+    'calEntry.noMembers': 'Noch keine Teammitglieder. Zuerst im Team-Tab hinzufügen.',
+    'calEntry.private': 'Nur für zugewiesene Person sichtbar',
+    'calEntry.cancel': 'Abbrechen',
+    'calEntry.save': 'Speichern',
+    'calEntry.delete': 'Löschen',
+    'calEntry.deleteTask': 'Aufgabe löschen?',
+    'calEntry.deleteEvent': 'Event löschen?',
+    'calEntry.deleteTaskMsg': 'Diese Aufgabe wird unwiderruflich gelöscht.',
+    'calEntry.deleteEventMsg': 'Dieses Event wird unwiderruflich gelöscht.',
+    // Calendar views
+    'cal.allDay': 'Ganztägig',
+    'cal.allDayShort': 'Ganzt.',
+    'cal.noAllDay': 'Keine ganztägigen Events',
+    'cal.more': 'mehr',
+    'cal.title': 'Kalender',
+    'cal.monthView': 'Monatsansicht',
+    'cal.weekView': 'Wochenansicht',
+    'cal.dayView': 'Tagesansicht',
+    'cal.printed': 'gedruckt am',
+    'cal.legend.batches': 'Fälligkeiten',
+    'cal.legend.tasks': 'Aufgaben',
+    'cal.legend.harvests': 'Ernten',
+    'cal.legend.custom': 'Eigene Termine',
+    'cal.legend.meetings': 'Meetings',
+    'cal.legend.deliveries': 'Lieferungen',
+    'cal.legend.maintenance': 'Wartung',
+    'cal.legend.external': 'Externe Termine',
+    'cal.days': 'Mo,Di,Mi,Do,Fr,Sa,So',
+    'cal.months': 'Januar,Februar,März,April,Mai,Juni,Juli,August,September,Oktober,November,Dezember',
+    'calEntry.moveTitle': 'Eintrag verschieben',
+    'calDetail.close': 'Schließen',
+    'calDetail.edit': 'Bearbeiten',
+    'calDetail.assignedTo': 'Zugewiesen',
+    'calDetail.everyone': 'Alle',
+    'calDetail.taskDue': 'Aufgabe',
+    'calDetail.dueLabel': 'Fällig',
+    'calDetail.markDone': 'Als erledigt markieren',
+    'calDetail.markUndone': 'Als unerledigt markieren',
+    'calDetail.batchDue': 'Charge fällig',
+    'calDetail.harvest': 'Ernte',
+    'calDetail.external': 'Externer Termin',
+    'calEntry.until': 'bis',
+    'cal.monthShort': 'Monat',
+    'cal.weekShort': 'Woche',
+    'cal.dayShort': 'Tag',
+    'cal.printTitle': 'Kalender drucken',
+    'cal.newEntry': '+ Neu',
+    'cal.taskListTitle': 'Aufgabenliste',
+    'cal.entries': 'Einträge',
+    'cal.noTasks': 'keine Aufgaben',
+    'cal.printChooseRange': 'Wähle den Zeitraum für die Aufgabenliste:',
+    'cal.printWeek': 'Woche — Aufgabenliste der aktuellen Woche',
+    'cal.printMonth': 'Monat — Aufgabenliste des aktuellen Monats',
   },
   pt: {
     // Nav
@@ -2350,6 +2522,92 @@ const LANG = {
     'zones.capacity': 'Capacidade máx. (bags)',
     'zones.errCapacity': 'Capacidade deve ser um número positivo',
     'scanFb.preferRack': '⚠ "{loc}" é uma zona — escaneie um rack para rastreamento preciso (ex. {example})',
+    // Calendar entry modal
+    'calEntry.titleNew': 'Nova entrada',
+    'calEntry.titleEdit': 'Editar entrada',
+    'calEntry.name': 'Título',
+    'calEntry.namePhTask': 'ex. Limpar tenda de umidade',
+    'calEntry.namePhEvent': 'ex. Reunião da equipe',
+    'calEntry.category': 'Categoria',
+    'calEntry.cat.task': 'Tarefa',
+    'calEntry.cat.custom': 'Evento personalizado',
+    'calEntry.cat.meeting': 'Reunião',
+    'calEntry.cat.delivery': 'Entrega',
+    'calEntry.cat.maintenance': 'Manutenção',
+    'calEntry.prio': 'Prioridade',
+    'calEntry.prio.low': 'Baixa',
+    'calEntry.prio.med': 'Média',
+    'calEntry.prio.high': 'Alta',
+    'calEntry.date': 'Data',
+    'calEntry.endDate': 'Até (opcional)',
+    'calEntry.allDay': 'Dia inteiro',
+    'calEntry.from': 'De',
+    'calEntry.to': 'Até',
+    'calEntry.recurrence': 'Repetição',
+    'calEntry.rec.none': 'Nenhuma',
+    'calEntry.rec.daily': 'Diária',
+    'calEntry.rec.weekly': 'Semanal',
+    'calEntry.rec.monthly': 'Mensal',
+    'calEntry.recurrenceUntil': 'Repetir até (opcional)',
+    'calEntry.desc': 'Descrição (opcional)',
+    'calEntry.descPh': 'Detalhes...',
+    'calEntry.assignTo': 'Atribuir a',
+    'calEntry.assignTo.all': 'Todos (empresa)',
+    'calEntry.assignedTo': 'Atribuído a',
+    'calEntry.allClickToSelect': 'Todos (clique para selecionar)',
+    'calEntry.noMembers': 'Sem membros da equipe. Adicione na aba Equipe primeiro.',
+    'calEntry.private': 'Visível apenas para a pessoa atribuída',
+    'calEntry.cancel': 'Cancelar',
+    'calEntry.save': 'Salvar',
+    'calEntry.delete': 'Excluir',
+    'calEntry.deleteTask': 'Excluir tarefa?',
+    'calEntry.deleteEvent': 'Excluir evento?',
+    'calEntry.deleteTaskMsg': 'Esta tarefa será permanentemente removida.',
+    'calEntry.deleteEventMsg': 'Este evento será permanentemente removido.',
+    // Calendar views
+    'cal.allDay': 'Dia inteiro',
+    'cal.allDayShort': 'Dia int.',
+    'cal.noAllDay': 'Sem eventos de dia inteiro',
+    'cal.more': 'mais',
+    'cal.title': 'Calendário',
+    'cal.monthView': 'Vista mensal',
+    'cal.weekView': 'Vista semanal',
+    'cal.dayView': 'Vista diária',
+    'cal.printed': 'impresso em',
+    'cal.legend.batches': 'Vencimentos',
+    'cal.legend.tasks': 'Tarefas',
+    'cal.legend.harvests': 'Colheitas',
+    'cal.legend.custom': 'Eventos personalizados',
+    'cal.legend.meetings': 'Reuniões',
+    'cal.legend.deliveries': 'Entregas',
+    'cal.legend.maintenance': 'Manutenção',
+    'cal.legend.external': 'Eventos externos',
+    'cal.days': 'Seg,Ter,Qua,Qui,Sex,Sáb,Dom',
+    'cal.months': 'Janeiro,Fevereiro,Março,Abril,Maio,Junho,Julho,Agosto,Setembro,Outubro,Novembro,Dezembro',
+    'calEntry.moveTitle': 'Mover entrada',
+    'calDetail.close': 'Fechar',
+    'calDetail.edit': 'Editar',
+    'calDetail.assignedTo': 'Atribuído',
+    'calDetail.everyone': 'Todos',
+    'calDetail.taskDue': 'Tarefa',
+    'calDetail.dueLabel': 'Vencimento',
+    'calDetail.markDone': 'Marcar como concluída',
+    'calDetail.markUndone': 'Marcar como não concluída',
+    'calDetail.batchDue': 'Vencimento do lote',
+    'calDetail.harvest': 'Colheita',
+    'calDetail.external': 'Evento externo',
+    'calEntry.until': 'até',
+    'cal.monthShort': 'Mês',
+    'cal.weekShort': 'Semana',
+    'cal.dayShort': 'Dia',
+    'cal.printTitle': 'Imprimir calendário',
+    'cal.newEntry': '+ Novo',
+    'cal.taskListTitle': 'Lista de tarefas',
+    'cal.entries': 'entradas',
+    'cal.noTasks': 'sem tarefas',
+    'cal.printChooseRange': 'Escolha o período para a lista de tarefas:',
+    'cal.printWeek': 'Semana — lista de tarefas da semana atual',
+    'cal.printMonth': 'Mês — lista de tarefas do mês atual',
   }
 };
 
@@ -2382,7 +2640,7 @@ function rebuildZoneConstants(){
 
 // ─── DATA ────────────────────────────────────────────────────
 let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
-let appUsers=[];let calEvSelectedAssignees=[];
+let appUsers=[];let calEvSelectedAssignees=[];let calTaskSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
 let spMap={};
@@ -5985,8 +6243,8 @@ if(typeof calendarEvents==='undefined') var calendarEvents=[];
 if(typeof MS_PER_DAY==='undefined') var MS_PER_DAY=86400000;
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),calView='month';
 let calSelectedDate=new Date(),caldavImports=[];
-const CAL_DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
-const CAL_MONTHS=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function calDays(){return (t('cal.days')||'Mo,Di,Mi,Do,Fr,Sa,So').split(',')}
+function calMonths(){return (t('cal.months')||'Januar,Februar,März,April,Mai,Juni,Juli,August,September,Oktober,November,Dezember').split(',')}
 const CAL_HOURS_START=6,CAL_HOURS_END=22;
 
 function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
@@ -6027,6 +6285,29 @@ function expandRecurringEvent(ev){
   }
   return out;
 }
+function expandRecurringTaskDates(task){
+  const out=[];
+  const startStr=task.dueDate?task.dueDate.split('T')[0]:null;
+  if(!startStr)return out;
+  if(!task.recurrence){out.push(startStr);return out}
+  const {start:winStart,end:winEnd}=getCalendarRange();
+  const base=parseDateStr(startStr);
+  const hardEnd=task.recurrenceUntil?parseDateStr(task.recurrenceUntil):null;
+  let cur=new Date(base);
+  let guard=0;
+  while(guard++<500){
+    if(hardEnd&&cur>hardEnd)break;
+    if(cur>winEnd)break;
+    if(cur>=winStart||cur.getTime()===base.getTime()){
+      out.push(cur.toISOString().split('T')[0]);
+    }
+    if(task.recurrence==='daily')cur=addDays(cur,1);
+    else if(task.recurrence==='weekly')cur=addDays(cur,7);
+    else if(task.recurrence==='monthly')cur=addMonths(cur,1);
+    else break;
+  }
+  return out;
+}
 function collectCalendarEvents(){
   const events=[];
   batches.forEach(b=>{
@@ -6037,7 +6318,12 @@ function collectCalendarEvents(){
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
-    events.push({date:t.dueDate.split('T')[0],label:t.text,type:'task-due',id:t.created,draggable:!t.done,allDay:true,color:'#3b82f6'});
+    const dates=expandRecurringTaskDates(t);
+    dates.forEach((ds,idx)=>{
+      // Only the base occurrence is draggable; recurring instances are locked
+      const isBase=idx===0&&ds===t.dueDate.split('T')[0];
+      events.push({date:ds,label:t.text,type:'task-due',id:t.created,draggable:!t.done&&!t.recurrence&&isBase,allDay:true,color:'#3b82f6',recurrence:t.recurrence||null});
+    });
   });
   harvests.forEach(h=>{
     if(!h.time)return;
@@ -6091,17 +6377,19 @@ function printCalendarTaskList(range){
   const sheet=document.getElementById('print-sheet');
   if(!sheet)return;
 
+  const MONTHS=calMonths(),DAYS=calDays();
+
   // Determine date range
   let startDate,endDate,rangeLabel;
   if(range==='week'){
     startDate=getWeekStart(calSelectedDate);
     endDate=new Date(startDate);endDate.setDate(startDate.getDate()+6);
     const sameMonth=startDate.getMonth()===endDate.getMonth();
-    rangeLabel='Woche: '+startDate.getDate()+'. '+(sameMonth?'':CAL_MONTHS[startDate.getMonth()]+' ')+'– '+endDate.getDate()+'. '+CAL_MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
+    rangeLabel=t('cal.weekShort')+': '+startDate.getDate()+'. '+(sameMonth?'':MONTHS[startDate.getMonth()]+' ')+'– '+endDate.getDate()+'. '+MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
   }else{
     startDate=new Date(calYear,calMonth,1);
     endDate=new Date(calYear,calMonth+1,0);
-    rangeLabel='Monat: '+CAL_MONTHS[calMonth]+' '+calYear;
+    rangeLabel=t('cal.monthShort')+': '+MONTHS[calMonth]+' '+calYear;
   }
 
   // Collect and filter events in range
@@ -6116,18 +6404,18 @@ function printCalendarTaskList(range){
 
   // Type label map
   const typeLabels={
-    'batch-due':'Fälligkeit',
-    'task-due':'Aufgabe',
-    'harvest':'Ernte',
-    'custom':'Termin',
-    'caldav-import':'Extern'
+    'batch-due':t('cal.legend.batches'),
+    'task-due':t('calDetail.taskDue'),
+    'harvest':t('cal.legend.harvests'),
+    'custom':t('calEntry.cat.custom'),
+    'caldav-import':t('calDetail.external')
   };
 
   // Build day list
   const days=[];
   for(let d=new Date(startDate);d<=endDate;d.setDate(d.getDate()+1)){
     const ds=fmtDate(d.getFullYear(),d.getMonth(),d.getDate());
-    const dayName=CAL_DAYS[(d.getDay()+6)%7];
+    const dayName=DAYS[(d.getDay()+6)%7];
     const dayEvents=(byDate[ds]||[]).slice().sort((a,b)=>{
       if(a.allDay&&!b.allDay)return -1;
       if(!a.allDay&&b.allDay)return 1;
@@ -6142,13 +6430,13 @@ function printCalendarTaskList(range){
   days.forEach(day=>{
     const isToday=day.ds===todayStr;
     bodyHtml+='<div class="cal-print-day'+(isToday?' today':'')+'">';
-    bodyHtml+='<div class="cal-print-day-hdr">'+day.dayName+', '+day.date.getDate()+'. '+CAL_MONTHS[day.date.getMonth()]+' '+day.date.getFullYear()+'</div>';
+    bodyHtml+='<div class="cal-print-day-hdr">'+day.dayName+', '+day.date.getDate()+'. '+MONTHS[day.date.getMonth()]+' '+day.date.getFullYear()+'</div>';
     if(day.events.length===0){
-      bodyHtml+='<div class="cal-print-empty">— keine Aufgaben —</div>';
+      bodyHtml+='<div class="cal-print-empty">— '+t('cal.noTasks')+' —</div>';
     }else{
       bodyHtml+='<ul class="cal-print-list">';
       day.events.forEach(e=>{
-        const time=e.allDay?'Ganztägig':((e.startTime||'')+(e.endTime?' – '+e.endTime:''));
+        const time=e.allDay?t('cal.allDay'):((e.startTime||'')+(e.endTime?' – '+e.endTime:''));
         const typeLbl=typeLabels[e.type]||'';
         const dotColor=safeColor(e.color||'#64748b');
         const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-print-assignees">('+e.assignees.map(a=>esc(a.username)).join(', ')+')</span>':'';
@@ -6168,9 +6456,9 @@ function printCalendarTaskList(range){
   const totalEvents=eventsInRange.length;
   sheet.innerHTML='<div class="cal-print-page cal-print-tasklist">'+
     '<div class="cal-print-header">'+
-      '<div style="font-size:20px;font-weight:800;color:#111">Aufgabenliste</div>'+
-      '<div style="font-size:13px;color:#444;margin-top:2px">'+rangeLabel+'</div>'+
-      '<div style="font-size:11px;color:#666;margin-top:2px">'+totalEvents+' Einträge — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
+      '<div style="font-size:20px;font-weight:800;color:#111">'+esc(t('cal.taskListTitle'))+'</div>'+
+      '<div style="font-size:13px;color:#444;margin-top:2px">'+esc(rangeLabel)+'</div>'+
+      '<div style="font-size:11px;color:#666;margin-top:2px">'+totalEvents+' '+t('cal.entries')+' — '+t('cal.printed')+' '+new Date().toLocaleDateString(loc())+'</div>'+
     '</div>'+
     '<div class="cal-print-body">'+bodyHtml+'</div>'+
   '</div>';
@@ -6183,7 +6471,8 @@ function printCalendarTaskList(range){
 function renderCalMonth(){
   const container=document.getElementById('cal-container');
   const title=document.getElementById('cal-title');
-  title.textContent=CAL_MONTHS[calMonth]+' '+calYear;
+  const months=calMonths(),days2=calDays();
+  title.textContent=months[calMonth]+' '+calYear;
   const firstDay=new Date(calYear,calMonth,1);
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
   let startDow=(firstDay.getDay()+6)%7;
@@ -6195,7 +6484,7 @@ function renderCalMonth(){
   const trailing=rows*7-totalCells;
 
   let html='<div class="cal-grid" id="cal-grid">';
-  html+=CAL_DAYS.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
+  html+=days2.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
 
   function eventsForDate(ds){
     const de=events.filter(e=>e.date===ds);
@@ -6208,7 +6497,7 @@ function renderCalMonth(){
       const dot=e.species?spDot(e.species):'';
       return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
-    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' mehr</div>';
+    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
     return o;
   }
 
@@ -6241,15 +6530,16 @@ function renderCalWeek(){
   const days=[];
   for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);days.push(d)}
   const todayStr=new Date().toISOString().split('T')[0];
-  title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?CAL_MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+CAL_MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+CAL_MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
+  const MONTHS=calMonths(),DAYS=calDays();
+  title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
   const events=collectCalendarEvents();
   const dayStrs=days.map(d=>d.toISOString().split('T')[0]);
 
   let html='<div class="cal-week">';
   html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
-  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'" onclick="calGotoDay(\''+ds+'\')">'+CAL_DAYS[i]+'<span class="wk-day-num">'+d.getDate()+'</span></div>'});
+  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'" onclick="calGotoDay(\''+ds+'\')">'+DAYS[i]+'<span class="wk-day-num">'+d.getDate()+'</span></div>'});
   html+='</div>';
-  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">Ganzt.</div>';
+  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">'+t('cal.allDayShort')+'</div>';
   days.forEach((d,i)=>{
     const ds=dayStrs[i];
     const de=events.filter(e=>e.date===ds&&e.allDay);
@@ -6329,15 +6619,16 @@ function renderCalDay(){
   const title=document.getElementById('cal-title');
   const d=calSelectedDate;
   const ds=d.toISOString().split('T')[0];
-  const dayName=CAL_DAYS[(d.getDay()+6)%7];
-  title.textContent=dayName+', '+d.getDate()+'. '+CAL_MONTHS[d.getMonth()]+' '+d.getFullYear();
+  const DAYS=calDays(),MONTHS=calMonths();
+  const dayName=DAYS[(d.getDay()+6)%7];
+  title.textContent=dayName+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
   const events=collectCalendarEvents();
   const dayEvents=events.filter(e=>e.date===ds);
   const allDay=dayEvents.filter(e=>e.allDay);
   const timed=dayEvents.filter(e=>!e.allDay&&e.startTime);
 
   let html='<div class="cal-day-view">';
-  html+='<div class="cal-day-allday"><div class="sec">Ganztägig</div>';
+  html+='<div class="cal-day-allday"><div class="sec">'+t('cal.allDay')+'</div>';
   if(allDay.length){
     allDay.forEach(e=>{
       const cls=e.draggable?'cal-event':'cal-event no-drag';
@@ -6345,7 +6636,7 @@ function renderCalDay(){
       const dot=e.species?spDot(e.species):'';
       html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
     });
-  }else{html+='<div class="cal-day-allday-empty">Keine ganztägigen Events</div>'}
+  }else{html+='<div class="cal-day-allday-empty">'+t('cal.noAllDay')+'</div>'}
   html+='</div>';
   html+='<div class="cal-day-body">';
   for(let h=CAL_HOURS_START;h<=CAL_HOURS_END;h++){
@@ -6613,59 +6904,64 @@ function openEventDetail(ev){
     const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
     titleEl.textContent=ce.title;
     const occDate=ev.date||ce.startDate;
-    let meta=new Date(occDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    let meta=new Date(occDate).toLocaleDateString(loc(),{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
-    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' '+t('calEntry.until')+' '+new Date(ce.endDate).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    const catLabels={custom:'Eigener Termin',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
-    const recLabels={daily:'Täglich',weekly:'Wöchentlich',monthly:'Monatlich'};
+    const catLabels={custom:t('calEntry.cat.custom'),meeting:t('calEntry.cat.meeting'),delivery:t('calEntry.cat.delivery'),maintenance:t('calEntry.cat.maintenance')};
+    const recLabels={daily:t('calEntry.rec.daily'),weekly:t('calEntry.rec.weekly'),monthly:t('calEntry.rec.monthly')};
     let badges='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(CATEGORY_COLORS[ce.category]||safeColor(ce.color))+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
     if(ce.recurrence)badges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 '+esc(recLabels[ce.recurrence]||ce.recurrence)+'</span>';
     badgesEl.innerHTML=badges;
     const teamList=Array.isArray(ce.teamAssignees)?ce.teamAssignees:[];
-    assignEl.innerHTML=teamList.length?'Zugewiesen: <strong>'+teamList.map(n=>esc(n)).join(', ')+'</strong>':'Zugewiesen: <strong>Alle</strong>';
+    assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(teamList.length?teamList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='task-due'){
-    const t=manualTasks.find(x=>x.created===ev.id);if(!t)return;
-    titleEl.textContent=t.text;
-    let meta='Aufgabe';
-    if(t.dueDate)meta+=' — Fällig: '+new Date(t.dueDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    const tk=manualTasks.find(x=>x.created===ev.id);if(!tk)return;
+    titleEl.textContent=tk.text;
+    let meta=t('calDetail.taskDue');
+    if(tk.dueDate)meta+=' — '+t('calDetail.dueLabel')+': '+new Date(tk.dueDate).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    const prioLabels={high:'Hoch',medium:'Mittel',low:'Niedrig'};
-    const prioColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">Aufgabe</span>'+(t.priority?'<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[t.priority]||'#888')+';color:#fff">'+esc(prioLabels[t.priority]||t.priority)+'</span>':'');
-    assignEl.innerHTML=t.assignee?'Zugewiesen: <strong>'+esc(t.assignee)+'</strong>':'Zugewiesen: <strong>Alle</strong>';
-    descEl.textContent=t.description||'';
-    descEl.style.display=t.description?'':'none';
-    const doneLabel=t.done?'Als unerledigt markieren':'Als erledigt markieren';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">Löschen</button><button class="btn'+(t.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+doneLabel+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn" onclick="closeEventDetail();openEventMoveModal({type:\'task-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">Bearbeiten</button>';
+    const prioLabels={high:t('calEntry.prio.high'),med:t('calEntry.prio.med'),medium:t('calEntry.prio.med'),low:t('calEntry.prio.low')};
+    const prioColors={high:'#ef4444',med:'#f59e0b',medium:'#f59e0b',low:'#22c55e'};
+    const recLabels2={daily:t('calEntry.rec.daily'),weekly:t('calEntry.rec.weekly'),monthly:t('calEntry.rec.monthly')};
+    let tBadges='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">'+esc(t('calDetail.taskDue'))+'</span>';
+    if(tk.priority)tBadges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[tk.priority]||'#888')+';color:#fff">'+esc(prioLabels[tk.priority]||tk.priority)+'</span>';
+    if(tk.recurrence)tBadges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 '+esc(recLabels2[tk.recurrence]||tk.recurrence)+'</span>';
+    badgesEl.innerHTML=tBadges;
+    const assigneeList=parseTaskAssignees(tk.assignee);
+    assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(assigneeList.length?assigneeList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
+    descEl.textContent=tk.description||'';
+    descEl.style.display=tk.description?'':'none';
+    const doneLabel=tk.done?t('calDetail.markUndone'):t('calDetail.markDone');
+    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='batch-due'){
     titleEl.textContent=ev.label;
     const b=batches.find(x=>x.batchId===ev.id);
-    let meta='Batch-Fälligkeitstermin';
-    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    let meta=t('calDetail.batchDue');
+    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">Batch</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">'+esc(t('calDetail.batchDue'))+'</span>';
     assignEl.innerHTML='';
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
-    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="closeEventDetail();openEventMoveModal({type:\'batch-due\',id:\''+esc(ev.id)+'\',date:\''+esc(ev.date)+'\',label:\''+esc(ev.label)+'\',draggable:true,allDay:true})">Verschieben</button>';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
 
   }else if(ev.type==='caldav-import'){
     titleEl.textContent=ev.label;
-    let meta='CalDAV Import';
-    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    let meta=t('calDetail.external');
+    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
     if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
     metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">CalDAV</span>';
+    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">'+esc(t('calDetail.external'))+'</span>';
     assignEl.innerHTML='';
     descEl.textContent=ev.description||'';
     descEl.style.display=ev.description?'':'none';
-    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">Schließen</button>';
+    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
   }
   document.getElementById('m-cal-detail').classList.add('open');
 }
@@ -6680,7 +6976,7 @@ function editEventFromDetail(id){
 
 function deleteCalEventFromDetail(id){
   closeEventDetail();
-  confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+  confirm2(t('calEntry.deleteEvent'),t('calEntry.deleteEventMsg'),t('calEntry.delete'),()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
     renderCalendar();
     apiDelete('/api/calendar-events/'+encodeURIComponent(id));
@@ -6697,11 +6993,11 @@ function toggleTaskFromCalendar(taskId){
 
 function deleteTaskFromCalendar(taskId){
   closeEventDetail();
-  confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
-    const t=manualTasks.find(t=>t.created===taskId);
-    if(!t)return;
-    manualTasks=manualTasks.filter(x=>x.id!==t.id);
-    apiDelete('/api/tasks/'+t.id);
+  confirm2(t('calEntry.deleteTask'),t('calEntry.deleteTaskMsg'),t('calEntry.delete'),()=>{
+    const tk=manualTasks.find(x=>x.created===taskId);
+    if(!tk)return;
+    manualTasks=manualTasks.filter(x=>x.id!==tk.id);
+    apiDelete('/api/tasks/'+tk.id);
     renderCalendar();updateTodoBadge();
   });
 }
@@ -6721,8 +7017,8 @@ function setEntryType(type){
   document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-private-wrap').style.display=isTask?'flex':'none';
   const recWrap=document.getElementById('cal-entry-recurrence-wrap');
-  if(recWrap)recWrap.style.display=isTask?'none':'grid';
-  document.getElementById('cal-entry-name').placeholder=isTask?'z.B. Luftfeuchtezelt reinigen':'z.B. Team-Meeting';
+  if(recWrap)recWrap.style.display='grid';
+  document.getElementById('cal-entry-name').placeholder=isTask?t('calEntry.namePhTask'):t('calEntry.namePhEvent');
   toggleEntryTimeInputs();
   toggleRecurrenceUntil();
 }
@@ -6738,24 +7034,25 @@ function openEntryModal(type,date,time,existing){
   document.getElementById('cal-entry-name').disabled=false;
   document.getElementById('cal-entry-desc').closest('div').style.display='';
   document.getElementById('cal-entry-type-select').closest('.g2').style.display='';
-  const sel=document.getElementById('cal-entry-task-assignee');
-  sel.innerHTML='<option value="">Alle (Betrieb)</option>'
-    +teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
   document.getElementById('cal-entry-type-select').disabled=isEdit;
   setEntryType(type||'task');
   if(type==='task'&&existing){
-    document.getElementById('cal-entry-title').textContent='Eintrag bearbeiten';
+    document.getElementById('cal-entry-title').textContent=t('calEntry.titleEdit');
     document.getElementById('cal-entry-mode').value='edit';
     document.getElementById('cal-entry-id').value=existing.id;
     document.getElementById('cal-entry-name').value=existing.text;
     document.getElementById('cal-entry-date').value=existing.dueDate?existing.dueDate.split('T')[0]:'';
     document.getElementById('cal-entry-prio').value=existing.priority||'med';
-    document.getElementById('cal-entry-task-assignee').value=existing.assignee||'';
+    calTaskSelectedAssignees=parseTaskAssignees(existing.assignee);
+    renderTaskAssigneePicker();
     document.getElementById('cal-entry-desc').value=existing.description||'';
     document.getElementById('cal-entry-private').checked=!!existing.private;
+    document.getElementById('cal-entry-recurrence').value=existing.recurrence||'';
+    document.getElementById('cal-entry-recurrence-until').value=existing.recurrenceUntil||'';
+    toggleRecurrenceUntil();
     document.getElementById('cal-entry-del-btn').style.display='';
   }else if(type==='event'&&existing){
-    document.getElementById('cal-entry-title').textContent='Eintrag bearbeiten';
+    document.getElementById('cal-entry-title').textContent=t('calEntry.titleEdit');
     document.getElementById('cal-entry-mode').value='edit';
     document.getElementById('cal-entry-id').value=existing.id;
     document.getElementById('cal-entry-name').value=existing.title;
@@ -6773,7 +7070,7 @@ function openEntryModal(type,date,time,existing){
     toggleRecurrenceUntil();
     document.getElementById('cal-entry-del-btn').style.display='';
   }else{
-    document.getElementById('cal-entry-title').textContent='Neuer Eintrag';
+    document.getElementById('cal-entry-title').textContent=t('calEntry.titleNew');
     document.getElementById('cal-entry-mode').value='create';
     document.getElementById('cal-entry-id').value='';
     document.getElementById('cal-entry-name').value='';
@@ -6784,7 +7081,7 @@ function openEntryModal(type,date,time,existing){
     const endH=time?String(Math.min(23,parseInt(time)+1)).padStart(2,'0')+':00':'10:00';
     document.getElementById('cal-entry-end-time').value=endH;
     document.getElementById('cal-entry-prio').value='med';
-    document.getElementById('cal-entry-task-assignee').value='';
+    calTaskSelectedAssignees=[];renderTaskAssigneePicker();
     document.getElementById('cal-entry-desc').value='';
     document.getElementById('cal-entry-private').checked=false;
     calEvSelectedAssignees=[];renderAssigneePicker();
@@ -6794,9 +7091,18 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-del-btn').style.display='none';
   }
   document.getElementById('cal-ev-assignee-dropdown').style.display='none';
+  const tdd=document.getElementById('cal-task-assignee-dropdown');
+  if(tdd)tdd.style.display='none';
   toggleEntryTimeInputs();
   modal.classList.add('open');
   if(!existing)setTimeout(()=>document.getElementById('cal-entry-name').focus(),50);
+}
+
+function parseTaskAssignees(val){
+  if(!val)return [];
+  if(Array.isArray(val))return val.slice();
+  // Split comma-separated for backward compat with old single-assignee strings
+  return String(val).split(',').map(s=>s.trim()).filter(Boolean);
 }
 
 function openEventModal(date,time,existing){openEntryModal(existing?'event':'custom',date,time,existing)}
@@ -6839,18 +7145,20 @@ function saveEntryTask(){
   if(!text)return;
   const prio=document.getElementById('cal-entry-prio').value;
   const due=document.getElementById('cal-entry-date').value||null;
-  const assignee=document.getElementById('cal-entry-task-assignee').value||null;
+  const assignee=calTaskSelectedAssignees.length?calTaskSelectedAssignees.join(','):null;
   const desc=document.getElementById('cal-entry-desc').value.trim()||null;
   const priv=document.getElementById('cal-entry-private').checked;
+  const recurrence=document.getElementById('cal-entry-recurrence').value||null;
+  const recurrenceUntil=recurrence?(document.getElementById('cal-entry-recurrence-until').value||null):null;
   if(mode==='edit'){
     const id=parseInt(document.getElementById('cal-entry-id').value);
     const tk=manualTasks.find(x=>x.id===id);
     if(!tk){closeEntryModal();return}
-    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.caldavSynced=null;
-    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,assignee:tk.assignee,description:tk.description,private:priv?1:0,caldavSynced:null});
+    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.recurrence=recurrence;tk.recurrenceUntil=recurrenceUntil;tk.caldavSynced=null;
+    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,assignee:tk.assignee,description:tk.description,private:priv?1:0,recurrence,recurrenceUntil,caldavSynced:null});
     if(caldav.enabled&&tk.caldavUid)pushTaskCaldav(tk);
   }else{
-    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
+    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv,recurrence,recurrenceUntil};
     manualTasks.push(task);
     apiPost('/api/tasks',task).then(r=>{if(r&&r.id){task.id=r.id;if(caldav.enabled&&due)pushTaskCaldav(task)}renderCalendar();updateTodoBadge()});
   }
@@ -6901,7 +7209,7 @@ function deleteEntry(){
     const id=parseInt(document.getElementById('cal-entry-id').value);
     if(!id){closeEntryModal();return}
     closeEntryModal();
-    confirm2('Aufgabe löschen?','Diese Aufgabe wird unwiderruflich gelöscht.','Löschen',()=>{
+    confirm2(t('calEntry.deleteTask'),t('calEntry.deleteTaskMsg'),t('calEntry.delete'),()=>{
       manualTasks=manualTasks.filter(x=>x.id!==id);
       apiDelete('/api/tasks/'+id);
       renderCalendar();updateTodoBadge();
@@ -6909,7 +7217,7 @@ function deleteEntry(){
   }else{
     const id=document.getElementById('cal-entry-id').value;if(!id)return;
     closeEntryModal();
-    confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
+    confirm2(t('calEntry.deleteEvent'),t('calEntry.deleteEventMsg'),t('calEntry.delete'),()=>{
       calendarEvents=calendarEvents.filter(x=>x.id!==id);
       apiDelete('/api/calendar-events/'+encodeURIComponent(id));
       renderCalendar();
@@ -6931,7 +7239,7 @@ function onCalMonthEventClick(type,id){
 }
 
 function openEventMoveModal(ev){
-  document.getElementById('cal-entry-title').textContent='Eintrag verschieben';
+  document.getElementById('cal-entry-title').textContent=t('calEntry.moveTitle');
   document.getElementById('cal-entry-id').value='';
   document.getElementById('cal-entry-mode').value='move';
   document.getElementById('cal-entry-name').value=ev.label;
@@ -6966,22 +7274,32 @@ async function pushEventCaldav(ev){
 async function loadAppUsers(){
   try{const r=await authFetch('/api/usernames');if(r.ok)appUsers=await r.json();fillCalendarUserFilter()}catch{appUsers=[]}
 }
+// Combined list of selectable people: registered users + manually-added team members (deduped)
+function getSelectableAssignees(){
+  const names=new Set();
+  const out=[];
+  (appUsers||[]).forEach(u=>{if(u&&u.username&&!names.has(u.username)){names.add(u.username);out.push(u.username)}});
+  (teamMembers||[]).forEach(m=>{if(m&&m.name&&!names.has(m.name)){names.add(m.name);out.push(m.name)}});
+  return out;
+}
 function fillCalendarUserFilter(){
   const sel=document.getElementById('cal-filter-user');if(!sel)return;
   const cur=sel.value;
-  sel.innerHTML='<option value="">Alle Teammitglieder</option>'+teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
+  const names=getSelectableAssignees();
+  sel.innerHTML='<option value="">'+esc(t('calEntry.assignTo.all'))+'</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
   sel.value=cur;
 }
 function renderAssigneePicker(){
   const box=document.getElementById('cal-ev-assignees');if(!box)return;
   const dd=document.getElementById('cal-ev-assignee-dropdown');
-  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">Alle (klicken um auszuwählen)</span>'}
+  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
   else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
   if(dd){
-    if(!teamMembers.length){
-      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">Noch keine Teammitglieder. Zuerst im Team-Tab hinzufügen.</div>';
+    const names=getSelectableAssignees();
+    if(!names.length){
+      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
     }else{
-      dd.innerHTML=teamMembers.map(m=>{const checked=calEvSelectedAssignees.includes(m.name);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee(\''+esc(m.name).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(m.name)+'</label>'}).join('');
+      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
     }
   }
 }
@@ -6995,6 +7313,31 @@ function toggleAssignee(name){
   renderAssigneePicker();
 }
 function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
+
+// ── Task assignee picker (multi-select) ──
+function renderTaskAssigneePicker(){
+  const box=document.getElementById('cal-task-assignees');if(!box)return;
+  const dd=document.getElementById('cal-task-assignee-dropdown');
+  if(!calTaskSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
+  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  if(dd){
+    const names=getSelectableAssignees();
+    if(!names.length){
+      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
+    }else{
+      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
+    }
+  }
+}
+function toggleTaskAssigneeDropdown(){
+  const dd=document.getElementById('cal-task-assignee-dropdown');if(!dd)return;
+  dd.style.display=dd.style.display==='none'?'block':'none';
+}
+function toggleTaskAssignee(name){
+  const i=calTaskSelectedAssignees.indexOf(name);
+  if(i>=0)calTaskSelectedAssignees.splice(i,1);else calTaskSelectedAssignees.push(name);
+  renderTaskAssigneePicker();
+}
 
 async function loadCalDAVImports(){
   try{
@@ -7292,6 +7635,7 @@ function initEventListeners() {
   $('cal-entry-recurrence').addEventListener('change', toggleRecurrenceUntil);
   $('m-cal-entry').addEventListener('click', e=>{if(e.target.id==='m-cal-entry')closeEntryModal()});
   $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
+  const taBox=$('cal-task-assignees');if(taBox)taBox.addEventListener('click', toggleTaskAssigneeDropdown);
 
   // Settings
   $('st-settings-log').addEventListener('click', () => { openStab('settings','log'); });
