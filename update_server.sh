@@ -64,11 +64,19 @@ backup_data() {
     BACKUP_DIR="backups"
     mkdir -p "$BACKUP_DIR"
     chmod u+w "$BACKUP_DIR"
-    if [ -f data.json ]; then
-        cp data.json "$BACKUP_DIR/data_$(date +%Y%m%d_%H%M%S).json"
-        echo "  -> data.json backed up."
+    if [ -f meistertracker.db ]; then
+        local stamp
+        stamp="$(date +%Y%m%d_%H%M%S)"
+        # Use sqlite3 .backup for WAL-consistent snapshot if available,
+        # fall back to cp (PM2 is stopped later anyway).
+        if command -v sqlite3 &>/dev/null; then
+            sqlite3 meistertracker.db ".backup '$BACKUP_DIR/meistertracker_$stamp.db'"
+        else
+            cp meistertracker.db "$BACKUP_DIR/meistertracker_$stamp.db"
+        fi
+        echo "  -> meistertracker.db backed up to $BACKUP_DIR/meistertracker_$stamp.db"
     else
-        echo "  -> No data.json found, skipping backup."
+        echo "  -> No meistertracker.db found, skipping backup."
     fi
 }
 

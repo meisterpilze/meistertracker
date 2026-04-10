@@ -73,11 +73,11 @@ On non-Windows systems, use the "Download ZPL" fallback to send labels manually.
 
 ## Data & Backups
 
-All data is stored in `data.json` on the server (shared by all devices automatically). Changes sync every 5 seconds.
+All data is stored in `meistertracker.db` (SQLite) on the server (shared by all devices automatically). Changes sync every 5 seconds.
 
 - **Auto-backup**: daily at midnight to `backups/` (keeps last 30 days)
 - **Manual backup**: use the Backup tab in the app to export/import JSON
-- **Remote backup**: `scp user@host:~/meistertracker/data.json ./backup.json`
+- **Remote backup**: `scp user@host:~/meistertracker/meistertracker.db ./backup.db`
 
 ## Raspberry Pi Deployment
 
