@@ -4317,6 +4317,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/api/zones/reorder') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!Array.isArray(data.order)) {
+        jsonErr(res, 400, 'order must be an array of zone IDs');
+        return;
+      }
+      try {
+        db.reorderZones(database, data.order);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const zoneMatch = req.url.match(/^\/api\/zones\/([^/]+)$/);
   if (req.method === 'DELETE' && zoneMatch) {
     if (requireAdmin(req, res)) return;
