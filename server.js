@@ -4204,6 +4204,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const taskMatch = req.url.match(/^\/api\/tasks\/(\d+)$/);
   if (req.method === 'PATCH' && taskMatch) {
     const id = parseInt(taskMatch[1]);
+    const isAdmin = req.authUser && req.authUser.role === 'admin';
+    if (!db.canUserModifyTask(database, req.authUser && req.authUser.username, id, isAdmin)) {
+      jsonErr(res, 403, 'You are not allowed to modify this task');
+      return;
+    }
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
@@ -4223,6 +4228,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'DELETE' && taskMatch) {
     const id = parseInt(taskMatch[1]);
+    const isAdmin = req.authUser && req.authUser.role === 'admin';
+    if (!db.canUserModifyTask(database, req.authUser && req.authUser.username, id, isAdmin)) {
+      jsonErr(res, 403, 'You are not allowed to delete this task');
+      return;
+    }
     try {
       const task = db.readTaskById(database, id);
       db.deleteTaskById(database, id);
@@ -4349,6 +4359,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const assetMatch = req.url.match(/^\/api\/assets\/([^/]+)$/);
   if (req.method === 'DELETE' && assetMatch) {
+    if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(assetMatch[1]);
     try {
       db.deleteAssetById(database, id);
@@ -4854,6 +4865,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'DELETE' && calEvMatch) {
+    if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(calEvMatch[1]);
     try {
       const ev = db.getCalendarEventById(database, id);
@@ -4974,6 +4986,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const supDelMatch = req.method === 'DELETE' && req.url.match(/^\/api\/suppliers\/(\d+)$/);
   if (supDelMatch) {
+    if (requireAdmin(req, res)) return;
     try {
       db.deleteSupplier(database, parseInt(supDelMatch[1]));
       broadcastSSE(res);
