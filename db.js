@@ -456,6 +456,79 @@ const MIGRATIONS = [
       addCol('due_time', 'TEXT');
       addCol('due_end_time', 'TEXT');
     }
+  },
+  {
+    version: 19,
+    description: 'Add mushroom_strains table and migrate existing strain data',
+    fn(db) {
+      const now = new Date().toISOString();
+
+      db.exec(`CREATE TABLE IF NOT EXISTS mushroom_strains (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        kuerzel     TEXT NOT NULL UNIQUE,
+        description TEXT DEFAULT '',
+        created     TEXT NOT NULL,
+        updated     TEXT
+      )`);
+
+      const hasBatch = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('batches') WHERE name='strain_id'").get();
+      if (!hasBatch.c) db.exec('ALTER TABLE batches ADD COLUMN strain_id INTEGER REFERENCES mushroom_strains(id)');
+
+      const hasCulture = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='strain_id'").get();
+      if (!hasCulture.c) db.exec('ALTER TABLE cultures ADD COLUMN strain_id INTEGER REFERENCES mushroom_strains(id)');
+
+      // Collect unique (species, strain) pairs from existing batches + cultures
+      const pairs = new Map();
+      const batchRows = db.prepare("SELECT DISTINCT species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''").all();
+      const cultureRows = db.prepare("SELECT DISTINCT species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''").all();
+      for (const row of [...batchRows, ...cultureRows]) {
+        const key = (row.species || '').toLowerCase() + '|' + row.strain.toLowerCase();
+        if (!pairs.has(key)) pairs.set(key, { species: (row.species || '').trim(), strain: row.strain.trim() });
+      }
+
+      // Generate unique name + kuerzel for each pair
+      const kuerzelUsed = new Set();
+      const nameUsed = new Set();
+      const pairToId = new Map();
+      const insMS = db.prepare('INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)');
+
+      for (const [key, { species, strain }] of pairs) {
+        // Name: use species if unique, else append strain to distinguish
+        let name = species || strain;
+        if (nameUsed.has(name.toLowerCase())) name = (species ? species + ' ' : '') + strain;
+        let nameSuffix = 2;
+        let finalName = name;
+        while (nameUsed.has(finalName.toLowerCase())) { finalName = name + ' ' + nameSuffix; nameSuffix++; }
+        nameUsed.add(finalName.toLowerCase());
+
+        // Kuerzel: up to 6 chars from strain, alphanumeric+hyphen, deduplicated
+        let kuerzel = strain.slice(0, 6).toUpperCase().replace(/[^A-Z0-9\-]/g, '') || 'UNK';
+        const kuerzelBase = kuerzel.slice(0, 5);
+        let kuerzelSuffix = 1;
+        while (kuerzelUsed.has(kuerzel)) { kuerzel = kuerzelBase + kuerzelSuffix; kuerzelSuffix++; }
+        kuerzelUsed.add(kuerzel);
+
+        const result = insMS.run(finalName, kuerzel, '', now);
+        pairToId.set(key, result.lastInsertRowid);
+      }
+
+      // Link existing batches to their mushroom_strain
+      const updateBatch = db.prepare('UPDATE batches SET strain_id=? WHERE batch_id=?');
+      for (const b of db.prepare("SELECT batch_id, species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''").all()) {
+        const key = (b.species || '').toLowerCase() + '|' + b.strain.toLowerCase();
+        const id = pairToId.get(key);
+        if (id) updateBatch.run(id, b.batch_id);
+      }
+
+      // Link existing cultures to their mushroom_strain
+      const updateCulture = db.prepare('UPDATE cultures SET strain_id=? WHERE id=?');
+      for (const c of db.prepare("SELECT id, species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''").all()) {
+        const key = (c.species || '').toLowerCase() + '|' + c.strain.toLowerCase();
+        const id = pairToId.get(key);
+        if (id) updateCulture.run(id, c.id);
+      }
+    }
   }
 ];
 
@@ -521,29 +594,39 @@ function openDb(dbPath) {
 
 // ── Read All (assembles the JSON shape the client expects) ───
 function readAll(db, opts = {}) {
+  // Mushroom strains
+  const mushroomStrains = listMushroomStrains(db);
+  const msById = new Map(mushroomStrains.map((ms) => [ms.id, ms]));
+
   // Batches + bags
   const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
   const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
-  const batches = batchRows.map((r) => ({
-    batchId: r.batch_id,
-    species: r.species,
-    strain: r.strain,
-    qty: r.qty,
-    days: r.days,
-    substrate: {
-      hardwood: r.sub_hardwood,
-      wheatbran: r.sub_wheatbran,
-      rh: r.sub_rh,
-      gypsum: r.sub_gypsum === 1 ? true : false
-    },
-    bagKg: r.bag_kg,
-    batchType: r.batch_type,
-    sourceId: r.source_id,
-    notes: r.notes,
-    created: r.created,
-    due: r.due,
-    bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
-  }));
+  const batches = batchRows.map((r) => {
+    const ms = r.strain_id ? msById.get(r.strain_id) : null;
+    return {
+      batchId: r.batch_id,
+      species: r.species,
+      strain: r.strain,
+      strainId: r.strain_id || null,
+      strainName: ms ? ms.name : null,
+      strainKuerzel: ms ? ms.kuerzel : null,
+      qty: r.qty,
+      days: r.days,
+      substrate: {
+        hardwood: r.sub_hardwood,
+        wheatbran: r.sub_wheatbran,
+        rh: r.sub_rh,
+        gypsum: r.sub_gypsum === 1 ? true : false
+      },
+      bagKg: r.bag_kg,
+      batchType: r.batch_type,
+      sourceId: r.source_id,
+      notes: r.notes,
+      created: r.created,
+      due: r.due,
+      bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
+    };
+  });
 
   // Scan log — include id for PATCH/DELETE targeting, join username
   const scanLog = db
@@ -582,17 +665,23 @@ function readAll(db, opts = {}) {
   const cultures = db
     .prepare('SELECT * FROM cultures ORDER BY created')
     .all()
-    .map((r) => ({
-      id: r.id,
-      type: r.type,
-      species: r.species,
-      strain: r.strain,
-      parentId: r.parent_id,
-      source: r.source,
-      status: r.status,
-      notes: r.notes,
-      created: r.created
-    }));
+    .map((r) => {
+      const ms = r.strain_id ? msById.get(r.strain_id) : null;
+      return {
+        id: r.id,
+        type: r.type,
+        species: r.species,
+        strain: r.strain,
+        strainId: r.strain_id || null,
+        strainName: ms ? ms.name : null,
+        strainKuerzel: ms ? ms.kuerzel : null,
+        parentId: r.parent_id,
+        source: r.source,
+        status: r.status,
+        notes: r.notes,
+        created: r.created
+      };
+    });
 
   // Manual tasks — include id for PATCH/DELETE targeting
   const manualTasks = db
@@ -751,6 +840,7 @@ function readAll(db, opts = {}) {
 
   const version = getDataVersion(db);
   return {
+    mushroomStrains,
     batches,
     scanLog,
     manualTasks,
@@ -1309,15 +1399,26 @@ function resetUserPassword(db, userId, newPassword) {
 function insertBatch(db, b) {
   if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
   if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
+  // Resolve strainId → species + strain text
+  let strainId = b.strainId || null;
+  let species = b.species;
+  let strain = b.strain || null;
+  if (strainId) {
+    const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
+    if (!ms) throw new Error('Pilzsorte nicht gefunden');
+    species = ms.name;
+    strain = ms.kuerzel;
+  }
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
-      b.species,
-      b.strain || null,
+      species,
+      strain,
+      strainId,
       b.qty,
       b.days,
       sub.hardwood || 0,
@@ -1345,13 +1446,20 @@ function updateBatchField(db, batchId, fields) {
   // Note: qty is intentionally NOT in the allowed list. Changing qty here
   // would skip the inventory_log entries that addBagsToBatch / deleteBatchById
   // use to keep stock consistent. Use addBagsToBatch to grow a batch.
-  const allowed = ['notes', 'species', 'strain', 'days', 'due'];
-  const cols = Object.keys(fields).filter((k) => allowed.includes(k));
-  if (!cols.length) return;
   db.exec('BEGIN');
   try {
-    const sets = cols.map((c) => `${c}=?`).join(',');
-    db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map((c) => fields[c]), batchId);
+    // Handle strainId update: resolve species+strain from mushroom_strains
+    if (fields.strainId != null) {
+      const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
+      if (!ms) throw new Error('Pilzsorte nicht gefunden');
+      db.prepare('UPDATE batches SET strain_id=?,species=?,strain=? WHERE batch_id=?').run(fields.strainId, ms.name, ms.kuerzel, batchId);
+    }
+    const allowed = ['notes', 'species', 'strain', 'days', 'due'];
+    const cols = Object.keys(fields).filter((k) => allowed.includes(k));
+    if (cols.length) {
+      const sets = cols.map((c) => `${c}=?`).join(',');
+      db.prepare(`UPDATE batches SET ${sets} WHERE batch_id=?`).run(...cols.map((c) => fields[c]), batchId);
+    }
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -1485,32 +1593,38 @@ function insertHarvest(db, h) {
 function insertCultures(db, cultures) {
   if (!cultures.length) return;
   const ins = db.prepare(
-    `INSERT INTO cultures(id,type,species,strain,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain,
+    `INSERT INTO cultures(id,type,species,strain,strain_id,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain, strain_id=excluded.strain_id,
        parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created`
   );
   for (const c of cultures) {
-    ins.run(
-      c.id,
-      c.type,
-      c.species || null,
-      c.strain || null,
-      c.parentId || null,
-      c.source || null,
-      c.status || 'active',
-      c.notes || '',
-      c.created
-    );
+    // Resolve strainId if provided
+    let strainId = c.strainId || null;
+    let species = c.species || null;
+    let strain = c.strain || null;
+    if (strainId) {
+      const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
+      if (ms) { species = ms.name; strain = ms.kuerzel; }
+    }
+    ins.run(c.id, c.type, species, strain, strainId, c.parentId || null, c.source || null, c.status || 'active', c.notes || '', c.created);
   }
   incrementDataVersion(db);
 }
 
 function updateCulture(db, id, fields) {
+  // Handle strainId update
+  if (fields.strainId != null) {
+    const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
+    if (!ms) throw new Error('Pilzsorte nicht gefunden');
+    db.prepare('UPDATE cultures SET strain_id=?,species=?,strain=? WHERE id=?').run(fields.strainId, ms.name, ms.kuerzel, id);
+  }
   const allowed = ['status', 'notes', 'species', 'strain', 'source'];
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
-  if (!cols.length) return;
-  const sets = cols.map((c) => `${c}=?`).join(',');
-  db.prepare(`UPDATE cultures SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
+  if (!cols.length && fields.strainId == null) return;
+  if (cols.length) {
+    const sets = cols.map((c) => `${c}=?`).join(',');
+    db.prepare(`UPDATE cultures SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
+  }
   incrementDataVersion(db);
 }
 
@@ -1631,7 +1745,7 @@ function readBatchById(db, batchId) {
   const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
   if (!r) return null;
   const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
-  return mapBatchRow(r, bagStmt);
+  return mapBatchRow(r, bagStmt, db);
 }
 
 function deleteTaskById(db, id) {
@@ -2213,10 +2327,85 @@ function verifyOAuthClientSecret(db, clientId, secret) {
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(row.client_secret_hash));
 }
 
+// ── Mushroom Strains CRUD ────────────────────────────────────
+function listMushroomStrains(db) {
+  return db.prepare('SELECT * FROM mushroom_strains ORDER BY name').all().map((r) => ({
+    id: r.id, name: r.name, kuerzel: r.kuerzel, description: r.description || '',
+    created: r.created, updated: r.updated || null
+  }));
+}
+
+function createMushroomStrain(db, { name, kuerzel, description }) {
+  if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
+  if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
+  const now = new Date().toISOString();
+  try {
+    const result = db.prepare(
+      'INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)'
+    ).run(name.trim(), kuerzel.trim(), description || '', now);
+    incrementDataVersion(db);
+    return result.lastInsertRowid;
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE')) {
+      if (e.message.includes('name')) throw new Error('Name already taken');
+      if (e.message.includes('kuerzel')) throw new Error('Kürzel already taken');
+    }
+    throw e;
+  }
+}
+
+function updateMushroomStrain(db, id, { name, kuerzel, description }) {
+  const now = new Date().toISOString();
+  const fields = {};
+  if (name !== undefined) fields.name = name.trim();
+  if (kuerzel !== undefined) fields.kuerzel = kuerzel.trim();
+  if (description !== undefined) fields.description = description;
+  if (!Object.keys(fields).length) return;
+  fields.updated = now;
+  const cols = Object.keys(fields);
+  const sets = cols.map((c) => `${c}=?`).join(',');
+  try {
+    db.prepare(`UPDATE mushroom_strains SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
+    // Propagate name/kuerzel changes to batches and cultures that reference this strain
+    if (fields.name || fields.kuerzel) {
+      const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(id);
+      if (ms) {
+        db.prepare('UPDATE batches SET species=?,strain=? WHERE strain_id=?').run(ms.name, ms.kuerzel, id);
+        db.prepare('UPDATE cultures SET species=?,strain=? WHERE strain_id=?').run(ms.name, ms.kuerzel, id);
+      }
+    }
+    incrementDataVersion(db);
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE')) {
+      if (e.message.includes('name')) throw new Error('Name already taken');
+      if (e.message.includes('kuerzel')) throw new Error('Kürzel already taken');
+    }
+    throw e;
+  }
+}
+
+function deleteMushroomStrain(db, id) {
+  const batchCount = db.prepare('SELECT COUNT(*) as c FROM batches WHERE strain_id=?').get(id).c;
+  const cultureCount = db.prepare('SELECT COUNT(*) as c FROM cultures WHERE strain_id=?').get(id).c;
+  if (batchCount > 0 || cultureCount > 0) {
+    throw new Error(`Cannot delete: Pilzsorte is still in use (${batchCount} batches, ${cultureCount} cultures).`);
+  }
+  const result = db.prepare('DELETE FROM mushroom_strains WHERE id=?').run(id);
+  if (result.changes > 0) incrementDataVersion(db);
+  return result.changes > 0;
+}
+
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
-function mapBatchRow(r, bagStmt) {
+function mapBatchRow(r, bagStmt, db) {
+  let strainName = null, strainKuerzel = null;
+  if (r.strain_id && db) {
+    const ms = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?').get(r.strain_id);
+    if (ms) { strainName = ms.name; strainKuerzel = ms.kuerzel; }
+  }
   return {
-    batchId: r.batch_id, species: r.species, strain: r.strain, qty: r.qty, days: r.days,
+    batchId: r.batch_id, species: r.species, strain: r.strain, strainId: r.strain_id || null,
+    strainName, strainKuerzel,
+    qty: r.qty, days: r.days,
     substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
     bagKg: r.bag_kg, batchType: r.batch_type, sourceId: r.source_id, notes: r.notes,
     created: r.created, due: r.due, bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
@@ -2224,7 +2413,7 @@ function mapBatchRow(r, bagStmt) {
 }
 function getAllBatches(db) {
   const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
-  return db.prepare('SELECT * FROM batches ORDER BY created').all().map(r => mapBatchRow(r, bagStmt));
+  return db.prepare('SELECT * FROM batches ORDER BY created').all().map(r => mapBatchRow(r, bagStmt, db));
 }
 function getAllTasks(db) {
   return db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
@@ -2381,5 +2570,9 @@ module.exports = {
   getScanLog,
   getCalendarEvents,
   getInventory,
-  getZonesWithRacks
+  getZonesWithRacks,
+  listMushroomStrains,
+  createMushroomStrain,
+  updateMushroomStrain,
+  deleteMushroomStrain
 };
