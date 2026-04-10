@@ -529,6 +529,44 @@ const MIGRATIONS = [
         if (id) updateCulture.run(id, c.id);
       }
     }
+  },
+  {
+    version: 20,
+    description: 'Add barcodes table — numeric barcode registry for all entities',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS barcodes (
+        barcode     INTEGER PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id   TEXT NOT NULL,
+        created     TEXT NOT NULL
+      )`);
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_barcodes_entity ON barcodes(entity_type, entity_id)');
+
+      const now = new Date().toISOString();
+      let nextBarcode = 1000000;
+      const ins = db.prepare('INSERT INTO barcodes(barcode, entity_type, entity_id, created) VALUES(?,?,?,?)');
+
+      // Assign barcodes to all existing bags
+      for (const r of db.prepare('SELECT bag_id FROM bags ORDER BY bag_id').all()) {
+        ins.run(nextBarcode++, 'bag', r.bag_id, now);
+      }
+      // Assign barcodes to all existing cultures
+      for (const r of db.prepare('SELECT id FROM cultures ORDER BY created, id').all()) {
+        ins.run(nextBarcode++, 'culture', r.id, now);
+      }
+      // Assign barcodes to all existing assets
+      for (const r of db.prepare('SELECT asset_id FROM assets ORDER BY asset_id').all()) {
+        ins.run(nextBarcode++, 'asset', r.asset_id, now);
+      }
+      // Assign barcodes to all existing zones
+      for (const r of db.prepare('SELECT id FROM zones ORDER BY sort_order, id').all()) {
+        ins.run(nextBarcode++, 'zone', r.id, now);
+      }
+      // Assign barcodes to all existing racks
+      for (const r of db.prepare('SELECT id FROM racks ORDER BY zone_id, sort_order, id').all()) {
+        ins.run(nextBarcode++, 'rack', r.id, now);
+      }
+    }
   }
 ];
 
@@ -590,6 +628,53 @@ function openDb(dbPath) {
   db.prepare(`INSERT OR IGNORE INTO duckdns_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO mcp_config(id) VALUES(1)`).run();
   return db;
+}
+
+// ── Barcode Registry ────────────────────────────────────────
+function nextBarcodeNumber(db) {
+  const row = db.prepare('SELECT MAX(barcode) as m FROM barcodes').get();
+  return (row && row.m != null) ? row.m + 1 : 1000000;
+}
+
+function assignBarcode(db, entityType, entityId) {
+  // Return existing barcode if already assigned
+  const existing = db.prepare('SELECT barcode FROM barcodes WHERE entity_type=? AND entity_id=?').get(entityType, entityId);
+  if (existing) return existing.barcode;
+  const num = nextBarcodeNumber(db);
+  db.prepare('INSERT INTO barcodes(barcode, entity_type, entity_id, created) VALUES(?,?,?,?)').run(
+    num, entityType, entityId, new Date().toISOString()
+  );
+  return num;
+}
+
+function assignBarcodes(db, entityType, entityIds) {
+  const result = {};
+  const existing = db.prepare('SELECT barcode, entity_id FROM barcodes WHERE entity_type=? AND entity_id IN (' + entityIds.map(() => '?').join(',') + ')').all(entityType, ...entityIds);
+  for (const r of existing) result[r.entity_id] = r.barcode;
+  const missing = entityIds.filter(id => !(id in result));
+  if (missing.length) {
+    let num = nextBarcodeNumber(db);
+    const ins = db.prepare('INSERT INTO barcodes(barcode, entity_type, entity_id, created) VALUES(?,?,?,?)');
+    const now = new Date().toISOString();
+    for (const id of missing) {
+      ins.run(num, entityType, id, now);
+      result[id] = num++;
+    }
+  }
+  return result;
+}
+
+function lookupBarcode(db, barcode) {
+  return db.prepare('SELECT entity_type, entity_id FROM barcodes WHERE barcode=?').get(barcode) || null;
+}
+
+function getBarcodeForEntity(db, entityType, entityId) {
+  const row = db.prepare('SELECT barcode FROM barcodes WHERE entity_type=? AND entity_id=?').get(entityType, entityId);
+  return row ? row.barcode : null;
+}
+
+function getAllBarcodes(db) {
+  return db.prepare('SELECT barcode, entity_type, entity_id FROM barcodes ORDER BY barcode').all();
 }
 
 // ── Read All (assembles the JSON shape the client expects) ───
@@ -840,6 +925,9 @@ function readAll(db, opts = {}) {
   // Suppliers
   const suppliers = db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
 
+  // Barcodes
+  const barcodes = getAllBarcodes(db);
+
   const version = getDataVersion(db);
   return {
     mushroomStrains,
@@ -856,6 +944,7 @@ function readAll(db, opts = {}) {
     calendarEvents,
     zones,
     suppliers,
+    barcodes,
     version
   };
 }
@@ -1436,8 +1525,11 @@ function insertBatch(db, b) {
     );
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id) VALUES(?,?)');
     for (const bagId of b.bags || []) ins.run(bagId, b.batchId);
+    // Assign numeric barcodes to all new bags
+    const bagBarcodes = assignBarcodes(db, 'bag', b.bags || []);
     incrementDataVersion(db);
     db.exec('COMMIT');
+    return { bagBarcodes };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -1476,8 +1568,11 @@ function addBagsToBatch(db, batchId, newBags, newQty) {
     const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id) VALUES(?,?)');
     for (const id of newBags) ins.run(id, batchId);
     if (newQty != null) db.prepare('UPDATE batches SET qty=? WHERE batch_id=?').run(newQty, batchId);
+    // Assign numeric barcodes to new bags
+    const bagBarcodes = assignBarcodes(db, 'bag', newBags);
     incrementDataVersion(db);
     db.exec('COMMIT');
+    return { bagBarcodes };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -1610,7 +1705,10 @@ function insertCultures(db, cultures) {
     }
     ins.run(c.id, c.type, species, strain, strainId, c.parentId || null, c.source || null, c.status || 'active', c.notes || '', c.created);
   }
+  // Assign numeric barcodes to all new cultures
+  const cultureBarcodes = assignBarcodes(db, 'culture', cultures.map(c => c.id));
   incrementDataVersion(db);
+  return { cultureBarcodes };
 }
 
 function updateCulture(db, id, fields) {
@@ -1788,7 +1886,9 @@ function upsertAsset(db, a) {
     a.notes || '',
     a.created
   );
+  const barcode = assignBarcode(db, 'asset', a.assetId);
   incrementDataVersion(db);
+  return { barcode };
 }
 
 function deleteAssetById(db, id) {
@@ -2117,7 +2217,9 @@ function insertZone(db, z) {
     if (z.racks && z.racks.length) {
       const ins = db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
       z.racks.forEach((rId, i) => ins.run(rId, z.id, i + 1, z.created || new Date().toISOString()));
+      assignBarcodes(db, 'rack', z.racks);
     }
+    assignBarcode(db, 'zone', z.id);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -2180,6 +2282,7 @@ function insertRack(db, r) {
     r.sortOrder || 0,
     r.created || new Date().toISOString()
   );
+  assignBarcode(db, 'rack', r.id);
   incrementDataVersion(db);
 }
 
@@ -2585,5 +2688,10 @@ module.exports = {
   listMushroomStrains,
   createMushroomStrain,
   updateMushroomStrain,
-  deleteMushroomStrain
+  deleteMushroomStrain,
+  assignBarcode,
+  assignBarcodes,
+  lookupBarcode,
+  getBarcodeForEntity,
+  getAllBarcodes
 };

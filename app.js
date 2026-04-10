@@ -2717,16 +2717,20 @@ function rebuildZoneConstants(){
   ZONE_LABELS={};ZONE_COLORS={};
   zones.forEach(z=>{ZONE_LABELS[z.id]=KNOWN_ZONE_I18N[z.id]||z.name;ZONE_COLORS[z.id]=z.color});
   locColor={...ZONE_COLORS};
-  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST']},{g:'Zones',items:[...ZONES]}];
+  // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
+  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'].map(a=>({val:a,label:a}))}];
+  REF_GROUPS.push({g:'Zones',items:ZONES.map(z=>{const bc=barcodeByEntity.get('zone:'+z);return{val:bc?String(bc):z,label:z}})});
   zones.filter(z=>z.racks.length>0).forEach(z=>{
     const rIds=z.racks.map(r=>r.id);
-    for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk})}
+    for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk.map(r=>{const bc=barcodeByEntity.get('rack:'+r);return{val:bc?String(bc):r,label:r}})})}
   });
-  REF_GROUPS.push({g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10']});
+  REF_GROUPS.push({g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10'].map(q=>({val:q,label:q}))});
 }
 
 // ─── DATA ────────────────────────────────────────────────────
 let mushroomStrains=[],batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
+// Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
+let barcodeRegistry=new Map(),barcodeByEntity=new Map();
 let appUsers=[];let calEvSelectedAssignees=[];let calTaskSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
@@ -2804,6 +2808,12 @@ function applyData(d){
   inventory=d.inventory||defaultInventory();
   teamMembers=d.teamMembers||[];caldav=d.caldav||{};duckdns=d.duckdns||{};assets=d.assets||[];
   calendarEvents=d.calendarEvents||[];zones=d.zones||[];suppliers=d.suppliers||[];
+  // Build barcode registry from server data
+  barcodeRegistry=new Map();barcodeByEntity=new Map();
+  for(const bc of d.barcodes||[]){
+    barcodeRegistry.set(bc.barcode,{type:bc.entity_type,id:bc.entity_id});
+    barcodeByEntity.set(bc.entity_type+':'+bc.entity_id,bc.barcode);
+  }
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillStrainSelects();
@@ -3632,6 +3642,8 @@ function createBatch(){
       alert('Batch konnte nicht gespeichert werden: '+r.error);
       renderBatches();renderStatus();
     }
+    // Register new barcode numbers from server response
+    if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}
   });
 
   // Auto-deduct materials from inventory via server-side deltas
@@ -3715,7 +3727,7 @@ function confirmAddBags(){
   b.bags=[...b.bags,...newBags];
   b.qty=b.bags.length;
   _lastNewBags=newBags;
-  apiPatch('/api/batches/'+encodeURIComponent(b.batchId)+'/bags',{add:newBags,newQty:b.qty});
+  apiPatch('/api/batches/'+encodeURIComponent(b.batchId)+'/bags',{add:newBags,newQty:b.qty}).then(r=>{if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}});
   // Switch to result phase
   document.getElementById('ab-phase-input').style.display='none';
   document.getElementById('m-addbags-title').textContent=t('addBags.addedTitle');
@@ -5191,7 +5203,8 @@ function toggleAllAssetLabels(on){
 function makeAssetZPL(ids){
   return ids.map(id=>{
     const a=assets.find(x=>x.assetId===id);if(!a)return'';
-    const bcVal=id.replace(/-/g,'_');
+    const numBc=barcodeByEntity.get('asset:'+id);
+    const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
     const loc=(a.category||'')+(a.location?' / '+a.location:'');
     const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
     const bc=bcParams(bcVal);
@@ -5402,7 +5415,7 @@ function logLabWork(){
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
   const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',strainId,strainName:sp,strainKuerzel:st||null,parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
-  cultures.push(...newC);apiPost('/api/cultures',{cultures:newC});
+  cultures.push(...newC);apiPost('/api/cultures',{cultures:newC}).then(r=>{if(r&&r.cultureBarcodes){for(const[id,bc]of Object.entries(r.cultureBarcodes)){barcodeRegistry.set(bc,{type:'culture',id});barcodeByEntity.set('culture:'+id,bc)}}});
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
   renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);lwPreview();
@@ -5464,6 +5477,7 @@ function createGrainBatch(){
       alert('Batch konnte nicht gespeichert werden: '+r.error);
       renderBatches();renderStatus();
     }
+    if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}
   });
   // Deduct grain from inventory
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
@@ -5695,18 +5709,23 @@ function renderPreviewDeferred(deferred,baseDelay){
 
 function bagLabelItems(bagId,batch,mode){
   const items=[];
-  const isGrain=batch.batchType==='grain';
-  // Barcode value: KUERZEL_MMDD_bagNum — kuerzel from mushroomStrains (Pilzsorten)
-  // Grain batches get "G" prefix: GKUERZEL_MMDD_bagNum
-  const parts=bagId.split('-');
+  // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
+  const numBc=barcodeByEntity.get('bag:'+bagId);
   let bcVal;
-  if(parts.length===4){
-    const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
-    const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY → MMDD
-    const bagNum=parseInt(parts[3],10);
-    bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
+  if(numBc){
+    bcVal=String(numBc);
   }else{
-    bcVal=bagId.replace(/-/g,'_');
+    // Legacy fallback for bags without barcode assignment
+    const isGrain=batch.batchType==='grain';
+    const parts=bagId.split('-');
+    if(parts.length===4){
+      const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
+      const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);
+      const bagNum=parseInt(parts[3],10);
+      bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
+    }else{
+      bcVal=bagId.replace(/-/g,'_');
+    }
   }
   const bc=bcParams(bcVal);
   // date-mode: compact barcode to fit 4 rows below; full: slightly taller; id: tallest
@@ -5751,8 +5770,10 @@ function labLabelItems(id,c,opts){
   const kz=c.strainDescriptor||'';
   const sp=name+(kz?' \u2013 '+kz:'');
   const ds=fmtDt(c.created);
-  const bcVal=id.replace(/-/g,'_');
-  const bc=bcParams(bcVal,5); // smaller quiet zone → wider bars
+  // Numeric barcode: lookup from registry, fall back to legacy encoding
+  const numBc=barcodeByEntity.get('culture:'+id);
+  const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
+  const bc=bcParams(bcVal); // numeric barcodes are short, no quiet zone hack needed
   const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
   const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
   const bcY=16;
@@ -5881,8 +5902,8 @@ function renderLabPreview(){
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
 
-async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const val of group.items){const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
-async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const val of group.items){const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=val;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:true,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
+async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:false,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px;text-align:center';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
+async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:false,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25;const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 // Session tracking
@@ -6290,45 +6311,62 @@ function processScan(raw){
   // only for non-location, non-action values. Adding new location formats that
   // use hyphens would break this logic — always use underscores for locations.
   let val=raw.trim().toUpperCase();if(!val)return;
-  if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
-  else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
-  // Decode barcode → full bag ID.
-  // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
-  // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
-  const parts=val.split('-');
-  let matchBatch=null,scannedBag='';
-  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2])){
-    // Current format: KUERZEL-MMDD-N
-    const scannedKz=parts[0];
-    const scannedMmdd=parts[1];
-    scannedBag=parts[2].padStart(2,'0');
-    matchBatch=batches.find(b=>{
-      const bKz=(b.strainKuerzel||b.strain||'').toUpperCase();
-      const bDateParts=b.batchId.split('-');
-      const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
-      return bKz===scannedKz && bMmdd===scannedMmdd;
-    });
-  }else if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-    // Legacy format: SP-ST-MMDD-N (old labels with spAbbrev + strain prefix)
-    const scannedSp=parts[0];
-    const scannedSt=parts[1];
-    const scannedMmdd=parts[2];
-    scannedBag=parts[3].padStart(2,'0');
-    matchBatch=batches.find(b=>{
-      const bSp=spAbbrev(b.species);
-      const bSt=(b.strain||'000').slice(0,3).toUpperCase();
-      const bDateParts=b.batchId.split('-');
-      const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
-      return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
-    });
-  }
-  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2]) || parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-    if(matchBatch){
-      val=matchBatch.batchId+'-'+scannedBag;
-      setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
-    }else{
-      setFb('err',t('scanFb.noBatchFound',{val:val}));
-      return;
+
+  // ── Numeric barcode lookup (new system: 7+ digit numbers) ──
+  const numVal=parseInt(val,10);
+  if(/^\d{7,}$/.test(val)&&numVal>=1000000){
+    const entry=barcodeRegistry.get(numVal);
+    if(!entry){setFb('err','Unbekannter Barcode: '+val);return}
+    if(entry.type==='bag'){
+      val=entry.id; // e.g. "SHI-260327-01-06"
+      setFb('info',t('scanFb.matched',{val:val,batch:val.split('-').slice(0,-1).join('-')}));
+    }else if(entry.type==='culture'){
+      val=entry.id; // e.g. "MC-SHI-260327-01"
+    }else if(entry.type==='zone'||entry.type==='rack'){
+      val=entry.id; // e.g. "INC" or "INC_R1"
+    }else if(entry.type==='asset'){
+      setFb('info','Asset: '+entry.id);return;
+    }
+  }else{
+    // ── Legacy barcode fallback ──
+    if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
+    else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
+    // Decode barcode → full bag ID.
+    // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
+    // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
+    const parts=val.split('-');
+    let matchBatch=null,scannedBag='';
+    if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2])){
+      const scannedKz=parts[0];
+      const scannedMmdd=parts[1];
+      scannedBag=parts[2].padStart(2,'0');
+      matchBatch=batches.find(b=>{
+        const bKz=(b.strainKuerzel||b.strain||'').toUpperCase();
+        const bDateParts=b.batchId.split('-');
+        const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
+        return bKz===scannedKz && bMmdd===scannedMmdd;
+      });
+    }else if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
+      const scannedSp=parts[0];
+      const scannedSt=parts[1];
+      const scannedMmdd=parts[2];
+      scannedBag=parts[3].padStart(2,'0');
+      matchBatch=batches.find(b=>{
+        const bSp=spAbbrev(b.species);
+        const bSt=(b.strain||'000').slice(0,3).toUpperCase();
+        const bDateParts=b.batchId.split('-');
+        const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
+        return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
+      });
+    }
+    if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2]) || parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
+      if(matchBatch){
+        val=matchBatch.batchId+'-'+scannedBag;
+        setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
+      }else{
+        setFb('err',t('scanFb.noBatchFound',{val:val}));
+        return;
+      }
     }
   }
   if(ACTIONS.includes(val)){
@@ -6468,6 +6506,8 @@ const SCAN_MIN_LEN=3;
 
 function isKnownBarcode(val){
   val=val.toUpperCase();
+  // Numeric barcode (new system)
+  if(/^\d{7,}$/.test(val)&&parseInt(val,10)>=1000000)return true;
   // Check actions/locations with underscores intact (barcode locations use underscores)
   if(ACTIONS.includes(val))return true;
   if(LOCS.includes(val))return true;
