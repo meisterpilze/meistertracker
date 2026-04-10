@@ -2634,7 +2634,7 @@ function getStatus(id){
   scanLog.filter(e=>e.batch===id).forEach(e=>{
     const tz=toZone(e.to),fz=toZone(e.from);
     if(e.action==='ADD'&&e.to&&c[tz]!==undefined)c[tz]=Math.max(0,c[tz]+1);
-    if(e.action==='MOVE'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
     if(e.action==='REMOVE'&&e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);
   });
   const total=Object.values(c).reduce((a,b)=>a+b,0);
@@ -3035,7 +3035,7 @@ function getRackBags(rackId){
   const bags={};
   scanLog.forEach(e=>{
     if(e.action==='ADD'&&e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};
-    if(e.action==='MOVE'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
     if(e.action==='REMOVE'&&e.from===rackId&&e.bag)delete bags[e.bag];
   });
   return bags;
@@ -3050,7 +3050,7 @@ function getZoneBags(zone){
   scanLog.forEach(e=>{
     const tz=toZone(e.to),fz=toZone(e.from);
     if(e.action==='ADD'&&tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
-    if(e.action==='MOVE'){
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){
       if(tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
       if(fz===zone&&e.bag)delete bags[e.bag];
     }
@@ -3121,7 +3121,7 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;const entries=[];
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const b=batches.find(x=>x.batchId===d.batchId);const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3135,7 +3135,7 @@ function locRemoveSelected(){
   if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
   const now=new Date().toISOString();
   const entries=[];selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const b=batches.find(x=>x.batchId===d.batchId);const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3495,7 +3495,7 @@ function addMember(){
   const member={name,role:role||null,added:new Date().toISOString()};
   teamMembers.push(member);
   document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  apiPost('/api/team',member).then(r=>{if(r.id)member.id=r.id});renderTeam();
+  apiPost('/api/team',member).then(r=>{if(r&&r.id)member.id=r.id;renderTeam()});
 }
 function removeMember(id){const m=teamMembers.find(x=>x.id===id);if(!m)return;confirm2('Remove member?','Remove '+m.name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers=teamMembers.filter(x=>x.id!==id);apiDelete('/api/team/'+id);renderTeam()})}
 
@@ -3796,7 +3796,7 @@ async function loadOAuthClients(){
       list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
       return;
     }
-    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const esc=s=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
@@ -4827,7 +4827,10 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
+    const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===biBagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
+    const fromLoc=bagLast?bagLast.to:null;
+    const b=batches.find(x=>x.batchId===biBatchId);
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:fromLoc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
     scan.count++;apiPost('/api/scan-log',{entries:[entry]});updateSD();
     setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
   }else{
@@ -5383,6 +5386,11 @@ function processScan(raw){
       const curLoc=bagLast.to||null;
       if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){_scanBeep(500,120);setFb('err',t('scanFb.bagAlreadyAt',{bag:val,loc:scan.to}));return}
       scan.from=curLoc;
+    }
+    // REMOVE: auto-derive FROM from bag's last known location
+    if(scan.action==='REMOVE'){
+      const bagLastR=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
+      scan.from=bagLastR?bagLastR.to:null;
     }
     // REMOVE confirmation: require scanning same bag twice within 5s
     if(scan.action==='REMOVE'){
@@ -6340,8 +6348,7 @@ function saveEntryTask(){
   }else{
     const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
     manualTasks.push(task);
-    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id});
-    if(caldav.enabled&&due)pushTaskCaldav(task);
+    apiPost('/api/tasks',task).then(r=>{if(r&&r.id){task.id=r.id;if(caldav.enabled&&due)pushTaskCaldav(task)}});
   }
   closeEntryModal();
   renderCalendar();updateTodoBadge();
