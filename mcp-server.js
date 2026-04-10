@@ -136,10 +136,11 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_batches',
-    'List production batches with optional filters for species, strain, batch type, or date range',
+    'List production batches with optional filters for Pilzsorte (strainId), species, strain, batch type, or date range',
     {
+      strainId: z.number().optional().describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
       species: z.string().optional().describe('Filter by species (partial match, case-insensitive)'),
-      strain: z.string().optional().describe('Filter by strain (partial match, case-insensitive)'),
+      strain: z.string().optional().describe('Filter by strain kuerzel (partial match, case-insensitive)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Filter by batch type'),
       dueBefore: z.string().optional().describe('ISO date — batches due before this date'),
       dueAfter: z.string().optional().describe('ISO date — batches due after this date')
@@ -147,6 +148,7 @@ function createMcpServer(database, onWrite) {
     async (params) => {
       let batches = db.getAllBatches(database);
 
+      if (params.strainId != null) batches = batches.filter((b) => b.strainId === params.strainId);
       if (params.species) {
         const s = params.species.toLowerCase();
         batches = batches.filter((b) => b.species && b.species.toLowerCase().includes(s));
@@ -164,6 +166,9 @@ function createMcpServer(database, onWrite) {
           batchId: b.batchId,
           species: b.species,
           strain: b.strain,
+          strainId: b.strainId,
+          strainName: b.strainName,
+          strainKuerzel: b.strainKuerzel,
           qty: b.qty,
           days: b.days,
           batchType: b.batchType,
@@ -337,9 +342,10 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_cultures',
-    'List mushroom cultures with optional filters for type, species, or status',
+    'List mushroom cultures with optional filters for type, Pilzsorte (strainId), species, or status',
     {
       type: z.string().optional().describe('Culture type (MC, PD, or LC)'),
+      strainId: z.number().optional().describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
       species: z.string().optional().describe('Filter by species (partial match)'),
       status: z.string().optional().describe('Filter by status (e.g. active, stored, used, contam)')
     },
@@ -347,6 +353,7 @@ function createMcpServer(database, onWrite) {
       let cultures = db.getAllCultures(database);
 
       if (params.type) cultures = cultures.filter((c) => c.type === params.type);
+      if (params.strainId != null) cultures = cultures.filter((c) => c.strainId === params.strainId);
       if (params.species) {
         const s = params.species.toLowerCase();
         cultures = cultures.filter((c) => c.species && c.species.toLowerCase().includes(s));
@@ -435,13 +442,14 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_batch',
-    'Create a new production batch with auto-generated bags',
+    'Create a new production batch with auto-generated bags. Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain/species are stored as free-text fallback.',
     {
       batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
-      species: z.string().describe('Mushroom species'),
+      strainId: z.number().optional().describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
+      species: z.string().optional().describe('Mushroom species (required when strainId is omitted)'),
       qty: z.number().describe('Number of bags (>= 1)'),
       days: z.number().describe('Incubation days (>= 1)'),
-      strain: z.string().optional().describe('Strain name'),
+      strain: z.string().optional().describe('Strain kuerzel (free-text fallback when strainId is omitted)'),
       subHardwood: z.number().optional().describe('Substrate hardwood %'),
       subWheatbran: z.number().optional().describe('Substrate wheat bran %'),
       subRh: z.number().optional().describe('Substrate relative humidity %'),
@@ -453,6 +461,9 @@ function createMcpServer(database, onWrite) {
     },
     async (params) => {
       try {
+        if (!params.strainId && !params.species) {
+          return errResult('Either strainId or species is required');
+        }
         const created = new Date().toISOString();
         const due = new Date(Date.now() + params.days * 86400000).toISOString();
         const bags = [];
@@ -461,6 +472,7 @@ function createMcpServer(database, onWrite) {
         }
         db.insertBatch(database, {
           batchId: params.batchId,
+          strainId: params.strainId || null,
           species: params.species,
           strain: params.strain || null,
           qty: params.qty,
@@ -480,7 +492,20 @@ function createMcpServer(database, onWrite) {
           bags
         });
         notify();
-        return json({ success: true, batchId: params.batchId, created, due, bagCount: params.qty, bags });
+        const persisted = db.readBatchById(database, params.batchId);
+        return json({
+          success: true,
+          batchId: params.batchId,
+          created,
+          due,
+          bagCount: params.qty,
+          bags,
+          species: persisted ? persisted.species : params.species,
+          strain: persisted ? persisted.strain : params.strain || null,
+          strainId: persisted ? persisted.strainId : params.strainId || null,
+          strainName: persisted ? persisted.strainName : null,
+          strainKuerzel: persisted ? persisted.strainKuerzel : null
+        });
       } catch (e) {
         return errResult(e.message);
       }
@@ -489,9 +514,10 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_batch',
-    'Update fields on an existing batch (notes, species, strain, days, due date). To change qty, use add_bags_to_batch instead — it keeps the inventory log consistent.',
+    'Update fields on an existing batch (notes, species, strain, strainId, days, due date). Pass strainId to switch Pilzsorte — species/strain will be auto-updated from mushroom_strains. To change qty, use add_bags_to_batch instead — it keeps the inventory log consistent.',
     {
       batchId: z.string().describe('Batch ID'),
+      strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
       notes: z.string().optional(),
       species: z.string().optional(),
       strain: z.string().optional(),
@@ -508,7 +534,17 @@ function createMcpServer(database, onWrite) {
         if (!Object.keys(updates).length) return errResult('No fields to update');
         db.updateBatchField(database, batchId, updates);
         notify();
-        return json({ success: true, batchId, updated: Object.keys(updates) });
+        const persisted = db.readBatchById(database, batchId);
+        return json({
+          success: true,
+          batchId,
+          updated: Object.keys(updates),
+          species: persisted ? persisted.species : null,
+          strain: persisted ? persisted.strain : null,
+          strainId: persisted ? persisted.strainId : null,
+          strainName: persisted ? persisted.strainName : null,
+          strainKuerzel: persisted ? persisted.strainKuerzel : null
+        });
       } catch (e) {
         return errResult(e.message);
       }
@@ -617,12 +653,13 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'log_harvest',
-    'Record a mushroom harvest with weight, batch, bag, and flush number',
+    'Record a mushroom harvest with weight, batch, bag, and flush number. Species/strain auto-fill from the batch when omitted; pass strainId to resolve from mushroom_strains instead.',
     {
       batch: z.string().describe('Batch ID'),
       grams: z.number().describe('Harvest weight in grams (>= 0)'),
       bag: z.string().optional().describe('Specific bag ID'),
       flush: z.number().optional().describe('Flush number (default: 1)'),
+      strainId: z.number().optional().describe('Pilzsorte id — when set, species/strain are resolved from mushroom_strains'),
       species: z.string().optional().describe('Auto-filled from batch if omitted'),
       strain: z.string().optional().describe('Auto-filled from batch if omitted')
     },
@@ -630,6 +667,13 @@ function createMcpServer(database, onWrite) {
       try {
         let species = params.species;
         let strain = params.strain;
+        if (params.strainId && (!species || !strain)) {
+          const strains = db.listMushroomStrains(database);
+          const ms = strains.find((s) => s.id === params.strainId);
+          if (!ms) return errResult('Pilzsorte not found: ' + params.strainId);
+          species = species || ms.name;
+          strain = strain || ms.kuerzel;
+        }
         if (!species || !strain) {
           const b = db.readBatchById(database, params.batch);
           if (b) {
@@ -652,7 +696,9 @@ function createMcpServer(database, onWrite) {
           id: Number(id),
           batch: params.batch,
           grams: params.grams,
-          flush: params.flush || 1
+          flush: params.flush || 1,
+          species,
+          strain
         });
       } catch (e) {
         return errResult(e.message);
@@ -729,11 +775,12 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_culture',
-    "Update a mushroom culture's status, notes, species, strain, or source",
+    "Update a mushroom culture's status, notes, Pilzsorte (strainId), species, strain, or source. Pass strainId to switch Pilzsorte — species/strain auto-update from mushroom_strains.",
     {
       id: z.string().describe('Culture ID'),
       status: z.string().optional().describe('New status (e.g. active, archived, contaminated)'),
       notes: z.string().optional(),
+      strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
       species: z.string().optional(),
       strain: z.string().optional(),
       source: z.string().optional()
@@ -749,6 +796,133 @@ function createMcpServer(database, onWrite) {
         db.updateCulture(database, id, updates);
         notify();
         return json({ success: true, id, updated: Object.keys(updates) });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // CULTURES: CREATE
+  // ──────────────────────────────────────────────────────────
+
+  server.tool(
+    'create_culture',
+    'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain is stored as free-text fallback.',
+    {
+      id: z.string().describe('Culture ID (e.g. MC-KINGS-250301-01)'),
+      type: z.enum(['MC', 'PD', 'LC', 'G2G']).describe('Culture type'),
+      strainId: z.number().optional().describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
+      species: z.string().optional().describe('Species (required when strainId is omitted)'),
+      strain: z.string().optional().describe('Strain kuerzel (free-text fallback)'),
+      parentId: z.string().optional().describe('Parent culture ID for lineage'),
+      source: z.string().optional().describe('Source note (e.g. clone, spore print, wild)'),
+      status: z.enum(['active', 'stored', 'used', 'contam']).optional().describe('Culture status (default: active)'),
+      notes: z.string().optional(),
+      created: z.string().optional().describe('ISO timestamp (default: now)')
+    },
+    async (params) => {
+      try {
+        if (!params.strainId && !params.species) {
+          return errResult('Either strainId or species is required');
+        }
+        db.insertCultures(database, [
+          {
+            id: params.id,
+            type: params.type,
+            strainId: params.strainId || null,
+            species: params.species || null,
+            strain: params.strain || null,
+            parentId: params.parentId || null,
+            source: params.source || null,
+            status: params.status || 'active',
+            notes: params.notes || '',
+            created: params.created || new Date().toISOString()
+          }
+        ]);
+        notify();
+        const persisted = db.getAllCultures(database).find((c) => c.id === params.id);
+        return json({ success: true, id: params.id, culture: persisted });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // MUSHROOM STRAINS (Pilzsorten) CRUD
+  // ──────────────────────────────────────────────────────────
+
+  server.tool(
+    'list_mushroom_strains',
+    'List all Pilzsorten (mushroom strains) with id, name, kuerzel, description. Use the id with create_batch / create_culture / update_batch / update_culture / log_harvest.',
+    {},
+    async () => {
+      return json(db.listMushroomStrains(database));
+    }
+  );
+
+  server.tool(
+    'create_mushroom_strain',
+    'Create a new Pilzsorte (mushroom strain). Name and kuerzel are required and must be unique.',
+    {
+      name: z.string().describe('Full strain name, e.g. "Pleurotus ostreatus HK35"'),
+      kuerzel: z.string().describe('Short code, e.g. "HK35"'),
+      description: z.string().optional().describe('Free-text description')
+    },
+    async (params) => {
+      try {
+        const id = db.createMushroomStrain(database, {
+          name: params.name,
+          kuerzel: params.kuerzel,
+          description: params.description || ''
+        });
+        notify();
+        return json({ success: true, id: Number(id), name: params.name, kuerzel: params.kuerzel });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  server.tool(
+    'update_mushroom_strain',
+    'Update a Pilzsorte. Changes to name/kuerzel propagate to all batches and cultures that reference this strain.',
+    {
+      id: z.number().describe('Pilzsorte id'),
+      name: z.string().optional().describe('New name'),
+      kuerzel: z.string().optional().describe('New kuerzel'),
+      description: z.string().optional().describe('New description')
+    },
+    async (params) => {
+      try {
+        const { id, ...fields } = params;
+        const updates = {};
+        for (const [k, v] of Object.entries(fields)) {
+          if (v !== undefined) updates[k] = v;
+        }
+        if (!Object.keys(updates).length) return errResult('No fields to update');
+        db.updateMushroomStrain(database, id, updates);
+        notify();
+        return json({ success: true, id, updated: Object.keys(updates) });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  server.tool(
+    'delete_mushroom_strain',
+    'Delete a Pilzsorte. Fails if it is still referenced by any batch or culture (delete protection).',
+    {
+      id: z.number().describe('Pilzsorte id')
+    },
+    async (params) => {
+      try {
+        const removed = db.deleteMushroomStrain(database, params.id);
+        if (!removed) return errResult('Pilzsorte not found: ' + params.id);
+        notify();
+        return json({ success: true, id: params.id });
       } catch (e) {
         return errResult(e.message);
       }
