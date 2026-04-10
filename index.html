@@ -443,24 +443,12 @@
       <div class="card">
         <div class="sec" data-i18n="batch.createNew">Create new batch</div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-          <div class="g2">
-            <div><label data-i18n="batch.batchType">Batch type</label>
-              <select id="nb-type">
-                <option value="block" data-i18n="batch.fruitingBlock">Fruiting block</option>
-                <option value="grain" data-i18n="batch.grainSpawnBag">Grain spawn bag</option>
-              </select>
-            </div>
-            <div><label data-i18n="batch.bagWeight">Bag weight</label>
+          <div><label data-i18n="batch.bagWeight">Bag weight</label>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px" id="nb-weight-btns">
                 <button type="button" class="btn btn-sm btn-p" id="wbtn-3">3 kg</button>
                 <button type="button" class="btn btn-sm" id="wbtn-5">5 kg</button>
-                <button type="button" class="btn btn-sm" id="wbtn-07" style="display:none">0.7 kg</button>
-                <button type="button" class="btn btn-sm" id="wbtn-1" style="display:none">1 kg</button>
-                <button type="button" class="btn btn-sm" id="wbtn-2" style="display:none">2 kg</button>
-                <button type="button" class="btn btn-sm" id="wbtn-5g" style="display:none">5 kg</button>
               </div>
               <input type="text" inputmode="decimal" id="nb-weight" value="3" style="margin-top:6px;width:100px" autocomplete="off" />
-            </div>
           </div>
           <div>
             <label data-i18n="strains.pilzsorte">Pilzsorte</label>
@@ -573,6 +561,7 @@
   <div class="stabs">
     <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
     <button class="stab" id="st-lab-work" data-i18n="lab.logWork">Log work</button>
+    <button class="stab" id="st-lab-grain" data-i18n="lab.grainSpawn">Körnerbrut</button>
     <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
   </div>
   <!-- Cultures -->
@@ -642,6 +631,50 @@
           <thead><tr><th data-i18n="th.date">Date</th><th data-i18n="th.type">Type</th><th>ID</th><th data-i18n="th.parent">Parent</th><th data-i18n="th.species">Species</th></tr></thead>
           <tbody id="lab-log-body"></tbody>
         </table></div>
+      </div>
+    </div>
+  </div>
+  <!-- Grain spawn -->
+  <div class="sp" id="sp-lab-grain">
+    <div class="g2">
+      <div class="card">
+        <div class="sec" data-i18n="lab.createGrainSpawn">Körnerbrut-Beutel erstellen</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div>
+            <label data-i18n="strains.pilzsorte">Pilzsorte</label>
+            <select id="gs-strain-sel">
+              <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
+            </select>
+          </div>
+          <div class="g2">
+            <div><label data-i18n="batch.bagWeight">Beutelgewicht</label>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px">
+                <button type="button" class="btn btn-sm" id="gs-wbtn-07">0.7 kg</button>
+                <button type="button" class="btn btn-sm btn-p" id="gs-wbtn-1">1 kg</button>
+                <button type="button" class="btn btn-sm" id="gs-wbtn-2">2 kg</button>
+                <button type="button" class="btn btn-sm" id="gs-wbtn-5">5 kg</button>
+              </div>
+              <input type="text" inputmode="decimal" id="gs-weight" value="1" style="margin-top:6px;width:100px" autocomplete="off" />
+            </div>
+            <div><label data-i18n="batch.qty">Menge (Beutel)</label><input type="number" id="gs-qty" value="10" min="1" max="500" /></div>
+          </div>
+          <div class="g2">
+            <div><label data-i18n="batch.incDays">Inkubationstage</label><input type="number" id="gs-days" value="14" min="1" max="90" /></div>
+            <div></div>
+          </div>
+          <div><label data-i18n="batch.sourceCulture">Quellkultur (optional)</label><select id="gs-culture"><option value="" data-i18n="batch.none">— keine —</option></select><div style="font-size:11px;color:var(--c-text-muted);margin-top:3px" data-i18n="batch.sourceCultureHint">Link to the PD or LC used to inoculate this batch</div></div>
+          <div><label data-i18n="batch.notes">Notizen (optional)</label><textarea id="gs-notes" rows="2" placeholder="Any notes..."></textarea></div>
+          <div class="met"><div class="met-l" data-i18n="lab.grainIdPreview">Körnerbrut-ID Vorschau</div><div id="gs-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
+          <div id="gs-mat-preview" style="display:none;background:var(--c-primary-light);border:1px solid var(--c-green-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--c-green-dark);line-height:1.8"></div>
+          <button id="btn-gs-create" class="btn btn-p" data-i18n="lab.createGrainBtn">Körnerbrut erstellen</button>
+        </div>
+      </div>
+      <div class="card" id="gs-result" style="display:none">
+        <div class="sec" data-i18n="batch.generatedIds">Generierte Beutel-IDs</div>
+        <div id="gs-bags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:250px;overflow-y:auto"></div>
+        <div style="border-top:1px solid var(--c-border);margin-top:12px;padding-top:12px">
+          <button id="prt-gs" class="btn btn-p" style="width:100%" data-i18n="batch.printLabels">Etiketten für diese Charge drucken</button>
+        </div>
       </div>
     </div>
   </div>
