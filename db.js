@@ -1905,6 +1905,24 @@ function deleteZone(db, id) {
   incrementDataVersion(db);
 }
 
+function reorderZones(db, order) {
+  if (!Array.isArray(order)) throw new Error('order must be an array');
+  const existing = new Set(db.prepare('SELECT id FROM zones').all().map((r) => r.id));
+  for (const id of order) {
+    if (!existing.has(id)) throw new Error('Unknown zone: ' + id);
+  }
+  db.exec('BEGIN');
+  try {
+    const upd = db.prepare('UPDATE zones SET sort_order=? WHERE id=?');
+    order.forEach((id, i) => upd.run(i + 1, id));
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
 function insertRack(db, r) {
   db.prepare('INSERT INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)').run(
     r.id,
@@ -2192,6 +2210,7 @@ module.exports = {
   getAllCalendarEventAssignees,
   insertZone,
   deleteZone,
+  reorderZones,
   insertRack,
   deleteRack,
   zoneExists,
