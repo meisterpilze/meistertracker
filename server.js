@@ -3457,6 +3457,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+          jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
+          return;
+        }
         const user = db.createUser(database, username, password, 'admin');
         const dbUser = db.getUserByUsername(database, username);
         const token = db.createSession(database, dbUser.id);
@@ -3583,6 +3587,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const { username, password, role } = data;
         if (!username || !password || password.length < 8) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
+          return;
+        }
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+          jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
         const user = db.createUser(database, username, password, role || 'user');

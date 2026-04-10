@@ -7385,13 +7385,13 @@ function renderAssigneePicker(){
   const box=document.getElementById('cal-ev-assignees');if(!box)return;
   const dd=document.getElementById('cal-ev-assignee-dropdown');
   if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
   if(dd){
     const names=getSelectableAssignees();
     if(!names.length){
       dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
     }else{
-      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
+      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
     }
   }
 }
@@ -7405,19 +7405,37 @@ function toggleAssignee(name){
   renderAssigneePicker();
 }
 function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
+// Delegated click handlers for assignee picker (avoids inline onclick XSS)
+(function(){
+  const box=document.getElementById('cal-ev-assignees');
+  if(box){box.addEventListener('click',function(e){
+    const rm=e.target.closest('[data-assignee-remove]');
+    if(!rm)return;
+    e.stopPropagation();
+    toggleAssignee(rm.dataset.assigneeRemove);
+  })}
+  const dd=document.getElementById('cal-ev-assignee-dropdown');
+  if(dd){dd.addEventListener('click',function(e){
+    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
+    const lbl=e.target.closest('[data-assignee-toggle]');
+    if(!lbl)return;
+    e.stopPropagation();e.preventDefault();
+    toggleAssignee(lbl.dataset.assigneeToggle);
+  })}
+})();
 
 // ── Task assignee picker (multi-select) ──
 function renderTaskAssigneePicker(){
   const box=document.getElementById('cal-task-assignees');if(!box)return;
   const dd=document.getElementById('cal-task-assignee-dropdown');
   if(!calTaskSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-task-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
   if(dd){
     const names=getSelectableAssignees();
     if(!names.length){
       dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
     }else{
-      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
+      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-task-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
     }
   }
 }
@@ -7430,6 +7448,24 @@ function toggleTaskAssignee(name){
   if(i>=0)calTaskSelectedAssignees.splice(i,1);else calTaskSelectedAssignees.push(name);
   renderTaskAssigneePicker();
 }
+// Delegated click handlers for task assignee picker (avoids inline onclick XSS)
+(function(){
+  const box=document.getElementById('cal-task-assignees');
+  if(box){box.addEventListener('click',function(e){
+    const rm=e.target.closest('[data-task-assignee-remove]');
+    if(!rm)return;
+    e.stopPropagation();
+    toggleTaskAssignee(rm.dataset.taskAssigneeRemove);
+  })}
+  const dd=document.getElementById('cal-task-assignee-dropdown');
+  if(dd){dd.addEventListener('click',function(e){
+    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
+    const lbl=e.target.closest('[data-task-assignee-toggle]');
+    if(!lbl)return;
+    e.stopPropagation();e.preventDefault();
+    toggleTaskAssignee(lbl.dataset.taskAssigneeToggle);
+  })}
+})();
 
 async function loadCalDAVImports(){
   try{
