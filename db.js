@@ -796,7 +796,7 @@ function writeAll(db, incoming) {
     if (incoming.scanLog) {
       db.prepare('DELETE FROM scan_log').run();
       const ins = db.prepare(
-        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain) VALUES(?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain, user_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const e of incoming.scanLog) {
         ins.run(
@@ -807,7 +807,8 @@ function writeAll(db, incoming) {
           e.from || null,
           e.to || null,
           e.species || null,
-          e.strain || null
+          e.strain || null,
+          e.userId ?? e.user_id ?? null
         );
       }
     }
@@ -866,7 +867,7 @@ function writeAll(db, incoming) {
     if (incoming.manualTasks) {
       db.prepare('DELETE FROM manual_tasks').run();
       const ins = db.prepare(
-        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced, private) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const t of incoming.manualTasks) {
         ins.run(
@@ -878,7 +879,8 @@ function writeAll(db, incoming) {
           t.dueDate || null,
           t.description || null,
           t.caldavUid || null,
-          t.caldavSynced || null
+          t.caldavSynced || null,
+          t.private ? 1 : 0
         );
       }
     }
@@ -905,15 +907,15 @@ function writeAll(db, incoming) {
         WHERE id=1
       `
       ).run(
-        (thresh.hardwood && thresh.hardwood.minKg) || 50,
-        (thresh.wheatbran && thresh.wheatbran.minKg) || 20,
-        (thresh.gypsum && thresh.gypsum.minKg) || 5,
-        (thresh.grain && thresh.grain.minKg) || 10,
-        avg.hwPct || 75,
-        avg.wbPct || 25,
-        avg.rhPct || 63,
-        avg.bagKg || 3,
-        avg.grainBagKg || 1
+        (thresh.hardwood && thresh.hardwood.minKg) ?? 50,
+        (thresh.wheatbran && thresh.wheatbran.minKg) ?? 20,
+        (thresh.gypsum && thresh.gypsum.minKg) ?? 5,
+        (thresh.grain && thresh.grain.minKg) ?? 10,
+        avg.hwPct ?? 75,
+        avg.wbPct ?? 25,
+        avg.rhPct ?? 63,
+        avg.bagKg ?? 3,
+        avg.grainBagKg ?? 1
       );
     }
 
@@ -1353,21 +1355,28 @@ function appendScanEntries(db, entries, userId) {
     'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id) VALUES(?,?,?,?,?,?,?,?,?)'
   );
   const ids = [];
-  for (const e of entries) {
-    const r = ins.run(
-      e.time,
-      e.action,
-      e.batch || null,
-      e.bag || null,
-      e.from || null,
-      e.to || null,
-      e.species || null,
-      e.strain || null,
-      userId || null
-    );
-    ids.push(r.lastInsertRowid);
+  db.exec('BEGIN');
+  try {
+    for (const e of entries) {
+      const r = ins.run(
+        e.time,
+        e.action,
+        e.batch || null,
+        e.bag || null,
+        e.from || null,
+        e.to || null,
+        e.species || null,
+        e.strain || null,
+        userId || null
+      );
+      ids.push(r.lastInsertRowid);
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
   }
-  incrementDataVersion(db);
   return ids;
 }
 
@@ -1672,15 +1681,15 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   db.prepare(
     `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=? WHERE id=1`
   ).run(
-    (t.hardwood && t.hardwood.minKg) || 50,
-    (t.wheatbran && t.wheatbran.minKg) || 20,
-    (t.gypsum && t.gypsum.minKg) || 5,
-    (t.grain && t.grain.minKg) || 10,
-    a.hwPct || 75,
-    a.wbPct || 25,
-    a.rhPct || 63,
-    a.bagKg || 3,
-    a.grainBagKg || 1
+    (t.hardwood && t.hardwood.minKg) ?? 50,
+    (t.wheatbran && t.wheatbran.minKg) ?? 20,
+    (t.gypsum && t.gypsum.minKg) ?? 5,
+    (t.grain && t.grain.minKg) ?? 10,
+    a.hwPct ?? 75,
+    a.wbPct ?? 25,
+    a.rhPct ?? 63,
+    a.bagKg ?? 3,
+    a.grainBagKg ?? 1
   );
   incrementDataVersion(db);
 }
@@ -1883,8 +1892,8 @@ function zoneBagCount(db, zoneId) {
     .all(...allLocs, ...allLocs);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE') && allLocs.includes(r.to)) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && allLocs.includes(r.to)) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
   }
   return bags.size;
 }
@@ -1914,8 +1923,8 @@ function rackBagCount(db, rackId) {
     .all(rackId, rackId);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE') && r.to === rackId) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && r.to === rackId) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
   }
   return bags.size;
 }
