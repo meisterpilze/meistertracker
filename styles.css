@@ -2880,20 +2880,39 @@ tr:hover td {
 .zone-group-header:first-child {
   padding-top: 4px;
 }
-.zone-reorder {
+.zone-row {
+  position: relative;
+}
+.zone-drag-handle {
   display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
   margin-right: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  color: var(--c-text-muted);
+  cursor: grab;
+  user-select: none;
+  border-radius: 3px;
 }
-.zone-reorder-btn {
-  font-size: 12px !important;
-  padding: 2px 6px !important;
-  line-height: 1 !important;
+.zone-drag-handle:hover {
+  background: var(--c-border-light);
+  color: var(--c-text);
 }
-.zone-reorder-btn[disabled] {
-  opacity: 0.3;
-  cursor: not-allowed;
+.zone-drag-handle:active {
+  cursor: grabbing;
+}
+.zone-row.zone-dragging {
+  opacity: 0.4;
+}
+.zone-row.zone-drop-before {
+  box-shadow: inset 0 4px 0 0 var(--c-primary);
+}
+.zone-row.zone-drop-after {
+  box-shadow: inset 0 -4px 0 0 var(--c-primary);
 }
 .zone-direct-badge {
   background: var(--c-red) !important;
