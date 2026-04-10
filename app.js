@@ -4112,7 +4112,6 @@ async function loadOAuthClients(){
       list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
       return;
     }
-    const esc=s=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
@@ -4126,9 +4125,14 @@ async function loadOAuthClients(){
           '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
           '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
           '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\','+c.autoRegistered+')">'+t('mcp.deleteClient')+'</button></td></tr>';
+          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="'+esc(c.clientId)+'" data-auto="'+(c.autoRegistered?1:0)+'">'+t('mcp.deleteClient')+'</button></td></tr>';
       }).join('')+
       '</tbody></table>';
+    list.onclick=function(e){
+      const btn=e.target.closest('[data-oauth-action="delete"]');
+      if(!btn)return;
+      deleteOAuthClient(btn.dataset.clientId,btn.dataset.auto==='1');
+    };
   }catch(e){console.error('loadOAuthClients:',e)}
 }
 async function deleteOAuthClient(clientId,isAuto){
@@ -6559,7 +6563,7 @@ function renderCalMonth(){
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
       const dot=e.species?spDot(e.species):'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+assigneeStr+'</div>';
+      return'<div class="'+cls+'" '+drag+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
     return o;
@@ -6612,7 +6616,7 @@ function renderCalWeek(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -6698,7 +6702,7 @@ function renderCalDay(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">'+t('cal.noAllDay')+'</div>'}
   html+='</div>';
@@ -6756,6 +6760,12 @@ function renderCalDay(){
 // ── Calendar Drag-and-Drop ──
 function initCalDragDrop(root){
   if(!root)return;
+  root.onclick=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(!ev)return;
+    e.stopPropagation();
+    onCalMonthEventClick(ev.dataset.type,ev.dataset.id);
+  };
   root.ondragstart=function(e){
     const ev=e.target.closest('.cal-event');
     if(!ev||ev.classList.contains('no-drag')){e.preventDefault();return}
@@ -6981,7 +6991,7 @@ function openEventDetail(ev){
     assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(teamList.length?teamList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='task-due'){
     const tk=manualTasks.find(x=>x.created===ev.id);if(!tk)return;
@@ -7002,7 +7012,7 @@ function openEventDetail(ev){
     descEl.textContent=tk.description||'';
     descEl.style.display=tk.description?'':'none';
     const doneLabel=tk.done?t('calDetail.markUndone'):t('calDetail.markDone');
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" data-cal-action="toggle-task" data-cal-id="'+esc(ev.id)+'">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='batch-due'){
     titleEl.textContent=ev.label;
@@ -7014,7 +7024,7 @@ function openEventDetail(ev){
     assignEl.innerHTML='';
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
-    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
 
   }else if(ev.type==='caldav-import'){
     titleEl.textContent=ev.label;
@@ -7026,12 +7036,26 @@ function openEventDetail(ev){
     assignEl.innerHTML='';
     descEl.textContent=ev.description||'';
     descEl.style.display=ev.description?'':'none';
-    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
+    btnsEl.innerHTML='<button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
   }
   document.getElementById('m-cal-detail').classList.add('open');
 }
 
 function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+
+// Delegated click handler for calendar detail buttons (avoids inline onclick XSS).
+document.getElementById('cal-detail-btns').addEventListener('click',function(e){
+  const btn=e.target.closest('[data-cal-action]');
+  if(!btn)return;
+  const action=btn.dataset.calAction;
+  const id=btn.dataset.calId;
+  if(action==='close')return closeEventDetail();
+  if(action==='delete-event')return deleteCalEventFromDetail(id);
+  if(action==='edit-event')return editEventFromDetail(id);
+  if(action==='delete-task')return deleteTaskFromCalendar(id);
+  if(action==='toggle-task')return toggleTaskFromCalendar(id);
+  if(action==='edit-task')return editTaskFromCalendar(id);
+});
 
 function editEventFromDetail(id){
   closeEventDetail();

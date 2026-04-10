@@ -3895,6 +3895,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
+        jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
       let vd = validateDate(data.created, 'created');
       if (vd) {
         jsonErr(res, 400, vd);
@@ -4080,6 +4084,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         for (const c of arr) {
           const vr = validateRequired(c, ['id', 'type', 'created']);
           if (vr) { jsonErr(res, 400, vr); return; }
+          if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
+            jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
+            return;
+          }
         }
         db.insertCultures(database, arr);
         broadcastSSE(res);
@@ -4298,6 +4306,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const vlen = validateLengths(data, { assetId: 200, name: 500, category: 200, supplier: 500, notes: 10000 });
       if (vlen) {
         jsonErr(res, 400, vlen);
+        return;
+      }
+      if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.assetId)) {
+        jsonErr(res, 400, 'assetId must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
       }
       const ve = validateEnum(data.depreciationMethod, ['linear'], 'depreciationMethod');
@@ -4761,6 +4773,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const vlen = validateLengths(data, { id: 200, title: 500, description: 10000 });
       if (vlen) {
         jsonErr(res, 400, vlen);
+        return;
+      }
+      if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.id)) {
+        jsonErr(res, 400, 'id must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
       }
       let vd = validateDate(data.startDate, 'startDate');
