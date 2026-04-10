@@ -124,6 +124,21 @@
       <div><label>Von</label><input type="time" id="cal-entry-start-time" value="09:00" /></div>
       <div><label>Bis</label><input type="time" id="cal-entry-end-time" value="10:00" /></div>
     </div>
+    <div class="g2" id="cal-entry-recurrence-wrap" style="margin-bottom:8px;display:none">
+      <div>
+        <label>Wiederholung</label>
+        <select id="cal-entry-recurrence">
+          <option value="">Keine</option>
+          <option value="daily">Täglich</option>
+          <option value="weekly">Wöchentlich</option>
+          <option value="monthly">Monatlich</option>
+        </select>
+      </div>
+      <div id="cal-entry-recurrence-until-wrap" style="display:none">
+        <label>Wiederholen bis (optional)</label>
+        <input type="date" id="cal-entry-recurrence-until" />
+      </div>
+    </div>
     <div style="margin-bottom:8px">
       <label>Beschreibung (optional)</label>
       <textarea id="cal-entry-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
@@ -135,8 +150,8 @@
       </select>
     </div>
     <div id="cal-entry-ev-assign-wrap" style="margin-bottom:8px;display:none">
-      <label>Zugewiesen an</label>
-      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px">Niemand zugewiesen</span></div>
+      <label>Zugewiesen an (Teammitglieder)</label>
+      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px">Alle (klicken um auszuwählen)</span></div>
       <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid var(--c-border);border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
     </div>
     <div id="cal-entry-private-wrap" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">

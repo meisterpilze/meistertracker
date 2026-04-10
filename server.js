@@ -4683,6 +4683,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
         }
       }
+      if (data.recurrence != null && !['weekly', 'monthly', 'daily', ''].includes(data.recurrence)) {
+        jsonErr(res, 400, 'recurrence must be daily, weekly or monthly');
+        return;
+      }
+      if (data.recurrenceUntil) {
+        const vd = validateDate(data.recurrenceUntil, 'recurrenceUntil');
+        if (vd) { jsonErr(res, 400, vd); return; }
+      }
+      if (data.teamAssignees != null && !Array.isArray(data.teamAssignees)) {
+        jsonErr(res, 400, 'teamAssignees must be an array of names');
+        return;
+      }
       try {
         db.insertCalendarEvent(database, data, Array.isArray(data.assignees) ? data.assignees : null);
         autoSyncCalendarEvent(data);

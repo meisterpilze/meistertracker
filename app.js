@@ -2434,6 +2434,7 @@ function applyData(d){
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
+  if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
 }
 function defaultInventory(){
   return{
@@ -3489,6 +3490,8 @@ function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const e
 // ─── TEAM MEMBERS ───────────────────────────────────────────
 function renderTeam(){
   const el=document.getElementById('team-list');
+  if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
+  if(!el)return;
   if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
   el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:var(--c-text-muted)">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
 }
@@ -5608,6 +5611,36 @@ function getBatchLoc(b){
   b.bags.forEach(bag=>{const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());if(last&&last.action!=='REMOVE'&&last.to)locs[last.to]=(locs[last.to]||0)+1});
   const entries=Object.entries(locs);if(!entries.length)return'';entries.sort((a,b)=>b[1]-a[1]);return entries[0][0];
 }
+function getCalendarRange(){
+  // Window for expanding recurring events — covers any visible view with margin
+  const y=calYear,m=calMonth;
+  const start=new Date(y,m-2,1);
+  const end=new Date(y,m+3,0);
+  return {start,end};
+}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function addMonths(d,n){const x=new Date(d);x.setMonth(x.getMonth()+n);return x}
+function expandRecurringEvent(ev){
+  const out=[];
+  if(!ev.recurrence){out.push(ev.startDate);return out}
+  const {start:winStart,end:winEnd}=getCalendarRange();
+  const base=parseDateStr(ev.startDate);
+  const hardEnd=ev.recurrenceUntil?parseDateStr(ev.recurrenceUntil):null;
+  let cur=new Date(base);
+  let guard=0;
+  while(guard++<500){
+    if(hardEnd&&cur>hardEnd)break;
+    if(cur>winEnd)break;
+    if(cur>=winStart||cur.getTime()===base.getTime()){
+      out.push(cur.toISOString().split('T')[0]);
+    }
+    if(ev.recurrence==='daily')cur=addDays(cur,1);
+    else if(ev.recurrence==='weekly')cur=addDays(cur,7);
+    else if(ev.recurrence==='monthly')cur=addMonths(cur,1);
+    else break;
+  }
+  return out;
+}
 function collectCalendarEvents(){
   const events=[];
   batches.forEach(b=>{
@@ -5625,10 +5658,15 @@ function collectCalendarEvents(){
     const d=new Date(h.time);
     events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
   });
-  const filterUserId=parseInt(document.getElementById('cal-filter-user')?.value)||0;
+  const filterName=document.getElementById('cal-filter-user')?.value||'';
   calendarEvents.forEach(ev=>{
-    if(filterUserId&&ev.assignees&&ev.assignees.length&&!ev.assignees.some(a=>a.userId===filterUserId))return;
-    events.push({date:ev.startDate,label:ev.title,type:'custom',id:ev.id,draggable:true,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#16a34a',description:ev.description,assignees:ev.assignees||[]});
+    const teamList=Array.isArray(ev.teamAssignees)?ev.teamAssignees:[];
+    if(filterName&&teamList.length&&!teamList.includes(filterName))return;
+    const dates=expandRecurringEvent(ev);
+    const displayAssignees=teamList.map(n=>({userId:0,username:n}));
+    dates.forEach(ds=>{
+      events.push({date:ds,label:ev.title,type:'custom',id:ev.id,draggable:!ev.recurrence,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#16a34a',description:ev.description,assignees:displayAssignees,recurrence:ev.recurrence||null});
+    });
   });
   caldavImports.forEach(ev=>{
     events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#6366f1'});
@@ -6132,13 +6170,18 @@ function openEventDetail(ev){
   if(ev.type==='custom'){
     const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
     titleEl.textContent=ce.title;
-    let meta=new Date(ce.startDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const occDate=ev.date||ce.startDate;
+    let meta=new Date(occDate).toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
     if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' bis '+new Date(ce.endDate).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     const catLabels={custom:'Eigener Termin',meeting:'Meeting',delivery:'Lieferung',maintenance:'Wartung'};
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(CATEGORY_COLORS[ce.category]||safeColor(ce.color))+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
-    assignEl.innerHTML=ce.assignees&&ce.assignees.length?'Zugewiesen: <strong>'+ce.assignees.map(a=>esc(a.username)).join(', ')+'</strong>':'';
+    const recLabels={daily:'Täglich',weekly:'Wöchentlich',monthly:'Monatlich'};
+    let badges='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(CATEGORY_COLORS[ce.category]||safeColor(ce.color))+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
+    if(ce.recurrence)badges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 '+esc(recLabels[ce.recurrence]||ce.recurrence)+'</span>';
+    badgesEl.innerHTML=badges;
+    const teamList=Array.isArray(ce.teamAssignees)?ce.teamAssignees:[];
+    assignEl.innerHTML=teamList.length?'Zugewiesen: <strong>'+teamList.map(n=>esc(n)).join(', ')+'</strong>':'Zugewiesen: <strong>Alle</strong>';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
     btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">Löschen</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">Schließen</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">Bearbeiten</button>';
@@ -6235,8 +6278,16 @@ function setEntryType(type){
   document.getElementById('cal-entry-task-assign-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
   document.getElementById('cal-entry-private-wrap').style.display=isTask?'flex':'none';
+  const recWrap=document.getElementById('cal-entry-recurrence-wrap');
+  if(recWrap)recWrap.style.display=isTask?'none':'grid';
   document.getElementById('cal-entry-name').placeholder=isTask?'z.B. Luftfeuchtezelt reinigen':'z.B. Team-Meeting';
   toggleEntryTimeInputs();
+  toggleRecurrenceUntil();
+}
+function toggleRecurrenceUntil(){
+  const sel=document.getElementById('cal-entry-recurrence');
+  const wrap=document.getElementById('cal-entry-recurrence-until-wrap');
+  if(sel&&wrap)wrap.style.display=sel.value?'':'none';
 }
 
 function openEntryModal(type,date,time,existing){
@@ -6273,7 +6324,11 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-end-time').value=existing.endTime||'10:00';
     setEntryType(existing.category||'custom');
     document.getElementById('cal-entry-desc').value=existing.description||'';
-    calEvSelectedAssignees=(existing.assignees||[]).map(a=>a.userId);renderAssigneePicker();
+    calEvSelectedAssignees=Array.isArray(existing.teamAssignees)?existing.teamAssignees.slice():[];
+    renderAssigneePicker();
+    document.getElementById('cal-entry-recurrence').value=existing.recurrence||'';
+    document.getElementById('cal-entry-recurrence-until').value=existing.recurrenceUntil||'';
+    toggleRecurrenceUntil();
     document.getElementById('cal-entry-del-btn').style.display='';
   }else{
     document.getElementById('cal-entry-title').textContent='Neuer Eintrag';
@@ -6291,6 +6346,9 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-desc').value='';
     document.getElementById('cal-entry-private').checked=false;
     calEvSelectedAssignees=[];renderAssigneePicker();
+    document.getElementById('cal-entry-recurrence').value='';
+    document.getElementById('cal-entry-recurrence-until').value='';
+    toggleRecurrenceUntil();
     document.getElementById('cal-entry-del-btn').style.display='none';
   }
   document.getElementById('cal-ev-assignee-dropdown').style.display='none';
@@ -6363,6 +6421,9 @@ function saveEntryEvent(){
   const name=document.getElementById('cal-entry-name').value.trim();if(!name)return;
   const allDay=document.getElementById('cal-entry-allday').checked;
   const category=document.getElementById('cal-entry-type-select').value;
+  const recurrence=document.getElementById('cal-entry-recurrence').value||null;
+  const recurrenceUntil=recurrence?(document.getElementById('cal-entry-recurrence-until').value||null):null;
+  const teamAssignees=calEvSelectedAssignees.slice();
   const ev={
     id:mode==='edit'?document.getElementById('cal-entry-id').value:('cev-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)),
     title:name,
@@ -6376,16 +6437,18 @@ function saveEntryEvent(){
     color:CATEGORY_COLORS[category]||'#16a34a',
     caldavUid:null,caldavSynced:null,
     created:new Date().toISOString(),
-    assignees:getSelectedAssigneeIds().map(uid=>{const u=appUsers.find(x=>x.id===uid);return{userId:uid,username:u?u.username:'?'}})
+    recurrence:recurrence,
+    recurrenceUntil:recurrenceUntil,
+    teamAssignees:teamAssignees,
+    assignees:[]
   };
-  const assigneeIds=getSelectedAssigneeIds();
   if(mode==='edit'){
     const idx=calendarEvents.findIndex(x=>x.id===ev.id);
     if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),Object.assign({},ev,{assignees:assigneeIds}));
+    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{title:ev.title,description:ev.description,startDate:ev.startDate,endDate:ev.endDate,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,category:ev.category,color:ev.color,recurrence:ev.recurrence,recurrenceUntil:ev.recurrenceUntil,teamAssignees:ev.teamAssignees});
   }else{
     calendarEvents.push(ev);
-    apiPost('/api/calendar-events',Object.assign({},ev,{assignees:assigneeIds})).then(r=>{if(r&&r.id)ev.id=r.id});
+    apiPost('/api/calendar-events',ev).then(r=>{if(r&&r.id)ev.id=r.id});
   }
   renderCalendar();closeEntryModal();
   if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
@@ -6439,6 +6502,8 @@ function openEventMoveModal(ev){
   document.getElementById('cal-entry-desc').closest('div').style.display='none';
   document.getElementById('cal-entry-task-assign-wrap').style.display='none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display='none';
+  const recWrapMove=document.getElementById('cal-entry-recurrence-wrap');
+  if(recWrapMove)recWrapMove.style.display='none';
   document.getElementById('cal-entry-private-wrap').style.display='none';
   document.getElementById('cal-entry-del-btn').style.display='none';
   document.getElementById('cal-entry-type-select').closest('.g2').style.display='none';
@@ -6461,22 +6526,30 @@ async function loadAppUsers(){
 }
 function fillCalendarUserFilter(){
   const sel=document.getElementById('cal-filter-user');if(!sel)return;
-  sel.innerHTML='<option value="">Alle Benutzer</option>'+appUsers.map(u=>'<option value="'+u.id+'">'+esc(u.username)+'</option>').join('');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Alle Teammitglieder</option>'+teamMembers.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('');
+  sel.value=cur;
 }
 function renderAssigneePicker(){
   const box=document.getElementById('cal-ev-assignees');if(!box)return;
   const dd=document.getElementById('cal-ev-assignee-dropdown');
-  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">Niemand zugewiesen</span>'}
-  else{box.innerHTML=calEvSelectedAssignees.map(uid=>{const u=appUsers.find(x=>x.id===uid);return'<span class="assignee-chip">'+esc(u?u.username:'?')+' <button onclick="event.stopPropagation();toggleAssignee('+uid+')">×</button></span>'}).join('')}
-  if(dd){dd.innerHTML=appUsers.map(u=>{const checked=calEvSelectedAssignees.includes(u.id);return'<label style="'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee('+u.id+')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(u.username)+'</label>'}).join('')}
+  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">Alle (klicken um auszuwählen)</span>'}
+  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  if(dd){
+    if(!teamMembers.length){
+      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">Noch keine Teammitglieder. Zuerst im Team-Tab hinzufügen.</div>';
+    }else{
+      dd.innerHTML=teamMembers.map(m=>{const checked=calEvSelectedAssignees.includes(m.name);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee(\''+esc(m.name).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(m.name)+'</label>'}).join('');
+    }
+  }
 }
 function toggleAssigneeDropdown(){
   const dd=document.getElementById('cal-ev-assignee-dropdown');if(!dd)return;
   dd.style.display=dd.style.display==='none'?'block':'none';
 }
-function toggleAssignee(uid){
-  const i=calEvSelectedAssignees.indexOf(uid);
-  if(i>=0)calEvSelectedAssignees.splice(i,1);else calEvSelectedAssignees.push(uid);
+function toggleAssignee(name){
+  const i=calEvSelectedAssignees.indexOf(name);
+  if(i>=0)calEvSelectedAssignees.splice(i,1);else calEvSelectedAssignees.push(name);
   renderAssigneePicker();
 }
 function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
@@ -6760,6 +6833,7 @@ function initEventListeners() {
   $('cal-entry-del-btn').addEventListener('click', deleteEntry);
   $('cal-entry-allday').addEventListener('change', toggleEntryTimeInputs);
   $('cal-entry-type-select').addEventListener('change', function(){setEntryType(this.value)});
+  $('cal-entry-recurrence').addEventListener('change', toggleRecurrenceUntil);
   $('m-cal-entry').addEventListener('click', e=>{if(e.target.id==='m-cal-entry')closeEntryModal()});
   $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
 
