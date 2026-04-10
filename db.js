@@ -1230,8 +1230,10 @@ function getUserByUsernameCaseInsensitive(db, username) {
 }
 
 function verifyPassword(storedHash, salt, password) {
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hash, 'hex'));
+  const a = Buffer.from(storedHash, 'hex');
+  const b = crypto.scryptSync(password, salt, 64);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 function createSession(db, userId) {
