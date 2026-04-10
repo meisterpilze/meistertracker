@@ -2647,7 +2647,7 @@ function getStatus(id){
   scanLog.filter(e=>e.batch===id).forEach(e=>{
     const tz=toZone(e.to),fz=toZone(e.from);
     if(e.action==='ADD'&&e.to&&c[tz]!==undefined)c[tz]=Math.max(0,c[tz]+1);
-    if(e.action==='MOVE'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
     if(e.action==='REMOVE'&&e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);
   });
   const total=Object.values(c).reduce((a,b)=>a+b,0);
@@ -3014,10 +3014,13 @@ function updateActionBar(){
 }
 
 function locSelectAllVisible(){
-  // Select all bags visible across all zones
+  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   ZONES.forEach(z=>{
     const bags=getZoneBags(z);
-    Object.entries(bags).forEach(([bagId,d])=>selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc}));
+    Object.entries(bags).forEach(([bagId,d])=>{
+      if(!q||bagId.toLowerCase().includes(q)||(d.batchId||'').toLowerCase().includes(q)||(d.species||'').toLowerCase().includes(q)||(d.strain||'').toLowerCase().includes(q))
+        selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc});
+    });
   });
   renderStatus();
 }
@@ -3048,7 +3051,7 @@ function getRackBags(rackId){
   const bags={};
   scanLog.forEach(e=>{
     if(e.action==='ADD'&&e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};
-    if(e.action==='MOVE'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
     if(e.action==='REMOVE'&&e.from===rackId&&e.bag)delete bags[e.bag];
   });
   return bags;
@@ -3063,7 +3066,7 @@ function getZoneBags(zone){
   scanLog.forEach(e=>{
     const tz=toZone(e.to),fz=toZone(e.from);
     if(e.action==='ADD'&&tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
-    if(e.action==='MOVE'){
+    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){
       if(tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
       if(fz===zone&&e.bag)delete bags[e.bag];
     }
@@ -3134,7 +3137,8 @@ function locMoveTo(toLoc){
   const now=new Date().toISOString();
   const n=selectedLocBags.size;const entries=[];
   selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:null,strain:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const b=batches.find(x=>x.batchId===d.batchId);
+    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3148,7 +3152,7 @@ function locRemoveSelected(){
   if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
   const now=new Date().toISOString();
   const entries=[];selectedLocBags.forEach((d,bagId)=>{
-    const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+    const b=batches.find(x=>x.batchId===d.batchId);const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
     scan.count++;
   });
   lastLocUndoCount=n;
@@ -3522,7 +3526,7 @@ function addMember(){
   const member={name,role:role||null,added:new Date().toISOString()};
   teamMembers.push(member);
   document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  apiPost('/api/team',member).then(r=>{if(r.id)member.id=r.id});renderTeam();
+  apiPost('/api/team',member).then(r=>{if(r&&r.id)member.id=r.id;renderTeam()});
 }
 function removeMember(id){const m=teamMembers.find(x=>x.id===id);if(!m)return;confirm2('Remove member?','Remove '+m.name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers=teamMembers.filter(x=>x.id!==id);apiDelete('/api/team/'+id);renderTeam()})}
 
@@ -3787,7 +3791,6 @@ async function runMcpDiagnostics(){
     const r=await authFetch('/api/mcp/diagnostics');
     if(!r.ok){el.innerHTML='<p style="color:var(--c-red-dark)">'+t('mcp.diagFailed')+'</p>';return}
     const d=await r.json();
-    const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
     let html='<table style="width:100%;font-size:12px;border-collapse:collapse">';
     const row=(label,val,color)=>'<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">'+label+'</td><td style="padding:4px 8px;color:'+(color||'#333')+'">'+val+'</td></tr>';
     const checks=d.checks||{};
@@ -3823,7 +3826,7 @@ async function loadOAuthClients(){
       list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
       return;
     }
-    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const esc=s=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
@@ -4854,9 +4857,11 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
+    const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===biBagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
+    const fromLoc=bagLast?bagLast.to:null;
     const b=batches.find(x=>x.batchId.toUpperCase()===(biBatchId||'').toUpperCase());
     const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,species:b?.species,strain:b?.strain,user:currentUser?.username||null,_tempId:tempId};
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:fromLoc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null,_tempId:tempId};
     scanLog.push(entry);movements.push(entry);
     if(!sessionStartTime)sessionStartTime=Date.now();
     sessionEntries.push(entry);
@@ -5024,7 +5029,7 @@ cell.appendChild(svg);
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;top:'+(idY/240*100).toFixed(1)+'%';idEl.textContent=bagId;cell.appendChild(idEl);
 if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+((idY+42)/240*100).toFixed(1)+'%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}
 if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-muted);white-space:nowrap;top:'+((idY+72)/240*100).toFixed(1)+'%';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}
-wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:Math.round(bcH*0.6),displayValue:false,margin:0,background:'#fff',lineColor:'#000'})}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:bcH,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});const sw=svg.getAttribute('width'),sh=svg.getAttribute('height');if(sw&&sh){svg.setAttribute('viewBox','0 0 '+sw.replace('px','')+' '+sh.replace('px',''));svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','none')}}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
 
 let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>'}
@@ -5043,7 +5048,7 @@ if(opts.bc){
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+(opts.qr?Math.min(parseFloat(bcW),68).toFixed(1):bcW)+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
   cell.appendChild(svg);
-  setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:Math.round(bcH*0.6),displayValue:false,margin:0,background:'#fff',lineColor:'#000'})}catch{}},30+i*15);
+  setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:bcH,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});const sw=svg.getAttribute('width'),sh=svg.getAttribute('height');if(sw&&sh){svg.setAttribute('viewBox','0 0 '+sw.replace('px','')+' '+sh.replace('px',''));svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','none')}}catch{}},30+i*15);
   ty=bcY+bcH+6;
 }else{ty=12}
 const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';idEl.textContent=id;cell.appendChild(idEl);ty+=34;
@@ -5381,6 +5386,8 @@ function processScan(raw){
     const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
     if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
     if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
+    // No action set? Auto-set to MOVE with this location as destination
+    if(!scan.action){scan.action='MOVE';scan.to=val;scan.from=null;scan.harvestBag=null;_pendingDupe=null;_pendingRemove=null;clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):'MOVE → '+val+' — jetzt Bags scannen');return}
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
@@ -5425,6 +5432,11 @@ function processScan(raw){
       const curLoc=bagLast.to||null;
       if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){_scanBeep(500,120);setFb('err',t('scanFb.bagAlreadyAt',{bag:val,loc:scan.to}));return}
       scan.from=curLoc;
+    }
+    // REMOVE: auto-derive FROM from bag's last known location
+    if(scan.action==='REMOVE'){
+      const bagLastR=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
+      scan.from=bagLastR?bagLastR.to:null;
     }
     // REMOVE confirmation: require scanning same bag twice within 5s
     if(scan.action==='REMOVE'){
@@ -6235,9 +6247,8 @@ function deleteCalEventFromDetail(id){
   closeEventDetail();
   confirm2('Event löschen?','Dieses Event wird unwiderruflich gelöscht.','Löschen',()=>{
     calendarEvents=calendarEvents.filter(x=>x.id!==id);
-    if(typeof saveData==='function')saveData();
     renderCalendar();
-    authFetch('/api/calendar-events/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
+    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
   });
 }
 
@@ -6391,11 +6402,10 @@ function saveEntryTask(){
   }else{
     const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv};
     manualTasks.push(task);
-    apiPost('/api/tasks',task).then(r=>{if(r&&r.id)task.id=r.id});
-    if(caldav.enabled&&due)pushTaskCaldav(task);
+    apiPost('/api/tasks',task).then(r=>{if(r&&r.id){task.id=r.id;if(caldav.enabled&&due)pushTaskCaldav(task)}renderCalendar();updateTodoBadge()});
   }
   closeEntryModal();
-  renderCalendar();updateTodoBadge();
+  if(document.getElementById('cal-entry-id').value){renderCalendar();updateTodoBadge()}
 }
 
 function saveEntryEvent(){
