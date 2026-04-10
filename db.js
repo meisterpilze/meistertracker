@@ -1581,6 +1581,19 @@ function readTaskById(db, id) {
   };
 }
 
+// Check whether a user is allowed to modify or delete a task.
+// Admins can always modify. Otherwise, the user must be named in the
+// task's assignee field (comma-separated) OR the task must be
+// unassigned (null/empty assignee means "for everyone").
+function canUserModifyTask(db, username, taskId, isAdmin) {
+  if (isAdmin) return true;
+  const r = db.prepare('SELECT assignee FROM manual_tasks WHERE id=?').get(taskId);
+  if (!r) return false;
+  if (!r.assignee || !String(r.assignee).trim()) return true;
+  const assignees = String(r.assignee).split(',').map((s) => s.trim()).filter(Boolean);
+  return assignees.includes(username);
+}
+
 function readTaskByCaldavUid(db, caldavUid) {
   const r = db.prepare('SELECT * FROM manual_tasks WHERE caldav_uid = ?').get(caldavUid);
   if (!r) return null;
@@ -2300,6 +2313,7 @@ module.exports = {
   updateTaskById,
   deleteTaskById,
   readTaskById,
+  canUserModifyTask,
   readTaskByCaldavUid,
   readBatchById,
   insertMember,
