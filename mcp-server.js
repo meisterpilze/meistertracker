@@ -489,13 +489,12 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_batch',
-    'Update fields on an existing batch (notes, species, strain, qty, days, due date)',
+    'Update fields on an existing batch (notes, species, strain, days, due date). To change qty, use add_bags_to_batch instead — it keeps the inventory log consistent.',
     {
       batchId: z.string().describe('Batch ID'),
       notes: z.string().optional(),
       species: z.string().optional(),
       strain: z.string().optional(),
-      qty: z.number().optional(),
       days: z.number().optional(),
       due: z.string().optional().describe('ISO date')
     },

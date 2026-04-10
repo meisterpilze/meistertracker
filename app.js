@@ -4110,7 +4110,7 @@ async function runMcpDiagnostics(){
     html+='</table>';
     if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">'+esc(d.hint)+'</div>';
     el.innerHTML=html;
-  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+e.message+'</p>'}
+  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+esc(e.message)+'</p>'}
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
@@ -4130,7 +4130,6 @@ async function loadOAuthClients(){
       list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
       return;
     }
-    const esc=s=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
@@ -4144,9 +4143,14 @@ async function loadOAuthClients(){
           '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
           '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
           '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" onclick="deleteOAuthClient(\''+esc(c.clientId)+'\','+c.autoRegistered+')">'+t('mcp.deleteClient')+'</button></td></tr>';
+          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="'+esc(c.clientId)+'" data-auto="'+(c.autoRegistered?1:0)+'">'+t('mcp.deleteClient')+'</button></td></tr>';
       }).join('')+
       '</tbody></table>';
+    list.onclick=function(e){
+      const btn=e.target.closest('[data-oauth-action="delete"]');
+      if(!btn)return;
+      deleteOAuthClient(btn.dataset.clientId,btn.dataset.auto==='1');
+    };
   }catch(e){console.error('loadOAuthClients:',e)}
 }
 async function deleteOAuthClient(clientId,isAuto){
@@ -4303,7 +4307,7 @@ function renderThresholds(){
       return`<tr>
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
-        <td><input type="text" inputmode="decimal" value="${t.minKg}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
+        <td><input type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
         <td style="font-size:12px;color:var(--c-text-sec)">~${bags} bags <span style="font-size:10px;color:var(--c-text-muted)">(avg)</span></td>
       </tr>`;
     }).join('')}
@@ -4321,15 +4325,15 @@ function renderThresholds(){
     </p>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
       <div><label style="font-size:11px">Hardwood %</label>
-        <input type="text" inputmode="decimal" value="${c.hwPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
       <div><label style="font-size:11px">Wheat bran %</label>
-        <input type="text" inputmode="decimal" value="${c.wbPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.wbPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
       <div><label style="font-size:11px">Water % (RH)</label>
-        <input type="text" inputmode="decimal" value="${c.rhPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.rhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
       <div><label style="font-size:11px">Block weight (kg)</label>
-        <input type="text" inputmode="decimal" value="${c.bagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
       <div><label style="font-size:11px">Grain bag (kg)</label>
-        <input type="text" inputmode="decimal" value="${c.grainBagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
       With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg*(1-c.rhPct/100)*(c.hwPct/100)).toFixed(3)}kg hardwood + ~${(c.bagKg*(1-c.rhPct/100)*(c.wbPct/100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
@@ -5003,7 +5007,7 @@ function resetAssetForm(){
   document.getElementById('asset-id-preview').textContent='Neue ID: '+nextAssetId();
   // Fill location datalist
   const locs=[...new Set(assets.map(a=>a.location).filter(Boolean))];
-  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${l}">`).join('');
+  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${esc(l)}">`).join('');
 }
 
 function assetStatusChange(){
@@ -5198,7 +5202,7 @@ function deleteCulture(id){
 function lwUpdate(){
   const type=document.getElementById('lw-type').value;
   const dl=document.getElementById('sp-list');
-  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${s}">`).join('');
+  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${esc(s)}">`).join('');
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
   if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
   else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
@@ -6594,7 +6598,7 @@ function renderCalMonth(){
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
       const dot=e.species?spDot(e.species):'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+assigneeStr+'</div>';
+      return'<div class="'+cls+'" '+drag+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
     if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
     return o;
@@ -6647,7 +6651,7 @@ function renderCalWeek(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
     });
     html+='</div>';
   });
@@ -6733,7 +6737,7 @@ function renderCalDay(){
       const cls=e.draggable?'cal-event':'cal-event no-drag';
       const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
       const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+e.type+'" data-id="'+(e.id||'')+'" title="'+esc(e.label)+'" '+bg+' onclick="event.stopPropagation();onCalMonthEventClick(\''+e.type+'\',\''+esc(e.id||'')+'\')">'+dot+esc(e.label)+'</div>';
+      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
     });
   }else{html+='<div class="cal-day-allday-empty">'+t('cal.noAllDay')+'</div>'}
   html+='</div>';
@@ -6791,6 +6795,12 @@ function renderCalDay(){
 // ── Calendar Drag-and-Drop ──
 function initCalDragDrop(root){
   if(!root)return;
+  root.onclick=function(e){
+    const ev=e.target.closest('.cal-event');
+    if(!ev)return;
+    e.stopPropagation();
+    onCalMonthEventClick(ev.dataset.type,ev.dataset.id);
+  };
   root.ondragstart=function(e){
     const ev=e.target.closest('.cal-event');
     if(!ev||ev.classList.contains('no-drag')){e.preventDefault();return}
@@ -7016,7 +7026,7 @@ function openEventDetail(ev){
     assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(teamList.length?teamList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
     descEl.textContent=ce.description||'';
     descEl.style.display=ce.description?'':'none';
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteCalEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editEventFromDetail(\''+esc(ce.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='task-due'){
     const tk=manualTasks.find(x=>x.created===ev.id);if(!tk)return;
@@ -7037,7 +7047,7 @@ function openEventDetail(ev){
     descEl.textContent=tk.description||'';
     descEl.style.display=tk.description?'':'none';
     const doneLabel=tk.done?t('calDetail.markUndone'):t('calDetail.markDone');
-    btnsEl.innerHTML='<button class="btn btn-r" onclick="deleteTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" onclick="toggleTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" onclick="editTaskFromCalendar(\''+esc(ev.id)+'\')">'+esc(t('calDetail.edit'))+'</button>';
+    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" data-cal-action="toggle-task" data-cal-id="'+esc(ev.id)+'">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calDetail.edit'))+'</button>';
 
   }else if(ev.type==='batch-due'){
     titleEl.textContent=ev.label;
@@ -7049,7 +7059,7 @@ function openEventDetail(ev){
     assignEl.innerHTML='';
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
-    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
 
   }else if(ev.type==='caldav-import'){
     titleEl.textContent=ev.label;
@@ -7061,12 +7071,26 @@ function openEventDetail(ev){
     assignEl.innerHTML='';
     descEl.textContent=ev.description||'';
     descEl.style.display=ev.description?'':'none';
-    btnsEl.innerHTML='<button class="btn" onclick="closeEventDetail()">'+esc(t('calDetail.close'))+'</button>';
+    btnsEl.innerHTML='<button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
   }
   document.getElementById('m-cal-detail').classList.add('open');
 }
 
 function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+
+// Delegated click handler for calendar detail buttons (avoids inline onclick XSS).
+document.getElementById('cal-detail-btns').addEventListener('click',function(e){
+  const btn=e.target.closest('[data-cal-action]');
+  if(!btn)return;
+  const action=btn.dataset.calAction;
+  const id=btn.dataset.calId;
+  if(action==='close')return closeEventDetail();
+  if(action==='delete-event')return deleteCalEventFromDetail(id);
+  if(action==='edit-event')return editEventFromDetail(id);
+  if(action==='delete-task')return deleteTaskFromCalendar(id);
+  if(action==='toggle-task')return toggleTaskFromCalendar(id);
+  if(action==='edit-task')return editTaskFromCalendar(id);
+});
 
 function editEventFromDetail(id){
   closeEventDetail();
@@ -7396,13 +7420,13 @@ function renderAssigneePicker(){
   const box=document.getElementById('cal-ev-assignees');if(!box)return;
   const dd=document.getElementById('cal-ev-assignee-dropdown');
   if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
   if(dd){
     const names=getSelectableAssignees();
     if(!names.length){
       dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
     }else{
-      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
+      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
     }
   }
 }
@@ -7416,19 +7440,37 @@ function toggleAssignee(name){
   renderAssigneePicker();
 }
 function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
+// Delegated click handlers for assignee picker (avoids inline onclick XSS)
+(function(){
+  const box=document.getElementById('cal-ev-assignees');
+  if(box){box.addEventListener('click',function(e){
+    const rm=e.target.closest('[data-assignee-remove]');
+    if(!rm)return;
+    e.stopPropagation();
+    toggleAssignee(rm.dataset.assigneeRemove);
+  })}
+  const dd=document.getElementById('cal-ev-assignee-dropdown');
+  if(dd){dd.addEventListener('click',function(e){
+    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
+    const lbl=e.target.closest('[data-assignee-toggle]');
+    if(!lbl)return;
+    e.stopPropagation();e.preventDefault();
+    toggleAssignee(lbl.dataset.assigneeToggle);
+  })}
+})();
 
 // ── Task assignee picker (multi-select) ──
 function renderTaskAssigneePicker(){
   const box=document.getElementById('cal-task-assignees');if(!box)return;
   const dd=document.getElementById('cal-task-assignee-dropdown');
   if(!calTaskSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(name).replace(/'/g,"\\'")+'\')">×</button></span>').join('')}
+  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-task-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
   if(dd){
     const names=getSelectableAssignees();
     if(!names.length){
       dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
     }else{
-      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" onclick="event.stopPropagation();toggleTaskAssignee(\''+esc(n).replace(/'/g,"\\'")+'\')"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" onclick="event.stopPropagation()">'+esc(n)+'</label>'}).join('');
+      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-task-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
     }
   }
 }
@@ -7441,6 +7483,24 @@ function toggleTaskAssignee(name){
   if(i>=0)calTaskSelectedAssignees.splice(i,1);else calTaskSelectedAssignees.push(name);
   renderTaskAssigneePicker();
 }
+// Delegated click handlers for task assignee picker (avoids inline onclick XSS)
+(function(){
+  const box=document.getElementById('cal-task-assignees');
+  if(box){box.addEventListener('click',function(e){
+    const rm=e.target.closest('[data-task-assignee-remove]');
+    if(!rm)return;
+    e.stopPropagation();
+    toggleTaskAssignee(rm.dataset.taskAssigneeRemove);
+  })}
+  const dd=document.getElementById('cal-task-assignee-dropdown');
+  if(dd){dd.addEventListener('click',function(e){
+    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
+    const lbl=e.target.closest('[data-task-assignee-toggle]');
+    if(!lbl)return;
+    e.stopPropagation();e.preventDefault();
+    toggleTaskAssignee(lbl.dataset.taskAssigneeToggle);
+  })}
+})();
 
 async function loadCalDAVImports(){
   try{
