@@ -26,6 +26,28 @@ components:
       properties:
         ok:
           type: boolean
+    MushroomStrain:
+      type: object
+      required: [id, name, kuerzel, created]
+      properties:
+        id:
+          type: integer
+          description: Primary key
+        name:
+          type: string
+          description: Full strain name (unique)
+        kuerzel:
+          type: string
+          description: Short code (unique)
+        description:
+          type: string
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+          nullable: true
 
 security:
   - cookieAuth: []
@@ -174,23 +196,124 @@ paths:
         '200':
           description: SSE stream (text/event-stream)
 
-  /api/batches:
+  /api/mushroom-strains:
+    get:
+      summary: List all Pilzsorten (mushroom strains)
+      responses:
+        '200':
+          description: Array of strains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MushroomStrain'
     post:
-      summary: Create a new batch
+      summary: Create a new Pilzsorte
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [batchId, species, qty, days, created, due]
+              required: [name, kuerzel]
+              properties:
+                name:
+                  type: string
+                  description: Must be unique
+                kuerzel:
+                  type: string
+                  description: Short code, must be unique
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Strain created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '400':
+          description: Validation error (missing fields or unique violation)
+
+  /api/mushroom-strains/{id}:
+    patch:
+      summary: Update a Pilzsorte
+      description: >-
+        Changes to `name` or `kuerzel` cascade into all batches and cultures
+        that reference this strain (their `species`/`strain` columns are
+        updated in a single transaction).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                kuerzel:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Strain updated
+        '400':
+          description: Unique violation
+    delete:
+      summary: Delete a Pilzsorte (admin only)
+      description: >-
+        Fails with 400 when the strain is still referenced by any batch or
+        culture. Delete or reassign dependent rows first.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Strain deleted
+        '400':
+          description: Strain still in use
+        '403':
+          description: Admin role required
+
+  /api/batches:
+    post:
+      summary: Create a new batch
+      description: >-
+        Either `strainId` or `species` must be supplied. When `strainId` is set,
+        `species` and `strain` are auto-filled from the referenced Pilzsorte
+        and any values passed in the request body are overwritten.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId, qty, days, created, due]
               properties:
                 batchId:
                   type: string
+                strainId:
+                  type: integer
+                  description: Pilzsorte id — auto-fills species/strain from mushroom_strains
                 species:
                   type: string
+                  description: Required when strainId is omitted
                 strain:
                   type: string
+                  description: Kuerzel (free-text fallback when strainId is omitted)
                 qty:
                   type: integer
                 days:
@@ -212,6 +335,9 @@ paths:
   /api/batches/{batchId}:
     patch:
       summary: Update batch fields
+      description: >-
+        Passing `strainId` switches the batch to a different Pilzsorte and
+        cascades `species`/`strain` from the mushroom_strains row.
       parameters:
         - name: batchId
           in: path
@@ -226,7 +352,11 @@ paths:
               properties:
                 notes:
                   type: string
+                strainId:
+                  type: integer
                 species:
+                  type: string
+                strain:
                   type: string
                 days:
                   type: integer
@@ -362,6 +492,10 @@ paths:
   /api/cultures:
     post:
       summary: Create cultures
+      description: >-
+        Pass `strainId` on each culture to auto-fill `species`/`strain` from
+        the referenced Pilzsorte. Free-text `species`/`strain` are only used
+        when `strainId` is omitted.
       requestBody:
         required: true
         content:
@@ -373,17 +507,34 @@ paths:
                   type: array
                   items:
                     type: object
+                    required: [id, type]
                     properties:
                       id:
                         type: string
                       type:
                         type: string
+                        enum: [MC, PD, LC, G2G]
+                      strainId:
+                        type: integer
+                        description: Pilzsorte id (auto-fills species/strain)
                       species:
                         type: string
                       strain:
                         type: string
+                      parentId:
+                        type: string
+                        nullable: true
+                      source:
+                        type: string
+                        nullable: true
                       status:
                         type: string
+                        enum: [active, stored, used, contam]
+                      notes:
+                        type: string
+                      created:
+                        type: string
+                        format: date-time
       responses:
         '200':
           description: Cultures created
@@ -391,6 +542,9 @@ paths:
   /api/cultures/{id}:
     patch:
       summary: Update a culture
+      description: >-
+        Passing `strainId` switches the culture to a different Pilzsorte and
+        cascades `species`/`strain` from the mushroom_strains row.
       parameters:
         - name: id
           in: path
@@ -405,8 +559,18 @@ paths:
               properties:
                 status:
                   type: string
+                  enum: [active, stored, used, contam]
                 notes:
                   type: string
+                strainId:
+                  type: integer
+                species:
+                  type: string
+                strain:
+                  type: string
+                source:
+                  type: string
+                  nullable: true
       responses:
         '200':
           description: Culture updated
