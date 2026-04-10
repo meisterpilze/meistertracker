@@ -290,6 +290,7 @@ const LANG = {
     'lab.recentEntries': 'Recent lab entries',
     'lab.noWork': 'No lab work logged yet.',
     'lab.enterSpecies': 'Please enter a species',
+    'lab.selectPilzsorte': 'Please select a Pilzsorte',
     'lab.g2gNote': 'G2G is recorded via the scan bar \u2014 use ADD to move grain bags.',
     'lab.printNow': 'Print labels now?',
     'lab.qtyDishes': 'Number of dishes',
@@ -1173,6 +1174,7 @@ const LANG = {
     'lab.recentEntries': 'Letzte Labor-Eintr\u00e4ge',
     'lab.noWork': 'Noch keine Laborarbeiten erfasst.',
     'lab.enterSpecies': 'Bitte eine Art eingeben',
+    'lab.selectPilzsorte': 'Bitte eine Pilzsorte auswählen',
     'lab.g2gNote': 'G2G wird \u00fcber die Scan-Leiste erfasst \u2014 verwende ADD.',
     'lab.printNow': 'Etiketten jetzt drucken?',
     'lab.qtyDishes': 'Anzahl Schalen',
@@ -2056,6 +2058,7 @@ const LANG = {
     'lab.recentEntries': 'Entradas recentes do lab',
     'lab.noWork': 'Nenhum trabalho de lab registrado ainda.',
     'lab.enterSpecies': 'Insira uma esp\u00e9cie',
+    'lab.selectPilzsorte': 'Selecione uma Pilzsorte',
     'lab.g2gNote': 'G2G \u00e9 registrado pela barra de scan \u2014 use ADD.',
     'lab.printNow': 'Imprimir etiquetas agora?',
     'lab.qtyDishes': 'N\u00famero de placas',
@@ -5367,8 +5370,6 @@ function deleteCulture(id){
 // ─── LAB WORK ────────────────────────────────────────────────
 function lwUpdate(){
   const type=document.getElementById('lw-type').value;
-  const dl=document.getElementById('sp-list');
-  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${esc(s)}">`).join('');
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
   if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
   else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
@@ -5378,7 +5379,11 @@ function lwUpdate(){
 }
 function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
-  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
+  const type=document.getElementById('lw-type').value;
+  const strainId=parseInt(document.getElementById('lw-st')?.value)||null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  const sp=ms?ms.name:'';
+  const qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
   if(!sp||type==='G2G'){box.style.display='none';return}
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
@@ -5386,19 +5391,19 @@ function lwPreview(){
   prev.textContent=Array.from({length:qty},(_,i)=>prefix+String(existing+i+1).padStart(2,'0')).join('\n');
   box.style.display='block';
 }
-// lw-sp and lw-qty input listeners moved to initEventListeners()
+// lw-st change and lw-qty input listeners live in initEventListeners()
 function logLabWork(){
-  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim();
+  const type=document.getElementById('lw-type').value;
   const strainSel=document.getElementById('lw-st');
   const strainId=strainSel?parseInt(strainSel.value)||null:null;
   const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  const st=ms?ms.kuerzel:'';
+  if(!ms){alert(t('lab.selectPilzsorte'));return}
+  const sp=ms.name,st=ms.kuerzel;
   const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
-  if(!sp){alert(t('lab.enterSpecies'));return}
   if(type==='G2G'){alert(t('lab.g2gNote'));return}
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
-  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',strainId:strainId||null,parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
+  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',strainId,strainName:sp,strainKuerzel:st||null,parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
   cultures.push(...newC);apiPost('/api/cultures',{cultures:newC});
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
@@ -7939,7 +7944,7 @@ function initEventListeners() {
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
   $('lw-type').addEventListener('change', lwUpdate);
-  $('lw-sp').addEventListener('input', lwPreview);
+  $('lw-st').addEventListener('change', lwPreview);
   $('lw-qty').addEventListener('input', lwPreview);
   $('btn-26').addEventListener('click', logLabWork);
   $('lineage-sel').addEventListener('change', renderLineage);
