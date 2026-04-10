@@ -158,7 +158,10 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   color       TEXT,
   caldav_uid  TEXT,
   caldav_synced TEXT,
-  created     TEXT NOT NULL
+  created     TEXT NOT NULL,
+  recurrence       TEXT,
+  recurrence_until TEXT,
+  team_assignees   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS calendar_event_assignees (
@@ -411,6 +414,19 @@ const MIGRATIONS = [
     description: 'Add resource column to oauth_codes for RFC 8707 resource indicator support',
     fn(db) {
       db.exec(`ALTER TABLE oauth_codes ADD COLUMN resource TEXT DEFAULT ''`);
+    }
+  },
+  {
+    version: 16,
+    description: 'Add recurrence + team_assignees to calendar_events',
+    fn(db) {
+      const addCol = (col, def) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE calendar_events ADD COLUMN ${col} ${def}`);
+      };
+      addCol('recurrence', 'TEXT');
+      addCol('recurrence_until', 'TEXT');
+      addCol('team_assignees', 'TEXT');
     }
   }
 ];
@@ -676,6 +692,9 @@ function readAll(db, opts = {}) {
       caldavUid: r.caldav_uid,
       caldavSynced: r.caldav_synced,
       created: r.created,
+      recurrence: r.recurrence || null,
+      recurrenceUntil: r.recurrence_until || null,
+      teamAssignees: parseTeamAssignees(r.team_assignees),
       assignees: assigneeMap.get(r.id) || []
     }));
 
@@ -986,13 +1005,16 @@ function writeAll(db, incoming) {
 
       const upsert = db.prepare(`
         INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
-          start_time, end_time, category, color, caldav_uid, caldav_synced, created)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          start_time, end_time, category, color, caldav_uid, caldav_synced, created,
+          recurrence, recurrence_until, team_assignees)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           title=excluded.title, description=excluded.description, start_date=excluded.start_date,
           end_date=excluded.end_date, all_day=excluded.all_day, start_time=excluded.start_time,
           end_time=excluded.end_time, category=excluded.category, color=excluded.color,
-          caldav_uid=excluded.caldav_uid, caldav_synced=excluded.caldav_synced, created=excluded.created
+          caldav_uid=excluded.caldav_uid, caldav_synced=excluded.caldav_synced, created=excluded.created,
+          recurrence=excluded.recurrence, recurrence_until=excluded.recurrence_until,
+          team_assignees=excluded.team_assignees
       `);
       for (const e of incoming.calendarEvents) {
         upsert.run(
@@ -1008,7 +1030,10 @@ function writeAll(db, incoming) {
           e.color || null,
           e.caldavUid || null,
           e.caldavSynced || null,
-          e.created
+          e.created,
+          e.recurrence || null,
+          e.recurrenceUntil || null,
+          serializeTeamAssignees(e.teamAssignees)
         );
       }
       // Sync assignees
@@ -1718,13 +1743,24 @@ function deleteSupplier(db, id) {
 }
 
 // ── Calendar Event CRUD ─────────────────────────────────────
+function serializeTeamAssignees(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  try { return JSON.stringify(Array.isArray(v) ? v : []); } catch { return null; }
+}
+function parseTeamAssignees(v) {
+  if (!v) return [];
+  try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
 function insertCalendarEvent(db, ev, assigneeIds) {
   db.exec('BEGIN');
   try {
     db.prepare(
       `INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
-      start_time, end_time, category, color, caldav_uid, caldav_synced, created)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      start_time, end_time, category, color, caldav_uid, caldav_synced, created,
+      recurrence, recurrence_until, team_assignees)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       ev.id,
       ev.title,
@@ -1738,7 +1774,10 @@ function insertCalendarEvent(db, ev, assigneeIds) {
       ev.color || null,
       ev.caldavUid || null,
       ev.caldavSynced || null,
-      ev.created || new Date().toISOString()
+      ev.created || new Date().toISOString(),
+      ev.recurrence || null,
+      ev.recurrenceUntil || null,
+      serializeTeamAssignees(ev.teamAssignees)
     );
     if (assigneeIds && assigneeIds.length) {
       const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
@@ -1764,7 +1803,10 @@ function updateCalendarEvent(db, id, fields) {
     'category',
     'color',
     'caldav_uid',
-    'caldav_synced'
+    'caldav_synced',
+    'recurrence',
+    'recurrence_until',
+    'team_assignees'
   ];
   const map = {
     startDate: 'start_date',
@@ -1773,7 +1815,9 @@ function updateCalendarEvent(db, id, fields) {
     startTime: 'start_time',
     endTime: 'end_time',
     caldavUid: 'caldav_uid',
-    caldavSynced: 'caldav_synced'
+    caldavSynced: 'caldav_synced',
+    recurrenceUntil: 'recurrence_until',
+    teamAssignees: 'team_assignees'
   };
   const sets = [];
   const vals = [];
@@ -1781,7 +1825,9 @@ function updateCalendarEvent(db, id, fields) {
     const col = map[k] || k;
     if (!allowed.includes(col)) continue;
     sets.push(col + '=?');
-    vals.push(col === 'all_day' ? (v ? 1 : 0) : (v ?? null));
+    if (col === 'all_day') vals.push(v ? 1 : 0);
+    else if (col === 'team_assignees') vals.push(serializeTeamAssignees(v));
+    else vals.push(v ?? null);
   }
   if (!sets.length) return;
   vals.push(id);
@@ -1814,7 +1860,10 @@ function readCalendarEventByCaldavUid(db, caldavUid) {
     color: r.color,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
-    created: r.created
+    created: r.created,
+    recurrence: r.recurrence || null,
+    recurrenceUntil: r.recurrence_until || null,
+    teamAssignees: parseTeamAssignees(r.team_assignees)
   };
 }
 
@@ -2103,7 +2152,10 @@ function getCalendarEvents(db) {
   return db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
     id: r.id, title: r.title, description: r.description, startDate: r.start_date,
     endDate: r.end_date, allDay: r.all_day === 1, startTime: r.start_time, endTime: r.end_time,
-    category: r.category, color: r.color, assignees: assigneeMap.get(r.id) || []
+    category: r.category, color: r.color,
+    recurrence: r.recurrence || null, recurrenceUntil: r.recurrence_until || null,
+    teamAssignees: parseTeamAssignees(r.team_assignees),
+    assignees: assigneeMap.get(r.id) || []
   }));
 }
 function getInventory(db, logLimit) {
