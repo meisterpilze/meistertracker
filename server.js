@@ -3957,7 +3957,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const scanIdMatch = req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if (req.method === 'DELETE' && scanIdMatch) {
-    if (requireAdmin(req, res)) return;
+    // Any authenticated user can undo a scan entry (workers must be able to undo their own scans).
+    // Auth is already enforced by the top-level /api/ guard above.
     try {
       const ok = db.deleteScanEntryById(database, parseInt(scanIdMatch[1]));
       broadcastSSE(res);
