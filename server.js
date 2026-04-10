@@ -3990,6 +3990,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // ── ATOMIC REST ENDPOINTS ────────────────────────────────────
 
+  // -- Mushroom Strains --
+  if (req.method === 'GET' && url === '/api/mushroom-strains') {
+    try {
+      jsonOk(res, db.listMushroomStrains(database));
+    } catch (err) { safeErr(res, err); }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/mushroom-strains') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      const vr = validateRequired(data, ['name', 'kuerzel']);
+      if (vr) { jsonErr(res, 400, vr); return; }
+      try {
+        const id = db.createMushroomStrain(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) { safeErr(res, err); }
+    });
+    return;
+  }
+  const msMatch = url.match(/^\/api\/mushroom-strains\/(\d+)$/);
+  if (req.method === 'PATCH' && msMatch) {
+    if (requireAdmin(req, res)) return;
+    const id = parseInt(msMatch[1], 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      try {
+        db.updateMushroomStrain(database, id, data);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) { safeErr(res, err); }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && msMatch) {
+    if (requireAdmin(req, res)) return;
+    const id = parseInt(msMatch[1], 10);
+    try {
+      db.deleteMushroomStrain(database, id);
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) { safeErr(res, err); }
+    return;
+  }
+
   // -- Batches --
   if (req.method === 'POST' && req.url === '/api/batches') {
     jsonBody(req, res, (e, data) => {
@@ -3997,12 +4043,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['batchId', 'species', 'qty', 'days', 'created', 'due']);
+      // strainId replaces species+strain; species still required when no strainId
+      const requiredFields = data.strainId ? ['batchId', 'qty', 'days', 'created', 'due'] : ['batchId', 'species', 'qty', 'days', 'created', 'due'];
+      const vr = validateRequired(data, requiredFields);
       if (vr) {
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { qty: 'number', days: 'number', species: 'string', batchId: 'string' });
+      const vt = validateTypes(data, { qty: 'number', days: 'number', batchId: 'string', ...(data.species ? { species: 'string' } : {}) });
       if (vt) {
         jsonErr(res, 400, vt);
         return;

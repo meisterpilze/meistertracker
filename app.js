@@ -41,8 +41,26 @@ const LANG = {
     'nav.zones': 'Zones',
     'nav.assets': 'Assets',
     'nav.print': 'Print',
+    'nav.strains': 'Pilzsorten',
     'nav.todo': 'To-do',
     'nav.calendar': 'Calendar',
+    'strains.manage': 'Manage Pilzsorten',
+    'strains.list': 'Existing Pilzsorten',
+    'strains.name': 'Name',
+    'strains.namePlaceholder': 'e.g. Shiitake',
+    'strains.kuerzel': 'Kürzel',
+    'strains.kuerzelPlaceholder': 'e.g. SHI',
+    'strains.description': 'Description (optional)',
+    'strains.save': 'Save Pilzsorte',
+    'strains.cancel': 'Cancel',
+    'strains.inUse': 'In use',
+    'strains.hint': 'Without a Pilzsorte, no batches can be created.',
+    'strains.pilzsorte': 'Pilzsorte',
+    'strains.selectPlaceholder': '— select Pilzsorte —',
+    'strains.noStrainsHint': 'No Pilzsorten defined. Please create one first.',
+    'strains.deleteProtected': 'Cannot delete: still in use.',
+    'strains.batches': 'batches',
+    'strains.cultures': 'cultures',
     'nav.more': 'More',
     // Scan strip
     'scan.placeholder': 'Scan barcode here \u2014 works on every tab...',
@@ -906,8 +924,26 @@ const LANG = {
     'nav.zones': 'Zonen',
     'nav.assets': 'Anlagen',
     'nav.print': 'Drucken',
+    'nav.strains': 'Pilzsorten',
     'nav.todo': 'Aufgaben',
     'nav.calendar': 'Kalender',
+    'strains.manage': 'Pilzsorten verwalten',
+    'strains.list': 'Vorhandene Pilzsorten',
+    'strains.name': 'Name',
+    'strains.namePlaceholder': 'z. B. Shiitake',
+    'strains.kuerzel': 'Kürzel',
+    'strains.kuerzelPlaceholder': 'z. B. SHI',
+    'strains.description': 'Beschreibung (optional)',
+    'strains.save': 'Pilzsorte anlegen',
+    'strains.cancel': 'Abbrechen',
+    'strains.inUse': 'Verwendung',
+    'strains.hint': 'Ohne angelegte Pilzsorte können keine Chargen erstellt werden.',
+    'strains.pilzsorte': 'Pilzsorte',
+    'strains.selectPlaceholder': '— Pilzsorte wählen —',
+    'strains.noStrainsHint': 'Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.',
+    'strains.deleteProtected': 'Löschen nicht möglich: noch in Verwendung.',
+    'strains.batches': 'Chargen',
+    'strains.cultures': 'Kulturen',
     'nav.more': 'Mehr',
     // Scan strip
     'scan.placeholder': 'Barcode hier scannen \u2014 funktioniert auf jedem Tab...',
@@ -1771,8 +1807,26 @@ const LANG = {
     'nav.zones': 'Zonas',
     'nav.assets': 'Ativos',
     'nav.print': 'Imprimir',
+    'nav.strains': 'Pilzsorten',
     'nav.todo': 'Tarefas',
     'nav.calendar': 'Calendário',
+    'strains.manage': 'Gerir Pilzsorten',
+    'strains.list': 'Pilzsorten existentes',
+    'strains.name': 'Nome',
+    'strains.namePlaceholder': 'ex. Shiitake',
+    'strains.kuerzel': 'Abrev.',
+    'strains.kuerzelPlaceholder': 'ex. SHI',
+    'strains.description': 'Descrição (opcional)',
+    'strains.save': 'Guardar Pilzsorte',
+    'strains.cancel': 'Cancelar',
+    'strains.inUse': 'Em uso',
+    'strains.hint': 'Sem Pilzsorte, não é possível criar lotes.',
+    'strains.pilzsorte': 'Pilzsorte',
+    'strains.selectPlaceholder': '— seleccionar Pilzsorte —',
+    'strains.noStrainsHint': 'Nenhuma Pilzsorte definida. Crie uma primeiro.',
+    'strains.deleteProtected': 'Não é possível apagar: ainda em uso.',
+    'strains.batches': 'lotes',
+    'strains.cultures': 'culturas',
     'nav.more': 'Mais',
     // Scan strip
     'scan.placeholder': 'Escaneie c\u00f3digo de barras aqui \u2014 funciona em todas as abas...',
@@ -2654,7 +2708,7 @@ function rebuildZoneConstants(){
 }
 
 // ─── DATA ────────────────────────────────────────────────────
-let batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
+let mushroomStrains=[],batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
 let appUsers=[];let calEvSelectedAssignees=[];let calTaskSelectedAssignees=[];
 let scan={action:null,from:null,to:null,count:0,harvestBag:null};
 let confirmCb=null,noteId=null,saving=false,lastHash='';
@@ -2726,6 +2780,7 @@ async function loadData(){
   }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
 function applyData(d){
+  mushroomStrains=d.mushroomStrains||[];
   batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
   harvests=d.harvests||[];cultures=d.cultures||[];
   inventory=d.inventory||defaultInventory();
@@ -2733,6 +2788,7 @@ function applyData(d){
   calendarEvents=d.calendarEvents||[];zones=d.zones||[];suppliers=d.suppliers||[];
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
+  fillStrainSelects();
   fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
   if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
 }
@@ -2829,7 +2885,7 @@ function sbCloseMobile(){
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
-const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',cal:'n-cal',settings:'n-settings'};
+const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',cal:'n-cal',settings:'n-settings',strains:'n-strains'};
 function go(page,btnId){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
@@ -2844,6 +2900,7 @@ function go(page,btnId){
   if(page==='print'){fillBatchSelect();renderLabList();}
   if(page==='cal'){renderCalendar();loadCalDAVImports().then(()=>renderCalendar());}
   if(page==='settings')renderLog();
+  if(page==='strains')renderStrains();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -2883,6 +2940,7 @@ function refresh(){
   if(id==='assets')renderAssets();
   if(id==='zones')renderZones();
   if(id==='cal')renderCalendar();
+  if(id==='strains')renderStrains();
   updateTodoBadge();
 }
 
@@ -3070,7 +3128,7 @@ function renderStatus(){
   });
 
   // Filter by search
-  const filtered=batchData.filter(d=>!q||d.b.batchId.toLowerCase().includes(q)||d.b.species.toLowerCase().includes(q)||d.b.strain.toLowerCase().includes(q));
+  const filtered=batchData.filter(d=>!q||d.b.batchId.toLowerCase().includes(q)||(d.b.species||'').toLowerCase().includes(q)||(d.b.strain||'').toLowerCase().includes(q)||(d.b.strainName||'').toLowerCase().includes(q));
 
   let html='';
   // Render zones dynamically by role
@@ -3506,7 +3564,10 @@ function setBagWeight(kg){
   nbPreview();
 }
 function nbPreview(){
-  const sp=document.getElementById('nb-sp').value.trim(),st=document.getElementById('nb-st').value.trim();
+  const strainSel=document.getElementById('nb-strain-sel');
+  const strainId=strainSel?parseInt(strainSel.value)||null:null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  const sp=ms?ms.name:'',st=ms?ms.kuerzel:'';
   const qty=parseInt(document.getElementById('nb-qty').value)||0;
   document.getElementById('nb-prev').textContent=(sp&&st)?genBatchId(sp)+' ('+qty+' bags)':'—';
   const isGrain=document.getElementById('nb-type').value==='grain';
@@ -3547,11 +3608,15 @@ function nbPreview(){
 }
 function nbSubSum(){const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0,s=hw+wb;document.getElementById('nb-subsum').textContent=(hw||wb)?'Total: '+s+'%'+(s!==100?' — should add up to 100%':''):'';nbPreview()}
 function createBatch(){
-  const sp=document.getElementById('nb-sp').value.trim(),st=document.getElementById('nb-st').value.trim();
+  const strainSel=document.getElementById('nb-strain-sel');
+  const strainId=strainSel?parseInt(strainSel.value)||null:null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
+  const sp=ms.name,st=ms.kuerzel;
   const qty=parseInt(document.getElementById('nb-qty').value)||0,days=parseInt(document.getElementById('nb-days').value)||14;
   const isGrain=document.getElementById('nb-type').value==='grain';
   const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
-  if(!sp||!st||qty<1){alert('Please fill in species, strain and quantity');return}
+  if(qty<1){alert('Please fill in quantity');return}
   if(!bagKg){alert('Please enter a bag weight');return}
   const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
   const substrate=(!isGrain&&(hw||wb))?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
@@ -3559,7 +3624,7 @@ function createBatch(){
   const due=new Date();due.setDate(due.getDate()+days);
   const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
   const batchType=isGrain?'grain':'block';
-  batches.push({batchId,species:sp,strain:st,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
 
   // Save batch to server
   const batchObj=batches[batches.length-1];
@@ -3592,7 +3657,7 @@ function createBatch(){
   if(deltas.length)invDeltas(deltas);
   document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
   document.getElementById('nb-result').style.display='block';
-  document.getElementById('nb-sp').value='';document.getElementById('nb-st').value='';
+  if(document.getElementById('nb-strain-sel'))document.getElementById('nb-strain-sel').value='';
   document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
   document.getElementById('nb-notes').value='';document.getElementById('nb-mat-preview').style.display='none';
   nbPreview();updateTodoBadge();
@@ -3601,12 +3666,13 @@ function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print'
 function renderBatches(){
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
-  body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||b.species.toLowerCase().includes(q)||b.strain.toLowerCase().includes(q)).map(b=>{
+  body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q)).map(b=>{
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${esc(b.strain)}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -5169,10 +5235,110 @@ async function quickPrintAsset(id){
   if(err){const blob=new Blob([zpl],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+'_label.zpl';a.click()}
 }
 
+// ─── MUSHROOM STRAINS ────────────────────────────────────────
+function fillStrainSelects(){
+  const opts='<option value="">'+t('strains.selectPlaceholder')+'</option>'+
+    mushroomStrains.map(ms=>`<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
+  const hint=mushroomStrains.length===0;
+  ['nb-strain-sel','lw-st'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    const cur=el.value;
+    el.innerHTML=opts;
+    if(cur)el.value=cur;
+  });
+  const nbHint=document.getElementById('nb-no-strains-hint');
+  if(nbHint)nbHint.style.display=hint?'block':'none';
+}
+
+function renderStrains(){
+  const body=document.getElementById('strains-body');
+  if(!body)return;
+  if(!mushroomStrains.length){
+    body.innerHTML='<tr><td colspan="4" class="empty">Noch keine Pilzsorten angelegt.</td></tr>';
+    return;
+  }
+  // Count usage
+  const batchCount=id=>batches.filter(b=>b.strainId===id).length;
+  const cultureCount=id=>cultures.filter(c=>c.strainId===id).length;
+  body.innerHTML=mushroomStrains.map(ms=>{
+    const bc=batchCount(ms.id),cc=cultureCount(ms.id);
+    const inUse=bc>0||cc>0;
+    const usageParts=[];
+    if(bc>0)usageParts.push(bc+' '+t('strains.batches'));
+    if(cc>0)usageParts.push(cc+' '+t('strains.cultures'));
+    const usageText=usageParts.join(', ')||'—';
+    return`<tr>
+      <td style="font-weight:500">${esc(ms.name)}</td>
+      <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">Bearb.</button>
+        <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse?'disabled title="'+t('strains.deleteProtected')+'"':''} style="padding:2px 7px">&#x2715;</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function saveMStrain(){
+  const name=document.getElementById('ms-name').value.trim();
+  const kuerzel=document.getElementById('ms-kuerzel').value.trim().toUpperCase();
+  const desc=document.getElementById('ms-desc').value.trim();
+  const editId=document.getElementById('ms-edit-id').value;
+  if(!name||!kuerzel){alert('Name und Kürzel sind Pflichtfelder.');return}
+  const payload={name,kuerzel,description:desc};
+  const req=editId?apiPatch('/api/mushroom-strains/'+editId,payload):apiPost('/api/mushroom-strains',payload);
+  req.then(r=>{
+    if(r&&r.error){alert('Fehler: '+r.error);return}
+    if(!editId&&r&&r.id){mushroomStrains.push({id:r.id,name,kuerzel,description:desc,created:new Date().toISOString()})}
+    else if(editId){const ms=mushroomStrains.find(x=>x.id===parseInt(editId));if(ms){ms.name=name;ms.kuerzel=kuerzel;ms.description=desc}}
+    mushroomStrains.sort((a,b)=>a.name.localeCompare(b.name));
+    fillStrainSelects();
+    renderStrains();
+    cancelMStrain();
+  });
+}
+
+function editMStrain(id){
+  const ms=mushroomStrains.find(x=>x.id===id);if(!ms)return;
+  document.getElementById('ms-name').value=ms.name;
+  document.getElementById('ms-kuerzel').value=ms.kuerzel;
+  document.getElementById('ms-desc').value=ms.description||'';
+  document.getElementById('ms-edit-id').value=id;
+  document.getElementById('ms-save-btn').textContent='Änderungen speichern';
+  document.getElementById('ms-cancel-btn').style.display='';
+  document.getElementById('ms-name').focus();
+}
+
+function cancelMStrain(){
+  document.getElementById('ms-name').value='';
+  document.getElementById('ms-kuerzel').value='';
+  document.getElementById('ms-desc').value='';
+  document.getElementById('ms-edit-id').value='';
+  document.getElementById('ms-save-btn').setAttribute('data-i18n','strains.save');
+  document.getElementById('ms-save-btn').textContent=t('strains.save');
+  document.getElementById('ms-cancel-btn').style.display='none';
+}
+
+function deleteMStrain(id){
+  const ms=mushroomStrains.find(x=>x.id===id);if(!ms)return;
+  confirm2('Pilzsorte löschen?','Pilzsorte "'+ms.name+'" wirklich löschen?','Löschen',()=>{
+    apiDelete('/api/mushroom-strains/'+id).then(r=>{
+      if(r&&r.error){alert('Fehler: '+r.error);return}
+      mushroomStrains=mushroomStrains.filter(x=>x.id!==id);
+      fillStrainSelects();renderStrains();
+    });
+  });
+}
+
+function nbStrainChanged(){
+  nbPreview();
+}
+
 // ─── CULTURES ────────────────────────────────────────────────
 const ctBadge=t=>{const m={MC:'badge-mc',PD:'badge-pd',LC:'badge-lc',G2G:'badge-g2g'};return`<span class="badge ${m[t]||''}">${t}</span>`}
 const csBadge=s=>{const m={active:'badge-active',stored:'badge-stored',used:'badge-used',contam:'badge-contam'};return`<span class="badge ${m[s]||''}">${s}</span>`}
-function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
+function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
@@ -5210,7 +5376,7 @@ function lwUpdate(){
   else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
   lwPreview();
 }
-function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.species)}/${esc(c.strain)}</option>`).join('');if(cur)s.value=cur}
+function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
   const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
@@ -5222,13 +5388,17 @@ function lwPreview(){
 }
 // lw-sp and lw-qty input listeners moved to initEventListeners()
 function logLabWork(){
-  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim(),st=document.getElementById('lw-st').value.trim();
+  const type=document.getElementById('lw-type').value,sp=document.getElementById('lw-sp').value.trim();
+  const strainSel=document.getElementById('lw-st');
+  const strainId=strainSel?parseInt(strainSel.value)||null:null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  const st=ms?ms.kuerzel:'';
   const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
   if(!sp){alert(t('lab.enterSpecies'));return}
   if(type==='G2G'){alert(t('lab.g2gNote'));return}
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
-  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
+  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',strainId:strainId||null,parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
   cultures.push(...newC);apiPost('/api/cultures',{cultures:newC});
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
@@ -5276,7 +5446,7 @@ function openBagInfo(bagId,batchId,batch){
   el.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${esc(b.strain)||'\u2014'}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strainName?(esc(b.strainName)+' <span style="font-size:12px;color:var(--c-text-muted)">('+esc(b.strainKuerzel||b.strain||'')+')</span>'):(esc(b.strain)||'\u2014')}</div></div>
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
     </div>
@@ -5472,7 +5642,11 @@ function bagLabelItems(bagId,batch,mode){
   const idY=bcY+bcH+6;
   items.push({type:'text',y:idY,fontH:38,text:bagId});
   if(mode==='full'||mode==='date'){
-    let infoLine=batch.strain||'';
+    // Show "Pilzsorte - Strain" (e.g. "Shiitake - Amazing") then substrate
+    const strainLabel=batch.strainName&&batch.strain
+      ?batch.strainName+' \u2013 '+batch.strain
+      :(batch.strainName||batch.strain||'');
+    let infoLine=strainLabel;
     if(batch.substrate){
       const hw=batch.substrate.hardwood||0;
       const wb=batch.substrate.wheatbran||0;
@@ -7663,6 +7837,7 @@ function initEventListeners() {
   $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
   $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
   $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
+  $('n-strains').addEventListener('click', () => { go('strains','n-strains'); renderStrains(); });
   $('btn-add-zone').addEventListener('click', addZone);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function(){const c={spawn:'#a855f7',incubation:'#0ea5e9',fruiting:'#10b981',contaminated:'#ef4444'}[this.value];if(c)document.getElementById('zone-color').value=c});
@@ -7752,6 +7927,8 @@ function initEventListeners() {
   $('nb-hw').addEventListener('input', nbSubSum);
   $('nb-wb').addEventListener('input', nbSubSum);
   $('nb-rh').addEventListener('input', nbPreview);
+  $('ms-save-btn').addEventListener('click', saveMStrain);
+  $('ms-cancel-btn').addEventListener('click', cancelMStrain);
   $('btn-24').addEventListener('click', createBatch);
   $('prt-25').addEventListener('click', goToPrintBatch);
   $('harvest-q').addEventListener('input', renderHarvests);
