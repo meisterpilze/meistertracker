@@ -585,3 +585,130 @@ describe('db – backup', () => {
     fs.unlinkSync(dest);
   });
 });
+
+describe('db – mushroom strains CRUD', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('listMushroomStrains returns empty array on fresh db', () => {
+    assert.deepEqual(db.listMushroomStrains(d), []);
+  });
+
+  it('createMushroomStrain returns new id and stores the row', () => {
+    const id = db.createMushroomStrain(d, { name: 'Pleurotus ostreatus HK35', kuerzel: 'HK35', description: 'Classic oyster' });
+    assert.ok(Number(id) > 0);
+    const list = db.listMushroomStrains(d);
+    assert.equal(list.length, 1);
+    assert.equal(list[0].name, 'Pleurotus ostreatus HK35');
+    assert.equal(list[0].kuerzel, 'HK35');
+    assert.equal(list[0].description, 'Classic oyster');
+  });
+
+  it('createMushroomStrain rejects missing name', () => {
+    assert.throws(() => db.createMushroomStrain(d, { name: '', kuerzel: 'X1' }), /Name/);
+  });
+
+  it('createMushroomStrain rejects missing kuerzel', () => {
+    assert.throws(() => db.createMushroomStrain(d, { name: 'Test', kuerzel: '' }), /K.?rzel/);
+  });
+
+  it('createMushroomStrain rejects duplicate name', () => {
+    assert.throws(
+      () => db.createMushroomStrain(d, { name: 'Pleurotus ostreatus HK35', kuerzel: 'OTHER' }),
+      /already taken/
+    );
+  });
+
+  it('createMushroomStrain rejects duplicate kuerzel', () => {
+    assert.throws(
+      () => db.createMushroomStrain(d, { name: 'Different name', kuerzel: 'HK35' }),
+      /already taken/
+    );
+  });
+
+  it('insertBatch with strainId resolves species/strain from mushroom_strains', () => {
+    const list = db.listMushroomStrains(d);
+    const strainId = list[0].id;
+    db.insertBatch(d, {
+      batchId: 'SB-001',
+      strainId,
+      species: 'WRONG SPECIES',
+      strain: 'WRONG',
+      qty: 2,
+      days: 14,
+      created: '2025-03-01T00:00:00Z',
+      due: '2025-03-15T00:00:00Z',
+      bags: ['SB-001-01', 'SB-001-02']
+    });
+    const b = db.readBatchById(d, 'SB-001');
+    assert.equal(b.strainId, strainId);
+    assert.equal(b.species, 'Pleurotus ostreatus HK35');
+    assert.equal(b.strain, 'HK35');
+    assert.equal(b.strainName, 'Pleurotus ostreatus HK35');
+    assert.equal(b.strainKuerzel, 'HK35');
+  });
+
+  it('insertCultures with strainId resolves species/strain from mushroom_strains', () => {
+    const list = db.listMushroomStrains(d);
+    const strainId = list[0].id;
+    db.insertCultures(d, [
+      {
+        id: 'MC-KINGS-250301-01',
+        type: 'MC',
+        strainId,
+        species: 'wrong',
+        strain: 'wrong',
+        status: 'active',
+        notes: '',
+        created: '2025-03-01T00:00:00Z'
+      }
+    ]);
+    const cultures = db.getAllCultures(d);
+    const c = cultures.find((x) => x.id === 'MC-KINGS-250301-01');
+    assert.ok(c);
+    assert.equal(c.strainId, strainId);
+    assert.equal(c.species, 'Pleurotus ostreatus HK35');
+    assert.equal(c.strain, 'HK35');
+    assert.equal(c.strainName, 'Pleurotus ostreatus HK35');
+    assert.equal(c.strainKuerzel, 'HK35');
+  });
+
+  it('updateMushroomStrain propagates name/kuerzel to batches and cultures', () => {
+    const list = db.listMushroomStrains(d);
+    const strainId = list[0].id;
+    db.updateMushroomStrain(d, strainId, { name: 'Pleurotus ostreatus Kings', kuerzel: 'KINGS' });
+
+    const b = db.readBatchById(d, 'SB-001');
+    assert.equal(b.species, 'Pleurotus ostreatus Kings');
+    assert.equal(b.strain, 'KINGS');
+    assert.equal(b.strainName, 'Pleurotus ostreatus Kings');
+    assert.equal(b.strainKuerzel, 'KINGS');
+
+    const cultures = db.getAllCultures(d);
+    const c = cultures.find((x) => x.id === 'MC-KINGS-250301-01');
+    assert.equal(c.species, 'Pleurotus ostreatus Kings');
+    assert.equal(c.strain, 'KINGS');
+    assert.equal(c.strainName, 'Pleurotus ostreatus Kings');
+    assert.equal(c.strainKuerzel, 'KINGS');
+  });
+
+  it('deleteMushroomStrain throws when strain is still referenced', () => {
+    const list = db.listMushroomStrains(d);
+    const strainId = list[0].id;
+    assert.throws(() => db.deleteMushroomStrain(d, strainId), /still in use/);
+  });
+
+  it('deleteMushroomStrain removes a free strain', () => {
+    const freshId = db.createMushroomStrain(d, { name: 'Lentinula edodes CS-41', kuerzel: 'CS41' });
+    const ok = db.deleteMushroomStrain(d, Number(freshId));
+    assert.equal(ok, true);
+    const list = db.listMushroomStrains(d);
+    assert.ok(!list.some((s) => s.id === Number(freshId)));
+  });
+});
