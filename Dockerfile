@@ -3,7 +3,7 @@ RUN addgroup -g 1001 app && adduser -u 1001 -G app -s /bin/sh -D app
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY server.js db.js app.js index.html login.html styles.css sw.js manifest.json openapi.yaml ./
+COPY server.js db.js app.js mcp-server.js index.html login.html login.js styles.css sw.js manifest.json openapi.yaml ./
 COPY lib/ lib/
 RUN mkdir -p backups calendars && chown -R app:app /app
 USER app

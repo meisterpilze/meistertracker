@@ -1230,8 +1230,10 @@ function getUserByUsernameCaseInsensitive(db, username) {
 }
 
 function verifyPassword(storedHash, salt, password) {
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hash, 'hex'));
+  const a = Buffer.from(storedHash, 'hex');
+  const b = crypto.scryptSync(password, salt, 64);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 function createSession(db, userId) {
@@ -1340,7 +1342,10 @@ function insertBatch(db, b) {
 }
 
 function updateBatchField(db, batchId, fields) {
-  const allowed = ['notes', 'species', 'strain', 'qty', 'days', 'due'];
+  // Note: qty is intentionally NOT in the allowed list. Changing qty here
+  // would skip the inventory_log entries that addBagsToBatch / deleteBatchById
+  // use to keep stock consistent. Use addBagsToBatch to grow a batch.
+  const allowed = ['notes', 'species', 'strain', 'days', 'due'];
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
   if (!cols.length) return;
   db.exec('BEGIN');
@@ -1585,6 +1590,19 @@ function readTaskById(db, id) {
     recurrence: r.recurrence || null,
     recurrenceUntil: r.recurrence_until || null
   };
+}
+
+// Check whether a user is allowed to modify or delete a task.
+// Admins can always modify. Otherwise, the user must be named in the
+// task's assignee field (comma-separated) OR the task must be
+// unassigned (null/empty assignee means "for everyone").
+function canUserModifyTask(db, username, taskId, isAdmin) {
+  if (isAdmin) return true;
+  const r = db.prepare('SELECT assignee FROM manual_tasks WHERE id=?').get(taskId);
+  if (!r) return false;
+  if (!r.assignee || !String(r.assignee).trim()) return true;
+  const assignees = String(r.assignee).split(',').map((s) => s.trim()).filter(Boolean);
+  return assignees.includes(username);
 }
 
 function readTaskByCaldavUid(db, caldavUid) {
@@ -2307,6 +2325,7 @@ module.exports = {
   updateTaskById,
   deleteTaskById,
   readTaskById,
+  canUserModifyTask,
   readTaskByCaldavUid,
   readBatchById,
   insertMember,
