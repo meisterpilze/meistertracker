@@ -243,6 +243,12 @@ const LANG = {
     'lab.stored': 'Stored',
     'lab.usedUp': 'Used up',
     'lab.contaminated': 'Contaminated',
+    'lab.deleteCulture': 'Delete culture',
+    'lab.deleteCultureTitle': 'Delete culture?',
+    'lab.deleteCultureMsg': 'Culture {id} will be permanently deleted. This cannot be undone.',
+    'lab.deleteChildren': '{n} child culture(s) reference this culture.',
+    'lab.deleteBatches': '{n} batch(es) reference this culture.',
+    'lab.deleteRefWarn': 'Their parent/source link will become invalid.',
     'lab.noCultures': 'No cultures yet. Use Lab \u2192 Log work to register them.',
     'lab.logCleanRoom': 'Log clean room work',
     'lab.workType': 'Work type',
@@ -1102,6 +1108,12 @@ const LANG = {
     'lab.stored': 'Gelagert',
     'lab.usedUp': 'Aufgebraucht',
     'lab.contaminated': 'Kontaminiert',
+    'lab.deleteCulture': 'Kultur l\u00f6schen',
+    'lab.deleteCultureTitle': 'Kultur l\u00f6schen?',
+    'lab.deleteCultureMsg': 'Kultur {id} wird unwiderruflich gel\u00f6scht.',
+    'lab.deleteChildren': '{n} Nachkommen-Kultur(en) verweisen auf diese Kultur.',
+    'lab.deleteBatches': '{n} Charge(n) verweisen auf diese Kultur.',
+    'lab.deleteRefWarn': 'Deren Eltern-/Quellen-Verweis wird ung\u00fcltig.',
     'lab.noCultures': 'Noch keine Kulturen. Verwende Labor \u2192 Arbeit erfassen.',
     'lab.logCleanRoom': 'Reinraumarbeit erfassen',
     'lab.workType': 'Arbeitstyp',
@@ -1961,6 +1973,12 @@ const LANG = {
     'lab.stored': 'Armazenada',
     'lab.usedUp': 'Esgotada',
     'lab.contaminated': 'Contaminada',
+    'lab.deleteCulture': 'Excluir cultura',
+    'lab.deleteCultureTitle': 'Excluir cultura?',
+    'lab.deleteCultureMsg': 'A cultura {id} ser\u00e1 permanentemente exclu\u00edda.',
+    'lab.deleteChildren': '{n} cultura(s) descendente(s) referenciam esta cultura.',
+    'lab.deleteBatches': '{n} lote(s) referenciam esta cultura.',
+    'lab.deleteRefWarn': 'A refer\u00eancia pai/origem ficar\u00e1 inv\u00e1lida.',
     'lab.noCultures': 'Nenhuma cultura ainda. Use Laborat\u00f3rio \u2192 Registrar trabalho.',
     'lab.logCleanRoom': 'Registrar trabalho em sala limpa',
     'lab.workType': 'Tipo de trabalho',
@@ -5155,9 +5173,26 @@ function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
   const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button></td></tr>`).join('');
+  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${esc(c.strain)||'\u2014'}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`).join('');
 }
 function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
+function deleteCulture(id){
+  const c=cultures.find(x=>x.id===id);if(!c)return;
+  const childCount=cultures.filter(x=>x.parentId===id).length;
+  const batchCount=batches.filter(b=>b.sourceId===id).length;
+  let warning='';
+  if(childCount||batchCount){
+    const parts=[];
+    if(childCount)parts.push(t('lab.deleteChildren',{n:childCount}));
+    if(batchCount)parts.push(t('lab.deleteBatches',{n:batchCount}));
+    warning=' \u26A0 '+parts.join(' ')+' '+t('lab.deleteRefWarn');
+  }
+  confirm2(t('lab.deleteCultureTitle'),t('lab.deleteCultureMsg',{id:id})+warning,t('lab.deleteCulture'),()=>{
+    cultures=cultures.filter(x=>x.id!==id);
+    apiDelete('/api/cultures/'+encodeURIComponent(id));
+    renderCultures();renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);
+  });
+}
 
 // ─── LAB WORK ────────────────────────────────────────────────
 function lwUpdate(){
