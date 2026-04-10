@@ -4083,10 +4083,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.insertBatch(database, data);
+        const result = db.insertBatch(database, data);
         autoPushBatchCaldav(data);
         broadcastSSE(res);
-        jsonOk(res);
+        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
       } catch (err) {
         safeErr(res, err);
       }
@@ -4102,9 +4102,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.addBagsToBatch(database, id, data.add || [], data.newQty);
+        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty);
         broadcastSSE(res);
-        jsonOk(res);
+        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
       } catch (err) {
         safeErr(res, err);
       }
@@ -4262,9 +4262,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             return;
           }
         }
-        db.insertCultures(database, arr);
+        const result = db.insertCultures(database, arr);
         broadcastSSE(res);
-        jsonOk(res);
+        jsonOk(res, { ok: true, cultureBarcodes: result ? result.cultureBarcodes : {} });
       } catch (err) {
         safeErr(res, err);
       }
@@ -4524,9 +4524,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
       }
       try {
-        db.upsertAsset(database, data);
+        const result = db.upsertAsset(database, data);
         broadcastSSE(res);
-        jsonOk(res);
+        jsonOk(res, { ok: true, barcode: result ? result.barcode : null });
       } catch (err) {
         safeErr(res, err);
       }
