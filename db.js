@@ -1509,6 +1509,12 @@ function updateCulture(db, id, fields) {
   incrementDataVersion(db);
 }
 
+function deleteCulture(db, id) {
+  const info = db.prepare('DELETE FROM cultures WHERE id=?').run(id);
+  if (info.changes > 0) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
 // -- Tasks --
 function insertTask(db, t) {
   const r = db
@@ -2296,6 +2302,7 @@ module.exports = {
   insertHarvest,
   insertCultures,
   updateCulture,
+  deleteCulture,
   insertTask,
   updateTaskById,
   deleteTaskById,
