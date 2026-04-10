@@ -5057,6 +5057,125 @@ function _scanBeep(freq,dur){
     o.stop(_scanAudioCtx.currentTime+dur/1000);
   }catch{}
 }
+// Pleasant success chirp: 880Hz sine, 120ms with soft attack/release envelope
+function _scanBeepOk(){
+  if(!scanAudioEnabled)return;
+  try{
+    _initScanAudio();
+    if(!_scanAudioCtx)return;
+    var ctx=_scanAudioCtx;var now=ctx.currentTime;
+    var o=ctx.createOscillator();var g=ctx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(880,now);
+    o.connect(g);g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001,now);
+    g.gain.exponentialRampToValueAtTime(0.22,now+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001,now+0.12);
+    o.start(now);o.stop(now+0.13);
+  }catch{}
+}
+// Sharp error buzz: two dissonant square waves (280Hz + 350Hz), 350ms with gap
+function _scanBeepErr(){
+  if(!scanAudioEnabled)return;
+  try{
+    _initScanAudio();
+    if(!_scanAudioCtx)return;
+    var ctx=_scanAudioCtx;var t0=ctx.currentTime;
+    function tone(start,dur){
+      var o1=ctx.createOscillator();var o2=ctx.createOscillator();var g=ctx.createGain();
+      o1.type='square';o2.type='square';
+      o1.frequency.setValueAtTime(280,start);
+      o2.frequency.setValueAtTime(350,start);
+      o1.connect(g);o2.connect(g);g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001,start);
+      g.gain.exponentialRampToValueAtTime(0.18,start+0.01);
+      g.gain.setValueAtTime(0.18,start+dur-0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,start+dur);
+      o1.start(start);o2.start(start);
+      o1.stop(start+dur);o2.stop(start+dur);
+    }
+    tone(t0,0.14);
+    tone(t0+0.21,0.14);
+  }catch{}
+}
+// Tab navigation for 3-tab scan modal
+function switchScanTab(tab){
+  var tabs=document.querySelectorAll('.scan-tab');
+  var panels=document.querySelectorAll('.scan-tab-panel');
+  for(var i=0;i<tabs.length;i++){
+    var t=tabs[i];
+    if(t.getAttribute('data-scan-tab')===tab)t.classList.add('active');
+    else t.classList.remove('active');
+  }
+  for(var j=0;j<panels.length;j++){
+    var p=panels[j];
+    if(p.getAttribute('data-scan-panel')===tab)p.classList.add('active');
+    else p.classList.remove('active');
+  }
+}
+// Render the "Letzte Erfolge" tab from sessionEntries (session successes)
+function renderScanSuccesses(){
+  var list=document.getElementById('scan-successes-list');
+  if(!list)return;
+  list.innerHTML='';
+  var succ=(sessionEntries||[]).filter(function(e){return e&&e.action&&(e.batch||e.bag)});
+  var cnt=document.getElementById('scan-tab-succ-count');
+  if(cnt)cnt.textContent=String(succ.length);
+  // Newest first
+  for(var i=succ.length-1;i>=0;i--){
+    var e=succ[i];
+    var row=document.createElement('div');
+    row.className='scan-success-row';
+    if(e._tempId)row.setAttribute('data-succ-id',e._tempId);
+    var tm=e.time?new Date(e.time):new Date();
+    var timeStr=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0');
+    var label=e.bag||e.batch||'';
+    var locStr=e.action==='MOVE'?((e.from||'?')+' → '+(e.to||'?'))
+      :e.action==='ADD'?('→ '+(e.to||''))
+      :e.action==='REMOVE'?('✕ '+(e.from||''))
+      :e.action==='HARVEST'?'🍄':'';
+    row.innerHTML='<span class="scan-success-time">'+timeStr+'</span>'
+      +'<span class="badge b-'+esc((e.action||'').toLowerCase())+'">'+esc(e.action||'')+'</span>'
+      +'<span class="scan-success-body"><b>'+esc(label)+'</b>'
+      +(locStr?' <span class="scan-success-loc">'+esc(locStr)+'</span>':'')+'</span>'
+      +'<button class="scan-success-undo" onclick="undoSuccessRow(this)" title="Undo">↩ Undo</button>';
+    list.appendChild(row);
+  }
+}
+// Undo from "Letzte Erfolge" tab row
+function undoSuccessRow(btn){
+  var row=btn.closest('.scan-success-row');
+  var tempId=row?row.getAttribute('data-succ-id'):null;
+  if(!tempId)return;
+  // Delegate to existing undoScanEntry via a matching log-entry button, or perform undo directly
+  var logBtn=document.querySelector('.scan-log-entry[data-scan-id="'+tempId+'"] .sle-undo');
+  if(logBtn){undoScanEntry(logBtn);renderScanSuccesses();return}
+  // Fallback: mirror undoScanEntry logic for entries not in the visible log
+  var idx=sessionEntries.findIndex(function(e){return e._tempId===tempId});
+  if(idx===-1)return;
+  var entry=sessionEntries[idx];
+  var si=scanLog.findIndex(function(e){return e._tempId===tempId});if(si!==-1)scanLog.splice(si,1);
+  var mi=movements.findIndex(function(e){return e._tempId===tempId});if(mi!==-1)movements.splice(mi,1);
+  sessionEntries.splice(idx,1);
+  if(entry._serverId)apiDelete('/api/scan-log/'+entry._serverId);
+  scan.count=Math.max(0,scan.count-1);
+  _scanBeep(400,100);
+  setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
+  updateSD();renderStatus();renderScanSuccesses();
+}
+// Transient overlay background flash to reinforce feedback
+var _scanBgFlashTimer=null;
+function _flashScanBg(type){
+  var ov=document.getElementById('scan-overlay');
+  if(!ov)return;
+  ov.classList.remove('scan-bg-ok','scan-bg-err');
+  if(type==='ok')ov.classList.add('scan-bg-ok');
+  else if(type==='err')ov.classList.add('scan-bg-err');
+  else return;
+  clearTimeout(_scanBgFlashTimer);
+  _scanBgFlashTimer=setTimeout(function(){
+    ov.classList.remove('scan-bg-ok','scan-bg-err');
+  },800);
+}
 // Multi-tab scan dedup via BroadcastChannel
 const scanChannel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('meister-scans'):null;
 if(scanChannel){
@@ -5124,9 +5243,10 @@ function setFb(type,msg,opts){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
   if(type==='err')sessionErrors++;
-  if(type==='ok')_scanBeep(800,80);
-  else if(type==='err')_scanBeep(200,200);
+  if(type==='ok'){_scanBeepOk();_flashScanBg('ok');if(typeof switchScanTab==='function')switchScanTab('current');}
+  else if(type==='err'){_scanBeepErr();_flashScanBg('err');if(typeof switchScanTab==='function')switchScanTab('current');}
   _addLogEntry(type,msg,entryData);
+  if(type==='ok'&&typeof renderScanSuccesses==='function')renderScanSuccesses();
 }
 function _showCamHudToast(type,msg){
   const el=document.getElementById('cam-hud-toast');
@@ -5213,6 +5333,7 @@ function undoScanEntry(btn){
   _scanBeep(400,100);
   setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
   updateSD();renderStatus();
+  if(typeof renderScanSuccesses==='function')renderScanSuccesses();
 }
 // Ctrl+Z undo support
 let _ctrlZPending=false;let _ctrlZTimer=null;
@@ -5236,6 +5357,8 @@ document.addEventListener('keydown',function(e){
 // End session → show summary
 function endScanSession(){
   if(sessionEntries.length===0)return;
+  // Summary lives in the "current" tab panel — make sure it's visible
+  if(typeof switchScanTab==='function')switchScanTab('current');
   const sumEl=document.getElementById('scan-session-summary');
   // Hide log, show summary
   document.getElementById('scan-modal-log').style.display='none';
@@ -5293,6 +5416,7 @@ function newScanSession(){
   document.getElementById('scan-modal-log').innerHTML='';
   sessionEntries=[];sessionStartTime=null;sessionErrors=0;_lastScanVal=null;
   scan.count=0;
+  if(typeof renderScanSuccesses==='function')renderScanSuccesses();
   resetScan();
 }
 let _scanTempIdCounter=0;
@@ -6674,6 +6798,14 @@ function initEventListeners() {
   $('btn-end-session').addEventListener('click', endScanSession);
   $('btn-scan-cam').addEventListener('click', function() { openCamScan(); });
   $('btn-scan-audio').addEventListener('click', function() { scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4; });
+  // Scan modal tab navigation
+  document.querySelectorAll('.scan-tab').forEach(function(tabBtn){
+    tabBtn.addEventListener('click',function(){
+      var name=this.getAttribute('data-scan-tab');
+      switchScanTab(name);
+      if(name==='successes')renderScanSuccesses();
+    });
+  });
 
   // Harvest panel
   $('act-21').addEventListener('click', confirmHarvest);
