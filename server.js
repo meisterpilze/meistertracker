@@ -1021,6 +1021,27 @@ function checkCertRenewal() {
 checkCertRenewal();
 setInterval(checkCertRenewal, 12 * 60 * 60 * 1000);
 
+// Short-lived cache for printer availability check (5 seconds)
+let _printerStatusCache = null;
+let _printerStatusCacheTime = 0;
+
+function checkPrinterAvailable(callback) {
+  const now = Date.now();
+  if (_printerStatusCache !== null && (now - _printerStatusCacheTime) < 5000) {
+    return callback(null, _printerStatusCache);
+  }
+  execFile(
+    'powershell',
+    ['-NoProfile', '-Command', `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`],
+    (err, stdout) => {
+      const found = !err && stdout.includes(PRINTER_NAME);
+      _printerStatusCache = found;
+      _printerStatusCacheTime = Date.now();
+      callback(null, found);
+    }
+  );
+}
+
 // Send raw ZPL to the GK420d via Windows
 function printZPL(zplData, callback) {
   const tmp = path.join(os.tmpdir(), 'mp_label_' + Date.now() + '.zpl');
@@ -1090,9 +1111,13 @@ public class DOCINFO {
         return callback('Could not write PS script: ' + err2.message);
       }
 
-      execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psTmp], (e, stdout, stderr) => {
-        fs.unlink(tmp, () => {});
-        fs.unlink(psTmp, () => {});
+      const cleanup = () => {
+        fs.unlink(tmp, (e) => { if (e) log('warn', 'Failed to delete temp ZPL file', { error: e.message }); });
+        fs.unlink(psTmp, (e) => { if (e) log('warn', 'Failed to delete temp PS1 file', { error: e.message }); });
+      };
+
+      const child = execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psTmp], (e, stdout, stderr) => {
+        cleanup();
         if (e) {
           log('error', 'PowerShell print error', { error: stderr || e.message });
           callback('Print failed: ' + (stderr || e.message).trim());
@@ -1101,6 +1126,15 @@ public class DOCINFO {
           callback(null);
         }
       });
+
+      const timeout = setTimeout(() => {
+        child.kill();
+        cleanup();
+        log('warn', 'PowerShell print process timed out and was killed');
+        callback('Print failed: PowerShell process timed out');
+      }, 15000);
+
+      child.on('close', () => clearTimeout(timeout));
     });
   });
 }
@@ -5385,15 +5419,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           res.end('{"error":"no zpl"}');
           return;
         }
-        printZPL(zpl, (err) => {
-          if (err) {
-            log('error', 'Print error', { error: err.message || err });
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err }));
-          } else {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end('{"ok":true,"labels":"printed"}');
+        checkPrinterAvailable((_, found) => {
+          if (!found) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Printer not found. Please check that the Zebra printer is connected and powered on.' }));
+            return;
           }
+          printZPL(zpl, (err) => {
+            if (err) {
+              log('error', 'Print error', { error: err.message || err });
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: err }));
+            } else {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end('{"ok":true,"labels":"printed"}');
+            }
+          });
         });
       } catch {
         res.writeHead(400, { 'Content-Type': 'application/json' });

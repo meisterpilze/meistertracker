@@ -5201,12 +5201,14 @@ function toggleAllAssetLabels(on){
 }
 
 function makeAssetZPL(ids){
-  return ids.map(id=>{
+  const truncated=[];
+  const zpl=ids.map(id=>{
     const a=assets.find(x=>x.assetId===id);if(!a)return'';
     const numBc=barcodeByEntity.get('asset:'+id);
     const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
     const loc=(a.category||'')+(a.location?' / '+a.location:'');
     const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
+    if(a.name.length>28||loc.length>36) truncated.push(a.name||id);
     const bc=bcParams(bcVal);
     return'^XA^PW400^LL240^CI28^LH0,0'+
       '^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS'+
@@ -5215,6 +5217,8 @@ function makeAssetZPL(ids){
       '^FO0,182^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
       '^XZ';
   }).filter(Boolean).join('\n');
+  if(truncated.length) alert('Warning: Label text was truncated for: '+truncated.join(', ')+'. Maximum 26 characters for name, 36 for location.');
+  return zpl;
 }
 
 async function printAssetLabels(){
@@ -5707,7 +5711,7 @@ function renderPreviewDeferred(deferred,baseDelay){
   });
 }
 
-function bagLabelItems(bagId,batch,mode){
+function bagLabelItems(bagId,batch,mode,_legacyFallbackIds){
   const items=[];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
   const numBc=barcodeByEntity.get('bag:'+bagId);
@@ -5716,6 +5720,7 @@ function bagLabelItems(bagId,batch,mode){
     bcVal=String(numBc);
   }else{
     // Legacy fallback for bags without barcode assignment
+    if(_legacyFallbackIds) _legacyFallbackIds.push(bagId);
     const isGrain=batch.batchType==='grain';
     const parts=bagId.split('-');
     if(parts.length===4){
@@ -5793,7 +5798,13 @@ function labLabelItems(id,c,opts){
 }
 
 function makeBagZPL(bags,batch,mode){
-  return bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,mode))).join('\n');
+  const legacyFallbackIds=[];
+  const zpl=bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,mode,legacyFallbackIds))).join('\n');
+  if(legacyFallbackIds.length){
+    console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
+    alert('Warning: Numeric barcodes not found for bags: '+legacyFallbackIds.join(', ')+'. Legacy text barcodes were used instead.');
+  }
+  return zpl;
 }
 
 function makeLabZPL(ids,opts){
@@ -5818,6 +5829,7 @@ async function printBagLabels(){
     if(!bags.length){alert('No bags in that range.');return}
   }
   const zpl=makeBagZPL(bags,b,document.getElementById('print-mode').value);
+  if(!zpl||!zpl.includes('^XA')){alert('No labels to print. Please check your selection.');return}
   const err=await sendToPrinter(zpl);
   if(err)alert('Print error: '+err);
   else setFb('ok','Printed '+bags.length+' labels for '+b.batchId);
@@ -5827,6 +5839,7 @@ async function printLabLabels(){
   const ids=[...selectedLabIds];
   if(!ids.length){alert('Select at least one culture.');return}
   const zpl=makeLabZPL(ids,getLabOpts());
+  if(!zpl||!zpl.includes('^XA')){alert('No labels to print. Please check your selection.');return}
   const err=await sendToPrinter(zpl);
   if(err)alert('Print error: '+err);
   else setFb('ok','Printed '+ids.length+' lab label'+(ids.length!==1?'s':''));
