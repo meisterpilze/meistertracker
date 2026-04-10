@@ -5358,8 +5358,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/caldav/import') {
     try {
       const imported = [];
+      // Determine which calendar directories the caller may see.
+      // Shared category calendars are visible to everyone, the user's own
+      // slug is always visible, and admins see everything.
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const callerSlug = req.authUser
+        ? String(req.authUser.username).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        : null;
+      const canSeeDir = (dir) => {
+        if (CALDAV_CATEGORY_CALS[dir]) return true;
+        if (isAdmin) return true;
+        return dir === callerSlug;
+      };
       if (fs.existsSync(CAL_DIR)) {
-        const dirs = fs.readdirSync(CAL_DIR).filter((d) => fs.statSync(path.join(CAL_DIR, d)).isDirectory());
+        const dirs = fs.readdirSync(CAL_DIR)
+          .filter((d) => fs.statSync(path.join(CAL_DIR, d)).isDirectory())
+          .filter(canSeeDir);
         for (const dir of dirs) {
           const files = fs.readdirSync(path.join(CAL_DIR, dir)).filter((f) => f.endsWith('.ics'));
           for (const f of files) {
