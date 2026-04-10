@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS manual_tasks (
   created          TEXT NOT NULL,
   assignee         TEXT,
   due_date         TEXT,
+  due_time         TEXT,
+  due_end_time     TEXT,
   description      TEXT,
   caldav_uid       TEXT,
   caldav_synced    TEXT,
@@ -442,6 +444,18 @@ const MIGRATIONS = [
       addCol('recurrence', 'TEXT');
       addCol('recurrence_until', 'TEXT');
     }
+  },
+  {
+    version: 18,
+    description: 'Add due_time/due_end_time to manual_tasks for time-slot scheduling',
+    fn(db) {
+      const addCol = (col, def) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
+      };
+      addCol('due_time', 'TEXT');
+      addCol('due_end_time', 'TEXT');
+    }
   }
 ];
 
@@ -592,6 +606,8 @@ function readAll(db, opts = {}) {
       created: r.created,
       assignee: r.assignee,
       dueDate: r.due_date,
+      dueTime: r.due_time,
+      dueEndTime: r.due_end_time,
       description: r.description,
       caldavUid: r.caldav_uid,
       caldavSynced: r.caldav_synced,
@@ -902,7 +918,7 @@ function writeAll(db, incoming) {
     if (incoming.manualTasks) {
       db.prepare('DELETE FROM manual_tasks').run();
       const ins = db.prepare(
-        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced, private, recurrence, recurrence_until) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, due_time, due_end_time, description, caldav_uid, caldav_synced, private, recurrence, recurrence_until) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const t of incoming.manualTasks) {
         ins.run(
@@ -912,6 +928,8 @@ function writeAll(db, incoming) {
           t.created,
           t.assignee || null,
           t.dueDate || null,
+          t.dueTime || null,
+          t.dueEndTime || null,
           t.description || null,
           t.caldavUid || null,
           t.caldavSynced || null,
@@ -1495,7 +1513,7 @@ function updateCulture(db, id, fields) {
 function insertTask(db, t) {
   const r = db
     .prepare(
-      'INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced,private,recurrence,recurrence_until) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,due_time,due_end_time,description,caldav_uid,caldav_synced,private,recurrence,recurrence_until) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )
     .run(
       t.text,
@@ -1504,6 +1522,8 @@ function insertTask(db, t) {
       t.created,
       t.assignee || null,
       t.dueDate || null,
+      t.dueTime || null,
+      t.dueEndTime || null,
       t.description || null,
       t.caldavUid || null,
       t.caldavSynced || null,
@@ -1524,6 +1544,8 @@ function updateTaskById(db, id, fields) {
     priority: 'priority',
     assignee: 'assignee',
     dueDate: 'due_date',
+    dueTime: 'due_time',
+    dueEndTime: 'due_end_time',
     description: 'description',
     private: 'private',
     recurrence: 'recurrence',
@@ -1548,6 +1570,8 @@ function readTaskById(db, id) {
     created: r.created,
     assignee: r.assignee,
     dueDate: r.due_date,
+    dueTime: r.due_time,
+    dueEndTime: r.due_end_time,
     description: r.description,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
@@ -1568,6 +1592,8 @@ function readTaskByCaldavUid(db, caldavUid) {
     created: r.created,
     assignee: r.assignee,
     dueDate: r.due_date,
+    dueTime: r.due_time,
+    dueEndTime: r.due_end_time,
     description: r.description,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
@@ -2179,7 +2205,8 @@ function getAllBatches(db) {
 function getAllTasks(db) {
   return db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
     id: r.id, text: r.text, priority: r.priority, done: r.done === 1, created: r.created,
-    assignee: r.assignee, dueDate: r.due_date, description: r.description,
+    assignee: r.assignee, dueDate: r.due_date, dueTime: r.due_time, dueEndTime: r.due_end_time,
+    description: r.description,
     recurrence: r.recurrence || null, recurrenceUntil: r.recurrence_until || null
   }));
 }
