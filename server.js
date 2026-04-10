@@ -1988,6 +1988,8 @@ function handleCaldav(req, res) {
   req.on('data', (c) => {
     bodySize += c.length;
     if (bodySize > MAX_BODY_SIZE) {
+      res.writeHead(413, { 'Content-Type': 'text/plain' });
+      res.end('Request body too large');
       req.destroy();
       return;
     }
