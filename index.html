@@ -48,6 +48,18 @@
   </div>
 </div>
 
+<!-- Calendar print range modal -->
+<div class="modal-bg" id="m-cal-print" role="dialog" aria-modal="true" aria-labelledby="m-cal-print-title">
+  <div class="modal">
+    <h3 id="m-cal-print-title" data-i18n="cal.printTitle">Kalender drucken</h3>
+    <p data-i18n="cal.printChooseRange">Wähle den Zeitraum für die Aufgabenliste:</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+      <button class="btn btn-p" id="m-cal-print-week" style="width:100%;justify-content:flex-start" data-i18n="cal.printWeek">Woche — Aufgabenliste der aktuellen Woche</button>
+      <button class="btn btn-p" id="m-cal-print-month" style="width:100%;justify-content:flex-start" data-i18n="cal.printMonth">Monat — Aufgabenliste des aktuellen Monats</button>
+    </div>
+    <div class="modal-btns"><button class="btn" id="m-cal-print-cancel" data-i18n="calEntry.cancel">Abbrechen</button></div>
+  </div>
+</div>
 <!-- Confirm modal -->
 <div class="modal-bg" id="m-confirm" role="dialog" aria-modal="true" aria-labelledby="m-title">
   <div class="modal"><h3 id="m-title"></h3><p id="m-body"></p>
@@ -296,17 +308,30 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       <span>Scan-Modus</span>
     </div>
-    <div class="scan-modal-body" id="scan-modal-body">
-    <div class="scan-modal-chips">
-      <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
-      <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
-      <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
-      <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-      <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
+    <div class="scan-modal-tabs" id="scan-modal-tabs" role="tablist">
+      <button type="button" class="scan-tab active" data-scan-tab="current" role="tab">Aktueller Scan</button>
+      <button type="button" class="scan-tab" data-scan-tab="successes" role="tab">Letzte Erfolge <span class="scan-tab-count" id="scan-tab-succ-count">0</span></button>
+      <button type="button" class="scan-tab" data-scan-tab="all" role="tab">Gesamt-Log</button>
     </div>
-    <div id="scan-toast" class="scan-toast-inline"></div>
-    <div class="scan-modal-log" id="scan-modal-log"></div>
-    <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
+    <div class="scan-modal-body" id="scan-modal-body">
+    <div class="scan-tab-panel active" data-scan-panel="current">
+      <div class="scan-modal-chips">
+        <div class="chip" id="chip-action"><div class="chip-l" data-i18n="scan.action">Action</div><div class="chip-v" id="s-action">—</div></div>
+        <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
+        <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
+        <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
+        <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
+      </div>
+      <div id="scan-toast" class="scan-toast-inline"></div>
+      <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
+    </div>
+    <div class="scan-tab-panel" data-scan-panel="successes">
+      <div class="scan-successes-empty" id="scan-successes-empty">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
+      <div class="scan-successes-list" id="scan-successes-list"></div>
+    </div>
+    <div class="scan-tab-panel" data-scan-panel="all">
+      <div class="scan-modal-log" id="scan-modal-log"></div>
+    </div>
     </div>
     <div class="scan-modal-btns">
       <button id="set-19" class="btn-xs" data-i18n="scan.reset">Reset</button>
@@ -336,40 +361,6 @@
   <!-- KPI strip -->
   <div id="metrics" class="g4" style="margin-bottom:10px"></div>
 
-  <!-- Color legend (collapsed by default) -->
-  <details class="card dash-legend" style="padding:10px 14px;margin-bottom:10px">
-    <summary style="font-size:12px;font-weight:600;color:var(--c-text-sec);cursor:pointer;display:flex;align-items:center;gap:6px">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-      <span data-i18n="dash.legend.title">Color guide</span>
-    </summary>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 16px;margin-top:12px;font-size:12px;color:var(--c-text-sec)">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <div style="width:4px;align-self:stretch;min-height:28px;background:linear-gradient(180deg,#e11d48 0%,#0284c7 50%,#059669 100%);border-radius:2px;flex-shrink:0"></div>
-        <div data-i18n="dash.legend.species">Colored left stripe on batch cards — each species gets its own color so you can spot them at a glance.</div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="width:12px;height:12px;border-radius:50%;background:#16a34a;flex-shrink:0;margin-top:3px"></span>
-        <div data-i18n="dash.legend.zoneDot">Zone dot in section headers — shows the color of each location (configured in Tools → Zones).</div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="width:12px;height:12px;border-radius:50%;background:#f59e0b;flex-shrink:0;margin-top:3px"></span>
-        <div data-i18n="dash.legend.orangeDot">Orange dot in batch tasks — warning, task due soon or needs attention.</div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="width:12px;height:12px;border-radius:50%;background:#ef4444;flex-shrink:0;margin-top:3px"></span>
-        <div data-i18n="dash.legend.redDot">Red dot in batch tasks — urgent, overdue or critical action required.</div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <div style="width:32px;height:18px;background:#fff5f5;border:1px solid #fecaca;border-left:3px solid #e11d48;border-radius:3px;flex-shrink:0;margin-top:1px"></div>
-        <div data-i18n="dash.legend.overdue">Pink-tinted batch card — batch is overdue (past its due date but still in incubation).</div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <div style="width:32px;height:5px;background:#ef4444;border-radius:3px;flex-shrink:0;margin-top:8px"></div>
-        <div data-i18n="dash.legend.capacity">Red capacity bar — location is over its configured maximum capacity.</div>
-      </div>
-    </div>
-  </details>
-
   <!-- Alerts (inventory only) -->
   <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px;display:none">
     <div style="margin-bottom:6px">
@@ -388,6 +379,17 @@
       </select>
     </div>
     <div id="dash-batch-tasks"></div>
+    <details class="dash-legend" style="margin-top:8px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-border);padding-top:6px">
+      <summary style="cursor:pointer;user-select:none" data-i18n="dash.legend.title">Color guide</summary>
+      <div style="padding:8px 0 2px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot med" style="margin-top:3px"></span><span data-i18n="dash.legend.orangeDot"></span></div>
+        <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot high" style="margin-top:3px"></span><span data-i18n="dash.legend.redDot"></span></div>
+        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:4px;height:14px;background:#888;border-radius:2px;margin-top:1px;flex-shrink:0"></span><span data-i18n="dash.legend.species"></span></div>
+        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-top:2px;flex-shrink:0"></span><span data-i18n="dash.legend.zoneDot"></span></div>
+        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:10px;background:var(--c-red-light);border:1px solid var(--c-red);border-radius:3px;margin-top:3px;flex-shrink:0"></span><span data-i18n="dash.legend.overdue"></span></div>
+        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:5px;background:var(--c-red);border-radius:2px;margin-top:5px;flex-shrink:0"></span><span data-i18n="dash.legend.capacity"></span></div>
+      </div>
+    </details>
   </div>
 
   <!-- Search bar -->
@@ -408,7 +410,7 @@
       <div id="pipeline-chart"></div>
     </div>
     <div class="card">
-      <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (g)</div>
+      <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
       <canvas id="harvest-chart" height="160"></canvas>
     </div>
   </div>
