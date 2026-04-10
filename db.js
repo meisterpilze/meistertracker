@@ -1892,8 +1892,8 @@ function zoneBagCount(db, zoneId) {
     .all(...allLocs, ...allLocs);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE') && allLocs.includes(r.to)) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && allLocs.includes(r.to)) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
   }
   return bags.size;
 }
@@ -1923,8 +1923,8 @@ function rackBagCount(db, rackId) {
     .all(rackId, rackId);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE') && r.to === rackId) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && r.to === rackId) bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
   }
   return bags.size;
 }

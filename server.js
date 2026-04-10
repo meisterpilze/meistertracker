@@ -2234,9 +2234,9 @@ function handleReport(parts, body, req, res) {
 
       // Validate token — if stale or unknown, tell client to do full sync (RFC 6578 §3)
       const currentToken = getSyncToken(calName);
-      const log = changeLog.get(calName);
+      const clog = changeLog.get(calName);
       if (reqToken > 0) {
-        const invalid = !log || (log.size > 0 && reqToken < Math.min(...[...log.values()].map((e) => e.token)));
+        const invalid = !clog || (clog.size > 0 && reqToken < Math.min(...[...clog.values()].map((e) => e.token)));
         if (invalid) {
           const errXml = `<?xml version="1.0" encoding="utf-8"?>
 <d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>`;
@@ -2263,7 +2263,7 @@ function handleReport(parts, body, req, res) {
         }
       } else {
         // Incremental sync — only items changed since reqToken
-        for (const [fileName, entry] of log.entries()) {
+        for (const [fileName, entry] of clog.entries()) {
           if (entry.token <= reqToken) continue;
           if (entry.action === 'deleted') {
             responses += `\n  <d:response>
@@ -4707,7 +4707,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (data.assignees !== undefined && Array.isArray(data.assignees)) {
           db.setCalendarEventAssignees(database, id, data.assignees);
         }
-        autoSyncCalendarEvent(Object.assign({ id }, data));
+        const fullEv = db.getCalendarEventById(database, id);
+        if (fullEv) autoSyncCalendarEvent(fullEv);
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
