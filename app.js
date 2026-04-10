@@ -4994,71 +4994,185 @@ function spAbbrev(species){
 // qzMult: quiet zone multiplier (default 10). Use 5 for lab labels to allow wider bars.
 function bcParams(val,qzMult){const mods=35+val.length*11;let mw=3;qzMult=qzMult||10;const qz=m=>m*qzMult;while(mw>1&&mods*mw+2*qz(mw)>400)mw--;const w=mods*mw;return{mw,x:Math.max(qz(mw),Math.round((400-w)/2))}}
 
-function makeBagZPL(bags,batch,mode){
-  return bags.map(bagId=>{
-    let z='^XA^PW400^LL240^CI28^LH0,0';
-    // Format: CH_ERL_0327_4 (max 13 chars)
-    // species abbrev _ strain 3 chars _ MMDD _ bag number (no leading zero)
-    const parts=bagId.split('-');
-    let bcVal;
-    if(parts.length===4){
-      const sp=spAbbrev(batch.species);
-      const st=(batch.strain||'000').slice(0,3).toUpperCase();
-      const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY '020426' → MMDD '0402'
-      const bagNum=parseInt(parts[3],10);    // '04' → 4 (no leading zero)
-      bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum;   // CH_ERL_0327_4
-    }else{
-      bcVal=bagId.replace(/-/g,'_');
+// ─── Unified label layout: SINGLE SOURCE OF TRUTH for ZPL + preview ───
+// Canvas is 400×240 dots (50×30mm @ 203dpi). bagLabelItems/labLabelItems
+// describe one label as a plain array of items in that coordinate system;
+// itemsToZPL turns them into printer output and buildPreviewCell renders
+// the same items as an SVG with viewBox="0 0 400 240". Because both come
+// from the same items array the preview cannot drift from what prints.
+// Item shapes:
+//   {type:'barcode', x, y, w, h, val, mw}
+//   {type:'text',    x?, y, blockW?, fontH, fontW?, text, bold?}
+//   {type:'qr',      x, y, size, val}
+
+function itemsToZPL(items){
+  let z='^XA^PW400^LL240^CI28^LH0,0';
+  for(const it of items){
+    if(it.type==='barcode'){
+      z+='^FO'+it.x+','+it.y+'^BY'+it.mw+',2.0,'+it.h+'^BCN,'+it.h+',N,N,N^FD'+it.val+'^FS';
+    }else if(it.type==='text'){
+      const fw=it.fontW||it.fontH;
+      const bw=it.blockW||400;
+      const bx=it.x||0;
+      z+='^FO'+bx+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+it.text+'^FS';
+      // ZPL has no bold flag; double-draw at x+1 thickens strokes.
+      if(it.bold) z+='^FO'+(bx+1)+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+it.text+'^FS';
+    }else if(it.type==='qr'){
+      z+='^FO'+it.x+','+it.y+'^BQN,2,4^FDMM,A'+it.val+'^FS';
     }
-    const bc=bcParams(bcVal);
-    // Maximize barcode: taller height, top margin shifted down 5mm (40 dots)
-    const bcY=mode==='date'?50:mode==='full'?52:56;
-    const bcH=mode==='date'?60:mode==='full'?70:90;
-    z+='^FO'+bc.x+','+bcY+'^BY'+bc.mw+',2.0,'+bcH+'^BCN,'+bcH+',N,N,N^FD'+bcVal+'^FS';
-    const idY=bcY+bcH+6;
-    z+='^FO0,'+idY+'^FB400,1,0,C^A0N,38,38^FD'+bagId+'^FS';
-    if(mode==='full'||mode==='date'){
-      // Strain + substrate on one line
-      let infoLine=batch.strain||'';
-      if(batch.substrate){
-        const hw=batch.substrate.hardwood||0;
-        const wb=batch.substrate.wheatbran||0;
-        const rh=batch.substrate.rh||0;
-        const subStr=(hw?'HW'+hw+'%':'')+( wb?' WB'+wb+'%':'')+( rh?' RH'+rh+'%':'');
-        if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
+  }
+  return z+'^XZ';
+}
+
+// Builds one preview cell as an SVG. Returns {cell, deferred} — insert cell
+// into the DOM first, then call renderPreviewDeferred(deferred) to attach
+// JsBarcode/QRCode content to the live nodes.
+function buildPreviewCell(items){
+  const cell=document.createElement('div');
+  cell.style.cssText='position:relative;border:1px solid var(--c-border);border-radius:5px;background:#fff;overflow:hidden;aspect-ratio:5/3';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 400 240');
+  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:block';
+  cell.appendChild(svg);
+  const deferred=[];
+  for(const it of items){
+    if(it.type==='barcode'){
+      const inner=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      inner.setAttribute('x',it.x);
+      inner.setAttribute('y',it.y);
+      inner.setAttribute('width',it.w);
+      inner.setAttribute('height',it.h);
+      svg.appendChild(inner);
+      deferred.push({kind:'bc',el:inner,val:it.val,mw:it.mw,w:it.w,h:it.h});
+    }else if(it.type==='text'){
+      const bw=it.blockW||400;
+      const cx=(it.x||0)+bw/2;
+      // ZPL A0 font height ≈ character height; baseline ≈ 82% from top.
+      const by=it.y+it.fontH*0.82;
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x',cx);
+      t.setAttribute('y',by);
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('font-family','Helvetica,Arial,sans-serif');
+      t.setAttribute('font-size',it.fontH);
+      t.setAttribute('fill','#000');
+      if(it.bold) t.setAttribute('font-weight','bold');
+      t.textContent=it.text;
+      svg.appendChild(t);
+    }else if(it.type==='qr'){
+      // QR as HTML overlay positioned with % from ZPL coords (qrcode.js → img/canvas).
+      const qrDiv=document.createElement('div');
+      const L=(it.x/400*100).toFixed(2);
+      const T=(it.y/240*100).toFixed(2);
+      const W=(it.size/400*100).toFixed(2);
+      qrDiv.style.cssText='position:absolute;left:'+L+'%;top:'+T+'%;width:'+W+'%;aspect-ratio:1;background:#fff';
+      cell.appendChild(qrDiv);
+      deferred.push({kind:'qr',el:qrDiv,val:it.val});
+    }
+  }
+  return {cell,deferred};
+}
+
+function renderPreviewDeferred(deferred,baseDelay){
+  baseDelay=baseDelay||20;
+  deferred.forEach((d,i)=>{
+    setTimeout(()=>{
+      if(d.kind==='bc'){
+        try{
+          JsBarcode(d.el,d.val,{format:'CODE128',width:d.mw,height:d.h,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});
+          // JsBarcode rewrites width/height on the svg; capture those as a
+          // viewBox and restore our (x,y,w,h) so bars stretch to our cell.
+          const w=parseFloat(d.el.getAttribute('width'))||d.w;
+          const h=parseFloat(d.el.getAttribute('height'))||d.h;
+          d.el.setAttribute('viewBox','0 0 '+w+' '+h);
+          d.el.setAttribute('width',d.w);
+          d.el.setAttribute('height',d.h);
+          d.el.setAttribute('preserveAspectRatio','none');
+        }catch{}
+      }else if(d.kind==='qr'){
+        try{
+          new QRCode(d.el,{text:d.val,width:64,height:64,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});
+          const img=d.el.querySelector('img')||d.el.querySelector('canvas');
+          if(img){img.style.cssText='display:block;width:100%;height:100%'}
+        }catch{}
       }
-      if(infoLine) z+='^FO0,'+(idY+42)+'^FB400,1,0,C^A0N,28,28^FD'+infoLine+'^FS';
+    },baseDelay+i*12);
+  });
+}
+
+function bagLabelItems(bagId,batch,mode){
+  const items=[];
+  // Barcode value: CH_ERL_0327_4 format (species abbrev _ strain3 _ MMDD _ bagNum)
+  const parts=bagId.split('-');
+  let bcVal;
+  if(parts.length===4){
+    const sp=spAbbrev(batch.species);
+    const st=(batch.strain||'000').slice(0,3).toUpperCase();
+    const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY → MMDD
+    const bagNum=parseInt(parts[3],10);
+    bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum;
+  }else{
+    bcVal=bagId.replace(/-/g,'_');
+  }
+  const bc=bcParams(bcVal);
+  const bcY=mode==='date'?50:mode==='full'?52:56;
+  const bcH=mode==='date'?60:mode==='full'?70:90;
+  items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
+  const idY=bcY+bcH+6;
+  items.push({type:'text',y:idY,fontH:38,text:bagId});
+  if(mode==='full'||mode==='date'){
+    let infoLine=batch.strain||'';
+    if(batch.substrate){
+      const hw=batch.substrate.hardwood||0;
+      const wb=batch.substrate.wheatbran||0;
+      const rh=batch.substrate.rh||0;
+      const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');
+      if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
     }
-    if(mode==='date'){
-      const due=new Date(batch.due);
-      const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-      z+='^FO0,'+(idY+72)+'^FB400,1,0,C^A0N,24,24^FDFaellig: '+dueStr+'^FS';
-    }
-    z+='^XZ';
-    return z;
-  }).join('\n');
+    if(infoLine) items.push({type:'text',y:idY+42,fontH:28,text:infoLine});
+  }
+  if(mode==='date'&&batch.due){
+    const due=new Date(batch.due);
+    const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
+    // Bigger + bold — due date is the key info in this mode.
+    items.push({type:'text',y:idY+72,fontH:32,text:'Faellig: '+dueStr,bold:true});
+  }
+  return items;
+}
+
+function labLabelItems(id,c,opts){
+  const items=[];
+  const sp=(c.species||'')+(c.strain?' / '+c.strain:'');
+  const ds=fmtDt(c.created);
+  const bcVal=id.replace(/-/g,'_');
+  const bc=bcParams(bcVal,5); // smaller quiet zone → wider bars
+  const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
+  const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
+  const bcY=16;
+  // Text stays left of the QR when it's present (QR occupies right ~128 dots).
+  const textBlockW=opts.qr?272:400;
+  if(opts.bc){
+    const bcW=opts.qr?Math.max(0,272-2*bc.x):(400-2*bc.x);
+    items.push({type:'barcode',x:bc.x,y:bcY,w:bcW,h:bcH,val:bcVal,mw:bc.mw});
+  }
+  let ty=opts.bc?bcY+bcH+6:12;
+  items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:30,text:id});ty+=34;
+  if(opts.sp&&sp){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:22,text:sp});ty+=26}
+  if(opts.par&&c.parentId){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:18,text:'Parent: '+c.parentId});ty+=22}
+  if(opts.dt){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:18,text:ds,bold:true});ty+=22}
+  if(opts.qr) items.push({type:'qr',x:280,y:bcY,size:108,val:id});
+  return items;
+}
+
+function makeBagZPL(bags,batch,mode){
+  return bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,mode))).join('\n');
 }
 
 function makeLabZPL(ids,opts){
   return ids.map(id=>{
-    const c=cultures.find(x=>x.id===id);if(!c)return'';
-    const sp=(c.species||'')+(c.strain?' / '+c.strain:'');
-    const ds=fmtDt(c.created);
-    const bcVal=id.replace(/-/g,'_');
-    let z='^XA^PW400^LL240^CI28^LH0,0';
-    const bc=bcParams(bcVal,5); // reduced quiet zone for wider bars
-    // Calculate how many text lines we need below the barcode
-    const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
-    const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
-    const bcY=16; // 2mm from top (16 dots at 203dpi)
-    if(opts.bc)z+='^FO'+bc.x+','+bcY+'^BY'+bc.mw+',2.0,'+bcH+'^BCN,'+bcH+',N,N,N^FD'+bcVal+'^FS';
-    let ty=opts.bc?bcY+bcH+6:12;
-    z+='^FO0,'+ty+'^FB400,1,0,C^A0N,30,30^FD'+id+'^FS';ty+=34;
-    if(opts.sp&&sp){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,22,22^FD'+sp+'^FS';ty+=26}
-    if(opts.par&&c.parentId){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,18,18^FDParent: '+c.parentId+'^FS';ty+=22}
-    if(opts.dt){z+='^FO0,'+ty+'^FB400,1,0,C^A0N,18,18^FD'+ds+'^FS';ty+=22}
-    if(opts.qr)z+='^FO'+Math.max(272,400-120)+','+(bcY)+'^BQN,2,4^FDMM,A'+id+'^FS';
-    return z+'^XZ';
+    const c=cultures.find(x=>x.id===id);
+    return c?itemsToZPL(labLabelItems(id,c,opts)):'';
   }).filter(Boolean).join('\n');
 }
 
@@ -5114,48 +5228,49 @@ async function sendToPrinter(zpl){
 
 function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
 
-function renderBagPreview(){const id=document.getElementById('print-batch').value,el=document.getElementById('bag-preview'),mode=document.getElementById('print-mode').value;if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}const batch=batches.find(b=>b.batchId===id);if(!batch)return;const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
-// ZPL label: 400 dots wide × 240 dots tall (50mm × 30mm @ 203 DPI)
-// Preview mirrors ZPL coordinates using percentage positioning
-const bcY=mode==='date'?50:mode==='full'?52:56;
-const bcH=mode==='date'?60:mode==='full'?70:90;
-const idY=bcY+bcH+6;
-batch.bags.forEach((bagId,i)=>{const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;background:#fff;overflow:hidden;position:relative;aspect-ratio:5/3';const parts=bagId.split('-');let bcVal;if(parts.length===4){const sp=spAbbrev(batch.species);const st=(batch.strain||'000').slice(0,3).toUpperCase();const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);const bagNum=parseInt(parts[3],10);bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum}else{bcVal=bagId.replace(/-/g,'_')}
-const bc=bcParams(bcVal);const bcLeft=(bc.x/400*100).toFixed(1);const bcW=((400-2*bc.x)/400*100).toFixed(1);
-const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+bcW+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
-cell.appendChild(svg);
-const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;top:'+(idY/240*100).toFixed(1)+'%';idEl.textContent=bagId;cell.appendChild(idEl);
-if(mode==='full'||mode==='date'){let infoLine=batch.strain||'';if(batch.substrate){const hw=batch.substrate.hardwood||0,wb=batch.substrate.wheatbran||0,rh=batch.substrate.rh||0;const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');if(subStr)infoLine+=(infoLine?' \u00b7 ':'')+subStr}if(infoLine){const infoEl=document.createElement('div');infoEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+((idY+42)/240*100).toFixed(1)+'%';infoEl.textContent=infoLine;cell.appendChild(infoEl)}}
-if(mode==='date'&&batch.due){const due=new Date(batch.due);const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();const dueEl=document.createElement('div');dueEl.style.cssText='position:absolute;left:0;width:100%;text-align:center;font-size:7px;color:var(--c-text-muted);white-space:nowrap;top:'+((idY+72)/240*100).toFixed(1)+'%';dueEl.textContent='Faellig: '+dueStr;cell.appendChild(dueEl)}
-wrap.appendChild(cell);setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:bcH,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});const sw=svg.getAttribute('width'),sh=svg.getAttribute('height');if(sw&&sh){svg.setAttribute('viewBox','0 0 '+sw.replace('px','')+' '+sh.replace('px',''));svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','none')}}catch{}},50+i*10)});el.innerHTML='';el.appendChild(wrap)}
+function renderBagPreview(){
+  const id=document.getElementById('print-batch').value;
+  const el=document.getElementById('bag-preview');
+  const mode=document.getElementById('print-mode').value;
+  if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}
+  const batch=batches.find(b=>b.batchId===id);
+  if(!batch)return;
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
+  const allDeferred=[];
+  batch.bags.forEach(bagId=>{
+    const {cell,deferred}=buildPreviewCell(bagLabelItems(bagId,batch,mode));
+    wrap.appendChild(cell);
+    allDeferred.push(...deferred);
+  });
+  el.innerHTML='';
+  el.appendChild(wrap);
+  renderPreviewDeferred(allDeferred,30);
+}
 
 let selectedLabIds=new Set();
 function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>'}
 function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
 function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
-function renderLabPreview(){const el=document.getElementById('lab-preview');const ids=[...selectedLabIds];if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}const opts=getLabOpts();const wrap=document.createElement('div');wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
-// ZPL lab label: 400 dots wide × 240 dots tall
-ids.forEach((id,i)=>{const c=cultures.find(x=>x.id===id);if(!c)return;const sp=(c.species||'')+(c.strain?' / '+c.strain:'');const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
-const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
-const bcY=16;
-const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:6px;background:#fff;aspect-ratio:5/3;overflow:hidden;position:relative';
-let ty;
-if(opts.bc){
-  const bcVal=id.replace(/-/g,'_');const bc=bcParams(bcVal,5);
-  const bcLeft=(bc.x/400*100).toFixed(1);const bcW=((400-2*bc.x)/400*100).toFixed(1);
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.style.cssText='position:absolute;left:'+bcLeft+'%;width:'+(opts.qr?Math.min(parseFloat(bcW),68).toFixed(1):bcW)+'%;top:'+(bcY/240*100).toFixed(1)+'%;height:'+(bcH/240*100).toFixed(1)+'%';
-  cell.appendChild(svg);
-  setTimeout(()=>{try{JsBarcode(svg,bcVal,{format:'CODE128',width:bc.mw,height:bcH,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});const sw=svg.getAttribute('width'),sh=svg.getAttribute('height');if(sw&&sh){svg.setAttribute('viewBox','0 0 '+sw.replace('px','')+' '+sh.replace('px',''));svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','none')}}catch{}},30+i*15);
-  ty=bcY+bcH+6;
-}else{ty=12}
-const idEl=document.createElement('div');idEl.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-family:monospace;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';idEl.textContent=id;cell.appendChild(idEl);ty+=34;
-if(opts.sp&&sp){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:8px;color:var(--c-text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=sp;cell.appendChild(e2);ty+=26}
-if(opts.par&&c.parentId){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:var(--c-text-muted);top:'+(ty/240*100).toFixed(1)+'%';e2.textContent='Parent: '+c.parentId;cell.appendChild(e2);ty+=22}
-if(opts.dt){const e2=document.createElement('div');e2.style.cssText='position:absolute;left:0;width:'+(opts.qr?'68%':'100%')+';text-align:center;font-size:7px;color:var(--c-text-muted);top:'+(ty/240*100).toFixed(1)+'%';e2.textContent=fmtDt(c.created);cell.appendChild(e2);ty+=22}
-if(opts.qr){const qrdiv=document.createElement('div');qrdiv.style.cssText='position:absolute;left:'+(272/400*100).toFixed(1)+'%;top:'+(16/240*100).toFixed(1)+'%;width:'+(120/400*100).toFixed(1)+'%;display:flex;justify-content:center';cell.appendChild(qrdiv);setTimeout(()=>{try{new QRCode(qrdiv,{text:id,width:48,height:48,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L})}catch{}},40+i*15)}
-wrap.appendChild(cell)});el.innerHTML='';el.appendChild(wrap)}
+function renderLabPreview(){
+  const el=document.getElementById('lab-preview');
+  const ids=[...selectedLabIds];
+  if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}
+  const opts=getLabOpts();
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
+  const allDeferred=[];
+  ids.forEach(id=>{
+    const c=cultures.find(x=>x.id===id);
+    if(!c)return;
+    const {cell,deferred}=buildPreviewCell(labLabelItems(id,c,opts));
+    wrap.appendChild(cell);
+    allDeferred.push(...deferred);
+  });
+  el.innerHTML='';
+  el.appendChild(wrap);
+  renderPreviewDeferred(allDeferred,30);
+}
 
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
