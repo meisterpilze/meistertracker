@@ -69,7 +69,7 @@ const LANG = {
     'dash.alerts': 'Alerts & tasks',
     'dash.seeAll': 'See all',
     'dash.pipeline': 'Production pipeline',
-    'dash.harvestBySpecies': 'Harvest by species (g)',
+    'dash.harvestBySpecies': 'Harvest by species (kg)',
     'dash.noHarvestData': 'No harvest data yet',
     'dash.liveStatus': 'Live batch status',
     'dash.search': 'Search...',
@@ -843,7 +843,7 @@ const LANG = {
     'dash.alerts': 'Warnungen & Aufgaben',
     'dash.seeAll': 'Alle anzeigen',
     'dash.pipeline': 'Produktions-Pipeline',
-    'dash.harvestBySpecies': 'Ernte nach Art (g)',
+    'dash.harvestBySpecies': 'Ernte nach Art (kg)',
     'dash.noHarvestData': 'Noch keine Erntedaten',
     'dash.liveStatus': 'Live Chargen-Status',
     'dash.search': 'Suche...',
@@ -1617,7 +1617,7 @@ const LANG = {
     'dash.alerts': 'Alertas e tarefas',
     'dash.seeAll': 'Ver tudo',
     'dash.pipeline': 'Pipeline de produ\u00e7\u00e3o',
-    'dash.harvestBySpecies': 'Colheita por esp\u00e9cie (g)',
+    'dash.harvestBySpecies': 'Colheita por esp\u00e9cie (kg)',
     'dash.noHarvestData': 'Sem dados de colheita ainda',
     'dash.liveStatus': 'Status dos lotes ao vivo',
     'dash.search': 'Buscar...',
@@ -2758,14 +2758,15 @@ function renderHarvestChart(){
   const bySpecies={};
   harvests.forEach(h=>{if(!bySpecies[h.species])bySpecies[h.species]=0;bySpecies[h.species]+=h.grams||0});
   const labels=Object.keys(bySpecies);
-  const data=labels.map(s=>bySpecies[s]);
+  const data=labels.map(s=>bySpecies[s]/1000);
   const colors=labels.map(s=>spColor(s));
   if(harvestChartInst){harvestChartInst.destroy();harvestChartInst=null}
   if(!labels.length){canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('harvest.noData'),canvas.width/2,80);return}
+  const fmtKg=v=>(Math.round(v*100)/100)+'kg';
   harvestChartInst=new Chart(canvas,{
     type:'bar',
     data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
-    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g',color:'#64748b'},grid:{color:'#f1f5f9'}},x:{grid:{display:false},ticks:{color:'#64748b'}}}}
+    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmtKg(ctx.parsed.y)}}},scales:{y:{ticks:{callback:v=>fmtKg(v),color:'#64748b'},grid:{color:'#f1f5f9'}},x:{grid:{display:false},ticks:{color:'#64748b'}}}}
   });
 }
 
