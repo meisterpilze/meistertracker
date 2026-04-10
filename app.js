@@ -4289,7 +4289,7 @@ function renderThresholds(){
       return`<tr>
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
-        <td><input type="text" inputmode="decimal" value="${t.minKg}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
+        <td><input type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
         <td style="font-size:12px;color:var(--c-text-sec)">~${bags} bags <span style="font-size:10px;color:var(--c-text-muted)">(avg)</span></td>
       </tr>`;
     }).join('')}
@@ -4307,15 +4307,15 @@ function renderThresholds(){
     </p>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
       <div><label style="font-size:11px">Hardwood %</label>
-        <input type="text" inputmode="decimal" value="${c.hwPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
       <div><label style="font-size:11px">Wheat bran %</label>
-        <input type="text" inputmode="decimal" value="${c.wbPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.wbPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
       <div><label style="font-size:11px">Water % (RH)</label>
-        <input type="text" inputmode="decimal" value="${c.rhPct}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.rhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
       <div><label style="font-size:11px">Block weight (kg)</label>
-        <input type="text" inputmode="decimal" value="${c.bagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
       <div><label style="font-size:11px">Grain bag (kg)</label>
-        <input type="text" inputmode="decimal" value="${c.grainBagKg}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
       With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg*(1-c.rhPct/100)*(c.hwPct/100)).toFixed(3)}kg hardwood + ~${(c.bagKg*(1-c.rhPct/100)*(c.wbPct/100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
@@ -4989,7 +4989,7 @@ function resetAssetForm(){
   document.getElementById('asset-id-preview').textContent='Neue ID: '+nextAssetId();
   // Fill location datalist
   const locs=[...new Set(assets.map(a=>a.location).filter(Boolean))];
-  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${l}">`).join('');
+  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${esc(l)}">`).join('');
 }
 
 function assetStatusChange(){
@@ -5167,7 +5167,7 @@ function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c
 function lwUpdate(){
   const type=document.getElementById('lw-type').value;
   const dl=document.getElementById('sp-list');
-  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${s}">`).join('');
+  dl.innerHTML=[...new Set([...batches.map(b=>b.species),...cultures.map(c=>c.species)].filter(Boolean))].map(s=>`<option value="${esc(s)}">`).join('');
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
   if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
   else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
