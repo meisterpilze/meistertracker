@@ -12,8 +12,8 @@
   --c-border: #e2e8f0;
   --c-border-light: #f1f5f9;
   --c-text: #1e293b;
-  --c-text-sec: #64748b;
-  --c-text-muted: #94a3b8;
+  --c-text-sec: #475569;
+  --c-text-muted: #64748b;
   /* Semantic color palette */
   --c-red: #ef4444;
   --c-red-light: #fee2e2;
@@ -367,6 +367,10 @@ body {
 .scan-modal.scan-action-move .scan-modal-header {
   background: #eff6ff;
   border-bottom-color: #93c5fd;
+}
+.scan-modal.scan-action-move_batch .scan-modal-header {
+  background: #eef2ff;
+  border-bottom-color: #a5b4fc;
 }
 .scan-modal.scan-action-remove .scan-modal-header {
   background: #fef2f2;
@@ -1285,13 +1289,13 @@ tr:hover td {
   vertical-align: middle;
 }
 .caldav-status.synced {
-  background: #4ade80;
+  background: var(--c-green);
 }
 .caldav-status.pending {
-  background: #fbbf24;
+  background: var(--c-amber);
 }
 .caldav-status.error {
-  background: #f87171;
+  background: var(--c-red);
 }
 .member-row {
   display: flex;
@@ -1319,13 +1323,13 @@ tr:hover td {
   flex-shrink: 0;
 }
 .sync-dot.ok {
-  background: #4ade80;
+  background: var(--c-green);
 }
 .sync-dot.err {
-  background: #f87171;
+  background: var(--c-red);
 }
 .sync-dot.busy {
-  background: #fbbf24;
+  background: var(--c-amber);
 }
 
 /* ═══ CALENDAR ══════════════════════════════════════════════════ */
