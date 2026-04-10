@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -5633,14 +5634,40 @@ function reloadTlsCerts() {
 }
 
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
-let server;
+let server; // HTTPS (or plain HTTP in fallback) — keeps setSecureContext working for cert hot-reload
+let listenServer; // The listener actually bound to PORT — a TCP mux in HTTPS mode, else === server
+let legacyRedirectServer; // Port-80 redirect server (HTTPS mode only)
 if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   const tlsOpts = { key: fs.readFileSync(CERT_KEY), cert: fs.readFileSync(CERT_CRT), minVersion: 'TLSv1.2' };
   server = https.createServer(tlsOpts, handleRequest);
   protocol = 'https';
 
-  // HTTP→HTTPS redirect server: redirect all non-localhost requests to HTTPS
-  const redirectServer = http.createServer((req, res) => {
+  // Same-port HTTP handler: any plain-HTTP request arriving on PORT is 301-redirected to its HTTPS equivalent.
+  // This is what makes `http://host:3000` automatically upgrade to `https://host:3000` in a browser.
+  const samePortRedirect = http.createServer((req, res) => {
+    const host = (req.headers.host || 'localhost').replace(/:.*$/, '');
+    const target = 'https://' + host + (PORT === 443 ? '' : ':' + PORT) + req.url;
+    res.writeHead(301, { Location: target });
+    res.end();
+  });
+
+  // TCP multiplexer: sniff the first byte of each connection.
+  // 0x16 = TLS ClientHello record type → forward to the HTTPS server.
+  // Anything else → forward to the plain-HTTP redirect server.
+  // This lets PORT accept both HTTP and HTTPS so users who type `http://` don't hit a broken TLS handshake.
+  listenServer = net.createServer((socket) => {
+    socket.once('data', (buf) => {
+      socket.pause();
+      socket.unshift(buf);
+      const target = buf[0] === 0x16 ? server : samePortRedirect;
+      target.emit('connection', socket);
+      process.nextTick(() => socket.resume());
+    });
+    socket.on('error', () => {});
+  });
+
+  // Legacy redirect on port 80 so users who type `http://host` (no port) still get forwarded to HTTPS.
+  legacyRedirectServer = http.createServer((req, res) => {
     const host = (req.headers.host || '').replace(/:.*$/, '');
     // Allow localhost HTTP for local development
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -5652,7 +5679,7 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
     res.end();
   });
   const HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT, 10) || 80;
-  redirectServer
+  legacyRedirectServer
     .listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {
       log('info', 'HTTP→HTTPS redirect active on port ' + HTTP_REDIRECT_PORT);
     })
@@ -5668,9 +5695,10 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   log('warn', 'TLS certificates not found — falling back to HTTP. Run: bash gen-cert.sh');
   server = http.createServer(handleRequest);
   protocol = 'http';
+  listenServer = server;
 }
 
-server.listen(PORT, '0.0.0.0', () => {
+listenServer.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
   console.log('');
   console.log('  Meisterpilze Lab Tracker is running!');
@@ -5707,10 +5735,18 @@ server.listen(PORT, '0.0.0.0', () => {
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
 function shutdown(signal) {
   log('info', 'Received ' + signal + ', shutting down...');
-  server.close(() => {
-    database.close();
-    log('info', 'Server closed');
-    process.exit(0);
+  const servers = [listenServer];
+  if (listenServer !== server) servers.push(server);
+  if (legacyRedirectServer) servers.push(legacyRedirectServer);
+  let remaining = servers.length;
+  servers.forEach((s) => {
+    s.close(() => {
+      if (--remaining === 0) {
+        database.close();
+        log('info', 'Server closed');
+        process.exit(0);
+      }
+    });
   });
   setTimeout(() => {
     database.close();
