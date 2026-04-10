@@ -3457,6 +3457,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+          jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
+          return;
+        }
         const user = db.createUser(database, username, password, 'admin');
         const dbUser = db.getUserByUsername(database, username);
         const token = db.createSession(database, dbUser.id);
@@ -3583,6 +3587,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const { username, password, role } = data;
         if (!username || !password || password.length < 8) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
+          return;
+        }
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+          jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
         const user = db.createUser(database, username, password, role || 'user');
@@ -3895,6 +3903,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
+        jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
       let vd = validateDate(data.created, 'created');
       if (vd) {
         jsonErr(res, 400, vd);
@@ -4080,6 +4092,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         for (const c of arr) {
           const vr = validateRequired(c, ['id', 'type', 'created']);
           if (vr) { jsonErr(res, 400, vr); return; }
+          if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
+            jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
+            return;
+          }
         }
         db.insertCultures(database, arr);
         broadcastSSE(res);
@@ -4199,6 +4215,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const taskMatch = req.url.match(/^\/api\/tasks\/(\d+)$/);
   if (req.method === 'PATCH' && taskMatch) {
     const id = parseInt(taskMatch[1]);
+    const isAdmin = req.authUser && req.authUser.role === 'admin';
+    if (!db.canUserModifyTask(database, req.authUser && req.authUser.username, id, isAdmin)) {
+      jsonErr(res, 403, 'You are not allowed to modify this task');
+      return;
+    }
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
@@ -4218,6 +4239,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'DELETE' && taskMatch) {
     const id = parseInt(taskMatch[1]);
+    const isAdmin = req.authUser && req.authUser.role === 'admin';
+    if (!db.canUserModifyTask(database, req.authUser && req.authUser.username, id, isAdmin)) {
+      jsonErr(res, 403, 'You are not allowed to delete this task');
+      return;
+    }
     try {
       const task = db.readTaskById(database, id);
       db.deleteTaskById(database, id);
@@ -4311,6 +4337,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.assetId)) {
+        jsonErr(res, 400, 'assetId must be alphanumeric with - _ @ . : (max 200 chars)');
+        return;
+      }
       const ve = validateEnum(data.depreciationMethod, ['linear'], 'depreciationMethod');
       if (ve) {
         jsonErr(res, 400, ve);
@@ -4340,6 +4370,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const assetMatch = req.url.match(/^\/api\/assets\/([^/]+)$/);
   if (req.method === 'DELETE' && assetMatch) {
+    if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(assetMatch[1]);
     try {
       db.deleteAssetById(database, id);
@@ -4774,6 +4805,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.id)) {
+        jsonErr(res, 400, 'id must be alphanumeric with - _ @ . : (max 200 chars)');
+        return;
+      }
       let vd = validateDate(data.startDate, 'startDate');
       if (vd) {
         jsonErr(res, 400, vd);
@@ -4841,6 +4876,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'DELETE' && calEvMatch) {
+    if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(calEvMatch[1]);
     try {
       const ev = db.getCalendarEventById(database, id);
@@ -4961,6 +4997,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const supDelMatch = req.method === 'DELETE' && req.url.match(/^\/api\/suppliers\/(\d+)$/);
   if (supDelMatch) {
+    if (requireAdmin(req, res)) return;
     try {
       db.deleteSupplier(database, parseInt(supDelMatch[1]));
       broadcastSSE(res);
@@ -5332,8 +5369,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/caldav/import') {
     try {
       const imported = [];
+      // Determine which calendar directories the caller may see.
+      // Shared category calendars are visible to everyone, the user's own
+      // slug is always visible, and admins see everything.
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const callerSlug = req.authUser
+        ? String(req.authUser.username).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        : null;
+      const canSeeDir = (dir) => {
+        if (CALDAV_CATEGORY_CALS[dir]) return true;
+        if (isAdmin) return true;
+        return dir === callerSlug;
+      };
       if (fs.existsSync(CAL_DIR)) {
-        const dirs = fs.readdirSync(CAL_DIR).filter((d) => fs.statSync(path.join(CAL_DIR, d)).isDirectory());
+        const dirs = fs.readdirSync(CAL_DIR)
+          .filter((d) => fs.statSync(path.join(CAL_DIR, d)).isDirectory())
+          .filter(canSeeDir);
         for (const dir of dirs) {
           const files = fs.readdirSync(path.join(CAL_DIR, dir)).filter((f) => f.endsWith('.ics'));
           for (const f of files) {
@@ -5389,9 +5440,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/printer-status
   if (req.method === 'GET' && req.url === '/api/printer-status') {
+    // wmic was removed in Windows 11 24H2+; use PowerShell Get-Printer instead.
+    // PRINTER_NAME is already validated at startup but strip quotes defensively.
     execFile(
-      'wmic',
-      ['printer', 'where', "Name='" + PRINTER_NAME + "'", 'get', 'Name,PrinterStatus', '/format:csv'],
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
+      ],
       (err, stdout) => {
         const found = !err && stdout.includes(PRINTER_NAME);
         res.writeHead(200, { 'Content-Type': 'application/json' });
