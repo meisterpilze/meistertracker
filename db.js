@@ -1342,7 +1342,10 @@ function insertBatch(db, b) {
 }
 
 function updateBatchField(db, batchId, fields) {
-  const allowed = ['notes', 'species', 'strain', 'qty', 'days', 'due'];
+  // Note: qty is intentionally NOT in the allowed list. Changing qty here
+  // would skip the inventory_log entries that addBagsToBatch / deleteBatchById
+  // use to keep stock consistent. Use addBagsToBatch to grow a batch.
+  const allowed = ['notes', 'species', 'strain', 'days', 'due'];
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
   if (!cols.length) return;
   db.exec('BEGIN');
