@@ -3665,6 +3665,28 @@ function createBatch(){
   nbPreview();updateTodoBadge();
 }
 function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const s=document.getElementById('print-batch'),last=batches[batches.length-1];if(last){s.value=last.batchId;renderBagPreview()}},100)}
+// Move all active bags in a batch to a destination zone/rack.
+// Shared by the scan engine (MOVE_BATCH action) and the batch list dropdown.
+// Calls back with (movedCount, skippedCount) when done.
+function moveBatchTo(batch,dest,cb){
+  const now=new Date().toISOString();const entries=[];let skipped=0;
+  batch.bags.forEach(bagId=>{
+    const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
+    if(!bagLast||bagLast.action==='REMOVE')return;
+    const curLoc=bagLast.to||null;
+    if(curLoc&&curLoc.toUpperCase()===dest.toUpperCase()){skipped++;return}
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:now,action:'MOVE',batch:batch.batchId,bag:bagId,from:curLoc,to:dest,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);entries.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
+  });
+  if(!entries.length){if(cb)cb(0,skipped);return}
+  if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
+  apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
+  if(cb)cb(entries.length,skipped);
+}
+
 function renderBatches(){
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
@@ -3674,7 +3696,10 @@ function renderBatches(){
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
     const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap"><button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    const isActive=status!=='DONE'&&status!=='EMPTY';
+    const zoneOpts=zones.map(z=>{const rackOpts=z.racks.length?z.racks.map(r=>`<option value="${esc(r.id)}">${esc(r.id)}</option>`).join(''):'';return`<option value="${esc(z.id)}">${esc(z.id)}</option>${rackOpts}`}).join('');
+    const moveDropdown=isActive?`<select data-action="move-batch" data-batch="${esc(b.batchId)}" style="font-size:11px;padding:2px 4px;max-width:110px;margin-right:3px"><option value="" disabled selected>↪ Verschieben…</option>${zoneOpts}</select>`:'';
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveDropdown}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -6433,24 +6458,12 @@ function processScan(raw){
     if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){setFb('err',t('scanFb.scanToFirst'));return}
     // MOVE_BATCH: scan any bag or batch ID → move entire batch
     if(scan.action==='MOVE_BATCH'&&batch){
-      const now=new Date().toISOString();const entries=[];let skipped=0;
-      batch.bags.forEach(bagId=>{
-        const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
-        if(!bagLast||bagLast.action==='REMOVE')return;
-        const curLoc=bagLast.to||null;
-        if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){skipped++;return}
-        const tempId='s'+(++_scanTempIdCounter);
-        const entry={time:now,action:'MOVE',batch:batch.batchId,bag:bagId,from:curLoc,to:scan.to,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
-        scanLog.push(entry);movements.push(entry);entries.push(entry);
-        if(!sessionStartTime)sessionStartTime=Date.now();
-        sessionEntries.push(entry);
-        scan.count++;
+      moveBatchTo(batch,scan.to,function(moved,skipped){
+        if(!moved){_scanBeep(500,120);setFb('err','Batch '+batch.batchId+': keine Bags zum Verschieben'+(skipped?' ('+skipped+' bereits in '+scan.to+')':''));updateSD();return}
+        setFb('ok','MOVE BATCH '+batch.batchId+': '+moved+' Bags → '+scan.to+(skipped?' ('+skipped+' übersprungen)':''));
+        scan.count+=moved;updateSD();
       });
-      if(!entries.length){_scanBeep(500,120);setFb('err','Batch '+batch.batchId+': keine Bags zum Verschieben'+(skipped?' ('+skipped+' bereits in '+scan.to+')':''));updateSD();return}
-      if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
-      apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
-      setFb('ok','MOVE BATCH '+batch.batchId+': '+entries.length+' Bags → '+scan.to+(skipped?' ('+skipped+' übersprungen)':''));
-      updateSD();return;
+      return;
     }
     // MOVE: auto-derive FROM from bag's last known location
     if(scan.action==='MOVE'){
@@ -8077,6 +8090,19 @@ function initEventListeners() {
       case 'add-bags': openAddBags(batch); break;
       case 'del-batch': delBatch(batch); break;
     }
+  });
+  $('batches-body').addEventListener('change', function(e) {
+    const el = e.target.closest('[data-action="move-batch"]');
+    if (!el) return;
+    const dest = el.value;
+    const b = batches.find(x => x.batchId === el.dataset.batch);
+    if (!b || !dest) return;
+    moveBatchTo(b, dest, function(moved, skipped) {
+      el.value = '';
+      if (!moved) { setFb('err', 'Keine Bags zu verschieben' + (skipped ? ' (' + skipped + ' bereits in ' + dest + ')' : '')); return; }
+      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + dest + (skipped ? ' (' + skipped + ' übersprungen)' : ''));
+      updateSD(); renderBatches();
+    });
   });
   $('st-batch-list').addEventListener('click', () => { openStab('batch','list'); });
   $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
