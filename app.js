@@ -2687,7 +2687,7 @@ const LANG = {
 const ACTIONS=['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
 const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
-const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
+// ABBR removed — kuerzel comes from mushroomStrains (Pilzsorten) now.
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
 const KNOWN_ZONE_I18N={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
@@ -2998,7 +2998,7 @@ function confirmBatchAdd(){
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
-const abbrev=s=>{if(!s)return'BAG';const u=s.toLowerCase();for(const k in ABBR)if(k.toLowerCase()===u)return ABBR[k];return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
+const abbrev=s=>{if(!s)return'BAG';const ms=mushroomStrains.find(x=>x.name.toLowerCase()===s.toLowerCase());if(ms&&ms.kuerzel)return ms.kuerzel;return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
 const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
 const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
 const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
@@ -5516,7 +5516,7 @@ document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id
 // Correct size/orientation automatically — no browser dialog issues.
 // Hyphens encoded as underscores in barcode to fix German keyboard scanning.
 
-// Species abbreviation: 1 word → first 2 letters (CH), 2+ words → first letter each (BO, BK)
+// Legacy species abbreviation (only used for scanning old barcode labels).
 function spAbbrev(species){
   if(!species)return'XX';
   const words=species.trim().split(/\s+/);
@@ -5640,15 +5640,14 @@ function renderPreviewDeferred(deferred,baseDelay){
 
 function bagLabelItems(bagId,batch,mode){
   const items=[];
-  // Barcode value: CH_ERL_0327_4 format (species abbrev _ strain3 _ MMDD _ bagNum)
+  // Barcode value: KUERZEL_MMDD_bagNum — kuerzel from mushroomStrains (Pilzsorten)
   const parts=bagId.split('-');
   let bcVal;
   if(parts.length===4){
-    const sp=spAbbrev(batch.species);
-    const st=(batch.strain||'000').slice(0,3).toUpperCase();
+    const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
     const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY → MMDD
     const bagNum=parseInt(parts[3],10);
-    bcVal=sp+'_'+st+'_'+mmdd+'_'+bagNum;
+    bcVal=kz+'_'+mmdd+'_'+bagNum;
   }else{
     bcVal=bagId.replace(/-/g,'_');
   }
@@ -6230,22 +6229,37 @@ function processScan(raw){
   let val=raw.trim().toUpperCase();if(!val)return;
   if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
   else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
-  // Decode new format: BO-ERL-0327-6 → full bag ID BLUES-260327-01-06
-  // Parts: [spAbbrev, strainPrefix, MMDD, bagNum]
+  // Decode barcode → full bag ID.
+  // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
+  // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
   const parts=val.split('-');
-  if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-    const scannedSp=parts[0];   // e.g. BO
-    const scannedSt=parts[1];   // e.g. ERL
-    const scannedMmdd=parts[2]; // e.g. 0327
-    const scannedBag=parts[3].padStart(2,'0'); // 6→06
-    // Find matching batch by comparing species abbrev + strain prefix + date MMDD
-    const matchBatch=batches.find(b=>{
+  let matchBatch=null,scannedBag='';
+  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2])){
+    // Current format: KUERZEL-MMDD-N
+    const scannedKz=parts[0];
+    const scannedMmdd=parts[1];
+    scannedBag=parts[2].padStart(2,'0');
+    matchBatch=batches.find(b=>{
+      const bKz=(b.strainKuerzel||b.strain||'').toUpperCase();
+      const bDateParts=b.batchId.split('-');
+      const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
+      return bKz===scannedKz && bMmdd===scannedMmdd;
+    });
+  }else if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
+    // Legacy format: SP-ST-MMDD-N (old labels with spAbbrev + strain prefix)
+    const scannedSp=parts[0];
+    const scannedSt=parts[1];
+    const scannedMmdd=parts[2];
+    scannedBag=parts[3].padStart(2,'0');
+    matchBatch=batches.find(b=>{
       const bSp=spAbbrev(b.species);
       const bSt=(b.strain||'000').slice(0,3).toUpperCase();
       const bDateParts=b.batchId.split('-');
       const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
       return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
     });
+  }
+  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2]) || parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
     if(matchBatch){
       val=matchBatch.batchId+'-'+scannedBag;
       setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
