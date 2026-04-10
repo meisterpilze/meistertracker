@@ -2702,7 +2702,7 @@ const LANG = {
 const ACTIONS=['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'];
 let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
 const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
-const ABBR={Kings:'KINGS',Oyster:'OYS',Shiitake:'SHII',Reishi:'REI',"Lion's Mane":'LION'};
+// ABBR removed — kuerzel comes from mushroomStrains (Pilzsorten) now.
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
 const KNOWN_ZONE_I18N={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
@@ -3014,7 +3014,7 @@ function confirmBatchAdd(){
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
-const abbrev=s=>{if(!s)return'BAG';const u=s.toLowerCase();for(const k in ABBR)if(k.toLowerCase()===u)return ABBR[k];return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
+const abbrev=s=>{if(!s)return'BAG';const ms=mushroomStrains.find(x=>x.name.toLowerCase()===s.toLowerCase());if(ms&&ms.kuerzel)return ms.kuerzel;return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
 const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
 const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
 const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
@@ -5263,6 +5263,7 @@ function renderStrains(){
     return`<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${ms.description?esc(ms.description):'<span style="color:var(--c-text-muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">Bearb.</button>
@@ -5570,7 +5571,7 @@ document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id
 // Correct size/orientation automatically — no browser dialog issues.
 // Hyphens encoded as underscores in barcode to fix German keyboard scanning.
 
-// Species abbreviation: 1 word → first 2 letters (CH), 2+ words → first letter each (BO, BK)
+// Legacy species abbreviation (only used for scanning old barcode labels).
 function spAbbrev(species){
   if(!species)return'XX';
   const words=species.trim().split(/\s+/);
@@ -5695,46 +5696,49 @@ function renderPreviewDeferred(deferred,baseDelay){
 function bagLabelItems(bagId,batch,mode){
   const items=[];
   const isGrain=batch.batchType==='grain';
-  // Barcode value: CH_ERL_0327_4 format (species abbrev _ strain3 _ MMDD _ bagNum)
-  // Grain batches get "G" prefix: GCH_ERL_0327_4
+  // Barcode value: KUERZEL_MMDD_bagNum — kuerzel from mushroomStrains (Pilzsorten)
+  // Grain batches get "G" prefix: GKUERZEL_MMDD_bagNum
   const parts=bagId.split('-');
   let bcVal;
   if(parts.length===4){
-    const sp=spAbbrev(batch.species);
-    const st=(batch.strain||'000').slice(0,3).toUpperCase();
+    const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
     const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY → MMDD
     const bagNum=parseInt(parts[3],10);
-    bcVal=(isGrain?'G':'')+sp+'_'+st+'_'+mmdd+'_'+bagNum;
+    bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
   }else{
     bcVal=bagId.replace(/-/g,'_');
   }
   const bc=bcParams(bcVal);
-  const bcY=mode==='date'?50:mode==='full'?52:56;
-  const bcH=mode==='date'?60:mode==='full'?70:90;
+  // date-mode: compact barcode to fit 4 rows below; full: slightly taller; id: tallest
+  const bcY=mode==='date'?8:mode==='full'?10:14;
+  const bcH=mode==='date'?55:mode==='full'?65:90;
   items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
-  const idY=bcY+bcH+6;
-  // Slightly smaller font for grain IDs (G-prefix makes ID longer)
-  items.push({type:'text',y:idY,fontH:isGrain?34:38,text:bagId});
+  const idY=bcY+bcH+4;
+  // Barcode text smaller so it doesn't crowd the lines below
+  items.push({type:'text',y:idY,fontH:24,text:bagId});
   if(mode==='full'||mode==='date'){
-    // Show "Pilzsorte - Strain" (e.g. "Shiitake - Amazing") then substrate
-    const strainLabel=batch.strainName&&batch.strain
-      ?batch.strainName+' \u2013 '+batch.strain
-      :(batch.strainName||batch.strain||'');
-    let infoLine=strainLabel;
+    // Row: "Pilzname – Genetik" or just "Pilzname" if no descriptor set
+    const strainLabel=batch.strainName
+      ?(batch.strainDescriptor?batch.strainName+' \u2013 '+batch.strainDescriptor:batch.strainName)
+      :'';
+    if(strainLabel) items.push({type:'text',y:idY+28,fontH:28,text:strainLabel});
+    // Due date — prominent, bold, this is the most important info
+    if(mode==='date'&&batch.due){
+      const due=new Date(batch.due);
+      const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
+      items.push({type:'text',y:idY+58,fontH:34,text:'Faellig: '+dueStr,bold:true});
+    }
+    // Substrate % — small, separate line at the bottom
     if(batch.substrate){
       const hw=batch.substrate.hardwood||0;
       const wb=batch.substrate.wheatbran||0;
       const rh=batch.substrate.rh||0;
       const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');
-      if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
+      if(subStr){
+        const subY=mode==='date'?idY+96:idY+58;
+        items.push({type:'text',y:subY,fontH:20,text:subStr});
+      }
     }
-    if(infoLine) items.push({type:'text',y:idY+42,fontH:28,text:infoLine});
-  }
-  if(mode==='date'&&batch.due){
-    const due=new Date(batch.due);
-    const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-    // Bigger + bold — due date is the key info in this mode.
-    items.push({type:'text',y:idY+72,fontH:32,text:'Faellig: '+dueStr,bold:true});
   }
   return items;
 }
@@ -5743,7 +5747,8 @@ function labLabelItems(id,c,opts){
   const items=[];
   // Prefer mushroom_strains lookup fields; fall back to legacy species/strain.
   const name=c.strainName||c.species||'';
-  const kz=c.strainKuerzel||c.strain||'';
+  // Only show descriptor after dash, not kürzel
+  const kz=c.strainDescriptor||'';
   const sp=name+(kz?' \u2013 '+kz:'');
   const ds=fmtDt(c.created);
   const bcVal=id.replace(/-/g,'_');
@@ -6287,22 +6292,37 @@ function processScan(raw){
   let val=raw.trim().toUpperCase();if(!val)return;
   if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
   else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
-  // Decode new format: BO-ERL-0327-6 → full bag ID BLUES-260327-01-06
-  // Parts: [spAbbrev, strainPrefix, MMDD, bagNum]
+  // Decode barcode → full bag ID.
+  // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
+  // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
   const parts=val.split('-');
-  if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-    const scannedSp=parts[0];   // e.g. BO
-    const scannedSt=parts[1];   // e.g. ERL
-    const scannedMmdd=parts[2]; // e.g. 0327
-    const scannedBag=parts[3].padStart(2,'0'); // 6→06
-    // Find matching batch by comparing species abbrev + strain prefix + date MMDD
-    const matchBatch=batches.find(b=>{
+  let matchBatch=null,scannedBag='';
+  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2])){
+    // Current format: KUERZEL-MMDD-N
+    const scannedKz=parts[0];
+    const scannedMmdd=parts[1];
+    scannedBag=parts[2].padStart(2,'0');
+    matchBatch=batches.find(b=>{
+      const bKz=(b.strainKuerzel||b.strain||'').toUpperCase();
+      const bDateParts=b.batchId.split('-');
+      const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
+      return bKz===scannedKz && bMmdd===scannedMmdd;
+    });
+  }else if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
+    // Legacy format: SP-ST-MMDD-N (old labels with spAbbrev + strain prefix)
+    const scannedSp=parts[0];
+    const scannedSt=parts[1];
+    const scannedMmdd=parts[2];
+    scannedBag=parts[3].padStart(2,'0');
+    matchBatch=batches.find(b=>{
       const bSp=spAbbrev(b.species);
       const bSt=(b.strain||'000').slice(0,3).toUpperCase();
       const bDateParts=b.batchId.split('-');
       const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
       return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
     });
+  }
+  if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2]) || parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
     if(matchBatch){
       val=matchBatch.batchId+'-'+scannedBag;
       setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
@@ -6590,6 +6610,7 @@ function calMonths(){return (t('cal.months')||'Januar,Februar,März,April,Mai,Ju
 const CAL_HOURS_START=6,CAL_HOURS_END=22;
 
 function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
 
 function getBatchLoc(b){
@@ -6618,7 +6639,7 @@ function expandRecurringEvent(ev){
     if(hardEnd&&cur>hardEnd)break;
     if(cur>winEnd)break;
     if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(cur.toISOString().split('T')[0]);
+      out.push(localDateStr(cur));
     }
     if(ev.recurrence==='daily')cur=addDays(cur,1);
     else if(ev.recurrence==='weekly')cur=addDays(cur,7);
@@ -6641,7 +6662,7 @@ function expandRecurringTaskDates(task){
     if(hardEnd&&cur>hardEnd)break;
     if(cur>winEnd)break;
     if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(cur.toISOString().split('T')[0]);
+      out.push(localDateStr(cur));
     }
     if(task.recurrence==='daily')cur=addDays(cur,1);
     else if(task.recurrence==='weekly')cur=addDays(cur,7);
@@ -6656,7 +6677,7 @@ function collectCalendarEvents(){
     if(!b.due)return;
     const d=new Date(b.due);
     const loc=getBatchLoc(b);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
+    events.push({date:localDateStr(d),label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
@@ -6682,7 +6703,7 @@ function collectCalendarEvents(){
   harvests.forEach(h=>{
     if(!h.time)return;
     const d=new Date(h.time);
-    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
+    events.push({date:localDateStr(d),label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
   });
   const filterName=document.getElementById('cal-filter-user')?.value||'';
   calendarEvents.forEach(ev=>{
@@ -6779,7 +6800,7 @@ function printCalendarTaskList(range){
   }
 
   // Render HTML
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   let bodyHtml='';
   days.forEach(day=>{
     const isToday=day.ds===todayStr;
@@ -6832,7 +6853,7 @@ function renderCalMonth(){
   let startDow=(firstDay.getDay()+6)%7;
   const prevLast=new Date(calYear,calMonth,0).getDate();
   const events=collectCalendarEvents();
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   const totalCells=startDow+daysInMonth;
   const rows=Math.max(6,Math.ceil(totalCells/7));
   const trailing=rows*7-totalCells;
@@ -6883,11 +6904,11 @@ function renderCalWeek(){
   const ws=getWeekStart(calSelectedDate);
   const days=[];
   for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);days.push(d)}
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   const MONTHS=calMonths(),DAYS=calDays();
   title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
   const events=collectCalendarEvents();
-  const dayStrs=days.map(d=>d.toISOString().split('T')[0]);
+  const dayStrs=days.map(d=>localDateStr(d));
 
   let html='<div class="cal-week">';
   html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
@@ -6950,7 +6971,7 @@ function renderCalWeek(){
         body.appendChild(el);
       });
     });
-    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const now=new Date();const nowDs=localDateStr(now);
     const todayIdx=dayStrs.indexOf(nowDs);
     if(todayIdx>=0){
       const nowH=now.getHours(),nowM=now.getMinutes();
@@ -6972,7 +6993,7 @@ function renderCalDay(){
   const container=document.getElementById('cal-container');
   const title=document.getElementById('cal-title');
   const d=calSelectedDate;
-  const ds=d.toISOString().split('T')[0];
+  const ds=localDateStr(d);
   const DAYS=calDays(),MONTHS=calMonths();
   const dayName=DAYS[(d.getDay()+6)%7];
   title.textContent=dayName+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
@@ -7027,7 +7048,7 @@ function renderCalDay(){
       }
       body.appendChild(el);
     });
-    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const now=new Date();const nowDs=localDateStr(now);
     if(ds===nowDs){
       const nowH=now.getHours(),nowM=now.getMinutes();
       if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
@@ -7452,7 +7473,7 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-mode').value='create';
     document.getElementById('cal-entry-id').value='';
     document.getElementById('cal-entry-name').value='';
-    document.getElementById('cal-entry-date').value=date||new Date().toISOString().split('T')[0];
+    document.getElementById('cal-entry-date').value=date||localDateStr(new Date());
     document.getElementById('cal-entry-end-date').value='';
     document.getElementById('cal-entry-allday').checked=!time;
     document.getElementById('cal-entry-start-time').value=time||'09:00';
