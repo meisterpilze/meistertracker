@@ -1476,8 +1476,13 @@ function batchToVEVENT(batch, scanLog) {
     'CATEGORIES:Fälligkeiten'
   ];
   if (loc) lines.push('LOCATION:' + escapeIcsText(loc));
+  // Prefer the joined mushroom_strains values; fall back to legacy free-text
+  // fields for historical batches without a strain_id.
+  const descName = batch.strainName || batch.species || '';
+  const descKuerzel = batch.strainKuerzel || batch.strain || '';
+  const descText = descName + (descKuerzel ? ' (' + descKuerzel + ')' : '');
   lines.push(
-    'DESCRIPTION:' + escapeIcsText((batch.species || '') + (batch.strain ? ' (' + batch.strain + ')' : '')),
+    'DESCRIPTION:' + escapeIcsText(descText),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:batch-due',
     'X-MEISTERPILZE-BATCH:' + batch.batchId,
