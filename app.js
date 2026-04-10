@@ -2724,7 +2724,6 @@ function rebuildZoneConstants(){
     const rIds=z.racks.map(r=>r.id);
     for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk.map(r=>{const bc=barcodeByEntity.get('rack:'+r);return{val:bc?String(bc):r,label:r}})})}
   });
-  REF_GROUPS.push({g:'Quantities',items:['1','2','3','4','5','6','7','8','9','10'].map(q=>({val:q,label:q}))});
 }
 
 // ─── DATA ────────────────────────────────────────────────────
@@ -5759,12 +5758,13 @@ function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
     }
   }
   const bc=bcParams(bcVal);
+  // Barcode starts 6mm (48 dots @ 203dpi) from the top edge
+  const bcY=48;
   // Taller barcode when fewer text lines follow
-  const bcY=8;
-  const bcH=detail==='minimal'?130:detail==='sorte'?90:70;
+  const bcH=detail==='minimal'?100:detail==='sorte'?65:50;
   items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
   // Line 1 — bag ID in monospaced kürzel format (always shown)
-  const line1Y=bcY+bcH+4;
+  const line1Y=bcY+bcH+6;
   items.push({type:'text',y:line1Y,fontH:24,text:bagId});
   if(detail==='sorte'||detail==='full'){
     // Line 2 — Pilzsorte written out, plus notes if any
@@ -5786,28 +5786,35 @@ function labLabelItems(id,c,opts){
   const items=[];
   // Prefer mushroom_strains lookup fields; fall back to legacy species/strain.
   const name=c.strainName||c.species||'';
-  // Only show descriptor after dash, not kürzel
   const kz=c.strainDescriptor||'';
   const sp=name+(kz?' \u2013 '+kz:'');
   const ds=fmtDt(c.created);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc=barcodeByEntity.get('culture:'+id);
   const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
-  const bc=bcParams(bcVal); // numeric barcodes are short, no quiet zone hack needed
-  const lines=(opts.sp&&sp?1:0)+(opts.par&&c.parentId?1:0)+(opts.dt?1:0);
-  const bcH=lines>=3?110:lines>=2?132:lines>=1?154:180;
-  const bcY=16;
-  // Text stays left of the QR when it's present (QR occupies right ~128 dots).
+  const bc=bcParams(bcVal);
+  // Barcode starts 6mm (48 dots @ 203dpi) from top — same as bag labels
+  const bcY=48;
+  // Count visible text lines to size barcode height (same logic as bag labels)
+  const visibleLines=(opts.sp&&sp?1:0)+(opts.dt?1:0);
+  const bcH=visibleLines===0?100:visibleLines===1?65:50;
+  // QR occupies the right ~128 dots; text and barcode stay left of it
   const textBlockW=opts.qr?272:400;
   if(opts.bc){
     const bcW=opts.qr?Math.max(0,272-2*bc.x):(400-2*bc.x);
     items.push({type:'barcode',x:bc.x,y:bcY,w:bcW,h:bcH,val:bcVal,mw:bc.mw});
   }
-  let ty=opts.bc?bcY+bcH+6:12;
-  items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:30,text:id});ty+=34;
-  if(opts.sp&&sp){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:22,text:sp});ty+=26}
-  if(opts.par&&c.parentId){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:18,text:'Parent: '+c.parentId});ty+=22}
-  if(opts.dt){items.push({type:'text',x:0,y:ty,blockW:textBlockW,fontH:18,text:ds,bold:true});ty+=22}
+  // Line 1 — culture ID, optionally with parent appended (fontH 24 matching bag labels)
+  const line1Y=opts.bc?bcY+bcH+6:12;
+  const line1Text=opts.par&&c.parentId?id+' \u2190 '+c.parentId:id;
+  items.push({type:'text',x:0,y:line1Y,blockW:textBlockW,fontH:24,text:line1Text});
+  // Line 2 — species + descriptor (fontH 24, same as bag Pilzsorte line)
+  if(opts.sp&&sp) items.push({type:'text',x:0,y:line1Y+28,blockW:textBlockW,fontH:24,text:sp});
+  // Line 3 — date created, bold (fontH 28, same as bag Fälligkeit line)
+  if(opts.dt){
+    const line3Y=line1Y+(opts.sp&&sp?56:28);
+    items.push({type:'text',x:0,y:line3Y,blockW:textBlockW,fontH:28,text:ds,bold:true});
+  }
   if(opts.qr) items.push({type:'qr',x:280,y:bcY,size:108,val:id});
   return items;
 }
@@ -5930,8 +5937,8 @@ function renderLabPreview(){
 // ─── REF BARCODES ────────────────────────────────────────────
 async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
 
-async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:flex-end';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.className='bc-cell';cell.style.minWidth='80px';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:false,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},20);const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:600;color:var(--c-text-sec);margin-top:3px;text-align:center';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
-async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:10px 8px 6px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:50,displayValue:false,fontSize:11,margin:12,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25;const lbl=document.createElement('div');lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
+async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;align-items:flex-end';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.className='bc-cell';cell.style.cssText='min-width:140px;text-align:center;padding:8px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface)';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:60,displayValue:false,margin:14,background:'#fff',lineColor:'#000'})}catch{}},20);const lbl=document.createElement('div');lbl.style.cssText='font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px;text-align:center';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
+async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:20px;padding:0 8px';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:6px;padding:12px 16px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='90px';img.style.height='90px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:60,displayValue:false,margin:14,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25;const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 // Session tracking
