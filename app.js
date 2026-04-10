@@ -305,6 +305,11 @@ const LANG = {
     'lab.selectAbove': 'Select a culture or batch above to trace its lineage.',
     'lab.selectAboveShort': 'Select a culture or batch above.',
     'lab.noLineageData': 'No lineage data found.',
+    'lab.grainSpawn': 'Grain spawn',
+    'lab.createGrainSpawn': 'Create grain spawn bags',
+    'lab.grainIdPreview': 'Grain spawn ID preview',
+    'lab.createGrainBtn': 'Create grain spawn',
+    'lab.grainCreated': '{n} grain spawn bags created',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Type',
@@ -1189,6 +1194,11 @@ const LANG = {
     'lab.selectAbove': 'W\u00e4hle oben eine Kultur oder Charge zur Abstammungsverfolgung.',
     'lab.selectAboveShort': 'Kultur oder Charge oben w\u00e4hlen.',
     'lab.noLineageData': 'Keine Abstammungsdaten gefunden.',
+    'lab.grainSpawn': 'K\u00f6rnerbrut',
+    'lab.createGrainSpawn': 'K\u00f6rnerbrut-Beutel erstellen',
+    'lab.grainIdPreview': 'K\u00f6rnerbrut-ID Vorschau',
+    'lab.createGrainBtn': 'K\u00f6rnerbrut erstellen',
+    'lab.grainCreated': '{n} K\u00f6rnerbrut-Beutel erstellt',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Typ',
@@ -2073,6 +2083,11 @@ const LANG = {
     'lab.selectAbove': 'Selecione uma cultura ou lote acima para rastrear linhagem.',
     'lab.selectAboveShort': 'Selecione uma cultura ou lote acima.',
     'lab.noLineageData': 'Nenhum dado de linhagem encontrado.',
+    'lab.grainSpawn': 'Gr\u00e3os de spawn',
+    'lab.createGrainSpawn': 'Criar sacos de gr\u00e3os de spawn',
+    'lab.grainIdPreview': 'Pr\u00e9via do ID de gr\u00e3os',
+    'lab.createGrainBtn': 'Criar gr\u00e3os de spawn',
+    'lab.grainCreated': '{n} sacos de gr\u00e3os criados',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Tipo',
@@ -2792,7 +2807,7 @@ function applyData(d){
   rebuildZoneConstants();
   batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
   fillStrainSelects();
-  fillCultureSelect('nb-culture',['PD','LC']);updateTodoBadge();
+  fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);updateTodoBadge();
   if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
 }
 function defaultInventory(){
@@ -2916,6 +2931,7 @@ function openStab(page,sub){
   if(page==='batch'&&sub==='harvest')renderHarvests();
   if(page==='lab'&&sub==='cultures')renderCultures();
   if(page==='lab'&&sub==='work'){lwUpdate();renderLabLog();}
+  if(page==='lab'&&sub==='grain'){fillCultureSelect('gs-culture',['PD','LC']);gsPreview();}
   if(page==='lab'&&sub==='lineage')fillLineageSelect();
   if(page==='inv'&&sub==='stock')renderInvStock();
   if(page==='inv'&&sub==='delivery'){delMatChange();adjMatChange();}
@@ -3539,26 +3555,11 @@ function locUndo(){
 }
 
 // ─── BATCHES ─────────────────────────────────────────────────
-function nbTypeChange(){
-  const isGrain=document.getElementById('nb-type').value==='grain';
-  // Toggle weight buttons
-  document.getElementById('wbtn-3').style.display=isGrain?'none':'';
-  document.getElementById('wbtn-5').style.display=isGrain?'none':'';
-  document.getElementById('wbtn-07').style.display=isGrain?'':'none';
-  document.getElementById('wbtn-1').style.display=isGrain?'':'none';
-  document.getElementById('wbtn-2').style.display=isGrain?'':'none';
-  document.getElementById('wbtn-5g').style.display=isGrain?'':'none';
-  // Toggle substrate section (grain doesn't need it)
-  document.querySelector('details').style.display=isGrain?'none':'';
-  // Set default weight
-  document.getElementById('nb-weight').value=isGrain?'1':'3';
-  setBagWeight(isGrain?1:3);
-  nbPreview();
-}
+function nbTypeChange(){nbPreview()}
 function setBagWeight(kg){
   document.getElementById('nb-weight').value=kg;
   // Highlight the active button
-  ['wbtn-3','wbtn-5','wbtn-07','wbtn-1','wbtn-2','wbtn-5g'].forEach(id=>{
+  ['wbtn-3','wbtn-5'].forEach(id=>{
     const btn=document.getElementById(id);
     if(!btn)return;
     const btnKg=parseFloat(btn.textContent);
@@ -3573,17 +3574,10 @@ function nbPreview(){
   const sp=ms?ms.name:'',st=ms?ms.kuerzel:'';
   const qty=parseInt(document.getElementById('nb-qty').value)||0;
   document.getElementById('nb-prev').textContent=(sp&&st)?genBatchId(sp)+' ('+qty+' bags)':'—';
-  const isGrain=document.getElementById('nb-type').value==='grain';
   const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
   if(!qty||!bagKg){document.getElementById('nb-mat-preview').style.display='none';return}
   let lines=[];
-  if(isGrain){
-    const totalGrain=qty*bagKg;
-    const avail=inventory.stock?.grain||0;
-    const enough=avail>=totalGrain;
-    lines.push(`<strong>Grain needed:</strong> ${totalGrain.toFixed(2)} kg (${qty} × ${bagKg} kg)`);
-    lines.push(`In stock: ${avail.toFixed(2)} kg → ${enough?'✓ sufficient':'⚠ only enough for '+Math.floor(avail/bagKg)+' bags'}`);
-  }else{
+  {
     const hw=parseFloat(document.getElementById('nb-hw').value)||0;
     const wb=parseFloat(document.getElementById('nb-wb').value)||0;
     const rh=parseFloat(document.getElementById('nb-rh').value)||0;
@@ -3617,16 +3611,15 @@ function createBatch(){
   if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
   const sp=ms.name,st=ms.kuerzel;
   const qty=parseInt(document.getElementById('nb-qty').value)||0,days=parseInt(document.getElementById('nb-days').value)||14;
-  const isGrain=document.getElementById('nb-type').value==='grain';
   const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
   if(qty<1){alert('Please fill in quantity');return}
   if(!bagKg){alert('Please enter a bag weight');return}
   const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
-  const substrate=(!isGrain&&(hw||wb))?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
+  const substrate=(hw||wb)?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
   const batchId=genBatchId(sp);spColor(sp);
   const due=new Date();due.setDate(due.getDate()+days);
   const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
-  const batchType=isGrain?'grain':'block';
+  const batchType='block';
   batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
 
   // Save batch to server
@@ -3644,11 +3637,7 @@ function createBatch(){
   // Auto-deduct materials from inventory via server-side deltas
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
   const deltas=[];
-  if(isGrain){
-    const grainUsed=qty*bagKg;
-    inventory.stock.grain=Math.max(0,inventory.stock.grain-grainUsed);
-    deltas.push({mat:'grain',deltaKg:-grainUsed,type:'batch',ref:batchId});
-  }else if(substrate){
+  if(substrate){
     const rh=parseFloat(document.getElementById('nb-rh').value)||0;
     const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
     const hwUsed=qty*dryKgPerBag*(hw/100);
@@ -5243,7 +5232,7 @@ function fillStrainSelects(){
   const opts='<option value="">'+t('strains.selectPlaceholder')+'</option>'+
     mushroomStrains.map(ms=>`<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
   const hint=mushroomStrains.length===0;
-  ['nb-strain-sel','lw-st'].forEach(id=>{
+  ['nb-strain-sel','lw-st','gs-strain-sel'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
     const cur=el.value;
@@ -5372,7 +5361,7 @@ function deleteCulture(id){
   confirm2(t('lab.deleteCultureTitle'),t('lab.deleteCultureMsg',{id:id})+warning,t('lab.deleteCulture'),()=>{
     cultures=cultures.filter(x=>x.id!==id);
     apiDelete('/api/cultures/'+encodeURIComponent(id));
-    renderCultures();renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);
+    renderCultures();renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);
   });
 }
 
@@ -5416,7 +5405,7 @@ function logLabWork(){
   cultures.push(...newC);apiPost('/api/cultures',{cultures:newC});
   document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
   if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
-  renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);lwPreview();
+  renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);lwPreview();
   const ids=newC.map(c=>c.id).join(', ');
   if(confirm(t('lab.logged',{n:newC.length,type:type})+'\n'+ids+'\n\n'+t('lab.printNow'))){
     selectedLabIds=new Set(newC.map(c=>c.id));go('print','n-print');
@@ -5424,6 +5413,71 @@ function logLabWork(){
   }
 }
 function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>{const name=c.strainName||c.species||'';const kz=c.strainKuerzel||c.strain||'';return`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td>${spDot(name)}${esc(name)}${kz?' / '+esc(kz):''}</td></tr>`}).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
+
+// ─── GRAIN SPAWN (Lab tab) ──────────────────────────────────
+const genGrainBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),prefix='G'+ab+'-'+dt;const n=batches.filter(b=>b.batchId.startsWith(prefix+'-')).length;return prefix+'-'+String(n+1).padStart(2,'0')};
+function gsSetWeight(kg){
+  document.getElementById('gs-weight').value=kg;
+  ['gs-wbtn-07','gs-wbtn-1','gs-wbtn-2','gs-wbtn-5'].forEach(id=>{
+    const btn=document.getElementById(id);if(!btn)return;
+    const btnKg=parseFloat(btn.textContent);
+    btn.className='btn btn-sm'+(btnKg===kg?' btn-p':'');
+  });
+  gsPreview();
+}
+function gsPreview(){
+  const strainSel=document.getElementById('gs-strain-sel');
+  const strainId=strainSel?parseInt(strainSel.value)||null:null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  const sp=ms?ms.name:'';
+  const qty=parseInt(document.getElementById('gs-qty').value)||0;
+  const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
+  document.getElementById('gs-prev').textContent=(sp)?genGrainBatchId(sp)+' ('+qty+' bags)':'\u2014';
+  const el=document.getElementById('gs-mat-preview');
+  if(!qty||!bagKg){el.style.display='none';return}
+  const totalGrain=qty*bagKg;
+  const avail=inventory.stock?.grain||0;
+  const enough=avail>=totalGrain;
+  el.innerHTML=`<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${qty} \u00d7 ${bagKg} kg)<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough?'\u2713 '+t('batch.sufficient'):'\u26A0 '+t('batch.onlyEnoughFor',{n:Math.floor(avail/bagKg)})}`;
+  el.style.display='block';
+}
+function createGrainBatch(){
+  const strainSel=document.getElementById('gs-strain-sel');
+  const strainId=strainSel?parseInt(strainSel.value)||null:null;
+  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
+  if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
+  const sp=ms.name,st=ms.kuerzel;
+  const qty=parseInt(document.getElementById('gs-qty').value)||0;
+  const days=parseInt(document.getElementById('gs-days').value)||14;
+  const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
+  if(qty<1){alert('Please fill in quantity');return}
+  if(!bagKg){alert('Please enter a bag weight');return}
+  const batchId=genGrainBatchId(sp);spColor(sp);
+  const due=new Date();due.setDate(due.getDate()+days);
+  const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
+  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('gs-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+  const batchObj=batches[batches.length-1];
+  apiPost('/api/batches',batchObj).then(r=>{
+    if(r&&r.error){
+      const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
+      if(i>=0)batches.splice(i,1);
+      alert('Batch konnte nicht gespeichert werden: '+r.error);
+      renderBatches();renderStatus();
+    }
+  });
+  // Deduct grain from inventory
+  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
+  const grainUsed=qty*bagKg;
+  inventory.stock.grain=Math.max(0,(inventory.stock.grain||0)-grainUsed);
+  invDeltas([{mat:'grain',deltaKg:-grainUsed,type:'batch',ref:batchId}]);
+  document.getElementById('gs-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
+  document.getElementById('gs-result').style.display='block';
+  if(strainSel)strainSel.value='';
+  document.getElementById('gs-qty').value='10';document.getElementById('gs-days').value='14';
+  document.getElementById('gs-notes').value='';document.getElementById('gs-mat-preview').style.display='none';
+  gsPreview();updateTodoBadge();renderBatches();
+}
+function goToPrintGrainBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const last=batches[batches.length-1];if(last){const s=document.getElementById('print-batch');s.value=last.batchId;renderBagPreview()}},100)}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
 // Lineage intentionally uses the legacy c.species / c.strain fields so that
@@ -5641,14 +5695,16 @@ function renderPreviewDeferred(deferred,baseDelay){
 
 function bagLabelItems(bagId,batch,mode){
   const items=[];
+  const isGrain=batch.batchType==='grain';
   // Barcode value: KUERZEL_MMDD_bagNum — kuerzel from mushroomStrains (Pilzsorten)
+  // Grain batches get "G" prefix: GKUERZEL_MMDD_bagNum
   const parts=bagId.split('-');
   let bcVal;
   if(parts.length===4){
     const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
     const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2); // DDMMYY → MMDD
     const bagNum=parseInt(parts[3],10);
-    bcVal=kz+'_'+mmdd+'_'+bagNum;
+    bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
   }else{
     bcVal=bagId.replace(/-/g,'_');
   }
@@ -7955,13 +8011,8 @@ function initEventListeners() {
   $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
   $('st-batch-harvest').addEventListener('click', () => { openStab('batch','harvest'); });
   $('batch-q').addEventListener('input', renderBatches);
-  $('nb-type').addEventListener('change', nbTypeChange);
   $('wbtn-3').addEventListener('click', () => { setBagWeight(3); });
   $('wbtn-5').addEventListener('click', () => { setBagWeight(5); });
-  $('wbtn-07').addEventListener('click', () => { setBagWeight(0.7); });
-  $('wbtn-1').addEventListener('click', () => { setBagWeight(1); });
-  $('wbtn-2').addEventListener('click', () => { setBagWeight(2); });
-  $('wbtn-5g').addEventListener('click', () => { setBagWeight(5); });
   $('nb-weight').addEventListener('input', nbPreview);
   $('nb-strain-sel').addEventListener('change', nbPreview);
   $('nb-qty').addEventListener('input', nbPreview);
@@ -7977,7 +8028,18 @@ function initEventListeners() {
   // Lab
   $('st-lab-cultures').addEventListener('click', () => { openStab('lab','cultures'); });
   $('st-lab-work').addEventListener('click', () => { openStab('lab','work'); });
+  $('st-lab-grain').addEventListener('click', () => { openStab('lab','grain');gsPreview(); });
   $('st-lab-lineage').addEventListener('click', () => { openStab('lab','lineage'); });
+  // Grain spawn form
+  $('gs-wbtn-07').addEventListener('click', () => { gsSetWeight(0.7); });
+  $('gs-wbtn-1').addEventListener('click', () => { gsSetWeight(1); });
+  $('gs-wbtn-2').addEventListener('click', () => { gsSetWeight(2); });
+  $('gs-wbtn-5').addEventListener('click', () => { gsSetWeight(5); });
+  $('gs-weight').addEventListener('input', gsPreview);
+  $('gs-strain-sel').addEventListener('change', gsPreview);
+  $('gs-qty').addEventListener('input', gsPreview);
+  $('btn-gs-create').addEventListener('click', createGrainBatch);
+  $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
   $('lw-type').addEventListener('change', lwUpdate);
