@@ -7921,8 +7921,7 @@ function initEventListeners() {
   $('wbtn-2').addEventListener('click', () => { setBagWeight(2); });
   $('wbtn-5g').addEventListener('click', () => { setBagWeight(5); });
   $('nb-weight').addEventListener('input', nbPreview);
-  $('nb-sp').addEventListener('input', nbPreview);
-  $('nb-st').addEventListener('input', nbPreview);
+  $('nb-strain-sel').addEventListener('change', nbPreview);
   $('nb-qty').addEventListener('input', nbPreview);
   $('nb-hw').addEventListener('input', nbSubSum);
   $('nb-wb').addEventListener('input', nbSubSum);

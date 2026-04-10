@@ -3998,7 +3998,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'POST' && url === '/api/mushroom-strains') {
-    if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
       if (e) { jsonErr(res, 400, e.message); return; }
       const vr = validateRequired(data, ['name', 'kuerzel']);
@@ -4013,7 +4012,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const msMatch = url.match(/^\/api\/mushroom-strains\/(\d+)$/);
   if (req.method === 'PATCH' && msMatch) {
-    if (requireAdmin(req, res)) return;
     const id = parseInt(msMatch[1], 10);
     jsonBody(req, res, (e, data) => {
       if (e) { jsonErr(res, 400, e.message); return; }
