@@ -179,13 +179,13 @@ REM ============================================================
 echo.
 echo [3/5] Backing up data...
 if not exist "backups" mkdir "backups"
-if exist "data.json" (
+if exist "meistertracker.db" (
     for /f "tokens=*" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TIMESTAMP=%%T"
     if not defined TIMESTAMP set "TIMESTAMP=backup"
-    copy /y "data.json" "backups\data_!TIMESTAMP!.json" >nul
-    echo  -^> data.json backed up.
+    copy /y "meistertracker.db" "backups\meistertracker_!TIMESTAMP!.db" >nul
+    echo  -^> meistertracker.db backed up.
 ) else (
-    echo  -^> No data.json found, skipping backup.
+    echo  -^> No meistertracker.db found, skipping backup.
 )
 
 REM ============================================================
