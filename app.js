@@ -2617,9 +2617,22 @@ document.getElementById('m-batchadd').addEventListener('click',e=>{if(e.target.i
 function confirmBatchAdd(){
   const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
   if(!id||!batch){alert('Select a batch first');return}
+  if(!loc){alert('Select a location first');return}
   const now=new Date().toISOString();
-  const entries=[];batch.bags.forEach(bagId=>{const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);scan.count++;entries.push(entry)});
-  apiPost('/api/scan-log',{entries});updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
+  const entries=[];
+  batch.bags.forEach(bagId=>{
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
+    scan.count++;
+    entries.push(entry);
+  });
+  apiPost('/api/scan-log',{entries}).then(function(r){
+    if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]});
+  });
+  updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
@@ -3244,7 +3257,15 @@ function createBatch(){
 
   // Save batch to server
   const batchObj=batches[batches.length-1];
-  apiPost('/api/batches',batchObj);
+  apiPost('/api/batches',batchObj).then(r=>{
+    if(r&&r.error){
+      // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
+      const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
+      if(i>=0)batches.splice(i,1);
+      alert('Batch konnte nicht gespeichert werden: '+r.error);
+      renderBatches();renderStatus();
+    }
+  });
 
   // Auto-deduct materials from inventory via server-side deltas
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
@@ -3389,10 +3410,16 @@ function confirmHarvest(){
   const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
   if(!g||g<=0){alert(t('harvest.enterWeight'));return}
   const p=scan.harvestBag;
+  const tempId='s'+(++_scanTempIdCounter);
   const hEntry={time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f};
-  harvests.push(hEntry);apiPost('/api/harvests',hEntry);scan.harvestBag=null;scan.count++;
+  harvests.push(hEntry);apiPost('/api/harvests',hEntry);
+  // Track in sessionEntries so session summary counts HARVEST and it appears in the log
+  const sEntry={time:hEntry.time,action:'HARVEST',batch:p.batchId,bag:p.bagId,from:null,to:null,species:p.species,strain:p.strain,grams:g,flush:f,_tempId:tempId};
+  if(!sessionStartTime)sessionStartTime=Date.now();
+  sessionEntries.push(sEntry);
+  scan.harvestBag=null;scan.count++;
   document.getElementById('harvest-panel').style.display='none';
-  setFb('ok',t('harvest.logged',{bag:p.bagId,g:g,f:f}));updateSD();
+  setFb('ok',t('harvest.logged',{bag:p.bagId,g:g,f:f}),sEntry);updateSD();
 }
 function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-panel').style.display='none';setFb('info',t('harvest.cancelled'))}
 document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
@@ -4827,9 +4854,16 @@ function biSetAction(action){
   if(action==='HARVEST'){
     showHarvestPanel(biBagId,biBatchId);
   }else if(action==='REMOVE'){
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);
-    scan.count++;apiPost('/api/scan-log',{entries:[entry]});updateSD();
-    setFb('ok',t('scanFb.removeLogged',{bag:biBagId}));
+    const b=batches.find(x=>x.batchId.toUpperCase()===(biBatchId||'').toUpperCase());
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:null,to:null,species:b?.species,strain:b?.strain,user:currentUser?.username||null,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
+    scan.count++;
+    apiPost('/api/scan-log',{entries:[entry]}).then(function(r){if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
+    updateSD();
+    setFb('ok',t('scanFb.removeLogged',{bag:biBagId}),entry);
   }else{
     setFb('ok',t('scanFb.actionReady',{action:action}));
   }
@@ -5087,12 +5121,15 @@ function _addLogEntry(type,msg,entryData){
     const locStr=entryData.action==='MOVE'?(entryData.from+' → '+entryData.to)
       :entryData.action==='ADD'?('→ '+entryData.to)
       :entryData.action==='REMOVE'?('✕ '+(entryData.from||''))
+      :entryData.action==='HARVEST'?(entryData.grams?entryData.grams+'g (Flush '+(entryData.flush||1)+')':'')
       :'';
+    // Harvest entries are not undoable via the scan-log endpoint (harvests live in a separate table)
+    const canUndo=entryData.action!=='HARVEST';
     el.innerHTML='<span class="sle-time">'+timeStr+'</span>'
       +'<span class="badge b-'+esc(entryData.action.toLowerCase())+'">'+esc(entryData.action)+'</span> '
       +'<span class="sle-msg"><b>'+esc(bagLabel)+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+esc(sp)+'</span>':'')
       +(locStr?' <span style="color:var(--c-text-muted)">'+esc(locStr)+'</span>':'')+'</span>'
-      +'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>';
+      +(canUndo?'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>':'');
   }else{
     el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+esc(msg)+'</span>';
   }
@@ -5222,8 +5259,13 @@ document.addEventListener('keydown',function(e){
       return;
     }
     _ctrlZPending=false;clearTimeout(_ctrlZTimer);
-    const last=sessionEntries[sessionEntries.length-1];
-    const btn=document.querySelector('[data-scan-id="'+last._tempId+'"] .sle-undo');
+    // Walk backwards to find the most recent undoable entry (skip HARVEST)
+    let lastUndoable=null;
+    for(let i=sessionEntries.length-1;i>=0;i--){
+      if(sessionEntries[i].action!=='HARVEST'){lastUndoable=sessionEntries[i];break}
+    }
+    if(!lastUndoable){setFb('info','Keine Scans zum Rückgängig machen');return}
+    const btn=document.querySelector('[data-scan-id="'+lastUndoable._tempId+'"] .sle-undo');
     if(btn)undoScanEntry(btn);
   }
 });
@@ -5478,6 +5520,15 @@ function _flushScanBuf(){
 
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey||e.metaKey||e.altKey)return;
+  // Ignore keystrokes while user is typing in form fields — prevents the scan buffer
+  // from swallowing Enter on form submits or mis-firing on fast typing in search boxes.
+  // The scan modal and camera modal are exceptions: keep the buffer active there.
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT'||ae.isContentEditable)){
+    const scanOpen=document.getElementById('scan-overlay')?.classList.contains('open');
+    const camOpen=document.getElementById('m-camscan')?.classList.contains('open');
+    if(!scanOpen&&!camOpen){_scanBuf.chars=[];clearTimeout(_scanBuf.timer);return}
+  }
   const now=performance.now();
   if(e.key==='Enter'){
     if(_scanBuf.chars.length>=SCAN_MIN_LEN){
