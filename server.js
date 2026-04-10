@@ -389,6 +389,7 @@ setInterval(() => {
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
 const BACKUP_DIR = path.join(DIR, 'backups');
+const BACKUP_STATUS_FILE = path.join(BACKUP_DIR, '.backup-status.json');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
 // Clean up orphaned temp files from interrupted backup operations
 try {
@@ -405,17 +406,76 @@ try {
   log('warn', 'Failed to scan backup dir for orphans', { error: e.message });
 }
 
+function readBackupStatus() {
+  try {
+    if (!fs.existsSync(BACKUP_STATUS_FILE)) return {};
+    const raw = fs.readFileSync(BACKUP_STATUS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    log('warn', 'Could not read backup status file', { error: e.message });
+    return {};
+  }
+}
+
+function writeBackupStatus(patch) {
+  try {
+    const current = readBackupStatus();
+    const next = Object.assign({}, current, patch);
+    // Atomic write: write to temp then rename
+    const tmp = BACKUP_STATUS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+    fs.renameSync(tmp, BACKUP_STATUS_FILE);
+  } catch (e) {
+    log('warn', 'Could not write backup status file', { error: e.message });
+  }
+}
+
+// Verify a freshly-written backup file on disk has the SQLite magic header
+// and a plausible size. Returns null on success, an error string on failure.
+function verifyBackupFile(dest) {
+  let sizeBytes = 0;
+  try {
+    sizeBytes = fs.statSync(dest).size;
+  } catch (e) {
+    return 'stat failed: ' + e.message;
+  }
+  if (sizeBytes < 1024) return 'backup file suspiciously small: ' + sizeBytes + ' bytes';
+  try {
+    const fd = fs.openSync(dest, 'r');
+    const header = Buffer.alloc(16);
+    fs.readSync(fd, header, 0, 16, 0);
+    fs.closeSync(fd);
+    if (header.toString('utf8', 0, 15) !== 'SQLite format 3') {
+      return 'backup file missing SQLite magic header';
+    }
+  } catch (e) {
+    return 'verify read failed: ' + e.message;
+  }
+  return null;
+}
+
 function runDailyBackup() {
+  const startedAt = Date.now();
+  const startedIso = new Date(startedAt).toISOString();
   try {
     const d = new Date();
     const stamp =
       d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     const dest = path.join(BACKUP_DIR, 'meisterpilze_backup_' + stamp + '.db');
-    if (!fs.existsSync(dest)) {
-      db.backupDb(database, dest)
-        .then(() => {
-          log('info', 'Auto-backup saved', { path: dest });
-          // Keep last 30 daily backups
+    if (fs.existsSync(dest)) {
+      // Already have today's backup — record lastAttempt but don't overwrite.
+      writeBackupStatus({ lastAttempt: { time: startedIso, success: true, skipped: 'already-exists' } });
+      return;
+    }
+    db.backupDb(database, dest)
+      .then(() => {
+        let sizeBytes = 0;
+        try { sizeBytes = fs.statSync(dest).size; } catch {}
+        const durationMs = Date.now() - startedAt;
+        log('info', 'Auto-backup saved', { path: dest, sizeBytes, durationMs });
+        // Keep last 30 daily backups
+        try {
           const files = fs
             .readdirSync(BACKUP_DIR)
             .filter((f) => f.endsWith('.db'))
@@ -426,11 +486,43 @@ function runDailyBackup() {
               log('info', 'Old backup removed', { file: f });
             });
           }
-        })
-        .catch((e) => log('error', 'Auto-backup failed', { error: e.message }));
-    }
+        } catch (e) {
+          log('warn', 'Backup rotation failed', { error: e.message });
+        }
+        // Sanity-check the written file before marking lastSuccess.
+        const verifyError = verifyBackupFile(dest);
+        if (verifyError) {
+          log('error', 'Auto-backup verify failed', { path: dest, error: verifyError });
+          writeBackupStatus({
+            lastAttempt: { time: startedIso, success: false },
+            lastFailure: { time: new Date().toISOString(), error: verifyError, path: dest }
+          });
+          return;
+        }
+        writeBackupStatus({
+          lastAttempt: { time: startedIso, success: true },
+          lastSuccess: {
+            time: new Date().toISOString(),
+            path: dest,
+            sizeBytes,
+            durationMs,
+            verified: true
+          }
+        });
+      })
+      .catch((e) => {
+        log('error', 'Auto-backup failed', { error: e.message });
+        writeBackupStatus({
+          lastAttempt: { time: startedIso, success: false },
+          lastFailure: { time: new Date().toISOString(), error: e.message, path: dest }
+        });
+      });
   } catch (e) {
     log('error', 'Auto-backup failed', { error: e.message });
+    writeBackupStatus({
+      lastAttempt: { time: startedIso, success: false },
+      lastFailure: { time: new Date().toISOString(), error: e.message }
+    });
   }
 }
 
@@ -3733,6 +3825,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
         heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
       };
+      // Backup freshness — degraded if last successful backup is older than
+      // 26h or if the most recent attempt failed.
+      const backupStatus = readBackupStatus();
+      const hasSuccess = backupStatus.lastSuccess && backupStatus.lastSuccess.time;
+      let ageHours = null;
+      let fresh = false;
+      if (hasSuccess) {
+        ageHours = (Date.now() - new Date(backupStatus.lastSuccess.time).getTime()) / 3600000;
+        fresh = ageHours < 26;
+      }
+      const lastAttemptOk = !backupStatus.lastAttempt || backupStatus.lastAttempt.success !== false;
+      health.backup = {
+        status: fresh && lastAttemptOk ? 'ok' : 'stale',
+        lastSuccess: backupStatus.lastSuccess || null,
+        lastFailure: backupStatus.lastFailure || null,
+        lastAttempt: backupStatus.lastAttempt || null,
+        ageHours: ageHours === null ? null : Math.round(ageHours * 10) / 10
+      };
+      if (health.backup.status !== 'ok' && health.status === 'ok') {
+        health.status = 'degraded';
+      }
     }
     res.writeHead(dbOk ? 200 : 503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(health));
