@@ -5966,45 +5966,101 @@ function calNav(delta){
 }
 
 function printCalendar(){
+  const modal=document.getElementById('m-cal-print');
+  if(!modal)return;
+  modal.classList.add('open');
+}
+function closeCalPrintModal(){const m=document.getElementById('m-cal-print');if(m)m.classList.remove('open')}
+
+function printCalendarTaskList(range){
   const sheet=document.getElementById('print-sheet');
   if(!sheet)return;
-  const titleEl=document.getElementById('cal-title');
-  const titleText=titleEl?titleEl.textContent:'Kalender';
-  const viewLabel=calView==='month'?'Monatsansicht':calView==='week'?'Wochenansicht':'Tagesansicht';
 
-  // Clone calendar content
-  const container=document.getElementById('cal-container');
-  if(!container)return;
-  const clone=container.cloneNode(true);
+  // Determine date range
+  let startDate,endDate,rangeLabel;
+  if(range==='week'){
+    startDate=getWeekStart(calSelectedDate);
+    endDate=new Date(startDate);endDate.setDate(startDate.getDate()+6);
+    const sameMonth=startDate.getMonth()===endDate.getMonth();
+    rangeLabel='Woche: '+startDate.getDate()+'. '+(sameMonth?'':CAL_MONTHS[startDate.getMonth()]+' ')+'– '+endDate.getDate()+'. '+CAL_MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
+  }else{
+    startDate=new Date(calYear,calMonth,1);
+    endDate=new Date(calYear,calMonth+1,0);
+    rangeLabel='Monat: '+CAL_MONTHS[calMonth]+' '+calYear;
+  }
 
-  // Remove interactive attributes from clone
-  clone.querySelectorAll('[onclick]').forEach(el=>el.removeAttribute('onclick'));
-  clone.querySelectorAll('[draggable]').forEach(el=>el.removeAttribute('draggable'));
-  clone.querySelectorAll('.ev-resize').forEach(el=>el.remove());
-  clone.querySelectorAll('.cal-week-now-line,.cal-day-now-line').forEach(el=>el.remove());
+  // Collect and filter events in range
+  const allEvents=collectCalendarEvents();
+  const startStr=fmtDate(startDate.getFullYear(),startDate.getMonth(),startDate.getDate());
+  const endStr=fmtDate(endDate.getFullYear(),endDate.getMonth(),endDate.getDate());
+  const eventsInRange=allEvents.filter(e=>e.date>=startStr&&e.date<=endStr);
 
-  // Build legend
-  const legendItems=[
-    {cls:'leg-batch',color:'#ef4444',label:'Fälligkeiten'},
-    {cls:'leg-task',color:'#3b82f6',label:'Aufgaben'},
-    {cls:'leg-harvest',color:'#f59e0b',label:'Ernten'},
-    {cls:'leg-custom',color:'#22c55e',label:'Eigene Termine'},
-    {cls:'leg-meeting',color:'#8b5cf6',label:'Meetings'},
-    {cls:'leg-delivery',color:'#14b8a6',label:'Lieferungen'},
-    {cls:'leg-maintenance',color:'#64748b',label:'Wartung'},
-    {cls:'leg-import',color:'#6366f1',label:'Externe Termine'}
-  ];
-  const legendHtml=legendItems.map(l=>'<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--c-text-sec)"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+l.color+'"></span>'+l.label+'</span>').join('&nbsp;&nbsp;');
+  // Group by date
+  const byDate={};
+  eventsInRange.forEach(e=>{(byDate[e.date]=byDate[e.date]||[]).push(e)});
 
-  sheet.innerHTML='<div class="cal-print-page">'+
+  // Type label map
+  const typeLabels={
+    'batch-due':'Fälligkeit',
+    'task-due':'Aufgabe',
+    'harvest':'Ernte',
+    'custom':'Termin',
+    'caldav-import':'Extern'
+  };
+
+  // Build day list
+  const days=[];
+  for(let d=new Date(startDate);d<=endDate;d.setDate(d.getDate()+1)){
+    const ds=fmtDate(d.getFullYear(),d.getMonth(),d.getDate());
+    const dayName=CAL_DAYS[(d.getDay()+6)%7];
+    const dayEvents=(byDate[ds]||[]).slice().sort((a,b)=>{
+      if(a.allDay&&!b.allDay)return -1;
+      if(!a.allDay&&b.allDay)return 1;
+      return (a.startTime||'').localeCompare(b.startTime||'');
+    });
+    days.push({ds,dayName,date:new Date(d),events:dayEvents});
+  }
+
+  // Render HTML
+  const todayStr=new Date().toISOString().split('T')[0];
+  let bodyHtml='';
+  days.forEach(day=>{
+    const isToday=day.ds===todayStr;
+    bodyHtml+='<div class="cal-print-day'+(isToday?' today':'')+'">';
+    bodyHtml+='<div class="cal-print-day-hdr">'+day.dayName+', '+day.date.getDate()+'. '+CAL_MONTHS[day.date.getMonth()]+' '+day.date.getFullYear()+'</div>';
+    if(day.events.length===0){
+      bodyHtml+='<div class="cal-print-empty">— keine Aufgaben —</div>';
+    }else{
+      bodyHtml+='<ul class="cal-print-list">';
+      day.events.forEach(e=>{
+        const time=e.allDay?'Ganztägig':((e.startTime||'')+(e.endTime?' – '+e.endTime:''));
+        const typeLbl=typeLabels[e.type]||'';
+        const dotColor=safeColor(e.color||'#64748b');
+        const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-print-assignees">('+e.assignees.map(a=>esc(a.username)).join(', ')+')</span>':'';
+        const desc=e.description?'<div class="cal-print-desc">'+esc(e.description)+'</div>':'';
+        bodyHtml+='<li class="cal-print-item">'+
+          '<span class="cal-print-dot" style="background:'+dotColor+'"></span>'+
+          '<span class="cal-print-time">'+esc(time)+'</span>'+
+          '<span class="cal-print-type">'+typeLbl+'</span>'+
+          '<span class="cal-print-label">'+esc(e.label)+assigneeStr+desc+'</span>'+
+        '</li>';
+      });
+      bodyHtml+='</ul>';
+    }
+    bodyHtml+='</div>';
+  });
+
+  const totalEvents=eventsInRange.length;
+  sheet.innerHTML='<div class="cal-print-page cal-print-tasklist">'+
     '<div class="cal-print-header">'+
-      '<div style="font-size:18px;font-weight:800;color:var(--c-text)">'+titleText+'</div>'+
-      '<div style="font-size:12px;color:var(--c-text-muted);margin-top:2px">'+viewLabel+' — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
+      '<div style="font-size:20px;font-weight:800;color:#111">Aufgabenliste</div>'+
+      '<div style="font-size:13px;color:#444;margin-top:2px">'+rangeLabel+'</div>'+
+      '<div style="font-size:11px;color:#666;margin-top:2px">'+totalEvents+' Einträge — gedruckt am '+new Date().toLocaleDateString('de-DE')+'</div>'+
     '</div>'+
-    '<div class="cal-print-legend">'+legendHtml+'</div>'+
-    '<div class="cal-print-body"></div>'+
+    '<div class="cal-print-body">'+bodyHtml+'</div>'+
   '</div>';
-  sheet.querySelector('.cal-print-body').appendChild(clone);
+
+  closeCalPrintModal();
   setTimeout(()=>window.print(),150);
 }
 
@@ -7108,6 +7164,10 @@ function initEventListeners() {
   $('cv-day').addEventListener('click', () => { setCalView('day'); });
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);
+  $('m-cal-print-week').addEventListener('click', ()=>printCalendarTaskList('week'));
+  $('m-cal-print-month').addEventListener('click', ()=>printCalendarTaskList('month'));
+  $('m-cal-print-cancel').addEventListener('click', closeCalPrintModal);
+  $('m-cal-print').addEventListener('click', e=>{if(e.target.id==='m-cal-print')closeCalPrintModal()});
   $('btn-cal-add').addEventListener('click', ()=>openEntryModal());
   $('cal-entry-cancel-btn').addEventListener('click', closeEntryModal);
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
