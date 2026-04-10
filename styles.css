@@ -2583,6 +2583,100 @@ tr:hover td {
     height: 36px;
     font-size: 9px;
   }
+
+  /* Calendar print — task list */
+  .cal-print-tasklist .cal-print-header {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #333;
+  }
+  .cal-print-tasklist .cal-print-day {
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .cal-print-tasklist .cal-print-day.today {
+    border-color: #16a34a;
+  }
+  .cal-print-tasklist .cal-print-day-hdr {
+    background: #f0f0f0;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #111;
+    border-bottom: 1px solid #ccc;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cal-print-tasklist .cal-print-day.today .cal-print-day-hdr {
+    background: #dcfce7;
+  }
+  .cal-print-tasklist .cal-print-empty {
+    padding: 6px 10px;
+    font-size: 10px;
+    color: #888;
+    font-style: italic;
+  }
+  .cal-print-tasklist .cal-print-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .cal-print-tasklist .cal-print-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    color: #111;
+    border-bottom: 1px dashed #e5e5e5;
+  }
+  .cal-print-tasklist .cal-print-item:last-child {
+    border-bottom: none;
+  }
+  .cal-print-tasklist .cal-print-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cal-print-tasklist .cal-print-time {
+    min-width: 82px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: #333;
+    flex-shrink: 0;
+  }
+  .cal-print-tasklist .cal-print-type {
+    min-width: 70px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #666;
+    padding-top: 1px;
+    flex-shrink: 0;
+  }
+  .cal-print-tasklist .cal-print-label {
+    flex: 1;
+    font-weight: 500;
+  }
+  .cal-print-tasklist .cal-print-assignees {
+    font-weight: 400;
+    color: #555;
+    font-size: 10px;
+  }
+  .cal-print-tasklist .cal-print-desc {
+    font-weight: 400;
+    color: #555;
+    font-size: 10px;
+    margin-top: 2px;
+  }
 }
 #print-sheet,
 #ref-print-sheet {
