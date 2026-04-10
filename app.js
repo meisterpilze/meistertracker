@@ -2941,7 +2941,6 @@ function openStab(page,sub){
   if(page==='batch'&&sub==='harvest')renderHarvests();
   if(page==='lab'&&sub==='cultures')renderCultures();
   if(page==='lab'&&sub==='work'){lwUpdate();renderLabLog();}
-  if(page==='lab'&&sub==='grain'){fillCultureSelect('gs-culture',['PD','LC']);gsPreview();}
   if(page==='lab'&&sub==='lineage')fillLineageSelect();
   if(page==='inv'&&sub==='stock')renderInvStock();
   if(page==='inv'&&sub==='delivery'){delMatChange();adjMatChange();}
@@ -3024,7 +3023,7 @@ function confirmBatchAdd(){
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
-const abbrev=s=>{if(!s)return'BAG';const ms=mushroomStrains.find(x=>x.name.toLowerCase()===s.toLowerCase());if(ms&&ms.kuerzel)return ms.kuerzel;return s.replace(/\s+/g,'').slice(0,5).toUpperCase()};
+const abbrev=s=>{if(!s)return'BAGX';const ms=mushroomStrains.find(x=>x.name.toLowerCase()===s.toLowerCase());if(ms&&ms.kuerzel)return ms.kuerzel;return s.replace(/\s+/g,'').slice(0,4).toUpperCase().padEnd(4,'X')};
 const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
 const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
 const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
@@ -5249,7 +5248,7 @@ function fillStrainSelects(){
   const opts='<option value="">'+t('strains.selectPlaceholder')+'</option>'+
     mushroomStrains.map(ms=>`<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
   const hint=mushroomStrains.length===0;
-  ['nb-strain-sel','lw-st','gs-strain-sel'].forEach(id=>{
+  ['nb-strain-sel','lw-st'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
     const cur=el.value;
@@ -5296,6 +5295,7 @@ function saveMStrain(){
   const desc=document.getElementById('ms-desc').value.trim();
   const editId=document.getElementById('ms-edit-id').value;
   if(!name||!kuerzel){alert('Name und Kürzel sind Pflichtfelder.');return}
+  if(kuerzel.length!==4){alert('Kürzel muss genau 4 Zeichen haben (z.B. LIMA, SHII, AUSP).');return}
   const payload={name,kuerzel,description:desc};
   const req=editId?apiPatch('/api/mushroom-strains/'+editId,payload):apiPost('/api/mushroom-strains',payload);
   req.then(r=>{
@@ -5386,11 +5386,26 @@ function deleteCulture(id){
 function lwUpdate(){
   const type=document.getElementById('lw-type').value;
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
-  if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
-  else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
-  else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.sourcePdMc');fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent=t('lab.qtyFlasks')}
-  else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
-  lwPreview();
+  const kbRows=document.getElementById('lw-kb-rows'),qtyRow=document.getElementById('lw-qty-row');
+  const gsResult=document.getElementById('gs-result');
+  // Hide KB result when switching away from KB
+  if(type!=='KB'&&gsResult)gsResult.style.display='none';
+  if(type==='KB'){
+    pr.style.display='none';sr.style.display='none';
+    if(qtyRow)qtyRow.style.display='none';
+    if(kbRows)kbRows.style.display='flex';
+    document.getElementById('lw-prev-box').style.display='none';
+    fillCultureSelect('gs-culture',['PD','LC']);
+    gsPreview();
+  }else{
+    if(kbRows)kbRows.style.display='none';
+    if(qtyRow)qtyRow.style.display='block';
+    if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
+    else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
+    else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.sourcePdMc');fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent=t('lab.qtyFlasks')}
+    else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
+    lwPreview();
+  }
 }
 function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)}</option>`).join('');if(cur)s.value=cur}
 function lwPreview(){
@@ -5400,7 +5415,7 @@ function lwPreview(){
   const sp=ms?ms.name:'';
   const qty=parseInt(document.getElementById('lw-qty').value)||1;
   const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
-  if(!sp||type==='G2G'){box.style.display='none';return}
+  if(!sp||type==='G2G'||type==='KB'){box.style.display='none';return}
   const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
   const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
   prev.textContent=Array.from({length:qty},(_,i)=>prefix+String(existing+i+1).padStart(2,'0')).join('\n');
@@ -5443,7 +5458,7 @@ function gsSetWeight(kg){
   gsPreview();
 }
 function gsPreview(){
-  const strainSel=document.getElementById('gs-strain-sel');
+  const strainSel=document.getElementById('lw-st');
   const strainId=strainSel?parseInt(strainSel.value)||null:null;
   const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
   const sp=ms?ms.name:'';
@@ -5459,7 +5474,7 @@ function gsPreview(){
   el.style.display='block';
 }
 function createGrainBatch(){
-  const strainSel=document.getElementById('gs-strain-sel');
+  const strainSel=document.getElementById('lw-st');
   const strainId=strainSel?parseInt(strainSel.value)||null:null;
   const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
   if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
@@ -5472,7 +5487,7 @@ function createGrainBatch(){
   const batchId=genGrainBatchId(sp);spColor(sp);
   const due=new Date();due.setDate(due.getDate()+days);
   const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
-  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('gs-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
   const batchObj=batches[batches.length-1];
   apiPost('/api/batches',batchObj).then(r=>{
     if(r&&r.error){
@@ -5492,7 +5507,7 @@ function createGrainBatch(){
   document.getElementById('gs-result').style.display='block';
   if(strainSel)strainSel.value='';
   document.getElementById('gs-qty').value='10';document.getElementById('gs-days').value='14';
-  document.getElementById('gs-notes').value='';document.getElementById('gs-mat-preview').style.display='none';
+  document.getElementById('lw-notes').value='';document.getElementById('gs-mat-preview').style.display='none';
   gsPreview();updateTodoBadge();renderBatches();
 }
 function goToPrintGrainBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const last=batches[batches.length-1];if(last){const s=document.getElementById('print-batch');s.value=last.batchId;renderBagPreview()}},100)}
@@ -5616,7 +5631,14 @@ function bcParams(val,qzMult){const mods=35+val.length*11;let mw=3;qzMult=qzMult
 //   {type:'qr',      x, y, size, val}
 
 function itemsToZPL(items){
-  let z='^XA^PW400^LL240^CI28^LH0,0';
+  // Compute label height from content (min 160, max 240) so short labels don't waste media.
+  let maxY=140;
+  for(const it of items){
+    const bottom=it.type==='barcode'?(it.y+it.h):(it.type==='text'?(it.y+it.fontH):(it.y+(it.size||80)));
+    if(bottom>maxY)maxY=bottom;
+  }
+  const ll=Math.min(240,Math.max(160,maxY+10));
+  let z='^XA^PW400^LL'+ll+'^CI28^LH0,0';
   for(const it of items){
     if(it.type==='barcode'){
       z+='^FO'+it.x+','+it.y+'^BY'+it.mw+',2.0,'+it.h+'^BCN,'+it.h+',N,N,N^FD'+it.val+'^FS';
@@ -5711,7 +5733,11 @@ function renderPreviewDeferred(deferred,baseDelay){
   });
 }
 
-function bagLabelItems(bagId,batch,mode,_legacyFallbackIds){
+// detail levels for bag labels:
+//   'minimal' — barcode + Line 1 (bag ID) only
+//   'sorte'   — + Line 2 (Pilzsorte written out + notes)
+//   'full'    — + Line 3 (Fälligkeit)
+function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
   const items=[];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
   const numBc=barcodeByEntity.get('bag:'+bagId);
@@ -5724,7 +5750,7 @@ function bagLabelItems(bagId,batch,mode,_legacyFallbackIds){
     const isGrain=batch.batchType==='grain';
     const parts=bagId.split('-');
     if(parts.length===4){
-      const kz=(batch.strainKuerzel||batch.strain||'XX').toUpperCase();
+      const kz=(batch.strainKuerzel||batch.strain||'BAGX').toUpperCase();
       const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);
       const bagNum=parseInt(parts[3],10);
       bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
@@ -5733,36 +5759,25 @@ function bagLabelItems(bagId,batch,mode,_legacyFallbackIds){
     }
   }
   const bc=bcParams(bcVal);
-  // date-mode: compact barcode to fit 4 rows below; full: slightly taller; id: tallest
-  const bcY=mode==='date'?8:mode==='full'?10:14;
-  const bcH=mode==='date'?55:mode==='full'?65:90;
+  // Taller barcode when fewer text lines follow
+  const bcY=8;
+  const bcH=detail==='minimal'?130:detail==='sorte'?90:70;
   items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
-  const idY=bcY+bcH+4;
-  // Barcode text smaller so it doesn't crowd the lines below
-  items.push({type:'text',y:idY,fontH:24,text:bagId});
-  if(mode==='full'||mode==='date'){
-    // Row: "Pilzname – Genetik" or just "Pilzname" if no descriptor set
-    const strainLabel=batch.strainName
-      ?(batch.strainDescriptor?batch.strainName+' \u2013 '+batch.strainDescriptor:batch.strainName)
-      :'';
-    if(strainLabel) items.push({type:'text',y:idY+28,fontH:28,text:strainLabel});
-    // Due date — prominent, bold, this is the most important info
-    if(mode==='date'&&batch.due){
-      const due=new Date(batch.due);
-      const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-      items.push({type:'text',y:idY+58,fontH:34,text:'Faellig: '+dueStr,bold:true});
-    }
-    // Substrate % — small, separate line at the bottom
-    if(batch.substrate){
-      const hw=batch.substrate.hardwood||0;
-      const wb=batch.substrate.wheatbran||0;
-      const rh=batch.substrate.rh||0;
-      const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');
-      if(subStr){
-        const subY=mode==='date'?idY+96:idY+58;
-        items.push({type:'text',y:subY,fontH:20,text:subStr});
-      }
-    }
+  // Line 1 — bag ID in monospaced kürzel format (always shown)
+  const line1Y=bcY+bcH+4;
+  items.push({type:'text',y:line1Y,fontH:24,text:bagId});
+  if(detail==='sorte'||detail==='full'){
+    // Line 2 — Pilzsorte written out, plus notes if any
+    const notes=(batch.notes||'').trim();
+    const line2=batch.strainName?(notes?batch.strainName+' \u2013 '+notes:batch.strainName):'';
+    if(line2) items.push({type:'text',y:line1Y+28,fontH:24,text:line2});
+  }
+  if(detail==='full'&&batch.due){
+    // Line 3 — Fälligkeit, bold
+    const due=new Date(batch.due);
+    const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
+    const line3Y=(detail==='full')?line1Y+56:line1Y+28;
+    items.push({type:'text',y:line3Y,fontH:28,text:'F\u00e4llig: '+dueStr,bold:true});
   }
   return items;
 }
@@ -5797,9 +5812,9 @@ function labLabelItems(id,c,opts){
   return items;
 }
 
-function makeBagZPL(bags,batch,mode){
+function makeBagZPL(bags,batch,detail){
   const legacyFallbackIds=[];
-  const zpl=bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,mode,legacyFallbackIds))).join('\n');
+  const zpl=bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,detail,legacyFallbackIds))).join('\n');
   if(legacyFallbackIds.length){
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
     alert('Warning: Numeric barcodes not found for bags: '+legacyFallbackIds.join(', ')+'. Legacy text barcodes were used instead.');
@@ -8081,24 +8096,21 @@ function initEventListeners() {
   // Lab
   $('st-lab-cultures').addEventListener('click', () => { openStab('lab','cultures'); });
   $('st-lab-work').addEventListener('click', () => { openStab('lab','work'); });
-  $('st-lab-grain').addEventListener('click', () => { openStab('lab','grain');gsPreview(); });
   $('st-lab-lineage').addEventListener('click', () => { openStab('lab','lineage'); });
-  // Grain spawn form
+  // Grain spawn form (now embedded in Log Work tab)
   $('gs-wbtn-07').addEventListener('click', () => { gsSetWeight(0.7); });
   $('gs-wbtn-1').addEventListener('click', () => { gsSetWeight(1); });
   $('gs-wbtn-2').addEventListener('click', () => { gsSetWeight(2); });
   $('gs-wbtn-5').addEventListener('click', () => { gsSetWeight(5); });
   $('gs-weight').addEventListener('input', gsPreview);
-  $('gs-strain-sel').addEventListener('change', gsPreview);
   $('gs-qty').addEventListener('input', gsPreview);
-  $('btn-gs-create').addEventListener('click', createGrainBatch);
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
   $('lw-type').addEventListener('change', lwUpdate);
-  $('lw-st').addEventListener('change', lwPreview);
+  $('lw-st').addEventListener('change', () => { const type=document.getElementById('lw-type').value; if(type==='KB')gsPreview(); else lwPreview(); });
   $('lw-qty').addEventListener('input', lwPreview);
-  $('btn-26').addEventListener('click', logLabWork);
+  $('btn-26').addEventListener('click', () => { const type=document.getElementById('lw-type').value; if(type==='KB')createGrainBatch(); else logLabWork(); });
   $('lineage-sel').addEventListener('change', renderLineage);
 
   // Print
