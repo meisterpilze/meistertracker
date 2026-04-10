@@ -84,85 +84,84 @@
 <!-- Calendar event modal (create/edit/move) -->
 <div class="modal-bg" id="m-cal-entry" role="dialog" aria-modal="true" aria-labelledby="cal-entry-title">
   <div class="modal">
-    <h3 id="cal-entry-title">Neuer Eintrag</h3>
+    <h3 id="cal-entry-title" data-i18n="calEntry.titleNew">Neuer Eintrag</h3>
     <input type="hidden" id="cal-entry-id" />
     <input type="hidden" id="cal-entry-mode" value="create" />
     <div style="margin-bottom:8px">
-      <label>Titel</label>
-      <input type="text" id="cal-entry-name" placeholder="z.B. Luftfeuchtezelt reinigen" />
+      <label data-i18n="calEntry.name">Titel</label>
+      <input type="text" id="cal-entry-name" data-i18n-placeholder="calEntry.namePhTask" placeholder="z.B. Luftfeuchtezelt reinigen" />
     </div>
     <div class="g2" style="margin-bottom:8px">
       <div>
-        <label>Kategorie</label>
+        <label data-i18n="calEntry.category">Kategorie</label>
         <select id="cal-entry-type-select">
-          <option value="task">Aufgabe</option>
-          <option value="custom">Eigener Termin</option>
-          <option value="meeting">Meeting</option>
-          <option value="delivery">Lieferung</option>
-          <option value="maintenance">Wartung</option>
+          <option value="task" data-i18n="calEntry.cat.task">Aufgabe</option>
+          <option value="custom" data-i18n="calEntry.cat.custom">Eigener Termin</option>
+          <option value="meeting" data-i18n="calEntry.cat.meeting">Meeting</option>
+          <option value="delivery" data-i18n="calEntry.cat.delivery">Lieferung</option>
+          <option value="maintenance" data-i18n="calEntry.cat.maintenance">Wartung</option>
         </select>
       </div>
       <div id="cal-entry-prio-wrap">
-        <label>Priorität</label>
+        <label data-i18n="calEntry.prio">Priorität</label>
         <select id="cal-entry-prio">
-          <option value="low">Niedrig</option>
-          <option value="med" selected>Mittel</option>
-          <option value="high">Hoch</option>
+          <option value="low" data-i18n="calEntry.prio.low">Niedrig</option>
+          <option value="med" selected data-i18n="calEntry.prio.med">Mittel</option>
+          <option value="high" data-i18n="calEntry.prio.high">Hoch</option>
         </select>
       </div>
     </div>
     <div class="g2" style="margin-bottom:8px">
-      <div><label>Datum</label><input type="date" id="cal-entry-date" /></div>
-      <div id="cal-entry-enddate-wrap" style="display:none"><label>Bis (optional)</label><input type="date" id="cal-entry-end-date" /></div>
+      <div><label data-i18n="calEntry.date">Datum</label><input type="date" id="cal-entry-date" /></div>
+      <div id="cal-entry-enddate-wrap" style="display:none"><label data-i18n="calEntry.endDate">Bis (optional)</label><input type="date" id="cal-entry-end-date" /></div>
     </div>
     <div id="cal-entry-allday-wrap" style="margin-bottom:8px;display:none">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="cal-entry-allday" checked style="width:auto" /> Ganztägig
+        <input type="checkbox" id="cal-entry-allday" checked style="width:auto" /> <span data-i18n="calEntry.allDay">Ganztägig</span>
       </label>
     </div>
     <div class="g2" id="cal-entry-times" style="margin-bottom:8px;display:none">
-      <div><label>Von</label><input type="time" id="cal-entry-start-time" value="09:00" /></div>
-      <div><label>Bis</label><input type="time" id="cal-entry-end-time" value="10:00" /></div>
+      <div><label data-i18n="calEntry.from">Von</label><input type="time" id="cal-entry-start-time" value="09:00" /></div>
+      <div><label data-i18n="calEntry.to">Bis</label><input type="time" id="cal-entry-end-time" value="10:00" /></div>
     </div>
     <div class="g2" id="cal-entry-recurrence-wrap" style="margin-bottom:8px;display:none">
       <div>
-        <label>Wiederholung</label>
+        <label data-i18n="calEntry.recurrence">Wiederholung</label>
         <select id="cal-entry-recurrence">
-          <option value="">Keine</option>
-          <option value="daily">Täglich</option>
-          <option value="weekly">Wöchentlich</option>
-          <option value="monthly">Monatlich</option>
+          <option value="" data-i18n="calEntry.rec.none">Keine</option>
+          <option value="daily" data-i18n="calEntry.rec.daily">Täglich</option>
+          <option value="weekly" data-i18n="calEntry.rec.weekly">Wöchentlich</option>
+          <option value="monthly" data-i18n="calEntry.rec.monthly">Monatlich</option>
         </select>
       </div>
       <div id="cal-entry-recurrence-until-wrap" style="display:none">
-        <label>Wiederholen bis (optional)</label>
+        <label data-i18n="calEntry.recurrenceUntil">Wiederholen bis (optional)</label>
         <input type="date" id="cal-entry-recurrence-until" />
       </div>
     </div>
     <div style="margin-bottom:8px">
-      <label>Beschreibung (optional)</label>
-      <textarea id="cal-entry-desc" rows="2" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+      <label data-i18n="calEntry.desc">Beschreibung (optional)</label>
+      <textarea id="cal-entry-desc" rows="2" data-i18n-placeholder="calEntry.descPh" placeholder="Details..." style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
     </div>
     <div id="cal-entry-task-assign-wrap" style="margin-bottom:8px">
-      <label>Zuweisen an</label>
-      <select id="cal-entry-task-assignee">
-        <option value="">Alle (Betrieb)</option>
-      </select>
+      <label data-i18n="calEntry.assignTo">Zuweisen an</label>
+      <div id="cal-task-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px" data-i18n="calEntry.allClickToSelect">Alle (klicken um auszuwählen)</span></div>
+      <div id="cal-task-assignee-dropdown" style="display:none;border:1px solid var(--c-border);border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
     </div>
     <div id="cal-entry-ev-assign-wrap" style="margin-bottom:8px;display:none">
-      <label>Zugewiesen an (Teammitglieder)</label>
-      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px">Alle (klicken um auszuwählen)</span></div>
+      <label data-i18n="calEntry.assignedTo">Zugewiesen an</label>
+      <div id="cal-ev-assignees" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;cursor:pointer"><span style="color:var(--c-text-muted);font-size:12px" data-i18n="calEntry.allClickToSelect">Alle (klicken um auszuwählen)</span></div>
       <div id="cal-ev-assignee-dropdown" style="display:none;border:1px solid var(--c-border);border-radius:6px;max-height:150px;overflow-y:auto;margin-top:2px"></div>
     </div>
     <div id="cal-entry-private-wrap" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0;font-size:11px;color:var(--c-text-muted)">
-        <input type="checkbox" id="cal-entry-private" style="width:auto" /> Nur für zugewiesene Person sichtbar
+        <input type="checkbox" id="cal-entry-private" style="width:auto" /> <span data-i18n="calEntry.private">Nur für zugewiesene Person sichtbar</span>
       </label>
     </div>
     <div class="modal-btns">
-      <button class="btn btn-r" id="cal-entry-del-btn" style="display:none;margin-right:auto">Löschen</button>
-      <button class="btn" id="cal-entry-cancel-btn">Abbrechen</button>
-      <button class="btn btn-p" id="cal-entry-save-btn">Speichern</button>
+      <button class="btn btn-r" id="cal-entry-del-btn" style="display:none;margin-right:auto" data-i18n="calEntry.delete">Löschen</button>
+      <button class="btn" id="cal-entry-cancel-btn" data-i18n="calEntry.cancel">Abbrechen</button>
+      <button class="btn btn-p" id="cal-entry-save-btn" data-i18n="calEntry.save">Speichern</button>
     </div>
   </div>
 </div>
@@ -734,15 +733,15 @@
       </div>
       <div class="cal-toolbar-right">
         <select id="cal-filter-user" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--c-border)">
-          <option value="">Alle Benutzer</option>
+          <option value="" data-i18n="calEntry.assignTo.all">Alle (Betrieb)</option>
         </select>
         <div class="cal-view-toggle">
-          <button class="cal-vbtn active" id="cv-month">Monat</button>
-          <button class="cal-vbtn" id="cv-week">Woche</button>
-          <button class="cal-vbtn" id="cv-day">Tag</button>
+          <button class="cal-vbtn active" id="cv-month" data-i18n="cal.monthShort">Monat</button>
+          <button class="cal-vbtn" id="cv-week" data-i18n="cal.weekShort">Woche</button>
+          <button class="cal-vbtn" id="cv-day" data-i18n="cal.dayShort">Tag</button>
         </div>
-        <button id="btn-cal-print" class="cal-print-btn" title="Kalender drucken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
-        <button id="btn-cal-add" class="cal-add-btn">+ Neu</button>
+        <button id="btn-cal-print" class="cal-print-btn" data-i18n-title="cal.printTitle" title="Kalender drucken"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+        <button id="btn-cal-add" class="cal-add-btn" data-i18n="cal.newEntry">+ Neu</button>
       </div>
     </div>
     <div class="cal-legend">

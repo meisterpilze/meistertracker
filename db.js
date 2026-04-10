@@ -70,17 +70,19 @@ CREATE TABLE IF NOT EXISTS cultures (
 );
 
 CREATE TABLE IF NOT EXISTS manual_tasks (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  text          TEXT NOT NULL,
-  priority      TEXT DEFAULT 'med',
-  done          INTEGER DEFAULT 0,
-  created       TEXT NOT NULL,
-  assignee      TEXT,
-  due_date      TEXT,
-  description   TEXT,
-  caldav_uid    TEXT,
-  caldav_synced TEXT,
-  private       INTEGER DEFAULT 0
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  text             TEXT NOT NULL,
+  priority         TEXT DEFAULT 'med',
+  done             INTEGER DEFAULT 0,
+  created          TEXT NOT NULL,
+  assignee         TEXT,
+  due_date         TEXT,
+  description      TEXT,
+  caldav_uid       TEXT,
+  caldav_synced    TEXT,
+  private          INTEGER DEFAULT 0,
+  recurrence       TEXT,
+  recurrence_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -428,6 +430,18 @@ const MIGRATIONS = [
       addCol('recurrence_until', 'TEXT');
       addCol('team_assignees', 'TEXT');
     }
+  },
+  {
+    version: 17,
+    description: 'Add recurrence columns to manual_tasks',
+    fn(db) {
+      const addCol = (col, def) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
+      };
+      addCol('recurrence', 'TEXT');
+      addCol('recurrence_until', 'TEXT');
+    }
   }
 ];
 
@@ -581,7 +595,9 @@ function readAll(db, opts = {}) {
       description: r.description,
       caldavUid: r.caldav_uid,
       caldavSynced: r.caldav_synced,
-      private: r.private === 1 ? true : false
+      private: r.private === 1 ? true : false,
+      recurrence: r.recurrence || null,
+      recurrenceUntil: r.recurrence_until || null
     }));
 
   // Team members — include id for DELETE targeting
@@ -886,7 +902,7 @@ function writeAll(db, incoming) {
     if (incoming.manualTasks) {
       db.prepare('DELETE FROM manual_tasks').run();
       const ins = db.prepare(
-        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced, private) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, description, caldav_uid, caldav_synced, private, recurrence, recurrence_until) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const t of incoming.manualTasks) {
         ins.run(
@@ -899,7 +915,9 @@ function writeAll(db, incoming) {
           t.description || null,
           t.caldavUid || null,
           t.caldavSynced || null,
-          t.private ? 1 : 0
+          t.private ? 1 : 0,
+          t.recurrence || null,
+          t.recurrenceUntil || null
         );
       }
     }
@@ -1468,7 +1486,7 @@ function updateCulture(db, id, fields) {
 function insertTask(db, t) {
   const r = db
     .prepare(
-      'INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced,private) VALUES(?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO manual_tasks(text,priority,done,created,assignee,due_date,description,caldav_uid,caldav_synced,private,recurrence,recurrence_until) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)'
     )
     .run(
       t.text,
@@ -1480,7 +1498,9 @@ function insertTask(db, t) {
       t.description || null,
       t.caldavUid || null,
       t.caldavSynced || null,
-      t.private ? 1 : 0
+      t.private ? 1 : 0,
+      t.recurrence || null,
+      t.recurrenceUntil || null
     );
   incrementDataVersion(db);
   return r.lastInsertRowid;
@@ -1496,7 +1516,9 @@ function updateTaskById(db, id, fields) {
     assignee: 'assignee',
     dueDate: 'due_date',
     description: 'description',
-    private: 'private'
+    private: 'private',
+    recurrence: 'recurrence',
+    recurrenceUntil: 'recurrence_until'
   };
   const entries = Object.entries(fields).filter(([k]) => map[k]);
   if (!entries.length) return;
@@ -1520,7 +1542,9 @@ function readTaskById(db, id) {
     description: r.description,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
-    private: r.private === 1
+    private: r.private === 1,
+    recurrence: r.recurrence || null,
+    recurrenceUntil: r.recurrence_until || null
   };
 }
 
@@ -1538,7 +1562,9 @@ function readTaskByCaldavUid(db, caldavUid) {
     description: r.description,
     caldavUid: r.caldav_uid,
     caldavSynced: r.caldav_synced,
-    private: r.private === 1
+    private: r.private === 1,
+    recurrence: r.recurrence || null,
+    recurrenceUntil: r.recurrence_until || null
   };
 }
 
@@ -2144,7 +2170,8 @@ function getAllBatches(db) {
 function getAllTasks(db) {
   return db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
     id: r.id, text: r.text, priority: r.priority, done: r.done === 1, created: r.created,
-    assignee: r.assignee, dueDate: r.due_date, description: r.description
+    assignee: r.assignee, dueDate: r.due_date, description: r.description,
+    recurrence: r.recurrence || null, recurrenceUntil: r.recurrence_until || null
   }));
 }
 function getAllHarvests(db) {
