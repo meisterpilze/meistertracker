@@ -537,7 +537,7 @@
           <div><label data-i18n="strains.name">Name</label><input type="text" id="ms-name" data-i18n-placeholder="strains.namePlaceholder" placeholder="z. B. Shiitake" /></div>
           <div><label data-i18n="strains.kuerzel">Kürzel</label><input type="text" id="ms-kuerzel" data-i18n-placeholder="strains.kuerzelPlaceholder" placeholder="z. B. SHI" style="text-transform:uppercase" /></div>
         </div>
-        <div><label data-i18n="strains.description">Beschreibung (optional)</label><input type="text" id="ms-desc" /></div>
+        <div><label data-i18n="strains.descriptor">Genetik-Bezeichnung (z.B. Amazing)</label><input type="text" id="ms-desc" data-i18n-placeholder="strains.descriptorPlaceholder" placeholder="z. B. Amazing, Top Genetics, …" /></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>
           <button class="btn" id="ms-cancel-btn" style="display:none" data-i18n="strains.cancel">Abbrechen</button>
@@ -549,7 +549,7 @@
       <div class="sec" data-i18n="strains.list">Vorhandene Pilzsorten</div>
       <div id="strains-hint" style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px" data-i18n="strains.hint">Ohne angelegte Pilzsorte können keine Chargen erstellt werden.</div>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th data-i18n="strains.name">Name</th><th data-i18n="strains.kuerzel">Kürzel</th><th data-i18n="strains.inUse">Verwendung</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="strains.name">Name</th><th data-i18n="strains.kuerzel">Kürzel</th><th data-i18n="strains.descriptor">Genetik</th><th data-i18n="strains.inUse">Verwendung</th><th></th></tr></thead>
         <tbody id="strains-body"></tbody>
       </table></div>
     </div>
