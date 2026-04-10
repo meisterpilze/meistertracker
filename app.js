@@ -5758,10 +5758,9 @@ function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
     }
   }
   const bc=bcParams(bcVal);
-  // Barcode starts 6mm (48 dots @ 203dpi) from the top edge
-  const bcY=48;
-  // Taller barcode when fewer text lines follow
-  const bcH=detail==='minimal'?100:detail==='sorte'?65:50;
+  // Fixed barcode size regardless of detail level: ≥5mm top margin (40 dots),
+  // 90-dot barcode fits all 3 text lines below within the 240-dot canvas.
+  const bcY=40,bcH=90;
   items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
   // Line 1 — bag ID in monospaced kürzel format (always shown)
   const line1Y=bcY+bcH+6;
@@ -5793,11 +5792,8 @@ function labLabelItems(id,c,opts){
   const numBc=barcodeByEntity.get('culture:'+id);
   const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
   const bc=bcParams(bcVal);
-  // Barcode starts 6mm (48 dots @ 203dpi) from top — same as bag labels
-  const bcY=48;
-  // Count visible text lines to size barcode height (same logic as bag labels)
-  const visibleLines=(opts.sp&&sp?1:0)+(opts.dt?1:0);
-  const bcH=visibleLines===0?100:visibleLines===1?65:50;
+  // Fixed barcode size — same as bag labels: ≥5mm top margin, 90-dot height.
+  const bcY=40,bcH=90;
   // QR occupies the right ~128 dots; text and barcode stay left of it
   const textBlockW=opts.qr?272:400;
   if(opts.bc){
