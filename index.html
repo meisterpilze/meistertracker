@@ -272,6 +272,7 @@
     <button class="sb-btn" id="n-zones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg><span data-i18n="nav.zones">Zonen</span></button>
     <button class="sb-btn" id="n-assets"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span data-i18n="nav.assets">Anlagen</span></button>
     <button class="sb-btn" id="n-print"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span data-i18n="nav.print">Print</span></button>
+    <button class="sb-btn" id="n-strains"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v1m0 6v1m-4-4h1m6 0h1"/></svg><span data-i18n="nav.strains">Pilzsorten</span></button>
   </nav>
   <div class="sb-footer">
     <button class="sb-btn" id="n-settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span data-i18n="nav.more">Settings</span></button>
@@ -461,9 +462,12 @@
               <input type="text" inputmode="decimal" id="nb-weight" value="3" style="margin-top:6px;width:100px" autocomplete="off" />
             </div>
           </div>
-          <div class="g2">
-            <div><label data-i18n="th.species">Species</label><input type="text" id="nb-sp" placeholder="e.g. Kings, Oyster" /></div>
-            <div><label data-i18n="th.strain">Strain</label><input type="text" id="nb-st" placeholder="e.g. Erl, XK5" /></div>
+          <div>
+            <label data-i18n="strains.pilzsorte">Pilzsorte</label>
+            <select id="nb-strain-sel" onchange="nbStrainChanged()">
+              <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
+            </select>
+            <div id="nb-no-strains-hint" style="display:none;font-size:11px;color:var(--c-red);margin-top:4px" data-i18n="strains.noStrainsHint">Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.</div>
           </div>
           <div class="g2">
             <div><label data-i18n="batch.qty">Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" /></div>
@@ -535,6 +539,35 @@
   </div>
 </div>
 
+<!-- ══ PILZSORTEN ══ -->
+<div class="page" id="p-strains">
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <div class="sec" data-i18n="strains.manage">Pilzsorten verwalten</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+        <div class="g2">
+          <div><label data-i18n="strains.name">Name</label><input type="text" id="ms-name" data-i18n-placeholder="strains.namePlaceholder" placeholder="z. B. Shiitake" /></div>
+          <div><label data-i18n="strains.kuerzel">Kürzel</label><input type="text" id="ms-kuerzel" data-i18n-placeholder="strains.kuerzelPlaceholder" placeholder="z. B. SHI" style="text-transform:uppercase" /></div>
+        </div>
+        <div><label data-i18n="strains.description">Beschreibung (optional)</label><input type="text" id="ms-desc" /></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>
+          <button class="btn" id="ms-cancel-btn" style="display:none" data-i18n="strains.cancel">Abbrechen</button>
+        </div>
+        <input type="hidden" id="ms-edit-id" value="" />
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec" data-i18n="strains.list">Vorhandene Pilzsorten</div>
+      <div id="strains-hint" style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px" data-i18n="strains.hint">Ohne angelegte Pilzsorte können keine Chargen erstellt werden.</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th data-i18n="strains.name">Name</th><th data-i18n="strains.kuerzel">Kürzel</th><th data-i18n="strains.inUse">Verwendung</th><th></th></tr></thead>
+        <tbody id="strains-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ LAB ══ -->
 <div class="page" id="p-lab">
   <div class="stabs">
@@ -584,7 +617,12 @@
               <datalist id="sp-list"></datalist>
             </div>
           </div>
-          <div><label data-i18n="th.strain">Strain</label><input type="text" id="lw-st" placeholder="e.g. Erl, XK5" /></div>
+          <div>
+            <label data-i18n="strains.pilzsorte">Pilzsorte</label>
+            <select id="lw-st">
+              <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
+            </select>
+          </div>
           <div id="lw-parent-row">
             <label id="lw-parent-lbl" data-i18n="lab.parentCulture">Parent culture</label>
             <select id="lw-parent"><option value="" data-i18n="lab.noneNewIsolation">— none / new isolation —</option></select>
