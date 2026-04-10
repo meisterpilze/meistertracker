@@ -549,6 +549,125 @@ describe('MCP write operations', () => {
     assert.equal(c.status, 'contaminated');
     assert.equal(c.notes, 'Found trichoderma');
   });
+
+  it('creates a batch with strainId — species/strain auto-filled', () => {
+    const strainId = Number(db.createMushroomStrain(d, { name: 'Hericium erinaceus LH1', kuerzel: 'LH1' }));
+    db.insertBatch(d, {
+      batchId: 'HE-001',
+      strainId,
+      species: 'ignored',
+      strain: 'ignored',
+      qty: 1,
+      days: 21,
+      created: new Date().toISOString(),
+      due: new Date(Date.now() + 21 * 86400000).toISOString(),
+      bags: ['HE-001-01']
+    });
+    const b = db.readBatchById(d, 'HE-001');
+    assert.equal(b.strainId, strainId);
+    assert.equal(b.species, 'Hericium erinaceus LH1');
+    assert.equal(b.strain, 'LH1');
+    assert.equal(b.strainName, 'Hericium erinaceus LH1');
+    assert.equal(b.strainKuerzel, 'LH1');
+  });
+
+  it('updates batch strainId — new species/strain cascade', () => {
+    const newId = Number(db.createMushroomStrain(d, { name: 'Hericium erinaceus LH2', kuerzel: 'LH2' }));
+    db.updateBatchField(d, 'HE-001', { strainId: newId });
+    const b = db.readBatchById(d, 'HE-001');
+    assert.equal(b.strainId, newId);
+    assert.equal(b.species, 'Hericium erinaceus LH2');
+    assert.equal(b.strain, 'LH2');
+  });
+
+  it('updates a culture strainId — new species/strain cascade', () => {
+    const strainId = Number(db.createMushroomStrain(d, { name: 'Agrocybe aegerita AA1', kuerzel: 'AA1' }));
+    db.updateCulture(d, 'C-MCP-001', { strainId });
+    const cultures = db.getAllCultures(d);
+    const c = cultures.find((x) => x.id === 'C-MCP-001');
+    assert.equal(c.strainId, strainId);
+    assert.equal(c.species, 'Agrocybe aegerita AA1');
+    assert.equal(c.strain, 'AA1');
+  });
+});
+
+describe('MCP mushroom strains tool layer', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('listMushroomStrains returns an empty array initially', () => {
+    assert.deepEqual(db.listMushroomStrains(d), []);
+  });
+
+  it('createMushroomStrain + list round-trip', () => {
+    const id = Number(db.createMushroomStrain(d, { name: 'Shiitake CS-41', kuerzel: 'CS41' }));
+    const list = db.listMushroomStrains(d);
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, id);
+    assert.equal(list[0].name, 'Shiitake CS-41');
+  });
+
+  it('updateMushroomStrain propagates to existing batches via MCP DB helpers', () => {
+    const strainId = db.listMushroomStrains(d)[0].id;
+    const bagStmt = `MCP-BATCH-${strainId}`;
+    db.insertBatch(d, {
+      batchId: bagStmt,
+      strainId,
+      qty: 1,
+      days: 7,
+      created: new Date().toISOString(),
+      due: new Date(Date.now() + 7 * 86400000).toISOString(),
+      bags: [bagStmt + '-01']
+    });
+    db.updateMushroomStrain(d, strainId, { name: 'Shiitake Kalliopi', kuerzel: 'KAL' });
+
+    // All MCP read paths should now see the new values
+    const listed = db.getAllBatches(d).find((b) => b.batchId === bagStmt);
+    assert.ok(listed);
+    assert.equal(listed.species, 'Shiitake Kalliopi');
+    assert.equal(listed.strain, 'KAL');
+    assert.equal(listed.strainName, 'Shiitake Kalliopi');
+    assert.equal(listed.strainKuerzel, 'KAL');
+
+    const detail = db.readBatchById(d, bagStmt);
+    assert.equal(detail.strainName, 'Shiitake Kalliopi');
+  });
+
+  it('deleteMushroomStrain refuses while referenced', () => {
+    const strainId = db.listMushroomStrains(d)[0].id;
+    assert.throws(() => db.deleteMushroomStrain(d, strainId), /still in use/);
+  });
+
+  it('deleteMushroomStrain succeeds for an unreferenced strain', () => {
+    const id = Number(db.createMushroomStrain(d, { name: 'Unused', kuerzel: 'UNU' }));
+    assert.equal(db.deleteMushroomStrain(d, id), true);
+  });
+
+  it('getAllCultures exposes strainName/strainKuerzel for linked cultures', () => {
+    const strainId = Number(db.createMushroomStrain(d, { name: 'Pleurotus eryngii PE1', kuerzel: 'PE1' }));
+    db.insertCultures(d, [
+      {
+        id: 'MCP-CULT-PE1',
+        type: 'MC',
+        strainId,
+        status: 'active',
+        notes: '',
+        created: new Date().toISOString()
+      }
+    ]);
+    const cultures = db.getAllCultures(d);
+    const c = cultures.find((x) => x.id === 'MCP-CULT-PE1');
+    assert.ok(c);
+    assert.equal(c.strainId, strainId);
+    assert.equal(c.strainName, 'Pleurotus eryngii PE1');
+    assert.equal(c.strainKuerzel, 'PE1');
+  });
 });
 
 // ── Daily briefing compound query ──────────────────────────
