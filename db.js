@@ -1133,9 +1133,18 @@ function writeAll(db, incoming) {
 
 // ── Backup ───────────────────────────────────────────────────
 function backupDb(db, destPath) {
-  // VACUUM INTO doesn't support bound parameters — validate path to prevent injection
-  if (/['\x00]/.test(destPath)) throw new Error('Backup path contains unsafe characters');
-  db.exec(`VACUUM INTO '${destPath}'`);
+  // VACUUM INTO doesn't support bound parameters — whitelist path chars to prevent injection.
+  // Allow absolute paths with letters, digits, dots, dashes, underscores, slashes, colons (Windows drive),
+  // spaces (Windows user dirs like "OneDrive - Meisterpilze UG"), and backslashes.
+  if (typeof destPath !== 'string' || !destPath.length) {
+    throw new Error('Backup path required');
+  }
+  if (!/^[A-Za-z0-9 ._/\\:-]+$/.test(destPath)) {
+    throw new Error('Backup path contains unsafe characters');
+  }
+  // Escape single quotes just in case (shouldn't match the whitelist above, but defense-in-depth)
+  const safePath = destPath.replace(/'/g, "''");
+  db.exec(`VACUUM INTO '${safePath}'`);
   return Promise.resolve();
 }
 
