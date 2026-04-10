@@ -3438,7 +3438,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
           return;
         }
-        const user = db.getUserByUsername(database, username);
+        const user = db.getUserByUsernameCaseInsensitive(database, username);
         if (!user || !db.verifyPassword(user.hash, user.salt, password)) {
           recordLoginFailure(throttleKey);
           recordLoginFailurePerUser(userKey);
