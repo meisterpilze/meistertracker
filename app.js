@@ -207,6 +207,9 @@ const LANG = {
     'batch.addNote': 'Add note',
     'batch.addBags': '+Bags',
     'batch.del': 'Del',
+    'batch.moveTo': 'Move to',
+    'batch.moveMenuTitle': 'Move {id} to…',
+    'batch.noLocations': 'No locations configured',
     'batch.deleteBatch': 'Delete batch {id}?',
     'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
     'batch.deleteBtn': 'Delete batch',
@@ -1096,6 +1099,9 @@ const LANG = {
     'batch.addNote': 'Notiz hinzuf\u00fcgen',
     'batch.addBags': '+Beutel',
     'batch.del': 'L\u00f6schen',
+    'batch.moveTo': 'Verschieben nach',
+    'batch.moveMenuTitle': '{id} verschieben nach\u2026',
+    'batch.noLocations': 'Keine Standorte konfiguriert',
     'batch.deleteBatch': 'Charge {id} l\u00f6schen?',
     'batch.deleteMsg': 'L\u00f6scht den Chargen-Datensatz dauerhaft. Scan-Log und Ernteeintr\u00e4ge bleiben erhalten.',
     'batch.deleteBtn': 'Charge l\u00f6schen',
@@ -1985,6 +1991,9 @@ const LANG = {
     'batch.addNote': 'Adicionar nota',
     'batch.addBags': '+Sacos',
     'batch.del': 'Excluir',
+    'batch.moveTo': 'Mover para',
+    'batch.moveMenuTitle': 'Mover {id} para\u2026',
+    'batch.noLocations': 'Nenhum local configurado',
     'batch.deleteBatch': 'Excluir lote {id}?',
     'batch.deleteMsg': 'Exclui permanentemente o registro do lote. Log de scan e colheitas permanecem.',
     'batch.deleteBtn': 'Excluir lote',
@@ -3687,7 +3696,77 @@ function moveBatchTo(batch,dest,cb){
   if(cb)cb(entries.length,skipped);
 }
 
+// Popover menu for moving an entire batch from the Alle Chargen list.
+// Anchored to the clicked button; closes on outside click or Escape.
+let _moveMenuCleanup=null;
+function closeBatchMoveMenu(){
+  if(_moveMenuCleanup){_moveMenuCleanup();_moveMenuCleanup=null}
+}
+function openBatchMoveMenu(batchId,anchorEl){
+  closeBatchMoveMenu();
+  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
+  const menu=document.createElement('div');
+  menu.className='move-menu';
+  menu.setAttribute('role','menu');
+  menu.style.cssText='position:absolute;z-index:1000;background:#fff;border:1px solid var(--c-border);border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.18);padding:6px 0;min-width:170px;max-height:60vh;overflow-y:auto;font-size:12px';
+  const title=document.createElement('div');
+  title.style.cssText='padding:4px 12px 6px;font-size:11px;color:var(--c-text-muted);border-bottom:1px solid var(--c-border);margin-bottom:4px;font-weight:600';
+  title.textContent=t('batch.moveMenuTitle',{id:b.batchId});
+  menu.appendChild(title);
+  const items=[];
+  zones.forEach(z=>{
+    items.push({id:z.id,label:z.id,indent:false});
+    (z.racks||[]).forEach(r=>items.push({id:r.id,label:r.id,indent:true}));
+  });
+  if(!items.length){
+    const empty=document.createElement('div');
+    empty.style.cssText='padding:8px 12px;color:var(--c-text-muted);font-style:italic';
+    empty.textContent=t('batch.noLocations');
+    menu.appendChild(empty);
+  }else{
+    items.forEach(it=>{
+      const row=document.createElement('button');
+      row.type='button';
+      row.setAttribute('role','menuitem');
+      row.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:6px 12px;font:inherit;cursor:pointer;font-family:monospace';
+      if(it.indent)row.style.paddingLeft='26px';
+      row.textContent=it.label;
+      row.addEventListener('mouseenter',()=>{row.style.background='var(--c-bg)'});
+      row.addEventListener('mouseleave',()=>{row.style.background='none'});
+      row.addEventListener('click',()=>{
+        closeBatchMoveMenu();
+        moveBatchTo(b,it.id,function(moved,skipped){
+          if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+it.id+')':''));return}
+          setFb('ok',b.batchId+': '+moved+' Bags → '+it.id+(skipped?' ('+skipped+' übersprungen)':''));
+          updateSD();renderBatches();
+        });
+      });
+      menu.appendChild(row);
+    });
+  }
+  document.body.appendChild(menu);
+  const r=anchorEl.getBoundingClientRect();
+  const top=r.bottom+window.scrollY+2;
+  let left=r.left+window.scrollX;
+  // Keep menu inside viewport horizontally
+  const mw=menu.offsetWidth;
+  if(left+mw>window.scrollX+document.documentElement.clientWidth-8){
+    left=Math.max(8,window.scrollX+document.documentElement.clientWidth-mw-8);
+  }
+  menu.style.top=top+'px';menu.style.left=left+'px';
+  const onDocClick=function(e){if(!menu.contains(e.target)&&e.target!==anchorEl)closeBatchMoveMenu()};
+  const onKey=function(e){if(e.key==='Escape')closeBatchMoveMenu()};
+  setTimeout(()=>document.addEventListener('click',onDocClick),0);
+  document.addEventListener('keydown',onKey);
+  _moveMenuCleanup=function(){
+    document.removeEventListener('click',onDocClick);
+    document.removeEventListener('keydown',onKey);
+    if(menu.parentNode)menu.parentNode.removeChild(menu);
+  };
+}
+
 function renderBatches(){
+  closeBatchMoveMenu();
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q)).map(b=>{
@@ -3696,10 +3775,9 @@ function renderBatches(){
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
     const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
     const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
-    const isActive=status!=='DONE'&&status!=='EMPTY';
-    const zoneOpts=zones.map(z=>{const rackOpts=z.racks.length?z.racks.map(r=>`<option value="${esc(r.id)}">${esc(r.id)}</option>`).join(''):'';return`<option value="${esc(z.id)}">${esc(z.id)}</option>${rackOpts}`}).join('');
-    const moveDropdown=isActive?`<select data-action="move-batch" data-batch="${esc(b.batchId)}" style="font-size:11px;padding:2px 4px;max-width:110px;margin-right:3px"><option value="" disabled selected>↪ Verschieben…</option>${zoneOpts}</select>`:'';
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveDropdown}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    const canMove=status!=='DONE';
+    const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-menu" data-batch="${esc(b.batchId)}" style="margin-right:3px">↪ ${t('batch.moveTo')}</button>`:'';
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -8089,20 +8167,11 @@ function initEventListeners() {
       case 'open-note': openNote(batch); break;
       case 'add-bags': openAddBags(batch); break;
       case 'del-batch': delBatch(batch); break;
+      case 'open-move-menu':
+        e.stopPropagation();
+        openBatchMoveMenu(batch, el);
+        break;
     }
-  });
-  $('batches-body').addEventListener('change', function(e) {
-    const el = e.target.closest('[data-action="move-batch"]');
-    if (!el) return;
-    const dest = el.value;
-    const b = batches.find(x => x.batchId === el.dataset.batch);
-    if (!b || !dest) return;
-    moveBatchTo(b, dest, function(moved, skipped) {
-      el.value = '';
-      if (!moved) { setFb('err', 'Keine Bags zu verschieben' + (skipped ? ' (' + skipped + ' bereits in ' + dest + ')' : '')); return; }
-      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + dest + (skipped ? ' (' + skipped + ' übersprungen)' : ''));
-      updateSD(); renderBatches();
-    });
   });
   $('st-batch-list').addEventListener('click', () => { openStab('batch','list'); });
   $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
