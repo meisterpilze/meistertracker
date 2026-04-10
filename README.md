@@ -71,6 +71,26 @@ The server sends ZPL directly to the printer via the Windows print spooler — n
 
 On non-Windows systems, use the "Download ZPL" fallback to send labels manually.
 
+## Authorization
+
+The app has two user roles: **worker** and **admin**.
+
+**Workers can:**
+- Create batches, harvests, scans, cultures, and calendar events
+- Log lab work and inventory consumption from batch creation
+- Create and complete their own tasks
+- Modify/delete tasks they are assigned to, or tasks with no assignee
+
+**Admins can:**
+- Everything workers can
+- Delete assets, calendar events, and suppliers
+- Manage users (create/delete/reset password)
+- Adjust inventory manually (thresholds, composition config)
+- Manage zones, racks, OAuth clients, CalDAV config
+- Download/restore the encrypted database backup
+
+Tasks belong to the people listed in their `assignee` field. An unassigned task (empty assignee) is considered "for everyone" and any authenticated worker may modify or delete it.
+
 ## Data & Backups
 
 All data is stored in `meistertracker.db` (SQLite) on the server (shared by all devices automatically). Changes sync every 5 seconds.
