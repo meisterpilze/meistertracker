@@ -4092,7 +4092,7 @@ async function runMcpDiagnostics(){
     html+='</table>';
     if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">'+esc(d.hint)+'</div>';
     el.innerHTML=html;
-  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+e.message+'</p>'}
+  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+esc(e.message)+'</p>'}
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
