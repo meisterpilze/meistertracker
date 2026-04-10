@@ -2628,6 +2628,44 @@ tr:hover td {
   margin-left: 4px;
   line-height: 1;
 }
+.zone-group-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--c-text-muted);
+  padding: 14px 4px 6px;
+  border-bottom: 1px solid var(--c-border-light);
+  margin-bottom: 6px;
+}
+.zone-group-header:first-child {
+  padding-top: 4px;
+}
+.zone-reorder {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: 2px;
+}
+.zone-reorder-btn {
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  line-height: 1 !important;
+}
+.zone-reorder-btn[disabled] {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.zone-direct-badge {
+  background: var(--c-red) !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 0 2px var(--c-red-light);
+  letter-spacing: 0.3px;
+}
 .zone-qr-panel {
   border-top: 1px solid var(--c-border-light);
   margin-top: 6px;

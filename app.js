@@ -779,6 +779,8 @@ const LANG = {
     'zones.hasBags': '{count} bags — remove first',
     'zones.directBags': '{count} not in rack',
     'zones.directBagsHint': 'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
+    'zones.moveUp': 'Move up',
+    'zones.moveDown': 'Move down',
     'zones.edit': 'Edit',
     'zones.editTitle': 'Edit Zone',
     'zones.moveToRack': 'Move to rack',
@@ -1544,6 +1546,8 @@ const LANG = {
     'zones.hasBags': '{count} Bags — erst entfernen',
     'zones.directBags': '{count} ohne Rack',
     'zones.directBagsHint': 'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
+    'zones.moveUp': 'Nach oben',
+    'zones.moveDown': 'Nach unten',
     'zones.edit': 'Bearbeiten',
     'zones.editTitle': 'Zone bearbeiten',
     'zones.moveToRack': 'In Rack verschieben',
@@ -2308,6 +2312,8 @@ const LANG = {
     'zones.hasBags': '{count} bags — remova primeiro',
     'zones.directBags': '{count} sem rack',
     'zones.directBagsHint': 'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
+    'zones.moveUp': 'Mover para cima',
+    'zones.moveDown': 'Mover para baixo',
     'zones.edit': 'Editar',
     'zones.editTitle': 'Editar zona',
     'zones.moveToRack': 'Mover para rack',
@@ -4275,11 +4281,27 @@ function restoreBackup(){
 
 // ─── ZONES (Location Management) ────────────────────────────
 const ROLE_LABELS={spawn:'zones.roleSpawn',incubation:'zones.roleIncubation',fruiting:'zones.roleFruiting',contaminated:'zones.roleContaminated'};
+const ROLE_ORDER=['spawn','incubation','fruiting','contaminated'];
 function renderZones(){
   const el=document.getElementById('zones-list');
   if(!el)return;
   if(!zones.length){el.innerHTML='<div class="empty">'+esc(t('zones.empty'))+'</div>';return}
-  el.innerHTML=zones.map((z,idx)=>{
+  // Group zones by role in canonical order; unknown roles go last.
+  const groups={};
+  ROLE_ORDER.forEach(r=>{groups[r]=[]});
+  const extraRoles=[];
+  zones.forEach(z=>{
+    if(groups[z.role])groups[z.role].push(z);
+    else{
+      if(!groups[z.role]){groups[z.role]=[];extraRoles.push(z.role)}
+      groups[z.role].push(z);
+    }
+  });
+  // Within each group: sort by sortOrder (fallback to name for stability).
+  Object.keys(groups).forEach(role=>{
+    groups[role].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+  });
+  const renderZone=(z,idxInGroup,groupLen)=>{
     const zoneBags=getZoneBags(z.id);
     const bagCount=Object.keys(zoneBags).length;
     const rackIds=new Set(z.racks.map(r=>r.id));
@@ -4290,13 +4312,19 @@ function renderZones(){
         return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
       }).join('')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
+    const canUp=idxInGroup>0;
+    const canDown=idxInGroup<groupLen-1;
     return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
+        <span class="zone-reorder">
+          <button class="btn btn-sm zone-reorder-btn" data-action="move-up" data-zone="${esc(z.id)}" title="${esc(t('zones.moveUp'))}"${canUp?'':' disabled'}>\u25b2</button>
+          <button class="btn btn-sm zone-reorder-btn" data-action="move-down" data-zone="${esc(z.id)}" title="${esc(t('zones.moveDown'))}"${canDown?'':' disabled'}>\u25bc</button>
+        </span>
         <span class="zone-row-name">${esc(z.name)}</span>
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity?bagCount+' / '+z.maxCapacity+' Bags':tp('dash.bags',bagCount)}</span>
-        ${directCount>0?`<span class="badge" style="background:var(--c-warning);color:#000;font-size:10px" title="${esc(t('zones.directBagsHint'))}">⚠ ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
-        ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-warning)">${esc(t('zones.moveToRack'))}</button>`:''}
+        ${directCount>0?`<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
+        ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
@@ -4308,7 +4336,54 @@ function renderZones(){
       <div class="zone-row-racks">${rackHtml}</div>
       <div class="zone-qr-panel" id="zone-qr-${esc(z.id)}" style="display:none"></div>
     </div>`;
+  };
+  const orderedRoles=[...ROLE_ORDER,...extraRoles];
+  el.innerHTML=orderedRoles.map(role=>{
+    const zs=groups[role];
+    if(!zs||!zs.length)return'';
+    const label=esc(t(ROLE_LABELS[role])||role);
+    const header=`<div class="zone-group-header">${label}</div>`;
+    return header+zs.map((z,i)=>renderZone(z,i,zs.length)).join('');
   }).join('');
+}
+async function moveZone(zoneId,dir){
+  // Reorder within the same role group, then persist full order.
+  const z=zones.find(x=>x.id===zoneId);if(!z)return;
+  const sameRole=zones
+    .filter(x=>x.role===z.role)
+    .sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+  const i=sameRole.findIndex(x=>x.id===zoneId);
+  const j=dir==='up'?i-1:i+1;
+  if(i<0||j<0||j>=sameRole.length)return;
+  [sameRole[i],sameRole[j]]=[sameRole[j],sameRole[i]];
+  // Build full order: roles in canonical order, each group in its new local order.
+  const groups={};
+  ROLE_ORDER.forEach(r=>{groups[r]=[]});
+  const extra=[];
+  zones.forEach(x=>{
+    if(x.role===z.role)return;
+    if(!groups[x.role]){groups[x.role]=[];extra.push(x.role)}
+    groups[x.role].push(x);
+  });
+  groups[z.role]=sameRole;
+  Object.keys(groups).forEach(r=>{
+    if(r!==z.role)groups[r].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+  });
+  const fullOrder=[...ROLE_ORDER,...extra].flatMap(r=>groups[r]||[]).map(x=>x.id);
+  // Optimistic local update so the UI moves immediately.
+  fullOrder.forEach((id,idx)=>{
+    const zz=zones.find(x=>x.id===id);
+    if(zz)zz.sortOrder=idx+1;
+  });
+  renderZones();
+  try{
+    const res=await apiPost('/api/zones/reorder',{order:fullOrder});
+    if(res&&res.error){alert(res.error);await loadData()}
+  }catch(e){
+    console.error('reorder zones error:',e);
+    alert('Error reordering zones: '+(e.message||'unknown error'));
+    await loadData();
+  }
 }
 async function addZone(){
   const nameRaw=document.getElementById('zone-name').value.trim().toUpperCase();
@@ -6778,6 +6853,8 @@ function initEventListeners() {
     else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
     else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
     else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
+    else if(action==='move-up')moveZone(btn.dataset.zone,'up');
+    else if(action==='move-down')moveZone(btn.dataset.zone,'down');
   });
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
