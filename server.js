@@ -320,6 +320,14 @@ function validateDate(value, fieldName) {
   if (isNaN(d.getTime())) return fieldName + ' is not a valid date';
   return null;
 }
+// Validate 24-hour time strings in HH:MM format
+function validateTimeOfDay(value, fieldName) {
+  if (!value) return null;
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    return fieldName + ' must be a HH:MM time';
+  }
+  return null;
+}
 // Validate enum membership
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
@@ -1324,7 +1332,12 @@ function taskToVTODO(task) {
   ];
   if (task.dueDate) {
     const d = new Date(task.dueDate).toISOString().replace(/[-:]/g, '').split('T')[0];
-    lines.push('DUE;VALUE=DATE:' + d);
+    if (task.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(task.dueTime)) {
+      // Floating local-time DUE so CalDAV clients render it at the wall-clock
+      lines.push('DUE:' + d + 'T' + task.dueTime.replace(':', '') + '00');
+    } else {
+      lines.push('DUE;VALUE=DATE:' + d);
+    }
   }
   const prioMap = { high: 1, med: 5, low: 9 };
   lines.push('PRIORITY:' + (prioMap[task.priority] || 0));
@@ -1387,10 +1400,30 @@ function taskDueToVEVENT(task) {
   const uid = (task.caldavUid || generateUID()) + '-event';
   const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const dueDate = new Date(task.dueDate).toISOString().replace(/[-:]/g, '').split('T')[0];
-  const endDate = new Date(new Date(task.dueDate).getTime() + 86400000)
-    .toISOString()
-    .replace(/[-:]/g, '')
-    .split('T')[0];
+  const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const hasTime = task.dueTime && timeRe.test(task.dueTime);
+  let dtStartLine, dtEndLine;
+  if (hasTime) {
+    const startRaw = dueDate + 'T' + task.dueTime.replace(':', '') + '00';
+    let endRaw;
+    if (task.dueEndTime && timeRe.test(task.dueEndTime) && task.dueEndTime > task.dueTime) {
+      endRaw = dueDate + 'T' + task.dueEndTime.replace(':', '') + '00';
+    } else {
+      // Default to 1h slot if no end given
+      const [sh, sm] = task.dueTime.split(':').map(Number);
+      const eh = String(Math.min(23, sh + 1)).padStart(2, '0');
+      endRaw = dueDate + 'T' + eh + String(sm).padStart(2, '0') + '00';
+    }
+    dtStartLine = 'DTSTART:' + startRaw;
+    dtEndLine = 'DTEND:' + endRaw;
+  } else {
+    const endDate = new Date(new Date(task.dueDate).getTime() + 86400000)
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .split('T')[0];
+    dtStartLine = 'DTSTART;VALUE=DATE:' + dueDate;
+    dtEndLine = 'DTEND;VALUE=DATE:' + endDate;
+  }
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -1398,8 +1431,8 @@ function taskDueToVEVENT(task) {
     'BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + now,
-    'DTSTART;VALUE=DATE:' + dueDate,
-    'DTEND;VALUE=DATE:' + endDate,
+    dtStartLine,
+    dtEndLine,
     'SUMMARY:' + escapeIcsText(task.text || ''),
     'CATEGORIES:Aufgaben',
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
@@ -2450,12 +2483,20 @@ function handlePut(parts, body, req, res) {
                 const done = statusMatch[1].trim() === 'COMPLETED';
                 if (done !== task.done) fields.done = done;
               }
+              const dueDateTimeMatch = unfolded.match(/DUE(?:;[^:]*)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?/);
               const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              if (dueMatch) {
+              if (dueDateTimeMatch) {
+                const d = dueDateTimeMatch[1] + '-' + dueDateTimeMatch[2] + '-' + dueDateTimeMatch[3];
+                const t = dueDateTimeMatch[4] + ':' + dueDateTimeMatch[5];
+                if (d !== (task.dueDate || '').slice(0, 10)) fields.dueDate = d;
+                if (t !== (task.dueTime || '')) fields.dueTime = t;
+              } else if (dueMatch) {
                 const d = dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3];
                 if (d !== (task.dueDate || '').slice(0, 10)) fields.dueDate = d;
+                if (task.dueTime) { fields.dueTime = null; fields.dueEndTime = null; }
               } else if (!unfolded.includes('DUE') && task.dueDate) {
                 fields.dueDate = null;
+                if (task.dueTime) { fields.dueTime = null; fields.dueEndTime = null; }
               }
               const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
               if (descMatch) {
@@ -2483,8 +2524,16 @@ function handlePut(parts, body, req, res) {
               const priority = prioMatch ? CALDAV_PRIO_MAP[prioMatch[1]] || 'med' : 'med';
               const statusMatch = unfolded.match(/STATUS:(.*)/);
               const done = statusMatch ? statusMatch[1].trim() === 'COMPLETED' : false;
+              const dueDateTimeMatch2 = unfolded.match(/DUE(?:;[^:]*)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?/);
               const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const dueDate = dueMatch ? dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3] : null;
+              let dueDate = null;
+              let dueTime = null;
+              if (dueDateTimeMatch2) {
+                dueDate = dueDateTimeMatch2[1] + '-' + dueDateTimeMatch2[2] + '-' + dueDateTimeMatch2[3];
+                dueTime = dueDateTimeMatch2[4] + ':' + dueDateTimeMatch2[5];
+              } else if (dueMatch) {
+                dueDate = dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3];
+              }
               const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
               const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
               db.insertTask(database, {
@@ -2493,6 +2542,7 @@ function handlePut(parts, body, req, res) {
                 done,
                 created: new Date().toISOString(),
                 dueDate,
+                dueTime,
                 description,
                 caldavUid: uid,
                 caldavSynced: new Date().toISOString()
@@ -4097,6 +4147,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const vd = validateDate(data.dueDate, 'dueDate');
         if (vd) {
           jsonErr(res, 400, vd);
+          return;
+        }
+      }
+      if (data.dueTime) {
+        const vt2 = validateTimeOfDay(data.dueTime, 'dueTime');
+        if (vt2) {
+          jsonErr(res, 400, vt2);
+          return;
+        }
+      }
+      if (data.dueEndTime) {
+        const vt2 = validateTimeOfDay(data.dueEndTime, 'dueEndTime');
+        if (vt2) {
+          jsonErr(res, 400, vt2);
           return;
         }
       }
