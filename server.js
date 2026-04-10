@@ -5429,9 +5429,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/printer-status
   if (req.method === 'GET' && req.url === '/api/printer-status') {
+    // wmic was removed in Windows 11 24H2+; use PowerShell Get-Printer instead.
+    // PRINTER_NAME is already validated at startup but strip quotes defensively.
     execFile(
-      'wmic',
-      ['printer', 'where', "Name='" + PRINTER_NAME + "'", 'get', 'Name,PrinterStatus', '/format:csv'],
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
+      ],
       (err, stdout) => {
         const found = !err && stdout.includes(PRINTER_NAME);
         res.writeHead(200, { 'Content-Type': 'application/json' });
