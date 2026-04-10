@@ -5343,6 +5343,8 @@ function processScan(raw){
     const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
     if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
     if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
+    // No action set? Auto-set to MOVE with this location as destination
+    if(!scan.action){scan.action='MOVE';scan.to=val;scan.from=null;scan.harvestBag=null;_pendingDupe=null;_pendingRemove=null;clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):'MOVE → '+val+' — jetzt Bags scannen');return}
     setFb('err',t('scanFb.setAction'));return;
   }
   // Culture ID scan → open lineage
