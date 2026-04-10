@@ -5274,6 +5274,7 @@ function renderStrains(){
     return`<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${ms.description?esc(ms.description):'<span style="color:var(--c-text-muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">Bearb.</button>
@@ -5653,31 +5654,36 @@ function bagLabelItems(bagId,batch,mode){
     bcVal=bagId.replace(/-/g,'_');
   }
   const bc=bcParams(bcVal);
-  const bcY=mode==='date'?50:mode==='full'?52:56;
-  const bcH=mode==='date'?60:mode==='full'?70:90;
+  // date-mode: compact barcode to fit 4 rows below; full: slightly taller; id: tallest
+  const bcY=mode==='date'?8:mode==='full'?10:14;
+  const bcH=mode==='date'?55:mode==='full'?65:90;
   items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
-  const idY=bcY+bcH+6;
-  items.push({type:'text',y:idY,fontH:38,text:bagId});
+  const idY=bcY+bcH+4;
+  // Barcode text smaller so it doesn't crowd the lines below
+  items.push({type:'text',y:idY,fontH:24,text:bagId});
   if(mode==='full'||mode==='date'){
-    // Show "Pilzsorte - Strain" (e.g. "Shiitake - Amazing") then substrate
-    const strainLabel=batch.strainName&&batch.strain
-      ?batch.strainName+' \u2013 '+batch.strain
-      :(batch.strainName||batch.strain||'');
-    let infoLine=strainLabel;
+    // Row: "Pilzname – Genetik" or just "Pilzname" if no descriptor set
+    const strainLabel=batch.strainName
+      ?(batch.strainDescriptor?batch.strainName+' \u2013 '+batch.strainDescriptor:batch.strainName)
+      :'';
+    if(strainLabel) items.push({type:'text',y:idY+28,fontH:28,text:strainLabel});
+    // Due date — prominent, bold, this is the most important info
+    if(mode==='date'&&batch.due){
+      const due=new Date(batch.due);
+      const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
+      items.push({type:'text',y:idY+58,fontH:34,text:'Faellig: '+dueStr,bold:true});
+    }
+    // Substrate % — small, separate line at the bottom
     if(batch.substrate){
       const hw=batch.substrate.hardwood||0;
       const wb=batch.substrate.wheatbran||0;
       const rh=batch.substrate.rh||0;
       const subStr=(hw?'HW'+hw+'%':'')+(wb?' WB'+wb+'%':'')+(rh?' RH'+rh+'%':'');
-      if(subStr) infoLine+=(infoLine?' · ':'')+subStr;
+      if(subStr){
+        const subY=mode==='date'?idY+96:idY+58;
+        items.push({type:'text',y:subY,fontH:20,text:subStr});
+      }
     }
-    if(infoLine) items.push({type:'text',y:idY+42,fontH:28,text:infoLine});
-  }
-  if(mode==='date'&&batch.due){
-    const due=new Date(batch.due);
-    const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-    // Bigger + bold — due date is the key info in this mode.
-    items.push({type:'text',y:idY+72,fontH:32,text:'Faellig: '+dueStr,bold:true});
   }
   return items;
 }
@@ -5686,7 +5692,8 @@ function labLabelItems(id,c,opts){
   const items=[];
   // Prefer mushroom_strains lookup fields; fall back to legacy species/strain.
   const name=c.strainName||c.species||'';
-  const kz=c.strainKuerzel||c.strain||'';
+  // Only show descriptor after dash, not kürzel
+  const kz=c.strainDescriptor||'';
   const sp=name+(kz?' \u2013 '+kz:'');
   const ds=fmtDt(c.created);
   const bcVal=id.replace(/-/g,'_');
