@@ -2430,10 +2430,19 @@ function getAllHarvests(db) {
   }));
 }
 function getAllCultures(db) {
-  return db.prepare('SELECT * FROM cultures ORDER BY created').all().map(r => ({
-    id: r.id, type: r.type, species: r.species, strain: r.strain,
-    parentId: r.parent_id, source: r.source, status: r.status, notes: r.notes, created: r.created
-  }));
+  const msStmt = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?');
+  return db.prepare('SELECT * FROM cultures ORDER BY created').all().map(r => {
+    let strainName = null, strainKuerzel = null;
+    if (r.strain_id) {
+      const ms = msStmt.get(r.strain_id);
+      if (ms) { strainName = ms.name; strainKuerzel = ms.kuerzel; }
+    }
+    return {
+      id: r.id, type: r.type, species: r.species, strain: r.strain,
+      strainId: r.strain_id || null, strainName, strainKuerzel,
+      parentId: r.parent_id, source: r.source, status: r.status, notes: r.notes, created: r.created
+    };
+  });
 }
 function getScanLog(db) {
   return db.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id').all().map(r => ({
