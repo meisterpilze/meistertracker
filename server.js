@@ -4071,7 +4071,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { text: 'string', priority: 'string', assignee: 'string', description: 'string' });
+      const vt = validateTypes(data, { text: 'string', priority: 'string', assignee: 'string', description: 'string', recurrence: 'string' });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
@@ -4086,8 +4086,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, ve);
         return;
       }
+      if (data.recurrence) {
+        const vr2 = validateEnum(data.recurrence, ['daily', 'weekly', 'monthly'], 'recurrence');
+        if (vr2) {
+          jsonErr(res, 400, vr2);
+          return;
+        }
+      }
       if (data.dueDate) {
         const vd = validateDate(data.dueDate, 'dueDate');
+        if (vd) {
+          jsonErr(res, 400, vd);
+          return;
+        }
+      }
+      if (data.recurrenceUntil) {
+        const vd = validateDate(data.recurrenceUntil, 'recurrenceUntil');
         if (vd) {
           jsonErr(res, 400, vd);
           return;
