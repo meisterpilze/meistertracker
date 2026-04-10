@@ -6533,6 +6533,7 @@ function calMonths(){return (t('cal.months')||'Januar,Februar,März,April,Mai,Ju
 const CAL_HOURS_START=6,CAL_HOURS_END=22;
 
 function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
 
 function getBatchLoc(b){
@@ -6561,7 +6562,7 @@ function expandRecurringEvent(ev){
     if(hardEnd&&cur>hardEnd)break;
     if(cur>winEnd)break;
     if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(cur.toISOString().split('T')[0]);
+      out.push(localDateStr(cur));
     }
     if(ev.recurrence==='daily')cur=addDays(cur,1);
     else if(ev.recurrence==='weekly')cur=addDays(cur,7);
@@ -6584,7 +6585,7 @@ function expandRecurringTaskDates(task){
     if(hardEnd&&cur>hardEnd)break;
     if(cur>winEnd)break;
     if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(cur.toISOString().split('T')[0]);
+      out.push(localDateStr(cur));
     }
     if(task.recurrence==='daily')cur=addDays(cur,1);
     else if(task.recurrence==='weekly')cur=addDays(cur,7);
@@ -6599,7 +6600,7 @@ function collectCalendarEvents(){
     if(!b.due)return;
     const d=new Date(b.due);
     const loc=getBatchLoc(b);
-    events.push({date:d.toISOString().split('T')[0],label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
+    events.push({date:localDateStr(d),label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
   });
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
@@ -6625,7 +6626,7 @@ function collectCalendarEvents(){
   harvests.forEach(h=>{
     if(!h.time)return;
     const d=new Date(h.time);
-    events.push({date:d.toISOString().split('T')[0],label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
+    events.push({date:localDateStr(d),label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
   });
   const filterName=document.getElementById('cal-filter-user')?.value||'';
   calendarEvents.forEach(ev=>{
@@ -6722,7 +6723,7 @@ function printCalendarTaskList(range){
   }
 
   // Render HTML
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   let bodyHtml='';
   days.forEach(day=>{
     const isToday=day.ds===todayStr;
@@ -6775,7 +6776,7 @@ function renderCalMonth(){
   let startDow=(firstDay.getDay()+6)%7;
   const prevLast=new Date(calYear,calMonth,0).getDate();
   const events=collectCalendarEvents();
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   const totalCells=startDow+daysInMonth;
   const rows=Math.max(6,Math.ceil(totalCells/7));
   const trailing=rows*7-totalCells;
@@ -6826,11 +6827,11 @@ function renderCalWeek(){
   const ws=getWeekStart(calSelectedDate);
   const days=[];
   for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);days.push(d)}
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=localDateStr(new Date());
   const MONTHS=calMonths(),DAYS=calDays();
   title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
   const events=collectCalendarEvents();
-  const dayStrs=days.map(d=>d.toISOString().split('T')[0]);
+  const dayStrs=days.map(d=>localDateStr(d));
 
   let html='<div class="cal-week">';
   html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
@@ -6893,7 +6894,7 @@ function renderCalWeek(){
         body.appendChild(el);
       });
     });
-    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const now=new Date();const nowDs=localDateStr(now);
     const todayIdx=dayStrs.indexOf(nowDs);
     if(todayIdx>=0){
       const nowH=now.getHours(),nowM=now.getMinutes();
@@ -6915,7 +6916,7 @@ function renderCalDay(){
   const container=document.getElementById('cal-container');
   const title=document.getElementById('cal-title');
   const d=calSelectedDate;
-  const ds=d.toISOString().split('T')[0];
+  const ds=localDateStr(d);
   const DAYS=calDays(),MONTHS=calMonths();
   const dayName=DAYS[(d.getDay()+6)%7];
   title.textContent=dayName+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
@@ -6970,7 +6971,7 @@ function renderCalDay(){
       }
       body.appendChild(el);
     });
-    const now=new Date();const nowDs=now.toISOString().split('T')[0];
+    const now=new Date();const nowDs=localDateStr(now);
     if(ds===nowDs){
       const nowH=now.getHours(),nowM=now.getMinutes();
       if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
@@ -7395,7 +7396,7 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-mode').value='create';
     document.getElementById('cal-entry-id').value='';
     document.getElementById('cal-entry-name').value='';
-    document.getElementById('cal-entry-date').value=date||new Date().toISOString().split('T')[0];
+    document.getElementById('cal-entry-date').value=date||localDateStr(new Date());
     document.getElementById('cal-entry-end-date').value='';
     document.getElementById('cal-entry-allday').checked=!time;
     document.getElementById('cal-entry-start-time').value=time||'09:00';
