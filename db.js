@@ -1378,6 +1378,7 @@ function deleteLastScanEntries(db, n) {
 
 function deleteScanEntryById(db, id) {
   const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
+  if (info.changes > 0) incrementDataVersion(db);
   return info.changes > 0;
 }
 
