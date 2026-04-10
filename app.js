@@ -786,8 +786,7 @@ const LANG = {
     'zones.hasBags': '{count} bags — remove first',
     'zones.directBags': '{count} not in rack',
     'zones.directBagsHint': 'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
-    'zones.moveUp': 'Move up',
-    'zones.moveDown': 'Move down',
+    'zones.dragToReorder': 'Drag to reorder',
     'zones.edit': 'Edit',
     'zones.editTitle': 'Edit Zone',
     'zones.moveToRack': 'Move to rack',
@@ -1646,8 +1645,7 @@ const LANG = {
     'zones.hasBags': '{count} Bags — erst entfernen',
     'zones.directBags': '{count} ohne Rack',
     'zones.directBagsHint': 'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
-    'zones.moveUp': 'Nach oben',
-    'zones.moveDown': 'Nach unten',
+    'zones.dragToReorder': 'Zum Neuordnen ziehen',
     'zones.edit': 'Bearbeiten',
     'zones.editTitle': 'Zone bearbeiten',
     'zones.moveToRack': 'In Rack verschieben',
@@ -2505,8 +2503,7 @@ const LANG = {
     'zones.hasBags': '{count} bags — remova primeiro',
     'zones.directBags': '{count} sem rack',
     'zones.directBagsHint': 'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
-    'zones.moveUp': 'Mover para cima',
-    'zones.moveDown': 'Mover para baixo',
+    'zones.dragToReorder': 'Arraste para reordenar',
     'zones.edit': 'Editar',
     'zones.editTitle': 'Editar zona',
     'zones.moveToRack': 'Mover para rack',
@@ -4581,7 +4578,7 @@ function renderZones(){
   Object.keys(groups).forEach(role=>{
     groups[role].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
   });
-  const renderZone=(z,idxInGroup,groupLen)=>{
+  const renderZone=z=>{
     const zoneBags=getZoneBags(z.id);
     const bagCount=Object.keys(zoneBags).length;
     const rackIds=new Set(z.racks.map(r=>r.id));
@@ -4592,14 +4589,9 @@ function renderZones(){
         return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
       }).join('')
       :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
-    const canUp=idxInGroup>0;
-    const canDown=idxInGroup<groupLen-1;
-    return`<div class="zone-row" style="border-left:4px solid ${safeColor(z.color)}">
+    return`<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
-        <span class="zone-reorder">
-          <button class="btn btn-sm zone-reorder-btn" data-action="move-up" data-zone="${esc(z.id)}" title="${esc(t('zones.moveUp'))}"${canUp?'':' disabled'}>\u25b2</button>
-          <button class="btn btn-sm zone-reorder-btn" data-action="move-down" data-zone="${esc(z.id)}" title="${esc(t('zones.moveDown'))}"${canDown?'':' disabled'}>\u25bc</button>
-        </span>
+        <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
         <span class="zone-row-name">${esc(z.name)}</span>
         <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity?bagCount+' / '+z.maxCapacity+' Bags':tp('dash.bags',bagCount)}</span>
@@ -4623,31 +4615,91 @@ function renderZones(){
     if(!zs||!zs.length)return'';
     const label=esc(t(ROLE_LABELS[role])||role);
     const header=`<div class="zone-group-header">${label}</div>`;
-    return header+zs.map((z,i)=>renderZone(z,i,zs.length)).join('');
+    return header+zs.map(renderZone).join('');
   }).join('');
 }
-async function moveZone(zoneId,dir){
-  // Reorder within the same role group, then persist full order.
-  const z=zones.find(x=>x.id===zoneId);if(!z)return;
+// Drag-and-drop state for zone reordering.
+let draggedZoneId=null;
+let draggedZoneRole=null;
+function clearZoneDropHints(){
+  document.querySelectorAll('.zone-row.zone-drop-before,.zone-row.zone-drop-after').forEach(r=>{
+    r.classList.remove('zone-drop-before','zone-drop-after');
+  });
+}
+function onZoneDragStart(e){
+  const handle=e.target.closest('.zone-drag-handle');
+  if(!handle){return}
+  const row=handle.closest('.zone-row');
+  if(!row){return}
+  draggedZoneId=row.dataset.zoneId;
+  draggedZoneRole=row.dataset.zoneRole;
+  if(e.dataTransfer){
+    e.dataTransfer.effectAllowed='move';
+    try{e.dataTransfer.setData('text/plain',draggedZoneId)}catch(_){}
+    try{
+      const rect=row.getBoundingClientRect();
+      e.dataTransfer.setDragImage(row,e.clientX-rect.left,e.clientY-rect.top);
+    }catch(_){}
+  }
+  // Delay the dragging class so the browser snapshots the row before we dim it.
+  setTimeout(()=>{row.classList.add('zone-dragging')},0);
+}
+function onZoneDragOver(e){
+  if(!draggedZoneId)return;
+  const row=e.target.closest('.zone-row');
+  if(!row||row.dataset.zoneRole!==draggedZoneRole||row.dataset.zoneId===draggedZoneId){
+    clearZoneDropHints();return;
+  }
+  e.preventDefault();
+  if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+  const rect=row.getBoundingClientRect();
+  const before=(e.clientY-rect.top)<rect.height/2;
+  clearZoneDropHints();
+  row.classList.add(before?'zone-drop-before':'zone-drop-after');
+}
+function onZoneDrop(e){
+  if(!draggedZoneId)return;
+  const row=e.target.closest('.zone-row');
+  if(!row||row.dataset.zoneRole!==draggedZoneRole||row.dataset.zoneId===draggedZoneId){
+    clearZoneDropHints();return;
+  }
+  e.preventDefault();
+  const rect=row.getBoundingClientRect();
+  const before=(e.clientY-rect.top)<rect.height/2;
+  const targetId=row.dataset.zoneId;
+  const sourceId=draggedZoneId;
+  const role=draggedZoneRole;
+  clearZoneDropHints();
+  reorderZoneWithinRole(sourceId,targetId,before,role);
+}
+function onZoneDragEnd(){
+  document.querySelectorAll('.zone-row.zone-dragging').forEach(r=>r.classList.remove('zone-dragging'));
+  clearZoneDropHints();
+  draggedZoneId=null;
+  draggedZoneRole=null;
+}
+async function reorderZoneWithinRole(sourceId,targetId,before,role){
   const sameRole=zones
-    .filter(x=>x.role===z.role)
+    .filter(x=>x.role===role)
     .sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
-  const i=sameRole.findIndex(x=>x.id===zoneId);
-  const j=dir==='up'?i-1:i+1;
-  if(i<0||j<0||j>=sameRole.length)return;
-  [sameRole[i],sameRole[j]]=[sameRole[j],sameRole[i]];
-  // Build full order: roles in canonical order, each group in its new local order.
+  const srcIdx=sameRole.findIndex(x=>x.id===sourceId);
+  if(srcIdx<0)return;
+  const [src]=sameRole.splice(srcIdx,1);
+  let tgtIdx=sameRole.findIndex(x=>x.id===targetId);
+  if(tgtIdx<0)sameRole.push(src);
+  else sameRole.splice(before?tgtIdx:tgtIdx+1,0,src);
+  // Build full order: roles in canonical order + any extras, each group in its new local order.
   const groups={};
   ROLE_ORDER.forEach(r=>{groups[r]=[]});
   const extra=[];
   zones.forEach(x=>{
-    if(x.role===z.role)return;
+    if(x.role===role)return;
     if(!groups[x.role]){groups[x.role]=[];extra.push(x.role)}
     groups[x.role].push(x);
   });
-  groups[z.role]=sameRole;
+  groups[role]=sameRole;
   Object.keys(groups).forEach(r=>{
-    if(r!==z.role)groups[r].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+    if(r!==role)groups[r].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
   });
   const fullOrder=[...ROLE_ORDER,...extra].flatMap(r=>groups[r]||[]).map(x=>x.id);
   // Optimistic local update so the UI moves immediately.
@@ -4659,9 +4711,9 @@ async function moveZone(zoneId,dir){
   try{
     const res=await apiPost('/api/zones/reorder',{order:fullOrder});
     if(res&&res.error){alert(res.error);await loadData()}
-  }catch(e){
-    console.error('reorder zones error:',e);
-    alert('Error reordering zones: '+(e.message||'unknown error'));
+  }catch(err){
+    console.error('reorder zones error:',err);
+    alert('Error reordering zones: '+(err.message||'unknown error'));
     await loadData();
   }
 }
@@ -7513,8 +7565,16 @@ function initEventListeners() {
     else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
     else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
     else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
-    else if(action==='move-up')moveZone(btn.dataset.zone,'up');
-    else if(action==='move-down')moveZone(btn.dataset.zone,'down');
+  });
+  // Drag-and-drop zone reordering.
+  const zonesList=$('zones-list');
+  zonesList.addEventListener('dragstart',onZoneDragStart);
+  zonesList.addEventListener('dragover',onZoneDragOver);
+  zonesList.addEventListener('drop',onZoneDrop);
+  zonesList.addEventListener('dragend',onZoneDragEnd);
+  zonesList.addEventListener('dragleave',e=>{
+    // Clear hints only when leaving the list entirely, not when moving between rows.
+    if(!zonesList.contains(e.relatedTarget))clearZoneDropHints();
   });
   $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
   $('n-print').addEventListener('click', () => { go('print','n-print'); });
