@@ -6371,10 +6371,22 @@ function collectCalendarEvents(){
   manualTasks.forEach(t=>{
     if(!t.dueDate)return;
     const dates=expandRecurringTaskDates(t);
+    const hasTime=!!t.dueTime;
     dates.forEach((ds,idx)=>{
       // Only the base occurrence is draggable; recurring instances are locked
       const isBase=idx===0&&ds===t.dueDate.split('T')[0];
-      events.push({date:ds,label:t.text,type:'task-due',id:t.created,draggable:!t.done&&!t.recurrence&&isBase,allDay:true,color:'#3b82f6',recurrence:t.recurrence||null});
+      events.push({
+        date:ds,
+        label:t.text,
+        type:'task-due',
+        id:t.created,
+        draggable:!t.done&&!t.recurrence&&isBase,
+        allDay:!hasTime,
+        startTime:hasTime?t.dueTime:undefined,
+        endTime:hasTime?(t.dueEndTime||undefined):undefined,
+        color:'#3b82f6',
+        recurrence:t.recurrence||null
+      });
     });
   });
   harvests.forEach(h=>{
@@ -6976,6 +6988,7 @@ function openEventDetail(ev){
     titleEl.textContent=tk.text;
     let meta=t('calDetail.taskDue');
     if(tk.dueDate)meta+=' — '+t('calDetail.dueLabel')+': '+new Date(tk.dueDate).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
+    if(tk.dueTime)meta+=', '+tk.dueTime+(tk.dueEndTime?' — '+tk.dueEndTime:'');
     metaEl.textContent=meta;
     const prioLabels={high:t('calEntry.prio.high'),med:t('calEntry.prio.med'),medium:t('calEntry.prio.med'),low:t('calEntry.prio.low')};
     const prioColors={high:'#ef4444',med:'#f59e0b',medium:'#f59e0b',low:'#22c55e'};
@@ -7063,7 +7076,7 @@ function setEntryType(type){
   calEntryType=isTask?'task':'event';
   document.getElementById('cal-entry-type-select').value=type;
   document.getElementById('cal-entry-enddate-wrap').style.display=isTask?'none':'';
-  document.getElementById('cal-entry-allday-wrap').style.display=isTask?'none':'';
+  document.getElementById('cal-entry-allday-wrap').style.display='';
   document.getElementById('cal-entry-prio-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-task-assign-wrap').style.display=isTask?'':'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
@@ -7094,6 +7107,9 @@ function openEntryModal(type,date,time,existing){
     document.getElementById('cal-entry-id').value=existing.id;
     document.getElementById('cal-entry-name').value=existing.text;
     document.getElementById('cal-entry-date').value=existing.dueDate?existing.dueDate.split('T')[0]:'';
+    document.getElementById('cal-entry-allday').checked=!existing.dueTime;
+    document.getElementById('cal-entry-start-time').value=existing.dueTime||'09:00';
+    document.getElementById('cal-entry-end-time').value=existing.dueEndTime||'10:00';
     document.getElementById('cal-entry-prio').value=existing.priority||'med';
     calTaskSelectedAssignees=parseTaskAssignees(existing.assignee);
     renderTaskAssigneePicker();
@@ -7170,11 +7186,7 @@ function closeCalTaskModal(){closeEntryModal()}
 
 function toggleEntryTimeInputs(){
   const timesEl=document.getElementById('cal-entry-times');
-  if(calEntryType==='event'){
-    timesEl.style.display=document.getElementById('cal-entry-allday').checked?'none':'grid';
-  }else{
-    timesEl.style.display='none';
-  }
+  timesEl.style.display=document.getElementById('cal-entry-allday').checked?'none':'grid';
 }
 
 function saveEntry(){
@@ -7197,6 +7209,10 @@ function saveEntryTask(){
   if(!text)return;
   const prio=document.getElementById('cal-entry-prio').value;
   const due=document.getElementById('cal-entry-date').value||null;
+  const allDay=document.getElementById('cal-entry-allday').checked;
+  const dueTime=(!allDay&&due)?(document.getElementById('cal-entry-start-time').value||null):null;
+  let dueEndTime=(!allDay&&due)?(document.getElementById('cal-entry-end-time').value||null):null;
+  if(dueTime&&dueEndTime&&dueEndTime<=dueTime)dueEndTime=null;
   const assignee=calTaskSelectedAssignees.length?calTaskSelectedAssignees.join(','):null;
   const desc=document.getElementById('cal-entry-desc').value.trim()||null;
   const priv=document.getElementById('cal-entry-private').checked;
@@ -7206,11 +7222,11 @@ function saveEntryTask(){
     const id=parseInt(document.getElementById('cal-entry-id').value);
     const tk=manualTasks.find(x=>x.id===id);
     if(!tk){closeEntryModal();return}
-    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.recurrence=recurrence;tk.recurrenceUntil=recurrenceUntil;tk.caldavSynced=null;
-    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,assignee:tk.assignee,description:tk.description,private:priv?1:0,recurrence,recurrenceUntil,caldavSynced:null});
+    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.dueTime=dueTime;tk.dueEndTime=dueEndTime;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.recurrence=recurrence;tk.recurrenceUntil=recurrenceUntil;tk.caldavSynced=null;
+    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,dueTime:tk.dueTime,dueEndTime:tk.dueEndTime,assignee:tk.assignee,description:tk.description,private:priv?1:0,recurrence,recurrenceUntil,caldavSynced:null});
     if(caldav.enabled&&tk.caldavUid)pushTaskCaldav(tk);
   }else{
-    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,description:desc,caldavUid:null,caldavSynced:null,private:priv,recurrence,recurrenceUntil};
+    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,dueTime,dueEndTime,description:desc,caldavUid:null,caldavSynced:null,private:priv,recurrence,recurrenceUntil};
     manualTasks.push(task);
     apiPost('/api/tasks',task).then(r=>{if(r&&r.id){task.id=r.id;if(caldav.enabled&&due)pushTaskCaldav(task)}renderCalendar();updateTodoBadge()});
   }
