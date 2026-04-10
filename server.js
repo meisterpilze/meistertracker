@@ -4108,6 +4108,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  if (req.method === 'DELETE' && cultureMatch) {
+    const id = decodeURIComponent(cultureMatch[1]);
+    try {
+      const deleted = db.deleteCulture(database, id);
+      broadcastSSE(res);
+      jsonOk(res, { deleted });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
 
   // -- Tasks --
   if (req.method === 'POST' && req.url === '/api/tasks') {
