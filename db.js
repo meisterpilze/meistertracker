@@ -610,6 +610,7 @@ function readAll(db, opts = {}) {
       strainId: r.strain_id || null,
       strainName: ms ? ms.name : null,
       strainKuerzel: ms ? ms.kuerzel : null,
+      strainDescriptor: ms ? (ms.description || null) : null,
       qty: r.qty,
       days: r.days,
       substrate: {
@@ -675,6 +676,7 @@ function readAll(db, opts = {}) {
         strainId: r.strain_id || null,
         strainName: ms ? ms.name : null,
         strainKuerzel: ms ? ms.kuerzel : null,
+        strainDescriptor: ms ? (ms.description || null) : null,
         parentId: r.parent_id,
         source: r.source,
         status: r.status,
