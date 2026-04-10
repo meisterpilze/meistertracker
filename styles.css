@@ -944,12 +944,14 @@ textarea:focus {
 .btn:hover {
   background: var(--c-bg);
 }
-.btn-p {
+.btn-p,
+.btn-green {
   background: var(--c-primary);
   color: #fff;
   border-color: transparent;
 }
-.btn-p:hover {
+.btn-p:hover,
+.btn-green:hover {
   background: var(--c-primary-hover);
 }
 .btn-r {
