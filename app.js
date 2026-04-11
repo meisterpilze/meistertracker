@@ -4320,12 +4320,23 @@ async function runBatchIdMigration(){
     if(!ms||!ms.kuerzel)return;
     const isGrain=b.batchType==='grain';
     const parts=b.batchId.split('-');
-    if(parts.length<3)return;
-    // Grain IDs: G-SHII-100426-01 (parts[0]='G', parts[1]=kuerzel, parts[2..]=date+seq)
-    // Block IDs: SHII-100426-01   (parts[0]=kuerzel, parts[1..]=date+seq)
-    const currentKuerzel=isGrain?parts[1]:parts[0];
-    const datePart=isGrain?parts.slice(2).join('-'):parts.slice(1).join('-');
-    if(currentKuerzel===ms.kuerzel)return; // already correct
+    if(parts.length<2)return;
+    // Detect the type prefix (if any) and extract kuerzel + date suffix.
+    // Formats handled:
+    //   block (new/current): SHII-100426-01       → no prefix
+    //   grain (new):         G-SHII-100426-01     → parts[0]='G'
+    //   grain (old, no sep): GSHII-100426-01      → parts[0] starts with 'G' and length>1
+    let currentKuerzel,datePart,correctFormat;
+    if(isGrain&&parts[0]==='G'){
+      // New G- style
+      currentKuerzel=parts[1];datePart=parts.slice(2).join('-');correctFormat=true;
+    }else if(isGrain){
+      // Old style without separator: GSHII-... → strip leading G
+      currentKuerzel=parts[0].slice(1);datePart=parts.slice(1).join('-');correctFormat=false;
+    }else{
+      currentKuerzel=parts[0];datePart=parts.slice(1).join('-');correctFormat=true;
+    }
+    if(currentKuerzel===ms.kuerzel&&correctFormat)return; // already correct
     const newId=isGrain?'G-'+ms.kuerzel+'-'+datePart:ms.kuerzel+'-'+datePart;
     renames.push({oldId:b.batchId,newId});
   });
