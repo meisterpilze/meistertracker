@@ -4346,12 +4346,13 @@ async function runBatchIdMigration(){
   let done=0,failed=0,failedList=[];
   // Hold _mutating elevated for the whole loop so SSE-triggered pollSync cannot
   // overwrite in-memory state between individual rename requests.
+  // apiPost internally does its own _mutating++/--, so the net value stays ≥1 throughout.
   _mutating++;
   try{
     for(const{oldId,newId}of renames){
       try{
-        const r=await authFetch('/api/batches/'+encodeURIComponent(oldId)+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newId})}).then(res=>res.json().catch(()=>({})));
-        if(r&&r.error){failed++;failedList.push(oldId+': '+r.error);continue}
+        const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
+        if(!r||r.error){failed++;failedList.push(oldId+': '+(r&&r.error||'unknown error'));continue}
         batches.forEach(b=>{
           if(b.batchId===oldId){b.batchId=newId;b.bags=(b.bags||[]).map(bag=>bag.replace(oldId,newId))}
         });
