@@ -257,15 +257,15 @@
 <div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
   <div class="modal" style="max-width:540px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h3 id="bi-title">Bag info</h3>
-      <button id="cls-11" class="btn btn-sm">X Close</button>
+      <h3 id="bi-title" data-i18n="bagInfo.title">Bag info</h3>
+      <button id="cls-11" class="btn btn-sm" data-i18n="common.close">Close</button>
     </div>
     <div id="bi-body"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
-      <button id="set-12" class="btn btn-sm btn-p">+ ADD this bag</button>
-      <button id="set-13" class="btn btn-sm btn-p">Move MOVE this bag</button>
-      <button id="set-14" class="btn btn-sm btn-p">Harvest HARVEST this bag</button>
-      <button id="set-15" class="btn btn-sm btn-r">X REMOVE this bag</button>
+      <button id="set-12" class="btn btn-sm btn-p" data-i18n="bagInfo.addThisBag">+ ADD this bag</button>
+      <button id="set-13" class="btn btn-sm btn-p" data-i18n="bagInfo.moveThisBag">Move MOVE this bag</button>
+      <button id="set-14" class="btn btn-sm btn-p" data-i18n="bagInfo.harvestThisBag">Harvest HARVEST this bag</button>
+      <button id="set-15" class="btn btn-sm btn-r" data-i18n="bagInfo.removeThisBag">X REMOVE this bag</button>
     </div>
   </div>
 </div>
@@ -339,15 +339,15 @@
 <!-- Scan modal (centered, appears on scan) -->
 <div id="scan-overlay" class="scan-overlay no-print">
   <div class="scan-modal" id="scan-modal">
-    <button id="cls-18" class="scan-modal-close" title="Close">&times;</button>
+    <button id="cls-18" class="scan-modal-close" data-i18n-title="common.close" title="Close">&times;</button>
     <div class="scan-modal-header" id="scan-modal-header">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
-      <span>Scan-Modus</span>
+      <span data-i18n="scan.mode">Scan-Modus</span>
     </div>
     <div class="scan-modal-tabs" id="scan-modal-tabs" role="tablist">
-      <button type="button" class="scan-tab active" data-scan-tab="current" role="tab">Aktueller Scan</button>
-      <button type="button" class="scan-tab" data-scan-tab="successes" role="tab">Letzte Erfolge <span class="scan-tab-count" id="scan-tab-succ-count">0</span></button>
-      <button type="button" class="scan-tab" data-scan-tab="all" role="tab">Gesamt-Log</button>
+      <button type="button" class="scan-tab active" data-scan-tab="current" role="tab" data-i18n="scan.tabCurrent">Aktueller Scan</button>
+      <button type="button" class="scan-tab" data-scan-tab="successes" role="tab"><span data-i18n="scan.tabSuccesses">Letzte Erfolge</span> <span class="scan-tab-count" id="scan-tab-succ-count">0</span></button>
+      <button type="button" class="scan-tab" data-scan-tab="all" role="tab" data-i18n="scan.tabAll">Gesamt-Log</button>
     </div>
     <div class="scan-modal-body" id="scan-modal-body">
     <div class="scan-tab-panel active" data-scan-panel="current">
@@ -356,13 +356,13 @@
         <div class="chip" id="chip-from"><div class="chip-l" data-i18n="scan.from">From</div><div class="chip-v" id="s-from">—</div></div>
         <div class="chip" id="chip-to"><div class="chip-l" data-i18n="scan.to">To</div><div class="chip-v" id="s-to">—</div></div>
         <div class="chip" id="chip-count"><div class="chip-l" data-i18n="scan.count">Count</div><div class="chip-v" id="s-count">0</div></div>
-        <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
+        <div class="chip chip-last-scan" id="chip-last" style="display:none"><div class="chip-l" data-i18n="scan.lastScan">Letzter Scan</div><div class="chip-v" id="s-last">—</div></div>
       </div>
       <div id="scan-toast" class="scan-toast-inline"></div>
       <div id="scan-session-summary" class="scan-session-summary" style="display:none"></div>
     </div>
     <div class="scan-tab-panel" data-scan-panel="successes">
-      <div class="scan-successes-empty" id="scan-successes-empty">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
+      <div class="scan-successes-empty" id="scan-successes-empty" data-i18n="scan.noSuccessesYet">Noch keine erfolgreichen Scans in dieser Sitzung.</div>
       <div class="scan-successes-list" id="scan-successes-list"></div>
     </div>
     <div class="scan-tab-panel" data-scan-panel="all">
@@ -372,9 +372,9 @@
     <div class="scan-modal-btns">
       <button id="set-19" class="btn-xs" data-i18n="scan.reset">Reset</button>
       <button id="btn-20" class="btn-xs green" data-i18n="scan.addBatch">+ Batch</button>
-      <button class="btn-xs btn-end-session" id="btn-end-session" style="display:none">Session beenden</button>
-      <button class="btn-xs btn-scan-cam" id="btn-scan-cam" title="Kamera öffnen"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg> Kamera</button>
-      <button class="btn-xs" id="btn-scan-audio" title="Audio an/aus" style="margin-left:auto">🔊</button>
+      <button class="btn-xs btn-end-session" id="btn-end-session" style="display:none" data-i18n="scan.endSession">Session beenden</button>
+      <button class="btn-xs btn-scan-cam" id="btn-scan-cam" data-i18n-title="scan.openCamera" title="Kamera öffnen"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg> <span data-i18n="scan.camera">Kamera</span></button>
+      <button class="btn-xs" id="btn-scan-audio" data-i18n-title="scan.audioToggle" title="Audio an/aus" style="margin-left:auto">🔊</button>
     </div>
   </div>
 </div>
@@ -947,24 +947,24 @@
       <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
       <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="caldav.desc">This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.</p>
       <div style="background:var(--c-primary-light);border:1px solid var(--c-green-border);border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        <div style="font-size:11px;color:var(--c-green-dark);font-weight:600;margin-bottom:4px">CalDAV URL (in deiner Kalender-App eintragen)</div>
+        <div style="font-size:11px;color:var(--c-green-dark);font-weight:600;margin-bottom:4px" data-i18n="caldav.urlTitle">CalDAV URL (use this in your calendar app)</div>
         <div style="display:flex;align-items:center;gap:8px">
-          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:var(--c-text);flex:1">Lade...</code>
-          <button id="btn-45" class="btn btn-sm" title="URL kopieren" style="white-space:nowrap;padding:4px 8px;font-size:11px">Kopieren</button>
+          <code id="caldav-url-display" style="font-size:12px;word-break:break-all;color:var(--c-text);flex:1" data-i18n="common.loading">Loading…</code>
+          <button id="btn-45" class="btn btn-sm" data-i18n-title="caldav.copyUrl" title="Copy URL" style="white-space:nowrap;padding:4px 8px;font-size:11px" data-i18n="common.copy">Copy</button>
         </div>
       </div>
-      <div style="background:var(--c-blue-light);border:1px solid var(--c-blue-border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--c-blue-dark);line-height:1.6">
-        <strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.
+      <div style="background:var(--c-blue-light);border:1px solid var(--c-blue-border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--c-blue-dark);line-height:1.6" data-i18n-html="caldav.loginHint">
+        <strong>Login:</strong> Use your account login (username &amp; password) to sign in to the calendar app.
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
-            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span>Sync aktivieren (Aufgaben in Kalender schreiben)</span>
+            <input type="checkbox" id="caldav-enabled" style="width:auto" /> <span data-i18n="caldav.enableSync">Enable sync (push tasks to calendars)</span>
           </label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button id="act-46" class="btn btn-sm btn-p">Einstellungen speichern</button>
-          <button class="btn btn-sm" id="caldav-sync-btn">Alle Aufgaben jetzt synchronisieren</button>
+          <button id="act-46" class="btn btn-sm btn-p" data-i18n="caldav.saveSettings">Save settings</button>
+          <button class="btn btn-sm" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
         </div>
         <div id="caldav-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
@@ -978,61 +978,61 @@
       </div>
     </div>
     <div class="card">
-      <div class="sec">So funktioniert es</div>
+      <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
       <div style="font-size:12px;color:var(--c-text-sec);line-height:1.7">
-        <p><strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-Fälligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.</p>
-        <p style="margin-top:6px"><strong>Persönliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zusätzlich.</p>
-        <p style="margin-top:6px"><strong>Sichtbarkeit:</strong> Standardmäßig sind alle Aufgaben für alle sichtbar (im Betriebskalender). Einzelne Aufgaben können als "Nur für zugewiesene Person" markiert werden — diese erscheinen dann nur im persönlichen Kalender.</p>
-        <p style="margin-top:6px"><strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. Änderungen in der Kalender-App werden zurückgespeichert.</p>
+        <p data-i18n-html="caldav.hiwShared"><strong>Shared calendar (<code>meisterpilze</code>):</strong> All tasks, events and batch due dates land here. Everyone on the farm sees this calendar.</p>
+        <p style="margin-top:6px" data-i18n-html="caldav.hiwPersonal"><strong>Personal calendars (<code>username</code>):</strong> Every user account automatically gets its own calendar. Assigned tasks appear there as well.</p>
+        <p style="margin-top:6px" data-i18n-html="caldav.hiwVisibility"><strong>Visibility:</strong> By default every task is visible to everyone (in the shared calendar). Individual tasks can be marked "assignee only" — they will then only show up in the personal calendar.</p>
+        <p style="margin-top:6px" data-i18n-html="caldav.hiwTwoWay"><strong>Two-way sync:</strong> Tasks are stored as calendar files on the server. Calendar apps read them via CalDAV. Changes made in the calendar app are synced back.</p>
       </div>
     </div>
   </div>
   <!-- DuckDNS -->
   <div class="sp" id="sp-settings-duckdns">
     <div class="card">
-      <div class="sec">DuckDNS Dynamic DNS</div>
-      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain für Zugriff über das Internet. Die öffentliche IP wird automatisch alle 5 Minuten aktualisiert.</p>
+      <div class="sec" data-i18n="duckdns.title">DuckDNS Dynamic DNS</div>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="duckdns.desc">Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated automatically every 5 minutes.</p>
       <div id="duckdns-status-banner" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
           <input type="checkbox" id="duckdns-enabled" style="width:auto" />
-          <span>DuckDNS aktivieren</span>
+          <span data-i18n="duckdns.enable">Enable DuckDNS</span>
         </label>
         <div>
-          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px">Subdomain</label>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px" data-i18n="duckdns.subdomain">Subdomain</label>
           <div style="display:flex;align-items:center;gap:4px">
-            <input type="text" id="duckdns-domain" placeholder="meinserver" style="flex:1;max-width:200px" />
+            <input type="text" id="duckdns-domain" data-i18n-placeholder="duckdns.subdomainPlaceholder" placeholder="myserver" style="flex:1;max-width:200px" />
             <span style="font-size:13px;color:var(--c-text-muted)">.duckdns.org</span>
           </div>
         </div>
         <div>
-          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px">DuckDNS Token</label>
+          <label style="font-size:12px;font-weight:600;color:var(--c-text-sec);display:block;margin-bottom:4px" data-i18n="duckdns.token">DuckDNS token</label>
           <input type="password" id="duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="max-width:350px;width:100%" />
-          <div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login</div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-top:2px" data-i18n-html="duckdns.tokenHint">You can find the token on <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> after login.</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-          <button id="duckdns-save-btn" class="btn btn-sm btn-p">Einstellungen speichern</button>
-          <button id="duckdns-update-btn" class="btn btn-sm">IP jetzt aktualisieren</button>
+          <button id="duckdns-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
+          <button id="duckdns-update-btn" class="btn btn-sm" data-i18n="duckdns.updateNow">Update IP now</button>
         </div>
         <div id="duckdns-ip-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
     </div>
     <div class="card">
-      <div class="sec">Let's Encrypt TLS-Zertifikat</div>
-      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Kostenloses, vertrauenswürdiges TLS-Zertifikat von Let's Encrypt für deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.</p>
+      <div class="sec" data-i18n="le.title">Let's Encrypt TLS certificate</div>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="le.desc">Free, trusted TLS certificate from Let's Encrypt for your DuckDNS domain. Replaces the self-signed certificate. Auto-renewed before expiry.</p>
       <div id="le-cert-status" style="border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;display:none"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
           <input type="checkbox" id="duckdns-le-enabled" style="width:auto" />
-          <span>Let's Encrypt Auto-Renewal aktivieren</span>
+          <span data-i18n="le.enableAutoRenew">Enable Let's Encrypt auto-renewal</span>
         </label>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button id="le-request-btn" class="btn btn-sm btn-p">Zertifikat jetzt anfordern</button>
+          <button id="le-request-btn" class="btn btn-sm btn-p" data-i18n="le.requestNow">Request certificate now</button>
         </div>
         <div id="le-status" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px;display:none"></div>
       </div>
-      <div style="margin-top:12px;font-size:11px;color:var(--c-text-muted);line-height:1.6">
-        Keine zusätzliche Software erforderlich — funktioniert auf allen Betriebssystemen (Linux, macOS, Windows).
+      <div style="margin-top:12px;font-size:11px;color:var(--c-text-muted);line-height:1.6" data-i18n="le.note">
+        No extra software required — works on all operating systems (Linux, macOS, Windows).
       </div>
     </div>
   </div>
@@ -1093,19 +1093,19 @@
   <!-- Server -->
   <div class="sp" id="sp-settings-server">
     <div class="card">
-      <div class="sec">Server Info</div>
-      <div id="server-info" style="font-size:13px;color:var(--c-text-sec);line-height:1.8;margin-bottom:12px">Lade...</div>
+      <div class="sec" data-i18n="server.info">Server info</div>
+      <div id="server-info" style="font-size:13px;color:var(--c-text-sec);line-height:1.8;margin-bottom:12px" data-i18n="common.loading">Loading…</div>
     </div>
     <div class="card">
-      <div class="sec">Update & Restart</div>
-      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.</p>
-      <button id="btn-server-restart" class="btn btn-r">Server aktualisieren & neustarten</button>
+      <div class="sec" data-i18n="server.updateRestart">Update &amp; restart</div>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n="server.updateDesc">Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.</p>
+      <button id="btn-server-restart" class="btn btn-r" data-i18n="server.updateBtn">Update &amp; restart server</button>
       <div id="server-restart-status" style="margin-top:10px;font-size:12px;display:none"></div>
     </div>
     <div class="card">
-      <div class="sec">Einmalige Datenmigration</div>
-      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6">Benennt alle vorhandenen Chargen-IDs auf das neue Kürzel-Format um (z.B. <code>BLACK-100426-01</code> → <code>BPKO-100426-01</code>). Zeigt eine Vorschau aller Änderungen vor der Ausführung.</p>
-      <button id="btn-migrate-batch-ids" class="btn btn-r">Chargen-IDs migrieren</button>
+      <div class="sec" data-i18n="migrate.title">One-time data migration</div>
+      <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px;line-height:1.6" data-i18n-html="migrate.desc">Renames all existing batch IDs to the new Kürzel format (e.g. <code>BLACK-100426-01</code> → <code>BPKO-100426-01</code>). Shows a preview of all changes before applying them.</p>
+      <button id="btn-migrate-batch-ids" class="btn btn-r" data-i18n="migrate.btn">Migrate batch IDs</button>
     </div>
   </div>
 </div>
