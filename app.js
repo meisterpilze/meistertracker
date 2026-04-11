@@ -216,6 +216,12 @@ const LANG = {
     'batch.whereGoInfo': '{id} — {n} bags need a starting location.',
     'batch.zones.rename': 'Rename',
     'batch.zones.renamePrompt': 'New display name for "{old}":',
+    'batch.rename': 'Rename ID',
+    'batch.renameTitle': 'Rename batch {id}',
+    'batch.renameNewId': 'New batch ID',
+    'batch.renameWarning': 'All bags, scan log and harvest entries will be updated. This cannot be undone.',
+    'batch.renameBtn': 'Rename',
+    'batch.renameSuccess': 'Batch renamed: {old} \u2192 {new}',
     'batch.deleteBatch': 'Delete batch {id}?',
     'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
     'batch.deleteBtn': 'Delete batch',
@@ -1114,6 +1120,12 @@ const LANG = {
     'batch.whereGoInfo': '{id} \u2014 {n} Beutel ben\u00f6tigen einen Startstandort.',
     'batch.zones.rename': 'Umbenennen',
     'batch.zones.renamePrompt': 'Neuer Anzeigename f\u00fcr \u201e{old}\u201c:',
+    'batch.rename': 'ID umbenennen',
+    'batch.renameTitle': 'Charge {id} umbenennen',
+    'batch.renameNewId': 'Neue Chargen-ID',
+    'batch.renameWarning': 'Alle Beutel, Scan-Log und Ernteeintr\u00e4ge werden aktualisiert. Dies kann nicht r\u00fcckg\u00e4ngig gemacht werden.',
+    'batch.renameBtn': 'Umbenennen',
+    'batch.renameSuccess': 'Charge umbenannt: {old} \u2192 {new}',
     'batch.deleteBatch': 'Charge {id} l\u00f6schen?',
     'batch.deleteMsg': 'L\u00f6scht den Chargen-Datensatz dauerhaft. Scan-Log und Ernteeintr\u00e4ge bleiben erhalten.',
     'batch.deleteBtn': 'Charge l\u00f6schen',
@@ -2012,6 +2024,12 @@ const LANG = {
     'batch.whereGoInfo': '{id} \u2014 {n} sacos precisam de um local inicial.',
     'batch.zones.rename': 'Renomear',
     'batch.zones.renamePrompt': 'Novo nome para \u201c{old}\u201d:',
+    'batch.rename': 'Renomear ID',
+    'batch.renameTitle': 'Renomear lote {id}',
+    'batch.renameNewId': 'Novo ID do lote',
+    'batch.renameWarning': 'Todos os sacos, log de scan e colheitas ser\u00e3o atualizados. Isso n\u00e3o pode ser desfeito.',
+    'batch.renameBtn': 'Renomear',
+    'batch.renameSuccess': 'Lote renomeado: {old} \u2192 {new}',
     'batch.deleteBatch': 'Excluir lote {id}?',
     'batch.deleteMsg': 'Exclui permanentemente o registro do lote. Log de scan e colheitas permanecem.',
     'batch.deleteBtn': 'Excluir lote',
@@ -3850,7 +3868,8 @@ function renderBatches(){
     const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
     const canMove=status!=='DONE';
     const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`:'';
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    const renameBtn=currentUser&&currentUser.role==='admin'?`<button class="btn btn-sm" data-action="rename-batch" data-batch="${esc(b.batchId)}" style="margin-right:3px">\u270e ${t('batch.rename')}</button>`:'';
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button>${renameBtn}<button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -3943,6 +3962,47 @@ function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg
   }
   batches=batches.filter(x=>x.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus();
 })}
+
+function openBatchRenameModal(oldId){
+  const m=document.getElementById('m-batch-rename');if(!m)return;
+  document.getElementById('br-title').textContent=t('batch.renameTitle',{id:oldId});
+  document.getElementById('br-old-id').textContent=oldId;
+  const inp=document.getElementById('br-new-id');
+  inp.value=oldId;
+  m.classList.add('open');
+  setTimeout(()=>{inp.select()},50);
+  document.getElementById('br-confirm-btn').onclick=()=>{
+    const newId=inp.value.trim();
+    if(!newId||newId===oldId){m.classList.remove('open');return}
+    if(!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(newId)){alert('ID darf nur Buchstaben, Zahlen und - _ @ . : enthalten (max 100 Zeichen)');return}
+    doBatchRename(oldId,newId,m);
+  };
+}
+async function doBatchRename(oldId,newId,modal){
+  try{
+    const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
+    if(r&&r.error){alert(r.error);return}
+    // Update all in-memory references
+    batches.forEach(b=>{
+      if(b.batchId===oldId){
+        b.batchId=newId;
+        b.bags=b.bags.map(bag=>bag.replace(oldId,newId));
+      }
+    });
+    scanLog.forEach(e=>{
+      if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}
+    });
+    movements.forEach(e=>{
+      if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}
+    });
+    harvests.forEach(h=>{
+      if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}
+    });
+    if(modal)modal.classList.remove('open');
+    setFb('ok',t('batch.renameSuccess',{old:oldId,new:newId}));
+    renderBatches();renderStatus();
+  }catch(e){alert('Fehler: '+e.message)}
+}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
@@ -8055,7 +8115,7 @@ if(typeof pushBatchCaldav==='undefined'){
 // Escape key closes the topmost open modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch'];
+  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch','m-batch-rename'];
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
@@ -8180,6 +8240,10 @@ function initEventListeners() {
   // Move-batch modal
   $('mb-cancel-btn').addEventListener('click', () => { document.getElementById('m-move-batch').classList.remove('open'); });
   $('m-move-batch').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
+  // Batch rename modal
+  $('br-cancel-btn').addEventListener('click', () => { document.getElementById('m-batch-rename').classList.remove('open'); });
+  $('m-batch-rename').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
+  $('br-new-id').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('br-confirm-btn').click(); });
   document.getElementById('lm-grid').addEventListener('click', e=>{
     const btn=e.target.closest('[data-action="bulk-rack-target"]');if(!btn)return;
     executeBulkMoveToRack(btn.dataset.zone,btn.dataset.rack);
@@ -8273,6 +8337,7 @@ function initEventListeners() {
       case 'open-note': openNote(batch); break;
       case 'add-bags': openAddBags(batch); break;
       case 'del-batch': delBatch(batch); break;
+      case 'rename-batch': openBatchRenameModal(batch); break;
       case 'open-move-modal':
         openMoveBatchModal(batch);
         break;

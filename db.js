@@ -1572,6 +1572,28 @@ function updateBatchField(db, batchId, fields) {
   }
 }
 
+function renameBatch(db, oldId, newId) {
+  db.exec('BEGIN');
+  try {
+    const existing = db.prepare('SELECT batch_id FROM batches WHERE batch_id=?').get(oldId);
+    if (!existing) throw new Error('Batch not found: ' + oldId);
+    const conflict = db.prepare('SELECT batch_id FROM batches WHERE batch_id=?').get(newId);
+    if (conflict) throw new Error('A batch with ID "' + newId + '" already exists');
+    // Update bag_id (PK) before updating the FK column
+    db.prepare('UPDATE bags SET bag_id=REPLACE(bag_id,?,?) WHERE batch_id=?').run(oldId, newId, oldId);
+    db.prepare('UPDATE scan_log SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
+    db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
+    db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
+    db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
 function addBagsToBatch(db, batchId, newBags, newQty) {
   db.exec('BEGIN');
   try {
@@ -2634,6 +2656,7 @@ module.exports = {
   resetUserPassword,
   insertBatch,
   updateBatchField,
+  renameBatch,
   addBagsToBatch,
   deleteBatchById,
   appendScanEntries,

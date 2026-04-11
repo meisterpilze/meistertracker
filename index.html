@@ -238,6 +238,21 @@
   </div>
 </div>
 
+<!-- Batch rename modal — admin only -->
+<div class="modal-bg" id="m-batch-rename" role="dialog" aria-modal="true" aria-labelledby="br-title">
+  <div class="modal" style="max-width:400px">
+    <h3 id="br-title"></h3>
+    <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:4px">Current ID: <code id="br-old-id" style="font-family:monospace;font-weight:600"></code></p>
+    <p style="font-size:11px;color:var(--c-red-dark);margin-bottom:12px" data-i18n="batch.renameWarning"></p>
+    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" data-i18n="batch.renameNewId">New batch ID</label>
+    <input type="text" id="br-new-id" style="width:100%;padding:8px;border:1px solid var(--c-border);border-radius:6px;font-size:14px;font-family:monospace;margin-bottom:12px">
+    <div class="modal-btns">
+      <button class="btn" id="br-cancel-btn" data-i18n="nav.cancel">Abbrechen</button>
+      <button class="btn btn-r" id="br-confirm-btn" data-i18n="batch.renameBtn">Umbenennen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Bag info modal — opens when scanning a bag with no action set -->
 <div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
   <div class="modal" style="max-width:540px">
