@@ -3857,10 +3857,49 @@ function openMoveBatchModal(batchId){
   document.getElementById('m-move-batch').classList.add('open');
 }
 
+const tableSort={batches:null,cultures:null};
+function sortCmp(a,b){
+  if(a==null&&b==null)return 0;
+  if(a==null)return 1;
+  if(b==null)return -1;
+  if(typeof a==='number'&&typeof b==='number')return a-b;
+  return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
+}
+function applyTableSort(rows,state,keyFn){
+  if(!state)return rows;
+  const sign=state.dir==='desc'?-1:1;
+  return [...rows].sort((a,b)=>sign*sortCmp(keyFn(a,state.key),keyFn(b,state.key)));
+}
+function cycleTableSort(table,key){
+  const cur=tableSort[table];
+  tableSort[table]=!cur||cur.key!==key
+    ?{key,dir:'asc'}
+    :cur.dir==='asc'?{key,dir:'desc'}:null;
+}
+function updateSortIndicators(table,activeState){
+  const bodyId=table==='batches'?'batches-body':'cultures-body';
+  const body=document.getElementById(bodyId);if(!body)return;
+  const thead=body.closest('table').tHead;if(!thead)return;
+  thead.querySelectorAll('th[data-sort]').forEach(th=>{
+    const active=activeState&&activeState.key===th.dataset.sort;
+    th.classList.toggle('active',!!active);
+    let arrow=th.querySelector('.arrow');
+    if(!arrow){arrow=document.createElement('span');arrow.className='arrow';th.appendChild(arrow);}
+    arrow.textContent=active?(activeState.dir==='asc'?' \u25B2':' \u25BC'):' \u21C5';
+  });
+}
 function renderBatches(){
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
+  updateSortIndicators('batches',tableSort.batches);
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
-  body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q)).map(b=>{
+  const filtered=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q));
+  const sorted=applyTableSort(filtered,tableSort.batches,(b,k)=>{
+    if(k==='strain')return b.strainName||b.strain||'';
+    if(k==='status')return getStatus(b.batchId).status;
+    if(k==='qty'||k==='days')return Number(b[k])||0;
+    return b[k];
+  });
+  body.innerHTML=sorted.map(b=>{
     const{status}=getStatus(b.batchId);
     const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
     const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
@@ -5671,7 +5710,13 @@ function cultureStrainDisplay(c){
 function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
-  const rows=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat)).sort((a,b)=>b.created.localeCompare(a.created));
+  const activeState=tableSort.cultures||{key:'created',dir:'desc'};
+  updateSortIndicators('cultures',activeState);
+  const filtered=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat));
+  const rows=applyTableSort(filtered,activeState,(c,k)=>{
+    if(k==='strain')return c.strainName||c.strain||'';
+    return c[k];
+  });
   if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
   body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${cultureStrainDisplay(c)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`).join('');
 }
@@ -8409,6 +8454,10 @@ function initEventListeners() {
   $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
   $('st-batch-harvest').addEventListener('click', () => { openStab('batch','harvest'); });
   $('batch-q').addEventListener('input', renderBatches);
+  $('batches-body').closest('table').tHead.addEventListener('click', e => {
+    const th=e.target.closest('th[data-sort]');if(!th)return;
+    cycleTableSort('batches',th.dataset.sort);renderBatches();
+  });
   $('wbtn-3').addEventListener('click', () => { setBagWeight(3); });
   $('wbtn-5').addEventListener('click', () => { setBagWeight(5); });
   $('nb-weight').addEventListener('input', nbPreview);
@@ -8437,6 +8486,10 @@ function initEventListeners() {
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
+  $('cultures-body').closest('table').tHead.addEventListener('click', e => {
+    const th=e.target.closest('th[data-sort]');if(!th)return;
+    cycleTableSort('cultures',th.dataset.sort);renderCultures();
+  });
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => { const type=document.getElementById('lw-type').value; if(type==='KB')gsPreview(); else lwPreview(); });
   $('lw-qty').addEventListener('input', lwPreview);
