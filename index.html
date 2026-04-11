@@ -21,7 +21,7 @@
 <!-- Add bags modal -->
 <div class="modal-bg" id="m-addbags" role="dialog" aria-modal="true" aria-labelledby="m-addbags-title">
   <div class="modal">
-    <h3 id="m-addbags-title">Add bags to batch</h3>
+    <h3 id="m-addbags-title" data-i18n="batchAdd.title">Add bags to batch</h3>
     <!-- Phase 1: input -->
     <div id="ab-phase-input">
       <p id="ab-info" style="font-size:13px;color:var(--c-text-sec);margin-bottom:12px"></p>
@@ -32,8 +32,8 @@
         <div id="ab-preview" style="font-size:12px;color:var(--c-text-sec);background:var(--c-bg);border-radius:7px;padding:8px 10px;display:none"></div>
       </div>
       <div class="modal-btns">
-        <button class="btn" id="addbags-cancel-btn">Cancel</button>
-        <button class="btn btn-p" id="addbags-confirm-btn">Add bags</button>
+        <button class="btn" id="addbags-cancel-btn" data-i18n="common.cancel">Cancel</button>
+        <button class="btn btn-p" id="addbags-confirm-btn" data-i18n="addBags.title">Add bags</button>
       </div>
     </div>
     <!-- Phase 2: result + print -->
@@ -63,34 +63,34 @@
 <!-- Confirm modal -->
 <div class="modal-bg" id="m-confirm" role="dialog" aria-modal="true" aria-labelledby="m-title">
   <div class="modal"><h3 id="m-title"></h3><p id="m-body"></p>
-    <div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button><button class="btn btn-r" id="m-ok">Confirm</button></div>
+    <div class="modal-btns"><button class="btn" id="m-cancel" data-i18n="common.cancel">Cancel</button><button class="btn btn-r" id="m-ok" data-i18n="common.confirm">Confirm</button></div>
   </div>
 </div>
 <!-- Prompt modal -->
 <div class="modal-bg" id="m-prompt" role="dialog" aria-modal="true" aria-labelledby="m-pr-title">
   <div class="modal"><h3 id="m-pr-title"></h3>
     <input type="text" id="m-pr-input" style="width:100%;margin:8px 0;padding:8px;border:1px solid var(--c-border);border-radius:6px;font-size:14px">
-    <div class="modal-btns"><button class="btn" id="m-pr-cancel" data-i18n="nav.cancel">Cancel</button><button class="btn btn-p" id="m-pr-ok">OK</button></div>
+    <div class="modal-btns"><button class="btn" id="m-pr-cancel" data-i18n="common.cancel">Cancel</button><button class="btn btn-p" id="m-pr-ok" data-i18n="common.ok">OK</button></div>
   </div>
 </div>
 <!-- Change password modal -->
-<div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" aria-label="Change password" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+<div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" data-i18n-aria-label="chpw.title" aria-label="Change password" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
   <div class="modal" style="max-width:360px">
-    <h3>Change Password</h3>
-    <label style="display:block;margin-bottom:8px">Current password<br><input type="password" id="chpw-current" style="width:100%;padding:6px;margin-top:4px" autocomplete="current-password"></label>
-    <label style="display:block;margin-bottom:8px">New password (min 8 chars)<br><input type="password" id="chpw-new" style="width:100%;padding:6px;margin-top:4px" autocomplete="new-password"></label>
+    <h3 data-i18n="chpw.title">Change password</h3>
+    <label style="display:block;margin-bottom:8px"><span data-i18n="chpw.current">Current password</span><br><input type="password" id="chpw-current" style="width:100%;padding:6px;margin-top:4px" autocomplete="current-password"></label>
+    <label style="display:block;margin-bottom:8px"><span data-i18n="chpw.new">New password (min 8 chars)</span><br><input type="password" id="chpw-new" style="width:100%;padding:6px;margin-top:4px" autocomplete="new-password"></label>
     <p id="chpw-status" style="min-height:1.2em;margin:8px 0"></p>
     <div class="modal-btns">
-      <button id="btn-1" class="btn">Cancel</button>
-      <button id="act-2" class="btn btn-p">Change</button>
+      <button id="btn-1" class="btn" data-i18n="common.cancel">Cancel</button>
+      <button id="act-2" class="btn btn-p" data-i18n="chpw.change">Change</button>
     </div>
   </div>
 </div>
 <!-- Note modal -->
 <div class="modal-bg" id="m-note" role="dialog" aria-modal="true" aria-labelledby="m-note-title">
-  <div class="modal"><h3 id="m-note-title">Edit note</h3>
-    <textarea id="m-note-text" rows="4" placeholder="Type your note here..."></textarea>
-    <div class="modal-btns"><button id="cls-3" class="btn">Cancel</button><button id="act-4" class="btn btn-p">Save</button></div>
+  <div class="modal"><h3 id="m-note-title" data-i18n="note.editTitle">Edit note</h3>
+    <textarea id="m-note-text" rows="4" data-i18n-placeholder="note.placeholder" placeholder="Type your note here..."></textarea>
+    <div class="modal-btns"><button id="cls-3" class="btn" data-i18n="common.cancel">Cancel</button><button id="act-4" class="btn btn-p" data-i18n="common.save">Save</button></div>
   </div>
 </div>
 <!-- Calendar event modal (create/edit/move) -->
@@ -190,14 +190,14 @@
 </div>
 <!-- Batch-add modal -->
 <div class="modal-bg" id="m-batchadd" role="dialog" aria-modal="true" aria-labelledby="m-batchadd-title">
-  <div class="modal"><h3 id="m-batchadd-title">Add entire batch to location</h3>
-    <p>All bags will be logged as ADD in one step.</p>
+  <div class="modal"><h3 id="m-batchadd-title" data-i18n="batchAddModal.title">Add entire batch to location</h3>
+    <p data-i18n="batchAddModal.desc">All bags will be logged as ADD in one step.</p>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div><label>Batch</label><select id="ba-batch"><option value="">— choose batch —</option></select></div>
-      <div><label>Location / rack</label><select id="ba-loc"></select></div>
+      <div><label data-i18n="batchAddModal.batch">Batch</label><select id="ba-batch"><option value="" data-i18n="batchAddModal.chooseBatch">— choose batch —</option></select></div>
+      <div><label data-i18n="batchAddModal.location">Location / rack</label><select id="ba-loc"></select></div>
       <div id="ba-prev" style="font-size:12px;color:var(--c-text-sec);min-height:16px"></div>
     </div>
-    <div class="modal-btns"><button id="cls-7" class="btn">Cancel</button><button id="act-8" class="btn btn-p">Add all bags</button></div>
+    <div class="modal-btns"><button id="cls-7" class="btn" data-i18n="common.cancel">Cancel</button><button id="act-8" class="btn btn-p" data-i18n="batchAddModal.addAll">Add all bags</button></div>
   </div>
 </div>
 
@@ -205,15 +205,15 @@
 <div class="modal-bg" id="m-locmove" role="dialog" aria-modal="true" aria-labelledby="lm-title">
   <div class="modal" style="max-width:420px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <h3 id="lm-title" style="font-family:monospace;font-size:15px">Bag</h3>
-      <button id="cls-9" class="btn btn-sm">Close</button>
+      <h3 id="lm-title" style="font-family:monospace;font-size:15px" data-i18n="locmove.bag">Bag</h3>
+      <button id="cls-9" class="btn btn-sm" data-i18n="common.close">Close</button>
     </div>
     <div id="lm-info" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px"></div>
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Move to:</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px" data-i18n="locmove.moveTo">Move to:</div>
     <div id="lm-grid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     <div id="lm-confirm" style="display:none"></div>
     <div style="border-top:1px solid var(--c-border);margin-top:14px;padding-top:12px">
-      <button id="btn-10" class="btn btn-sm btn-r" style="width:100%">Remove this bag</button>
+      <button id="btn-10" class="btn btn-sm btn-r" style="width:100%" data-i18n="locmove.removeBag">Remove this bag</button>
     </div>
   </div>
 </div>
@@ -926,18 +926,18 @@
   <!-- Users -->
   <div class="sp" id="sp-settings-users">
     <div class="card">
-      <div class="sec">Account</div>
+      <div class="sec" data-i18n="users.account">Account</div>
       <p id="users-account" style="font-size:13px;color:var(--c-text-sec);margin-bottom:8px"></p>
-      <button id="btn-43" class="btn btn-r" style="margin-top:4px">Logout</button>
+      <button id="btn-43" class="btn btn-r" style="margin-top:4px" data-i18n="users.logout">Logout</button>
     </div>
     <div class="card">
-      <div class="sec">Manage users</div>
+      <div class="sec" data-i18n="users.manage">Manage users</div>
       <div id="users-table" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--c-border)">
-        <div><label style="font-size:11px;color:var(--c-text-muted)">Username</label><input type="text" id="new-username" style="width:120px;font-size:13px" /></div>
-        <div><label style="font-size:11px;color:var(--c-text-muted)">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
-        <div><label style="font-size:11px;color:var(--c-text-muted)">Role</label><select id="new-role" style="width:auto;font-size:13px;padding:6px"><option value="user">user</option><option value="admin">admin</option></select></div>
-        <button id="btn-44" class="btn btn-p" style="font-size:12px">Add user</button>
+        <div><label style="font-size:11px;color:var(--c-text-muted)" data-i18n="users.username">Username</label><input type="text" id="new-username" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:var(--c-text-muted)" data-i18n="users.password">Password</label><input type="password" id="new-password" style="width:120px;font-size:13px" /></div>
+        <div><label style="font-size:11px;color:var(--c-text-muted)" data-i18n="users.role">Role</label><select id="new-role" style="width:auto;font-size:13px;padding:6px"><option value="user" data-i18n="users.roleUser">user</option><option value="admin" data-i18n="users.roleAdmin">admin</option></select></div>
+        <button id="btn-44" class="btn btn-p" style="font-size:12px" data-i18n="users.addUser">Add user</button>
       </div>
     </div>
   </div>
