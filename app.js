@@ -3866,26 +3866,47 @@ function sortCmp(a,b){
   return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
 }
 function applyTableSort(rows,state,keyFn){
-  if(!state)return rows;
-  const sign=state.dir==='desc'?-1:1;
-  return [...rows].sort((a,b)=>sign*sortCmp(keyFn(a,state.key),keyFn(b,state.key)));
+  if(!state||!state.length)return rows;
+  return [...rows].sort((a,b)=>{
+    for(const {key,dir} of state){
+      const c=sortCmp(keyFn(a,key),keyFn(b,key));
+      if(c)return dir==='desc'?-c:c;
+    }
+    return 0;
+  });
 }
-function cycleTableSort(table,key){
-  const cur=tableSort[table];
-  tableSort[table]=!cur||cur.key!==key
-    ?{key,dir:'asc'}
-    :cur.dir==='asc'?{key,dir:'desc'}:null;
+function cycleTableSort(table,key,additive){
+  const cur=tableSort[table]||[];
+  if(additive){
+    const i=cur.findIndex(s=>s.key===key);
+    if(i<0){tableSort[table]=[...cur,{key,dir:'asc'}];return}
+    const next=[...cur];
+    if(next[i].dir==='asc')next[i]={key,dir:'desc'};
+    else next.splice(i,1);
+    tableSort[table]=next.length?next:null;
+    return;
+  }
+  if(cur.length===1&&cur[0].key===key){
+    tableSort[table]=cur[0].dir==='asc'?[{key,dir:'desc'}]:null;
+    return;
+  }
+  tableSort[table]=[{key,dir:'asc'}];
 }
 function updateSortIndicators(table,activeState){
   const bodyId=table==='batches'?'batches-body':'cultures-body';
   const body=document.getElementById(bodyId);if(!body)return;
   const thead=body.closest('table').tHead;if(!thead)return;
+  const state=activeState||[];
+  const showIdx=state.length>1;
   thead.querySelectorAll('th[data-sort]').forEach(th=>{
-    const active=activeState&&activeState.key===th.dataset.sort;
-    th.classList.toggle('active',!!active);
+    const i=state.findIndex(s=>s.key===th.dataset.sort);
+    const active=i>=0;
+    th.classList.toggle('active',active);
     let arrow=th.querySelector('.arrow');
     if(!arrow){arrow=document.createElement('span');arrow.className='arrow';th.appendChild(arrow);}
-    arrow.textContent=active?(activeState.dir==='asc'?' \u25B2':' \u25BC'):' \u21C5';
+    if(!active){arrow.textContent=' \u21C5';return}
+    const mark=state[i].dir==='asc'?'\u25B2':'\u25BC';
+    arrow.textContent=' '+mark+(showIdx?(i+1):'');
   });
 }
 function renderBatches(){
@@ -5710,7 +5731,7 @@ function cultureStrainDisplay(c){
 function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
 function renderCultures(){
   const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
-  const activeState=tableSort.cultures||{key:'created',dir:'desc'};
+  const activeState=tableSort.cultures||[{key:'created',dir:'desc'}];
   updateSortIndicators('cultures',activeState);
   const filtered=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat));
   const rows=applyTableSort(filtered,activeState,(c,k)=>{
@@ -8456,7 +8477,7 @@ function initEventListeners() {
   $('batch-q').addEventListener('input', renderBatches);
   $('batches-body').closest('table').tHead.addEventListener('click', e => {
     const th=e.target.closest('th[data-sort]');if(!th)return;
-    cycleTableSort('batches',th.dataset.sort);renderBatches();
+    cycleTableSort('batches',th.dataset.sort,e.shiftKey);renderBatches();
   });
   $('wbtn-3').addEventListener('click', () => { setBagWeight(3); });
   $('wbtn-5').addEventListener('click', () => { setBagWeight(5); });
@@ -8488,7 +8509,7 @@ function initEventListeners() {
   $('cult-stat').addEventListener('change', renderCultures);
   $('cultures-body').closest('table').tHead.addEventListener('click', e => {
     const th=e.target.closest('th[data-sort]');if(!th)return;
-    cycleTableSort('cultures',th.dataset.sort);renderCultures();
+    cycleTableSort('cultures',th.dataset.sort,e.shiftKey);renderCultures();
   });
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => { const type=document.getElementById('lw-type').value; if(type==='KB')gsPreview(); else lwPreview(); });
