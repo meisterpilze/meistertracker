@@ -4343,22 +4343,33 @@ async function runBatchIdMigration(){
   if(!renames.length){alert('Alle Chargen-IDs sind bereits aktuell. Keine Änderungen nötig.');return}
   const preview=renames.map(r=>`${r.oldId}  →  ${r.newId}`).join('\n');
   if(!confirm(renames.length+' Chargen werden umbenannt:\n\n'+preview+'\n\nFortfahren?'))return;
-  let done=0,failed=0;
-  for(const{oldId,newId}of renames){
-    try{
-      const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
-      if(r&&r.error){failed++;console.error('Rename failed:',oldId,r.error);continue}
-      batches.forEach(b=>{
-        if(b.batchId===oldId){b.batchId=newId;b.bags=(b.bags||[]).map(bag=>bag.replace(oldId,newId))}
-      });
-      scanLog.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
-      movements.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
-      harvests.forEach(h=>{if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}});
-      done++;
-    }catch(e){failed++}
+  let done=0,failed=0,failedList=[];
+  // Hold _mutating elevated for the whole loop so SSE-triggered pollSync cannot
+  // overwrite in-memory state between individual rename requests.
+  _mutating++;
+  try{
+    for(const{oldId,newId}of renames){
+      try{
+        const r=await authFetch('/api/batches/'+encodeURIComponent(oldId)+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newId})}).then(res=>res.json().catch(()=>({})));
+        if(r&&r.error){failed++;failedList.push(oldId+': '+r.error);continue}
+        batches.forEach(b=>{
+          if(b.batchId===oldId){b.batchId=newId;b.bags=(b.bags||[]).map(bag=>bag.replace(oldId,newId))}
+        });
+        scanLog.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
+        movements.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
+        harvests.forEach(h=>{if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}});
+        done++;
+      }catch(e){failed++;failedList.push(oldId+': '+e.message)}
+    }
+  }finally{
+    _mutating--;
   }
   renderBatches();renderStatus();
-  setFb(failed?'err':'ok','Migration: '+done+' umbenannt'+(failed?', '+failed+' Fehler':''));
+  if(failed){
+    alert('Migration abgeschlossen: '+done+' umbenannt, '+failed+' Fehler:\n\n'+failedList.join('\n'));
+  }else{
+    alert('Migration erfolgreich: '+done+' Chargen umbenannt.');
+  }
 }
 
 function restartServer(){
