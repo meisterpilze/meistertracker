@@ -1584,8 +1584,8 @@ function renameBatch(db, oldId, newId) {
     db.prepare('UPDATE scan_log SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
-    db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
