@@ -4185,6 +4185,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  const batchRenameMatch = req.url.match(/^\/api\/batches\/([^/]+)\/rename$/);
+  if (req.method === 'POST' && batchRenameMatch) {
+    if (requireAdmin(req, res)) return;
+    const oldId = decodeURIComponent(batchRenameMatch[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      const newId = (data.newId || '').trim();
+      if (!newId) { jsonErr(res, 400, 'newId is required'); return; }
+      if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(newId)) {
+        jsonErr(res, 400, 'newId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      try {
+        db.renameBatch(database, oldId, newId);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, oldId, newId });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Scan Log --
   if (req.method === 'POST' && req.url === '/api/scan-log') {
     const sess = checkAuth(req);
