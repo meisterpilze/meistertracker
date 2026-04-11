@@ -8514,6 +8514,10 @@ function initEventListeners() {
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
+  $('cultures-body').closest('table').tHead.addEventListener('click', e => {
+    const th=e.target.closest('th[data-sort]');if(!th)return;
+    cycleTableSort('cultures',th.dataset.sort);renderCultures();
+  });
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => { const type=document.getElementById('lw-type').value; if(type==='KB')gsPreview(); else lwPreview(); });
   $('lw-qty').addEventListener('input', lwPreview);
