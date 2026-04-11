@@ -1574,12 +1574,16 @@ function updateBatchField(db, batchId, fields) {
 
 function renameBatch(db, oldId, newId) {
   db.exec('BEGIN');
+  // Defer FK checks to COMMIT so we can update parent (batches) and child (bags)
+  // without hitting a constraint violation mid-transaction. The schema uses
+  // ON DELETE CASCADE but not ON UPDATE CASCADE, so without deferral SQLite
+  // rejects any update to batches.batch_id while bags still reference the old value.
+  db.exec('PRAGMA defer_foreign_keys = ON');
   try {
     const existing = db.prepare('SELECT batch_id FROM batches WHERE batch_id=?').get(oldId);
     if (!existing) throw new Error('Batch not found: ' + oldId);
     const conflict = db.prepare('SELECT batch_id FROM batches WHERE batch_id=?').get(newId);
     if (conflict) throw new Error('A batch with ID "' + newId + '" already exists');
-    // Update bag_id (PK) before updating the FK column
     db.prepare('UPDATE bags SET bag_id=REPLACE(bag_id,?,?) WHERE batch_id=?').run(oldId, newId, oldId);
     db.prepare('UPDATE scan_log SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
