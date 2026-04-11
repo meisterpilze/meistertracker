@@ -4312,12 +4312,12 @@ async function loadServerTab(){
   }catch(e){el.textContent='Fehler beim Laden.'}
 }
 async function runBatchIdMigration(){
-  // For each batch that has a strainId, check if its ID prefix matches the strain's kuerzel.
-  // If not, queue a rename.
   const renames=[];
   batches.forEach(b=>{
-    const ms=mushroomStrains.find(s=>s.id===b.strainId);
-    if(!ms||!ms.kuerzel)return;
+    // Use strainKuerzel stored on the batch itself (set at creation time).
+    // Fall back to a strain lookup only if strainKuerzel is missing (e.g. very old batches).
+    const kuerzel=b.strainKuerzel||(mushroomStrains.find(s=>s.id===b.strainId)||{}).kuerzel;
+    if(!kuerzel)return;
     const isGrain=b.batchType==='grain';
     const parts=b.batchId.split('-');
     if(parts.length<2)return;
@@ -4336,8 +4336,8 @@ async function runBatchIdMigration(){
     }else{
       currentKuerzel=parts[0];datePart=parts.slice(1).join('-');correctFormat=true;
     }
-    if(currentKuerzel===ms.kuerzel&&correctFormat)return; // already correct
-    const newId=isGrain?'G-'+ms.kuerzel+'-'+datePart:ms.kuerzel+'-'+datePart;
+    if(currentKuerzel===kuerzel&&correctFormat)return; // already correct
+    const newId=isGrain?'G-'+kuerzel+'-'+datePart:kuerzel+'-'+datePart;
     renames.push({oldId:b.batchId,newId});
   });
   if(!renames.length){alert('Alle Chargen-IDs sind bereits aktuell. Keine Änderungen nötig.');return}
