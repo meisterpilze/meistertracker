@@ -567,6 +567,14 @@ const MIGRATIONS = [
         ins.run(nextBarcode++, 'rack', r.id, now);
       }
     }
+  },
+  {
+    version: 21,
+    description: 'Add strain_text column to batches for free-text strain annotation',
+    fn(db) {
+      const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('batches') WHERE name='strain_text'").get();
+      if (!has.c) db.exec("ALTER TABLE batches ADD COLUMN strain_text TEXT DEFAULT ''");
+    }
   }
 ];
 
@@ -708,6 +716,7 @@ function readAll(db, opts = {}) {
       batchType: r.batch_type,
       sourceId: r.source_id,
       notes: r.notes,
+      strainText: r.strain_text || '',
       created: r.created,
       due: r.due,
       bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
@@ -1504,7 +1513,7 @@ function insertBatch(db, b) {
   try {
     const sub = b.substrate || {};
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
       species,
@@ -1520,6 +1529,7 @@ function insertBatch(db, b) {
       b.batchType || 'block',
       b.sourceId || null,
       b.notes || '',
+      b.strainText || '',
       b.created,
       b.due
     );
@@ -2312,6 +2322,15 @@ function zoneExists(db, id) {
   return !!db.prepare('SELECT 1 FROM zones WHERE id=?').get(id);
 }
 
+function renameZoneName(db, id, newName) {
+  if (!newName || !newName.trim()) throw new Error('Zone name cannot be empty');
+  if (newName.length > 50) throw new Error('Zone name too long (max 50 chars)');
+  const z = db.prepare('SELECT id FROM zones WHERE id=?').get(id);
+  if (!z) throw new Error('Zone not found: ' + id);
+  db.prepare('UPDATE zones SET name=? WHERE id=?').run(newName.trim(), id);
+  incrementDataVersion(db);
+}
+
 function getMcpCfg(db) {
   const row = db.prepare('SELECT * FROM mcp_config WHERE id=1').get();
   return { enabled: row.enabled === 1, hasToken: !!row.api_token };
@@ -2513,6 +2532,7 @@ function mapBatchRow(r, bagStmt, db) {
     qty: r.qty, days: r.days,
     substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
     bagKg: r.bag_kg, batchType: r.batch_type, sourceId: r.source_id, notes: r.notes,
+    strainText: r.strain_text || '',
     created: r.created, due: r.due, bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
   };
 }
@@ -2658,6 +2678,7 @@ module.exports = {
   insertRack,
   deleteRack,
   zoneExists,
+  renameZoneName,
   zoneBagCount,
   rackBagCount,
   getMcpCfg,

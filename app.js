@@ -210,6 +210,12 @@ const LANG = {
     'batch.moveTo': 'Move to',
     'batch.moveMenuTitle': 'Move {id} to…',
     'batch.noLocations': 'No locations configured',
+    'batch.strainLabel': 'Strain',
+    'batch.strainPlaceholder': 'e.g. BHA-1, Amazing…',
+    'batch.whereGo': 'Where do these bags go?',
+    'batch.whereGoInfo': '{id} — {n} bags need a starting location.',
+    'batch.zones.rename': 'Rename',
+    'batch.zones.renamePrompt': 'New display name for "{old}":',
     'batch.deleteBatch': 'Delete batch {id}?',
     'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
     'batch.deleteBtn': 'Delete batch',
@@ -1102,6 +1108,12 @@ const LANG = {
     'batch.moveTo': 'Verschieben nach',
     'batch.moveMenuTitle': '{id} verschieben nach\u2026',
     'batch.noLocations': 'Keine Standorte konfiguriert',
+    'batch.strainLabel': 'Stamm',
+    'batch.strainPlaceholder': 'z.B. BHA-1, Amazing\u2026',
+    'batch.whereGo': 'Wohin kommen diese Beutel?',
+    'batch.whereGoInfo': '{id} \u2014 {n} Beutel ben\u00f6tigen einen Startstandort.',
+    'batch.zones.rename': 'Umbenennen',
+    'batch.zones.renamePrompt': 'Neuer Anzeigename f\u00fcr \u201e{old}\u201c:',
     'batch.deleteBatch': 'Charge {id} l\u00f6schen?',
     'batch.deleteMsg': 'L\u00f6scht den Chargen-Datensatz dauerhaft. Scan-Log und Ernteeintr\u00e4ge bleiben erhalten.',
     'batch.deleteBtn': 'Charge l\u00f6schen',
@@ -1994,6 +2006,12 @@ const LANG = {
     'batch.moveTo': 'Mover para',
     'batch.moveMenuTitle': 'Mover {id} para\u2026',
     'batch.noLocations': 'Nenhum local configurado',
+    'batch.strainLabel': 'Cepa',
+    'batch.strainPlaceholder': 'ex.: BHA-1, Amazing\u2026',
+    'batch.whereGo': 'Para onde v\u00e3o esses sacos?',
+    'batch.whereGoInfo': '{id} \u2014 {n} sacos precisam de um local inicial.',
+    'batch.zones.rename': 'Renomear',
+    'batch.zones.renamePrompt': 'Novo nome para \u201c{old}\u201d:',
     'batch.deleteBatch': 'Excluir lote {id}?',
     'batch.deleteMsg': 'Exclui permanentemente o registro do lote. Log de scan e colheitas permanecem.',
     'batch.deleteBtn': 'Excluir lote',
@@ -2715,7 +2733,18 @@ const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if
 const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
 let REF_GROUPS=[];
 const KNOWN_ZONE_I18N={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-function zoneDisplayName(id){if(KNOWN_ZONE_I18N[id])return t(KNOWN_ZONE_I18N[id]);const z=zones.find(x=>x.id===id);return z?z.name:id}
+function zoneDisplayName(id){
+  if(!id)return id;
+  if(KNOWN_ZONE_I18N[id])return t(KNOWN_ZONE_I18N[id]);
+  const z=zones.find(x=>x.id===id);
+  if(z)return z.name;
+  // Try as rack ID: find parent zone and return "ZoneName / rackSuffix"
+  for(const zone of zones){
+    const rack=zone.racks.find(r=>r.id===id);
+    if(rack)return(zone.name||zone.id)+'/'+(id.slice(zone.id.length+1)||id);
+  }
+  return id;
+}
 function zoneByRole(role){return zones.filter(z=>z.role===role)}
 function rebuildZoneConstants(){
   ZONES=zones.map(z=>z.id);
@@ -3633,11 +3662,12 @@ function createBatch(){
   if(!bagKg){alert('Please enter a bag weight');return}
   const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
   const substrate=(hw||wb)?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
+  const strainText=(document.getElementById('nb-strain-text')||{}).value?.trim()||'';
   const batchId=genBatchId(sp);spColor(sp);
   const due=new Date();due.setDate(due.getDate()+days);
   const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
   const batchType='block';
-  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),strainText,created:new Date().toISOString(),due:due.toISOString(),bags});
 
   // Save batch to server
   const batchObj=batches[batches.length-1];
@@ -3666,12 +3696,16 @@ function createBatch(){
     if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);deltas.push({mat:'gypsum',deltaKg:-gypUsed,type:'batch',ref:batchId})}
   }
   if(deltas.length)invDeltas(deltas);
-  document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
-  document.getElementById('nb-result').style.display='block';
   if(document.getElementById('nb-strain-sel'))document.getElementById('nb-strain-sel').value='';
+  const nbStrainTextEl=document.getElementById('nb-strain-text');if(nbStrainTextEl)nbStrainTextEl.value='';
   document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
   document.getElementById('nb-notes').value='';document.getElementById('nb-mat-preview').style.display='none';
   nbPreview();updateTodoBadge();
+  // Show zone picker — required before print
+  openZonePickModal(batchObj,bags,function(){
+    document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
+    document.getElementById('nb-result').style.display='block';
+  });
 }
 function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const s=document.getElementById('print-batch'),last=batches[batches.length-1];if(last){s.value=last.batchId;renderBagPreview()}},100)}
 // Move all active bags in a batch to a destination zone/rack.
@@ -3696,77 +3730,116 @@ function moveBatchTo(batch,dest,cb){
   if(cb)cb(entries.length,skipped);
 }
 
-// Popover menu for moving an entire batch from the Alle Chargen list.
-// Anchored to the clicked button; closes on outside click or Escape.
-let _moveMenuCleanup=null;
-function closeBatchMoveMenu(){
-  if(_moveMenuCleanup){_moveMenuCleanup();_moveMenuCleanup=null}
-}
-function openBatchMoveMenu(batchId,anchorEl){
-  closeBatchMoveMenu();
-  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
-  const menu=document.createElement('div');
-  menu.className='move-menu';
-  menu.setAttribute('role','menu');
-  menu.style.cssText='position:absolute;z-index:1000;background:#fff;border:1px solid var(--c-border);border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.18);padding:6px 0;min-width:170px;max-height:60vh;overflow-y:auto;font-size:12px';
-  const title=document.createElement('div');
-  title.style.cssText='padding:4px 12px 6px;font-size:11px;color:var(--c-text-muted);border-bottom:1px solid var(--c-border);margin-bottom:4px;font-weight:600';
-  title.textContent=t('batch.moveMenuTitle',{id:b.batchId});
-  menu.appendChild(title);
-  const items=[];
-  zones.forEach(z=>{
-    items.push({id:z.id,label:z.id,indent:false});
-    (z.racks||[]).forEach(r=>items.push({id:r.id,label:r.id,indent:true}));
+// Add all bags in bagIds to a location (initial placement — ADD action, from=null).
+function addBagsToLocation(batch,bagIds,dest,cb){
+  const now=new Date().toISOString();const entries=[];
+  bagIds.forEach(bagId=>{
+    const tempId='s'+(++_scanTempIdCounter);
+    const entry={time:now,action:'ADD',batch:batch.batchId,bag:bagId,from:null,to:dest,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
+    scanLog.push(entry);movements.push(entry);entries.push(entry);
+    if(!sessionStartTime)sessionStartTime=Date.now();
+    sessionEntries.push(entry);
   });
-  if(!items.length){
-    const empty=document.createElement('div');
-    empty.style.cssText='padding:8px 12px;color:var(--c-text-muted);font-style:italic';
-    empty.textContent=t('batch.noLocations');
-    menu.appendChild(empty);
+  if(!entries.length){if(cb)cb(0);return}
+  if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
+  apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
+  if(cb)cb(entries.length);
+}
+
+// Zone picker modal — shown after batch creation, user must pick a destination.
+// onDone() is called after a zone is picked so the caller can show print panel.
+function openZonePickModal(batch,bags,onDone){
+  const m=document.getElementById('m-zone-pick');if(!m)return;
+  document.getElementById('zp-title').textContent=t('batch.whereGo');
+  document.getElementById('zp-info').textContent=t('batch.whereGoInfo',{id:batch.batchId,n:bags.length});
+  const container=document.getElementById('zp-zones');
+  container.innerHTML='';
+  if(!zones.length){
+    container.innerHTML='<div style="color:var(--c-text-muted);font-style:italic;font-size:13px">'+esc(t('batch.noLocations'))+'</div>';
   }else{
-    items.forEach(it=>{
-      const row=document.createElement('button');
-      row.type='button';
-      row.setAttribute('role','menuitem');
-      row.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:6px 12px;font:inherit;cursor:pointer;font-family:monospace';
-      if(it.indent)row.style.paddingLeft='26px';
-      row.textContent=it.label;
-      row.addEventListener('mouseenter',()=>{row.style.background='var(--c-bg)'});
-      row.addEventListener('mouseleave',()=>{row.style.background='none'});
-      row.addEventListener('click',()=>{
-        closeBatchMoveMenu();
-        moveBatchTo(b,it.id,function(moved,skipped){
-          if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+it.id+')':''));return}
-          setFb('ok',b.batchId+': '+moved+' Bags → '+it.id+(skipped?' ('+skipped+' übersprungen)':''));
+    zones.forEach(z=>{
+      const wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;align-items:center;gap:8px;background:var(--c-bg);border-radius:8px;padding:10px 12px';
+      // Zone button
+      const btn=document.createElement('button');
+      btn.type='button';btn.className='btn btn-p';
+      btn.textContent=z.name||z.id;
+      btn.style.cssText='flex:1;min-width:0;text-align:left;font-weight:600';
+      // Optional rack selector
+      let rackSel=null;
+      if(z.racks&&z.racks.length){
+        rackSel=document.createElement('select');
+        rackSel.style.cssText='font-size:12px;max-width:120px';
+        rackSel.innerHTML='<option value="">\u2014 '+esc(t('zones.noRacks'))+' \u2014</option>'+z.racks.map(r=>`<option value="${esc(r.id)}">${esc(r.id.slice(z.id.length+1)||r.id)}</option>`).join('');
+        wrap.appendChild(rackSel);
+      }
+      btn.addEventListener('click',function(){
+        const dest=rackSel&&rackSel.value?rackSel.value:z.id;
+        m.style.display='none';
+        addBagsToLocation(batch,bags,dest,function(added){
+          setFb('ok',batch.batchId+': '+added+' Bags \u2192 '+zoneDisplayName(dest));
+          updateSD();renderBatches();renderStatus();
+        });
+        if(onDone)onDone();
+      });
+      wrap.insertBefore(btn,wrap.firstChild);
+      container.appendChild(wrap);
+    });
+  }
+  m.style.display='flex';
+}
+
+// Move-batch modal — select destination for an entire batch from Alle Chargen.
+function openMoveBatchModal(batchId){
+  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
+  const m=document.getElementById('m-move-batch');if(!m)return;
+  document.getElementById('mb-title').textContent=t('batch.moveMenuTitle',{id:batchId});
+  const container=document.getElementById('mb-zones');
+  container.innerHTML='';
+  if(!zones.length){
+    container.innerHTML='<div style="padding:8px 0;color:var(--c-text-muted);font-style:italic">'+esc(t('batch.noLocations'))+'</div>';
+  }else{
+    zones.forEach(z=>{
+      // Zone row
+      const zRow=document.createElement('button');
+      zRow.type='button';
+      zRow.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;border-left:3px solid '+(z.color||'#888');
+      zRow.textContent=z.name||z.id;
+      zRow.addEventListener('mouseenter',()=>{zRow.style.background='var(--c-bg)'});
+      zRow.addEventListener('mouseleave',()=>{zRow.style.background='none'});
+      zRow.addEventListener('click',()=>{
+        document.getElementById('m-move-batch').classList.remove('open');
+        moveBatchTo(b,z.id,function(moved,skipped){
+          if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(z.id)+')':''));return}
+          setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(z.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
           updateSD();renderBatches();
         });
       });
-      menu.appendChild(row);
+      container.appendChild(zRow);
+      // Rack rows
+      (z.racks||[]).forEach(r=>{
+        const rRow=document.createElement('button');
+        rRow.type='button';
+        rRow.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-size:12px;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
+        rRow.textContent=r.id.slice(z.id.length+1)||r.id;
+        rRow.addEventListener('mouseenter',()=>{rRow.style.background='var(--c-bg)'});
+        rRow.addEventListener('mouseleave',()=>{rRow.style.background='none'});
+        rRow.addEventListener('click',()=>{
+          document.getElementById('m-move-batch').classList.remove('open');
+          moveBatchTo(b,r.id,function(moved,skipped){
+            if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(r.id)+')':''));return}
+            setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(r.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
+            updateSD();renderBatches();
+          });
+        });
+        container.appendChild(rRow);
+      });
     });
   }
-  document.body.appendChild(menu);
-  const r=anchorEl.getBoundingClientRect();
-  const top=r.bottom+window.scrollY+2;
-  let left=r.left+window.scrollX;
-  // Keep menu inside viewport horizontally
-  const mw=menu.offsetWidth;
-  if(left+mw>window.scrollX+document.documentElement.clientWidth-8){
-    left=Math.max(8,window.scrollX+document.documentElement.clientWidth-mw-8);
-  }
-  menu.style.top=top+'px';menu.style.left=left+'px';
-  const onDocClick=function(e){if(!menu.contains(e.target)&&e.target!==anchorEl)closeBatchMoveMenu()};
-  const onKey=function(e){if(e.key==='Escape')closeBatchMoveMenu()};
-  setTimeout(()=>document.addEventListener('click',onDocClick),0);
-  document.addEventListener('keydown',onKey);
-  _moveMenuCleanup=function(){
-    document.removeEventListener('click',onDocClick);
-    document.removeEventListener('keydown',onKey);
-    if(menu.parentNode)menu.parentNode.removeChild(menu);
-  };
+  document.getElementById('m-move-batch').classList.add('open');
 }
 
 function renderBatches(){
-  closeBatchMoveMenu();
   const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
   if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
   body.innerHTML=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q)).map(b=>{
@@ -3776,7 +3849,7 @@ function renderBatches(){
     const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
     const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
     const canMove=status!=='DONE';
-    const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-menu" data-batch="${esc(b.batchId)}" style="margin-right:3px">↪ ${t('batch.moveTo')}</button>`:'';
+    const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`:'';
     return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
@@ -3794,7 +3867,7 @@ function toggleBatchBags(batchId){
     let loc='—',color='#aaa';
     if(last){
       if(last.action==='REMOVE'){loc=t('bagInfo.removed');color='#999'}
-      else if(last.to){loc=last.to;const z=toZone(last.to);color=locColor[z]||'#888'}
+      else if(last.to){loc=zoneDisplayName(last.to);const z=toZone(last.to);color=locColor[z]||'#888'}
     }
     const num=bag.split('-').pop();
     return`<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last&&last.action==='REMOVE'?';text-decoration:line-through;opacity:.5':''}">
@@ -4791,6 +4864,7 @@ function renderZones(){
         ${directCount>0?`<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
         ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>`:''}
         <span style="flex:1"></span>
+        <button class="btn btn-sm" data-action="rename-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('batch.zones.rename'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
         <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
@@ -4911,8 +4985,9 @@ async function reorderZoneWithinRole(sourceId,targetId,before,role){
   }
 }
 async function addZone(){
-  const nameRaw=document.getElementById('zone-name').value.trim().toUpperCase();
-  const id=nameRaw.replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
+  const nameRaw=document.getElementById('zone-name').value.trim();
+  // ID is derived from uppercase version for stability; display name keeps user casing
+  const id=nameRaw.toUpperCase().replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
   if(!id||id.length<2){alert(t('zones.errShort'));return}
   if(nameRaw.length>50){alert(t('zones.errLong'));return}
   if(!/^[A-Z]/.test(id)){alert(t('zones.errIdStart'));return}
@@ -4942,6 +5017,19 @@ async function addZone(){
     console.error('addZone error:',e);
     alert('Error creating zone: '+(e.message||'unknown error'));
   }
+}
+function renameZone(id){
+  const z=zones.find(x=>x.id===id);if(!z)return;
+  prompt2(t('batch.zones.renamePrompt',{old:z.name}),z.name,function(newName){
+    if(!newName||!newName.trim())return;
+    newName=newName.trim();
+    if(newName===z.name)return;
+    apiPatch('/api/zones/'+encodeURIComponent(id)+'/name',{name:newName}).then(res=>{
+      if(res&&res.error){alert(res.error);return}
+      z.name=newName;
+      renderZones();renderStatus();renderBatches();
+    });
+  });
 }
 function removeZone(id){
   const z=zones.find(x=>x.id===id);if(!z)return;
@@ -5489,6 +5577,7 @@ function lwUpdate(){
   const type=document.getElementById('lw-type').value;
   const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
   const kbRows=document.getElementById('lw-kb-rows'),qtyRow=document.getElementById('lw-qty-row');
+  const strainTextRow=document.getElementById('lw-strain-text-row');
   const gsResult=document.getElementById('gs-result');
   // Hide KB result when switching away from KB
   if(type!=='KB'&&gsResult)gsResult.style.display='none';
@@ -5496,11 +5585,13 @@ function lwUpdate(){
     pr.style.display='none';sr.style.display='none';
     if(qtyRow)qtyRow.style.display='none';
     if(kbRows)kbRows.style.display='flex';
+    if(strainTextRow)strainTextRow.style.display='block';
     document.getElementById('lw-prev-box').style.display='none';
     fillCultureSelect('gs-culture',['PD','LC']);
     gsPreview();
   }else{
     if(kbRows)kbRows.style.display='none';
+    if(strainTextRow)strainTextRow.style.display='none';
     if(qtyRow)qtyRow.style.display='block';
     if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
     else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
@@ -5586,10 +5677,11 @@ function createGrainBatch(){
   const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
   if(qty<1){alert('Please fill in quantity');return}
   if(!bagKg){alert('Please enter a bag weight');return}
+  const lwStrainText=(document.getElementById('lw-strain-text')||{}).value?.trim()||'';
   const batchId=genGrainBatchId(sp);spColor(sp);
   const due=new Date();due.setDate(due.getDate()+days);
   const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
-  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString(),due:due.toISOString(),bags});
+  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('lw-notes').value.trim(),strainText:lwStrainText,created:new Date().toISOString(),due:due.toISOString(),bags});
   const batchObj=batches[batches.length-1];
   apiPost('/api/batches',batchObj).then(r=>{
     if(r&&r.error){
@@ -5605,12 +5697,16 @@ function createGrainBatch(){
   const grainUsed=qty*bagKg;
   inventory.stock.grain=Math.max(0,(inventory.stock.grain||0)-grainUsed);
   invDeltas([{mat:'grain',deltaKg:-grainUsed,type:'batch',ref:batchId}]);
-  document.getElementById('gs-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
-  document.getElementById('gs-result').style.display='block';
   if(strainSel)strainSel.value='';
+  const lwStrainEl=document.getElementById('lw-strain-text');if(lwStrainEl)lwStrainEl.value='';
   document.getElementById('gs-qty').value='10';document.getElementById('gs-days').value='14';
   document.getElementById('lw-notes').value='';document.getElementById('gs-mat-preview').style.display='none';
   gsPreview();updateTodoBadge();renderBatches();
+  // Show zone picker — required before print
+  openZonePickModal(batchObj,bags,function(){
+    document.getElementById('gs-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
+    document.getElementById('gs-result').style.display='block';
+  });
 }
 function goToPrintGrainBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const last=batches[batches.length-1];if(last){const s=document.getElementById('print-batch');s.value=last.batchId;renderBagPreview()}},100)}
 
@@ -5869,9 +5965,15 @@ function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
   const line1Y=bcY+bcH+6;
   items.push({type:'text',y:line1Y,fontH:24,text:bagId});
   if(detail==='sorte'||detail==='full'){
-    // Line 2 — Pilzsorte written out, plus notes if any
-    const notes=(batch.notes||'').trim();
-    const line2=batch.strainName?(notes?batch.strainName+' \u2013 '+notes:batch.strainName):'';
+    // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 15 chars on label)
+    const species=batch.strainName||batch.species||'';
+    const strainTxt=(batch.strainText||'').trim();
+    const rawNotes=(batch.notes||'').trim();
+    const notes=rawNotes.length>15?rawNotes.slice(0,15)+'\u2026':rawNotes;
+    let parts=[species];
+    if(strainTxt)parts.push(strainTxt);
+    if(notes)parts.push(notes);
+    const line2=parts.join(' \u2013 ');
     if(line2) items.push({type:'text',y:line1Y+28,fontH:24,text:line2});
   }
   if(detail==='full'&&batch.due){
@@ -7953,7 +8055,7 @@ if(typeof pushBatchCaldav==='undefined'){
 // Escape key closes the topmost open modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm'];
+  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch'];
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
@@ -8075,6 +8177,9 @@ function initEventListeners() {
   $('act-8').addEventListener('click', confirmBatchAdd);
   $('m-locmove').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
   $('cls-9').addEventListener('click', () => { document.getElementById('m-locmove').classList.remove('open'); });
+  // Move-batch modal
+  $('mb-cancel-btn').addEventListener('click', () => { document.getElementById('m-move-batch').classList.remove('open'); });
+  $('m-move-batch').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
   document.getElementById('lm-grid').addEventListener('click', e=>{
     const btn=e.target.closest('[data-action="bulk-rack-target"]');if(!btn)return;
     executeBulkMoveToRack(btn.dataset.zone,btn.dataset.rack);
@@ -8106,6 +8211,7 @@ function initEventListeners() {
     const btn=e.target.closest('[data-action]');if(!btn)return;
     const action=btn.dataset.action;
     if(action==='del-zone')removeZone(btn.dataset.zone);
+    else if(action==='rename-zone')renameZone(btn.dataset.zone);
     else if(action==='add-rack')addRackToZone(btn.dataset.zone);
     else if(action==='del-rack')removeRack(btn.dataset.rack);
     else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
@@ -8167,9 +8273,8 @@ function initEventListeners() {
       case 'open-note': openNote(batch); break;
       case 'add-bags': openAddBags(batch); break;
       case 'del-batch': delBatch(batch); break;
-      case 'open-move-menu':
-        e.stopPropagation();
-        openBatchMoveMenu(batch, el);
+      case 'open-move-modal':
+        openMoveBatchModal(batch);
         break;
     }
   });
