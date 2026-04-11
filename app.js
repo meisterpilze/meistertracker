@@ -4320,10 +4320,13 @@ async function runBatchIdMigration(){
     if(!ms||!ms.kuerzel)return;
     const isGrain=b.batchType==='grain';
     const parts=b.batchId.split('-');
-    if(parts.length<2)return;
-    const expectedPrefix=isGrain?'G'+ms.kuerzel:ms.kuerzel;
-    if(parts[0]===expectedPrefix)return; // already correct
-    const newId=expectedPrefix+'-'+parts.slice(1).join('-');
+    if(parts.length<3)return;
+    // Grain IDs: G-SHII-100426-01 (parts[0]='G', parts[1]=kuerzel, parts[2..]=date+seq)
+    // Block IDs: SHII-100426-01   (parts[0]=kuerzel, parts[1..]=date+seq)
+    const currentKuerzel=isGrain?parts[1]:parts[0];
+    const datePart=isGrain?parts.slice(2).join('-'):parts.slice(1).join('-');
+    if(currentKuerzel===ms.kuerzel)return; // already correct
+    const newId=isGrain?'G-'+ms.kuerzel+'-'+datePart:ms.kuerzel+'-'+datePart;
     renames.push({oldId:b.batchId,newId});
   });
   if(!renames.length){alert('Alle Chargen-IDs sind bereits aktuell. Keine Änderungen nötig.');return}
@@ -5736,7 +5739,7 @@ function logLabWork(){
 function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>{const name=c.strainName||c.species||'';const kz=c.strainKuerzel||c.strain||'';return`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td>${spDot(name)}${esc(name)}${kz?' / '+esc(kz):''}</td></tr>`}).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
 
 // ─── GRAIN SPAWN (Lab tab) ──────────────────────────────────
-const genGrainBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),prefix='G'+ab+'-'+dt;const n=batches.filter(b=>b.batchId.startsWith(prefix+'-')).length;return prefix+'-'+String(n+1).padStart(2,'0')};
+const genGrainBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),prefix='G-'+ab+'-'+dt;const n=batches.filter(b=>b.batchId.startsWith(prefix+'-')).length;return prefix+'-'+String(n+1).padStart(2,'0')};
 function gsSetWeight(kg){
   document.getElementById('gs-weight').value=kg;
   ['gs-wbtn-07','gs-wbtn-1','gs-wbtn-2','gs-wbtn-5'].forEach(id=>{
