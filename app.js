@@ -5965,11 +5965,11 @@ function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
   const line1Y=bcY+bcH+6;
   items.push({type:'text',y:line1Y,fontH:24,text:bagId});
   if(detail==='sorte'||detail==='full'){
-    // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 15 chars on label)
+    // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 13 chars on label)
     const species=batch.strainName||batch.species||'';
     const strainTxt=(batch.strainText||'').trim();
     const rawNotes=(batch.notes||'').trim();
-    const notes=rawNotes.length>15?rawNotes.slice(0,15)+'\u2026':rawNotes;
+    const notes=rawNotes.length>13?rawNotes.slice(0,13)+'\u2026':rawNotes;
     let parts=[species];
     if(strainTxt)parts.push(strainTxt);
     if(notes)parts.push(notes);
