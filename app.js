@@ -4311,6 +4311,42 @@ async function loadServerTab(){
       (h.memory?'<div><b>RAM:</b> '+h.memory.rss+' MB</div>':'');
   }catch(e){el.textContent='Fehler beim Laden.'}
 }
+async function runBatchIdMigration(){
+  // For each batch that has a strainId, check if its ID prefix matches the strain's kuerzel.
+  // If not, queue a rename.
+  const renames=[];
+  batches.forEach(b=>{
+    const ms=mushroomStrains.find(s=>s.id===b.strainId);
+    if(!ms||!ms.kuerzel)return;
+    const isGrain=b.batchType==='grain';
+    const parts=b.batchId.split('-');
+    if(parts.length<2)return;
+    const expectedPrefix=isGrain?'G'+ms.kuerzel:ms.kuerzel;
+    if(parts[0]===expectedPrefix)return; // already correct
+    const newId=expectedPrefix+'-'+parts.slice(1).join('-');
+    renames.push({oldId:b.batchId,newId});
+  });
+  if(!renames.length){alert('Alle Chargen-IDs sind bereits aktuell. Keine Änderungen nötig.');return}
+  const preview=renames.map(r=>`${r.oldId}  →  ${r.newId}`).join('\n');
+  if(!confirm(renames.length+' Chargen werden umbenannt:\n\n'+preview+'\n\nFortfahren?'))return;
+  let done=0,failed=0;
+  for(const{oldId,newId}of renames){
+    try{
+      const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
+      if(r&&r.error){failed++;console.error('Rename failed:',oldId,r.error);continue}
+      batches.forEach(b=>{
+        if(b.batchId===oldId){b.batchId=newId;b.bags=(b.bags||[]).map(bag=>bag.replace(oldId,newId))}
+      });
+      scanLog.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
+      movements.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
+      harvests.forEach(h=>{if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}});
+      done++;
+    }catch(e){failed++}
+  }
+  renderBatches();renderStatus();
+  setFb(failed?'err':'ok','Migration: '+done+' umbenannt'+(failed?', '+failed+' Fehler':''));
+}
+
 function restartServer(){
   confirm2('Server neustarten?','Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.','Ja, neustarten',async()=>{
     const btn=document.getElementById('btn-server-restart');
@@ -8430,6 +8466,7 @@ function initEventListeners() {
   $('st-settings-mcp').addEventListener('click', () => { openStab('settings','mcp'); });
   $('st-settings-server').addEventListener('click', () => { openStab('settings','server'); loadServerTab(); });
   $('btn-server-restart').addEventListener('click', restartServer);
+  $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
