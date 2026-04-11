@@ -4097,7 +4097,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vrng);
         return;
       }
-      const vlen = validateLengths(data, { batchId: 100, species: 200, strain: 200, notes: 10000 });
+      const vlen = validateLengths(data, { batchId: 100, species: 200, strain: 200, notes: 10000, strainText: 200 });
       if (vlen) {
         jsonErr(res, 400, vlen);
         return;
@@ -4673,6 +4673,23 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+  // PATCH /api/zones/:id/name — rename zone display name only (ID unchanged)
+  const zoneNameMatch = req.url.match(/^\/api\/zones\/([^/]+)\/name$/);
+  if (req.method === 'PATCH' && zoneNameMatch) {
+    if (requireAdmin(req, res)) return;
+    const id = decodeURIComponent(zoneNameMatch[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) { jsonErr(res, 400, e.message); return; }
+      if (!data.name || !data.name.trim()) { jsonErr(res, 400, 'name is required'); return; }
+      if (data.name.length > 50) { jsonErr(res, 400, 'Zone name too long (max 50 chars)'); return; }
+      try {
+        db.renameZoneName(database, id, data.name);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) { safeErr(res, err); }
+    });
     return;
   }
   const zoneRackMatch = req.url.match(/^\/api\/zones\/([^/]+)\/racks$/);
