@@ -1268,6 +1268,22 @@ th {
   background: var(--c-surface);
   z-index: 1;
 }
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: var(--c-text-sec);
+}
+th.sortable .arrow {
+  font-size: 9px;
+  opacity: 0.35;
+  margin-left: 3px;
+}
+th.sortable.active .arrow {
+  opacity: 1;
+  color: var(--c-primary);
+}
 td {
   padding: 10px;
   border-bottom: 1px solid var(--c-border-light);
