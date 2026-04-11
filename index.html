@@ -218,6 +218,26 @@
   </div>
 </div>
 
+<!-- Zone picker modal — mandatory after batch creation -->
+<div class="modal-bg" id="m-zone-pick" role="dialog" aria-modal="true" aria-labelledby="zp-title" style="display:none">
+  <div class="modal" style="max-width:400px">
+    <h3 id="zp-title" data-i18n="batch.whereGo">Where do these bags go?</h3>
+    <p id="zp-info" style="font-size:12px;color:var(--c-text-muted);margin-bottom:12px"></p>
+    <div id="zp-zones" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
+<!-- Move-batch modal — select destination for all bags in a batch -->
+<div class="modal-bg" id="m-move-batch" role="dialog" aria-modal="true" aria-labelledby="mb-title">
+  <div class="modal" style="max-width:380px">
+    <h3 id="mb-title"></h3>
+    <div id="mb-zones" style="display:flex;flex-direction:column;gap:4px;max-height:55vh;overflow-y:auto;margin-bottom:12px"></div>
+    <div class="modal-btns">
+      <button class="btn" id="mb-cancel-btn" data-i18n="nav.cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Bag info modal — opens when scanning a bag with no action set -->
 <div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
   <div class="modal" style="max-width:540px">
@@ -457,6 +477,10 @@
             </select>
             <div id="nb-no-strains-hint" style="display:none;font-size:11px;color:var(--c-red);margin-top:4px" data-i18n="strains.noStrainsHint">Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.</div>
           </div>
+          <div>
+            <label data-i18n="batch.strainLabel">Strain</label>
+            <input type="text" id="nb-strain-text" data-i18n-placeholder="batch.strainPlaceholder" placeholder="z.B. BHA-1, Amazing, Top Genetics…" autocomplete="off" />
+          </div>
           <div class="g2">
             <div><label data-i18n="batch.qty">Qty (bags)</label><input type="number" id="nb-qty" value="10" min="1" max="500" /></div>
             <div><label data-i18n="batch.incDays">Incubation days</label><input type="number" id="nb-days" value="14" min="1" max="90" /></div>
@@ -607,6 +631,10 @@
                 <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
               </select>
             </div>
+          </div>
+          <div id="lw-strain-text-row" style="display:none">
+            <label data-i18n="batch.strainLabel">Strain</label>
+            <input type="text" id="lw-strain-text" data-i18n-placeholder="batch.strainPlaceholder" placeholder="z.B. BHA-1, Amazing, Top Genetics…" autocomplete="off" />
           </div>
           <div id="lw-parent-row">
             <label id="lw-parent-lbl" data-i18n="lab.parentCulture">Parent culture</label>
@@ -1182,7 +1210,7 @@
   <div class="card">
     <div class="sec" data-i18n="zones.addTitle">Zone hinzufügen</div>
     <div class="g2">
-      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. TENT4" maxlength="50" style="text-transform:uppercase"></div>
+      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. Tent 4" maxlength="50"></div>
       <div><label data-i18n="zones.zoneRole">Rolle</label>
         <select id="zone-role">
           <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
