@@ -123,6 +123,9 @@ const LANG = {
     'dash.harvestBySpecies': 'Harvest by species (kg)',
     'dash.noHarvestData': 'No harvest data yet',
     'dash.liveStatus': 'Live batch status',
+    'dash.modeFarm': 'Farm',
+    'dash.modeOverview': 'Overview',
+    'dash.weeklyHarvest': 'Weekly harvest trend',
     'dash.search': 'Search...',
     'dash.cards': 'Cards',
     'dash.table': 'Table',
@@ -1229,6 +1232,9 @@ const LANG = {
     'dash.harvestBySpecies': 'Ernte nach Art (kg)',
     'dash.noHarvestData': 'Noch keine Erntedaten',
     'dash.liveStatus': 'Live Chargen-Status',
+    'dash.modeFarm': 'Betrieb',
+    'dash.modeOverview': 'Übersicht',
+    'dash.weeklyHarvest': 'Wöchentliche Ernte',
     'dash.search': 'Suche...',
     'dash.cards': 'Karten',
     'dash.table': 'Tabelle',
@@ -2344,6 +2350,9 @@ const LANG = {
     'dash.harvestBySpecies': 'Colheita por esp\u00e9cie (kg)',
     'dash.noHarvestData': 'Sem dados de colheita ainda',
     'dash.liveStatus': 'Status dos lotes ao vivo',
+    'dash.modeFarm': 'Fazenda',
+    'dash.modeOverview': 'Visão geral',
+    'dash.weeklyHarvest': 'Tendência semanal de colheita',
     'dash.search': 'Buscar...',
     'dash.cards': 'Cart\u00f5es',
     'dash.table': 'Tabela',
@@ -3431,6 +3440,7 @@ function safeColor(c,fallback){
 
 // ─── AUTH ────────────────────────────────────────────────────
 let currentUser=null;
+let dashMode=localStorage.getItem('mp-dash-mode')||'farm';
 async function authFetch(url,opts){
   const r=await fetch(url,opts);
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
@@ -3738,33 +3748,65 @@ const getHarvested=id=>harvests.filter(h=>h.batch===id).reduce((s,h)=>s+(h.grams
 // ─── DASHBOARD ───────────────────────────────────────────────
 let harvestChartInst=null,batchYieldInst=null,timelineInst=null;
 
+function buildSparkSvg(data,color){
+  if(!data||data.length<2)return'';
+  const w=80,h=22,max=Math.max(...data,1);
+  const pts=data.map((v,i)=>[Math.round(i/(data.length-1)*w),Math.round(h-v/max*(h-2))]);
+  const line=pts.map((p,i)=>(i===0?'M':'L')+p[0]+','+p[1]).join(' ');
+  const area=line+` L${w},${h} L0,${h} Z`;
+  return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="met-spark"><path d="${area}" fill="${color}" opacity=".12"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function harvestSparkData(){
+  const days=[];const now=new Date();
+  for(let i=6;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);days.push(d.toISOString().slice(0,10))}
+  return days.map(day=>harvests.filter(h=>(h.time||'').slice(0,10)===day).reduce((s,h)=>s+(h.grams||0),0));
+}
+function countDueToday(){
+  const today=new Date();today.setHours(0,0,0,0);
+  return batches.filter(b=>{
+    const{status}=getStatus(b.batchId);
+    if(status==='DONE'||status==='EMPTY')return false;
+    const due=new Date(b.due);due.setHours(0,0,0,0);
+    const dl=Math.round((due-today)/864e5);
+    return dl<=0||(status==='FRUITING')||(status==='CONTAM');
+  }).length;
+}
 function renderMetrics(tot,inc,tent,contam){
   const totalHarv=harvests.reduce((s,h)=>s+(h.grams||0),0);
-  const contamRate=tot>0?Math.round((contam/tot)*100):0;
+  const dueToday=countDueToday();
+  const dueTodayColor=dueToday>0?'#e11d48':'#64748b';
+  const dueTodayIcon=dueToday>0
+    ?`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+    :`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
   const icons=[
     `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
     `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
     `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`,
+    dueTodayIcon,
     `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`
   ];
-  const colors=['#16a34a','#2563eb','#16a34a','#d97706'];
-  document.getElementById('metrics').innerHTML=[
-    [t('dash.totalBatches'),tot,0],
-    [t('dash.inIncubation'),inc,1],
-    [t('dash.inTents'),tent,2],
-    [t('dash.totalHarvested'),totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—',3]
-  ].map(([l,v,i])=>`<div class="met" style="border-left-color:${colors[i]}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px">${icons[i]}</span>${l}</div><div class="met-v" style="color:${colors[i]}">${v}</div></div>`).join('');
+  const colors=['#16a34a','#2563eb','#16a34a',dueTodayColor,'#d97706'];
+  const sparkHarvest=buildSparkSvg(harvestSparkData(),'#d97706');
+  const cards=[
+    [t('dash.totalBatches'),tot,0,''],
+    [t('dash.inIncubation'),inc,1,''],
+    [t('dash.inTents'),tent,2,''],
+    [t('dash.dueToday'),dueToday,3,''],
+    [t('dash.totalHarvested'),totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—',4,sparkHarvest]
+  ];
+  document.getElementById('metrics').innerHTML=cards.map(([l,v,i,spark])=>`<div class="met" style="border-left-color:${colors[i]}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px">${icons[i]}</span>${l}</div><div class="met-v" style="color:${colors[i]}">${v}</div>${spark}</div>`).join('');
 }
 
-function renderPipelineChart(){
+function renderMiniPipeline(){
+  const el=document.getElementById('dash-mini-pipeline');
+  if(!el)return;
   const roleStages=[
     {role:'spawn',label:'SPAWN',color:'#a855f7'},
     {role:'incubation',label:'INC',color:'#0ea5e9'},
     {role:'fruiting',label:'TENT',color:'#10b981'},
-    {role:null,label:'DONE',color:'#e5e3dd'},
+    {role:null,label:'DONE',color:'#94a3b8'},
     {role:'contaminated',label:'CONTAM',color:'#ef4444'}
   ];
-  // Use first zone's color for each role if available
   const stages=roleStages.map(s=>{
     if(s.role){const z=zones.find(x=>x.role===s.role);if(z)return{...s,color:z.color}}
     return s;
@@ -3779,41 +3821,112 @@ function renderPipelineChart(){
     if(status==='DONE')counts.DONE++;
   });
   const max=Math.max(1,...Object.values(counts));
-  const el=document.getElementById('pipeline-chart');
-  el.innerHTML=stages.map(s=>{
+  el.innerHTML=`<div class="card dmp-card"><div class="dmp-stages">${stages.map(s=>{
     const v=counts[s.label]||0;
-    const pct=Math.round((v/max)*100);
-    return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <div style="width:52px;font-size:12px;font-weight:600;color:var(--c-text-sec);text-align:right;flex-shrink:0">${s.label}</div>
-      <div style="flex:1;height:26px;background:var(--c-border-light);border-radius:6px;overflow:hidden">
-        <div style="height:100%;background:${s.color};width:${pct}%;border-radius:6px;transition:width .4s ease;display:flex;align-items:center;padding-left:10px">
-          ${v>0?`<span style="font-size:12px;font-weight:700;color:rgba(255,255,255,.95)">${v}</span>`:''}
-        </div>
+    const pct=v>0?Math.max(6,Math.round(v/max*100)):0;
+    return`<div class="dmp-stage">
+      <div class="dmp-stage-top">
+        <span class="dmp-stage-label">${s.label}</span>
+        <span class="dmp-stage-count" style="color:${v>0?s.color:'var(--c-text-muted)'}">${v}</span>
       </div>
-      <div style="width:32px;font-size:12px;color:var(--c-text-sec);text-align:right;flex-shrink:0;font-weight:600">${v}</div>
+      <div class="dmp-stage-bar"><div class="dmp-stage-fill" style="width:${pct}%;background:${s.color}"></div></div>
     </div>`;
-  }).join('');
+  }).join('')}</div></div>`;
 }
 
 function renderHarvestChart(){
   const canvas=document.getElementById('harvest-chart');
   if(!canvas)return;
-  // Group by species
   const bySpecies={};
   harvests.forEach(h=>{if(!bySpecies[h.species])bySpecies[h.species]=0;bySpecies[h.species]+=h.grams||0});
   const labels=Object.keys(bySpecies);
   const data=labels.map(s=>bySpecies[s]/1000);
-  const colors=labels.map(s=>spColor(s));
   if(harvestChartInst){harvestChartInst.destroy();harvestChartInst=null}
-  if(!labels.length){canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('harvest.noData'),canvas.width/2,80);return}
+  if(!labels.length){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('harvest.noData'),canvas.width/2,80);return}
   const fmtKg=v=>(Math.round(v*100)/100)+'kg';
+  const ctx=canvas.getContext('2d');
+  const bgColors=labels.map(s=>{
+    const base=spColor(s);
+    const g=ctx.createLinearGradient(0,0,0,canvas.clientHeight||180);
+    g.addColorStop(0,base+'ee');g.addColorStop(1,base+'55');
+    return g;
+  });
+  const dataLabelPlugin={
+    id:'harvestDataLabels',
+    afterDatasetsDraw(chart){
+      const{ctx:c,data}=chart;
+      chart.getDatasetMeta(0).data.forEach((bar,i)=>{
+        const val=data.datasets[0].data[i];
+        if(!val)return;
+        c.save();c.fillStyle='#475569';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='bottom';
+        c.fillText(fmtKg(val),bar.x,bar.y-4);c.restore();
+      });
+    }
+  };
   harvestChartInst=new Chart(canvas,{
     type:'bar',
-    data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
-    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmtKg(ctx.parsed.y)}}},scales:{y:{ticks:{callback:v=>fmtKg(v),color:'#64748b'},grid:{color:'#f1f5f9'}},x:{grid:{display:false},ticks:{color:'#64748b'}}}}
+    plugins:[dataLabelPlugin],
+    data:{labels,datasets:[{data,backgroundColor:bgColors,borderColor:labels.map(s=>spColor(s)),borderWidth:1.5,borderRadius:8,borderSkipped:false}]},
+    options:{responsive:true,layout:{padding:{top:22}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtKg(c.parsed.y)}}},scales:{y:{ticks:{callback:v=>fmtKg(v),color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{grid:{display:false},ticks:{color:'#64748b'}}}}
   });
 }
 
+let weeklyHarvestInst=null;
+function renderWeeklyHarvestChart(){
+  const canvas=document.getElementById('weekly-harvest-chart');
+  if(!canvas)return;
+  const byWeek={};
+  harvests.forEach(h=>{
+    const d=new Date(h.time);
+    const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
+    const key=mon.toISOString().slice(0,10);
+    byWeek[key]=(byWeek[key]||0)+(h.grams||0);
+  });
+  const weekKeys=Object.keys(byWeek).sort().slice(-10);
+  if(weeklyHarvestInst){weeklyHarvestInst.destroy();weeklyHarvestInst=null}
+  const badge=document.getElementById('dash-weekly-trend-badge');
+  if(!weekKeys.length){
+    const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText(t('dash.noHarvestData'),canvas.width/2,60);
+    if(badge)badge.innerHTML='';return;
+  }
+  // Trend badge: compare last completed week vs previous
+  if(badge&&weekKeys.length>=2){
+    const lastVal=byWeek[weekKeys[weekKeys.length-1]]/1000;
+    const prevVal=byWeek[weekKeys[weekKeys.length-2]]/1000;
+    const delta=lastVal-prevVal;
+    const pct=prevVal>0?Math.abs(Math.round(delta/prevVal*100)):null;
+    const up=delta>=0;
+    badge.innerHTML=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${up?'var(--c-green-light)':'var(--c-red-light)'};color:${up?'var(--c-green-dark)':'var(--c-red-dark)'}">${up?'↑':'↓'}${pct!==null?pct+'%':''} vs prev</span>`;
+  }else if(badge){badge.innerHTML='';}
+  // Check which key is the current (potentially incomplete) week
+  const nowMon=new Date();nowMon.setDate(nowMon.getDate()-nowMon.getDay()+1);nowMon.setHours(0,0,0,0);
+  const thisWeekKey=nowMon.toISOString().slice(0,10);
+  const values=weekKeys.map(k=>byWeek[k]/1000);
+  const ctx=canvas.getContext('2d');
+  const grad=ctx.createLinearGradient(0,0,0,canvas.clientHeight||180);
+  grad.addColorStop(0,'rgba(245,158,11,0.35)');
+  grad.addColorStop(1,'rgba(245,158,11,0.01)');
+  const pointColors=weekKeys.map(k=>k===thisWeekKey?'rgba(245,158,11,0.45)':'rgba(245,158,11,1)');
+  const pointBorderColors=weekKeys.map(k=>k===thisWeekKey?'rgba(245,158,11,0.6)':'rgba(245,158,11,1)');
+  weeklyHarvestInst=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:weekKeys.map(k=>{const d=new Date(k);return fmtDtShort(d)+(k===thisWeekKey?' *':'')}),
+      datasets:[{
+        data:values,fill:true,backgroundColor:grad,
+        borderColor:'rgba(245,158,11,0.9)',borderWidth:2.5,
+        pointBackgroundColor:pointColors,pointBorderColor:pointBorderColors,
+        pointRadius:4,pointHoverRadius:7,tension:0.35
+      }]
+    },
+    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>(Math.round(c.parsed.y*100)/100)+'kg',title:items=>{const lbl=items[0].label;return lbl.endsWith(' *')?lbl.slice(0,-2)+' (this week)':lbl}}}},
+      scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{font:{size:10},color:'#64748b'},grid:{display:false}}}}
+  });
+}
+
+const CHEVRON_SVG='<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 let ZONE_LABELS={};
 let ZONE_COLORS={};
 function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
@@ -3822,8 +3935,8 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
-  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderPipelineChart();renderHarvestChart();return}
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
+  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
 
   // Compute per-batch status
   let ti=0,tt=0,tc=0;
@@ -3859,8 +3972,10 @@ function renderStatus(){
 
   el.innerHTML=html;
   renderMetrics(batches.length,ti,tt,tc);
-  renderPipelineChart();
+  renderMiniPipeline();
   renderHarvestChart();
+  renderWeeklyHarvestChart();
+  applyDashMode();
   updateActionBar();
 }
 
@@ -3921,12 +4036,16 @@ function renderRackSection(zone,racks,filtered){
       <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags>cap?'#ef4444':color};width:${Math.min(100,Math.round(totalBags/cap*100))}%;border-radius:3px"></div></div>
       <span style="font-size:11px;color:${totalBags>cap?'#ef4444':'var(--c-text-muted)'};white-space:nowrap">${Math.round(totalBags/cap*100)}%</span>
     </div>`:'';
-  return`<div class="location-section">
-    <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
+  const zoneHasUrgent=filtered.some(d=>d.ov&&Object.keys(d.c).some(zid=>zid===zone||racks.includes(zid)));
+  const sectionClass='location-section'+(dashMode==='farm'&&zoneHasUrgent?'':' collapsed');
+  return`<div class="${sectionClass}" data-zone="${esc(zone)}">
+    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
       <span class="location-section-count">${cap?totalBags+' / '+cap+' Bags':tp('dash.bags',totalBags)}</span>
-    </div>${capHtml}
-    <div class="${gridClass}">${rackCards}</div>
+    </div>
+    <div class="location-section-body">${capHtml}
+      <div class="${gridClass}">${rackCards}</div>
+    </div>
   </div>`;
 }
 
@@ -3986,12 +4105,15 @@ function renderFruitingSection(fruitingZones,filtered){
     </div>`;
   }).join('');
 
-  return`<div class="location-section">
-    <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
+  const fruitSectionClass='location-section'+(dashMode==='farm'&&totalBags>0?'':' collapsed');
+  return`<div class="${fruitSectionClass}" data-zone="fruiting">
+    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
     </div>
-    <div class="tent-columns">${tentCols}</div>
+    <div class="location-section-body">
+      <div class="tent-columns">${tentCols}</div>
+    </div>
   </div>`;
 }
 
@@ -4097,13 +4219,47 @@ function locSelectAllVisible(){
   });
   renderStatus();
 }
+function setDashMode(mode){
+  dashMode=mode;
+  localStorage.setItem('mp-dash-mode',mode);
+  applyDashMode();
+  renderStatus();
+}
+function applyDashMode(){
+  const farmBtn=document.getElementById('dash-view-farm');
+  const ovBtn=document.getElementById('dash-view-overview');
+  const charts=document.getElementById('dash-charts-section');
+  if(farmBtn)farmBtn.classList.toggle('active',dashMode==='farm');
+  if(ovBtn)ovBtn.classList.toggle('active',dashMode==='overview');
+  if(charts)charts.style.display=dashMode==='overview'?'':'none';
+}
+
 function renderDashAlerts(){
-  const invAlerts=getInvAlerts();
+  const invAlerts=getInvAlerts().map(a=>({...a,goPage:'inv',goBtn:'n-inv'}));
+  // Overdue batches
+  const today=new Date();today.setHours(0,0,0,0);
+  const overdueCount=batches.filter(b=>{
+    const{status}=getStatus(b.batchId);
+    if(['DONE','EMPTY','FRUITING','CONTAM'].includes(status))return false;
+    return new Date(b.due)<today;
+  }).length;
+  const overdueAlerts=overdueCount?[{text:overdueCount+' batch'+(overdueCount>1?'es':'')+' overdue \u2014 ready to move',urgent:overdueCount>=3,goPage:'batch',goBtn:'n-batch'}]:[];
+  // Zone capacity warnings (≥90%)
+  const capAlerts=[];
+  zones.forEach(z=>{
+    if(!z.maxCapacity)return;
+    let cnt=0;
+    if(z.racks&&z.racks.length)z.racks.forEach(r=>cnt+=Object.keys(getRackBags(r.id)).length);
+    else cnt=Object.keys(getZoneBags(z.id)).length;
+    const pct=Math.round(cnt/z.maxCapacity*100);
+    if(pct>=90)capAlerts.push({text:zoneDisplayName(z.id)+': '+cnt+'/'+z.maxCapacity+' bags ('+pct+'% full)',urgent:pct>=100,goPage:'zones',goBtn:'n-zones'});
+  });
+  const allAlerts=[...overdueAlerts,...invAlerts,...capAlerts];
   const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
-  if(!invAlerts.length){card.style.display='none';return}
+  if(!allAlerts.length){card.style.display='none';return}
   card.style.display='';
-  el.innerHTML=invAlerts.map(tk=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${tk.urgent?'var(--c-red-light)':'var(--c-amber-light)'};border-left:3px solid ${tk.urgent?'var(--c-red)':'var(--c-amber)'}"><div style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(tk.text)}</div><button class="btn btn-sm" onclick="go('inv','n-inv')" style="font-size:11px;padding:2px 8px">${t('inv.stock')}</button></div>`).join('');
+  el.innerHTML=allAlerts.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${a.urgent?'var(--c-red-light)':'var(--c-amber-light)'};border-left:3px solid ${a.urgent?'var(--c-red)':'var(--c-amber)'}"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0">${t('dash.view')}</button></div>`).join('');
 }
 function renderDashBatchTasks(){
   const filter=document.getElementById('dash-batch-filter')?.value||'all';
@@ -4112,10 +4268,22 @@ function renderDashBatchTasks(){
   const el=document.getElementById('dash-batch-tasks');
   if(!el)return;
   if(!tasks.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';return}
-  el.innerHTML=shown.length?shown.map(tk=>'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px;--sp-color:'+spColor(tk.species)+'">'
-    +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
-    +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(tk.text)+'</div>'
-    +'<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">'+esc(tk.detail)+'</div></div></div>').join('')
+  function taskBtn(tk){
+    const id=esc(tk.batchId);
+    if(tk.taskAction==='move')return`<button class="btn btn-sm btn-p" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
+    if(tk.taskAction==='harvest')return`<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>`;
+    if(tk.taskAction==='discard')return`<button class="btn btn-sm btn-r" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
+    return`<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+  }
+  el.innerHTML=shown.length?shown.map(tk=>{
+    const parts=tk.text.split(tk.batchId);
+    const textWithLink=esc(parts[0]||'')+`<span class="dash-task-batch-id" onclick="go('batch','n-batch')" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>`+esc(parts.slice(1).join(tk.batchId)||'');
+    return'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px;--sp-color:'+spColor(tk.species)+'">'
+      +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+textWithLink+'</div>'
+      +'<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">'+esc(tk.detail)+'</div></div>'
+      +taskBtn(tk)+'</div>';
+  }).join('')
     :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
 }
 
@@ -4731,14 +4899,14 @@ function buildAutoTasks(){
     const{status,action}=getStatus(b.batchId);if(status==='DONE'||status==='EMPTY')return;
     const due=new Date(b.due);due.setHours(0,0,0,0);
     const dl=Math.round((due-today)/(864e5));
-    let urgent=false,warn=false,text='',detail='';
+    let urgent=false,warn=false,text='',detail='',taskAction=null;
     if(status==='INCUBATING'||status==='SPAWN RUN'){
-      if(dl<0){urgent=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueAgo',{n:Math.abs(dl)})}
-      else if(dl<=2){warn=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl})}
+      if(dl<0){urgent=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueAgo',{n:Math.abs(dl)});taskAction='move'}
+      else if(dl<=2){warn=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl});taskAction='move'}
       else{text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl})}
-    }else if(status==='FRUITING'){text=`${b.batchId} \u2014 ${t('status.action.harvest')}`;detail=`${b.species}/${b.strain} ${t('todo.fruiting')}`;warn=true}
-    else if(status==='CONTAM'){text=`${b.batchId} \u2014 ${t('status.action.discard')}`;detail=`${b.species}/${b.strain}`;urgent=true}
-    if(text)tasks.push({text,detail,urgent,warn,species:b.species});
+    }else if(status==='FRUITING'){text=`${b.batchId} \u2014 ${t('status.action.harvest')}`;detail=`${b.species}/${b.strain} ${t('todo.fruiting')}`;warn=true;taskAction='harvest'}
+    else if(status==='CONTAM'){text=`${b.batchId} \u2014 ${t('status.action.discard')}`;detail=`${b.species}/${b.strain}`;urgent=true;taskAction='discard'}
+    if(text)tasks.push({text,detail,urgent,warn,species:b.species,batchId:b.batchId,taskAction});
   });
   return tasks;
 }
@@ -9043,6 +9211,7 @@ function initEventListeners() {
   // Dashboard
   $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
+  applyDashMode();
 
   // Batches — delegated actions for dynamically rendered rows (CSP-safe)
   $('batches-body').addEventListener('click', function(e) {
