@@ -5215,6 +5215,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Lab Thresholds --
+  if (req.method === 'POST' && req.url === '/api/lab-thresholds') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.updateLabThresholds(database, data.labThresholds);
+        log('info', 'Lab thresholds updated', { actor: req.authUser.username });
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Suppliers CRUD --
   if (req.method === 'GET' && req.url === '/api/suppliers') {
     try {

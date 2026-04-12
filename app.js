@@ -387,6 +387,12 @@ const LANG = {
     'lab.grainIdPreview': 'Grain spawn ID preview',
     'lab.createGrainBtn': 'Create grain spawn',
     'lab.grainCreated': '{n} grain spawn bags created',
+    'lab.lowStock': 'LOW',
+    'lab.activeCount': '{n} active',
+    'lab.belowMin': '{n} active — below minimum of {min}',
+    'lab.setMinimum': 'Set minimum',
+    'lab.lowLabAlert': 'Low lab stock: {type}',
+    'lab.gsLabel': 'Grain Spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Type',
@@ -1528,6 +1534,12 @@ const LANG = {
     'lab.grainIdPreview': 'K\u00f6rnerbrut-ID Vorschau',
     'lab.createGrainBtn': 'K\u00f6rnerbrut erstellen',
     'lab.grainCreated': '{n} K\u00f6rnerbrut-Beutel erstellt',
+    'lab.lowStock': 'NIEDRIG',
+    'lab.activeCount': '{n} aktiv',
+    'lab.belowMin': '{n} aktiv \u2014 unter Minimum von {min}',
+    'lab.setMinimum': 'Minimum festlegen',
+    'lab.lowLabAlert': 'Niedriger Labbestand: {type}',
+    'lab.gsLabel': 'K\u00f6rnerbrut',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Typ',
@@ -2678,6 +2690,12 @@ const LANG = {
     'lab.grainIdPreview': 'Pr\u00e9via do ID de gr\u00e3os',
     'lab.createGrainBtn': 'Criar gr\u00e3os de spawn',
     'lab.grainCreated': '{n} sacos de gr\u00e3os criados',
+    'lab.lowStock': 'BAIXO',
+    'lab.activeCount': '{n} ativo(s)',
+    'lab.belowMin': '{n} ativo(s) \u2014 abaixo do m\u00ednimo de {min}',
+    'lab.setMinimum': 'Definir m\u00ednimo',
+    'lab.lowLabAlert': 'Estoque baixo no lab: {type}',
+    'lab.gsLabel': 'Gr\u00e3os de spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Tipo',
@@ -3573,6 +3591,7 @@ async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/del
 async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
+async function saveLabThresholds(){return apiPost('/api/lab-thresholds',{labThresholds:inventory.labThresholds})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
   showServerTab();showMcpTab();showAdminNav();
@@ -3619,6 +3638,7 @@ function defaultInventory(){
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
     avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},
+    labThresholds:{MC:0,PD:0,LC:0,G2G:0,GS:0},
     log:[]
   };
 }
@@ -3711,7 +3731,7 @@ function go(page,btnId){
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('p-'+page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
   if(page==='batch')renderBatches();
   if(page==='lab')renderCultures();
   if(page==='inv'){renderInvStock();}
@@ -3753,7 +3773,7 @@ function openStab(page,sub){
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
@@ -4590,7 +4610,8 @@ function renderDashAlerts(){
     const pct=Math.round(cnt/z.maxCapacity*100);
     if(pct>=90)capAlerts.push({text:zoneDisplayName(z.id)+': '+cnt+'/'+z.maxCapacity+' bags ('+pct+'% full)',urgent:pct>=100,goPage:'zones',goBtn:'n-zones'});
   });
-  const allAlerts=[...overdueAlerts,...invAlerts,...capAlerts];
+  const labAlerts=getLabAlerts().map(a=>({...a,goPage:'lab',goBtn:'n-lab'}));
+  const allAlerts=[...overdueAlerts,...invAlerts,...labAlerts,...capAlerts];
   const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
   if(!allAlerts.length){card.style.display='none';return}
@@ -4621,6 +4642,52 @@ function renderDashBatchTasks(){
       +taskBtn(tk)+'</div>';
   }).join('')
     :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
+}
+
+// ─── DASHBOARD LAB STOCK ────────────────────────────────────
+const LAB_TYPES=['MC','PD','LC','G2G','GS'];
+const LAB_LABELS={MC:'Mother cultures',PD:'Petri dishes',LC:'Liquid cultures',G2G:'G2G',GS:null};
+function getLabLabel(type){if(type==='GS')return t('lab.gsLabel');return LAB_LABELS[type]||type}
+function getLabStockCounts(){
+  const counts={MC:0,PD:0,LC:0,G2G:0,GS:0};
+  cultures.filter(c=>c.status==='active').forEach(c=>{if(counts[c.type]!==undefined)counts[c.type]++});
+  // Grain spawn = batches with batchType 'grain' that are still active
+  batches.filter(b=>b.batchType==='grain').forEach(b=>{
+    const{status}=getStatus(b.batchId);
+    if(!['DONE','EMPTY','CONTAM'].includes(status))counts.GS++;
+  });
+  return counts;
+}
+function renderDashLabStock(){
+  const el=document.getElementById('dash-lab-stock');
+  if(!el)return;
+  if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
+  const counts=getLabStockCounts();
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px">'+LAB_TYPES.map(type=>{
+    const count=counts[type]||0;
+    const min=inventory.labThresholds[type]||0;
+    const low=min>0&&count<min;
+    const label=getLabLabel(type);
+    return`<div style="background:var(--c-bg);border:1px solid ${low?'var(--c-red)':'var(--c-border)'};border-radius:10px;padding:12px 14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--c-text-sec)">${esc(label)}</div>
+        ${low?'<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">'+t('lab.lowStock')+'</span>':''}
+      </div>
+      <div style="font-size:24px;font-weight:700;color:${low?'var(--c-red-dark)':'var(--c-text)'};margin-bottom:2px">${count}</div>
+      <div style="font-size:11px;color:var(--c-text-muted)">${min>0?'min '+min:'\u2014'}</div>
+      <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:6px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
+    </div>`;
+  }).join('')+'</div>';
+}
+function setLabMin(type){
+  if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
+  const cur=inventory.labThresholds[type]||0;
+  const val=prompt(t('lab.setMinimum')+' \u2014 '+getLabLabel(type),cur);
+  if(val===null)return;
+  inventory.labThresholds[type]=parseInt(val)||0;
+  saveLabThresholds();
+  renderDashLabStock();
+  renderDashAlerts();
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -5961,6 +6028,21 @@ function getInvAlerts(){
     const sups=getSuppliersForMat(mat);
     const supNote=sups.length?` — ${t('inv.reorderFrom')}: ${sups.map(s=>s.name).join(', ')}`:'';
     return{text:`Low stock: ${MAT_LABELS[mat]}`,detail:`${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold${supNote}`,urgent:stock<thresh*0.5,warn:true,species:null};
+  });
+}
+
+// Show low lab stock alerts in dashboard
+function getLabAlerts(){
+  if(!inventory.labThresholds)return[];
+  const counts=getLabStockCounts();
+  return LAB_TYPES.filter(type=>{
+    const min=inventory.labThresholds[type]||0;
+    return min>0&&counts[type]<min;
+  }).map(type=>{
+    const count=counts[type]||0;
+    const min=inventory.labThresholds[type];
+    const label=getLabLabel(type);
+    return{text:t('lab.lowLabAlert',{type:label}),detail:t('lab.belowMin',{n:count,min:min}),urgent:count===0,warn:true};
   });
 }
 
