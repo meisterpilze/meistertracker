@@ -168,6 +168,13 @@ const LANG = {
     'dash.ov.historyNoData': 'No KPI history yet — snapshots are taken daily with the backup.',
     'dash.ov.historyTakeSnapshot': 'Take snapshot now',
     'dash.ov.exportCsv': 'Export CSV',
+    'dash.ov.csvDaily': 'Daily',
+    'dash.ov.csvWeekly': 'Weekly',
+    'dash.ov.csvMonthly': 'Monthly',
+    'dash.ov.snapshotOk': 'Snapshot saved!',
+    'dash.ov.snapshotSkipped': 'Snapshot already taken today.',
+    'dash.ov.snapshotAuthErr': 'Admin login required.',
+    'dash.ov.snapshotErr': 'Snapshot failed.',
     'dash.ov.spawn': 'Spawn',
     'dash.ov.incubation': 'Incubation',
     'dash.ov.fruiting': 'Fruiting',
@@ -402,6 +409,12 @@ const LANG = {
     'lab.grainIdPreview': 'Grain spawn ID preview',
     'lab.createGrainBtn': 'Create grain spawn',
     'lab.grainCreated': '{n} grain spawn bags created',
+    'lab.lowStock': 'LOW',
+    'lab.activeCount': '{n} active',
+    'lab.belowMin': '{n} active — below minimum of {min}',
+    'lab.setMinimum': 'Set minimum',
+    'lab.lowLabAlert': 'Low lab stock: {type}',
+    'lab.gsLabel': 'Grain Spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Type',
@@ -1324,6 +1337,13 @@ const LANG = {
     'dash.ov.historyNoData': 'Noch keine KPI-Daten — Snapshots werden täglich mit dem Backup erstellt.',
     'dash.ov.historyTakeSnapshot': 'Snapshot jetzt erstellen',
     'dash.ov.exportCsv': 'CSV exportieren',
+    'dash.ov.csvDaily': 'Täglich',
+    'dash.ov.csvWeekly': 'Wöchentlich',
+    'dash.ov.csvMonthly': 'Monatlich',
+    'dash.ov.snapshotOk': 'Snapshot gespeichert!',
+    'dash.ov.snapshotSkipped': 'Snapshot wurde heute bereits erstellt.',
+    'dash.ov.snapshotAuthErr': 'Admin-Login erforderlich.',
+    'dash.ov.snapshotErr': 'Snapshot fehlgeschlagen.',
     'dash.ov.spawn': 'Spawn',
     'dash.ov.incubation': 'Inkubation',
     'dash.ov.fruiting': 'Fruchtung',
@@ -1558,6 +1578,12 @@ const LANG = {
     'lab.grainIdPreview': 'K\u00f6rnerbrut-ID Vorschau',
     'lab.createGrainBtn': 'K\u00f6rnerbrut erstellen',
     'lab.grainCreated': '{n} K\u00f6rnerbrut-Beutel erstellt',
+    'lab.lowStock': 'NIEDRIG',
+    'lab.activeCount': '{n} aktiv',
+    'lab.belowMin': '{n} aktiv \u2014 unter Minimum von {min}',
+    'lab.setMinimum': 'Minimum festlegen',
+    'lab.lowLabAlert': 'Niedriger Labbestand: {type}',
+    'lab.gsLabel': 'K\u00f6rnerbrut',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Typ',
@@ -2489,6 +2515,13 @@ const LANG = {
     'dash.ov.historyNoData': 'Ainda sem dados — snapshots são feitos diariamente com o backup.',
     'dash.ov.historyTakeSnapshot': 'Tirar snapshot agora',
     'dash.ov.exportCsv': 'Exportar CSV',
+    'dash.ov.csvDaily': 'Diário',
+    'dash.ov.csvWeekly': 'Semanal',
+    'dash.ov.csvMonthly': 'Mensal',
+    'dash.ov.snapshotOk': 'Snapshot salvo!',
+    'dash.ov.snapshotSkipped': 'Snapshot já foi tirado hoje.',
+    'dash.ov.snapshotAuthErr': 'Login de admin necessário.',
+    'dash.ov.snapshotErr': 'Snapshot falhou.',
     'dash.ov.spawn': 'Spawn',
     'dash.ov.incubation': 'Incubação',
     'dash.ov.fruiting': 'Frutificação',
@@ -2723,6 +2756,12 @@ const LANG = {
     'lab.grainIdPreview': 'Pr\u00e9via do ID de gr\u00e3os',
     'lab.createGrainBtn': 'Criar gr\u00e3os de spawn',
     'lab.grainCreated': '{n} sacos de gr\u00e3os criados',
+    'lab.lowStock': 'BAIXO',
+    'lab.activeCount': '{n} ativo(s)',
+    'lab.belowMin': '{n} ativo(s) \u2014 abaixo do m\u00ednimo de {min}',
+    'lab.setMinimum': 'Definir m\u00ednimo',
+    'lab.lowLabAlert': 'Estoque baixo no lab: {type}',
+    'lab.gsLabel': 'Gr\u00e3os de spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Tipo',
@@ -3618,6 +3657,7 @@ async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/del
 async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
 async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
+async function saveLabThresholds(){return apiPost('/api/lab-thresholds',{labThresholds:inventory.labThresholds})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
   showServerTab();showMcpTab();showAdminNav();
@@ -3664,6 +3704,7 @@ function defaultInventory(){
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
     avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},
+    labThresholds:{MC:0,PD:0,LC:0,G2G:0,GS:0},
     log:[]
   };
 }
@@ -3756,7 +3797,7 @@ function go(page,btnId){
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('p-'+page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
   if(page==='batch')renderBatches();
   if(page==='lab')renderCultures();
   if(page==='inv'){renderInvStock();}
@@ -3798,7 +3839,7 @@ function openStab(page,sub){
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();}
+  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
@@ -4331,9 +4372,46 @@ function renderKpiHistory(){
 async function takeKpiSnapshot(){
   try{
     const r=await fetch('/api/kpi-snapshots/now',{method:'POST'});
+    if(r.status===401||r.status===403){alert(t('dash.ov.snapshotAuthErr')||'Admin login required');return;}
     if(!r.ok)throw new Error('Failed');
+    const j=await r.json();
+    if(j.skipped){alert(t('dash.ov.snapshotSkipped')||'Snapshot already taken today');}
+    else{alert(t('dash.ov.snapshotOk')||'Snapshot saved!');}
     await loadKpiHistory();
-  }catch(e){console.error('Snapshot failed',e);}
+  }catch(e){console.error('Snapshot failed',e);alert(t('dash.ov.snapshotErr')||'Snapshot failed');}
+}
+
+function _kpiGroupKey(dateStr,period){
+  const d=new Date(dateStr+'T00:00:00');
+  if(period==='monthly')return dateStr.slice(0,7);
+  if(period==='weekly'){
+    const thu=new Date(d);thu.setDate(d.getDate()-((d.getDay()+6)%7)+3);
+    const y=thu.getFullYear();
+    const w=Math.ceil(((thu-new Date(y,0,4))/864e5+new Date(y,0,4).getDay()+6)/7);
+    return y+'-W'+String(w).padStart(2,'0');
+  }
+  return dateStr;
+}
+
+function _kpiAggregate(rows,period){
+  if(period==='daily')return rows;
+  const sumF=['bags_created','grain_used_kg','harvest_kg','hardwood_used_kg','wheatbran_used_kg'];
+  const lastF=['avg_yield_g','contam_rate_pct','contam_bags','total_bags_placed','days_since_contam',
+    'flush_2plus','bags_spawn','bags_incubation','bags_fruiting','bags_contaminated',
+    'total_batches','stock_hardwood_kg','stock_wheatbran_kg','stock_grain_kg'];
+  const groups={};const order=[];
+  rows.forEach(r=>{
+    const k=_kpiGroupKey(r.date,period);
+    if(!groups[k]){groups[k]={key:k,rows:[]};order.push(k);}
+    groups[k].rows.push(r);
+  });
+  return order.map(k=>{
+    const g=groups[k];const last=g.rows[g.rows.length-1];
+    const agg={date:g.key+' ('+g.rows[0].date+' \u2013 '+last.date+')'};
+    sumF.forEach(f=>{agg[f]=+g.rows.reduce((s,r)=>s+(r[f]||0),0).toFixed(2);});
+    lastF.forEach(f=>{agg[f]=last[f];});
+    return agg;
+  });
 }
 
 async function exportKpiCSV(){
@@ -4341,9 +4419,11 @@ async function exportKpiCSV(){
     const r=await fetch('/api/kpi-snapshots');
     if(!r.ok)throw new Error('Failed');
     const j=await r.json();
-    const rows=j.items||[];
-    if(!rows.length){alert(t('dash.ov.historyNoData'));return;}
-    const hdr=['Date','Bags created','Grain used (kg)','Harvest (kg)','Hardwood used (kg)','Wheat bran used (kg)',
+    const raw=j.items||[];
+    if(!raw.length){alert(t('dash.ov.historyNoData'));return;}
+    const period=(document.getElementById('kpi-csv-period')||{}).value||'weekly';
+    const rows=_kpiAggregate(raw,period);
+    const hdr=['Period','Bags created','Grain used (kg)','Harvest (kg)','Hardwood used (kg)','Wheat bran used (kg)',
       'Avg yield (g)','Contam rate (%)','Contam bags','Total bags placed','Days since contam',
       'Flush 2+','Bags spawn','Bags incubation','Bags fruiting','Bags contaminated',
       'Total batches','Stock hardwood (kg)','Stock wheat bran (kg)','Stock grain (kg)'];
@@ -4353,7 +4433,7 @@ async function exportKpiCSV(){
       s.total_batches,s.stock_hardwood_kg,s.stock_wheatbran_kg,s.stock_grain_kg]);
     const csv='\uFEFF'+[hdr,...csvRows].map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kpi_history_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kpi_'+period+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   }catch(e){console.error('KPI CSV export failed',e);}
 }
 
