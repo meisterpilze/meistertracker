@@ -132,6 +132,17 @@ const LANG = {
     'dash.ov.grainUsed': 'Grain used',
     'dash.ov.harvestThisWeek': 'Harvest',
     'dash.ov.substrateUsed': 'Substrate used',
+    'dash.ov.hardwoodUsed': 'Hardwood used',
+    'dash.ov.wheatbranUsed': 'Wheat bran used',
+    'dash.ov.hardwood': 'Hardwood',
+    'dash.ov.wheatbran': 'Wheat bran',
+    'dash.ov.periodWeek': 'This week',
+    'dash.ov.periodMonth': 'This month',
+    'dash.ov.periodYear': 'This year',
+    'dash.ov.dailyHarvest': 'Daily harvest (this month)',
+    'dash.ov.weeklySubstrate': 'Substrate by week',
+    'dash.ov.monthlyHarvest': 'Monthly harvest',
+    'dash.ov.monthlyBags': 'Bags created by month',
     'dash.ov.avgYield': 'Avg yield / bag',
     'dash.ov.contamRate': 'Contam rate',
     'dash.ov.daysSinceContam': 'Days clean',
@@ -1262,6 +1273,17 @@ const LANG = {
     'dash.ov.grainUsed': 'Verbrauchtes Korn',
     'dash.ov.harvestThisWeek': 'Ernte',
     'dash.ov.substrateUsed': 'Substrat verbraucht',
+    'dash.ov.hardwoodUsed': 'Hartholz verbraucht',
+    'dash.ov.wheatbranUsed': 'Weizenkleie verbraucht',
+    'dash.ov.hardwood': 'Hartholz',
+    'dash.ov.wheatbran': 'Weizenkleie',
+    'dash.ov.periodWeek': 'Diese Woche',
+    'dash.ov.periodMonth': 'Diesen Monat',
+    'dash.ov.periodYear': 'Dieses Jahr',
+    'dash.ov.dailyHarvest': 'Tägliche Ernte (diesen Monat)',
+    'dash.ov.weeklySubstrate': 'Substrat nach Woche',
+    'dash.ov.monthlyHarvest': 'Monatliche Ernte',
+    'dash.ov.monthlyBags': 'Erstellte Beutel pro Monat',
     'dash.ov.avgYield': 'Ø Ertrag / Beutel',
     'dash.ov.contamRate': 'Kontaminationsrate',
     'dash.ov.daysSinceContam': 'Tage kontaminationsfrei',
@@ -2401,6 +2423,17 @@ const LANG = {
     'dash.ov.grainUsed': 'Grão utilizado',
     'dash.ov.harvestThisWeek': 'Colheita',
     'dash.ov.substrateUsed': 'Substrato utilizado',
+    'dash.ov.hardwoodUsed': 'Madeira dura utilizada',
+    'dash.ov.wheatbranUsed': 'Farelo de trigo utilizado',
+    'dash.ov.hardwood': 'Madeira dura',
+    'dash.ov.wheatbran': 'Farelo de trigo',
+    'dash.ov.periodWeek': 'Esta semana',
+    'dash.ov.periodMonth': 'Este mês',
+    'dash.ov.periodYear': 'Este ano',
+    'dash.ov.dailyHarvest': 'Colheita diária (este mês)',
+    'dash.ov.weeklySubstrate': 'Substrato por semana',
+    'dash.ov.monthlyHarvest': 'Colheita mensal',
+    'dash.ov.monthlyBags': 'Sacos criados por mês',
     'dash.ov.avgYield': 'Rendimento médio / saco',
     'dash.ov.contamRate': 'Taxa de contaminação',
     'dash.ov.daysSinceContam': 'Dias sem contaminação',
@@ -3504,6 +3537,7 @@ function safeColor(c,fallback){
 // ─── AUTH ────────────────────────────────────────────────────
 let currentUser=null;
 let dashMode=localStorage.getItem('mp-dash-mode')||'farm';
+let ovPeriod=localStorage.getItem('mp-ov-period')||'week';
 async function authFetch(url,opts){
   const r=await fetch(url,opts);
   if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
@@ -3898,27 +3932,40 @@ function renderMiniPipeline(){
 }
 
 function renderOverviewKPIs(){
+  if(dashMode!=='overview')return;
   const weekEl=document.getElementById('ov-kpi-week');
   const qualEl=document.getElementById('ov-kpi-quality');
   if(!weekEl||!qualEl)return;
 
-  const now=Date.now();
-  const weekAgo=new Date(now-7*864e5);
-  const monthStart=new Date();monthStart.setDate(1);monthStart.setHours(0,0,0,0);
+  applyOvPeriod();
 
-  // ── THIS WEEK ─────────────────────────────────────────────
+  const now=Date.now();
+  const nowDate=new Date();
+
+  // Period start based on selected period
+  let periodStart;
+  if(ovPeriod==='week') periodStart=new Date(now-7*864e5);
+  else if(ovPeriod==='month') periodStart=new Date(nowDate.getFullYear(),nowDate.getMonth(),1);
+  else periodStart=new Date(nowDate.getFullYear(),0,1);
+
+  // ── PRODUCTION ─────────────────────────────────────────────
   // 1. Bags created
-  const bagsCreated=batches.filter(b=>new Date(b.created)>=weekAgo).reduce((s,b)=>s+(b.qty||0),0);
+  const bagsCreated=batches.filter(b=>new Date(b.created)>=periodStart).reduce((s,b)=>s+(b.qty||0),0);
 
   // 2. Grain used (kg) — from inventory log
-  const grainUsed=(inventory.log||[]).filter(e=>e.mat==='grain'&&e.type==='batch'&&new Date(e.time)>=weekAgo).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
+  const grainUsed=(inventory.log||[]).filter(e=>e.mat==='grain'&&e.type==='batch'&&new Date(e.time)>=periodStart).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
 
-  // 3. Harvest this week (kg)
-  const weekHarvestG=harvests.filter(h=>new Date(h.time)>=weekAgo).reduce((s,h)=>s+(h.grams||0),0);
-  const weekHarvestKg=weekHarvestG/1000;
+  // 3. Harvest (kg)
+  const periodHarvests=harvests.filter(h=>new Date(h.time)>=periodStart);
+  const periodHarvestKg=periodHarvests.reduce((s,h)=>s+(h.grams||0),0)/1000;
 
-  // 4. Substrate used (kg) = hardwood + wheat bran from this week's batches
-  const substrateUsed=(inventory.log||[]).filter(e=>(e.mat==='hardwood'||e.mat==='wheatbran')&&e.type==='batch'&&new Date(e.time)>=weekAgo).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
+  // 4. Substrate used (kg) — hardwood and wheat bran tracked separately
+  let hardwoodUsed=0,wheatbranUsed=0;
+  (inventory.log||[]).forEach(e=>{
+    if(e.type!=='batch'||new Date(e.time)<periodStart)return;
+    if(e.mat==='hardwood')hardwoodUsed+=Math.abs(e.deltaKg||0);
+    else if(e.mat==='wheatbran')wheatbranUsed+=Math.abs(e.deltaKg||0);
+  });
 
   // ── QUALITY & EFFICIENCY ──────────────────────────────────
   // 5. Avg yield per bag (g) — total grams / unique bags ever harvested
@@ -3983,11 +4030,16 @@ function renderOverviewKPIs(){
   const iconStreak=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
   const iconFlush=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
 
+  const periodSub=t('dash.ov.period'+ovPeriod.charAt(0).toUpperCase()+ovPeriod.slice(1));
+  const periodLabel=document.getElementById('ov-period-label');
+  if(periodLabel) periodLabel.textContent=periodSub;
+
   weekEl.innerHTML=[
-    card(iconBag, bagsCreated||'0', t('dash.ov.bagsCreated'), t('dash.ov.vsLastWeek'), '#0ea5e9','#dbeafe'),
+    card(iconBag, bagsCreated||'0', t('dash.ov.bagsCreated'), periodSub, '#0ea5e9','#dbeafe'),
     card(iconGrain, grainUsed>0?fmtKg(grainUsed):'—', t('dash.ov.grainUsed'), t('dash.ov.fromBatches'), '#a855f7','#f3e8ff'),
-    card(iconHarvest, weekHarvestKg>0?fmtKg(weekHarvestKg):'—', t('dash.ov.harvestThisWeek'), harvests.filter(h=>new Date(h.time)>=weekAgo).length+' '+t('dash.ov.harvests'), '#d97706','#fef3c7'),
-    card(iconSubstrate, substrateUsed>0?fmtKg(substrateUsed):'—', t('dash.ov.substrateUsed'), t('dash.ov.hwWb'), '#0d9488','#ccfbf1'),
+    card(iconHarvest, periodHarvestKg>0?fmtKg(periodHarvestKg):'—', t('dash.ov.harvestThisWeek'), periodHarvests.length+' '+t('dash.ov.harvests'), '#d97706','#fef3c7'),
+    card(iconSubstrate, hardwoodUsed>0?fmtKg(hardwoodUsed):'—', t('dash.ov.hardwoodUsed'), t('dash.ov.fromBatches'), '#0d9488','#ccfbf1'),
+    card(iconSubstrate, wheatbranUsed>0?fmtKg(wheatbranUsed):'—', t('dash.ov.wheatbranUsed'), t('dash.ov.fromBatches'), '#059669','#d1fae5'),
   ].join('');
 
   qualEl.innerHTML=[
@@ -3996,6 +4048,14 @@ function renderOverviewKPIs(){
     card(iconStreak, daysSinceContam!==null?daysSinceContam:t('dash.ov.na'), t('dash.ov.daysSinceContam'), daysSinceLabel, streakColor, streakBg),
     card(iconFlush, flush2Plus||'0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1','#e0e7ff'),
   ].join('');
+
+  // Show the right chart container for the period
+  ['week','month','year'].forEach(p=>{
+    const el=document.getElementById('ov-charts-'+p);
+    if(el) el.style.display=ovPeriod===p?'':'none';
+  });
+  if(ovPeriod==='month') renderMonthCharts(periodStart);
+  else if(ovPeriod==='year') renderYearCharts(periodStart);
 }
 
 function renderHarvestChart(){
@@ -4036,6 +4096,7 @@ function renderHarvestChart(){
 }
 
 let weeklyHarvestInst=null;
+let ovMonthHarvestInst=null,ovMonthSubstrateInst=null,ovYearHarvestInst=null,ovYearBagsInst=null;
 function renderWeeklyHarvestChart(){
   const canvas=document.getElementById('weekly-harvest-chart');
   if(!canvas)return;
@@ -4090,6 +4151,103 @@ function renderWeeklyHarvestChart(){
   });
 }
 
+function renderMonthCharts(monthStart){
+  const nowDate=new Date();
+
+  const canvas1=document.getElementById('ov-month-harvest-chart');
+  if(canvas1){
+    const dayMap={};
+    harvests.forEach(h=>{
+      const d=new Date(h.time);
+      if(d<monthStart)return;
+      const key=d.toISOString().slice(0,10);
+      dayMap[key]=(dayMap[key]||0)+(h.grams||0);
+    });
+    const days=[];
+    const cur=new Date(monthStart);
+    while(cur<=nowDate){days.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+1);}
+    if(ovMonthHarvestInst){ovMonthHarvestInst.destroy();ovMonthHarvestInst=null;}
+    const ctx1=canvas1.getContext('2d');
+    const grad1=ctx1.createLinearGradient(0,0,0,180);
+    grad1.addColorStop(0,'rgba(245,158,11,0.35)');grad1.addColorStop(1,'rgba(245,158,11,0.01)');
+    ovMonthHarvestInst=new Chart(canvas1,{
+      type:'line',
+      data:{labels:days.map(k=>fmtDtShort(new Date(k))),datasets:[{data:days.map(k=>(dayMap[k]||0)/1000),fill:true,backgroundColor:grad1,borderColor:'rgba(245,158,11,0.9)',borderWidth:2,pointRadius:days.length>20?0:3,tension:0.3}]},
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(2)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{font:{size:9},color:'#64748b',maxTicksLimit:12},grid:{display:false}}}}
+    });
+  }
+
+  const canvas2=document.getElementById('ov-month-substrate-chart');
+  if(canvas2){
+    const weekHw={},weekWb={};
+    (inventory.log||[]).forEach(e=>{
+      if(e.type!=='batch')return;
+      if(e.mat!=='hardwood'&&e.mat!=='wheatbran')return;
+      const d=new Date(e.time);
+      if(d<monthStart)return;
+      const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
+      const key=mon.toISOString().slice(0,10);
+      if(e.mat==='hardwood')weekHw[key]=(weekHw[key]||0)+Math.abs(e.deltaKg||0);
+      else weekWb[key]=(weekWb[key]||0)+Math.abs(e.deltaKg||0);
+    });
+    const weekKeys=[...new Set([...Object.keys(weekHw),...Object.keys(weekWb)])].sort();
+    if(ovMonthSubstrateInst){ovMonthSubstrateInst.destroy();ovMonthSubstrateInst=null;}
+    if(!weekKeys.length){
+      const ctx=canvas2.getContext('2d');ctx.clearRect(0,0,canvas2.width,canvas2.height);
+      ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('dash.noHarvestData'),canvas2.width/2,60);
+    }else{
+      ovMonthSubstrateInst=new Chart(canvas2,{
+        type:'bar',
+        data:{labels:weekKeys.map(k=>'w/'+k.slice(5,10)),datasets:[
+          {label:t('dash.ov.hardwood'),data:weekKeys.map(k=>+(weekHw[k]||0).toFixed(1)),backgroundColor:'#0d9488',borderRadius:3},
+          {label:t('dash.ov.wheatbran'),data:weekKeys.map(k=>+(weekWb[k]||0).toFixed(1)),backgroundColor:'#059669',borderRadius:3}
+        ]},
+        options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(1)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+      });
+    }
+  }
+}
+
+function renderYearCharts(yearStart){
+  const nowDate=new Date();
+  const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthKeys=Array.from({length:12},(_,i)=>`${nowDate.getFullYear()}-${String(i+1).padStart(2,'0')}`);
+
+  const canvas1=document.getElementById('ov-year-harvest-chart');
+  if(canvas1){
+    const monthMap={};
+    harvests.forEach(h=>{
+      const d=new Date(h.time);
+      if(d<yearStart)return;
+      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      monthMap[key]=(monthMap[key]||0)+(h.grams||0);
+    });
+    if(ovYearHarvestInst){ovYearHarvestInst.destroy();ovYearHarvestInst=null;}
+    ovYearHarvestInst=new Chart(canvas1,{
+      type:'bar',
+      data:{labels:monthNames,datasets:[{data:monthKeys.map(k=>+((monthMap[k]||0)/1000).toFixed(2)),backgroundColor:monthKeys.map((_,i)=>i===nowDate.getMonth()?'rgba(245,158,11,0.9)':'rgba(245,158,11,0.45)'),borderRadius:4}]},
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(2)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+    });
+  }
+
+  const canvas2=document.getElementById('ov-year-bags-chart');
+  if(canvas2){
+    const bagMap={};
+    batches.forEach(b=>{
+      const d=new Date(b.created);
+      if(d<yearStart)return;
+      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      bagMap[key]=(bagMap[key]||0)+(b.qty||0);
+    });
+    if(ovYearBagsInst){ovYearBagsInst.destroy();ovYearBagsInst=null;}
+    ovYearBagsInst=new Chart(canvas2,{
+      type:'bar',
+      data:{labels:monthNames,datasets:[{data:monthKeys.map(k=>bagMap[k]||0),backgroundColor:monthKeys.map((_,i)=>i===nowDate.getMonth()?'rgba(14,165,233,0.9)':'rgba(14,165,233,0.45)'),borderRadius:4}]},
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' '+t('dash.ov.bags')}}},scales:{y:{ticks:{color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+    });
+  }
+}
+
 const CHEVRON_SVG='<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 let ZONE_LABELS={};
 let ZONE_COLORS={};
@@ -4099,8 +4257,8 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
-  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
+  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
 
   // Compute per-batch status
   let ti=0,tt=0,tc=0;
@@ -4138,8 +4296,7 @@ function renderStatus(){
   renderMetrics(batches.length,ti,tt,tc);
   renderMiniPipeline();
   renderOverviewKPIs();
-  renderHarvestChart();
-  renderWeeklyHarvestChart();
+  if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}
   applyDashMode();
   updateActionBar();
 }
@@ -4394,9 +4551,23 @@ function applyDashMode(){
   const farmBtn=document.getElementById('dash-view-farm');
   const ovBtn=document.getElementById('dash-view-overview');
   const charts=document.getElementById('dash-charts-section');
+  const farmSection=document.getElementById('dash-farm-section');
   if(farmBtn)farmBtn.classList.toggle('active',dashMode==='farm');
   if(ovBtn)ovBtn.classList.toggle('active',dashMode==='overview');
   if(charts)charts.style.display=dashMode==='overview'?'':'none';
+  if(farmSection)farmSection.style.display=dashMode==='farm'?'':'none';
+}
+function setOvPeriod(p){
+  ovPeriod=p;
+  localStorage.setItem('mp-ov-period',p);
+  renderOverviewKPIs();
+  if(p==='week'){renderHarvestChart();renderWeeklyHarvestChart();}
+}
+function applyOvPeriod(){
+  ['week','month','year'].forEach(p=>{
+    const btn=document.getElementById('ov-p-'+p);
+    if(btn)btn.classList.toggle('active',ovPeriod===p);
+  });
 }
 
 function renderDashAlerts(){

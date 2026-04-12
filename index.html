@@ -392,6 +392,9 @@
     </button>
   </div>
 
+  <!-- Farm-only sections (hidden in Overview mode) -->
+  <div id="dash-farm-section">
+
   <!-- Batch tasks + Alerts side by side -->
   <div class="dash-top-row" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">
 
@@ -441,23 +444,32 @@
   </div>
   <div id="dash-locations"></div>
 
+  </div><!-- end dash-farm-section -->
+
   <!-- Charts section — visible in Overview mode only -->
   <div id="dash-charts-section" style="display:none">
 
-    <!-- Overview KPI row 1: this week -->
-    <div class="ov-kpi-group" style="margin-bottom:10px">
-      <div class="ov-kpi-group-label" data-i18n="dash.ov.thisWeek">This week</div>
-      <div class="g4" id="ov-kpi-week"></div>
+    <!-- Period toggle: Week / Month / Year -->
+    <div class="ov-period-toggle">
+      <button class="ov-period-btn active" id="ov-p-week" onclick="setOvPeriod('week')" data-i18n="dash.ov.periodWeek">This week</button>
+      <button class="ov-period-btn" id="ov-p-month" onclick="setOvPeriod('month')" data-i18n="dash.ov.periodMonth">This month</button>
+      <button class="ov-period-btn" id="ov-p-year" onclick="setOvPeriod('year')" data-i18n="dash.ov.periodYear">This year</button>
     </div>
 
-    <!-- Overview KPI row 2: quality & efficiency -->
+    <!-- Production KPI row (adapts to period) -->
+    <div class="ov-kpi-group" style="margin-bottom:10px">
+      <div class="ov-kpi-group-label" id="ov-period-label">This week</div>
+      <div class="g5" id="ov-kpi-week"></div>
+    </div>
+
+    <!-- Quality & Efficiency KPI row (all-time) -->
     <div class="ov-kpi-group" style="margin-bottom:14px">
       <div class="ov-kpi-group-label" data-i18n="dash.ov.qualityEff">Quality &amp; efficiency</div>
       <div class="g4" id="ov-kpi-quality"></div>
     </div>
 
-    <!-- Charts -->
-    <div class="g2" style="margin-bottom:10px">
+    <!-- Week charts -->
+    <div id="ov-charts-week" class="g2" style="margin-bottom:10px">
       <div class="card">
         <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
         <canvas id="harvest-chart" height="180"></canvas>
@@ -468,6 +480,30 @@
           <div id="dash-weekly-trend-badge"></div>
         </div>
         <canvas id="weekly-harvest-chart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- Month charts -->
+    <div id="ov-charts-month" class="g2" style="margin-bottom:10px;display:none">
+      <div class="card">
+        <div class="sec" data-i18n="dash.ov.dailyHarvest">Daily harvest (this month)</div>
+        <canvas id="ov-month-harvest-chart" height="180"></canvas>
+      </div>
+      <div class="card">
+        <div class="sec" data-i18n="dash.ov.weeklySubstrate">Substrate by week</div>
+        <canvas id="ov-month-substrate-chart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- Year charts -->
+    <div id="ov-charts-year" class="g2" style="margin-bottom:10px;display:none">
+      <div class="card">
+        <div class="sec" data-i18n="dash.ov.monthlyHarvest">Monthly harvest</div>
+        <canvas id="ov-year-harvest-chart" height="180"></canvas>
+      </div>
+      <div class="card">
+        <div class="sec" data-i18n="dash.ov.monthlyBags">Bags created by month</div>
+        <canvas id="ov-year-bags-chart" height="180"></canvas>
       </div>
     </div>
   </div>
