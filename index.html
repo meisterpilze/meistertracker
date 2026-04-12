@@ -392,35 +392,40 @@
     </button>
   </div>
 
-  <!-- Batch tasks (worker-first — top of page) -->
-  <div class="card" id="dash-batch-tasks-card" style="padding:12px 16px;margin-bottom:10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
-      <select id="dash-batch-filter" style="width:auto;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--c-border)">
-        <option value="all" data-i18n="todo.all">All</option>
-        <option value="urgent" data-i18n="todo.urgentOnly">Urgent only</option>
-      </select>
-    </div>
-    <div id="dash-batch-tasks"></div>
-    <details class="dash-legend" style="margin-top:8px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-border);padding-top:6px">
-      <summary style="cursor:pointer;user-select:none" data-i18n="dash.legend.title">Color guide</summary>
-      <div style="padding:8px 0 2px;display:flex;flex-direction:column;gap:6px">
-        <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot med" style="margin-top:3px"></span><span data-i18n="dash.legend.orangeDot"></span></div>
-        <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot high" style="margin-top:3px"></span><span data-i18n="dash.legend.redDot"></span></div>
-        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:4px;height:14px;background:#888;border-radius:2px;margin-top:1px;flex-shrink:0"></span><span data-i18n="dash.legend.species"></span></div>
-        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-top:2px;flex-shrink:0"></span><span data-i18n="dash.legend.zoneDot"></span></div>
-        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:10px;background:var(--c-red-light);border:1px solid var(--c-red);border-radius:3px;margin-top:3px;flex-shrink:0"></span><span data-i18n="dash.legend.overdue"></span></div>
-        <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:5px;background:var(--c-red);border-radius:2px;margin-top:5px;flex-shrink:0"></span><span data-i18n="dash.legend.capacity"></span></div>
-      </div>
-    </details>
-  </div>
+  <!-- Batch tasks + Alerts side by side -->
+  <div class="dash-top-row" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">
 
-  <!-- Alerts (inventory + overdue batches + capacity) -->
-  <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px;display:none">
-    <div style="margin-bottom:6px">
-      <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts</div>
+    <!-- Batch tasks (worker-first — top of page) -->
+    <div class="card" id="dash-batch-tasks-card" style="padding:12px 16px;flex:1;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
+        <select id="dash-batch-filter" style="width:auto;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--c-border)">
+          <option value="all" data-i18n="todo.all">All</option>
+          <option value="urgent" data-i18n="todo.urgentOnly">Urgent only</option>
+        </select>
+      </div>
+      <div id="dash-batch-tasks"></div>
+      <details class="dash-legend" style="margin-top:8px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-border);padding-top:6px">
+        <summary style="cursor:pointer;user-select:none" data-i18n="dash.legend.title">Color guide</summary>
+        <div style="padding:8px 0 2px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot med" style="margin-top:3px"></span><span data-i18n="dash.legend.orangeDot"></span></div>
+          <div style="display:flex;align-items:flex-start;gap:8px"><span class="pdot high" style="margin-top:3px"></span><span data-i18n="dash.legend.redDot"></span></div>
+          <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:4px;height:14px;background:#888;border-radius:2px;margin-top:1px;flex-shrink:0"></span><span data-i18n="dash.legend.species"></span></div>
+          <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#888;margin-top:2px;flex-shrink:0"></span><span data-i18n="dash.legend.zoneDot"></span></div>
+          <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:10px;background:var(--c-red-light);border:1px solid var(--c-red);border-radius:3px;margin-top:3px;flex-shrink:0"></span><span data-i18n="dash.legend.overdue"></span></div>
+          <div style="display:flex;align-items:flex-start;gap:8px"><span style="display:inline-block;width:14px;height:5px;background:var(--c-red);border-radius:2px;margin-top:5px;flex-shrink:0"></span><span data-i18n="dash.legend.capacity"></span></div>
+        </div>
+      </details>
     </div>
-    <div id="dash-alerts"></div>
+
+    <!-- Alerts (inventory + overdue batches + capacity) -->
+    <div class="card" id="dash-alerts-card" style="padding:12px 16px;flex:0 0 260px;display:none">
+      <div style="margin-bottom:6px">
+        <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts</div>
+      </div>
+      <div id="dash-alerts"></div>
+    </div>
+
   </div>
 
   <!-- KPI strip (5 cards) -->
@@ -438,6 +443,20 @@
 
   <!-- Charts section — visible in Overview mode only -->
   <div id="dash-charts-section" style="display:none">
+
+    <!-- Overview KPI row 1: this week -->
+    <div class="ov-kpi-group" style="margin-bottom:10px">
+      <div class="ov-kpi-group-label" data-i18n="dash.ov.thisWeek">This week</div>
+      <div class="g4" id="ov-kpi-week"></div>
+    </div>
+
+    <!-- Overview KPI row 2: quality & efficiency -->
+    <div class="ov-kpi-group" style="margin-bottom:14px">
+      <div class="ov-kpi-group-label" data-i18n="dash.ov.qualityEff">Quality &amp; efficiency</div>
+      <div class="g4" id="ov-kpi-quality"></div>
+    </div>
+
+    <!-- Charts -->
     <div class="g2" style="margin-bottom:10px">
       <div class="card">
         <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
