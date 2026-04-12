@@ -1122,6 +1122,11 @@ textarea:focus {
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
+.g5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
 
 /* ═══ RESPONSIVE TABLES ════════════════════════════════════════ */
 .table-wrap {
@@ -1149,6 +1154,12 @@ textarea:focus {
   font-weight: 700;
   color: var(--c-text);
   line-height: 1.2;
+}
+.met-spark {
+  margin-top: 6px;
+  height: 24px;
+  display: flex;
+  align-items: flex-end;
 }
 
 /* ═══ BADGES ════════════════════════════════════════════════════ */
@@ -1353,7 +1364,7 @@ tr:hover td {
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
   border: 1px solid var(--c-border);
-  border-left: 3px solid var(--sp-color, var(--c-border));
+  border-left: 4px solid var(--action-color, var(--c-border));
   background: var(--c-surface);
   transition: box-shadow 0.15s;
 }
@@ -2128,6 +2139,29 @@ tr:hover td {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.location-section.collapsed .location-section-header {
+  margin-bottom: 0;
+}
+.location-section-body {
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.location-section.collapsed .location-section-body {
+  max-height: 0 !important;
+  margin-top: 0;
+}
+.location-section-toggle {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  color: var(--c-text-muted);
+}
+.location-section.collapsed .location-section-toggle {
+  transform: rotate(-90deg);
 }
 .location-section-title {
   font-size: 14px;
@@ -2329,23 +2363,119 @@ tr:hover td {
   font-weight: 600;
   color: var(--c-text);
 }
-.dash-search-bar {
+/* ═══ DASHBOARD VIEW TOGGLE ════════════════════════════════════ */
+.dash-view-toggle {
+  display: flex;
+  background: var(--c-border-light);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  width: fit-content;
   margin-bottom: 14px;
 }
-.dash-search-bar input {
-  width: 100%;
-  padding: 10px 14px;
+.dash-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 18px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text-muted);
   font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.dash-view-btn.active {
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+.dash-view-btn svg {
+  flex-shrink: 0;
+}
+
+/* ═══ MINI PIPELINE STRIP ═══════════════════════════════════════ */
+.dmp-card {
+  padding: 14px 18px;
+}
+.dmp-stages {
+  display: flex;
+  gap: 8px;
+}
+.dmp-stage {
+  flex: 1;
+  min-width: 0;
+}
+.dmp-stage-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+.dmp-stage-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--c-text-muted);
+}
+.dmp-stage-count {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.dmp-stage-bar {
+  height: 6px;
+  background: var(--c-border-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dmp-stage-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.45s ease;
+  min-width: 0;
+}
+
+/* ═══ LOCATIONS HEADER + INLINE SEARCH ═════════════════════════ */
+.dash-locations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dash-search-inline {
+  width: 200px;
+  font-size: 12px;
+  padding: 6px 10px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   background: var(--c-surface);
   color: var(--c-text);
   font-family: inherit;
+  transition: border-color 0.15s;
 }
-.dash-search-bar input:focus {
+.dash-search-inline:focus {
   outline: none;
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+}
+
+/* ═══ TASK ACTION BUTTONS + CLICKABLE BATCH ID ══════════════════ */
+.dash-task-batch-id {
+  font-family: monospace;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--c-text-muted);
+  transition: color 0.12s, border-color 0.12s;
+}
+.dash-task-batch-id:hover {
+  color: var(--c-primary);
+  border-bottom-color: var(--c-primary);
 }
 .rack-detail-inline {
   margin-top: 10px;
@@ -2410,8 +2540,9 @@ tr:hover td {
 
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
-  .g4 {
-    grid-template-columns: repeat(2, 1fr);
+  .g4,
+  .g5 {
+    grid-template-columns: repeat(3, 1fr);
   }
   .rack-grid-inc {
     grid-template-columns: repeat(3, 1fr) !important;
@@ -2478,7 +2609,8 @@ tr:hover td {
     padding: 14px;
   }
   .g3,
-  .g4 {
+  .g4,
+  .g5 {
     grid-template-columns: repeat(2, 1fr);
   }
   .g2 {
@@ -2565,6 +2697,20 @@ tr:hover td {
   }
 }
 @media (max-width: 480px) {
+  .dash-view-toggle {
+    width: 100%;
+  }
+  .dash-view-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 7px 10px;
+  }
+  .dash-search-inline {
+    width: 140px;
+  }
+  .dmp-stage-count {
+    font-size: 15px;
+  }
   .main {
     padding: 8px;
   }
@@ -2574,7 +2720,8 @@ tr:hover td {
   }
   .g2,
   .g3,
-  .g4 {
+  .g4,
+  .g5 {
     grid-template-columns: 1fr;
   }
   .cal-grid {
