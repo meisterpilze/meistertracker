@@ -4025,7 +4025,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const result = db.snapshotDailyKPIs(database);
       jsonOk(res, result);
     } catch (e) {
-      jsonErr(res, 500, e.message);
+      safeErr(res, e);
     }
     return;
   }
@@ -5252,7 +5252,23 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.updateLabThresholds(database, data.labThresholds);
+        const lt = data.labThresholds;
+        if (!lt || typeof lt !== 'object' || Array.isArray(lt)) {
+          jsonErr(res, 400, 'labThresholds must be an object');
+          return;
+        }
+        const validKeys = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+        for (const k of Object.keys(lt)) {
+          if (!validKeys.includes(k)) {
+            jsonErr(res, 400, 'Unknown threshold key: ' + k);
+            return;
+          }
+          if (typeof lt[k] !== 'number' || lt[k] < 0) {
+            jsonErr(res, 400, 'Threshold values must be non-negative numbers');
+            return;
+          }
+        }
+        db.updateLabThresholds(database, lt);
         log('info', 'Lab thresholds updated', { actor: req.authUser.username });
         broadcastSSE(res);
         jsonOk(res);

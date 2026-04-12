@@ -611,11 +611,12 @@ const MIGRATIONS = [
     version: 23,
     description: 'Add lab threshold columns to inventory table',
     fn(db) {
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_pd INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_lc INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0");
+      const cols = db.prepare("SELECT name FROM pragma_table_info('inventory')").all().map((r) => r.name);
+      if (!cols.includes('lab_thresh_mc')) db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0");
+      if (!cols.includes('lab_thresh_pd')) db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_pd INTEGER DEFAULT 0");
+      if (!cols.includes('lab_thresh_lc')) db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_lc INTEGER DEFAULT 0");
+      if (!cols.includes('lab_thresh_g2g')) db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0");
+      if (!cols.includes('lab_thresh_gs')) db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0");
     }
   }
 ];

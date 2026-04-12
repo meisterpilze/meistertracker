@@ -408,6 +408,8 @@ const LANG = {
     'lab.setMinimum': 'Set minimum',
     'lab.lowLabAlert': 'Low lab stock: {type}',
     'lab.gsLabel': 'Grain Spawn',
+    'lab.totalStock': 'Total lab stock',
+    'lab.liveStatus': 'Active cultures & spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Type',
@@ -1570,6 +1572,8 @@ const LANG = {
     'lab.setMinimum': 'Minimum festlegen',
     'lab.lowLabAlert': 'Niedriger Labbestand: {type}',
     'lab.gsLabel': 'K\u00f6rnerbrut',
+    'lab.totalStock': 'Labbestand gesamt',
+    'lab.liveStatus': 'Aktive Kulturen & Spawn',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Typ',
@@ -2741,6 +2745,8 @@ const LANG = {
     'lab.setMinimum': 'Definir m\u00ednimo',
     'lab.lowLabAlert': 'Estoque baixo no lab: {type}',
     'lab.gsLabel': 'Gr\u00e3os de spawn',
+    'lab.totalStock': 'Estoque total do lab',
+    'lab.liveStatus': 'Culturas & spawn ativos',
     // Table headers - lab
     'th.id': 'ID',
     'th.type': 'Tipo',
@@ -3776,7 +3782,7 @@ function go(page,btnId){
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('p-'+page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
+  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();renderDashLabLive();renderDashLabIncubation();}
   if(page==='batch')renderBatches();
   if(page==='lab')renderCultures();
   if(page==='inv'){renderInvStock();}
@@ -3818,7 +3824,7 @@ function openStab(page,sub){
 function refresh(){
   const active=document.querySelector('.page.active');if(!active)return;
   const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
+  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();renderDashLabLive();renderDashLabIncubation();}
   if(id==='batch')renderBatches();
   if(id==='lab')renderCultures();
   if(id==='inv')renderInvStock();
@@ -4275,7 +4281,7 @@ let ovHistHarvestInst=null,ovHistBagsInst=null,ovHistPipelineInst=null,ovHistCon
 
 async function loadKpiHistory(){
   try{
-    const r=await fetch('/api/kpi-snapshots?limit=90');
+    const r=await authFetch('/api/kpi-snapshots?limit=90');
     if(!r.ok)return;
     const j=await r.json();
     kpiHistoryData=j.items||[];
@@ -4350,7 +4356,7 @@ function renderKpiHistory(){
 
 async function takeKpiSnapshot(){
   try{
-    const r=await fetch('/api/kpi-snapshots/now',{method:'POST'});
+    const r=await authFetch('/api/kpi-snapshots/now',{method:'POST'});
     if(!r.ok)throw new Error('Failed');
     await loadKpiHistory();
   }catch(e){console.error('Snapshot failed',e);}
@@ -4358,7 +4364,7 @@ async function takeKpiSnapshot(){
 
 async function exportKpiCSV(){
   try{
-    const r=await fetch('/api/kpi-snapshots');
+    const r=await authFetch('/api/kpi-snapshots');
     if(!r.ok)throw new Error('Failed');
     const j=await r.json();
     const rows=j.items||[];
@@ -4773,26 +4779,91 @@ function getLabStockCounts(){
   });
   return counts;
 }
+const LAB_ICONS={
+  MC:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>`,
+  PD:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="2" y1="12" x2="22" y2="12"/></svg>`,
+  LC:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v7l4 9H5l4-9V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>`,
+  G2G:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`,
+  GS:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M7 7V5a5 5 0 0110 0v2"/></svg>`
+};
+const LAB_COLORS={MC:'#a855f7',PD:'#0ea5e9',LC:'#10b981',G2G:'#d97706',GS:'#e11d48'};
 function renderDashLabStock(){
   const el=document.getElementById('dash-lab-stock');
   if(!el)return;
   if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
   const counts=getLabStockCounts();
-  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px">'+LAB_TYPES.map(type=>{
+  const total=LAB_TYPES.reduce((s,k)=>s+(counts[k]||0),0);
+  const totalRow=`<div class="metrics-total-row"><span class="metrics-total-label">${t('lab.totalStock')}</span><span class="metrics-total-value">${total}</span></div>`;
+  const cards=LAB_TYPES.map(type=>{
     const count=counts[type]||0;
     const min=inventory.labThresholds[type]||0;
     const low=min>0&&count<min;
     const label=getLabLabel(type);
-    return`<div style="background:var(--c-bg);border:1px solid ${low?'var(--c-red)':'var(--c-border)'};border-radius:10px;padding:12px 14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="font-size:11px;font-weight:600;color:var(--c-text-sec)">${esc(label)}</div>
-        ${low?'<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">'+t('lab.lowStock')+'</span>':''}
-      </div>
-      <div style="font-size:24px;font-weight:700;color:${low?'var(--c-red-dark)':'var(--c-text)'};margin-bottom:2px">${count}</div>
-      <div style="font-size:11px;color:var(--c-text-muted)">${min>0?'min '+min:'\u2014'}</div>
-      <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:6px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
+    const color=LAB_COLORS[type];
+    const icon=LAB_ICONS[type];
+    return`<div class="met" style="border-left-color:${color};cursor:pointer${low?';border-color:var(--c-red);border-left-color:var(--c-red)':''}" onclick="setLabMin('${type}')">
+      <div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${color}">${icon}</span>${esc(label)}${low?' <span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700;margin-left:6px">'+t('lab.lowStock')+'</span>':''}</div>
+      <div class="met-v" style="color:${low?'var(--c-red-dark)':count>0?color:'var(--c-text-muted)'}">${count}</div>
+      <div style="font-size:11px;color:var(--c-text-muted);margin-top:4px">${min>0?'min '+min:'\u2014'}</div>
     </div>`;
-  }).join('')+'</div>';
+  }).join('');
+  el.innerHTML=totalRow+`<div class="g5 metrics-pipeline">${cards}</div>`;
+}
+function renderDashLabLive(){
+  const el=document.getElementById('dash-lab-live');
+  if(!el)return;
+  // Gather active cultures grouped by species+strain
+  const byStrain={};
+  cultures.filter(c=>c.status==='active').forEach(c=>{
+    const key=(c.species||'?')+'||'+(c.strain||'?');
+    if(!byStrain[key])byStrain[key]={sp:c.species||'?',st:c.strain||'?',items:[]};
+    byStrain[key].items.push({id:c.id,type:c.type});
+  });
+  // Add active grain spawn batches
+  batches.filter(b=>b.batchType==='grain').forEach(b=>{
+    const{status}=getStatus(b.batchId);
+    if(['DONE','EMPTY','CONTAM'].includes(status))return;
+    const key=(b.species||'?')+'||'+(b.strain||'?');
+    if(!byStrain[key])byStrain[key]={sp:b.species||'?',st:b.strain||'?',items:[]};
+    byStrain[key].items.push({id:b.batchId,type:'GS'});
+  });
+  const entries=Object.values(byStrain);
+  if(!entries.length){el.innerHTML='';return}
+  const cards=entries.map(e=>{
+    const typeCounts={};
+    e.items.forEach(i=>{typeCounts[i.type]=(typeCounts[i.type]||0)+1});
+    const chips=Object.entries(typeCounts).map(([tp,n])=>`<span style="font-size:10px;background:${LAB_COLORS[tp]||'var(--c-text-muted)'}22;color:${LAB_COLORS[tp]||'var(--c-text-sec)'};padding:2px 8px;border-radius:99px;font-weight:600">${n}\u00d7 ${tp}</span>`).join(' ');
+    return`<div class="batch-card" style="--sp-color:${spColor(e.sp)}">
+      <div class="batch-card-header"><span class="batch-card-species">${esc(e.sp)}</span><span class="batch-card-count">${e.items.length}</span></div>
+      <div class="batch-card-meta"><span>${esc(e.st)}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${chips}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="location-section">
+    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:#a855f7"></span>${t('lab.liveStatus')}</div>
+      <span class="location-section-count">${entries.length}</span>
+    </div>
+    <div class="location-section-body"><div style="display:flex;flex-direction:column;gap:6px">${cards}</div></div>
+  </div>`;
+}
+function renderDashLabIncubation(){
+  const el=document.getElementById('dash-lab-incubation');
+  if(!el)return;
+  const incZones=zones.filter(z=>z.role==='incubation');
+  if(!incZones.length){el.innerHTML='';return}
+  let html='';
+  incZones.forEach(z=>{
+    if(z.racks&&z.racks.length>0){
+      // Use fake filtered array with all batches
+      const batchData=batches.map(b=>{const{c,total,status}=getStatus(b.batchId);const due=new Date(b.due);const ov=due<new Date()&&(c[z.id]||0)>0;return{b,c,total,status,due,ov}});
+      html+=renderRackSection(z.id,z.racks.map(r=>r.id),batchData);
+    } else {
+      const batchData=batches.map(b=>{const{c,total,status}=getStatus(b.batchId);const due=new Date(b.due);const ov=due<new Date()&&(c[z.id]||0)>0;return{b,c,total,status,due,ov}});
+      html+=renderSimpleZoneSection(z,batchData);
+    }
+  });
+  el.innerHTML=html;
 }
 function setLabMin(type){
   if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
