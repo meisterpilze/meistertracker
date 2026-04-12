@@ -606,6 +606,17 @@ const MIGRATIONS = [
       `);
       db.exec('CREATE INDEX IF NOT EXISTS idx_kpi_date ON kpi_snapshots(date)');
     }
+  },
+  {
+    version: 23,
+    description: 'Add lab threshold columns to inventory table',
+    fn(db) {
+      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0");
+      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_pd INTEGER DEFAULT 0");
+      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_lc INTEGER DEFAULT 0");
+      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0");
+      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0");
+    }
   }
 ];
 
@@ -876,6 +887,13 @@ function readAll(db, opts = {}) {
       rhPct: inv.avg_rh_pct,
       bagKg: inv.avg_bag_kg,
       grainBagKg: inv.avg_grain_bag_kg
+    },
+    labThresholds: {
+      MC: inv.lab_thresh_mc || 0,
+      PD: inv.lab_thresh_pd || 0,
+      LC: inv.lab_thresh_lc || 0,
+      G2G: inv.lab_thresh_g2g || 0,
+      GS: inv.lab_thresh_gs || 0
     },
     log: invLog
   };
@@ -1175,11 +1193,13 @@ function writeAll(db, incoming) {
       const inv = incoming.inventory;
       const thresh = inv.thresholds || {};
       const avg = inv.avgComposition || {};
+      const lt = inv.labThresholds || {};
       db.prepare(
         `
         UPDATE inventory SET
           thresh_hardwood=?, thresh_wheatbran=?, thresh_gypsum=?, thresh_grain=?,
-          avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?
+          avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?,
+          lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?
         WHERE id=1
       `
       ).run(
@@ -1191,7 +1211,8 @@ function writeAll(db, incoming) {
         avg.wbPct ?? 25,
         avg.rhPct ?? 63,
         avg.bagKg ?? 3,
-        avg.grainBagKg ?? 1
+        avg.grainBagKg ?? 1,
+        lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0
       );
     }
 
@@ -2087,6 +2108,14 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   incrementDataVersion(db);
 }
 
+function updateLabThresholds(db, labThresholds) {
+  const lt = labThresholds || {};
+  db.prepare(
+    `UPDATE inventory SET lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=? WHERE id=1`
+  ).run(lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0);
+  incrementDataVersion(db);
+}
+
 // ── Supplier CRUD ──────────────────────────────────────────
 function listSuppliers(db) {
   return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
@@ -2652,6 +2681,7 @@ function getInventory(db, logLimit) {
     stock: { hardwood: inv.stock_hardwood, wheatbran: inv.stock_wheatbran, gypsum: inv.stock_gypsum, grain: inv.stock_grain },
     thresholds: { hardwood: { minKg: inv.thresh_hardwood }, wheatbran: { minKg: inv.thresh_wheatbran }, gypsum: { minKg: inv.thresh_gypsum }, grain: { minKg: inv.thresh_grain } },
     avgComposition: { hwPct: inv.avg_hw_pct, wbPct: inv.avg_wb_pct, rhPct: inv.avg_rh_pct, bagKg: inv.avg_bag_kg, grainBagKg: inv.avg_grain_bag_kg },
+    labThresholds: { MC: inv.lab_thresh_mc || 0, PD: inv.lab_thresh_pd || 0, LC: inv.lab_thresh_lc || 0, G2G: inv.lab_thresh_g2g || 0, GS: inv.lab_thresh_gs || 0 },
     log: logRows.map(r => ({ time: r.time, mat: r.mat, deltaKg: r.delta_kg, running: r.running, type: r.type, ref: r.ref }))
   };
 }
@@ -2836,6 +2866,7 @@ module.exports = {
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,
+  updateLabThresholds,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,
