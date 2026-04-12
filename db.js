@@ -604,7 +604,7 @@ const MIGRATIONS = [
           stock_grain_kg REAL DEFAULT 0
         )
       `);
-      db.exec('CREATE INDEX IF NOT EXISTS idx_kpi_date ON kpi_snapshots(date)');
+      // date is PRIMARY KEY — no extra index needed
     }
   },
   {
