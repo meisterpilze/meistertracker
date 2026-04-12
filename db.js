@@ -578,6 +578,37 @@ const MIGRATIONS = [
   },
   {
     version: 22,
+    description: 'Add kpi_snapshots table for daily KPI history',
+    fn(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS kpi_snapshots (
+          date           TEXT PRIMARY KEY,
+          bags_created   INTEGER DEFAULT 0,
+          grain_used_kg  REAL DEFAULT 0,
+          harvest_kg     REAL DEFAULT 0,
+          hardwood_used_kg REAL DEFAULT 0,
+          wheatbran_used_kg REAL DEFAULT 0,
+          avg_yield_g    REAL DEFAULT 0,
+          contam_rate_pct REAL DEFAULT 0,
+          contam_bags    INTEGER DEFAULT 0,
+          total_bags_placed INTEGER DEFAULT 0,
+          days_since_contam INTEGER,
+          flush_2plus    INTEGER DEFAULT 0,
+          bags_spawn     INTEGER DEFAULT 0,
+          bags_incubation INTEGER DEFAULT 0,
+          bags_fruiting  INTEGER DEFAULT 0,
+          bags_contaminated INTEGER DEFAULT 0,
+          total_batches  INTEGER DEFAULT 0,
+          stock_hardwood_kg REAL DEFAULT 0,
+          stock_wheatbran_kg REAL DEFAULT 0,
+          stock_grain_kg REAL DEFAULT 0
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_kpi_date ON kpi_snapshots(date)');
+    }
+  },
+  {
+    version: 23,
     description: 'Add lab threshold columns to inventory table',
     fn(db) {
       db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0");
@@ -2663,6 +2694,122 @@ function getZonesWithRacks(db) {
   }));
 }
 
+// ── Daily KPI Snapshot ──────────────────────────────────────
+function snapshotDailyKPIs(db) {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Skip if already snapshotted today
+  const existing = db.prepare('SELECT date FROM kpi_snapshots WHERE date = ?').get(today);
+  if (existing) return { skipped: true, date: today };
+
+  const dayStart = today + 'T00:00:00';
+  const dayEnd = today + 'T23:59:59';
+
+  // 1. Bags created today
+  const bagsCreated = db.prepare(
+    "SELECT COALESCE(SUM(qty), 0) AS v FROM batches WHERE created >= ? AND created <= ?"
+  ).get(dayStart, dayEnd).v;
+
+  // 2-4. Materials used today (from inventory_log, type='batch')
+  const matRows = db.prepare(
+    "SELECT mat, COALESCE(SUM(ABS(delta_kg)), 0) AS v FROM inventory_log WHERE type = 'batch' AND time >= ? AND time <= ? GROUP BY mat"
+  ).all(dayStart, dayEnd);
+  const matUsed = {};
+  matRows.forEach(r => { matUsed[r.mat] = r.v; });
+
+  // 5. Harvest today (kg)
+  const harvestKg = db.prepare(
+    "SELECT COALESCE(SUM(grams), 0) AS v FROM harvests WHERE time >= ? AND time <= ?"
+  ).get(dayStart, dayEnd).v / 1000;
+
+  // 6. Avg yield per bag (all-time) — total grams / unique bags harvested
+  const yieldData = db.prepare(
+    "SELECT COALESCE(SUM(grams), 0) AS totalG, COUNT(DISTINCT bag) AS uniqueBags FROM harvests"
+  ).get();
+  const avgYield = yieldData.uniqueBags > 0 ? Math.round(yieldData.totalG / yieldData.uniqueBags) : 0;
+
+  // 7. Contamination rate (all-time) — contaminated bags / all bags placed
+  const zones = db.prepare('SELECT id, role FROM zones').all();
+  const contamZoneIds = zones.filter(z => z.role === 'contaminated').map(z => z.id);
+  const allBagsPlaced = db.prepare(
+    "SELECT COUNT(DISTINCT bag) AS v FROM scan_log WHERE action = 'ADD' AND bag IS NOT NULL"
+  ).get().v;
+
+  let contamBags = 0;
+  if (contamZoneIds.length > 0) {
+    // A bag is contaminated if it was ever moved TO a contaminated zone (or zone:rack)
+    const placeholders = contamZoneIds.map(() => '?').join(',');
+    // scan_log.to can be "zone" or "zone:rack", so we match zone prefix
+    const contamRows = db.prepare(
+      `SELECT DISTINCT bag FROM scan_log WHERE bag IS NOT NULL AND (` +
+      contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ') + `)`
+    ).all(...contamZoneIds.flatMap(id => [id, id]));
+    contamBags = contamRows.length;
+  }
+  const contamRate = allBagsPlaced > 0 ? +(contamBags / allBagsPlaced * 100).toFixed(1) : 0;
+
+  // 8. Days since last contamination
+  let daysSinceContam = null;
+  if (contamZoneIds.length > 0) {
+    const lastContamCondition = contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ');
+    const lastContam = db.prepare(
+      `SELECT MAX(time) AS t FROM scan_log WHERE bag IS NOT NULL AND (${lastContamCondition})`
+    ).get(...contamZoneIds.flatMap(id => [id, id]));
+    if (lastContam && lastContam.t) {
+      daysSinceContam = Math.floor((Date.now() - new Date(lastContam.t).getTime()) / 864e5);
+    }
+  }
+
+  // 9. Flush 2+ bags
+  const flush2Plus = db.prepare(
+    "SELECT COUNT(*) AS v FROM (SELECT bag, MAX(flush) AS mf FROM harvests GROUP BY bag HAVING mf >= 2)"
+  ).get().v;
+
+  // 10. Pipeline counts — compute current bag locations from scan_log
+  const zoneRoleMap = {};
+  zones.forEach(z => { zoneRoleMap[z.id] = z.role; });
+  const allScans = db.prepare('SELECT action, bag, "from", "to" FROM scan_log ORDER BY id').all();
+  const bagZone = {}; // bag -> zone_id (current)
+  allScans.forEach(e => {
+    const toZone = e.to ? e.to.split(':')[0] : null;
+    const fromZone = e.from ? e.from.split(':')[0] : null;
+    if (e.action === 'ADD' && toZone) bagZone[e.bag] = toZone;
+    if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZone) bagZone[e.bag] = toZone;
+    if (e.action === 'REMOVE' && fromZone && bagZone[e.bag] === fromZone) delete bagZone[e.bag];
+  });
+  const roleCounts = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
+  Object.values(bagZone).forEach(zId => {
+    const role = zoneRoleMap[zId];
+    if (role && roleCounts[role] !== undefined) roleCounts[role]++;
+  });
+
+  // 11. Total batches & current stock
+  const totalBatches = db.prepare('SELECT COUNT(*) AS v FROM batches').get().v;
+  const inv = db.prepare('SELECT stock_hardwood, stock_wheatbran, stock_grain FROM inventory WHERE id = 1').get();
+
+  // Insert snapshot
+  db.prepare(`INSERT INTO kpi_snapshots (
+    date, bags_created, grain_used_kg, harvest_kg, hardwood_used_kg, wheatbran_used_kg,
+    avg_yield_g, contam_rate_pct, contam_bags, total_bags_placed, days_since_contam,
+    flush_2plus, bags_spawn, bags_incubation, bags_fruiting, bags_contaminated,
+    total_batches, stock_hardwood_kg, stock_wheatbran_kg, stock_grain_kg
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    today, bagsCreated, matUsed.grain || 0, harvestKg, matUsed.hardwood || 0, matUsed.wheatbran || 0,
+    avgYield, contamRate, contamBags, allBagsPlaced, daysSinceContam,
+    flush2Plus, roleCounts.spawn, roleCounts.incubation, roleCounts.fruiting, roleCounts.contaminated,
+    totalBatches, inv ? inv.stock_hardwood : 0, inv ? inv.stock_wheatbran : 0, inv ? inv.stock_grain : 0
+  );
+
+  return { saved: true, date: today };
+}
+
+function getKpiSnapshots(db, limit) {
+  if (limit) {
+    return db.prepare('SELECT * FROM kpi_snapshots ORDER BY date DESC LIMIT ?').all(limit).reverse();
+  }
+  return db.prepare('SELECT * FROM kpi_snapshots ORDER BY date').all();
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -2772,5 +2919,7 @@ module.exports = {
   assignBarcodes,
   lookupBarcode,
   getBarcodeForEntity,
-  getAllBarcodes
+  getAllBarcodes,
+  snapshotDailyKPIs,
+  getKpiSnapshots
 };

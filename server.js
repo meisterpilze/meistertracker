@@ -460,6 +460,13 @@ function runDailyBackup() {
   const startedAt = Date.now();
   const startedIso = new Date(startedAt).toISOString();
   try {
+    // Snapshot KPIs before backup so the data is included
+    try {
+      const snapResult = db.snapshotDailyKPIs(database);
+      log('info', 'KPI snapshot', snapResult);
+    } catch (e) {
+      log('warn', 'KPI snapshot failed (backup continues)', { error: e.message });
+    }
     const d = new Date();
     const stamp =
       d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -3999,6 +4006,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       limit,
       offset
     });
+    return;
+  }
+
+  // GET /api/kpi-snapshots — historical KPI data for trend analysis
+  if (req.method === 'GET' && url === '/api/kpi-snapshots') {
+    const params = new URL(req.url, 'http://x').searchParams;
+    const limit = params.get('limit') ? Math.min(parseInt(params.get('limit')) || 90, 365) : null;
+    const rows = db.getKpiSnapshots(database, limit);
+    jsonOk(res, { items: rows });
+    return;
+  }
+
+  // POST /api/kpi-snapshots/now — manually trigger a KPI snapshot for today
+  if (req.method === 'POST' && url === '/api/kpi-snapshots/now') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const result = db.snapshotDailyKPIs(database);
+      jsonOk(res, result);
+    } catch (e) {
+      jsonErr(res, 500, e.message);
+    }
     return;
   }
 

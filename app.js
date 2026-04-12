@@ -116,6 +116,7 @@ const LANG = {
     'dash.totalBatches': 'Total batches',
     'dash.inIncubation': 'In incubation',
     'dash.inTents': 'In tents / fruiting',
+    'dash.dueToday': 'Due today',
     'dash.totalHarvested': 'Total harvested',
     'dash.alerts': 'Alerts & tasks',
     'dash.seeAll': 'See all',
@@ -158,6 +159,20 @@ const LANG = {
     'dash.ov.dayAgo': '1 day ago',
     'dash.ov.daysAgo': '{n} days ago',
     'dash.ov.na': '—',
+    'dash.ov.history': 'KPI History',
+    'dash.ov.historyHarvest': 'Daily harvest (kg)',
+    'dash.ov.historyBags': 'Daily bags created',
+    'dash.ov.historyPipeline': 'Pipeline (bags by stage)',
+    'dash.ov.historyContam': 'Contamination rate (%)',
+    'dash.ov.historyStock': 'Stock levels (kg)',
+    'dash.ov.historyNoData': 'No KPI history yet — snapshots are taken daily with the backup.',
+    'dash.ov.historyTakeSnapshot': 'Take snapshot now',
+    'dash.ov.exportCsv': 'Export CSV',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Incubation',
+    'dash.ov.fruiting': 'Fruiting',
+    'dash.ov.contaminated': 'Contaminated',
+    'dash.ov.grain': 'Grain',
     'dash.search': 'Search...',
     'dash.cards': 'Cards',
     'dash.table': 'Table',
@@ -1263,6 +1278,7 @@ const LANG = {
     'dash.totalBatches': 'Chargen gesamt',
     'dash.inIncubation': 'In Inkubation',
     'dash.inTents': 'In Zelten / fruchtend',
+    'dash.dueToday': 'Heute fällig',
     'dash.totalHarvested': 'Gesamt geerntet',
     'dash.alerts': 'Warnungen & Aufgaben',
     'dash.seeAll': 'Alle anzeigen',
@@ -1305,6 +1321,20 @@ const LANG = {
     'dash.ov.dayAgo': 'vor 1 Tag',
     'dash.ov.daysAgo': 'vor {n} Tagen',
     'dash.ov.na': '—',
+    'dash.ov.history': 'KPI-Verlauf',
+    'dash.ov.historyHarvest': 'Tägliche Ernte (kg)',
+    'dash.ov.historyBags': 'Tägliche Beutel erstellt',
+    'dash.ov.historyPipeline': 'Pipeline (Beutel nach Phase)',
+    'dash.ov.historyContam': 'Kontaminationsrate (%)',
+    'dash.ov.historyStock': 'Lagerbestände (kg)',
+    'dash.ov.historyNoData': 'Noch keine KPI-Daten — Snapshots werden täglich mit dem Backup erstellt.',
+    'dash.ov.historyTakeSnapshot': 'Snapshot jetzt erstellen',
+    'dash.ov.exportCsv': 'CSV exportieren',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Inkubation',
+    'dash.ov.fruiting': 'Fruchtung',
+    'dash.ov.contaminated': 'Kontaminiert',
+    'dash.ov.grain': 'Korn',
     'dash.search': 'Suche...',
     'dash.cards': 'Karten',
     'dash.table': 'Tabelle',
@@ -2419,6 +2449,7 @@ const LANG = {
     'dash.totalBatches': 'Total de lotes',
     'dash.inIncubation': 'Em incuba\u00e7\u00e3o',
     'dash.inTents': 'Em tendas / frutificando',
+    'dash.dueToday': 'Vence hoje',
     'dash.totalHarvested': 'Total colhido',
     'dash.alerts': 'Alertas e tarefas',
     'dash.seeAll': 'Ver tudo',
@@ -2461,6 +2492,20 @@ const LANG = {
     'dash.ov.dayAgo': 'há 1 dia',
     'dash.ov.daysAgo': 'há {n} dias',
     'dash.ov.na': '—',
+    'dash.ov.history': 'Histórico de KPIs',
+    'dash.ov.historyHarvest': 'Colheita diária (kg)',
+    'dash.ov.historyBags': 'Sacos criados por dia',
+    'dash.ov.historyPipeline': 'Pipeline (sacos por fase)',
+    'dash.ov.historyContam': 'Taxa de contaminação (%)',
+    'dash.ov.historyStock': 'Níveis de estoque (kg)',
+    'dash.ov.historyNoData': 'Ainda sem dados — snapshots são feitos diariamente com o backup.',
+    'dash.ov.historyTakeSnapshot': 'Tirar snapshot agora',
+    'dash.ov.exportCsv': 'Exportar CSV',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Incubação',
+    'dash.ov.fruiting': 'Frutificação',
+    'dash.ov.contaminated': 'Contaminado',
+    'dash.ov.grain': 'Grãos',
     'dash.search': 'Buscar...',
     'dash.cards': 'Cart\u00f5es',
     'dash.table': 'Tabela',
@@ -3888,67 +3933,23 @@ function countDueToday(){
     return dl<=0||(status==='FRUITING')||(status==='CONTAM');
   }).length;
 }
-function renderMetrics(tot,inc,tent,contam){
-  const totalHarv=harvests.reduce((s,h)=>s+(h.grams||0),0);
-  const dueToday=countDueToday();
-  const dueTodayColor=dueToday>0?'#e11d48':'#64748b';
-  const dueTodayIcon=dueToday>0
-    ?`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-    :`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
-  const icons=[
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`,
-    dueTodayIcon,
-    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`
-  ];
-  const colors=['#16a34a','#2563eb','#16a34a',dueTodayColor,'#d97706'];
-  const sparkHarvest=buildSparkSvg(harvestSparkData(),'#d97706');
-  const cards=[
-    [t('dash.totalBatches'),tot,0,''],
-    [t('dash.inIncubation'),inc,1,''],
-    [t('dash.inTents'),tent,2,''],
-    [t('dash.dueToday'),dueToday,3,''],
-    [t('dash.totalHarvested'),totalHarv>0?(totalHarv>=1000?(totalHarv/1000).toFixed(1)+'kg':totalHarv+'g'):'—',4,sparkHarvest]
-  ];
-  document.getElementById('metrics').innerHTML=cards.map(([l,v,i,spark])=>`<div class="met" style="border-left-color:${colors[i]}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px">${icons[i]}</span>${l}</div><div class="met-v" style="color:${colors[i]}">${v}</div>${spark}</div>`).join('');
-}
-
-function renderMiniPipeline(){
-  const el=document.getElementById('dash-mini-pipeline');
+function renderPipelineKPIs(tot,spawn,inc,tent,done,contam){
+  const el=document.getElementById('metrics');
   if(!el)return;
-  const roleStages=[
-    {role:'spawn',label:'SPAWN',color:'#a855f7'},
-    {role:'incubation',label:'INC',color:'#0ea5e9'},
-    {role:'fruiting',label:'TENT',color:'#10b981'},
-    {role:null,label:'DONE',color:'#94a3b8'},
-    {role:'contaminated',label:'CONTAM',color:'#ef4444'}
+  // Pick up zone colors if configured
+  const zSpawn=zones.find(z=>z.role==='spawn');
+  const zInc=zones.find(z=>z.role==='incubation');
+  const zTent=zones.find(z=>z.role==='fruiting');
+  const zContam=zones.find(z=>z.role==='contaminated');
+  const stages=[
+    {label:'SPAWN',value:spawn,color:zSpawn?.color||'#a855f7',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`},
+    {label:'INC',value:inc,color:zInc?.color||'#0ea5e9',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`},
+    {label:'TENT',value:tent,color:zTent?.color||'#10b981',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`},
+    {label:'DONE',value:done,color:'#64748b',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`},
+    {label:'CONTAM',value:contam,color:zContam?.color||'#ef4444',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`}
   ];
-  const stages=roleStages.map(s=>{
-    if(s.role){const z=zones.find(x=>x.role===s.role);if(z)return{...s,color:z.color}}
-    return s;
-  });
-  const counts={};stages.forEach(s=>counts[s.label]=0);
-  batches.forEach(b=>{
-    const{c,status}=getStatus(b.batchId);
-    zones.forEach(z=>{
-      const stg=stages.find(s=>s.role===z.role);
-      if(stg)counts[stg.label]+=(c[z.id]||0);
-    });
-    if(status==='DONE')counts.DONE++;
-  });
-  const max=Math.max(1,...Object.values(counts));
-  el.innerHTML=`<div class="card dmp-card"><div class="dmp-stages">${stages.map(s=>{
-    const v=counts[s.label]||0;
-    const pct=v>0?Math.max(6,Math.round(v/max*100)):0;
-    return`<div class="dmp-stage">
-      <div class="dmp-stage-top">
-        <span class="dmp-stage-label">${s.label}</span>
-        <span class="dmp-stage-count" style="color:${v>0?s.color:'var(--c-text-muted)'}">${v}</span>
-      </div>
-      <div class="dmp-stage-bar"><div class="dmp-stage-fill" style="width:${pct}%;background:${s.color}"></div></div>
-    </div>`;
-  }).join('')}</div></div>`;
+  const totalRow=`<div class="metrics-total-row"><span class="metrics-total-label">${t('dash.totalBatches')}</span><span class="metrics-total-value">${tot}</span></div>`;
+  el.innerHTML=totalRow+`<div class="g5 metrics-pipeline">${stages.map(s=>`<div class="met" style="border-left-color:${s.color}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${s.color}">${s.icon}</span>${s.label}</div><div class="met-v" style="color:${s.value>0?s.color:'var(--c-text-muted)'}">${s.value}</div></div>`).join('')}</div>`;
 }
 
 function renderOverviewKPIs(){
@@ -4268,6 +4269,114 @@ function renderYearCharts(yearStart){
   }
 }
 
+// ── KPI History (daily snapshot trend charts) ───────────────
+let kpiHistoryData=null;
+let ovHistHarvestInst=null,ovHistBagsInst=null,ovHistPipelineInst=null,ovHistContamInst=null,ovHistStockInst=null;
+
+async function loadKpiHistory(){
+  try{
+    const r=await fetch('/api/kpi-snapshots?limit=90');
+    if(!r.ok)return;
+    const j=await r.json();
+    kpiHistoryData=j.items||[];
+    renderKpiHistory();
+  }catch(e){console.warn('KPI history load failed',e);}
+}
+
+function renderKpiHistory(){
+  const wrap=document.getElementById('ov-kpi-history');
+  const emptyEl=document.getElementById('ov-history-empty');
+  const chartsEl=document.getElementById('ov-history-charts');
+  if(!wrap)return;
+  if(dashMode!=='overview'){wrap.style.display='none';return;}
+  wrap.style.display='';
+
+  if(!kpiHistoryData||kpiHistoryData.length<2){
+    if(emptyEl)emptyEl.style.display='';
+    if(chartsEl)chartsEl.style.display='none';
+    return;
+  }
+  if(emptyEl)emptyEl.style.display='none';
+  if(chartsEl)chartsEl.style.display='';
+
+  const labels=kpiHistoryData.map(s=>s.date.slice(5)); // MM-DD
+  const chartOpts=(yLabel,cb)=>({responsive:true,plugins:{legend:{display:true,labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:cb||undefined}}},scales:{y:{ticks:{color:'#64748b',callback:v=>v+yLabel},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b',maxRotation:45},grid:{display:false}}}});
+  const lineDs=(label,data,color,fill)=>({label,data,borderColor:color,backgroundColor:fill||color+'33',tension:0.3,pointRadius:2,fill:!!fill});
+
+  // 1. Harvest chart
+  const c1=document.getElementById('ov-history-harvest-chart');
+  if(c1){
+    if(ovHistHarvestInst){ovHistHarvestInst.destroy();ovHistHarvestInst=null;}
+    ovHistHarvestInst=new Chart(c1,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.harvestThisWeek'),kpiHistoryData.map(s=>+(s.harvest_kg||0).toFixed(2)),'#d97706','#fef3c733')]},options:chartOpts('kg',c=>c.parsed.y.toFixed(2)+'kg')});
+  }
+
+  // 2. Bags created chart
+  const c2=document.getElementById('ov-history-bags-chart');
+  if(c2){
+    if(ovHistBagsInst){ovHistBagsInst.destroy();ovHistBagsInst=null;}
+    ovHistBagsInst=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:t('dash.ov.bagsCreated'),data:kpiHistoryData.map(s=>s.bags_created||0),backgroundColor:'rgba(14,165,233,0.6)',borderRadius:3}]},options:chartOpts('',c=>c.parsed.y+' '+t('dash.ov.bags'))});
+  }
+
+  // 3. Pipeline chart (stacked area)
+  const c3=document.getElementById('ov-history-pipeline-chart');
+  if(c3){
+    if(ovHistPipelineInst){ovHistPipelineInst.destroy();ovHistPipelineInst=null;}
+    ovHistPipelineInst=new Chart(c3,{type:'line',data:{labels,datasets:[
+      lineDs(t('dash.ov.spawn'),kpiHistoryData.map(s=>s.bags_spawn||0),'#a855f7','#a855f733'),
+      lineDs(t('dash.ov.incubation'),kpiHistoryData.map(s=>s.bags_incubation||0),'#0ea5e9','#0ea5e933'),
+      lineDs(t('dash.ov.fruiting'),kpiHistoryData.map(s=>s.bags_fruiting||0),'#10b981','#10b98133'),
+      lineDs(t('dash.ov.contaminated'),kpiHistoryData.map(s=>s.bags_contaminated||0),'#ef4444','#ef444433')
+    ]},options:chartOpts('')});
+  }
+
+  // 4. Contamination rate chart
+  const c4=document.getElementById('ov-history-contam-chart');
+  if(c4){
+    if(ovHistContamInst){ovHistContamInst.destroy();ovHistContamInst=null;}
+    ovHistContamInst=new Chart(c4,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.contamRate'),kpiHistoryData.map(s=>+(s.contam_rate_pct||0).toFixed(1)),'#ef4444','#ef444422')]},options:chartOpts('%',c=>c.parsed.y.toFixed(1)+'%')});
+  }
+
+  // 5. Stock levels chart
+  const c5=document.getElementById('ov-history-stock-chart');
+  if(c5){
+    if(ovHistStockInst){ovHistStockInst.destroy();ovHistStockInst=null;}
+    ovHistStockInst=new Chart(c5,{type:'line',data:{labels,datasets:[
+      lineDs(t('dash.ov.hardwoodUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_hardwood_kg||0).toFixed(1)),'#0d9488'),
+      lineDs(t('dash.ov.wheatbranUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_wheatbran_kg||0).toFixed(1)),'#059669'),
+      lineDs(t('dash.ov.grain'),kpiHistoryData.map(s=>+(s.stock_grain_kg||0).toFixed(1)),'#a855f7')
+    ]},options:chartOpts('kg',c=>c.parsed.y.toFixed(1)+'kg')});
+  }
+}
+
+async function takeKpiSnapshot(){
+  try{
+    const r=await fetch('/api/kpi-snapshots/now',{method:'POST'});
+    if(!r.ok)throw new Error('Failed');
+    await loadKpiHistory();
+  }catch(e){console.error('Snapshot failed',e);}
+}
+
+async function exportKpiCSV(){
+  try{
+    const r=await fetch('/api/kpi-snapshots');
+    if(!r.ok)throw new Error('Failed');
+    const j=await r.json();
+    const rows=j.items||[];
+    if(!rows.length){alert(t('dash.ov.historyNoData'));return;}
+    const hdr=['Date','Bags created','Grain used (kg)','Harvest (kg)','Hardwood used (kg)','Wheat bran used (kg)',
+      'Avg yield (g)','Contam rate (%)','Contam bags','Total bags placed','Days since contam',
+      'Flush 2+','Bags spawn','Bags incubation','Bags fruiting','Bags contaminated',
+      'Total batches','Stock hardwood (kg)','Stock wheat bran (kg)','Stock grain (kg)'];
+    const csvRows=rows.map(s=>[s.date,s.bags_created,s.grain_used_kg,s.harvest_kg,s.hardwood_used_kg,s.wheatbran_used_kg,
+      s.avg_yield_g,s.contam_rate_pct,s.contam_bags,s.total_bags_placed,s.days_since_contam,
+      s.flush_2plus,s.bags_spawn,s.bags_incubation,s.bags_fruiting,s.bags_contaminated,
+      s.total_batches,s.stock_hardwood_kg,s.stock_wheatbran_kg,s.stock_grain_kg]);
+    const csv='\uFEFF'+[hdr,...csvRows].map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kpi_history_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  }catch(e){console.error('KPI CSV export failed',e);}
+}
+
 const CHEVRON_SVG='<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 let ZONE_LABELS={};
 let ZONE_COLORS={};
@@ -4277,15 +4386,16 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
-  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderPipelineKPIs(0,0,0,0,0,0);renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
+  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderPipelineKPIs(0,0,0,0,0,0);renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
 
   // Compute per-batch status
-  let ti=0,tt=0,tc=0;
+  let tspawn=0,ti=0,tt=0,tc=0;
   const batchData=batches.map(b=>{
     const{c,total,status}=getStatus(b.batchId);
     zones.forEach(z=>{
-      if(z.role==='spawn'||z.role==='incubation')ti+=c[z.id]||0;
+      if(z.role==='spawn')tspawn+=c[z.id]||0;
+      if(z.role==='incubation')ti+=c[z.id]||0;
       if(z.role==='fruiting')tt+=c[z.id]||0;
       if(z.role==='contaminated')tc+=c[z.id]||0;
     });
@@ -4313,8 +4423,8 @@ function renderStatus(){
   });
 
   el.innerHTML=html;
-  renderMetrics(batches.length,ti,tt,tc);
-  renderMiniPipeline();
+  const tdone=batchData.filter(d=>d.status==='DONE').length;
+  renderPipelineKPIs(batches.length,tspawn,ti,tt,tdone,tc);
   renderOverviewKPIs();
   if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}
   applyDashMode();
@@ -4576,6 +4686,9 @@ function applyDashMode(){
   if(ovBtn)ovBtn.classList.toggle('active',dashMode==='overview');
   if(charts)charts.style.display=dashMode==='overview'?'':'none';
   if(farmSection)farmSection.style.display=dashMode==='farm'?'':'none';
+  const histWrap=document.getElementById('ov-kpi-history');
+  if(histWrap)histWrap.style.display=dashMode==='overview'?'':'none';
+  if(dashMode==='overview'&&!kpiHistoryData)loadKpiHistory();
 }
 function setOvPeriod(p){
   ovPeriod=p;
@@ -4610,8 +4723,10 @@ function renderDashAlerts(){
     const pct=Math.round(cnt/z.maxCapacity*100);
     if(pct>=90)capAlerts.push({text:zoneDisplayName(z.id)+': '+cnt+'/'+z.maxCapacity+' bags ('+pct+'% full)',urgent:pct>=100,goPage:'zones',goBtn:'n-zones'});
   });
+  const dueToday=countDueToday();
+  const dueTodayAlerts=dueToday>0?[{text:dueToday+' batch'+(dueToday>1?'es':'')+' due today or need attention',urgent:dueToday>=3,goPage:'batch',goBtn:'n-batch'}]:[];
   const labAlerts=getLabAlerts().map(a=>({...a,goPage:'lab',goBtn:'n-lab'}));
-  const allAlerts=[...overdueAlerts,...invAlerts,...labAlerts,...capAlerts];
+  const allAlerts=[...dueTodayAlerts,...overdueAlerts,...invAlerts,...labAlerts,...capAlerts];
   const card=document.getElementById('dash-alerts-card');
   const el=document.getElementById('dash-alerts');
   if(!allAlerts.length){card.style.display='none';return}
