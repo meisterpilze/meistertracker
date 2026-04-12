@@ -379,18 +379,20 @@
 
 <!-- ══ DASHBOARD ══ -->
 <div class="page active" id="p-dash">
-  <!-- KPI strip -->
-  <div id="metrics" class="g4" style="margin-bottom:10px"></div>
 
-  <!-- Alerts (inventory only) -->
-  <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px;display:none">
-    <div style="margin-bottom:6px">
-      <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts</div>
-    </div>
-    <div id="dash-alerts"></div>
+  <!-- Farm / Overview view toggle -->
+  <div class="dash-view-toggle">
+    <button class="dash-view-btn active" id="dash-view-farm" onclick="setDashMode('farm')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span data-i18n="dash.modeFarm">Farm</span>
+    </button>
+    <button class="dash-view-btn" id="dash-view-overview" onclick="setDashMode('overview')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span data-i18n="dash.modeOverview">Overview</span>
+    </button>
   </div>
 
-  <!-- Batch tasks -->
+  <!-- Batch tasks (worker-first — top of page) -->
   <div class="card" id="dash-batch-tasks-card" style="padding:12px 16px;margin-bottom:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="sec" style="margin:0" data-i18n="todo.batchTasks">Batch tasks</div>
@@ -413,28 +415,46 @@
     </details>
   </div>
 
-  <!-- Search bar -->
-  <div class="dash-search-bar">
-    <input type="text" id="status-q" data-i18n-aria-label="aria.searchDashboard" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." />
+  <!-- Alerts (inventory + overdue batches + capacity) -->
+  <div class="card" id="dash-alerts-card" style="padding:12px 16px;margin-bottom:10px;display:none">
+    <div style="margin-bottom:6px">
+      <div class="sec" style="margin:0;font-size:11px" data-i18n="dash.alerts">Alerts</div>
+    </div>
+    <div id="dash-alerts"></div>
   </div>
 
-  <!-- Location overview (rendered by JS) -->
+  <!-- KPI strip (5 cards) -->
+  <div id="metrics" class="g5" style="margin-bottom:10px"></div>
+
+  <!-- Mini pipeline strip (always visible, replaces separate pipeline chart) -->
+  <div id="dash-mini-pipeline" style="margin-bottom:10px"></div>
+
+  <!-- Location overview with inline search header -->
+  <div class="dash-locations-header">
+    <div class="sec" style="margin:0" data-i18n="dash.liveStatus">Live batch status</div>
+    <input type="text" id="status-q" class="dash-search-inline" data-i18n-aria-label="aria.searchDashboard" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." />
+  </div>
   <div id="dash-locations"></div>
+
+  <!-- Charts section — visible in Overview mode only -->
+  <div id="dash-charts-section" style="display:none">
+    <div class="g2" style="margin-bottom:10px">
+      <div class="card">
+        <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
+        <canvas id="harvest-chart" height="180"></canvas>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div class="sec" style="margin:0" data-i18n="dash.weeklyHarvest">Weekly harvest trend</div>
+          <div id="dash-weekly-trend-badge"></div>
+        </div>
+        <canvas id="weekly-harvest-chart" height="180"></canvas>
+      </div>
+    </div>
+  </div>
 
   <!-- Floating action bar for bag selection -->
   <div id="loc-action-bar" class="action-bar-sticky" style="display:none"></div>
-
-  <!-- Charts row (moved to bottom) -->
-  <div class="g2" style="margin-bottom:10px">
-    <div class="card">
-      <div class="sec" data-i18n="dash.pipeline">Production pipeline</div>
-      <div id="pipeline-chart"></div>
-    </div>
-    <div class="card">
-      <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
-      <canvas id="harvest-chart" height="160"></canvas>
-    </div>
-  </div>
 </div>
 
 <!-- ══ BATCHES ══ -->
