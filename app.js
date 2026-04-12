@@ -159,6 +159,20 @@ const LANG = {
     'dash.ov.dayAgo': '1 day ago',
     'dash.ov.daysAgo': '{n} days ago',
     'dash.ov.na': '—',
+    'dash.ov.history': 'KPI History',
+    'dash.ov.historyHarvest': 'Daily harvest (kg)',
+    'dash.ov.historyBags': 'Daily bags created',
+    'dash.ov.historyPipeline': 'Pipeline (bags by stage)',
+    'dash.ov.historyContam': 'Contamination rate (%)',
+    'dash.ov.historyStock': 'Stock levels (kg)',
+    'dash.ov.historyNoData': 'No KPI history yet — snapshots are taken daily with the backup.',
+    'dash.ov.historyTakeSnapshot': 'Take snapshot now',
+    'dash.ov.exportCsv': 'Export CSV',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Incubation',
+    'dash.ov.fruiting': 'Fruiting',
+    'dash.ov.contaminated': 'Contaminated',
+    'dash.ov.grain': 'Grain',
     'dash.search': 'Search...',
     'dash.cards': 'Cards',
     'dash.table': 'Table',
@@ -1301,6 +1315,20 @@ const LANG = {
     'dash.ov.dayAgo': 'vor 1 Tag',
     'dash.ov.daysAgo': 'vor {n} Tagen',
     'dash.ov.na': '—',
+    'dash.ov.history': 'KPI-Verlauf',
+    'dash.ov.historyHarvest': 'Tägliche Ernte (kg)',
+    'dash.ov.historyBags': 'Tägliche Beutel erstellt',
+    'dash.ov.historyPipeline': 'Pipeline (Beutel nach Phase)',
+    'dash.ov.historyContam': 'Kontaminationsrate (%)',
+    'dash.ov.historyStock': 'Lagerbestände (kg)',
+    'dash.ov.historyNoData': 'Noch keine KPI-Daten — Snapshots werden täglich mit dem Backup erstellt.',
+    'dash.ov.historyTakeSnapshot': 'Snapshot jetzt erstellen',
+    'dash.ov.exportCsv': 'CSV exportieren',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Inkubation',
+    'dash.ov.fruiting': 'Fruchtung',
+    'dash.ov.contaminated': 'Kontaminiert',
+    'dash.ov.grain': 'Korn',
     'dash.search': 'Suche...',
     'dash.cards': 'Karten',
     'dash.table': 'Tabelle',
@@ -2452,6 +2480,20 @@ const LANG = {
     'dash.ov.dayAgo': 'há 1 dia',
     'dash.ov.daysAgo': 'há {n} dias',
     'dash.ov.na': '—',
+    'dash.ov.history': 'Histórico de KPIs',
+    'dash.ov.historyHarvest': 'Colheita diária (kg)',
+    'dash.ov.historyBags': 'Sacos criados por dia',
+    'dash.ov.historyPipeline': 'Pipeline (sacos por fase)',
+    'dash.ov.historyContam': 'Taxa de contaminação (%)',
+    'dash.ov.historyStock': 'Níveis de estoque (kg)',
+    'dash.ov.historyNoData': 'Ainda sem dados — snapshots são feitos diariamente com o backup.',
+    'dash.ov.historyTakeSnapshot': 'Tirar snapshot agora',
+    'dash.ov.exportCsv': 'Exportar CSV',
+    'dash.ov.spawn': 'Spawn',
+    'dash.ov.incubation': 'Incubação',
+    'dash.ov.fruiting': 'Frutificação',
+    'dash.ov.contaminated': 'Contaminado',
+    'dash.ov.grain': 'Grãos',
     'dash.search': 'Buscar...',
     'dash.cards': 'Cart\u00f5es',
     'dash.table': 'Tabela',
@@ -4207,6 +4249,114 @@ function renderYearCharts(yearStart){
   }
 }
 
+// ── KPI History (daily snapshot trend charts) ───────────────
+let kpiHistoryData=null;
+let ovHistHarvestInst=null,ovHistBagsInst=null,ovHistPipelineInst=null,ovHistContamInst=null,ovHistStockInst=null;
+
+async function loadKpiHistory(){
+  try{
+    const r=await fetch('/api/kpi-snapshots?limit=90');
+    if(!r.ok)return;
+    const j=await r.json();
+    kpiHistoryData=j.items||[];
+    renderKpiHistory();
+  }catch(e){console.warn('KPI history load failed',e);}
+}
+
+function renderKpiHistory(){
+  const wrap=document.getElementById('ov-kpi-history');
+  const emptyEl=document.getElementById('ov-history-empty');
+  const chartsEl=document.getElementById('ov-history-charts');
+  if(!wrap)return;
+  if(dashMode!=='overview'){wrap.style.display='none';return;}
+  wrap.style.display='';
+
+  if(!kpiHistoryData||kpiHistoryData.length<2){
+    if(emptyEl)emptyEl.style.display='';
+    if(chartsEl)chartsEl.style.display='none';
+    return;
+  }
+  if(emptyEl)emptyEl.style.display='none';
+  if(chartsEl)chartsEl.style.display='';
+
+  const labels=kpiHistoryData.map(s=>s.date.slice(5)); // MM-DD
+  const chartOpts=(yLabel,cb)=>({responsive:true,plugins:{legend:{display:true,labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:cb||undefined}}},scales:{y:{ticks:{color:'#64748b',callback:v=>v+yLabel},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b',maxRotation:45},grid:{display:false}}}});
+  const lineDs=(label,data,color,fill)=>({label,data,borderColor:color,backgroundColor:fill||color+'33',tension:0.3,pointRadius:2,fill:!!fill});
+
+  // 1. Harvest chart
+  const c1=document.getElementById('ov-history-harvest-chart');
+  if(c1){
+    if(ovHistHarvestInst){ovHistHarvestInst.destroy();ovHistHarvestInst=null;}
+    ovHistHarvestInst=new Chart(c1,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.harvestThisWeek'),kpiHistoryData.map(s=>+(s.harvest_kg||0).toFixed(2)),'#d97706','#fef3c733')]},options:chartOpts('kg',c=>c.parsed.y.toFixed(2)+'kg')});
+  }
+
+  // 2. Bags created chart
+  const c2=document.getElementById('ov-history-bags-chart');
+  if(c2){
+    if(ovHistBagsInst){ovHistBagsInst.destroy();ovHistBagsInst=null;}
+    ovHistBagsInst=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:t('dash.ov.bagsCreated'),data:kpiHistoryData.map(s=>s.bags_created||0),backgroundColor:'rgba(14,165,233,0.6)',borderRadius:3}]},options:chartOpts('',c=>c.parsed.y+' '+t('dash.ov.bags'))});
+  }
+
+  // 3. Pipeline chart (stacked area)
+  const c3=document.getElementById('ov-history-pipeline-chart');
+  if(c3){
+    if(ovHistPipelineInst){ovHistPipelineInst.destroy();ovHistPipelineInst=null;}
+    ovHistPipelineInst=new Chart(c3,{type:'line',data:{labels,datasets:[
+      lineDs(t('dash.ov.spawn'),kpiHistoryData.map(s=>s.bags_spawn||0),'#a855f7','#a855f733'),
+      lineDs(t('dash.ov.incubation'),kpiHistoryData.map(s=>s.bags_incubation||0),'#0ea5e9','#0ea5e933'),
+      lineDs(t('dash.ov.fruiting'),kpiHistoryData.map(s=>s.bags_fruiting||0),'#10b981','#10b98133'),
+      lineDs(t('dash.ov.contaminated'),kpiHistoryData.map(s=>s.bags_contaminated||0),'#ef4444','#ef444433')
+    ]},options:chartOpts('')});
+  }
+
+  // 4. Contamination rate chart
+  const c4=document.getElementById('ov-history-contam-chart');
+  if(c4){
+    if(ovHistContamInst){ovHistContamInst.destroy();ovHistContamInst=null;}
+    ovHistContamInst=new Chart(c4,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.contamRate'),kpiHistoryData.map(s=>+(s.contam_rate_pct||0).toFixed(1)),'#ef4444','#ef444422')]},options:chartOpts('%',c=>c.parsed.y.toFixed(1)+'%')});
+  }
+
+  // 5. Stock levels chart
+  const c5=document.getElementById('ov-history-stock-chart');
+  if(c5){
+    if(ovHistStockInst){ovHistStockInst.destroy();ovHistStockInst=null;}
+    ovHistStockInst=new Chart(c5,{type:'line',data:{labels,datasets:[
+      lineDs(t('dash.ov.hardwoodUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_hardwood_kg||0).toFixed(1)),'#0d9488'),
+      lineDs(t('dash.ov.wheatbranUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_wheatbran_kg||0).toFixed(1)),'#059669'),
+      lineDs(t('dash.ov.grain'),kpiHistoryData.map(s=>+(s.stock_grain_kg||0).toFixed(1)),'#a855f7')
+    ]},options:chartOpts('kg',c=>c.parsed.y.toFixed(1)+'kg')});
+  }
+}
+
+async function takeKpiSnapshot(){
+  try{
+    const r=await fetch('/api/kpi-snapshots/now',{method:'POST'});
+    if(!r.ok)throw new Error('Failed');
+    await loadKpiHistory();
+  }catch(e){console.error('Snapshot failed',e);}
+}
+
+async function exportKpiCSV(){
+  try{
+    const r=await fetch('/api/kpi-snapshots');
+    if(!r.ok)throw new Error('Failed');
+    const j=await r.json();
+    const rows=j.items||[];
+    if(!rows.length){alert(t('dash.ov.historyNoData'));return;}
+    const hdr=['Date','Bags created','Grain used (kg)','Harvest (kg)','Hardwood used (kg)','Wheat bran used (kg)',
+      'Avg yield (g)','Contam rate (%)','Contam bags','Total bags placed','Days since contam',
+      'Flush 2+','Bags spawn','Bags incubation','Bags fruiting','Bags contaminated',
+      'Total batches','Stock hardwood (kg)','Stock wheat bran (kg)','Stock grain (kg)'];
+    const csvRows=rows.map(s=>[s.date,s.bags_created,s.grain_used_kg,s.harvest_kg,s.hardwood_used_kg,s.wheatbran_used_kg,
+      s.avg_yield_g,s.contam_rate_pct,s.contam_bags,s.total_bags_placed,s.days_since_contam,
+      s.flush_2plus,s.bags_spawn,s.bags_incubation,s.bags_fruiting,s.bags_contaminated,
+      s.total_batches,s.stock_hardwood_kg,s.stock_wheatbran_kg,s.stock_grain_kg]);
+    const csv='\uFEFF'+[hdr,...csvRows].map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kpi_history_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  }catch(e){console.error('KPI CSV export failed',e);}
+}
+
 const CHEVRON_SVG='<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 let ZONE_LABELS={};
 let ZONE_COLORS={};
@@ -4516,6 +4666,9 @@ function applyDashMode(){
   if(ovBtn)ovBtn.classList.toggle('active',dashMode==='overview');
   if(charts)charts.style.display=dashMode==='overview'?'':'none';
   if(farmSection)farmSection.style.display=dashMode==='farm'?'':'none';
+  const histWrap=document.getElementById('ov-kpi-history');
+  if(histWrap)histWrap.style.display=dashMode==='overview'?'':'none';
+  if(dashMode==='overview'&&!kpiHistoryData)loadKpiHistory();
 }
 function setOvPeriod(p){
   ovPeriod=p;
