@@ -27,6 +27,7 @@ function translatePage() {
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
   document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
   document.documentElement.lang = currentLang;
 }
 const LANG = {
@@ -1059,6 +1060,82 @@ const LANG = {
     'zones.namePh': 'e.g. Tent 4',
     'zones.racksPh': 'e.g. R1, R2, R3',
     'zones.capacityPh': 'optional',
+    // Scan session summary
+    'scan.sessionSummary': 'Session Summary',
+    'scan.totalCount': 'Total',
+    'scan.sessionErrors': 'Errors',
+    'scan.duration': 'Duration',
+    'scan.batches': 'Batches',
+    'scan.close': 'Close',
+    'scan.newSession': 'New Session',
+    // Users / account
+    'users.loggedInAs': 'Logged in as {user} ({role})',
+    'users.adminRequiredManage': 'Admin access required to manage users.',
+    'users.required': 'Username and password required',
+    'users.minPw': 'Password must be at least 8 characters',
+    'users.deleteConfirm': 'Delete this user?',
+    // Change password
+    'chpw.required': 'Both fields are required.',
+    'chpw.minLength': 'New password must be at least 8 characters.',
+    'chpw.success': 'Password changed successfully.',
+    // Strains
+    'strains.saveChanges': 'Save changes',
+    'strains.required': 'Name and abbreviation are required fields.',
+    'strains.kuerzelLength': 'Abbreviation must be exactly 4 characters (e.g. LIMA, SHII, AUSP).',
+    // Sync
+    'sync.syncedAt': 'Synced \u00b7 {time}',
+    // DuckDNS / Let\'s Encrypt / Server
+    'duckdns.noUpdateYet': 'DuckDNS enabled but no IP update yet.',
+    'duckdns.currentCert': 'Current certificate: ',
+    'duckdns.updating': 'Updating\u2026',
+    'duckdns.saved': 'Saved.',
+    'duckdns.subdomainRequired': 'Please enter a subdomain.',
+    'duckdns.tokenRequired': 'Please enter a token.',
+    'duckdns.sendingIp': 'Sending IP to DuckDNS\u2026',
+    'duckdns.ipUpdated': 'IP updated. Waiting for redirect check\u2026',
+    'le.certActive': 'Active',
+    'le.certOther': 'Unknown',
+    'le.requesting': 'Requesting\u2026',
+    'le.certIssued': 'Certificate issued for {domain}! Expires: {date}',
+    'le.certRequesting': 'Requesting certificate from Let\u2019s Encrypt (may take 1\u20132 minutes)\u2026',
+    'server.adminRequired': 'Admin access required.',
+    'server.loadError': 'Error loading.',
+    'server.restarting': 'Restarting\u2026',
+    'server.updateStatus': 'Updating and restarting server\u2026',
+    'server.waitReconnect': 'Server restarting. Waiting for connection\u2026',
+    'server.noResponse': 'Server not responding. Please check manually.',
+    'server.statusLabel': 'Status',
+    'server.versionLabel': 'Version',
+    'server.platformLabel': 'Platform',
+    'server.nodeLabel': 'Node.js',
+    'server.uptimeLabel': 'Uptime',
+    'server.sseLabel': 'SSE Clients',
+    'server.ramLabel': 'RAM',
+    // Migration
+    'migrate.alreadyCurrent': 'All batch IDs are already current. No changes needed.',
+    'migrate.confirm': 'Start migration? All old IDs will be renamed.',
+    'migrate.complete': 'Migration complete: ',
+    'migrate.success': 'Migration successful: ',
+    // Inventory labels
+    'inv.afterDeliveryLabel': 'After delivery: ',
+    'inv.setToLabel': 'Set to ',
+    'inv.newTotalLabel': 'New total: ',
+    'inv.kgFromCurrent': ' kg (from current stock)',
+    // Zones
+    'zones.nameRequired': 'Zone name required.',
+    'zones.errorReorder': 'Error reordering zones: {err}',
+    'zones.errorCreate': 'Error creating zone: {err}',
+    // Print
+    'print.noLabels': 'No labels to print. Please check your selection.',
+    'print.printError': 'Print error: {err}',
+    'print.warnTruncated': 'Warning: Label text was truncated for: {id}',
+    'print.warnNumericBarcodes': 'Warning: Numeric barcodes not found for bags: {list}',
+    // Batch add / note
+    'batchadd.selectBatch': 'Please select a batch.',
+    'batchadd.selectLoc': 'Please enter a location.',
+    'batch.fillQty': 'Please fill in quantity greater than 0',
+    'batch.saveFailed': 'Batch could not be saved: ',
+    'note.prefix': 'Note \u2014 ',
   },
   de: {
     // Common (reused across modals / dialogs)
@@ -2046,6 +2123,134 @@ const LANG = {
     'cal.printChooseRange': 'Wähle den Zeitraum für die Aufgabenliste:',
     'cal.printWeek': 'Woche — Aufgabenliste der aktuellen Woche',
     'cal.printMonth': 'Monat — Aufgabenliste des aktuellen Monats',
+    // Aria labels
+    'aria.cameraScanner': 'Kamera-Scanner',
+    'aria.switchCamera': 'Kamera wechseln',
+    'aria.closeCamera': 'Kamera schlie\u00dfen',
+    'aria.toggleSidebar': 'Seitenleiste umschalten',
+    'aria.mainNav': 'Hauptnavigation',
+    'aria.openMenu': 'Men\u00fc \u00f6ffnen',
+    'aria.searchDashboard': 'Dashboard durchsuchen',
+    'aria.searchBatches': 'Chargen durchsuchen',
+    'aria.searchHarvests': 'Ernten durchsuchen',
+    'aria.searchLog': 'Log durchsuchen',
+    'aria.openCameraScanner': 'Kamera-Scanner \u00f6ffnen',
+    'aria.clickToSync': 'Klicken zum Synchronisieren',
+    // Placeholders
+    'harvest.gramsPlaceholder': 'z. B. 245',
+    'batch.notesPlaceholder': 'Notizen\u2026',
+    'lab.sourcePlaceholder': 'z. B. Klon von KINGS-250101-01-03',
+    'lab.kb': 'K\u00f6rnerbrut',
+    // Print
+    'print.barcodeOnly': 'Nur Barcode (Barcode + ID)',
+    'print.barcodeStrain': 'Barcode + Sorte (+ Pilzsorte & Notizen)',
+    'print.barcodeFull': 'Vollst\u00e4ndig (+ F\u00e4lligkeit)',
+    'print.bagFromPh': 'von',
+    'print.bagToPh': 'bis',
+    // Settings tabs
+    'settings.tabUsers': 'Benutzer',
+    'settings.tabCaldav': 'CalDAV',
+    'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabMcp': 'MCP',
+    'settings.tabServer': 'Server',
+    // Log
+    'log.allActions': 'Alle Aktionen',
+    'log.dateFromTitle': 'Von Datum',
+    'log.dateToTitle': 'Bis Datum',
+    'log.loadMore': 'Mehr laden\u2026',
+    // Backup passwords
+    'settings.encryptPwPh': 'Verschl\u00fcsselungspasswort',
+    'settings.decryptPwPh': 'Entschl\u00fcsselungspasswort',
+    // CalDAV how-tos
+    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Kalender:</strong> Neuen \u201eCalDAV\u201c- oder \u201eNetzwerkkalender\u201c hinzuf\u00fcgen und die CalDAV-URL oben einf\u00fcgen.',
+    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> DAVx5 aus F-Droid oder Play Store installieren. Konto mit \u201eAnmeldung mit URL\u201c hinzuf\u00fcgen und URL einf\u00fcgen.',
+    'caldav.howApple': '<strong>Apple Kalender (iPhone/Mac):</strong> Einstellungen \u2192 Kalender \u2192 Konten \u2192 CalDAV-Konto hinzuf\u00fcgen. Server = die obige URL.',
+    // Inventory placeholders
+    'inv.delKgPh': 'z. B. 1000 oder 847,5',
+    'inv.delNotePh': 'z. B. Agrobs, Charge 2025-03',
+    'inv.adjAbsPh': 'z. B. 847,5',
+    'inv.adjDeltaPh': 'z. B. -5 oder +20',
+    'inv.reasonPh': 'z. B. Verderb, Inventur',
+    // Zone placeholders
+    'zones.namePh': 'z. B. Zelt 4',
+    'zones.racksPh': 'z. B. R1, R2, R3',
+    'zones.capacityPh': 'optional',
+    // Scan session summary
+    'scan.sessionSummary': 'Session-Zusammenfassung',
+    'scan.totalCount': 'Gesamt',
+    'scan.sessionErrors': 'Fehler',
+    'scan.duration': 'Dauer',
+    'scan.batches': 'Chargen',
+    'scan.close': 'Schlie\u00dfen',
+    'scan.newSession': 'Neue Session',
+    // Users / account
+    'users.loggedInAs': 'Angemeldet als {user} ({role})',
+    'users.adminRequiredManage': 'Adminzugriff erforderlich f\u00fcr Benutzerverwaltung.',
+    'users.required': 'Benutzername und Passwort erforderlich',
+    'users.minPw': 'Passwort muss mindestens 8 Zeichen haben',
+    'users.deleteConfirm': 'Diesen Benutzer l\u00f6schen?',
+    // Change password
+    'chpw.required': 'Beide Felder sind erforderlich.',
+    'chpw.minLength': 'Neues Passwort muss mindestens 8 Zeichen haben.',
+    'chpw.success': 'Passwort erfolgreich ge\u00e4ndert.',
+    // Strains
+    'strains.saveChanges': '\u00c4nderungen speichern',
+    'strains.required': 'Name und K\u00fcrzel sind Pflichtfelder.',
+    'strains.kuerzelLength': 'K\u00fcrzel muss genau 4 Zeichen haben (z.B. LIMA, SHII, AUSP).',
+    // Sync
+    'sync.syncedAt': 'Synchronisiert \u00b7 {time}',
+    // DuckDNS / Let\'s Encrypt / Server
+    'duckdns.noUpdateYet': 'DuckDNS aktiviert, aber noch kein IP-Update durchgef\u00fchrt.',
+    'duckdns.currentCert': 'Aktuelles Zertifikat: ',
+    'duckdns.updating': 'Aktualisiere\u2026',
+    'duckdns.saved': 'Gespeichert.',
+    'duckdns.subdomainRequired': 'Bitte Subdomain eingeben.',
+    'duckdns.tokenRequired': 'Bitte Token eingeben.',
+    'duckdns.sendingIp': 'Sende IP an DuckDNS\u2026',
+    'duckdns.ipUpdated': 'IP aktualisiert. Warte auf Weiterleitungspr\u00fcfung\u2026',
+    'le.certActive': 'Aktiv',
+    'le.certOther': 'Unbekannt',
+    'le.requesting': 'Anfordern\u2026',
+    'le.certIssued': 'Zertifikat ausgestellt f\u00fcr {domain}! Ablauf: {date}',
+    'le.certRequesting': 'Zertifikat wird bei Let\u2019s Encrypt angefordert (kann 1\u20132 Minuten dauern)\u2026',
+    'server.adminRequired': 'Adminzugriff erforderlich.',
+    'server.loadError': 'Fehler beim Laden.',
+    'server.restarting': 'Wird neugestartet\u2026',
+    'server.updateStatus': 'Server wird aktualisiert und neugestartet\u2026',
+    'server.waitReconnect': 'Server startet neu. Warte auf Verbindung\u2026',
+    'server.noResponse': 'Server antwortet nicht. Bitte manuell pr\u00fcfen.',
+    'server.statusLabel': 'Status',
+    'server.versionLabel': 'Version',
+    'server.platformLabel': 'Plattform',
+    'server.nodeLabel': 'Node.js',
+    'server.uptimeLabel': 'Uptime',
+    'server.sseLabel': 'SSE Clients',
+    'server.ramLabel': 'RAM',
+    // Migration
+    'migrate.alreadyCurrent': 'Alle Chargen-IDs sind bereits aktuell. Keine \u00c4nderungen n\u00f6tig.',
+    'migrate.confirm': 'Migration starten? Alle alten IDs werden umbenannt.',
+    'migrate.complete': 'Migration abgeschlossen: ',
+    'migrate.success': 'Migration erfolgreich: ',
+    // Inventory labels
+    'inv.afterDeliveryLabel': 'Nach Lieferung: ',
+    'inv.setToLabel': 'Setze auf ',
+    'inv.newTotalLabel': 'Neuer Gesamt: ',
+    'inv.kgFromCurrent': ' kg (von aktuellem Bestand)',
+    // Zones
+    'zones.nameRequired': 'Zonenname erforderlich.',
+    'zones.errorReorder': 'Fehler beim Neuanordnen der Zonen: {err}',
+    'zones.errorCreate': 'Fehler beim Erstellen der Zone: {err}',
+    // Print
+    'print.noLabels': 'Keine Etiketten zum Drucken. Bitte Auswahl pr\u00fcfen.',
+    'print.printError': 'Druckfehler: {err}',
+    'print.warnTruncated': 'Warnung: Etikettentext wurde gek\u00fcrzt f\u00fcr: {id}',
+    'print.warnNumericBarcodes': 'Warnung: Numerische Barcodes nicht gefunden f\u00fcr Beutel: {list}',
+    // Batch add / note
+    'batchadd.selectBatch': 'Bitte eine Charge ausw\u00e4hlen.',
+    'batchadd.selectLoc': 'Bitte einen Standort eingeben.',
+    'batch.fillQty': 'Bitte eine Anzahl gr\u00f6\u00dfer 0 eingeben',
+    'batch.saveFailed': 'Charge konnte nicht gespeichert werden: ',
+    'note.prefix': 'Notiz \u2014 ',
   },
   pt: {
     // Common (reused across modals / dialogs)
@@ -3032,7 +3237,135 @@ const LANG = {
     'cal.noTasks': 'sem tarefas',
     'cal.printChooseRange': 'Escolha o período para a lista de tarefas:',
     'cal.printWeek': 'Semana — lista de tarefas da semana atual',
-    'cal.printMonth': 'Mês — lista de tarefas do mês atual',
+    'cal.printMonth': 'M\u00eas — lista de tarefas do m\u00eas atual',
+    // Aria labels
+    'aria.cameraScanner': 'Scanner de c\u00e2mera',
+    'aria.switchCamera': 'Mudar c\u00e2mera',
+    'aria.closeCamera': 'Fechar c\u00e2mera',
+    'aria.toggleSidebar': 'Alternar barra lateral',
+    'aria.mainNav': 'Navega\u00e7\u00e3o principal',
+    'aria.openMenu': 'Abrir menu',
+    'aria.searchDashboard': 'Pesquisar dashboard',
+    'aria.searchBatches': 'Pesquisar lotes',
+    'aria.searchHarvests': 'Pesquisar colheitas',
+    'aria.searchLog': 'Pesquisar registo',
+    'aria.openCameraScanner': 'Abrir scanner de c\u00e2mera',
+    'aria.clickToSync': 'Clique para sincronizar',
+    // Placeholders
+    'harvest.gramsPlaceholder': 'ex. 245',
+    'batch.notesPlaceholder': 'Notas\u2026',
+    'lab.sourcePlaceholder': 'ex. Clone de KINGS-250101-01-03',
+    'lab.kb': 'Esporos em gr\u00e3o (K\u00f6rnerbrut)',
+    // Print
+    'print.barcodeOnly': 'S\u00f3 c\u00f3digo de barras (C\u00f3digo + ID)',
+    'print.barcodeStrain': 'C\u00f3digo + variedade (+ esp\u00e9cie & notas)',
+    'print.barcodeFull': 'Completo (+ prazo)',
+    'print.bagFromPh': 'de',
+    'print.bagToPh': 'at\u00e9',
+    // Settings tabs
+    'settings.tabUsers': 'Utilizadores',
+    'settings.tabCaldav': 'CalDAV',
+    'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabMcp': 'MCP',
+    'settings.tabServer': 'Servidor',
+    // Log
+    'log.allActions': 'Todas as a\u00e7\u00f5es',
+    'log.dateFromTitle': 'Data inicial',
+    'log.dateToTitle': 'Data final',
+    'log.loadMore': 'Carregar mais\u2026',
+    // Backup passwords
+    'settings.encryptPwPh': 'Senha de encripta\u00e7\u00e3o',
+    'settings.decryptPwPh': 'Senha de desencripta\u00e7\u00e3o',
+    // CalDAV how-tos
+    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Calendar:</strong> Adicione um novo calend\u00e1rio \u201cCalDAV\u201d ou \u201cde rede\u201d e cole o URL CalDAV acima.',
+    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> Instale o DAVx5 do F-Droid ou Play Store. Adicione conta com \u201cLogin com URL\u201d e cole o URL.',
+    'caldav.howApple': '<strong>Apple Calendar (iPhone/Mac):</strong> Defini\u00e7\u00f5es \u2192 Calend\u00e1rio \u2192 Contas \u2192 Adicionar conta CalDAV. Servidor = o URL acima.',
+    // Inventory placeholders
+    'inv.delKgPh': 'ex. 1000 ou 847,5',
+    'inv.delNotePh': 'ex. Agrobs, lote 2025-03',
+    'inv.adjAbsPh': 'ex. 847,5',
+    'inv.adjDeltaPh': 'ex. -5 ou +20',
+    'inv.reasonPh': 'ex. Estrago, contagem de estoque',
+    // Zone placeholders
+    'zones.namePh': 'ex. Tenda 4',
+    'zones.racksPh': 'ex. R1, R2, R3',
+    'zones.capacityPh': 'opcional',
+    // Scan session summary
+    'scan.sessionSummary': 'Resumo da Sess\u00e3o',
+    'scan.totalCount': 'Total',
+    'scan.sessionErrors': 'Erros',
+    'scan.duration': 'Dura\u00e7\u00e3o',
+    'scan.batches': 'Lotes',
+    'scan.close': 'Fechar',
+    'scan.newSession': 'Nova Sess\u00e3o',
+    // Users / account
+    'users.loggedInAs': 'Sess\u00e3o iniciada como {user} ({role})',
+    'users.adminRequiredManage': 'Acesso de administrador obrigat\u00f3rio para gerir utilizadores.',
+    'users.required': 'Nome de utilizador e senha obrigat\u00f3rios',
+    'users.minPw': 'A senha deve ter pelo menos 8 caracteres',
+    'users.deleteConfirm': 'Eliminar este utilizador?',
+    // Change password
+    'chpw.required': 'Ambos os campos s\u00e3o obrigat\u00f3rios.',
+    'chpw.minLength': 'A nova senha deve ter pelo menos 8 caracteres.',
+    'chpw.success': 'Senha alterada com sucesso.',
+    // Strains
+    'strains.saveChanges': 'Guardar altera\u00e7\u00f5es',
+    'strains.required': 'Nome e abrevia\u00e7\u00f5es s\u00e3o campos obrigat\u00f3rios.',
+    'strains.kuerzelLength': 'A abrevia\u00e7\u00e3o deve ter exatamente 4 caracteres (ex. LIMA, SHII, AUSP).',
+    // Sync
+    'sync.syncedAt': 'Sincronizado \u00b7 {time}',
+    // DuckDNS / Let\'s Encrypt / Server
+    'duckdns.noUpdateYet': 'DuckDNS ativado, mas ainda sem atualiza\u00e7\u00e3o de IP.',
+    'duckdns.currentCert': 'Certificado atual: ',
+    'duckdns.updating': 'A atualizar\u2026',
+    'duckdns.saved': 'Guardado.',
+    'duckdns.subdomainRequired': 'Introduza um subdom\u00ednio.',
+    'duckdns.tokenRequired': 'Introduza um token.',
+    'duckdns.sendingIp': 'A enviar IP para DuckDNS\u2026',
+    'duckdns.ipUpdated': 'IP atualizado. A verificar reencaminhamento\u2026',
+    'le.certActive': 'Ativo',
+    'le.certOther': 'Desconhecido',
+    'le.requesting': 'A solicitar\u2026',
+    'le.certIssued': 'Certificado emitido para {domain}! Expira: {date}',
+    'le.certRequesting': 'A solicitar certificado \u00e0 Let\u2019s Encrypt (pode demorar 1\u20132 minutos)\u2026',
+    'server.adminRequired': 'Acesso de administrador obrigat\u00f3rio.',
+    'server.loadError': 'Erro ao carregar.',
+    'server.restarting': 'A reiniciar\u2026',
+    'server.updateStatus': 'A atualizar e reiniciar servidor\u2026',
+    'server.waitReconnect': 'Servidor a reiniciar. A aguardar liga\u00e7\u00e3o\u2026',
+    'server.noResponse': 'Servidor n\u00e3o responde. Verifique manualmente.',
+    'server.statusLabel': 'Estado',
+    'server.versionLabel': 'Vers\u00e3o',
+    'server.platformLabel': 'Plataforma',
+    'server.nodeLabel': 'Node.js',
+    'server.uptimeLabel': 'Tempo de atividade',
+    'server.sseLabel': 'Clientes SSE',
+    'server.ramLabel': 'RAM',
+    // Migration
+    'migrate.alreadyCurrent': 'Todos os IDs de lote j\u00e1 est\u00e3o atuais. Nenhuma altera\u00e7\u00e3o necess\u00e1ria.',
+    'migrate.confirm': 'Iniciar migra\u00e7\u00e3o? Todos os IDs antigos ser\u00e3o renomeados.',
+    'migrate.complete': 'Migra\u00e7\u00e3o conclu\u00edda: ',
+    'migrate.success': 'Migra\u00e7\u00e3o bem-sucedida: ',
+    // Inventory labels
+    'inv.afterDeliveryLabel': 'Ap\u00f3s entrega: ',
+    'inv.setToLabel': 'Definir para ',
+    'inv.newTotalLabel': 'Novo total: ',
+    'inv.kgFromCurrent': ' kg (do estoque atual)',
+    // Zones
+    'zones.nameRequired': 'Nome de zona obrigat\u00f3rio.',
+    'zones.errorReorder': 'Erro ao reordenar zonas: {err}',
+    'zones.errorCreate': 'Erro ao criar zona: {err}',
+    // Print
+    'print.noLabels': 'Sem etiquetas para imprimir. Verifique a sele\u00e7\u00e3o.',
+    'print.printError': 'Erro de impress\u00e3o: {err}',
+    'print.warnTruncated': 'Aviso: Texto da etiqueta truncado para: {id}',
+    'print.warnNumericBarcodes': 'Aviso: C\u00f3digos de barras num\u00e9ricos n\u00e3o encontrados para sacos: {list}',
+    // Batch add / note
+    'batchadd.selectBatch': 'Selecione um lote.',
+    'batchadd.selectLoc': 'Introduza um local.',
+    'batch.fillQty': 'Introduza uma quantidade maior que 0',
+    'batch.saveFailed': 'N\u00e3o foi poss\u00edvel guardar o lote: ',
+    'note.prefix': 'Nota \u2014 ',
   }
 };
 
@@ -3149,7 +3482,7 @@ async function loadData(){
     const d=await authFetch('/api/data').then(r=>r.json());
     lastHash=JSON.stringify(d);
     applyData(d);
-    setSyncStatus('ok','Synced · gerade eben');
+    lastSyncTime=Date.now();setSyncStatus('ok',t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)}));
     refresh();
   }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
 }
@@ -3199,13 +3532,13 @@ setInterval(()=>{
   if(!lastSyncTime)return;
   const dot=document.getElementById('sync-dot');
   if(!dot||!dot.classList.contains('ok'))return;
-  document.getElementById('sync-label').textContent='Synced · '+formatRelativeTime(lastSyncTime);
+  document.getElementById('sync-label').textContent=t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)});
 },5000);
 let _polling=false;
 async function pollSync(){
   if(_mutating>0||_polling)return;
   _polling=true;
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);setSyncStatus('ok','Synced · gerade eben');refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
+  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);lastSyncTime=Date.now();setSyncStatus('ok',t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)}));refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
   finally{_polling=false}
 }
 
@@ -3336,7 +3669,7 @@ document.getElementById('m-pr-ok').onclick=()=>{if(promptCb)promptCb(document.ge
 document.getElementById('m-pr-cancel').onclick=closePrompt;
 document.getElementById('m-prompt').addEventListener('click',e=>{if(e.target.id==='m-prompt')closePrompt()});
 document.getElementById('m-pr-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('m-pr-ok').click()}});
-function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent='Note — '+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
+function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent=t('note.prefix')+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
 function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
 function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();apiPatch('/api/batches/'+encodeURIComponent(noteId),{notes:b.notes});renderBatches()}closeNote()}
 document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
@@ -3355,8 +3688,8 @@ function baPreview(){const id=document.getElementById('ba-batch').value,loc=docu
 document.getElementById('m-batchadd').addEventListener('click',e=>{if(e.target.id==='m-batchadd')closeBatchAdd()});
 function confirmBatchAdd(){
   const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
-  if(!id||!batch){alert('Select a batch first');return}
-  if(!loc){alert('Select a location first');return}
+  if(!id||!batch){alert(t('batchadd.selectBatch'));return}
+  if(!loc){alert(t('batchadd.selectLoc'));return}
   const now=new Date().toISOString();
   const entries=[];
   batch.bags.forEach(bagId=>{
@@ -3973,8 +4306,8 @@ function createBatch(){
   const sp=ms.name,st=ms.kuerzel;
   const qty=parseInt(document.getElementById('nb-qty').value)||0,days=parseInt(document.getElementById('nb-days').value)||14;
   const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
-  if(qty<1){alert('Please fill in quantity');return}
-  if(!bagKg){alert('Please enter a bag weight');return}
+  if(qty<1){alert(t('batch.fillQty'));return}
+  if(!bagKg){alert(t('batch.enterWeight'));return}
   const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
   const substrate=(hw||wb)?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
   const strainText=(document.getElementById('nb-strain-text')||{}).value?.trim()||'';
@@ -3991,7 +4324,7 @@ function createBatch(){
       // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
       const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
       if(i>=0)batches.splice(i,1);
-      alert('Batch konnte nicht gespeichert werden: '+r.error);
+      alert(t('batch.saveFailed')+r.error);
       renderBatches();renderStatus();
     }
     // Register new barcode numbers from server response
@@ -4453,7 +4786,7 @@ function showCaldavStatus(msg,color){
 }
 async function syncCaldavNow(){
   if(!caldav.enabled){showCaldavStatus('Enable sync first, then save settings.','#92400e');return}
-  const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent='Syncing...';
+  const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent=t('caldav.syncing');
   showCaldavStatus('Writing tasks to calendar files...','#888');
   try{
     const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
@@ -4466,7 +4799,7 @@ async function syncCaldavNow(){
       renderCalendar();
     }
   }catch(e){showCaldavStatus('Sync error: '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent='Sync all tasks now'}
+  finally{btn.disabled=false;btn.textContent=t('caldav.syncNow')}
 }
 async function pushTaskCaldav(task){
   if(!caldav.enabled)return;
@@ -4504,7 +4837,7 @@ async function refreshDuckdnsStatus(){
         banner.innerHTML='<strong>'+s.domain+'</strong> &rarr; '+s.lastIp+(s.lastIpUpdate?' <span style="color:var(--c-text-muted)">('+fmtDtTime(s.lastIpUpdate)+')</span>':'');
       }else{
         banner.style.background='var(--c-amber-light)';banner.style.border='1px solid var(--c-amber-border)';banner.style.color='var(--c-amber-dark)';
-        banner.textContent='DuckDNS aktiviert, aber noch kein IP-Update durchgeführt.';
+        banner.textContent=t('duckdns.noUpdateYet');
       }
     }else{banner.style.display='none'}
     const certEl=document.getElementById('le-cert-status');
@@ -4516,10 +4849,10 @@ async function refreshDuckdnsStatus(){
         certEl.style.background=ok?'var(--c-primary-light)':warn?'var(--c-amber-light)':'var(--c-red-light)';
         certEl.style.border='1px solid '+(ok?'var(--c-green-border)':warn?'var(--c-amber-border)':'var(--c-red-border)');
         certEl.style.color=ok?'var(--c-green-dark)':warn?'var(--c-amber-dark)':'var(--c-red-dark)';
-        certEl.innerHTML='Let\'s Encrypt Zertifikat aktiv. Ablauf: '+fmtDt(s.leExpiry)+' ('+daysLeft+' Tage)';
+        certEl.innerHTML=t('le.certActive')+'. '+t('le.certIssued',{domain:s.domain||'',date:fmtDt(s.leExpiry)});
       }else{
         certEl.style.background='var(--c-blue-light)';certEl.style.border='1px solid var(--c-blue-border)';certEl.style.color='var(--c-blue-dark)';
-        certEl.textContent='Aktuelles Zertifikat: '+s.cert.type;
+        certEl.textContent=t('duckdns.currentCert')+s.cert.type;
       }
     }else{certEl.style.display='none'}
   }catch(e){/* non-admin */}
@@ -4542,37 +4875,37 @@ async function saveDuckdnsSettings(){
     leEnabled:document.getElementById('duckdns-le-enabled').checked
   };
   if(tokenVal)cfg.token=tokenVal;
-  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus('Subdomain ist erforderlich.','var(--c-red-dark)');return}
-  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus('Token ist erforderlich.','var(--c-red-dark)');return}
+  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus(t('duckdns.subdomainRequired'),'var(--c-red-dark)');return}
+  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus(t('duckdns.tokenRequired'),'var(--c-red-dark)');return}
   try{
     const r=await apiPost('/api/duckdns/config',cfg);
-    if(r.error){showDuckdnsStatus('Fehler: '+r.error,'var(--c-red-dark)')}
-    else{showDuckdnsStatus('Einstellungen gespeichert.','var(--c-green-dark)');refreshDuckdnsStatus()}
+    if(r.error){showDuckdnsStatus(t('common.error')+': '+r.error,'var(--c-red-dark)')}
+    else{showDuckdnsStatus(t('duckdns.saved'),'var(--c-green-dark)');refreshDuckdnsStatus()}
   }catch(e){showDuckdnsStatus('Fehler: '+e.message,'var(--c-red-dark)')}
 }
 async function triggerDuckdnsUpdate(){
   const btn=document.getElementById('duckdns-update-btn');
-  btn.disabled=true;btn.textContent='Aktualisiere...';
-  showDuckdnsStatus('Sende IP-Update an DuckDNS...','#888');
+  btn.disabled=true;btn.textContent=t('duckdns.updating');
+  showDuckdnsStatus(t('duckdns.sendingIp'),'#888');
   try{
     const r=await authFetch('/api/duckdns/update-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showDuckdnsStatus('Fehler: '+data.error,'var(--c-red-dark)')}
-    else{showDuckdnsStatus('IP aktualisiert: '+data.lastIp,'var(--c-green-dark)');refreshDuckdnsStatus()}
-  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent='IP jetzt aktualisieren'}
+    if(data.error){showDuckdnsStatus(t('common.error')+': '+data.error,'var(--c-red-dark)')}
+    else{showDuckdnsStatus(t('duckdns.ipUpdated'),'var(--c-green-dark)');refreshDuckdnsStatus()}
+  }catch(e){showDuckdnsStatus(t('common.error')+': '+e.message,'var(--c-red-dark)')}
+  finally{btn.disabled=false;btn.textContent=t('duckdns.updateNow')}
 }
 async function requestLeCert(){
   const btn=document.getElementById('le-request-btn');
-  btn.disabled=true;btn.textContent='Wird angefordert...';
-  showLeStatus('Zertifikat wird bei Let\'s Encrypt angefordert (kann 1-2 Minuten dauern)...','#888');
+  btn.disabled=true;btn.textContent=t('le.requesting');
+  showLeStatus(t('le.certRequesting'),'#888');
   try{
     const r=await authFetch('/api/duckdns/request-cert',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const data=await r.json();
-    if(data.error){showLeStatus('Fehler: '+data.error,'var(--c-red-dark)')}
-    else{showLeStatus('Zertifikat ausgestellt für '+data.domain+'! Ablauf: '+fmtDt(data.expiry),'var(--c-green-dark)');refreshDuckdnsStatus()}
-  }catch(e){showLeStatus('Fehler: '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent='Zertifikat jetzt anfordern'}
+    if(data.error){showLeStatus(t('common.error')+': '+data.error,'var(--c-red-dark)')}
+    else{showLeStatus(t('le.certIssued',{domain:data.domain,date:fmtDt(data.expiry)}),'var(--c-green-dark)');refreshDuckdnsStatus()}
+  }catch(e){showLeStatus(t('common.error')+': '+e.message,'var(--c-red-dark)')}
+  finally{btn.disabled=false;btn.textContent=t('le.requestNow')}
 }
 
 // ─── MCP TAB (admin-only) ───────────────────────────────────
@@ -4589,21 +4922,21 @@ function showServerTab(){
 async function loadServerTab(){
   const el=document.getElementById('server-info');
   if(!el)return;
-  if(!currentUser||currentUser.role!=='admin'){el.textContent='Admin access required.';return}
+  if(!currentUser||currentUser.role!=='admin'){el.textContent=t('server.adminRequired');return}
   try{
     const r=await authFetch('/api/health');
     const h=await r.json();
     const uptimeH=Math.floor(h.uptime/3600);
     const uptimeM=Math.floor((h.uptime%3600)/60);
     const platLabel=h.platform==='win32'?'Windows':h.platform==='darwin'?'macOS':'Linux';
-    el.innerHTML='<div><b>Status:</b> '+esc(h.status)+'</div>'+
-      '<div><b>Version:</b> '+esc(h.version)+'</div>'+
-      '<div><b>Plattform:</b> '+platLabel+'</div>'+
-      '<div><b>Node.js:</b> '+esc(h.nodeVersion||'–')+'</div>'+
-      '<div><b>Uptime:</b> '+uptimeH+'h '+uptimeM+'m</div>'+
-      '<div><b>SSE Clients:</b> '+h.sseClients+'</div>'+
-      (h.memory?'<div><b>RAM:</b> '+h.memory.rss+' MB</div>':'');
-  }catch(e){el.textContent='Fehler beim Laden.'}
+    el.innerHTML='<div><b>'+t('server.statusLabel')+':</b> '+esc(h.status)+'</div>'+
+      '<div><b>'+t('server.versionLabel')+':</b> '+esc(h.version)+'</div>'+
+      '<div><b>'+t('server.platformLabel')+':</b> '+platLabel+'</div>'+
+      '<div><b>'+t('server.nodeLabel')+':</b> '+esc(h.nodeVersion||'–')+'</div>'+
+      '<div><b>'+t('server.uptimeLabel')+':</b> '+uptimeH+'h '+uptimeM+'m</div>'+
+      '<div><b>'+t('server.sseLabel')+':</b> '+h.sseClients+'</div>'+
+      (h.memory?'<div><b>'+t('server.ramLabel')+':</b> '+h.memory.rss+' MB</div>':'');
+  }catch(e){el.textContent=t('server.loadError')}
 }
 async function runBatchIdMigration(){
   const renames=[];
@@ -4634,9 +4967,9 @@ async function runBatchIdMigration(){
     const newId=isGrain?'G-'+kuerzel+'-'+datePart:kuerzel+'-'+datePart;
     renames.push({oldId:b.batchId,newId});
   });
-  if(!renames.length){alert('Alle Chargen-IDs sind bereits aktuell. Keine Änderungen nötig.');return}
+  if(!renames.length){alert(t('migrate.alreadyCurrent'));return}
   const preview=renames.map(r=>`${r.oldId}  →  ${r.newId}`).join('\n');
-  if(!confirm(renames.length+' Chargen werden umbenannt:\n\n'+preview+'\n\nFortfahren?'))return;
+  if(!confirm(t('migrate.confirm')+'\n\n'+preview))return;
   let done=0,failed=0,failedList=[];
   // Hold _mutating elevated for the whole loop so SSE-triggered pollSync cannot
   // overwrite in-memory state between individual rename requests.
@@ -4661,9 +4994,9 @@ async function runBatchIdMigration(){
   }
   renderBatches();renderStatus();
   if(failed){
-    alert('Migration abgeschlossen: '+done+' umbenannt, '+failed+' Fehler:\n\n'+failedList.join('\n'));
+    alert(t('migrate.complete')+done+' renamed, '+failed+' errors:\n\n'+failedList.join('\n'));
   }else{
-    alert('Migration erfolgreich: '+done+' Chargen umbenannt.');
+    alert(t('migrate.success')+done+' batches renamed.');
   }
 }
 
@@ -4671,12 +5004,12 @@ function restartServer(){
   confirm2('Server neustarten?','Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.','Ja, neustarten',async()=>{
     const btn=document.getElementById('btn-server-restart');
     const status=document.getElementById('server-restart-status');
-    btn.disabled=true;btn.textContent='Wird neugestartet...';
+    btn.disabled=true;btn.textContent=t('server.restarting');
     status.style.display='block';status.style.color='var(--c-text-muted)';
-    status.textContent='Server wird aktualisiert und neugestartet...';
+    status.textContent=t('server.updateStatus');
     try{
       await authFetch('/api/server/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      status.textContent='Server startet neu. Warte auf Verbindung...';
+      status.textContent=t('server.waitReconnect');
       let attempts=0;
       const poll=setInterval(async()=>{
         attempts++;
@@ -4684,9 +5017,9 @@ function restartServer(){
           const r=await fetch('/api/health');
           if(r.ok){clearInterval(poll);window.location.reload()}
         }catch(e){/* still down */}
-        if(attempts>60){clearInterval(poll);status.textContent='Server antwortet nicht. Bitte manuell prüfen.';status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+        if(attempts>60){clearInterval(poll);status.textContent=t('server.noResponse');status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent=t('server.updateBtn')}
       },3000);
-    }catch(e){status.textContent='Fehler: '+e.message;status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent='Server aktualisieren & neustarten'}
+    }catch(e){status.textContent=t('common.error')+': '+e.message;status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent=t('server.updateBtn')}
   });
 }
 
@@ -5019,7 +5352,7 @@ function updateThreshold(mat,key,val){
 function delMatChange(){
   const mat=document.getElementById('del-mat').value;
   const stock=inventory.stock?.[mat]||0;
-  document.getElementById('del-current').textContent='Current stock: '+stock.toFixed(2)+' kg';
+  document.getElementById('del-current').textContent=t('inv.currentStock',{n:stock.toFixed(2)});
   document.getElementById('del-kg').value='';
   document.getElementById('del-preview').style.display='none';
 }
@@ -5029,13 +5362,13 @@ function delPreview(){
   const el=document.getElementById('del-preview');
   if(!kg){el.style.display='none';return}
   const cur=inventory.stock?.[mat]||0;
-  el.innerHTML='After delivery: <strong>'+(cur+kg).toFixed(2)+' kg</strong> ('+cur.toFixed(2)+' + '+kg+' kg)';
+  el.innerHTML=t('inv.afterDeliveryLabel')+'<strong>'+(cur+kg).toFixed(2)+' kg</strong> ('+cur.toFixed(2)+' + '+kg+' kg)';
   el.style.display='block';
 }
 function adjMatChange(){
   const mat=document.getElementById('adj-mat').value;
   const stock=inventory.stock?.[mat]||0;
-  document.getElementById('adj-current').textContent='Current stock: '+stock.toFixed(2)+' kg';
+  document.getElementById('adj-current').textContent=t('inv.currentStock',{n:stock.toFixed(2)});
   document.getElementById('adj-absolute').value='';
   document.getElementById('adj-delta').value='';
   document.getElementById('adj-preview').style.display='none';
@@ -5050,13 +5383,13 @@ function adjPreview(mode){
     if(isNaN(abs)){el.style.display='none';return}
     document.getElementById('adj-delta').value='';
     newVal=Math.max(0,abs);diff=newVal-cur;
-    el.innerHTML='Set to <strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg from current '+cur.toFixed(2)+' kg)';
+    el.innerHTML=t('inv.setToLabel')+'<strong>'+newVal.toFixed(2)+' kg</strong> '+(diff>=0?'+':'')+diff.toFixed(2)+t('inv.kgFromCurrent');
   }else{
     const delta=parseFloat(document.getElementById('adj-delta').value);
     if(isNaN(delta)){el.style.display='none';return}
     document.getElementById('adj-absolute').value='';
     newVal=Math.max(0,cur+delta);diff=delta;
-    el.innerHTML='New total: <strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg)';
+    el.innerHTML=t('inv.newTotalLabel')+'<strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg)';
   }
   el.style.display='block';
 }
@@ -5064,7 +5397,7 @@ function logDelivery(){
   const mat=document.getElementById('del-mat').value;
   const kg=parseFloat(document.getElementById('del-kg').value)||0;
   const note=document.getElementById('del-note').value.trim();
-  if(kg<=0){alert('Enter a quantity greater than 0');return}
+  if(kg<=0){alert(t('inv.enterQty'));return}
   if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
   inventory.stock[mat]=(inventory.stock[mat]||0)+kg;
   invDelta(mat,kg,'delivery',note||'delivery');
@@ -5085,7 +5418,7 @@ function logAdjustment(){
     newStock=Math.max(0,parseFloat(absVal)||0);delta=newStock-cur;
   }else if(deltaVal!==''){
     delta=parseFloat(deltaVal)||0;newStock=Math.max(0,cur+delta);
-  }else{alert('Enter either a new total or an adjustment amount');return}
+  }else{alert(t('inv.enterAmount'));return}
   inventory.stock[mat]=newStock;
   invSetAbsolute(mat,newStock,'adjustment',reason);
   document.getElementById('adj-absolute').value='';document.getElementById('adj-delta').value='';
@@ -5172,7 +5505,7 @@ function editSupplier(id){
   document.getElementById('m-ok').textContent=existing?t('inv.editSupplier'):t('inv.addSupplier');
   confirmCb=async()=>{
     const s={mat:document.getElementById('sup-mat').value,name:document.getElementById('sup-name').value.trim(),url:document.getElementById('sup-url').value.trim(),phone:document.getElementById('sup-phone').value.trim(),notes:document.getElementById('sup-notes').value.trim()};
-    if(!s.name){alert('Name is required');return}
+    if(!s.name){alert(t('zones.nameRequired'));return}
     if(existing)s.id=existing.id;
     const r=await apiPost('/api/suppliers',s);
     if(r&&r.id&&!existing){s.id=r.id;suppliers.push(s)}
@@ -5203,7 +5536,7 @@ function setStatus(el,msg,ok){el.style.color=ok?'var(--c-green-dark)':'var(--c-r
 async function downloadBackup(){
   const pw=document.getElementById('backup-dl-pw').value;
   const st=document.getElementById('backup-dl-status');
-  if(!pw||pw.length<8){setStatus(st,'Password must be at least 8 characters.',false);return}
+  if(!pw||pw.length<8){setStatus(st,t('users.minPw'),false);return}
   setStatus(st,'Preparing backup…',true);
   try{
     const r=await authFetch('/api/backup/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
@@ -5396,7 +5729,7 @@ async function reorderZoneWithinRole(sourceId,targetId,before,role){
     if(res&&res.error){alert(res.error);await loadData()}
   }catch(err){
     console.error('reorder zones error:',err);
-    alert('Error reordering zones: '+(err.message||'unknown error'));
+    alert(t('zones.errorReorder',{err:err.message||'unknown error'}));
     await loadData();
   }
 }
@@ -5431,7 +5764,7 @@ async function addZone(){
     document.getElementById('zone-capacity').value='';
   }catch(e){
     console.error('addZone error:',e);
-    alert('Error creating zone: '+(e.message||'unknown error'));
+    alert(t('zones.errorCreate',{err:e.message||'unknown error'}));
   }
 }
 function renameZone(id){
@@ -5679,7 +6012,7 @@ function resetAssetForm(){
   document.getElementById('asset-exit-date').value='';
   document.getElementById('asset-exit-row').style.display='none';
   document.getElementById('asset-notes').value='';
-  document.getElementById('asset-id-preview').textContent='Neue ID: '+nextAssetId();
+  document.getElementById('asset-id-preview').textContent=t('assets.newId',{id:nextAssetId()});
   // Fill location datalist
   const locs=[...new Set(assets.map(a=>a.location).filter(Boolean))];
   document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${esc(l)}">`).join('');
@@ -5707,7 +6040,7 @@ function editAsset(id){
   document.getElementById('asset-exit-date').value=a.exitDate||'';
   document.getElementById('asset-exit-row').style.display=a.status==='aktiv'?'none':'block';
   document.getElementById('asset-notes').value=a.notes||'';
-  document.getElementById('asset-id-preview').textContent='Bearbeiten: '+id;
+  document.getElementById('asset-id-preview').textContent=t('assets.editing',{id});
   openStab('assets','add');
 }
 
@@ -5717,7 +6050,7 @@ function saveAsset(){
   const entryDate=document.getElementById('asset-entry-date').value;
   const price=parseFloat(document.getElementById('asset-price').value);
   const life=parseInt(document.getElementById('asset-life').value);
-  if(!name||!entryDate||isNaN(price)||price<0||isNaN(life)||life<1){alert('Bitte alle Pflichtfelder ausfüllen.');return}
+  if(!name||!entryDate||isNaN(price)||price<0||isNaN(life)||life<1){alert(t('assets.fillRequired'));return}
   const status=document.getElementById('asset-status').value;
   const obj={
     assetId:editingAssetId||nextAssetId(),
@@ -5767,7 +6100,7 @@ function fmtNum(n){return String(Math.round(n*100)/100).replace('.',',')}
 
 function renderStichtagReport(){
   const ref=document.getElementById('stichtag-date').value;
-  if(!ref){alert('Bitte Stichtag wählen.');return}
+  if(!ref){alert(t('assets.chooseCutoff'));return}
   const aktiv=assets.filter(a=>a.status==='aktiv'||(a.exitDate&&a.exitDate>ref));
   let totalPurchase=0,totalBook=0,totalAccum=0;
   const rows=aktiv.map(a=>{
@@ -5776,7 +6109,7 @@ function renderStichtagReport(){
     return`<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
   });
   document.getElementById('stichtag-result').innerHTML=
-    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">Stichtag: ${fmtDE(ref)} — ${aktiv.length} aktive Anlagen</div>`+
+    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">${t('cutoff.date',{date:fmtDE(ref),n:aktiv.length})}</div>`+
     `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>`+
     rows.join('')+
     `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>`+
@@ -5822,22 +6155,22 @@ function makeAssetZPL(ids){
       '^FO0,182^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
       '^XZ';
   }).filter(Boolean).join('\n');
-  if(truncated.length) alert('Warning: Label text was truncated for: '+truncated.join(', ')+'. Maximum 26 characters for name, 36 for location.');
+  if(truncated.length) alert(t('print.warnTruncated',{id:truncated.join(', ')}));
   return zpl;
 }
 
 async function printAssetLabels(){
   const ids=[...selectedAssetIds];
-  if(!ids.length){alert('Bitte mindestens eine Anlage auswählen.');return}
+  if(!ids.length){alert(t('assets.selectAsset'));return}
   const zpl=makeAssetZPL(ids);
   const err=await sendToPrinter(zpl);
-  if(err)alert('Druckfehler: '+err);
+  if(err)alert(t('assets.printError')+err);
   else setFb('ok',ids.length+' Inventar-Etikett'+(ids.length!==1?'en':'')+' gedruckt');
 }
 
 function downloadAssetZPL(){
   const ids=[...selectedAssetIds];
-  if(!ids.length){alert('Bitte mindestens eine Anlage auswählen.');return}
+  if(!ids.length){alert(t('assets.selectAsset'));return}
   const zpl=makeAssetZPL(ids);
   const blob=new Blob([zpl],{type:'text/plain'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventar_labels.zpl';a.click();
@@ -5900,12 +6233,12 @@ function saveMStrain(){
   const kuerzel=document.getElementById('ms-kuerzel').value.trim().toUpperCase();
   const desc=document.getElementById('ms-desc').value.trim();
   const editId=document.getElementById('ms-edit-id').value;
-  if(!name||!kuerzel){alert('Name und Kürzel sind Pflichtfelder.');return}
-  if(kuerzel.length!==4){alert('Kürzel muss genau 4 Zeichen haben (z.B. LIMA, SHII, AUSP).');return}
+  if(!name||!kuerzel){alert(t('strains.required'));return}
+  if(kuerzel.length!==4){alert(t('strains.kuerzelLength'));return}
   const payload={name,kuerzel,description:desc};
   const req=editId?apiPatch('/api/mushroom-strains/'+editId,payload):apiPost('/api/mushroom-strains',payload);
   req.then(r=>{
-    if(r&&r.error){alert('Fehler: '+r.error);return}
+    if(r&&r.error){alert(t('common.error')+': '+r.error);return}
     if(!editId&&r&&r.id){mushroomStrains.push({id:r.id,name,kuerzel,description:desc,created:new Date().toISOString()})}
     else if(editId){const ms=mushroomStrains.find(x=>x.id===parseInt(editId));if(ms){ms.name=name;ms.kuerzel=kuerzel;ms.description=desc}}
     mushroomStrains.sort((a,b)=>a.name.localeCompare(b.name));
@@ -5921,7 +6254,7 @@ function editMStrain(id){
   document.getElementById('ms-kuerzel').value=ms.kuerzel;
   document.getElementById('ms-desc').value=ms.description||'';
   document.getElementById('ms-edit-id').value=id;
-  document.getElementById('ms-save-btn').textContent='Änderungen speichern';
+  document.getElementById('ms-save-btn').textContent=t('strains.saveChanges');
   document.getElementById('ms-cancel-btn').style.display='';
   document.getElementById('ms-name').focus();
 }
@@ -5940,7 +6273,7 @@ function deleteMStrain(id){
   const ms=mushroomStrains.find(x=>x.id===id);if(!ms)return;
   confirm2('Pilzsorte löschen?','Pilzsorte "'+ms.name+'" wirklich löschen?','Löschen',()=>{
     apiDelete('/api/mushroom-strains/'+id).then(r=>{
-      if(r&&r.error){alert('Fehler: '+r.error);return}
+      if(r&&r.error){alert(t('common.error')+': '+r.error);return}
       mushroomStrains=mushroomStrains.filter(x=>x.id!==id);
       fillStrainSelects();renderStrains();
     });
@@ -6097,8 +6430,8 @@ function createGrainBatch(){
   const qty=parseInt(document.getElementById('gs-qty').value)||0;
   const days=parseInt(document.getElementById('gs-days').value)||14;
   const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
-  if(qty<1){alert('Please fill in quantity');return}
-  if(!bagKg){alert('Please enter a bag weight');return}
+  if(qty<1){alert(t('batch.fillQty'));return}
+  if(!bagKg){alert(t('batch.enterWeight'));return}
   const lwStrainText=(document.getElementById('lw-strain-text')||{}).value?.trim()||'';
   const batchId=genGrainBatchId(sp);spColor(sp);
   const due=new Date();due.setDate(due.getDate()+days);
@@ -6109,7 +6442,7 @@ function createGrainBatch(){
     if(r&&r.error){
       const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
       if(i>=0)batches.splice(i,1);
-      alert('Batch konnte nicht gespeichert werden: '+r.error);
+      alert(t('batch.saveFailed')+r.error);
       renderBatches();renderStatus();
     }
     if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}
@@ -6447,7 +6780,7 @@ function makeBagZPL(bags,batch,detail){
   const zpl=bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,detail,legacyFallbackIds))).join('\n');
   if(legacyFallbackIds.length){
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
-    alert('Warning: Numeric barcodes not found for bags: '+legacyFallbackIds.join(', ')+'. Legacy text barcodes were used instead.');
+    alert(t('print.warnNumericBarcodes',{list:legacyFallbackIds.join(', ')}));
   }
   return zpl;
 }
@@ -6465,28 +6798,28 @@ function toggleBagRange(){document.getElementById('bag-range-inputs').style.disp
 
 async function printBagLabels(){
   const b=batches.find(x=>x.batchId===document.getElementById('print-batch').value);
-  if(!b){alert('Select a batch first.');return}
+  if(!b){alert(t('print.selectBatchFirst'));return}
   let bags=b.bags;
   if(document.getElementById('print-range').value==='range'){
     const from=parseInt(document.getElementById('bag-from').value)||1;
     const to=parseInt(document.getElementById('bag-to').value)||b.bags.length;
     bags=b.bags.filter(bagId=>{const n=parseInt(bagId.split('-').pop());return n>=from&&n<=to});
-    if(!bags.length){alert('No bags in that range.');return}
+    if(!bags.length){alert(t('print.noBagsInRange'));return}
   }
   const zpl=makeBagZPL(bags,b,document.getElementById('print-mode').value);
-  if(!zpl||!zpl.includes('^XA')){alert('No labels to print. Please check your selection.');return}
+  if(!zpl||!zpl.includes('^XA')){alert(t('print.noLabels'));return}
   const err=await sendToPrinter(zpl);
-  if(err)alert('Print error: '+err);
+  if(err)alert(t('print.printError',{err}));
   else setFb('ok','Printed '+bags.length+' labels for '+b.batchId);
 }
 
 async function printLabLabels(){
   const ids=[...selectedLabIds];
-  if(!ids.length){alert('Select at least one culture.');return}
+  if(!ids.length){alert(t('print.selectCulture'));return}
   const zpl=makeLabZPL(ids,getLabOpts());
-  if(!zpl||!zpl.includes('^XA')){alert('No labels to print. Please check your selection.');return}
+  if(!zpl||!zpl.includes('^XA')){alert(t('print.noLabels'));return}
   const err=await sendToPrinter(zpl);
-  if(err)alert('Print error: '+err);
+  if(err)alert(t('print.printError',{err}));
   else setFb('ok','Printed '+ids.length+' lab label'+(ids.length!==1?'s':''));
 }
 
@@ -6926,21 +7259,21 @@ function endScanSession(){
   }
   let batchHtml='';
   touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+esc(bid)+(sp?' ('+esc(sp)+')':'')+'</span>';});
-  sumEl.innerHTML='<h3>Session Zusammenfassung</h3>'
+  sumEl.innerHTML='<h3>'+t('scan.sessionSummary')+'</h3>'
     +'<div class="scan-summary-grid">'
-    +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">Gesamt</div></div>'
+    +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">'+t('scan.totalCount')+'</div></div>'
     +(counts.ADD?'<div class="scan-summary-stat" style="border-top:3px solid #86efac"><div class="ss-num">'+counts.ADD+'</div><div class="ss-lbl">ADD</div></div>':'')
     +(counts.MOVE?'<div class="scan-summary-stat" style="border-top:3px solid #93c5fd"><div class="ss-num">'+counts.MOVE+'</div><div class="ss-lbl">MOVE</div></div>':'')
     +(counts.REMOVE?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+counts.REMOVE+'</div><div class="ss-lbl">REMOVE</div></div>':'')
     +(counts.HARVEST?'<div class="scan-summary-stat" style="border-top:3px solid #fcd34d"><div class="ss-num">'+counts.HARVEST+'</div><div class="ss-lbl">HARVEST</div></div>':'')
-    +(sessionErrors?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+sessionErrors+'</div><div class="ss-lbl">Fehler</div></div>':'')
+    +(sessionErrors?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+sessionErrors+'</div><div class="ss-lbl">'+t('scan.sessionErrors')+'</div></div>':'')
     +'</div>'
-    +'<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">Dauer: '+dur+' Min'+(startStr?' ('+startStr+' – '+endStr+')':'')+'</div>'
-    +(batchHtml?'<div class="scan-summary-batches">Batches: '+batchHtml+'</div>':'')
+    +'<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">'+t('scan.duration')+': '+dur+' Min'+(startStr?' ('+startStr+' – '+endStr+')':'')+'</div>'
+    +(batchHtml?'<div class="scan-summary-batches">'+t('scan.batches')+': '+batchHtml+'</div>':'')
     +(locSummary.length?'<div style="font-size:12px;margin-bottom:12px">'+locSummary.join(' · ')+'</div>':'')
     +'<div class="scan-summary-actions">'
-    +'<button class="btn-xs" onclick="closeScanSession()">Schließen</button>'
-    +'<button class="btn-xs green" onclick="newScanSession()">Neue Session</button>'
+    +'<button class="btn-xs" onclick="closeScanSession()">'+t('scan.close')+'</button>'
+    +'<button class="btn-xs green" onclick="newScanSession()">'+t('scan.newSession')+'</button>'
     +'</div>';
 }
 function closeScanSession(){
@@ -7217,10 +7550,10 @@ async function loadUsersTab(){
   const c=document.getElementById('sp-settings-users');
   if(!c)return;
   const acct=document.getElementById('users-account');
-  if(acct&&currentUser)acct.innerHTML=`Logged in as <b>${esc(currentUser.username)}</b> (${esc(currentUser.role)}) <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">Change Password</button>`;
+  if(acct&&currentUser)acct.innerHTML=t('users.loggedInAs',{user:esc(currentUser.username),role:esc(currentUser.role)})+` <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">${t('chpw.title')}</button>`;
   if(!currentUser||currentUser.role!=='admin'){
     const tbl=document.getElementById('users-table');
-    if(tbl)tbl.innerHTML='<p style="color:var(--c-text-muted)">Admin access required to manage users.</p>';
+    if(tbl)tbl.innerHTML='<p style="color:var(--c-text-muted)">'+t('users.adminRequiredManage')+'</p>';
     return;
   }
   try{
@@ -7238,8 +7571,8 @@ async function addUser(){
   const u=document.getElementById('new-username').value.trim();
   const p=document.getElementById('new-password').value;
   const role=document.getElementById('new-role').value;
-  if(!u||!p){alert('Username and password required');return;}
-  if(p.length<8){alert('Password must be at least 8 characters');return;}
+  if(!u||!p){alert(t('users.required'));return;}
+  if(p.length<8){alert(t('users.minPw'));return;}
   try{
     const r=await authFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role})});
     if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
@@ -7250,7 +7583,7 @@ async function addUser(){
 }
 
 async function deleteUser(id){
-  if(!confirm('Delete this user?'))return;
+  if(!confirm(t('users.deleteConfirm')))return;
   try{
     const r=await authFetch('/api/users/'+id,{method:'DELETE'});
     if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
@@ -7269,14 +7602,14 @@ async function submitChangePassword(){
   const cur=document.getElementById('chpw-current').value;
   const nw=document.getElementById('chpw-new').value;
   const st=document.getElementById('chpw-status');
-  if(!cur||!nw){st.textContent='Both fields are required.';st.style.color='red';return}
-  if(nw.length<8){st.textContent='New password must be at least 8 characters.';st.style.color='red';return}
+  if(!cur||!nw){st.textContent=t('chpw.required');st.style.color='red';return}
+  if(nw.length<8){st.textContent=t('chpw.minLength');st.style.color='red';return}
   try{
     const r=await authFetch('/api/auth/password',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});
     if(!r.ok){const d=await r.json().catch(()=>({}));st.textContent=d.error||'Failed';st.style.color='red';return}
-    st.textContent='Password changed successfully.';st.style.color='green';
+    st.textContent=t('chpw.success');st.style.color='green';
     setTimeout(()=>hideChangePasswordModal(),1500);
-  }catch(e){st.textContent='Error: '+e.message;st.style.color='red'}
+  }catch(e){st.textContent=t('common.error')+': '+e.message;st.style.color='red'}
 }
 
 // ─── INIT ────────────────────────────────────────────────────
@@ -7446,15 +7779,13 @@ function printCalendarTaskList(range){
   if(range==='week'){
     startDate=new Date(today);
     endDate=new Date(today);endDate.setDate(today.getDate()+6);
-    const sameMonth=startDate.getMonth()===endDate.getMonth();
-    const sameYear=startDate.getFullYear()===endDate.getFullYear();
-    rangeLabel=t('cal.weekShort')+': '+startDate.getDate()+'. '+MONTHS[startDate.getMonth()]+(sameYear?'':' '+startDate.getFullYear())+' – '+endDate.getDate()+'. '+MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
   }else{
     startDate=new Date(today);
     endDate=new Date(today);endDate.setDate(today.getDate()+29);
-    const sameYear=startDate.getFullYear()===endDate.getFullYear();
-    rangeLabel=t('cal.monthShort')+': '+startDate.getDate()+'. '+MONTHS[startDate.getMonth()]+(sameYear?'':' '+startDate.getFullYear())+' – '+endDate.getDate()+'. '+MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
   }
+  const sameYear=startDate.getFullYear()===endDate.getFullYear();
+  const rangePrefix=range==='week'?t('cal.weekShort'):t('cal.monthShort');
+  rangeLabel=rangePrefix+': '+startDate.getDate()+'. '+MONTHS[startDate.getMonth()]+(sameYear?'':' '+startDate.getFullYear())+' – '+endDate.getDate()+'. '+MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
 
   // Collect and filter events in range
   const allEvents=collectCalendarEvents();
@@ -8604,7 +8935,7 @@ function flipCamera(){
   _camFacingMode=_camFacingMode==='environment'?'user':'environment';
   if(_camScanner){closeCamScan();setTimeout(openCamScan,300)}
 }
-function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent='Kopiert!';setTimeout(()=>{b.textContent='Kopieren'},2000)}).catch(()=>{})}
+function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent=t('common.copied');setTimeout(()=>{b.textContent=t('common.copy')},2000)}).catch(()=>{})}
 
 function initEventListeners() {
   const $=id=>document.getElementById(id);
