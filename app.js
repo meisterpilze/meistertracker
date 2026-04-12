@@ -4424,7 +4424,7 @@ function renderDashAlerts(){
   const el=document.getElementById('dash-alerts');
   if(!allAlerts.length){card.style.display='none';return}
   card.style.display='';
-  el.innerHTML=allAlerts.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12px;border-radius:6px;margin-bottom:3px;background:${a.urgent?'var(--c-red-light)':'var(--c-amber-light)'};border-left:3px solid ${a.urgent?'var(--c-red)':'var(--c-amber)'}"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0">${t('dash.view')}</button></div>`).join('');
+  el.innerHTML=allAlerts.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent?'#fca5a5':'#fed7aa'};border-left:4px solid ${a.urgent?'#dc2626':'#ea580c'};color:${a.urgent?'#7f1d1d':'#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent?'#dc2626':'#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button></div>`).join('');
 }
 function renderDashBatchTasks(){
   const filter=document.getElementById('dash-batch-filter')?.value||'all';
