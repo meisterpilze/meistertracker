@@ -395,6 +395,12 @@
   <!-- Farm-only sections (hidden in Overview mode) -->
   <div id="dash-farm-section">
 
+  <!-- ── GROWBLOCKS section ── -->
+  <div class="dash-section-header dash-section-growblocks">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+    <span>Growblocks</span>
+  </div>
+
   <!-- Batch tasks + Alerts side by side -->
   <div class="dash-top-row" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">
 
@@ -431,11 +437,8 @@
 
   </div>
 
-  <!-- KPI strip (5 cards) -->
-  <div id="metrics" class="g5" style="margin-bottom:10px"></div>
-
-  <!-- Mini pipeline strip (always visible, replaces separate pipeline chart) -->
-  <div id="dash-mini-pipeline" style="margin-bottom:10px"></div>
+  <!-- Pipeline KPI strip (total + 5 stage cards) -->
+  <div id="metrics" style="margin-bottom:10px"></div>
 
   <!-- Location overview with inline search header -->
   <div class="dash-locations-header">
@@ -443,6 +446,13 @@
     <input type="text" id="status-q" class="dash-search-inline" data-i18n-aria-label="aria.searchDashboard" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." />
   </div>
   <div id="dash-locations"></div>
+
+  <!-- ── LAB section ── -->
+  <div class="dash-section-header dash-section-lab">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v7l4 9H5l4-9V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>
+    <span>Lab</span>
+  </div>
+  <div id="dash-lab-stock"></div>
 
   </div><!-- end dash-farm-section -->
 
