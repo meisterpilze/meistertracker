@@ -6916,6 +6916,11 @@ function bcParams(val,qzMult){const mods=35+val.length*11;let mw=3;qzMult=qzMult
 //   {type:'text',    x?, y, blockW?, fontH, fontW?, text, bold?}
 //   {type:'qr',      x, y, size, val}
 
+// Sanitize a string for use inside a ZPL ^FD...^FS field.
+// ^ starts ZPL commands and ~ starts ZPL control sequences — both must be removed
+// so user-supplied text (species names, notes, IDs) cannot inject ZPL commands.
+function zplText(s){return String(s||'').replace(/[\^~]/g,'');}
+
 function itemsToZPL(items){
   // Compute label height from content (min 160, max 240) so short labels don't waste media.
   let maxY=140;
@@ -6927,16 +6932,16 @@ function itemsToZPL(items){
   let z='^XA^PW400^LL'+ll+'^CI28^LH0,0';
   for(const it of items){
     if(it.type==='barcode'){
-      z+='^FO'+it.x+','+it.y+'^BY'+it.mw+',2.0,'+it.h+'^BCN,'+it.h+',N,N,N^FD'+it.val+'^FS';
+      z+='^FO'+it.x+','+it.y+'^BY'+it.mw+',2.0,'+it.h+'^BCN,'+it.h+',N,N,N^FD'+zplText(it.val)+'^FS';
     }else if(it.type==='text'){
       const fw=it.fontW||it.fontH;
       const bw=it.blockW||400;
       const bx=it.x||0;
-      z+='^FO'+bx+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+it.text+'^FS';
+      z+='^FO'+bx+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+zplText(it.text)+'^FS';
       // ZPL has no bold flag; double-draw at x+1 thickens strokes.
-      if(it.bold) z+='^FO'+(bx+1)+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+it.text+'^FS';
+      if(it.bold) z+='^FO'+(bx+1)+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+zplText(it.text)+'^FS';
     }else if(it.type==='qr'){
-      z+='^FO'+it.x+','+it.y+'^BQN,2,4^FDMM,A'+it.val+'^FS';
+      z+='^FO'+it.x+','+it.y+'^BQN,2,4^FDMM,A'+zplText(it.val)+'^FS';
     }
   }
   return z+'^XZ';
