@@ -16,9 +16,22 @@ if not "%~1"=="--relaunched" (
     echo  ========================================
     echo.
     echo [1/5] Updating code from git...
+    set "IS_WORKTREE=0"
     where git >nul 2>&1
     if !errorlevel! equ 0 (
-        if exist ".git" (
+        set "GIT_DIR_VAL="
+        for /f "tokens=*" %%G in ('git rev-parse --git-dir 2^>nul') do set "GIT_DIR_VAL=%%G"
+        if defined GIT_DIR_VAL (
+            echo !GIT_DIR_VAL! | findstr /c:".git/worktrees/" >nul 2>&1
+            if !errorlevel! equ 0 set "IS_WORKTREE=1"
+        )
+        if "!IS_WORKTREE!"=="1" (
+            echo.
+            echo  +------------------------------------------+
+            echo  ^|  Running in git worktree                 ^|
+            echo  ^|  Git pull will be skipped                ^|
+            echo  +------------------------------------------+
+        ) else if exist ".git" (
             git fetch origin >nul 2>&1
             if !errorlevel! equ 0 (
                 git reset --hard origin/main
