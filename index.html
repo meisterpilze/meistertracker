@@ -521,7 +521,14 @@
     <div id="ov-kpi-history" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
-        <button class="btn btn-sm" onclick="exportKpiCSV()" data-i18n="dash.ov.exportCsv">Export CSV</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="kpi-csv-period" class="inp" style="padding:4px 8px;font-size:12px;min-width:0;width:auto">
+            <option value="weekly" data-i18n="dash.ov.csvWeekly">Weekly</option>
+            <option value="monthly" data-i18n="dash.ov.csvMonthly">Monthly</option>
+            <option value="daily" data-i18n="dash.ov.csvDaily">Daily</option>
+          </select>
+          <button class="btn btn-sm" onclick="exportKpiCSV()" data-i18n="dash.ov.exportCsv">Export CSV</button>
+        </div>
       </div>
       <div id="ov-history-empty" class="card" style="display:none;text-align:center;padding:24px;color:var(--c-text-muted)">
         <p data-i18n="dash.ov.historyNoData">No KPI history yet — snapshots are taken daily with the backup.</p>
