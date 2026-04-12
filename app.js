@@ -134,6 +134,8 @@ const LANG = {
     'dash.ov.substrateUsed': 'Substrate used',
     'dash.ov.hardwoodUsed': 'Hardwood used',
     'dash.ov.wheatbranUsed': 'Wheat bran used',
+    'dash.ov.hardwood': 'Hardwood',
+    'dash.ov.wheatbran': 'Wheat bran',
     'dash.ov.periodWeek': 'This week',
     'dash.ov.periodMonth': 'This month',
     'dash.ov.periodYear': 'This year',
@@ -1273,6 +1275,8 @@ const LANG = {
     'dash.ov.substrateUsed': 'Substrat verbraucht',
     'dash.ov.hardwoodUsed': 'Hartholz verbraucht',
     'dash.ov.wheatbranUsed': 'Weizenkleie verbraucht',
+    'dash.ov.hardwood': 'Hartholz',
+    'dash.ov.wheatbran': 'Weizenkleie',
     'dash.ov.periodWeek': 'Diese Woche',
     'dash.ov.periodMonth': 'Diesen Monat',
     'dash.ov.periodYear': 'Dieses Jahr',
@@ -2421,6 +2425,8 @@ const LANG = {
     'dash.ov.substrateUsed': 'Substrato utilizado',
     'dash.ov.hardwoodUsed': 'Madeira dura utilizada',
     'dash.ov.wheatbranUsed': 'Farelo de trigo utilizado',
+    'dash.ov.hardwood': 'Madeira dura',
+    'dash.ov.wheatbran': 'Farelo de trigo',
     'dash.ov.periodWeek': 'Esta semana',
     'dash.ov.periodMonth': 'Este mês',
     'dash.ov.periodYear': 'Este ano',
@@ -4193,8 +4199,8 @@ function renderMonthCharts(monthStart){
       ovMonthSubstrateInst=new Chart(canvas2,{
         type:'bar',
         data:{labels:weekKeys.map(k=>'w/'+k.slice(5,10)),datasets:[
-          {label:t('batch.hardwood'),data:weekKeys.map(k=>+(weekHw[k]||0).toFixed(1)),backgroundColor:'#0d9488',borderRadius:3},
-          {label:t('batch.wheatBran'),data:weekKeys.map(k=>+(weekWb[k]||0).toFixed(1)),backgroundColor:'#059669',borderRadius:3}
+          {label:t('dash.ov.hardwood'),data:weekKeys.map(k=>+(weekHw[k]||0).toFixed(1)),backgroundColor:'#0d9488',borderRadius:3},
+          {label:t('dash.ov.wheatbran'),data:weekKeys.map(k=>+(weekWb[k]||0).toFixed(1)),backgroundColor:'#059669',borderRadius:3}
         ]},
         options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(1)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
       });
