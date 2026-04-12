@@ -516,6 +516,40 @@
         <canvas id="ov-year-bags-chart" height="180"></canvas>
       </div>
     </div>
+
+    <!-- KPI History (trend charts from daily snapshots) -->
+    <div id="ov-kpi-history" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
+        <button class="btn btn-sm" onclick="exportKpiCSV()" data-i18n="dash.ov.exportCsv">Export CSV</button>
+      </div>
+      <div id="ov-history-empty" class="card" style="display:none;text-align:center;padding:24px;color:var(--c-text-muted)">
+        <p data-i18n="dash.ov.historyNoData">No KPI history yet — snapshots are taken daily with the backup.</p>
+        <button class="btn" onclick="takeKpiSnapshot()" data-i18n="dash.ov.historyTakeSnapshot">Take snapshot now</button>
+      </div>
+      <div id="ov-history-charts" class="g2" style="margin-bottom:10px">
+        <div class="card">
+          <div class="sec" data-i18n="dash.ov.historyHarvest">Daily harvest (kg)</div>
+          <canvas id="ov-history-harvest-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="sec" data-i18n="dash.ov.historyBags">Daily bags created</div>
+          <canvas id="ov-history-bags-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="sec" data-i18n="dash.ov.historyPipeline">Pipeline (bags by stage)</div>
+          <canvas id="ov-history-pipeline-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="sec" data-i18n="dash.ov.historyContam">Contamination rate (%)</div>
+          <canvas id="ov-history-contam-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="sec" data-i18n="dash.ov.historyStock">Stock levels (kg)</div>
+          <canvas id="ov-history-stock-chart" height="180"></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Floating action bar for bag selection -->
