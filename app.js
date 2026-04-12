@@ -126,6 +126,27 @@ const LANG = {
     'dash.modeFarm': 'Farm',
     'dash.modeOverview': 'Overview',
     'dash.weeklyHarvest': 'Weekly harvest trend',
+    'dash.ov.thisWeek': 'This week',
+    'dash.ov.qualityEff': 'Quality & efficiency',
+    'dash.ov.bagsCreated': 'Bags created',
+    'dash.ov.grainUsed': 'Grain used',
+    'dash.ov.harvestThisWeek': 'Harvest',
+    'dash.ov.substrateUsed': 'Substrate used',
+    'dash.ov.avgYield': 'Avg yield / bag',
+    'dash.ov.contamRate': 'Contam rate',
+    'dash.ov.daysSinceContam': 'Days clean',
+    'dash.ov.flush2Plus': 'Flush 2+ bags',
+    'dash.ov.vsLastWeek': 'vs last week',
+    'dash.ov.fromBatches': 'from new batches',
+    'dash.ov.harvests': 'harvests',
+    'dash.ov.hwWb': 'hardwood + wheat bran',
+    'dash.ov.perBag': 'all-time average',
+    'dash.ov.bags': 'bags',
+    'dash.ov.bagsOnSecondFlush': 'on 2nd flush or more',
+    'dash.ov.neverContam': 'no contamination recorded',
+    'dash.ov.dayAgo': '1 day ago',
+    'dash.ov.daysAgo': '{n} days ago',
+    'dash.ov.na': '—',
     'dash.search': 'Search...',
     'dash.cards': 'Cards',
     'dash.table': 'Table',
@@ -1235,6 +1256,27 @@ const LANG = {
     'dash.modeFarm': 'Betrieb',
     'dash.modeOverview': 'Übersicht',
     'dash.weeklyHarvest': 'Wöchentliche Ernte',
+    'dash.ov.thisWeek': 'Diese Woche',
+    'dash.ov.qualityEff': 'Qualität & Effizienz',
+    'dash.ov.bagsCreated': 'Erstellte Beutel',
+    'dash.ov.grainUsed': 'Verbrauchtes Korn',
+    'dash.ov.harvestThisWeek': 'Ernte',
+    'dash.ov.substrateUsed': 'Substrat verbraucht',
+    'dash.ov.avgYield': 'Ø Ertrag / Beutel',
+    'dash.ov.contamRate': 'Kontaminationsrate',
+    'dash.ov.daysSinceContam': 'Tage kontaminationsfrei',
+    'dash.ov.flush2Plus': 'Flush 2+ Beutel',
+    'dash.ov.vsLastWeek': 'vs. letzte Woche',
+    'dash.ov.fromBatches': 'aus neuen Chargen',
+    'dash.ov.harvests': 'Ernten',
+    'dash.ov.hwWb': 'Hartholz + Weizenkleie',
+    'dash.ov.perBag': 'Gesamtdurchschnitt',
+    'dash.ov.bags': 'Beutel',
+    'dash.ov.bagsOnSecondFlush': 'im 2. Flush oder mehr',
+    'dash.ov.neverContam': 'keine Kontamination verzeichnet',
+    'dash.ov.dayAgo': 'vor 1 Tag',
+    'dash.ov.daysAgo': 'vor {n} Tagen',
+    'dash.ov.na': '—',
     'dash.search': 'Suche...',
     'dash.cards': 'Karten',
     'dash.table': 'Tabelle',
@@ -2353,6 +2395,27 @@ const LANG = {
     'dash.modeFarm': 'Fazenda',
     'dash.modeOverview': 'Visão geral',
     'dash.weeklyHarvest': 'Tendência semanal de colheita',
+    'dash.ov.thisWeek': 'Esta semana',
+    'dash.ov.qualityEff': 'Qualidade & eficiência',
+    'dash.ov.bagsCreated': 'Sacos criados',
+    'dash.ov.grainUsed': 'Grão utilizado',
+    'dash.ov.harvestThisWeek': 'Colheita',
+    'dash.ov.substrateUsed': 'Substrato utilizado',
+    'dash.ov.avgYield': 'Rendimento médio / saco',
+    'dash.ov.contamRate': 'Taxa de contaminação',
+    'dash.ov.daysSinceContam': 'Dias sem contaminação',
+    'dash.ov.flush2Plus': 'Sacos flush 2+',
+    'dash.ov.vsLastWeek': 'vs semana passada',
+    'dash.ov.fromBatches': 'de novos lotes',
+    'dash.ov.harvests': 'colheitas',
+    'dash.ov.hwWb': 'madeira dura + farelo de trigo',
+    'dash.ov.perBag': 'média geral',
+    'dash.ov.bags': 'sacos',
+    'dash.ov.bagsOnSecondFlush': 'no 2º flush ou mais',
+    'dash.ov.neverContam': 'nenhuma contaminação registrada',
+    'dash.ov.dayAgo': 'há 1 dia',
+    'dash.ov.daysAgo': 'há {n} dias',
+    'dash.ov.na': '—',
     'dash.search': 'Buscar...',
     'dash.cards': 'Cart\u00f5es',
     'dash.table': 'Tabela',
@@ -3834,6 +3897,107 @@ function renderMiniPipeline(){
   }).join('')}</div></div>`;
 }
 
+function renderOverviewKPIs(){
+  const weekEl=document.getElementById('ov-kpi-week');
+  const qualEl=document.getElementById('ov-kpi-quality');
+  if(!weekEl||!qualEl)return;
+
+  const now=Date.now();
+  const weekAgo=new Date(now-7*864e5);
+  const monthStart=new Date();monthStart.setDate(1);monthStart.setHours(0,0,0,0);
+
+  // ── THIS WEEK ─────────────────────────────────────────────
+  // 1. Bags created
+  const bagsCreated=batches.filter(b=>new Date(b.created)>=weekAgo).reduce((s,b)=>s+(b.qty||0),0);
+
+  // 2. Grain used (kg) — from inventory log
+  const grainUsed=(inventory.log||[]).filter(e=>e.mat==='grain'&&e.type==='batch'&&new Date(e.time)>=weekAgo).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
+
+  // 3. Harvest this week (kg)
+  const weekHarvestG=harvests.filter(h=>new Date(h.time)>=weekAgo).reduce((s,h)=>s+(h.grams||0),0);
+  const weekHarvestKg=weekHarvestG/1000;
+
+  // 4. Substrate used (kg) = hardwood + wheat bran from this week's batches
+  const substrateUsed=(inventory.log||[]).filter(e=>(e.mat==='hardwood'||e.mat==='wheatbran')&&e.type==='batch'&&new Date(e.time)>=weekAgo).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
+
+  // ── QUALITY & EFFICIENCY ──────────────────────────────────
+  // 5. Avg yield per bag (g) — total grams / unique bags ever harvested
+  const uniqueHarvestedBags=new Set(harvests.map(h=>h.bag)).size;
+  const avgYield=uniqueHarvestedBags>0?Math.round(harvests.reduce((s,h)=>s+(h.grams||0),0)/uniqueHarvestedBags):0;
+
+  // 6. Contamination rate (%)
+  const allBagsPlaced=new Set(scanLog.filter(e=>e.action==='ADD'&&e.bag).map(e=>e.bag)).size;
+  const contamBagSet=new Set();
+  scanLog.forEach(e=>{
+    if(!e.to||!e.bag)return;
+    const z=zones.find(x=>x.id===toZone(e.to));
+    if(z&&z.role==='contaminated')contamBagSet.add(e.bag);
+  });
+  const contamRate=allBagsPlaced>0?+(contamBagSet.size/allBagsPlaced*100).toFixed(1):0;
+  const contamColor=contamRate===0?'var(--c-green)':contamRate<=5?'var(--c-amber)':'var(--c-red)';
+  const contamBg=contamRate===0?'var(--c-green-light)':contamRate<=5?'var(--c-amber-light)':'var(--c-red-light)';
+
+  // 7. Days without contamination (streak)
+  const contamEvents=scanLog.filter(e=>{
+    if(!e.to||!e.bag)return false;
+    const z=zones.find(x=>x.id===toZone(e.to));
+    return z&&z.role==='contaminated';
+  });
+  let daysSinceContam=null,daysSinceLabel='';
+  if(contamEvents.length===0){
+    daysSinceContam=batches.length>0?Math.floor((now-new Date(batches[0].created))/864e5):null;
+    daysSinceLabel=t('dash.ov.neverContam');
+  }else{
+    daysSinceContam=Math.floor((now-new Date(contamEvents[contamEvents.length-1].time))/864e5);
+    daysSinceLabel=daysSinceContam===1?t('dash.ov.dayAgo'):t('dash.ov.daysAgo',{n:daysSinceContam});
+  }
+  const streakColor=daysSinceContam===null?'var(--c-text-muted)':daysSinceContam>=14?'var(--c-green)':daysSinceContam>=7?'var(--c-amber)':'var(--c-red)';
+  const streakBg=daysSinceContam===null?'var(--c-bg)':daysSinceContam>=14?'var(--c-green-light)':daysSinceContam>=7?'var(--c-amber-light)':'var(--c-red-light)';
+
+  // 8. Flush 2+ bags (bags that have had ≥2 harvests logged)
+  const bagFlushMax={};
+  harvests.forEach(h=>{if(!bagFlushMax[h.bag]||h.flush>bagFlushMax[h.bag])bagFlushMax[h.bag]=h.flush||1;});
+  const flush2Plus=Object.values(bagFlushMax).filter(f=>f>=2).length;
+
+  // ── HELPER ────────────────────────────────────────────────
+  function card(icon,value,label,sub,accentColor,accentBg){
+    return`<div class="ov-kpi-card">
+      <div class="ov-kpi-icon" style="color:${accentColor};background:${accentBg}">${icon}</div>
+      <div class="ov-kpi-body">
+        <div class="ov-kpi-value" style="color:${accentColor}">${value}</div>
+        <div class="ov-kpi-label">${label}</div>
+        ${sub?`<div class="ov-kpi-sub">${sub}</div>`:''}
+      </div>
+    </div>`;
+  }
+
+  const fmtKg=v=>v>=10?Math.round(v)+'kg':v.toFixed(1)+'kg';
+
+  // Icons
+  const iconBag=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
+  const iconGrain=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 6v12M8 8l4 4 4-4M8 16l4-4 4 4"/></svg>`;
+  const iconHarvest=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+  const iconSubstrate=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>`;
+  const iconYield=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`;
+  const iconContam=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+  const iconStreak=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+  const iconFlush=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
+
+  weekEl.innerHTML=[
+    card(iconBag, bagsCreated||'0', t('dash.ov.bagsCreated'), t('dash.ov.vsLastWeek'), '#0ea5e9','#dbeafe'),
+    card(iconGrain, grainUsed>0?fmtKg(grainUsed):'—', t('dash.ov.grainUsed'), t('dash.ov.fromBatches'), '#a855f7','#f3e8ff'),
+    card(iconHarvest, weekHarvestKg>0?fmtKg(weekHarvestKg):'—', t('dash.ov.harvestThisWeek'), harvests.filter(h=>new Date(h.time)>=weekAgo).length+' '+t('dash.ov.harvests'), '#d97706','#fef3c7'),
+    card(iconSubstrate, substrateUsed>0?fmtKg(substrateUsed):'—', t('dash.ov.substrateUsed'), t('dash.ov.hwWb'), '#0d9488','#ccfbf1'),
+  ].join('');
+
+  qualEl.innerHTML=[
+    card(iconYield, avgYield>0?avgYield+'g':'—', t('dash.ov.avgYield'), t('dash.ov.perBag'), '#16a34a','#dcfce7'),
+    card(iconContam, contamRate+'%', t('dash.ov.contamRate'), contamBagSet.size+' / '+allBagsPlaced+' '+t('dash.ov.bags'), contamColor, contamBg),
+    card(iconStreak, daysSinceContam!==null?daysSinceContam:t('dash.ov.na'), t('dash.ov.daysSinceContam'), daysSinceLabel, streakColor, streakBg),
+    card(iconFlush, flush2Plus||'0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1','#e0e7ff'),
+  ].join('');
+}
+
 function renderHarvestChart(){
   const canvas=document.getElementById('harvest-chart');
   if(!canvas)return;
@@ -3935,8 +4099,8 @@ function renderStatus(){
   const q=(document.getElementById('status-q')?.value||'').toLowerCase();
   const el=document.getElementById('dash-locations');
   if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
-  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
+  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
+  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderMetrics(0,0,0,0);renderMiniPipeline();renderOverviewKPIs();renderHarvestChart();renderWeeklyHarvestChart();applyDashMode();return}
 
   // Compute per-batch status
   let ti=0,tt=0,tc=0;
@@ -3973,6 +4137,7 @@ function renderStatus(){
   el.innerHTML=html;
   renderMetrics(batches.length,ti,tt,tc);
   renderMiniPipeline();
+  renderOverviewKPIs();
   renderHarvestChart();
   renderWeeklyHarvestChart();
   applyDashMode();
