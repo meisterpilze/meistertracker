@@ -31,6 +31,26 @@ function translatePage() {
 }
 const LANG = {
   en: {
+    // Common (reused across modals / dialogs)
+    'common.cancel': 'Cancel',
+    'common.save': 'Save',
+    'common.close': 'Close',
+    'common.ok': 'OK',
+    'common.confirm': 'Confirm',
+    'common.edit': 'Edit',
+    'common.delete': 'Delete',
+    'common.add': 'Add',
+    'common.from': 'From',
+    'common.to': 'To',
+    'common.loading': 'Loading…',
+    'common.saving': 'Saving…',
+    'common.error': 'Error',
+    'common.yes': 'Yes',
+    'common.no': 'No',
+    'common.copy': 'Copy',
+    'common.copied': 'Copied!',
+    'common.none': 'None',
+    'common.unknown': 'Unknown',
     // Nav
     'nav.main': 'Main',
     'nav.tools': 'Tools',
@@ -42,6 +62,7 @@ const LANG = {
     'nav.assets': 'Assets',
     'nav.print': 'Print',
     'nav.strains': 'Pilzsorten',
+    'nav.admin': 'Admin',
     'nav.todo': 'To-do',
     'nav.calendar': 'Calendar',
     'strains.manage': 'Manage Pilzsorten',
@@ -51,6 +72,8 @@ const LANG = {
     'strains.kuerzel': 'Kürzel',
     'strains.kuerzelPlaceholder': 'e.g. SHI',
     'strains.description': 'Description (optional)',
+    'strains.descriptor': 'Genetics',
+    'strains.descriptorPlaceholder': 'e.g. Amazing, Top Genetics, …',
     'strains.save': 'Save Pilzsorte',
     'strains.cancel': 'Cancel',
     'strains.inUse': 'In use',
@@ -61,7 +84,6 @@ const LANG = {
     'strains.deleteProtected': 'Cannot delete: still in use.',
     'strains.batches': 'batches',
     'strains.cultures': 'cultures',
-    'nav.more': 'More',
     // Scan strip
     'scan.placeholder': 'Scan barcode here \u2014 works on every tab...',
     'scan.action': 'Action',
@@ -72,6 +94,16 @@ const LANG = {
     'scan.addBatch': 'Add batch',
     'scan.ready': 'Ready \u2014 scan ADD, MOVE, REMOVE or HARVEST to begin',
     'scan.stateReset': 'State reset. Scan ADD, MOVE, REMOVE or HARVEST to begin.',
+    'scan.mode': 'Scan mode',
+    'scan.tabCurrent': 'Current scan',
+    'scan.tabSuccesses': 'Recent successes',
+    'scan.tabAll': 'Full log',
+    'scan.lastScan': 'Last scan',
+    'scan.noSuccessesYet': 'No successful scans yet in this session.',
+    'scan.endSession': 'End session',
+    'scan.openCamera': 'Open camera',
+    'scan.camera': 'Camera',
+    'scan.audioToggle': 'Audio on/off',
     // Harvest panel
     'harvest.logHarvest': 'Log harvest',
     'harvest.grams': 'Grams',
@@ -216,12 +248,6 @@ const LANG = {
     'batch.whereGoInfo': '{id} — {n} bags need a starting location.',
     'batch.zones.rename': 'Rename',
     'batch.zones.renamePrompt': 'New display name for "{old}":',
-    'batch.rename': 'Rename ID',
-    'batch.renameTitle': 'Rename batch {id}',
-    'batch.renameNewId': 'New batch ID',
-    'batch.renameWarning': 'All bags, scan log and harvest entries will be updated. This cannot be undone.',
-    'batch.renameBtn': 'Rename',
-    'batch.renameSuccess': 'Batch renamed: {old} \u2192 {new}',
     'batch.deleteBatch': 'Delete batch {id}?',
     'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
     'batch.deleteBtn': 'Delete batch',
@@ -431,6 +457,33 @@ const LANG = {
     'caldav.writingTasks': 'Writing tasks to calendar files...',
     'caldav.howToConnect': 'How to connect',
     'caldav.howItWorks': 'How it works',
+    'caldav.copyUrl': 'Copy URL',
+    'caldav.loginHint': '<strong>Login:</strong> Use your account login (username &amp; password) to sign in to the calendar app.',
+    'caldav.hiwShared': '<strong>Shared calendar (<code>meisterpilze</code>):</strong> All tasks, events and batch due dates land here. Everyone on the farm sees this calendar.',
+    'caldav.hiwPersonal': '<strong>Personal calendars (<code>username</code>):</strong> Every user account automatically gets its own calendar. Assigned tasks appear there as well.',
+    'caldav.hiwVisibility': '<strong>Visibility:</strong> By default every task is visible to everyone (in the shared calendar). Individual tasks can be marked "assignee only" \u2014 they will then only show up in the personal calendar.',
+    'caldav.hiwTwoWay': '<strong>Two-way sync:</strong> Tasks are stored as calendar files on the server. Calendar apps read them via CalDAV. Changes made in the calendar app are synced back.',
+    // DuckDNS / Let's Encrypt / Server
+    'duckdns.title': 'DuckDNS dynamic DNS',
+    'duckdns.desc': 'Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated automatically every 5 minutes.',
+    'duckdns.enable': 'Enable DuckDNS',
+    'duckdns.subdomain': 'Subdomain',
+    'duckdns.subdomainPlaceholder': 'myserver',
+    'duckdns.token': 'DuckDNS token',
+    'duckdns.tokenHint': 'You can find the token on <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> after login.',
+    'duckdns.updateNow': 'Update IP now',
+    'le.title': "Let's Encrypt TLS certificate",
+    'le.desc': "Free, trusted TLS certificate from Let's Encrypt for your DuckDNS domain. Replaces the self-signed certificate. Auto-renewed before expiry.",
+    'le.enableAutoRenew': "Enable Let's Encrypt auto-renewal",
+    'le.requestNow': 'Request certificate now',
+    'le.note': 'No extra software required \u2014 works on all operating systems (Linux, macOS, Windows).',
+    'server.info': 'Server info',
+    'server.updateRestart': 'Update & restart',
+    'server.updateDesc': 'Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.',
+    'server.updateBtn': 'Update & restart server',
+    'migrate.title': 'One-time data migration',
+    'migrate.desc': 'Renames all existing batch IDs to the new Kürzel format (e.g. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Shows a preview of all changes before applying them.',
+    'migrate.btn': 'Migrate batch IDs',
     // More / Settings
     'settings.scanLog': 'Scan log',
     'settings.user': 'User',
@@ -600,6 +653,7 @@ const LANG = {
     'cutoff.accumDepr': 'Accum. depr.',
     'cutoff.sum': 'Sum',
     // Bag info modal
+    'bagInfo.title': 'Bag info',
     'bagInfo.currentLocation': 'Current location',
     'bagInfo.notPlaced': 'Not placed yet',
     'bagInfo.removed': 'Removed',
@@ -614,8 +668,36 @@ const LANG = {
     'confirm.cancel': 'Cancel',
     // Note modal
     'note.title': 'Note \u2014 {id}',
+    'note.editTitle': 'Edit note',
+    'note.placeholder': 'Type your note here\u2026',
     'note.save': 'Save',
     'note.cancel': 'Cancel',
+    // Change-password modal
+    'chpw.title': 'Change password',
+    'chpw.current': 'Current password',
+    'chpw.new': 'New password (min 8 chars)',
+    'chpw.change': 'Change',
+    // Batch-add modal
+    'batchAddModal.title': 'Add entire batch to location',
+    'batchAddModal.desc': 'All bags will be logged as ADD in one step.',
+    'batchAddModal.batch': 'Batch',
+    'batchAddModal.chooseBatch': '\u2014 choose batch \u2014',
+    'batchAddModal.location': 'Location / rack',
+    'batchAddModal.addAll': 'Add all bags',
+    // Move-bag modal
+    'locmove.bag': 'Bag',
+    'locmove.moveTo': 'Move to:',
+    'locmove.removeBag': 'Remove this bag',
+    // Users / account settings
+    'users.account': 'Account',
+    'users.logout': 'Logout',
+    'users.manage': 'Manage users',
+    'users.username': 'Username',
+    'users.password': 'Password',
+    'users.role': 'Role',
+    'users.roleUser': 'user',
+    'users.roleAdmin': 'admin',
+    'users.addUser': 'Add user',
     // Scan feedback
     'scanFb.actionAdd': 'Action: ADD \u2192 scan location or rack, then bags',
     'scanFb.actionMove': 'Action: MOVE \u2192 scan destination location, then bags',
@@ -895,6 +977,7 @@ const LANG = {
     'cal.noAllDay': 'No all-day events',
     'cal.more': 'more',
     'cal.title': 'Calendar',
+    'cal.today': 'Today',
     'cal.monthView': 'Month view',
     'cal.weekView': 'Week view',
     'cal.dayView': 'Day view',
@@ -933,8 +1016,71 @@ const LANG = {
     'cal.printChooseRange': 'Choose the range for the task list:',
     'cal.printWeek': 'Week — task list for the current week',
     'cal.printMonth': 'Month — task list for the current month',
+    'aria.cameraScanner': 'Camera scanner',
+    'aria.switchCamera': 'Switch camera',
+    'aria.closeCamera': 'Close camera',
+    'aria.toggleSidebar': 'Toggle sidebar',
+    'aria.mainNav': 'Main navigation',
+    'aria.openMenu': 'Open menu',
+    'aria.searchDashboard': 'Search dashboard',
+    'aria.searchBatches': 'Search batches',
+    'aria.searchHarvests': 'Search harvests',
+    'aria.searchLog': 'Search log',
+    'aria.openCameraScanner': 'Open camera scanner',
+    'aria.clickToSync': 'Click to sync',
+    'harvest.gramsPlaceholder': 'e.g. 245',
+    'batch.notesPlaceholder': 'Any notes...',
+    'lab.sourcePlaceholder': 'e.g. Clone from KINGS-250101-01-03',
+    'lab.kb': 'Grain spawn (K\u00f6rnerbrut)',
+    'print.barcodeOnly': 'Barcode only (Barcode + ID)',
+    'print.barcodeStrain': 'Barcode + variety (+ species & notes)',
+    'print.barcodeFull': 'Full (+ due date)',
+    'print.bagFromPh': 'from',
+    'print.bagToPh': 'to',
+    'settings.tabUsers': 'Users',
+    'settings.tabCaldav': 'CalDAV',
+    'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabMcp': 'MCP',
+    'settings.tabServer': 'Server',
+    'log.allActions': 'All actions',
+    'log.dateFromTitle': 'From date',
+    'log.dateToTitle': 'To date',
+    'log.loadMore': 'Load more...',
+    'settings.encryptPwPh': 'Encryption password',
+    'settings.decryptPwPh': 'Decryption password',
+    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Calendar:</strong> Add a new \u201cCalDAV\u201d or \u201cnetwork calendar\u201d and paste the CalDAV URL above.',
+    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with \u201cLogin with URL\u201d and paste the URL.',
+    'caldav.howApple': '<strong>Apple Calendar (iPhone/Mac):</strong> Settings \u2192 Calendar \u2192 Accounts \u2192 Add CalDAV account. Server = the URL above.',
+    'inv.delKgPh': 'e.g. 1000 or 847.5',
+    'inv.delNotePh': 'e.g. Agrobs, batch 2025-03',
+    'inv.adjAbsPh': 'e.g. 847.5',
+    'inv.adjDeltaPh': 'e.g. -5  or  +20',
+    'inv.reasonPh': 'e.g. Spoilage, stock count',
+    'zones.namePh': 'e.g. Tent 4',
+    'zones.racksPh': 'e.g. R1, R2, R3',
+    'zones.capacityPh': 'optional',
   },
   de: {
+    // Common (reused across modals / dialogs)
+    'common.cancel': 'Abbrechen',
+    'common.save': 'Speichern',
+    'common.close': 'Schlie\u00dfen',
+    'common.ok': 'OK',
+    'common.confirm': 'Best\u00e4tigen',
+    'common.edit': 'Bearbeiten',
+    'common.delete': 'L\u00f6schen',
+    'common.add': 'Hinzuf\u00fcgen',
+    'common.from': 'Von',
+    'common.to': 'Bis',
+    'common.loading': 'L\u00e4dt\u2026',
+    'common.saving': 'Speichert\u2026',
+    'common.error': 'Fehler',
+    'common.yes': 'Ja',
+    'common.no': 'Nein',
+    'common.copy': 'Kopieren',
+    'common.copied': 'Kopiert!',
+    'common.none': 'Keine',
+    'common.unknown': 'Unbekannt',
     // Nav
     'nav.main': 'Hauptmenü',
     'nav.tools': 'Werkzeuge',
@@ -946,6 +1092,7 @@ const LANG = {
     'nav.assets': 'Anlagen',
     'nav.print': 'Drucken',
     'nav.strains': 'Pilzsorten',
+    'nav.admin': 'Admin',
     'nav.todo': 'Aufgaben',
     'nav.calendar': 'Kalender',
     'strains.manage': 'Pilzsorten verwalten',
@@ -955,6 +1102,8 @@ const LANG = {
     'strains.kuerzel': 'Kürzel',
     'strains.kuerzelPlaceholder': 'z. B. SHI',
     'strains.description': 'Beschreibung (optional)',
+    'strains.descriptor': 'Genetik',
+    'strains.descriptorPlaceholder': 'z. B. Amazing, Top Genetics, …',
     'strains.save': 'Pilzsorte anlegen',
     'strains.cancel': 'Abbrechen',
     'strains.inUse': 'Verwendung',
@@ -965,7 +1114,6 @@ const LANG = {
     'strains.deleteProtected': 'Löschen nicht möglich: noch in Verwendung.',
     'strains.batches': 'Chargen',
     'strains.cultures': 'Kulturen',
-    'nav.more': 'Mehr',
     // Scan strip
     'scan.placeholder': 'Barcode hier scannen \u2014 funktioniert auf jedem Tab...',
     'scan.action': 'Aktion',
@@ -976,6 +1124,16 @@ const LANG = {
     'scan.addBatch': 'Charge hinzufügen',
     'scan.ready': 'Bereit \u2014 scanne ADD, MOVE, REMOVE oder HARVEST',
     'scan.stateReset': 'Zur\u00fcckgesetzt. Scanne ADD, MOVE, REMOVE oder HARVEST.',
+    'scan.mode': 'Scan-Modus',
+    'scan.tabCurrent': 'Aktueller Scan',
+    'scan.tabSuccesses': 'Letzte Erfolge',
+    'scan.tabAll': 'Gesamt-Log',
+    'scan.lastScan': 'Letzter Scan',
+    'scan.noSuccessesYet': 'Noch keine erfolgreichen Scans in dieser Sitzung.',
+    'scan.endSession': 'Session beenden',
+    'scan.openCamera': 'Kamera \u00f6ffnen',
+    'scan.camera': 'Kamera',
+    'scan.audioToggle': 'Audio an/aus',
     // Harvest panel
     'harvest.logHarvest': 'Ernte erfassen',
     'harvest.grams': 'Gramm',
@@ -1120,12 +1278,6 @@ const LANG = {
     'batch.whereGoInfo': '{id} \u2014 {n} Beutel ben\u00f6tigen einen Startstandort.',
     'batch.zones.rename': 'Umbenennen',
     'batch.zones.renamePrompt': 'Neuer Anzeigename f\u00fcr \u201e{old}\u201c:',
-    'batch.rename': 'ID umbenennen',
-    'batch.renameTitle': 'Charge {id} umbenennen',
-    'batch.renameNewId': 'Neue Chargen-ID',
-    'batch.renameWarning': 'Alle Beutel, Scan-Log und Ernteeintr\u00e4ge werden aktualisiert. Dies kann nicht r\u00fcckg\u00e4ngig gemacht werden.',
-    'batch.renameBtn': 'Umbenennen',
-    'batch.renameSuccess': 'Charge umbenannt: {old} \u2192 {new}',
     'batch.deleteBatch': 'Charge {id} l\u00f6schen?',
     'batch.deleteMsg': 'L\u00f6scht den Chargen-Datensatz dauerhaft. Scan-Log und Ernteeintr\u00e4ge bleiben erhalten.',
     'batch.deleteBtn': 'Charge l\u00f6schen',
@@ -1334,6 +1486,33 @@ const LANG = {
     'caldav.syncing': 'Synchronisiere...',
     'caldav.writingTasks': 'Schreibe Aufgaben in Kalender-Dateien...',
     'caldav.howToConnect': 'So verbinden',
+    'caldav.copyUrl': 'URL kopieren',
+    'caldav.loginHint': '<strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.',
+    'caldav.hiwShared': '<strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-F\u00e4lligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.',
+    'caldav.hiwPersonal': '<strong>Pers\u00f6nliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zus\u00e4tzlich.',
+    'caldav.hiwVisibility': '<strong>Sichtbarkeit:</strong> Standardm\u00e4\u00dfig sind alle Aufgaben f\u00fcr alle sichtbar (im Betriebskalender). Einzelne Aufgaben k\u00f6nnen als "Nur f\u00fcr zugewiesene Person" markiert werden \u2014 diese erscheinen dann nur im pers\u00f6nlichen Kalender.',
+    'caldav.hiwTwoWay': '<strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. \u00c4nderungen in der Kalender-App werden zur\u00fcckgespeichert.',
+    // DuckDNS / Let's Encrypt / Server
+    'duckdns.title': 'DuckDNS Dynamic DNS',
+    'duckdns.desc': 'Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain f\u00fcr Zugriff \u00fcber das Internet. Die \u00f6ffentliche IP wird automatisch alle 5 Minuten aktualisiert.',
+    'duckdns.enable': 'DuckDNS aktivieren',
+    'duckdns.subdomain': 'Subdomain',
+    'duckdns.subdomainPlaceholder': 'meinserver',
+    'duckdns.token': 'DuckDNS Token',
+    'duckdns.tokenHint': 'Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login.',
+    'duckdns.updateNow': 'IP jetzt aktualisieren',
+    'le.title': "Let's Encrypt TLS-Zertifikat",
+    'le.desc': "Kostenloses, vertrauensw\u00fcrdiges TLS-Zertifikat von Let's Encrypt f\u00fcr deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.",
+    'le.enableAutoRenew': "Let's Encrypt Auto-Renewal aktivieren",
+    'le.requestNow': 'Zertifikat jetzt anfordern',
+    'le.note': 'Keine zus\u00e4tzliche Software erforderlich \u2014 funktioniert auf allen Betriebssystemen (Linux, macOS, Windows).',
+    'server.info': 'Server-Info',
+    'server.updateRestart': 'Update & Neustart',
+    'server.updateDesc': 'Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.',
+    'server.updateBtn': 'Server aktualisieren & neustarten',
+    'migrate.title': 'Einmalige Datenmigration',
+    'migrate.desc': 'Benennt alle vorhandenen Chargen-IDs auf das neue K\u00fcrzel-Format um (z.B. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Zeigt eine Vorschau aller \u00c4nderungen vor der Ausf\u00fchrung.',
+    'migrate.btn': 'Chargen-IDs migrieren',
     'caldav.howItWorks': 'So funktioniert es',
     // More / Settings
     'settings.scanLog': 'Scan-Log',
@@ -1504,6 +1683,7 @@ const LANG = {
     'cutoff.accumDepr': 'Kum. AfA',
     'cutoff.sum': 'Summe',
     // Bag info modal
+    'bagInfo.title': 'Beutel-Info',
     'bagInfo.currentLocation': 'Aktueller Standort',
     'bagInfo.notPlaced': 'Noch nicht platziert',
     'bagInfo.removed': 'Entfernt',
@@ -1518,8 +1698,36 @@ const LANG = {
     'confirm.cancel': 'Abbrechen',
     // Note modal
     'note.title': 'Notiz \u2014 {id}',
+    'note.editTitle': 'Notiz bearbeiten',
+    'note.placeholder': 'Notiz hier eingeben\u2026',
     'note.save': 'Speichern',
     'note.cancel': 'Abbrechen',
+    // Change-password modal
+    'chpw.title': 'Passwort \u00e4ndern',
+    'chpw.current': 'Aktuelles Passwort',
+    'chpw.new': 'Neues Passwort (min. 8 Zeichen)',
+    'chpw.change': '\u00c4ndern',
+    // Batch-add modal
+    'batchAddModal.title': 'Ganze Charge einem Standort hinzuf\u00fcgen',
+    'batchAddModal.desc': 'Alle Beutel werden in einem Schritt als ADD erfasst.',
+    'batchAddModal.batch': 'Charge',
+    'batchAddModal.chooseBatch': '\u2014 Charge w\u00e4hlen \u2014',
+    'batchAddModal.location': 'Standort / Regal',
+    'batchAddModal.addAll': 'Alle Beutel hinzuf\u00fcgen',
+    // Move-bag modal
+    'locmove.bag': 'Beutel',
+    'locmove.moveTo': 'Verschieben nach:',
+    'locmove.removeBag': 'Diesen Beutel entfernen',
+    // Users / account settings
+    'users.account': 'Konto',
+    'users.logout': 'Abmelden',
+    'users.manage': 'Benutzer verwalten',
+    'users.username': 'Benutzername',
+    'users.password': 'Passwort',
+    'users.role': 'Rolle',
+    'users.roleUser': 'Benutzer',
+    'users.roleAdmin': 'Admin',
+    'users.addUser': 'Benutzer hinzuf\u00fcgen',
     // Scan feedback
     'scanFb.actionAdd': 'Aktion: ADD \u2192 Standort/Regal scannen, dann Beutel',
     'scanFb.actionMove': 'Aktion: MOVE \u2192 Ziel-Standort scannen, dann Beutel',
@@ -1799,6 +2007,7 @@ const LANG = {
     'cal.noAllDay': 'Keine ganztägigen Events',
     'cal.more': 'mehr',
     'cal.title': 'Kalender',
+    'cal.today': 'Heute',
     'cal.monthView': 'Monatsansicht',
     'cal.weekView': 'Wochenansicht',
     'cal.dayView': 'Tagesansicht',
@@ -1839,6 +2048,26 @@ const LANG = {
     'cal.printMonth': 'Monat — Aufgabenliste des aktuellen Monats',
   },
   pt: {
+    // Common (reused across modals / dialogs)
+    'common.cancel': 'Cancelar',
+    'common.save': 'Guardar',
+    'common.close': 'Fechar',
+    'common.ok': 'OK',
+    'common.confirm': 'Confirmar',
+    'common.edit': 'Editar',
+    'common.delete': 'Apagar',
+    'common.add': 'Adicionar',
+    'common.from': 'De',
+    'common.to': 'At\u00e9',
+    'common.loading': 'A carregar\u2026',
+    'common.saving': 'A guardar\u2026',
+    'common.error': 'Erro',
+    'common.yes': 'Sim',
+    'common.no': 'N\u00e3o',
+    'common.copy': 'Copiar',
+    'common.copied': 'Copiado!',
+    'common.none': 'Nenhum',
+    'common.unknown': 'Desconhecido',
     // Nav
     'nav.main': 'Principal',
     'nav.tools': 'Ferramentas',
@@ -1850,6 +2079,7 @@ const LANG = {
     'nav.assets': 'Ativos',
     'nav.print': 'Imprimir',
     'nav.strains': 'Pilzsorten',
+    'nav.admin': 'Admin',
     'nav.todo': 'Tarefas',
     'nav.calendar': 'Calendário',
     'strains.manage': 'Gerir Pilzsorten',
@@ -1859,6 +2089,8 @@ const LANG = {
     'strains.kuerzel': 'Abrev.',
     'strains.kuerzelPlaceholder': 'ex. SHI',
     'strains.description': 'Descrição (opcional)',
+    'strains.descriptor': 'Genética',
+    'strains.descriptorPlaceholder': 'ex. Amazing, Top Genetics, …',
     'strains.save': 'Guardar Pilzsorte',
     'strains.cancel': 'Cancelar',
     'strains.inUse': 'Em uso',
@@ -1869,7 +2101,6 @@ const LANG = {
     'strains.deleteProtected': 'Não é possível apagar: ainda em uso.',
     'strains.batches': 'lotes',
     'strains.cultures': 'culturas',
-    'nav.more': 'Mais',
     // Scan strip
     'scan.placeholder': 'Escaneie c\u00f3digo de barras aqui \u2014 funciona em todas as abas...',
     'scan.action': 'A\u00e7\u00e3o',
@@ -1880,6 +2111,16 @@ const LANG = {
     'scan.addBatch': 'Adicionar lote',
     'scan.ready': 'Pronto \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar',
     'scan.stateReset': 'Resetado. Escaneie ADD, MOVE, REMOVE ou HARVEST para come\u00e7ar.',
+    'scan.mode': 'Modo de scan',
+    'scan.tabCurrent': 'Scan atual',
+    'scan.tabSuccesses': '\u00daltimos sucessos',
+    'scan.tabAll': 'Log completo',
+    'scan.lastScan': '\u00daltimo scan',
+    'scan.noSuccessesYet': 'Nenhum scan bem-sucedido nesta sess\u00e3o.',
+    'scan.endSession': 'Terminar sess\u00e3o',
+    'scan.openCamera': 'Abrir c\u00e2mera',
+    'scan.camera': 'C\u00e2mera',
+    'scan.audioToggle': '\u00c1udio lig./desl.',
     // Harvest panel
     'harvest.logHarvest': 'Registrar colheita',
     'harvest.grams': 'Gramas',
@@ -2024,12 +2265,6 @@ const LANG = {
     'batch.whereGoInfo': '{id} \u2014 {n} sacos precisam de um local inicial.',
     'batch.zones.rename': 'Renomear',
     'batch.zones.renamePrompt': 'Novo nome para \u201c{old}\u201d:',
-    'batch.rename': 'Renomear ID',
-    'batch.renameTitle': 'Renomear lote {id}',
-    'batch.renameNewId': 'Novo ID do lote',
-    'batch.renameWarning': 'Todos os sacos, log de scan e colheitas ser\u00e3o atualizados. Isso n\u00e3o pode ser desfeito.',
-    'batch.renameBtn': 'Renomear',
-    'batch.renameSuccess': 'Lote renomeado: {old} \u2192 {new}',
     'batch.deleteBatch': 'Excluir lote {id}?',
     'batch.deleteMsg': 'Exclui permanentemente o registro do lote. Log de scan e colheitas permanecem.',
     'batch.deleteBtn': 'Excluir lote',
@@ -2238,6 +2473,33 @@ const LANG = {
     'caldav.syncing': 'Sincronizando...',
     'caldav.writingTasks': 'Escrevendo tarefas nos arquivos de calend\u00e1rio...',
     'caldav.howToConnect': 'Como conectar',
+    'caldav.copyUrl': 'Copiar URL',
+    'caldav.loginHint': '<strong>Login:</strong> Use o login da sua conta (utilizador &amp; senha) para autenticar no app de calend\u00e1rio.',
+    'caldav.hiwShared': '<strong>Calend\u00e1rio partilhado (<code>meisterpilze</code>):</strong> Todas as tarefas, eventos e prazos de lotes v\u00e3o para aqui. Toda a equipa v\u00ea este calend\u00e1rio.',
+    'caldav.hiwPersonal': '<strong>Calend\u00e1rios pessoais (<code>utilizador</code>):</strong> Cada conta de utilizador recebe um calend\u00e1rio pr\u00f3prio. Tarefas atribu\u00eddas aparecem l\u00e1 tamb\u00e9m.',
+    'caldav.hiwVisibility': '<strong>Visibilidade:</strong> Por padr\u00e3o todas as tarefas s\u00e3o vis\u00edveis para todos (no calend\u00e1rio partilhado). Tarefas individuais podem ser marcadas como "apenas respons\u00e1vel" \u2014 aparecem apenas no calend\u00e1rio pessoal.',
+    'caldav.hiwTwoWay': '<strong>Sincroniza\u00e7\u00e3o bidirecional:</strong> As tarefas s\u00e3o guardadas como ficheiros de calend\u00e1rio no servidor. Os apps de calend\u00e1rio leem via CalDAV. Altera\u00e7\u00f5es no app de calend\u00e1rio s\u00e3o sincronizadas de volta.',
+    // DuckDNS / Let's Encrypt / Server
+    'duckdns.title': 'DuckDNS DNS din\u00e2mico',
+    'duckdns.desc': 'Liga o teu servidor a um dom\u00ednio DuckDNS gratuito para acesso pela internet. O IP p\u00fablico \u00e9 atualizado automaticamente a cada 5 minutos.',
+    'duckdns.enable': 'Ativar DuckDNS',
+    'duckdns.subdomain': 'Subdom\u00ednio',
+    'duckdns.subdomainPlaceholder': 'meuservidor',
+    'duckdns.token': 'Token DuckDNS',
+    'duckdns.tokenHint': 'Encontra o token em <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> ap\u00f3s o login.',
+    'duckdns.updateNow': 'Atualizar IP agora',
+    'le.title': "Certificado TLS Let's Encrypt",
+    'le.desc': "Certificado TLS gratuito e confi\u00e1vel da Let's Encrypt para o teu dom\u00ednio DuckDNS. Substitui o certificado autoassinado. Renovado automaticamente antes do fim da validade.",
+    'le.enableAutoRenew': "Ativar renova\u00e7\u00e3o autom\u00e1tica Let's Encrypt",
+    'le.requestNow': 'Pedir certificado agora',
+    'le.note': 'Sem software adicional necess\u00e1rio \u2014 funciona em todos os sistemas operativos (Linux, macOS, Windows).',
+    'server.info': 'Info do servidor',
+    'server.updateRestart': 'Atualizar e reiniciar',
+    'server.updateDesc': 'Obt\u00e9m o c\u00f3digo mais recente do GitHub e reinicia o servidor. Todos os utilizadores ser\u00e3o desligados brevemente.',
+    'server.updateBtn': 'Atualizar e reiniciar servidor',
+    'migrate.title': 'Migra\u00e7\u00e3o de dados \u00fanica',
+    'migrate.desc': 'Renomeia todos os IDs de lotes existentes para o novo formato K\u00fcrzel (ex. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Mostra uma pr\u00e9-visualiza\u00e7\u00e3o antes de aplicar.',
+    'migrate.btn': 'Migrar IDs de lotes',
     'caldav.howItWorks': 'Como funciona',
     // More / Settings
     'settings.scanLog': 'Log de scan',
@@ -2408,6 +2670,7 @@ const LANG = {
     'cutoff.accumDepr': 'Depr. acum.',
     'cutoff.sum': 'Soma',
     // Bag info modal
+    'bagInfo.title': 'Info do saco',
     'bagInfo.currentLocation': 'Localiza\u00e7\u00e3o atual',
     'bagInfo.notPlaced': 'Ainda n\u00e3o colocado',
     'bagInfo.removed': 'Removido',
@@ -2422,8 +2685,36 @@ const LANG = {
     'confirm.cancel': 'Cancelar',
     // Note modal
     'note.title': 'Nota \u2014 {id}',
+    'note.editTitle': 'Editar nota',
+    'note.placeholder': 'Escreva a sua nota aqui\u2026',
     'note.save': 'Salvar',
     'note.cancel': 'Cancelar',
+    // Change-password modal
+    'chpw.title': 'Alterar palavra-passe',
+    'chpw.current': 'Palavra-passe atual',
+    'chpw.new': 'Nova palavra-passe (m\u00edn. 8 caracteres)',
+    'chpw.change': 'Alterar',
+    // Batch-add modal
+    'batchAddModal.title': 'Adicionar lote inteiro a um local',
+    'batchAddModal.desc': 'Todos os sacos ser\u00e3o registados como ADD num s\u00f3 passo.',
+    'batchAddModal.batch': 'Lote',
+    'batchAddModal.chooseBatch': '\u2014 escolher lote \u2014',
+    'batchAddModal.location': 'Local / estante',
+    'batchAddModal.addAll': 'Adicionar todos',
+    // Move-bag modal
+    'locmove.bag': 'Saco',
+    'locmove.moveTo': 'Mover para:',
+    'locmove.removeBag': 'Remover este saco',
+    // Users / account settings
+    'users.account': 'Conta',
+    'users.logout': 'Sair',
+    'users.manage': 'Gerir utilizadores',
+    'users.username': 'Utilizador',
+    'users.password': 'Palavra-passe',
+    'users.role': 'Fun\u00e7\u00e3o',
+    'users.roleUser': 'utilizador',
+    'users.roleAdmin': 'admin',
+    'users.addUser': 'Adicionar utilizador',
     // Scan feedback
     'scanFb.actionAdd': 'A\u00e7\u00e3o: ADD \u2192 escaneie local/estante, depois sacos',
     'scanFb.actionMove': 'A\u00e7\u00e3o: MOVE \u2192 escaneie local de destino, depois sacos',
@@ -2441,6 +2732,7 @@ const LANG = {
     'scanFb.bagRemoved': '{bag} foi removido \u2014 use ADD para recolocar',
     'scanFb.bagAlreadyAt': '{bag} j\u00e1 est\u00e1 em {loc}',
     'scanFb.unknown': 'C\u00f3digo desconhecido: {val}. Verifique se o lote existe.',
+    'scanFb.unknownFormat': 'Formato desconhecido: {val} \u2014 verifique o c\u00f3digo de barras.',
     'scanFb.matched': 'Correspondido: {val} de {batch}',
     'scanFb.noBatchFound': 'Nenhum lote encontrado para {val} \u2014 verifique esp\u00e9cie/cepa/data',
     'scanFb.removeLogged': 'REMOVE registrado: {bag}',
@@ -2702,6 +2994,7 @@ const LANG = {
     'cal.noAllDay': 'Sem eventos de dia inteiro',
     'cal.more': 'mais',
     'cal.title': 'Calendário',
+    'cal.today': 'Hoje',
     'cal.monthView': 'Vista mensal',
     'cal.weekView': 'Vista semanal',
     'cal.dayView': 'Vista diária',
@@ -2842,7 +3135,11 @@ async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory
 async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
 async function loadCurrentUser(){
   try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
-  showServerTab();showMcpTab();
+  showServerTab();showMcpTab();showAdminNav();
+}
+function showAdminNav(){
+  const btn=document.getElementById('n-settings');
+  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
@@ -3907,8 +4204,7 @@ function renderBatches(){
     const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
     const canMove=status!=='DONE';
     const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`:'';
-    const renameBtn=currentUser&&currentUser.role==='admin'?`<button class="btn btn-sm" data-action="rename-batch" data-batch="${esc(b.batchId)}" style="margin-right:3px">\u270e ${t('batch.rename')}</button>`:'';
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button>${renameBtn}<button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
   }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
 }
 let locColor={};
@@ -4001,47 +4297,6 @@ function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg
   }
   batches=batches.filter(x=>x.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus();
 })}
-
-function openBatchRenameModal(oldId){
-  const m=document.getElementById('m-batch-rename');if(!m)return;
-  document.getElementById('br-title').textContent=t('batch.renameTitle',{id:oldId});
-  document.getElementById('br-old-id').textContent=oldId;
-  const inp=document.getElementById('br-new-id');
-  inp.value=oldId;
-  m.classList.add('open');
-  setTimeout(()=>{inp.select()},50);
-  document.getElementById('br-confirm-btn').onclick=()=>{
-    const newId=inp.value.trim();
-    if(!newId||newId===oldId){m.classList.remove('open');return}
-    if(!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(newId)){alert('ID darf nur Buchstaben, Zahlen und - _ @ . : enthalten (max 100 Zeichen)');return}
-    doBatchRename(oldId,newId,m);
-  };
-}
-async function doBatchRename(oldId,newId,modal){
-  try{
-    const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
-    if(r&&r.error){alert(r.error);return}
-    // Update all in-memory references
-    batches.forEach(b=>{
-      if(b.batchId===oldId){
-        b.batchId=newId;
-        b.bags=b.bags.map(bag=>bag.replace(oldId,newId));
-      }
-    });
-    scanLog.forEach(e=>{
-      if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}
-    });
-    movements.forEach(e=>{
-      if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}
-    });
-    harvests.forEach(h=>{
-      if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}
-    });
-    if(modal)modal.classList.remove('open');
-    setFb('ok',t('batch.renameSuccess',{old:oldId,new:newId}));
-    renderBatches();renderStatus();
-  }catch(e){alert('Fehler: '+e.message)}
-}
 
 // ─── HARVESTS ────────────────────────────────────────────────
 function showHarvestPanel(bagId,batchId){
@@ -8250,7 +8505,7 @@ if(typeof pushBatchCaldav==='undefined'){
 // Escape key closes the topmost open modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch','m-batch-rename'];
+  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch'];
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
@@ -8375,10 +8630,6 @@ function initEventListeners() {
   // Move-batch modal
   $('mb-cancel-btn').addEventListener('click', () => { document.getElementById('m-move-batch').classList.remove('open'); });
   $('m-move-batch').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
-  // Batch rename modal
-  $('br-cancel-btn').addEventListener('click', () => { document.getElementById('m-batch-rename').classList.remove('open'); });
-  $('m-batch-rename').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
-  $('br-new-id').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('br-confirm-btn').click(); });
   document.getElementById('lm-grid').addEventListener('click', e=>{
     const btn=e.target.closest('[data-action="bulk-rack-target"]');if(!btn)return;
     executeBulkMoveToRack(btn.dataset.zone,btn.dataset.rack);
@@ -8472,7 +8723,6 @@ function initEventListeners() {
       case 'open-note': openNote(batch); break;
       case 'add-bags': openAddBags(batch); break;
       case 'del-batch': delBatch(batch); break;
-      case 'rename-batch': openBatchRenameModal(batch); break;
       case 'open-move-modal':
         openMoveBatchModal(batch);
         break;
