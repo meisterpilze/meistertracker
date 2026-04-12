@@ -74,9 +74,9 @@
   </div>
 </div>
 <!-- Change password modal -->
-<div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" data-i18n-aria-label="chpw.title" aria-label="Change password" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+<div class="modal-bg" id="change-pw-modal" role="dialog" aria-modal="true" aria-labelledby="chpw-title-h3" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
   <div class="modal" style="max-width:360px">
-    <h3 data-i18n="chpw.title">Change password</h3>
+    <h3 id="chpw-title-h3" data-i18n="chpw.title">Change password</h3>
     <label style="display:block;margin-bottom:8px"><span data-i18n="chpw.current">Current password</span><br><input type="password" id="chpw-current" style="width:100%;padding:6px;margin-top:4px" autocomplete="current-password"></label>
     <label style="display:block;margin-bottom:8px"><span data-i18n="chpw.new">New password (min 8 chars)</span><br><input type="password" id="chpw-new" style="width:100%;padding:6px;margin-top:4px" autocomplete="new-password"></label>
     <p id="chpw-status" style="min-height:1.2em;margin:8px 0"></p>
@@ -238,21 +238,6 @@
   </div>
 </div>
 
-<!-- Batch rename modal — admin only -->
-<div class="modal-bg" id="m-batch-rename" role="dialog" aria-modal="true" aria-labelledby="br-title">
-  <div class="modal" style="max-width:400px">
-    <h3 id="br-title"></h3>
-    <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:4px">Current ID: <code id="br-old-id" style="font-family:monospace;font-weight:600"></code></p>
-    <p style="font-size:11px;color:var(--c-red-dark);margin-bottom:12px" data-i18n="batch.renameWarning"></p>
-    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px" data-i18n="batch.renameNewId">New batch ID</label>
-    <input type="text" id="br-new-id" style="width:100%;padding:8px;border:1px solid var(--c-border);border-radius:6px;font-size:14px;font-family:monospace;margin-bottom:12px">
-    <div class="modal-btns">
-      <button class="btn" id="br-cancel-btn" data-i18n="nav.cancel">Abbrechen</button>
-      <button class="btn btn-r" id="br-confirm-btn" data-i18n="batch.renameBtn">Umbenennen</button>
-    </div>
-  </div>
-</div>
-
 <!-- Bag info modal — opens when scanning a bag with no action set -->
 <div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
   <div class="modal" style="max-width:540px">
@@ -310,7 +295,7 @@
     <button class="sb-btn" id="n-strains"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v1m0 6v1m-4-4h1m6 0h1"/></svg><span data-i18n="nav.strains">Pilzsorten</span></button>
   </nav>
   <div class="sb-footer">
-    <button class="sb-btn" id="n-settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span data-i18n="nav.more">Settings</span></button>
+    <button class="sb-btn" id="n-settings" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span data-i18n="nav.admin">Admin</span></button>
     <div class="sb-sync">
       <span class="sync-dot" id="sync-dot" title="Click to sync"></span>
       <span id="sync-label" class="sb-sync-label"></span>
@@ -822,7 +807,7 @@
 <div class="page" id="p-cal">
     <div class="cal-toolbar">
       <div class="cal-toolbar-left">
-        <button id="btn-33" class="cal-today-btn">Heute</button>
+        <button id="btn-33" class="cal-today-btn" data-i18n="cal.today">Today</button>
         <button id="btn-34" class="cal-nav-btn">&#8249;</button>
         <button id="btn-35" class="cal-nav-btn">&#8250;</button>
         <span class="cal-title" id="cal-title"></span>
@@ -841,14 +826,14 @@
       </div>
     </div>
     <div class="cal-legend">
-      <span class="leg-batch">Fälligkeiten</span>
-      <span class="leg-task">Aufgaben</span>
-      <span class="leg-harvest">Ernten</span>
-      <span class="leg-custom">Eigene Termine</span>
-      <span class="leg-meeting">Meetings</span>
-      <span class="leg-delivery">Lieferungen</span>
-      <span class="leg-maintenance">Wartung</span>
-      <span class="leg-import">Externe Termine</span>
+      <span class="leg-batch" data-i18n="cal.legend.batches">Due dates</span>
+      <span class="leg-task" data-i18n="cal.legend.tasks">Tasks</span>
+      <span class="leg-harvest" data-i18n="cal.legend.harvests">Harvests</span>
+      <span class="leg-custom" data-i18n="cal.legend.custom">Custom events</span>
+      <span class="leg-meeting" data-i18n="cal.legend.meetings">Meetings</span>
+      <span class="leg-delivery" data-i18n="cal.legend.deliveries">Deliveries</span>
+      <span class="leg-maintenance" data-i18n="cal.legend.maintenance">Maintenance</span>
+      <span class="leg-import" data-i18n="cal.legend.external">External events</span>
     </div>
     <div id="cal-container">
       <div class="cal-grid" id="cal-grid"></div>
