@@ -1199,6 +1199,62 @@ const LANG = {
     'batch.fillQty': 'Please fill in quantity greater than 0',
     'batch.saveFailed': 'Batch could not be saved: ',
     'note.prefix': 'Note \u2014 ',
+    // Sync relative time
+    'time.justNow': 'just now',
+    'time.secsAgo': '{n}s ago',
+    'time.minsAgo': '{n} min ago',
+    'time.hoursAgo': '{n}h ago',
+    // Alerts
+    'alert.batchOverdue.one': '1 batch overdue — ready to move',
+    'alert.batchOverdue.other': '{n} batches overdue — ready to move',
+    'alert.dueToday.one': '1 batch due today or needs attention',
+    'alert.dueToday.other': '{n} batches due today or need attention',
+    // Scan log
+    'log.entries': '{n} entries',
+    'log.entriesFiltered': '{n} of {total} entries',
+    'log.deleteEntry': 'Delete entry?',
+    'log.deleteEntryMsg': 'Delete {action} {batch} from {time}?',
+    // Inventory cards
+    'inv.lowStock': 'LOW STOCK',
+    'inv.alertBelow': 'Alert below {n}kg',
+    'inv.logDelivery': '+ Log delivery',
+    'inv.grainBagsEst': '\u2248 {n} grain bags @ {kg}kg each',
+    'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg blocks',
+    'inv.avgEstimate': '(avg estimate)',
+    // Inventory thresholds
+    'inv.thMaterial': 'Material',
+    'inv.thInStock': 'In stock',
+    'inv.thAlertBelow': 'Alert below (kg)',
+    'inv.thEstBags': 'Est. bags (avg)',
+    'inv.avgCompTitle': 'Average composition used for estimates',
+    'inv.avgCompDesc': 'These averages are used to calculate "\u2248X bags" on the stock cards. They are estimates only \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
+    'inv.hwPct': 'Hardwood %',
+    'inv.wbPct': 'Wheat bran %',
+    'inv.waterPct': 'Water % (RH)',
+    'inv.blockWeight': 'Block weight (kg)',
+    'inv.grainBagWeight': 'Grain bag (kg)',
+    // Assets
+    'assets.total': 'Total',
+    'assets.purchaseValue': 'Purchase value',
+    'assets.editBtn': 'Edit',
+    'assets.printBtn': 'Print',
+    'assets.gwg': 'GWG (\u2264 800 \u20ac)',
+    // Camera
+    'cam.permDenied': 'Camera permission denied. Please allow camera access in your browser settings.',
+    'cam.notFound': 'No camera found.',
+    'cam.inUse': 'Camera is in use by another application.',
+    'cam.unknownError': 'Camera error: {err}',
+    // Offline
+    'offline.queued': '{n} queued',
+    // Task delete
+    'task.deleteTitle': 'Delete task?',
+    'task.deleteMsg': 'This task will be permanently removed.',
+    // No bags to move
+    'batch.noBagsToMove': 'No bags to move',
+    // Server restart
+    'server.restartTitle': 'Restart server?',
+    'server.restartMsg': 'Code will be updated from GitHub and the server will restart. All users will be briefly disconnected.',
+    'server.restartConfirm': 'Yes, restart',
   },
   de: {
     // Common (reused across modals / dialogs)
@@ -2377,6 +2433,62 @@ const LANG = {
     'batch.fillQty': 'Bitte eine Anzahl gr\u00f6\u00dfer 0 eingeben',
     'batch.saveFailed': 'Charge konnte nicht gespeichert werden: ',
     'note.prefix': 'Notiz \u2014 ',
+    // Sync relative time
+    'time.justNow': 'gerade eben',
+    'time.secsAgo': 'vor {n}s',
+    'time.minsAgo': 'vor {n} Min.',
+    'time.hoursAgo': 'vor {n} Std.',
+    // Alerts
+    'alert.batchOverdue.one': '1 Charge \u00fcberf\u00e4llig \u2014 bereit zum Umzug',
+    'alert.batchOverdue.other': '{n} Chargen \u00fcberf\u00e4llig \u2014 bereit zum Umzug',
+    'alert.dueToday.one': '1 Charge heute f\u00e4llig oder braucht Aufmerksamkeit',
+    'alert.dueToday.other': '{n} Chargen heute f\u00e4llig oder brauchen Aufmerksamkeit',
+    // Scan log
+    'log.entries': '{n} Eintr\u00e4ge',
+    'log.entriesFiltered': '{n} von {total} Eintr\u00e4gen',
+    'log.deleteEntry': 'Eintrag l\u00f6schen?',
+    'log.deleteEntryMsg': '{action} {batch} vom {time} l\u00f6schen?',
+    // Inventory cards
+    'inv.lowStock': 'NIEDRIGER BESTAND',
+    'inv.alertBelow': 'Alarm unter {n}kg',
+    'inv.logDelivery': '+ Lieferung erfassen',
+    'inv.grainBagsEst': '\u2248 {n} Getreidebeutel \u00e0 {kg}kg',
+    'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg Bl\u00f6cke',
+    'inv.avgEstimate': '(Durchschnittssch\u00e4tzung)',
+    // Inventory thresholds
+    'inv.thMaterial': 'Material',
+    'inv.thInStock': 'Auf Lager',
+    'inv.thAlertBelow': 'Alarm unter (kg)',
+    'inv.thEstBags': 'Gesch. Beutel (Durchschn.)',
+    'inv.avgCompTitle': 'Durchschnittliche Zusammensetzung f\u00fcr Sch\u00e4tzungen',
+    'inv.avgCompDesc': 'Diese Durchschnittswerte werden f\u00fcr die "\u2248X Beutel"-Anzeige auf den Lagerkarten verwendet. Sie sind nur Sch\u00e4tzungen \u2014 der genaue Verbrauch wird erfasst, wenn eine Charge mit spezifischem Substratrezept erstellt wird.',
+    'inv.hwPct': 'Hartholz %',
+    'inv.wbPct': 'Weizenkleie %',
+    'inv.waterPct': 'Wasser % (RH)',
+    'inv.blockWeight': 'Blockgewicht (kg)',
+    'inv.grainBagWeight': 'Getreidebeutel (kg)',
+    // Assets
+    'assets.total': 'Gesamt',
+    'assets.purchaseValue': 'Anschaffungswert',
+    'assets.editBtn': 'Bearb.',
+    'assets.printBtn': 'Druck',
+    // Camera
+    'assets.gwg': 'GWG (\u2264 800 \u20ac)',
+    'cam.permDenied': 'Kamera-Berechtigung verweigert. Bitte Kamerazugriff in den Browsereinstellungen erlauben.',
+    'cam.notFound': 'Keine Kamera gefunden.',
+    'cam.inUse': 'Kamera wird von einer anderen Anwendung verwendet.',
+    'cam.unknownError': 'Kamerafehler: {err}',
+    // Offline
+    'offline.queued': '{n} in Warteschlange',
+    // Task delete
+    'task.deleteTitle': 'Aufgabe l\u00f6schen?',
+    'task.deleteMsg': 'Diese Aufgabe wird unwiderruflich entfernt.',
+    // No bags to move
+    'batch.noBagsToMove': 'Keine Bags zu verschieben',
+    // Server restart
+    'server.restartTitle': 'Server neustarten?',
+    'server.restartMsg': 'Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.',
+    'server.restartConfirm': 'Ja, neustarten',
   },
   pt: {
     // Common (reused across modals / dialogs)
@@ -3555,6 +3667,62 @@ const LANG = {
     'batch.fillQty': 'Introduza uma quantidade maior que 0',
     'batch.saveFailed': 'N\u00e3o foi poss\u00edvel guardar o lote: ',
     'note.prefix': 'Nota \u2014 ',
+    // Sync relative time
+    'time.justNow': 'agora mesmo',
+    'time.secsAgo': 'h\u00e1 {n}s',
+    'time.minsAgo': 'h\u00e1 {n} min',
+    'time.hoursAgo': 'h\u00e1 {n}h',
+    // Alerts
+    'alert.batchOverdue.one': '1 lote atrasado \u2014 pronto para mover',
+    'alert.batchOverdue.other': '{n} lotes atrasados \u2014 prontos para mover',
+    'alert.dueToday.one': '1 lote vence hoje ou precisa de aten\u00e7\u00e3o',
+    'alert.dueToday.other': '{n} lotes vencem hoje ou precisam de aten\u00e7\u00e3o',
+    // Scan log
+    'log.entries': '{n} entradas',
+    'log.entriesFiltered': '{n} de {total} entradas',
+    'log.deleteEntry': 'Apagar entrada?',
+    'log.deleteEntryMsg': 'Apagar {action} {batch} de {time}?',
+    // Inventory cards
+    'inv.lowStock': 'ESTOQUE BAIXO',
+    'inv.alertBelow': 'Alerta abaixo de {n}kg',
+    'inv.logDelivery': '+ Registar entrega',
+    'inv.grainBagsEst': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',
+    'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg blocos',
+    'inv.avgEstimate': '(estimativa m\u00e9dia)',
+    // Inventory thresholds
+    'inv.thMaterial': 'Material',
+    'inv.thInStock': 'Em estoque',
+    'inv.thAlertBelow': 'Alerta abaixo (kg)',
+    'inv.thEstBags': 'Est. sacos (m\u00e9d.)',
+    'inv.avgCompTitle': 'Composi\u00e7\u00e3o m\u00e9dia usada para estimativas',
+    'inv.avgCompDesc': 'Estas m\u00e9dias s\u00e3o usadas para calcular "\u2248X sacos" nos cart\u00f5es de estoque. S\u00e3o apenas estimativas \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica de substrato.',
+    'inv.hwPct': 'Madeira dura %',
+    'inv.wbPct': 'Farelo de trigo %',
+    'inv.waterPct': '\u00c1gua % (RH)',
+    'inv.blockWeight': 'Peso do bloco (kg)',
+    'inv.grainBagWeight': 'Saco de gr\u00e3os (kg)',
+    // Assets
+    'assets.total': 'Total',
+    'assets.purchaseValue': 'Valor de compra',
+    'assets.editBtn': 'Editar',
+    'assets.printBtn': 'Imprimir',
+    // Camera
+    'assets.gwg': 'GWG (\u2264 800 \u20ac)',
+    'cam.permDenied': 'Permiss\u00e3o de c\u00e2mera negada. Permita o acesso \u00e0 c\u00e2mera nas configura\u00e7\u00f5es do navegador.',
+    'cam.notFound': 'Nenhuma c\u00e2mera encontrada.',
+    'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
+    'cam.unknownError': 'Erro de c\u00e2mera: {err}',
+    // Offline
+    'offline.queued': '{n} na fila',
+    // Task delete
+    'task.deleteTitle': 'Apagar tarefa?',
+    'task.deleteMsg': 'Esta tarefa ser\u00e1 permanentemente removida.',
+    // No bags to move
+    'batch.noBagsToMove': 'Sem sacos para mover',
+    // Server restart
+    'server.restartTitle': 'Reiniciar servidor?',
+    'server.restartMsg': 'O c\u00f3digo ser\u00e1 atualizado do GitHub e o servidor reiniciado. Todos os usu\u00e1rios ser\u00e3o desconectados brevemente.',
+    'server.restartConfirm': 'Sim, reiniciar',
   }
 };
 
@@ -3613,6 +3781,7 @@ function esc(s){
   if(s==null)return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function safeHref(url){if(!url)return '';const u=String(url).trim();return /^https?:\/\//i.test(u)?esc(u):'';}
 function safeColor(c,fallback){
   if(!c)return fallback||'#16a34a';
   return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#16a34a');
@@ -3713,11 +3882,11 @@ let _mutating=0; // tracks in-flight mutations to block pollSync from overwritin
 let lastSyncTime=null;
 function formatRelativeTime(ts){
   const sec=Math.round((Date.now()-ts)/1000);
-  if(sec<5)return 'gerade eben';
-  if(sec<60)return 'vor '+sec+'s';
+  if(sec<5)return t('time.justNow');
+  if(sec<60)return t('time.secsAgo',{n:sec});
   const min=Math.floor(sec/60);
-  if(min<60)return 'vor '+min+' Min.';
-  return 'vor '+Math.floor(min/60)+' Std.';
+  if(min<60)return t('time.minsAgo',{n:min});
+  return t('time.hoursAgo',{n:Math.floor(min/60)});
 }
 function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
 // Update relative time display every 5 seconds
@@ -4772,7 +4941,7 @@ function renderDashAlerts(){
     if(['DONE','EMPTY','FRUITING','CONTAM'].includes(status))return false;
     return new Date(b.due)<today;
   }).length;
-  const overdueAlerts=overdueCount?[{text:overdueCount+' batch'+(overdueCount>1?'es':'')+' overdue \u2014 ready to move',urgent:overdueCount>=3,goPage:'batch',goBtn:'n-batch'}]:[];
+  const overdueAlerts=overdueCount?[{text:tp('alert.batchOverdue',overdueCount),urgent:overdueCount>=3,goPage:'batch',goBtn:'n-batch'}]:[];
   // Zone capacity warnings (≥90%)
   const capAlerts=[];
   zones.forEach(z=>{
@@ -4784,7 +4953,7 @@ function renderDashAlerts(){
     if(pct>=90)capAlerts.push({text:zoneDisplayName(z.id)+': '+cnt+'/'+z.maxCapacity+' bags ('+pct+'% full)',urgent:pct>=100,goPage:'zones',goBtn:'n-zones'});
   });
   const dueToday=countDueToday();
-  const dueTodayAlerts=dueToday>0?[{text:dueToday+' batch'+(dueToday>1?'es':'')+' due today or need attention',urgent:dueToday>=3,goPage:'batch',goBtn:'n-batch'}]:[];
+  const dueTodayAlerts=dueToday>0?[{text:tp('alert.dueToday',dueToday),urgent:dueToday>=3,goPage:'batch',goBtn:'n-batch'}]:[];
   const labAlerts=getLabAlerts().map(a=>({...a,goPage:'lab',goBtn:'n-lab'}));
   const allAlerts=[...dueTodayAlerts,...overdueAlerts,...invAlerts,...labAlerts,...capAlerts];
   const card=document.getElementById('dash-alerts-card');
@@ -5204,7 +5373,7 @@ function openMoveBatchModal(batchId){
       zRow.addEventListener('click',()=>{
         document.getElementById('m-move-batch').classList.remove('open');
         moveBatchTo(b,z.id,function(moved,skipped){
-          if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(z.id)+')':''));return}
+          if(!moved){setFb('err',t('batch.noBagsToMove')+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(z.id)+')':''));return}
           setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(z.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
           updateSD();renderBatches();
         });
@@ -5221,7 +5390,7 @@ function openMoveBatchModal(batchId){
         rRow.addEventListener('click',()=>{
           document.getElementById('m-move-batch').classList.remove('open');
           moveBatchTo(b,r.id,function(moved,skipped){
-            if(!moved){setFb('err','Keine Bags zu verschieben'+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(r.id)+')':''));return}
+            if(!moved){setFb('err',t('batch.noBagsToMove')+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(r.id)+')':''));return}
             setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(r.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
             updateSD();renderBatches();
           });
@@ -5489,7 +5658,7 @@ function buildAutoTasks(){
   return tasks;
 }
 function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderCalendar();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
-function deleteTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;confirm2('Delete task?','This task will be permanently removed.','Delete',()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderCalendar();updateTodoBadge()})}
+function deleteTask(id){const tk=manualTasks.find(x=>x.id===id);if(!tk)return;confirm2(t('task.deleteTitle'),t('task.deleteMsg'),t('common.delete'),()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderCalendar();updateTodoBadge()})}
 function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const el=document.getElementById('n-cal');if(el)el.classList.toggle('alert',n>0);const bd=buildAutoTasks().filter(t=>t.urgent||t.warn).length+getInvAlerts().length;const de=document.getElementById('n-dash');if(de)de.classList.toggle('alert',bd>0)}
 
 // ─── TEAM MEMBERS ───────────────────────────────────────────
@@ -5747,7 +5916,7 @@ async function runBatchIdMigration(){
 }
 
 function restartServer(){
-  confirm2('Server neustarten?','Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.','Ja, neustarten',async()=>{
+  confirm2(t('server.restartTitle'),t('server.restartMsg'),t('server.restartConfirm'),async()=>{
     const btn=document.getElementById('btn-server-restart');
     const status=document.getElementById('server-restart-status');
     btn.disabled=true;btn.textContent=t('server.restarting');
@@ -5927,18 +6096,18 @@ function renderLog(){
   // Count display
   const total=scanLog.length,filtered=items.length;
   const countEl=document.getElementById('log-count');
-  if(countEl)countEl.textContent=filtered===total?total+' Einträge':filtered+' von '+total+' Einträgen';
+  if(countEl)countEl.textContent=filtered===total?t('log.entries',{n:total}):t('log.entriesFiltered',{n:filtered,total:total});
   // Paginate
   const hasMore=items.length>logDisplayLimit;
   items=items.slice(0,logDisplayLimit);
   const now=Date.now(),h24=24*60*60*1000;
   body.innerHTML=items.length?items.map(e=>{
     const isRecent=(now-new Date(e.time).getTime())<h24;
-    return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="Löschen">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
+    return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="${t('common.delete')}">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
   const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
 }
 function deleteLogEntry(btn,time,batch,action){
-  confirm2('Eintrag löschen?',action+' '+batch+' vom '+fmtDtTime(time)+' löschen?','Löschen',()=>{
+  confirm2(t('log.deleteEntry'),t('log.deleteEntryMsg',{action:action,batch:batch,time:fmtDtTime(time)}),t('common.delete'),()=>{
     const idx=scanLog.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
     if(idx===-1)return;
     const entry=scanLog[idx];
@@ -6006,24 +6175,24 @@ function renderInvStock(){
     const {bags,bagKg,matPerBag,isGrain}=estBagsFromMat(mat,stock);
     const pct=thresh.minKg>0?Math.min(100,Math.round((stock/Math.max(stock,thresh.minKg*3))*100)):Math.min(100,Math.round((stock/Math.max(stock,100))*100));
     const estNote=isGrain
-      ? `≈ ${bags} grain bags @ ${bagKg}kg each`
-      : `≈ <strong>${bags}</strong> × ${bagKg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>`;
+      ? t('inv.grainBagsEst',{n:bags,kg:bagKg})
+      : t('inv.blocksEst',{n:'<strong>'+bags+'</strong>',kg:bagKg})+' <span style="font-size:10px;color:var(--c-text-muted)">'+t('inv.avgEstimate')+'</span>';
     return`<div style="background:${MAT_BG[mat]};border:1px solid ${low?'var(--c-red)':MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
-        ${low?`<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">LOW STOCK</span>`:''}
+        ${low?`<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>`:''}
       </div>
       <div style="font-size:26px;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:var(--c-text-muted)">kg</span></div>
       <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
         <div style="height:100%;border-radius:3px;background:${low?'var(--c-red)':MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
       </div>
       <div style="font-size:12px;color:var(--c-text-sec);line-height:1.6">${estNote}</div>
-      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'};margin-top:2px">Alert below ${thresh.minKg}kg</div>`:''}
-      <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">+ Log delivery</button>
+      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'};margin-top:2px">${t('inv.alertBelow',{n:thresh.minKg})}</div>`:''}
+      <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">${t('inv.logDelivery')}</button>
       ${(()=>{const sups=getSuppliersForMat(mat);if(!sups.length)return'';
         return`<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:var(--c-text-sec)">
           <span style="font-weight:600;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'}">${low?t('inv.reorderFrom'):t('inv.suppliers')}:</span>
-          ${sups.map(s=>s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
+          ${sups.map(s=>safeHref(s.url)?`<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
         </div>`;})()}
     </div>`;
   }).join('');
@@ -6037,7 +6206,7 @@ function renderThresholds(){
 
   // Per-material alert thresholds
   const threshHtml=`<div style="overflow-x:auto;margin-bottom:16px"><table>
-    <thead><tr><th>Material</th><th>In stock</th><th>Alert below (kg)</th><th>Est. bags (avg)</th></tr></thead>
+    <thead><tr><th>${t('inv.thMaterial')}</th><th>${t('inv.thInStock')}</th><th>${t('inv.thAlertBelow')}</th><th>${t('inv.thEstBags')}</th></tr></thead>
     <tbody>
     ${Object.keys(MAT_LABELS).map(mat=>{
       const stock=inventory.stock[mat]||0;
@@ -6056,22 +6225,21 @@ function renderThresholds(){
   // Average composition settings
   const compHtml=`<div style="background:var(--c-bg);border-radius:8px;padding:12px">
     <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
-      Average composition used for estimates
+      ${t('inv.avgCompTitle')}
     </div>
     <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
-      These averages are used to calculate "~X bags" on the stock cards. 
-      They are <strong>estimates only</strong> — exact usage is tracked when you create a batch with a specific substrate recipe.
+      ${t('inv.avgCompDesc')}
     </p>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-      <div><label style="font-size:11px">Hardwood %</label>
+      <div><label style="font-size:11px">${t('inv.hwPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
-      <div><label style="font-size:11px">Wheat bran %</label>
+      <div><label style="font-size:11px">${t('inv.wbPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.wbPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
-      <div><label style="font-size:11px">Water % (RH)</label>
+      <div><label style="font-size:11px">${t('inv.waterPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.rhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
-      <div><label style="font-size:11px">Block weight (kg)</label>
+      <div><label style="font-size:11px">${t('inv.blockWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
-      <div><label style="font-size:11px">Grain bag (kg)</label>
+      <div><label style="font-size:11px">${t('inv.grainBagWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
@@ -6238,7 +6406,7 @@ function renderSuppliers(){
         <thead><tr><th>${t('inv.supplierName')}</th><th>${t('inv.supplierUrl')}</th><th>${t('inv.supplierPhone')}</th><th>${t('inv.supplierNotes')}</th><th></th></tr></thead>
         <tbody>${list.map(s=>`<tr>
           <td style="font-weight:500">${esc(s.name)}</td>
-          <td>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>`:'-'}</td>
+          <td>${safeHref(s.url)?`<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>`:esc(s.url)||'-'}</td>
           <td style="font-size:12px">${s.phone?esc(s.phone):'-'}</td>
           <td style="font-size:12px;color:var(--c-text-sec)">${s.notes?esc(s.notes):'-'}</td>
           <td style="white-space:nowrap">
@@ -6730,10 +6898,10 @@ function renderAssets(){
   const totalBook=aktiv.reduce((s,a)=>s+computeDepreciation(a).bookValue,0);
   const gwgCount=aktiv.filter(a=>a.purchasePrice<=800).length;
   document.getElementById('asset-stats').innerHTML=
-    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">Gesamt</div></div>`+
-    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">Anschaffungswert (aktiv)</div></div>`+
-    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">Buchwert heute (aktiv)</div></div>`+
-    `<div class="met"><div class="met-v">${gwgCount}</div><div class="met-l">GWG (≤ 800 €)</div></div>`;
+    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">${t('assets.total')}</div></div>`+
+    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">${t('assets.purchaseValueActive')}</div></div>`+
+    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">${t('assets.bookValueToday')}</div></div>`+
+    `<div class="met"><div class="met-v">${gwgCount}</div><div class="met-l">${t('assets.gwg')}</div></div>`;
 
   // Table
   const body=document.getElementById('assets-body');
@@ -6750,8 +6918,8 @@ function renderAssets(){
       <td>${assetStatusBadge(a.status)}</td>
       <td style="font-size:11px;color:var(--c-text-sec)">${esc(a.location)||'—'}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">Bearb.</button>
-        <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">Druck</button>
+        <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.editBtn')}</button>
+        <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.printBtn')}</button>
         <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:var(--c-red-dark)">×</button>
       </td>
     </tr>`}).join('');
@@ -6982,7 +7150,7 @@ function renderStrains(){
       <td style="font-size:12px;color:var(--c-text-sec)">${ms.description?esc(ms.description):'<span style="color:var(--c-text-muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">Bearb.</button>
+        <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('assets.editBtn')}</button>
         <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse?'disabled title="'+t('strains.deleteProtected')+'"':''} style="padding:2px 7px">&#x2715;</button>
       </td>
     </tr>`;
@@ -9645,7 +9813,7 @@ function updateOfflineBadge(count){
     if(syncEl)syncEl.parentNode.appendChild(badge);
     else document.querySelector('.topbar')?.appendChild(badge);
   }
-  badge.textContent=count+' queued';
+  badge.textContent=t('offline.queued',{n:count});
 }
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
@@ -9672,12 +9840,10 @@ function openCamScan(){
   ).catch(function(err){
     console.error('Camera start failed:',err);
     var msg;var s=String(err);
-    if(/NotAllowedError|Permission/.test(s))msg='Kamera-Berechtigung verweigert. Bitte in den Browser-Einstellungen erlauben.';
-    else if(/NotFoundError/.test(s))msg='Keine Kamera gefunden.';
-    else if(/NotReadableError|TrackStartError/.test(s))msg='Kamera wird von anderer App verwendet.';
-    else if(/OverconstrainedError/.test(s))msg='Kamera unterstützt die gewünschte Auflösung nicht.';
-    else if(/InsecureContext|https/.test(s))msg='Kamera benötigt HTTPS. Bitte sichere Verbindung verwenden.';
-    else msg='Kamera konnte nicht gestartet werden: '+err;
+    if(/NotAllowedError|Permission/.test(s))msg=t('cam.permDenied');
+    else if(/NotFoundError/.test(s))msg=t('cam.notFound');
+    else if(/NotReadableError|TrackStartError/.test(s))msg=t('cam.inUse');
+    else msg=t('cam.unknownError',{err:err});
     setFb('err',msg);
     closeCamScan();
   });
