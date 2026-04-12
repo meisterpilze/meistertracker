@@ -2481,7 +2481,7 @@ tr:hover td {
   width: 200px;
   font-size: 12px;
   padding: 6px 10px;
-  border: 1px solid var(--c-border);
+  border: 2px solid var(--c-border-strong, #94a3b8);
   border-radius: var(--radius-sm);
   background: var(--c-surface);
   color: var(--c-text);
@@ -2492,6 +2492,55 @@ tr:hover td {
   outline: none;
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+}
+
+/* ═══ FARM / LAB SECTION HEADERS ════════════════════════════════ */
+.dash-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.dash-section-growblocks {
+  background: rgba(16, 185, 129, 0.09);
+  border-left: 4px solid #10b981;
+  color: #065f46;
+}
+.dash-section-lab {
+  background: rgba(139, 92, 246, 0.09);
+  border-left: 4px solid #8b5cf6;
+  color: #4c1d95;
+  margin-top: 18px;
+}
+
+/* ═══ PIPELINE KPI TOTAL ROW ═════════════════════════════════════ */
+.metrics-total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.metrics-total-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-sec);
+}
+.metrics-total-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--c-text);
+  line-height: 1;
+}
+.metrics-pipeline {
+  margin: 0;
 }
 
 /* ═══ TASK ACTION BUTTONS + CLICKABLE BATCH ID ══════════════════ */
