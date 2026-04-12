@@ -255,7 +255,7 @@
   </div>
 </div>
 <!-- Camera scan modal -->
-<div class="modal-bg" id="m-camscan" role="dialog" aria-modal="true" aria-label="Camera scanner" style="background:rgba(0,0,0,.85)">
+<div class="modal-bg" id="m-camscan" role="dialog" aria-modal="true" data-i18n-aria-label="aria.cameraScanner" aria-label="Camera scanner" style="background:rgba(0,0,0,.85)">
   <div style="position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px">
     <div id="cam-reader" style="width:100%;max-width:500px;border-radius:12px;overflow:hidden;background:#000"></div>
     <!-- Camera scan HUD: compact status shown during continuous scanning -->
@@ -269,8 +269,8 @@
         <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
       </div>
       <div class="cam-hud-btns">
-        <button id="btn-flip-cam" class="cam-hud-btn" aria-label="Kamera wechseln"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><circle cx="12" cy="12" r="3"/><path d="m18 22-3-3 3-3"/><path d="m6 2 3 3-3 3"/></svg></button>
-        <button id="cls-16" class="cam-hud-btn cam-hud-close" aria-label="Close Camera">&times;</button>
+        <button id="btn-flip-cam" class="cam-hud-btn" data-i18n-aria-label="aria.switchCamera" aria-label="Kamera wechseln"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><circle cx="12" cy="12" r="3"/><path d="m18 22-3-3 3-3"/><path d="m6 2 3 3-3 3"/></svg></button>
+        <button id="cls-16" class="cam-hud-btn cam-hud-close" data-i18n-aria-label="aria.closeCamera" aria-label="Close Camera">&times;</button>
       </div>
     </div>
   </div>
@@ -279,9 +279,9 @@
 <aside class="sidebar no-print" id="sidebar">
   <div class="sb-header">
     <div class="sb-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M12 13v5M8 21h8M9 3c0 0-2-2-2-3M15 3c0 0 2-2 2-3"/></svg><span class="sb-logo-text">Meisterpilze <small>lab</small></span></div>
-    <button class="sb-toggle" id="sb-toggle" aria-label="Toggle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <button class="sb-toggle" id="sb-toggle" data-i18n-aria-label="aria.toggleSidebar" aria-label="Toggle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
   </div>
-  <nav class="sb-nav" aria-label="Main navigation" role="navigation">
+  <nav class="sb-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation" role="navigation">
     <div class="sb-group-label" data-i18n="nav.main">Main</div>
     <button class="sb-btn active" id="n-dash"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span data-i18n="nav.dashboard">Dashboard</span></button>
     <button class="sb-btn" id="n-cal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span data-i18n="nav.calendar">Kalender</span></button>
@@ -297,7 +297,7 @@
   <div class="sb-footer">
     <button class="sb-btn" id="n-settings" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span data-i18n="nav.admin">Admin</span></button>
     <div class="sb-sync">
-      <span class="sync-dot" id="sync-dot" title="Click to sync"></span>
+      <span class="sync-dot" id="sync-dot" data-i18n-title="aria.clickToSync" title="Click to sync"></span>
       <span id="sync-label" class="sb-sync-label"></span>
       <select id="lang-sel" class="sb-lang-sel">
         <option value="de">DE</option>
@@ -310,7 +310,7 @@
 
 <!-- Mobile topbar (hamburger) -->
 <div class="mobile-topbar no-print" id="mobile-topbar">
-  <button id="tgl-17" class="sb-toggle" aria-label="Open menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+  <button id="tgl-17" class="sb-toggle" data-i18n-aria-label="aria.openMenu" aria-label="Open menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
   <div class="sb-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M12 13v5M8 21h8"/></svg><span class="sb-logo-text">Meisterpilze</span></div>
   <span class="sync-dot" id="sync-dot-m"></span>
 </div>
@@ -368,7 +368,7 @@
 <div id="harvest-panel">
   <div class="inner">
     <div><div style="font-size:11px;color:var(--c-amber-dark);font-weight:600;margin-bottom:3px" id="hp-lbl" data-i18n="harvest.logHarvest">Log harvest</div><input type="text" id="hp-bag" readonly style="width:180px;font-family:monospace;font-size:12px;background:var(--c-amber-light)" /></div>
-    <div><label style="color:var(--c-amber-dark);font-size:11px" data-i18n="harvest.grams">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" placeholder="e.g. 245" /></div>
+    <div><label style="color:var(--c-amber-dark);font-size:11px" data-i18n="harvest.grams">Grams</label><input type="number" id="hp-grams" min="0" step="1" style="width:100px" data-i18n-placeholder="harvest.gramsPlaceholder" placeholder="e.g. 245" /></div>
     <div><label style="color:var(--c-amber-dark);font-size:11px" data-i18n="harvest.flush">Flush #</label><input type="number" id="hp-flush" value="1" min="1" max="10" style="width:65px" /></div>
     <button id="act-21" class="btn btn-p btn-sm" data-i18n="harvest.logHarvest">Log harvest</button>
     <button id="btn-22" class="btn btn-sm" data-i18n="harvest.cancel">Cancel</button>
@@ -415,7 +415,7 @@
 
   <!-- Search bar -->
   <div class="dash-search-bar">
-    <input type="text" id="status-q" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." />
+    <input type="text" id="status-q" data-i18n-aria-label="aria.searchDashboard" aria-label="Search dashboard" data-i18n-placeholder="dash.search" placeholder="Search..." />
   </div>
 
   <!-- Location overview (rendered by JS) -->
@@ -449,7 +449,7 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec" style="margin:0" data-i18n="batch.allBatches">All batches</div>
-        <input type="text" id="batch-q" aria-label="Search batches" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" />
+        <input type="text" id="batch-q" data-i18n-aria-label="aria.searchBatches" aria-label="Search batches" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:140px;font-size:12px;padding:4px 8px" />
       </div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th><th class="sortable" data-sort="species" data-i18n="th.species">Species</th><th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th><th class="sortable" data-sort="qty" data-i18n="th.qty">Qty</th><th class="sortable" data-sort="days" data-i18n="th.inc">Inc</th><th data-i18n="th.substrate">Substrate</th><th data-i18n="th.source">Source</th><th class="sortable" data-sort="created" data-i18n="th.created">Created</th><th class="sortable" data-sort="due" data-i18n="th.due">Due</th><th class="sortable" data-sort="status" data-i18n="th.status">Status</th><th data-i18n="th.notes">Notes</th><th></th></tr></thead>
@@ -503,7 +503,7 @@
             </div>
           </details>
           <div><label data-i18n="batch.sourceCulture">Source culture (optional)</label><select id="nb-culture"><option value="" data-i18n="batch.none">— none —</option></select><div style="font-size:11px;color:var(--c-text-muted);margin-top:3px" data-i18n="batch.sourceCultureHint">Link to the PD or LC used to inoculate this batch</div></div>
-          <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="nb-notes" rows="2" placeholder="Any notes..."></textarea></div>
+          <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="nb-notes" rows="2" data-i18n-placeholder="batch.notesPlaceholder" placeholder="Any notes..."></textarea></div>
           <div class="met"><div class="met-l" data-i18n="batch.idPreview">Batch ID preview</div><div id="nb-prev" style="font-family:monospace;font-size:13px;font-weight:600;margin-top:3px">—</div></div>
           <div id="nb-mat-preview" style="display:none;background:var(--c-primary-light);border:1px solid var(--c-green-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--c-green-dark);line-height:1.8"></div>
           <button id="btn-24" class="btn btn-p" data-i18n="batch.create">Create batch</button>
@@ -541,7 +541,7 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec" style="margin:0" data-i18n="harvest.log">Harvest log</div>
-        <input type="text" id="harvest-q" aria-label="Search harvests" data-i18n-placeholder="harvest.searchBatch" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" />
+        <input type="text" id="harvest-q" data-i18n-aria-label="aria.searchHarvests" aria-label="Search harvests" data-i18n-placeholder="harvest.searchBatch" placeholder="Search batch..." style="width:140px;font-size:12px;padding:4px 8px" />
       </div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th data-i18n="th.date">Date</th><th data-i18n="th.batch">Batch</th><th data-i18n="th.bag">Bag</th><th data-i18n="th.species">Species</th><th data-i18n="th.strain">Strain</th><th data-i18n="th.flush">Flush</th><th data-i18n="th.grams">Grams</th></tr></thead>
@@ -622,7 +622,7 @@
                 <option value="PD" data-i18n="lab.pdTransfer">Petri dish transfer</option>
                 <option value="LC" data-i18n="lab.lcPrep">Liquid culture prep</option>
                 <option value="G2G" data-i18n="lab.g2g">Grain-to-grain (G2G)</option>
-                <option value="KB">Körnerbrut</option>
+                <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
               </select>
             </div>
             <div>
@@ -642,7 +642,7 @@
           </div>
           <div id="lw-source-row" style="display:none">
             <label data-i18n="lab.source">Source (e.g. clone, spore print, wild)</label>
-            <input type="text" id="lw-source" placeholder="e.g. Clone from KINGS-250101-01-03" />
+            <input type="text" id="lw-source" data-i18n-placeholder="lab.sourcePlaceholder" placeholder="e.g. Clone from KINGS-250101-01-03" />
           </div>
           <div id="lw-qty-row"><label id="lw-qty-lbl" data-i18n="lab.qtyMade">Quantity made</label><input type="number" id="lw-qty" value="1" min="1" max="50" /></div>
           <div><label data-i18n="batch.notes">Notes (optional)</label><textarea id="lw-notes" rows="2" data-i18n-placeholder="lab.observations" placeholder="Observations, conditions..."></textarea></div>
@@ -725,9 +725,9 @@
         <div><label data-i18n="print.selectBatch">Select batch</label><select id="print-batch"><option value="" data-i18n="print.chooseBatch">— choose batch —</option></select></div>
         <div><label data-i18n="print.labelContent">Label content</label>
           <select id="print-mode">
-            <option value="minimal">Nur Barcode (Barcode + ID)</option>
-            <option value="sorte" selected>Barcode + Sorte (+ Pilzsorte &amp; Notizen)</option>
-            <option value="full">Vollständig (+ Fälligkeit)</option>
+            <option value="minimal" data-i18n="print.barcodeOnly">Nur Barcode (Barcode + ID)</option>
+            <option value="sorte" selected data-i18n="print.barcodeStrain">Barcode + Sorte (+ Pilzsorte &amp; Notizen)</option>
+            <option value="full" data-i18n="print.barcodeFull">Vollständig (+ Fälligkeit)</option>
           </select>
         </div>
       </div>
@@ -739,9 +739,9 @@
             <option value="range" data-i18n="print.bagRange">Bag range (from–to)</option>
           </select>
           <span id="bag-range-inputs" style="display:none;gap:6px;align-items:center">
-            <input type="number" id="bag-from" min="1" style="width:60px" placeholder="from" />
+            <input type="number" id="bag-from" min="1" style="width:60px" data-i18n-placeholder="print.bagFromPh" placeholder="from" />
             <span>–</span>
-            <input type="number" id="bag-to" min="1" style="width:60px" placeholder="to" />
+            <input type="number" id="bag-to" min="1" style="width:60px" data-i18n-placeholder="print.bagToPh" placeholder="to" />
           </span>
         </div>
       </div>
@@ -845,11 +845,11 @@
   <div class="stabs">
     <button class="stab active" id="st-settings-log" data-i18n="settings.scanLog">Scan log</button>
     <button class="stab" id="st-settings-backup" data-i18n="settings.backup">Backup</button>
-    <button class="stab" id="st-settings-users">Users</button>
-    <button class="stab" id="st-settings-caldav">CalDAV</button>
-    <button class="stab" id="st-settings-duckdns">DuckDNS</button>
-    <button class="stab" id="st-settings-mcp" style="display:none">MCP</button>
-    <button class="stab" id="st-settings-server" style="display:none">Server</button>
+    <button class="stab" id="st-settings-users" data-i18n="settings.tabUsers">Users</button>
+    <button class="stab" id="st-settings-caldav" data-i18n="settings.tabCaldav">CalDAV</button>
+    <button class="stab" id="st-settings-duckdns" data-i18n="settings.tabDuckdns">DuckDNS</button>
+    <button class="stab" id="st-settings-mcp" style="display:none" data-i18n="settings.tabMcp">MCP</button>
+    <button class="stab" id="st-settings-server" style="display:none" data-i18n="settings.tabServer">Server</button>
   </div>
   <!-- Scan log -->
   <div class="sp active" id="sp-settings-log">
@@ -858,15 +858,15 @@
         <div class="sec" style="margin:0" data-i18n="settings.scanLog">Scan log</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <select id="log-action-filter" style="font-size:12px;padding:4px 6px">
-            <option value="">Alle Aktionen</option>
+            <option value="" data-i18n="log.allActions">Alle Aktionen</option>
             <option value="ADD">ADD</option>
             <option value="MOVE">MOVE</option>
             <option value="REMOVE">REMOVE</option>
             <option value="HARVEST">HARVEST</option>
           </select>
-          <input type="date" id="log-date-from" style="font-size:12px;padding:4px 6px" title="Von Datum" />
-          <input type="date" id="log-date-to" style="font-size:12px;padding:4px 6px" title="Bis Datum" />
-          <input type="text" id="log-q" aria-label="Search log" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" />
+          <input type="date" id="log-date-from" style="font-size:12px;padding:4px 6px" data-i18n-title="log.dateFromTitle" title="Von Datum" />
+          <input type="date" id="log-date-to" style="font-size:12px;padding:4px 6px" data-i18n-title="log.dateToTitle" title="Bis Datum" />
+          <input type="text" id="log-q" data-i18n-aria-label="aria.searchLog" aria-label="Search log" data-i18n-placeholder="dash.search" placeholder="Search..." style="width:130px;font-size:12px;padding:4px 8px" />
           <button id="btn-37" class="btn btn-sm btn-r" data-i18n="settings.clear">Clear</button>
         </div>
       </div>
@@ -876,7 +876,7 @@
         <tbody id="log-body"></tbody>
       </table></div>
       <div id="log-load-more" style="text-align:center;padding:8px;display:none">
-        <button id="ctl-40" class="btn btn-sm">Mehr laden...</button>
+        <button id="ctl-40" class="btn btn-sm" data-i18n="log.loadMore">Mehr laden...</button>
       </div>
     </div>
   </div>
@@ -886,7 +886,7 @@
       <div class="sec" data-i18n="settings.downloadBackupTitle">Download backup</div>
       <p style="font-size:13px;color:var(--c-text-sec);margin-bottom:12px;line-height:1.6" data-i18n="settings.downloadBackupDesc">Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="password" id="backup-dl-pw" placeholder="Encryption password" style="flex:1;min-width:140px" />
+        <input type="password" id="backup-dl-pw" data-i18n-placeholder="settings.encryptPwPh" placeholder="Encryption password" style="flex:1;min-width:140px" />
         <button id="btn-41" class="btn btn-p" data-i18n="settings.downloadBackupBtn">Download backup</button>
       </div>
       <div id="backup-dl-status" style="margin-top:8px;font-size:12px;color:var(--c-text-sec)"></div>
@@ -898,7 +898,7 @@
         <input type="file" id="restore-file" accept=".enc" style="width:auto;flex:1" />
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-        <input type="password" id="backup-restore-pw" placeholder="Decryption password" style="flex:1;min-width:140px" />
+        <input type="password" id="backup-restore-pw" data-i18n-placeholder="settings.decryptPwPh" placeholder="Decryption password" style="flex:1;min-width:140px" />
         <button id="btn-42" class="btn btn-r" data-i18n="settings.restoreBtn">Restore</button>
       </div>
       <div id="backup-restore-status" style="margin-top:8px;font-size:12px;color:var(--c-text-sec)"></div>
@@ -957,9 +957,9 @@
     <div class="card">
       <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
       <div style="font-size:12px;color:var(--c-text-sec);line-height:1.7">
-        <p><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
-        <p style="margin-top:6px"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
-        <p style="margin-top:6px"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
+        <p data-i18n-html="caldav.howThunderbird"><strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the CalDAV URL above.</p>
+        <p style="margin-top:6px" data-i18n-html="caldav.howAndroid"><strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with "Login with URL" and paste the URL.</p>
+        <p style="margin-top:6px" data-i18n-html="caldav.howApple"><strong>Apple Calendar (iPhone/Mac):</strong> Settings → Calendar → Accounts → Add CalDAV account. Server = the URL above.</p>
       </div>
     </div>
     <div class="card">
@@ -1130,10 +1130,10 @@
           </div>
           <div id="del-current" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px"></div>
           <div><label data-i18n="inv.amountReceived">Amount received (kg)</label>
-            <input type="text" inputmode="decimal" id="del-kg" placeholder="e.g. 1000 or 847.5" style="font-size:16px;padding:10px 12px" autocomplete="off" />
+            <input type="text" inputmode="decimal" id="del-kg" data-i18n-placeholder="inv.delKgPh" placeholder="e.g. 1000 or 847.5" style="font-size:16px;padding:10px 12px" autocomplete="off" />
           </div>
           <div id="del-preview" style="display:none;font-size:12px;color:var(--c-green-dark);background:var(--c-primary-light);border-radius:7px;padding:8px 10px"></div>
-          <div><label data-i18n="inv.supplierNote">Supplier / note (optional)</label><input type="text" id="del-note" placeholder="e.g. Agrobs, batch 2025-03" /></div>
+          <div><label data-i18n="inv.supplierNote">Supplier / note (optional)</label><input type="text" id="del-note" data-i18n-placeholder="inv.delNotePh" placeholder="e.g. Agrobs, batch 2025-03" /></div>
           <button id="btn-47" class="btn btn-p" data-i18n="inv.addToStock">Add to stock</button>
         </div>
       </div>
@@ -1152,15 +1152,15 @@
           <div id="adj-current" style="font-size:12px;color:var(--c-text-muted);padding:6px 10px;background:var(--c-bg);border-radius:7px"></div>
           <div class="g2">
             <div><label data-i18n="inv.setStockTo">Set stock to (kg)</label>
-              <input type="text" inputmode="decimal" id="adj-absolute" placeholder="e.g. 847.5" style="font-size:15px;padding:9px 12px" autocomplete="off" />
+              <input type="text" inputmode="decimal" id="adj-absolute" data-i18n-placeholder="inv.adjAbsPh" placeholder="e.g. 847.5" style="font-size:15px;padding:9px 12px" autocomplete="off" />
             </div>
             <div style="display:flex;align-items:center;justify-content:center;padding-top:18px;font-size:12px;color:var(--c-text-muted);font-style:italic" data-i18n="inv.orAddSubtract">or add / subtract</div>
           </div>
           <div><label data-i18n="inv.adjustBy">Adjust by (kg) — negative to subtract</label>
-            <input type="text" inputmode="decimal" id="adj-delta" placeholder="e.g. -5  or  +20" style="font-size:15px;padding:9px 12px" autocomplete="off" />
+            <input type="text" inputmode="decimal" id="adj-delta" data-i18n-placeholder="inv.adjDeltaPh" placeholder="e.g. -5  or  +20" style="font-size:15px;padding:9px 12px" autocomplete="off" />
           </div>
           <div id="adj-preview" style="display:none;font-size:12px;background:var(--c-bg);border-radius:7px;padding:8px 10px"></div>
-          <div><label data-i18n="inv.reason">Reason</label><input type="text" id="adj-reason" placeholder="e.g. Spoilage, stock count" /></div>
+          <div><label data-i18n="inv.reason">Reason</label><input type="text" id="adj-reason" data-i18n-placeholder="inv.reasonPh" placeholder="e.g. Spoilage, stock count" /></div>
           <button id="btn-48" class="btn btn-sm btn-p" data-i18n="inv.apply">Apply</button>
         </div>
       </div>
@@ -1215,7 +1215,7 @@
   <div class="card">
     <div class="sec" data-i18n="zones.addTitle">Zone hinzufügen</div>
     <div class="g2">
-      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" placeholder="z.B. Tent 4" maxlength="50"></div>
+      <div><label data-i18n="zones.zoneName">Name</label><input id="zone-name" data-i18n-placeholder="zones.namePh" placeholder="z.B. Tent 4" maxlength="50"></div>
       <div><label data-i18n="zones.zoneRole">Rolle</label>
         <select id="zone-role">
           <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
@@ -1227,10 +1227,10 @@
     </div>
     <div class="g2">
       <div><label data-i18n="zones.zoneColor">Farbe</label><input id="zone-color" type="color" value="#10b981" style="width:60px;height:32px;padding:2px;border-radius:6px;border:1px solid var(--c-border)"></div>
-      <div><label data-i18n="zones.zoneRacks">Racks (optional, kommagetrennt)</label><input id="zone-racks" placeholder="z.B. R1, R2, R3" maxlength="500"></div>
+      <div><label data-i18n="zones.zoneRacks">Racks (optional, kommagetrennt)</label><input id="zone-racks" data-i18n-placeholder="zones.racksPh" placeholder="z.B. R1, R2, R3" maxlength="500"></div>
     </div>
     <div class="g2">
-      <div><label data-i18n="zones.capacity">Max. Kapazität (Bags)</label><input id="zone-capacity" type="number" min="1" step="1" placeholder="optional"></div>
+      <div><label data-i18n="zones.capacity">Max. Kapazität (Bags)</label><input id="zone-capacity" type="number" min="1" step="1" data-i18n-placeholder="zones.capacityPh" placeholder="optional"></div>
       <div></div>
     </div>
     <button class="btn btn-green" id="btn-add-zone" style="margin-top:10px" data-i18n="zones.add">Zone hinzufügen</button>
@@ -1364,7 +1364,7 @@
 
 <script src="/app.js"></script>
 <!-- Floating camera FAB (mobile/tablet only) -->
-<button class="cam-fab no-print" id="cam-fab" aria-label="Open camera scanner">
+<button class="cam-fab no-print" id="cam-fab" data-i18n-aria-label="aria.openCameraScanner" aria-label="Open camera scanner">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 5l1-2h6l1 2"/></svg>
 </button>
 </body>
