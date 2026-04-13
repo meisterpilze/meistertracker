@@ -5331,19 +5331,32 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const scriptDir = path.resolve(__dirname);
         // Use a lightweight update script instead of interactive START.bat.
         // Sequence: git pull → npm install → pm2 restart
-        const script = process.platform === 'win32'
-          ? ['cmd.exe', ['/c',
-              'cd /d "' + scriptDir + '" &&' +
-              ' git fetch origin && git reset --hard origin/main &&' +
-              ' npm install --omit=dev &&' +
-              ' pm2 restart meisterpilze --update-env'
-            ]]
-          : ['bash', ['-c',
-              'cd "' + scriptDir + '" &&' +
-              ' git fetch origin && git reset --hard origin/main &&' +
-              ' npm install --omit=dev &&' +
-              ' pm2 restart meisterpilze --update-env'
-            ]];
+        const script =
+          process.platform === 'win32'
+            ? [
+                'cmd.exe',
+                [
+                  '/c',
+                  'cd /d "' +
+                    scriptDir +
+                    '" &&' +
+                    ' git fetch origin && git reset --hard origin/main &&' +
+                    ' npm install --omit=dev &&' +
+                    ' pm2 restart meisterpilze --update-env'
+                ]
+              ]
+            : [
+                'bash',
+                [
+                  '-c',
+                  'cd "' +
+                    scriptDir +
+                    '" &&' +
+                    ' git fetch origin && git reset --hard origin/main &&' +
+                    ' npm install --omit=dev &&' +
+                    ' pm2 restart meisterpilze --update-env'
+                ]
+              ];
         const child = spawn(script[0], script[1], { cwd: scriptDir, detached: true, stdio: 'ignore' });
         child.unref();
       }, 500);

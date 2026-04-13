@@ -622,11 +622,9 @@ describe('db – mushroom strains CRUD', () => {
     assert.throws(() => db.createMushroomStrain(d, { name: 'Test', kuerzel: '' }), /K.?rzel/);
   });
 
-  it('createMushroomStrain rejects duplicate name', () => {
-    assert.throws(
-      () => db.createMushroomStrain(d, { name: 'Pleurotus ostreatus HK35', kuerzel: 'OTHER' }),
-      /already taken/
-    );
+  it('createMushroomStrain allows duplicate name (different kuerzel)', () => {
+    const id = db.createMushroomStrain(d, { name: 'Pleurotus ostreatus HK35', kuerzel: 'OTHER' });
+    assert.ok(Number(id) > 0);
   });
 
   it('createMushroomStrain rejects duplicate kuerzel', () => {
@@ -700,9 +698,11 @@ describe('db – mushroom strains CRUD', () => {
   });
 
   it('deleteMushroomStrain throws when strain is still referenced', () => {
+    // Find the strain that has batches/cultures referencing it (kuerzel was updated to KINGS earlier)
     const list = db.listMushroomStrains(d);
-    const strainId = list[0].id;
-    assert.throws(() => db.deleteMushroomStrain(d, strainId), /still in use/);
+    const referenced = list.find((s) => s.kuerzel === 'KINGS');
+    assert.ok(referenced, 'expected to find the referenced strain');
+    assert.throws(() => db.deleteMushroomStrain(d, referenced.id), /still in use/);
   });
 
   it('deleteMushroomStrain removes a free strain', () => {
