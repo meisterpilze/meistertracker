@@ -899,19 +899,18 @@ describe('MCP label printing', () => {
       assert.equal(items[0].val, 'FB_2025_001_01');
     });
 
-    it('with QR: produces large qr item at left', () => {
+    it('with QR: produces qr item at origin with mag=5', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', 42, true);
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'FB-2025-001-01');
-      assert.equal(items[0].mag, 7);
+      assert.equal(items[0].mag, 5);
       assert.equal(items[0].x, 0);
     });
 
-    it('with QR: text positioned right of QR', () => {
+    it('with QR: text centered full-width below QR', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, true);
       for (const it of items.filter((i) => i.type === 'text')) {
-        assert.equal(it.x, 195, 'text must start at x=195 right of QR');
-        assert.equal(it.blockW, 200, 'text width must be 200 with QR');
+        assert.equal(it.blockW, 400, 'text width must be 400');
       }
     });
 
@@ -984,11 +983,11 @@ describe('MCP label printing', () => {
       assert.equal(dateLine.y, 164);
     });
 
-    it('with QR: produces large qr item at left', () => {
+    it('with QR: produces qr item at origin with mag=5', () => {
       const items = labLabelItems('PD-001', culture, 'minimal', 55, true);
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'PD-001');
-      assert.equal(items[0].mag, 7);
+      assert.equal(items[0].mag, 5);
       assert.equal(items[0].x, 0);
     });
 
@@ -1180,11 +1179,11 @@ describe('MCP label printing', () => {
       assert.ok(mcpZpl.endsWith('^XZ'), 'footer');
     });
 
-    it('QR label uses mag=7 matching frontend', () => {
+    it('QR label uses mag=5 matching frontend', () => {
       const batch = { species: 'Test', strainName: 'Test' };
       const items = bagLabelItems('FB-001-01', batch, 'minimal', null, true);
       const zpl = itemsToZPL(items);
-      assert.ok(zpl.includes('^BQN,2,7'), 'QR mag must be 7 like frontend');
+      assert.ok(zpl.includes('^BQN,2,5'), 'QR mag must be 5 like frontend');
     });
 
     it('barcode positions match between bag and culture labels for same value', () => {
