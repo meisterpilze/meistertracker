@@ -48,7 +48,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'daily_briefing',
-    "Get today's briefing: batches due today/overdue, open tasks by assignee, low-stock alerts, and today's calendar events",
+    "Get today's operational briefing: batches due/overdue, open tasks by assignee, low-stock alerts, and calendar events. READ-ONLY overview — use other tools to take action on items.",
     { date: z.string().optional().describe('ISO date (YYYY-MM-DD), defaults to today') },
     async ({ date }) => {
       const batches = db.getAllBatches(database);
@@ -112,6 +112,15 @@ function createMcpServer(database, onWrite) {
         return start <= target && end >= target;
       });
 
+      // Maintenance due/overdue
+      let maintenanceDue = [];
+      try {
+        const allDue = db.getMaintenanceDue(database);
+        maintenanceDue = allDue.filter((m) => !m.scheduledDate || m.scheduledDate <= target);
+      } catch (_) {
+        // maintenance_log table may not exist yet
+      }
+
       return json({
         date: target,
         batchesDueToday: dueToday,
@@ -119,6 +128,7 @@ function createMcpServer(database, onWrite) {
         openTaskCount: openTasks.length,
         tasksByAssignee,
         lowStockAlerts: lowStock,
+        maintenanceDue,
         calendarEvents: todayEvents.map((e) => ({
           id: e.id,
           title: e.title,
@@ -136,7 +146,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_batches',
-    'List production batches with optional filters for Pilzsorte (strainId), species, strain, batch type, or date range',
+    'List production batches with optional filters. READ-ONLY listing. To modify batches use update_batch (metadata), add_bags_to_batch (more bags), rename_batch (change ID), or delete_batch (remove entirely).',
     {
       strainId: z
         .number()
@@ -186,7 +196,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_batch_details',
-    'Get full details for a single batch including bags, scan history, harvest totals, and current bag locations',
+    'Get full details for a single batch: bags with current locations, scan history, harvest totals, and per-flush breakdown. READ-ONLY. To modify use update_batch, to record harvests use log_harvest, to move bags use move_bags.',
     { batchId: z.string().describe('Batch ID') },
     async ({ batchId }) => {
       const batch = db.readBatchById(database, batchId);
@@ -221,7 +231,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_zone_overview',
-    'Get all zones with rack counts, current bag counts, and capacity utilization',
+    'Get all zones with rack counts, current bag counts, and capacity utilization. READ-ONLY. To manage zones use manage_zones, to manage racks use manage_racks.',
     {},
     async () => {
       const zones = db.getZonesWithRacks(database).map((z) => {
@@ -248,7 +258,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_inventory_status',
-    'Get current substrate inventory levels, thresholds, and low-stock alerts',
+    'Get current substrate inventory levels, thresholds, low-stock alerts, and recent transactions. READ-ONLY. To log deliveries or usage use update_inventory.',
     {},
     async () => {
       const inv = db.getInventory(database, 20);
@@ -270,7 +280,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_tasks',
-    'List tasks with optional filters for assignee, priority, completion status, or date range',
+    'List team tasks with optional filters for assignee, priority, completion status, or date range. READ-ONLY. To create tasks use create_task, to modify use update_task.',
     {
       assignee: z.string().optional().describe('Filter by assignee name'),
       priority: z.enum(['low', 'med', 'high']).optional().describe('Filter by priority'),
@@ -307,7 +317,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_calendar_events',
-    'Get calendar events within a date range, optionally filtered by category',
+    'Get calendar events within a date range, optionally filtered by category. READ-ONLY. To create events use create_calendar_event.',
     {
       startDate: z.string().optional().describe('ISO date — start of range (default: today)'),
       endDate: z.string().optional().describe('ISO date — end of range (default: 30 days from start)'),
@@ -345,7 +355,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_cultures',
-    'List mushroom cultures with optional filters for type, Pilzsorte (strainId), species, or status',
+    'List mushroom cultures with optional filters for type (MC/PD/LC/G2G), Pilzsorte (strainId), species, or status. READ-ONLY. To modify use update_culture, to delete use delete_culture.',
     {
       type: z.string().optional().describe('Culture type (MC, PD, or LC)'),
       strainId: z
@@ -372,7 +382,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_harvest_report',
-    'Get harvest data aggregated by batch, species, or month with totals and per-flush breakdowns',
+    'Get harvest data aggregated by batch, species, or month with totals and per-flush breakdowns. READ-ONLY. To record a new harvest use log_harvest.',
     {
       groupBy: z.enum(['batch', 'species', 'month']).optional().describe('Aggregation dimension (default: batch)'),
       batchId: z.string().optional().describe('Filter to a specific batch'),
@@ -399,17 +409,27 @@ function createMcpServer(database, onWrite) {
         else if (groupBy === 'species') key = h.species || 'unknown';
         else key = h.time ? h.time.slice(0, 7) : 'unknown'; // month: YYYY-MM
 
-        if (!groups[key]) groups[key] = { totalGrams: 0, count: 0, byFlush: {} };
+        if (!groups[key]) groups[key] = { totalGrams: 0, count: 0, byFlush: {}, byQuality: {} };
         groups[key].totalGrams += h.grams;
         groups[key].count += 1;
         const fKey = 'flush_' + h.flush;
         groups[key].byFlush[fKey] = (groups[key].byFlush[fKey] || 0) + h.grams;
+        const qKey = h.quality || 'ungraded';
+        groups[key].byQuality[qKey] = (groups[key].byQuality[qKey] || 0) + 1;
+      }
+
+      // Overall quality distribution
+      const qualityDist = {};
+      for (const h of harvests) {
+        const q = h.quality || 'ungraded';
+        qualityDist[q] = (qualityDist[q] || 0) + 1;
       }
 
       return json({
         groupBy,
         totalHarvests: harvests.length,
         totalGrams: harvests.reduce((s, h) => s + h.grams, 0),
+        qualityDistribution: qualityDist,
         groups
       });
     }
@@ -417,11 +437,12 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_scan_log',
-    'Get recent scan log entries (bag movements), optionally filtered by batch, bag, action, or date',
+    'Get scan log entries (bag movements/placements/removals) with optional filters. READ-ONLY history. To log new bag movements use move_bags.',
     {
       batchId: z.string().optional().describe('Filter by batch ID'),
       bagId: z.string().optional().describe('Filter by bag ID'),
       action: z.enum(['ADD', 'MOVE', 'REMOVE']).optional().describe('Filter by action type'),
+      reason: z.string().optional().describe('Filter by reason (e.g. contam_tricho, dried_out)'),
       limit: z.number().optional().describe('Max entries to return (default: 50, max: 500)'),
       startDate: z.string().optional().describe('ISO date — entries after this date'),
       endDate: z.string().optional().describe('ISO date — entries before this date')
@@ -432,6 +453,7 @@ function createMcpServer(database, onWrite) {
       if (params.batchId) log = log.filter((e) => e.batch === params.batchId);
       if (params.bagId) log = log.filter((e) => e.bag === params.bagId);
       if (params.action) log = log.filter((e) => e.action === params.action);
+      if (params.reason) log = log.filter((e) => e.reason === params.reason);
       if (params.startDate) log = log.filter((e) => e.time && e.time.slice(0, 10) >= params.startDate);
       if (params.endDate) log = log.filter((e) => e.time && e.time.slice(0, 10) <= params.endDate);
 
@@ -448,7 +470,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_batch',
-    'Create a new production batch with auto-generated bags. Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain/species are stored as free-text fallback.',
+    'Create a new production batch with auto-generated bags. Prefer strainId (use list_mushroom_strains); when omitted, species is required. Does NOT auto-deduct inventory — use update_inventory separately for substrate usage. Does NOT place bags in zones — use move_bags to ADD bags after creation.',
     {
       batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
       strainId: z
@@ -466,12 +488,29 @@ function createMcpServer(database, onWrite) {
       bagKg: z.number().optional().describe('Bag weight in kg (default: 3)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Batch type (default: block)'),
       sourceId: z.string().optional().describe('Source culture ID'),
+      recipeId: z
+        .number()
+        .optional()
+        .describe('Recipe ID — auto-fills substrate fields (hardwood%, wheatbran%, gypsum%, rh%) from recipe'),
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
       try {
         if (!params.strainId && !params.species) {
           return errResult('Either strainId or species is required');
+        }
+        // Apply recipe if provided
+        let subHardwood = params.subHardwood || 0;
+        let subWheatbran = params.subWheatbran || 0;
+        let subRh = params.subRh || 0;
+        let subGypsum = params.subGypsum || false;
+        if (params.recipeId) {
+          const recipe = db.getRecipeById(database, params.recipeId);
+          if (!recipe) return errResult('Recipe not found: ' + params.recipeId);
+          subHardwood = params.subHardwood != null ? params.subHardwood : recipe.hardwoodPct;
+          subWheatbran = params.subWheatbran != null ? params.subWheatbran : recipe.wheatbranPct;
+          subRh = params.subRh != null ? params.subRh : recipe.rhPct;
+          subGypsum = params.subGypsum != null ? params.subGypsum : recipe.gypsumPct > 0;
         }
         const created = new Date().toISOString();
         const due = new Date(Date.now() + params.days * 86400000).toISOString();
@@ -487,10 +526,10 @@ function createMcpServer(database, onWrite) {
           qty: params.qty,
           days: params.days,
           substrate: {
-            hardwood: params.subHardwood || 0,
-            wheatbran: params.subWheatbran || 0,
-            rh: params.subRh || 0,
-            gypsum: params.subGypsum || false
+            hardwood: subHardwood,
+            wheatbran: subWheatbran,
+            rh: subRh,
+            gypsum: subGypsum
           },
           bagKg: params.bagKg || 3,
           batchType: params.batchType || 'block',
@@ -523,7 +562,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_batch',
-    'Update fields on an existing batch (notes, species, strain, strainId, days, due date). Pass strainId to switch Pilzsorte — species/strain will be auto-updated from mushroom_strains. To change qty, use add_bags_to_batch instead — it keeps the inventory log consistent.',
+    'Update batch METADATA ONLY: notes, species, strain, strainId, days, due date. NOT for contamination (→ move_bags with MOVE to contam zone). NOT for harvests/weights (→ log_harvest). NOT for inventory changes (→ update_inventory). NOT for adding bags (→ add_bags_to_batch). Pass strainId to switch Pilzsorte — species/strain auto-update.',
     {
       batchId: z.string().describe('Batch ID'),
       strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
@@ -562,7 +601,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_task',
-    'Create a new task for the team',
+    'Create a team task (todo/work item). ONLY for real team work: cleaning, ordering, maintenance, reviews. NOT for documenting contamination (→ move_bags). NOT for recording harvests (→ log_harvest). NOT for inventory changes (→ update_inventory). NOT for logging bag movements (→ move_bags).',
     {
       text: z.string().describe('Task description'),
       priority: z.enum(['low', 'med', 'high']).optional().describe('Priority (default: med)'),
@@ -591,7 +630,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_task',
-    'Update a task — change text, priority, assignee, due date, description, or mark as done/undone',
+    'Update an existing team task — change text, priority, assignee, due date, description, or mark as done/undone. ONLY for modifying existing tasks. NOT for physical actions like contamination or harvests.',
     {
       id: z.number().describe('Task ID'),
       text: z.string().optional(),
@@ -662,12 +701,14 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'log_harvest',
-    'Record a mushroom harvest with weight, batch, bag, and flush number. Species/strain auto-fill from the batch when omitted; pass strainId to resolve from mushroom_strains instead.',
+    'Record a mushroom harvest with weight in grams. ALWAYS use this tool when grams, weight, or harvest amount is mentioned — NEVER record harvests as notes in update_batch. Species/strain auto-fill from the batch when omitted; pass strainId to resolve from mushroom_strains.',
     {
       batch: z.string().describe('Batch ID'),
       grams: z.number().describe('Harvest weight in grams (>= 0)'),
       bag: z.string().optional().describe('Specific bag ID'),
       flush: z.number().optional().describe('Flush number (default: 1)'),
+      quality: z.enum(['A', 'B', 'C']).optional().describe('Quality grade: A (premium), B (standard), C (low)'),
+      notes: z.string().optional().describe('Harvest notes'),
       strainId: z
         .number()
         .optional()
@@ -700,7 +741,9 @@ function createMcpServer(database, onWrite) {
           species: species || null,
           strain: strain || null,
           grams: params.grams,
-          flush: params.flush || 1
+          flush: params.flush || 1,
+          quality: params.quality || null,
+          notes: params.notes || null
         });
         notify();
         return json({
@@ -709,6 +752,7 @@ function createMcpServer(database, onWrite) {
           batch: params.batch,
           grams: params.grams,
           flush: params.flush || 1,
+          quality: params.quality || null,
           species,
           strain
         });
@@ -720,7 +764,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'move_bags',
-    'Log bag movement(s) between zones/racks. Supports ADD (place bag), MOVE (relocate), and REMOVE (discard)',
+    'Log physical bag movements between zones/racks. Use for ALL physical bag state changes: ADD (place bag in zone), MOVE (relocate — including to contamination zone for contaminated bags), REMOVE (permanently remove bag from zone tracking; scan history preserved). DESTRUCTIVE: REMOVE requires confirm: true. For contamination ALWAYS use MOVE to a contam zone first. Only use REMOVE when user explicitly says entsorgen/wegwerfen/löschen. NOT for recording harvests (→ log_harvest). NOT for batch metadata (→ update_batch).',
     {
       entries: z
         .array(
@@ -729,13 +773,29 @@ function createMcpServer(database, onWrite) {
             bag: z.string().describe('Bag ID'),
             action: z.enum(['ADD', 'MOVE', 'REMOVE']).describe('Movement type'),
             from: z.string().optional().describe('Source zone/rack (required for MOVE/REMOVE)'),
-            to: z.string().optional().describe('Destination zone/rack (required for ADD/MOVE)')
+            to: z.string().optional().describe('Destination zone/rack (required for ADD/MOVE)'),
+            reason: z
+              .string()
+              .optional()
+              .describe(
+                'Reason for MOVE/REMOVE (e.g. contam_tricho, contam_cobweb, contam_bacteria, contam_other, dried_out, damaged, other)'
+              )
           })
         )
-        .describe('Array of bag movements')
+        .describe('Array of bag movements'),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe('Required true for REMOVE actions. Safety confirmation for destructive operations.')
     },
-    async ({ entries }) => {
+    async ({ entries, confirm }) => {
       try {
+        const hasRemove = entries.some((e) => e.action === 'REMOVE');
+        if (hasRemove && confirm !== true) {
+          return errResult(
+            'REMOVE entfernt Bags dauerhaft aus dem Zonen-Tracking (Scan-Historie bleibt erhalten). Bitte mit confirm: true bestätigen. Bei Kontamination besser MOVE in eine Kontam-Zone verwenden.'
+          );
+        }
         const now = new Date().toISOString();
         const enriched = entries.map((e) => {
           const b = db.readBatchById(database, e.batch);
@@ -747,7 +807,8 @@ function createMcpServer(database, onWrite) {
             from: e.from || null,
             to: e.to || null,
             species: b ? b.species : null,
-            strain: b ? b.strain : null
+            strain: b ? b.strain : null,
+            reason: e.reason || null
           };
         });
         const ids = db.appendScanEntries(database, enriched, null);
@@ -761,7 +822,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_inventory',
-    'Log a substrate inventory change (delivery, usage, correction). Materials: hardwood, wheatbran, gypsum, grain',
+    'Log a substrate inventory change: delivery (positive deltaKg), usage (negative deltaKg), or correction. Materials: hardwood, wheatbran, gypsum, grain. ALWAYS use this for stock changes — NEVER record inventory as task (→ create_task) or batch note (→ update_batch).',
     {
       material: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain']).describe('Material type'),
       deltaKg: z.number().describe('Change in kg (positive for delivery, negative for usage)'),
@@ -787,7 +848,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_culture',
-    "Update a mushroom culture's status, notes, Pilzsorte (strainId), species, strain, or source. Pass strainId to switch Pilzsorte — species/strain auto-update from mushroom_strains.",
+    "Update a mushroom culture's metadata: status, notes, Pilzsorte (strainId), species, strain, or source. For status changes like 'contam' use this. NOT for physical bag handling (→ move_bags). Pass strainId to switch Pilzsorte — species/strain auto-update.",
     {
       id: z.string().describe('Culture ID'),
       status: z.string().optional().describe('New status (e.g. active, archived, contaminated)'),
@@ -820,7 +881,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_culture',
-    'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain is stored as free-text fallback.',
+    'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer strainId (use list_mushroom_strains); when omitted, species is required. NOT for creating production batches (→ create_batch).',
     {
       id: z.string().describe('Culture ID (e.g. MC-KINGS-250301-01)'),
       type: z.enum(['MC', 'PD', 'LC', 'G2G']).describe('Culture type'),
@@ -870,7 +931,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_mushroom_strains',
-    'List all Pilzsorten (mushroom strains) with id, name, kuerzel, description. Use the id with create_batch / create_culture / update_batch / update_culture / log_harvest.',
+    'List all Pilzsorten (mushroom strains) with id, name, kuerzel, description. READ-ONLY. Use the returned id with create_batch, create_culture, update_batch, update_culture, or log_harvest to link to a strain.',
     {},
     async () => {
       return json(db.listMushroomStrains(database));
@@ -928,7 +989,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'delete_mushroom_strain',
-    'Delete a Pilzsorte. Fails if it is still referenced by any batch or culture (delete protection).',
+    'Delete a Pilzsorte. DESTRUCTIVE — fails safely if still referenced by any batch or culture (delete protection). Cannot be undone.',
     {
       id: z.number().describe('Pilzsorte id')
     },
@@ -941,6 +1002,644 @@ function createMcpServer(database, onWrite) {
       } catch (e) {
         return errResult(e.message);
       }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // ZONE & RACK MANAGEMENT
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_zones({ action: 'create', id: 'fruiting-2', name: 'Fruiting Room 2', role: 'fruiting' })
+  server.tool(
+    'manage_zones',
+    'Create, rename, delete, or reorder zones. Actions: create (new zone), rename (change name), delete (remove empty zone), reorder (set sort order). READ zones with get_zone_overview. NOT for racks (→ manage_racks).',
+    {
+      action: z.enum(['create', 'rename', 'delete', 'reorder']).describe('Action to perform'),
+      id: z.string().optional().describe('Zone ID (required for create/rename/delete)'),
+      name: z.string().optional().describe('Zone name (required for create/rename)'),
+      role: z
+        .string()
+        .optional()
+        .describe('Zone role: spawn, incubation, fruiting, contaminated, storage (for create)'),
+      color: z.string().optional().describe('Hex color e.g. #4CAF50 (for create)'),
+      maxCapacity: z.number().optional().describe('Max bag capacity (for create)'),
+      order: z.array(z.string()).optional().describe('Array of zone IDs in desired order (for reorder)')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.id || !params.name) return errResult('id and name are required for create');
+            db.insertZone(database, {
+              id: params.id,
+              name: params.name,
+              role: params.role || null,
+              color: params.color || null,
+              maxCapacity: params.maxCapacity || null,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: params.id, name: params.name });
+          }
+          case 'rename': {
+            if (!params.id || !params.name) return errResult('id and name are required for rename');
+            db.renameZoneName(database, params.id, params.name);
+            notify();
+            return json({ success: true, action: 'rename', id: params.id, newName: params.name });
+          }
+          case 'delete': {
+            if (!params.id) return errResult('id is required for delete');
+            db.deleteZone(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          case 'reorder': {
+            if (!params.order || !params.order.length) return errResult('order array is required for reorder');
+            db.reorderZones(database, params.order);
+            notify();
+            return json({ success: true, action: 'reorder', order: params.order });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: manage_racks({ action: 'create', id: 'R-FRUIT2-01', zoneId: 'fruiting-2' })
+  server.tool(
+    'manage_racks',
+    'Create or delete racks within zones. Actions: create (new rack in zone), delete (remove empty rack). View racks via get_zone_overview. NOT for zones (→ manage_zones).',
+    {
+      action: z.enum(['create', 'delete']).describe('Action to perform'),
+      id: z.string().optional().describe('Rack ID (required for create/delete)'),
+      zoneId: z.string().optional().describe('Zone ID (required for create)')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.id || !params.zoneId) return errResult('id and zoneId are required for create');
+            db.insertRack(database, {
+              id: params.id,
+              zoneId: params.zoneId,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: params.id, zoneId: params.zoneId });
+          }
+          case 'delete': {
+            if (!params.id) return errResult('id is required for delete');
+            db.deleteRack(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // BATCH EXTENSIONS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: add_bags_to_batch({ batchId: 'FB-2025-042', count: 5 })
+  server.tool(
+    'add_bags_to_batch',
+    'Add more bags to an existing batch. Generates new bag IDs sequentially. Use this instead of update_batch when you need more bags — it keeps inventory log consistent.',
+    {
+      batchId: z.string().describe('Batch ID'),
+      count: z.number().describe('Number of bags to add (>= 1)')
+    },
+    async (params) => {
+      try {
+        const batch = db.readBatchById(database, params.batchId);
+        if (!batch) return errResult('Batch not found: ' + params.batchId);
+        const existingCount = batch.bags.length;
+        const newBags = [];
+        for (let i = 1; i <= params.count; i++) {
+          newBags.push(params.batchId + '-' + String(existingCount + i).padStart(2, '0'));
+        }
+        const result = db.addBagsToBatch(database, params.batchId, newBags, existingCount + params.count);
+        notify();
+        return json({
+          success: true,
+          batchId: params.batchId,
+          newBags,
+          totalBags: existingCount + params.count,
+          bagBarcodes: result.bagBarcodes
+        });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: delete_batch({ batchId: 'FB-2025-042', confirm: true })
+  server.tool(
+    'delete_batch',
+    'Delete a batch with ALL its bags, scan entries, and harvests. DESTRUCTIVE — cannot be undone. Reverses inventory deltas. Requires confirm: true.',
+    {
+      batchId: z.string().describe('Batch ID to delete'),
+      confirm: z.boolean().optional().describe('Must be true to confirm deletion')
+    },
+    async (params) => {
+      try {
+        if (params.confirm !== true) {
+          return errResult(
+            'delete_batch löscht den Batch mit ALLEN Bags, Scan-Einträgen und Ernten unwiderruflich. Bitte mit confirm: true bestätigen.'
+          );
+        }
+        const batch = db.readBatchById(database, params.batchId);
+        if (!batch) return errResult('Batch not found: ' + params.batchId);
+        db.deleteBatchById(database, params.batchId);
+        notify();
+        return json({ success: true, batchId: params.batchId, deletedBags: batch.bags.length });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: rename_batch({ oldId: 'FB-2025-042', newId: 'FB-2025-043' })
+  server.tool(
+    'rename_batch',
+    'Rename a batch ID. Updates all references in bags, scan_log, harvests, and inventory_log. NOT for metadata changes (→ update_batch).',
+    {
+      oldId: z.string().describe('Current batch ID'),
+      newId: z.string().describe('New batch ID')
+    },
+    async (params) => {
+      try {
+        db.renameBatch(database, params.oldId, params.newId);
+        notify();
+        return json({ success: true, oldId: params.oldId, newId: params.newId });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // CULTURE EXTENSIONS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: delete_culture({ id: 'MC-KINGS-250301-01', confirm: true })
+  server.tool(
+    'delete_culture',
+    'Delete a mushroom culture. DESTRUCTIVE — cannot be undone. Requires confirm: true. Consider setting status to "contam" or "used" via update_culture instead.',
+    {
+      id: z.string().describe('Culture ID to delete'),
+      confirm: z.boolean().optional().describe('Must be true to confirm deletion')
+    },
+    async (params) => {
+      try {
+        if (params.confirm !== true) {
+          return errResult(
+            'delete_culture löscht die Kultur unwiderruflich. Bitte mit confirm: true bestätigen. Alternativ: update_culture mit status "contam" oder "used".'
+          );
+        }
+        const removed = db.deleteCulture(database, params.id);
+        if (!removed) return errResult('Culture not found: ' + params.id);
+        notify();
+        return json({ success: true, id: params.id });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: get_culture_details({ id: 'MC-KINGS-250301-01' })
+  server.tool(
+    'get_culture_details',
+    'Get full details for a single culture including strain info, lineage (parent + children), and batches created from it. READ-ONLY. To modify use update_culture.',
+    {
+      id: z.string().describe('Culture ID')
+    },
+    async (params) => {
+      const culture = db.getCultureById(database, params.id);
+      if (!culture) return errResult('Culture not found: ' + params.id);
+      return json(culture);
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // BARCODES
+  // ──────────────────────────────────────────────────────────
+
+  // Example: lookup_barcode({ barcode: 1000042 })
+  server.tool(
+    'lookup_barcode',
+    'Resolve a numeric barcode to its entity (bag, culture, asset, zone, rack). Returns entity_type and entity_id. READ-ONLY.',
+    {
+      barcode: z.number().describe('Numeric barcode to look up')
+    },
+    async (params) => {
+      const result = db.lookupBarcode(database, params.barcode);
+      if (!result) return errResult('Barcode not found: ' + params.barcode);
+      return json(result);
+    }
+  );
+
+  // Example: assign_barcode({ entityType: 'bag', entityId: 'FB-2025-042-01' })
+  server.tool(
+    'assign_barcode',
+    'Assign a numeric barcode to an entity (bag, culture, asset, zone, rack). Returns existing barcode if already assigned (idempotent).',
+    {
+      entityType: z.enum(['bag', 'culture', 'asset', 'zone', 'rack']).describe('Entity type'),
+      entityId: z.string().describe('Entity ID')
+    },
+    async (params) => {
+      try {
+        const barcode = db.assignBarcode(database, params.entityType, params.entityId);
+        notify();
+        return json({ success: true, barcode, entityType: params.entityType, entityId: params.entityId });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: list_barcodes()
+  server.tool('list_barcodes', 'List all assigned barcodes with their entity type and ID. READ-ONLY.', {}, async () => {
+    return json(db.getAllBarcodes(database));
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // ASSETS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_assets({ action: 'create', assetId: 'AK-001', name: 'Autoklav', category: 'Sterilisation', purchasePrice: 2500 })
+  server.tool(
+    'manage_assets',
+    'Create, update, delete, or list equipment/assets. Actions: list (all assets), create/update (upsert by assetId), delete (remove asset). NOT for inventory/substrate (→ update_inventory).',
+    {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
+      assetId: z.string().optional().describe('Asset ID (required for create/update/delete)'),
+      name: z.string().optional().describe('Asset name (required for create)'),
+      category: z.string().optional().describe('Category (required for create)'),
+      entryDate: z.string().optional().describe('Entry date ISO (default: today)'),
+      exitDate: z.string().optional().describe('Exit/disposal date ISO'),
+      purchasePrice: z.number().optional().describe('Purchase price (required for create)'),
+      usefulLife: z.number().optional().describe('Useful life in years (required for create)'),
+      depreciationMethod: z.string().optional().describe('Depreciation method (default: linear)'),
+      supplier: z.string().optional().describe('Supplier name'),
+      invoiceNumber: z.string().optional().describe('Invoice number'),
+      serialNumber: z.string().optional().describe('Serial number'),
+      location: z.string().optional().describe('Current location'),
+      status: z.string().optional().describe('Status (default: aktiv)'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'list':
+            return json(db.listAssets(database));
+          case 'create':
+          case 'update': {
+            if (!params.assetId) return errResult('assetId is required');
+            if (
+              params.action === 'create' &&
+              (!params.name || !params.category || params.purchasePrice == null || params.usefulLife == null)
+            ) {
+              return errResult('name, category, purchasePrice, and usefulLife are required for create');
+            }
+            const result = db.upsertAsset(database, {
+              assetId: params.assetId,
+              name: params.name || '',
+              category: params.category || '',
+              entryDate: params.entryDate || today(),
+              exitDate: params.exitDate || null,
+              purchasePrice: params.purchasePrice || 0,
+              usefulLife: params.usefulLife || 0,
+              depreciationMethod: params.depreciationMethod || 'linear',
+              supplier: params.supplier || null,
+              invoiceNumber: params.invoiceNumber || null,
+              serialNumber: params.serialNumber || null,
+              location: params.location || null,
+              status: params.status || 'aktiv',
+              notes: params.notes || '',
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: params.action, assetId: params.assetId, barcode: result.barcode });
+          }
+          case 'delete': {
+            if (!params.assetId) return errResult('assetId is required for delete');
+            db.deleteAssetById(database, params.assetId);
+            notify();
+            return json({ success: true, action: 'delete', assetId: params.assetId });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // SUPPLIERS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_suppliers({ action: 'list' })
+  // Example: manage_suppliers({ action: 'create', mat: 'hardwood', name: 'Holz GmbH', url: 'https://holz.de' })
+  server.tool(
+    'manage_suppliers',
+    'Create, update, delete, or list substrate suppliers. Actions: list, create/update (upsert), delete. Suppliers are linked to materials: hardwood, wheatbran, gypsum, grain.',
+    {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
+      id: z.number().optional().describe('Supplier ID (required for update/delete)'),
+      mat: z
+        .enum(['hardwood', 'wheatbran', 'gypsum', 'grain'])
+        .optional()
+        .describe('Material type (required for create)'),
+      name: z.string().optional().describe('Supplier name (required for create)'),
+      url: z.string().optional().describe('Website URL'),
+      phone: z.string().optional().describe('Phone number'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'list':
+            return json(db.listSuppliers(database));
+          case 'create':
+          case 'update': {
+            if (params.action === 'create' && (!params.mat || !params.name)) {
+              return errResult('mat and name are required for create');
+            }
+            const id = db.upsertSupplier(database, {
+              id: params.id || undefined,
+              mat: params.mat,
+              name: params.name,
+              url: params.url || null,
+              phone: params.phone || null,
+              notes: params.notes || null
+            });
+            notify();
+            return json({ success: true, action: params.action, id: Number(id) });
+          }
+          case 'delete': {
+            if (params.id == null) return errResult('id is required for delete');
+            db.deleteSupplier(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // KPI
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_kpi_history({ limit: 30 })
+  server.tool(
+    'get_kpi_history',
+    'Get KPI snapshots: yield/bag, contamination rate, bags created, stock levels, pipeline counts over time. READ-ONLY historical data.',
+    {
+      limit: z.number().optional().describe('Max snapshots to return (default: all, most recent first)')
+    },
+    async (params) => {
+      return json(db.getKpiSnapshots(database, params.limit || undefined));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // USERS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: list_users()
+  server.tool(
+    'list_users',
+    'List all users with their IDs, usernames, roles, and creation dates. READ-ONLY. Useful for assigneeIds in calendar events.',
+    {},
+    async () => {
+      return json(db.listUsers(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // CONTAMINATION REPORT
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_contamination_report({ groupBy: 'species', startDate: '2025-01-01' })
+  server.tool(
+    'get_contamination_report',
+    'Get contamination statistics grouped by species, zone, or month. Shows contamination counts and reason breakdown. READ-ONLY. To log contamination use move_bags with reason.',
+    {
+      groupBy: z.enum(['species', 'zone', 'month']).optional().describe('Aggregation dimension (default: month)'),
+      startDate: z.string().optional().describe('ISO date — start of range'),
+      endDate: z.string().optional().describe('ISO date — end of range')
+    },
+    async (params) => {
+      return json(db.getContaminationReport(database, params.groupBy || 'month', params.startDate, params.endDate));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // RECIPES
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_recipes({ action: 'create', name: 'Standard HK35', hardwoodPct: 80, wheatbranPct: 20, rhPct: 65 })
+  server.tool(
+    'manage_recipes',
+    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, gypsum%, rh% for quick batch creation. Use recipeId in create_batch to auto-fill substrate fields.',
+    {
+      action: z.enum(['create', 'update', 'delete']).describe('Action to perform'),
+      id: z.number().optional().describe('Recipe ID (required for update/delete)'),
+      name: z.string().optional().describe('Recipe name (required for create, unique)'),
+      hardwoodPct: z.number().optional().describe('Hardwood percentage'),
+      wheatbranPct: z.number().optional().describe('Wheat bran percentage'),
+      gypsumPct: z.number().optional().describe('Gypsum percentage'),
+      rhPct: z.number().optional().describe('Relative humidity percentage'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.name) return errResult('name is required for create');
+            const id = db.insertRecipe(database, {
+              name: params.name,
+              hardwood_pct: params.hardwoodPct || 0,
+              wheatbran_pct: params.wheatbranPct || 0,
+              gypsum_pct: params.gypsumPct || 0,
+              rh_pct: params.rhPct || 0,
+              notes: params.notes || null,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: Number(id), name: params.name });
+          }
+          case 'update': {
+            if (params.id == null) return errResult('id is required for update');
+            db.updateRecipe(database, params.id, {
+              name: params.name,
+              hardwood_pct: params.hardwoodPct,
+              wheatbran_pct: params.wheatbranPct,
+              gypsum_pct: params.gypsumPct,
+              rh_pct: params.rhPct,
+              notes: params.notes
+            });
+            notify();
+            return json({ success: true, action: 'update', id: params.id });
+          }
+          case 'delete': {
+            if (params.id == null) return errResult('id is required for delete');
+            const removed = db.deleteRecipe(database, params.id);
+            if (!removed) return errResult('Recipe not found: ' + params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: list_recipes()
+  server.tool(
+    'list_recipes',
+    'List all substrate recipes with their compositions. READ-ONLY. Use manage_recipes to create/update/delete.',
+    {},
+    async () => {
+      return json(db.getAllRecipes(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // TRACEABILITY
+  // ──────────────────────────────────────────────────────────
+
+  // Example: trace_lineage({ entityType: 'batch', entityId: 'FB-2025-042' })
+  server.tool(
+    'trace_lineage',
+    'Trace the origin chain of a batch or culture backwards: batch → source culture → parent culture → ... Shows the full production genealogy. READ-ONLY.',
+    {
+      entityType: z.enum(['batch', 'culture']).describe('Type of entity to trace'),
+      entityId: z.string().describe('Batch ID or Culture ID')
+    },
+    async (params) => {
+      return json({ chain: db.traceLineageBack(database, params.entityType, params.entityId) });
+    }
+  );
+
+  // Example: trace_forward({ cultureId: 'MC-KINGS-250301-01' })
+  server.tool(
+    'trace_forward',
+    'Trace everything produced from a culture forward: child cultures, batches, and harvests. Shows the complete downstream output. READ-ONLY.',
+    {
+      cultureId: z.string().describe('Culture ID to trace from')
+    },
+    async (params) => {
+      return json(db.traceLineageForward(database, params.cultureId));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // PRODUCTION PIPELINE
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_production_pipeline()
+  server.tool(
+    'get_production_pipeline',
+    'Get a full production pipeline overview: active cultures by type/status, batches by type and phase (incubating vs ready), bags per zone with capacity utilization. READ-ONLY snapshot of the entire operation.',
+    {},
+    async () => {
+      return json(db.getProductionPipeline(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // MAINTENANCE
+  // ──────────────────────────────────────────────────────────
+
+  // Example: schedule_maintenance({ type: 'autoclave_cycle', assetId: 'AK-001', scheduledDate: '2025-04-15' })
+  server.tool(
+    'schedule_maintenance',
+    'Schedule a maintenance task for an asset or zone (e.g. autoclave cycle, HEPA filter change, laminar flow cleaning). Creates an open maintenance entry with a due date.',
+    {
+      type: z.string().describe('Maintenance type (e.g. autoclave_cycle, hepa_filter, cleaning, calibration)'),
+      assetId: z.string().optional().describe('Asset ID (for equipment maintenance)'),
+      zoneId: z.string().optional().describe('Zone ID (for room/zone maintenance)'),
+      description: z.string().optional().describe('Detailed description'),
+      scheduledDate: z.string().optional().describe('ISO date when maintenance is due'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        if (!params.assetId && !params.zoneId) {
+          return errResult('Either assetId or zoneId is required');
+        }
+        const id = db.insertMaintenance(database, {
+          assetId: params.assetId || null,
+          zoneId: params.zoneId || null,
+          type: params.type,
+          description: params.description || null,
+          scheduledDate: params.scheduledDate || null,
+          notes: params.notes || null
+        });
+        notify();
+        return json({ success: true, id: Number(id), type: params.type });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: complete_maintenance({ id: 1, completedBy: 'Julian' })
+  server.tool(
+    'complete_maintenance',
+    'Mark a scheduled maintenance task as completed. Records who completed it and when.',
+    {
+      id: z.number().describe('Maintenance log entry ID'),
+      completedBy: z.string().optional().describe('Name of person who completed the maintenance'),
+      notes: z.string().optional().describe('Completion notes')
+    },
+    async (params) => {
+      try {
+        db.completeMaintenance(database, params.id, params.completedBy || null, params.notes || null);
+        notify();
+        return json({ success: true, id: params.id });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: get_maintenance_due()
+  server.tool(
+    'get_maintenance_due',
+    'Get all due/overdue maintenance tasks (not yet completed). READ-ONLY. To schedule new maintenance use schedule_maintenance, to complete use complete_maintenance.',
+    {
+      assetId: z.string().optional().describe('Filter by asset ID'),
+      zoneId: z.string().optional().describe('Filter by zone ID'),
+      limit: z.number().optional().describe('Max entries (for history)')
+    },
+    async (params) => {
+      if (params.assetId || params.zoneId || params.limit) {
+        return json(
+          db.getMaintenanceHistory(database, params.assetId || null, params.zoneId || null, params.limit || 50)
+        );
+      }
+      return json(db.getMaintenanceDue(database));
     }
   );
 
