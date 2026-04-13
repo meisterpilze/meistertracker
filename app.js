@@ -5,16 +5,32 @@
 // ─── I18N ────────────────────────────────────────────────────
 let currentLang = localStorage.getItem('mp-lang') || 'de';
 const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };
-function loc() { return LOCALE_MAP[currentLang]; }
-function fmtDt(d){if(!(d instanceof Date))d=new Date(d);const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=String(d.getFullYear()).slice(-2);return dd+'.'+mm+'.'+yy}
-function fmtDtTime(d){if(!(d instanceof Date))d=new Date(d);return fmtDt(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
-function fmtDtShort(d){if(!(d instanceof Date))d=new Date(d);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')}
+function loc() {
+  return LOCALE_MAP[currentLang];
+}
+function fmtDt(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  const dd = String(d.getDate()).padStart(2, '0'),
+    mm = String(d.getMonth() + 1).padStart(2, '0'),
+    yy = String(d.getFullYear()).slice(-2);
+  return dd + '.' + mm + '.' + yy;
+}
+function fmtDtTime(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return fmtDt(d) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function fmtDtShort(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
+}
 function t(key, params) {
   const str = (LANG[currentLang] && LANG[currentLang][key]) || (LANG['en'] && LANG['en'][key]) || key;
   if (!params) return str;
-  return str.replace(/\{(\w+)\}/g, (_, k) => params[k] !== undefined ? params[k] : '{'+k+'}');
+  return str.replace(/\{(\w+)\}/g, (_, k) => (params[k] !== undefined ? params[k] : '{' + k + '}'));
 }
-function tp(key, n) { return t(key + (n === 1 ? '.one' : '.other'), { n }); }
+function tp(key, n) {
+  return t(key + (n === 1 ? '.one' : '.other'), { n });
+}
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem('mp-lang', lang);
@@ -23,11 +39,21 @@ function setLang(lang) {
   refresh();
 }
 function translatePage() {
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
-  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
-  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
+  });
   document.documentElement.lang = currentLang;
 }
 const LANG = {
@@ -224,8 +250,10 @@ const LANG = {
     'dash.harvested': 'Harvested',
     'dash.rackN': 'Rack {n}',
     'dash.legend.title': 'Color guide',
-    'dash.legend.species': 'Colored left stripe on batch cards — each species gets its own color so you can spot them at a glance.',
-    'dash.legend.zoneDot': 'Zone dot in section headers — shows the color of each location (configured in Tools → Zones).',
+    'dash.legend.species':
+      'Colored left stripe on batch cards — each species gets its own color so you can spot them at a glance.',
+    'dash.legend.zoneDot':
+      'Zone dot in section headers — shows the color of each location (configured in Tools → Zones).',
     'dash.legend.orangeDot': 'Orange dot in batch tasks — warning, task due soon or needs attention.',
     'dash.legend.redDot': 'Red dot in batch tasks — urgent, overdue or critical action required.',
     'dash.legend.overdue': 'Pink-tinted batch card — batch is overdue (past its due date but still in incubation).',
@@ -421,7 +449,8 @@ const LANG = {
     'th.parent': 'Parent',
     // Print
     'print.printerInfo': 'Printing directly to ZDesigner GK420d',
-    'print.printerInfoDetail': 'via the server \u2014 no dialog needed. Make sure the server is running and the printer is on.',
+    'print.printerInfoDetail':
+      'via the server \u2014 no dialog needed. Make sure the server is running and the printer is on.',
     'print.bagLabels': 'Bag labels',
     'print.labLabels': 'Lab labels',
     'print.refBarcodes': 'Reference barcodes',
@@ -495,7 +524,8 @@ const LANG = {
     'days.inDays': 'Due in {n} days',
     // Team
     'team.members': 'Team members',
-    'team.membersDesc': 'Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.',
+    'team.membersDesc':
+      'Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.',
     'team.noMembers': 'No team members yet. Add your first member below.',
     'team.name': 'Name',
     'team.role': 'Role (optional)',
@@ -505,7 +535,8 @@ const LANG = {
     'team.removeBtn': 'Remove',
     // CalDAV
     'caldav.title': 'CalDAV calendar server',
-    'caldav.desc': 'This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.',
+    'caldav.desc':
+      'This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird, DAVx5 on Android) to see your tasks.',
     'caldav.urlTitle': 'CalDAV URL (use this in your calendar app)',
     'caldav.password': 'Optional: protect with password',
     'caldav.username': 'Username',
@@ -522,31 +553,41 @@ const LANG = {
     'caldav.howToConnect': 'How to connect',
     'caldav.howItWorks': 'How it works',
     'caldav.copyUrl': 'Copy URL',
-    'caldav.loginHint': '<strong>Login:</strong> Use your account login (username &amp; password) to sign in to the calendar app.',
-    'caldav.hiwShared': '<strong>Shared calendar (<code>meisterpilze</code>):</strong> All tasks, events and batch due dates land here. Everyone on the farm sees this calendar.',
-    'caldav.hiwPersonal': '<strong>Personal calendars (<code>username</code>):</strong> Every user account automatically gets its own calendar. Assigned tasks appear there as well.',
-    'caldav.hiwVisibility': '<strong>Visibility:</strong> By default every task is visible to everyone (in the shared calendar). Individual tasks can be marked "assignee only" \u2014 they will then only show up in the personal calendar.',
-    'caldav.hiwTwoWay': '<strong>Two-way sync:</strong> Tasks are stored as calendar files on the server. Calendar apps read them via CalDAV. Changes made in the calendar app are synced back.',
+    'caldav.loginHint':
+      '<strong>Login:</strong> Use your account login (username &amp; password) to sign in to the calendar app.',
+    'caldav.hiwShared':
+      '<strong>Shared calendar (<code>meisterpilze</code>):</strong> All tasks, events and batch due dates land here. Everyone on the farm sees this calendar.',
+    'caldav.hiwPersonal':
+      '<strong>Personal calendars (<code>username</code>):</strong> Every user account automatically gets its own calendar. Assigned tasks appear there as well.',
+    'caldav.hiwVisibility':
+      '<strong>Visibility:</strong> By default every task is visible to everyone (in the shared calendar). Individual tasks can be marked "assignee only" \u2014 they will then only show up in the personal calendar.',
+    'caldav.hiwTwoWay':
+      '<strong>Two-way sync:</strong> Tasks are stored as calendar files on the server. Calendar apps read them via CalDAV. Changes made in the calendar app are synced back.',
     // DuckDNS / Let's Encrypt / Server
     'duckdns.title': 'DuckDNS dynamic DNS',
-    'duckdns.desc': 'Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated automatically every 5 minutes.',
+    'duckdns.desc':
+      'Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated automatically every 5 minutes.',
     'duckdns.enable': 'Enable DuckDNS',
     'duckdns.subdomain': 'Subdomain',
     'duckdns.subdomainPlaceholder': 'myserver',
     'duckdns.token': 'DuckDNS token',
-    'duckdns.tokenHint': 'You can find the token on <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> after login.',
+    'duckdns.tokenHint':
+      'You can find the token on <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> after login.',
     'duckdns.updateNow': 'Update IP now',
     'le.title': "Let's Encrypt TLS certificate",
-    'le.desc': "Free, trusted TLS certificate from Let's Encrypt for your DuckDNS domain. Replaces the self-signed certificate. Auto-renewed before expiry.",
+    'le.desc':
+      "Free, trusted TLS certificate from Let's Encrypt for your DuckDNS domain. Replaces the self-signed certificate. Auto-renewed before expiry.",
     'le.enableAutoRenew': "Enable Let's Encrypt auto-renewal",
     'le.requestNow': 'Request certificate now',
     'le.note': 'No extra software required \u2014 works on all operating systems (Linux, macOS, Windows).',
     'server.info': 'Server info',
     'server.updateRestart': 'Update & restart',
-    'server.updateDesc': 'Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.',
+    'server.updateDesc':
+      'Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.',
     'server.updateBtn': 'Update & restart server',
     'migrate.title': 'One-time data migration',
-    'migrate.desc': 'Renames all existing batch IDs to the new Kürzel format (e.g. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Shows a preview of all changes before applying them.',
+    'migrate.desc':
+      'Renames all existing batch IDs to the new Kürzel format (e.g. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Shows a preview of all changes before applying them.',
     'migrate.btn': 'Migrate batch IDs',
     // More / Settings
     'settings.scanLog': 'Scan log',
@@ -558,13 +599,16 @@ const LANG = {
     'settings.clearLogMsg': 'Permanently deletes all {n} scan entries. Batches and harvests are not deleted.',
     'settings.clearLogBtn': 'Yes, clear everything',
     'settings.downloadBackupTitle': 'Download backup',
-    'settings.downloadBackupDesc': 'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
+    'settings.downloadBackupDesc':
+      'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
     'settings.downloadBackupBtn': 'Download backup',
     'settings.restoreBackupTitle': 'Restore backup',
-    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml':
+      'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
     'settings.restoreBtn': 'Restore',
     'settings.syncInfo': 'Sync info',
-    'settings.syncInfoDesc': 'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
+    'settings.syncInfoDesc':
+      'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
     'settings.restoreBackup': 'Restore this backup?',
     'settings.restoreMsg': 'Replaces ALL data on the server for all users. Cannot be undone.',
     'settings.restoreConfirm': 'Yes, restore',
@@ -585,7 +629,8 @@ const LANG = {
     'inv.logDelivery': 'Log delivery',
     'inv.usageLog': 'Usage log',
     'inv.alertThresholds': 'Alert thresholds',
-    'inv.alertThresholdsDesc': 'Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".',
+    'inv.alertThresholdsDesc':
+      'Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".',
     'inv.lowStock': 'LOW STOCK',
     'inv.alertBelow': 'Alert below {n}kg',
     'inv.logDeliveryBtn': '+ Log delivery',
@@ -609,9 +654,11 @@ const LANG = {
     'inv.enterQty': 'Enter a quantity greater than 0',
     'inv.enterAmount': 'Enter either a new total or an adjustment amount',
     'inv.grainBags': '\u2248 {n} grain bags @ {kg}kg each',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>',
+    'inv.blocks':
+      '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>',
     'inv.avgComposition': 'Average composition used for estimates',
-    'inv.avgCompDesc': 'These averages are used to calculate "\u007eX bags" on the stock cards. They are <strong>estimates only</strong> \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
+    'inv.avgCompDesc':
+      'These averages are used to calculate "\u007eX bags" on the stock cards. They are <strong>estimates only</strong> \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
     'inv.hardwoodPct': 'Hardwood %',
     'inv.wheatBranPct': 'Wheat bran %',
     'inv.waterPct': 'Water % (RH)',
@@ -664,7 +711,8 @@ const LANG = {
     'assets.deleteMsg': 'Asset {id} will be permanently deleted.',
     'assets.deleteBtn': 'Yes, delete',
     'assets.csvExport': 'CSV Export',
-    'assets.csvDesc': 'Complete inventory list with all fields and calculated depreciation values as CSV for the tax advisor.',
+    'assets.csvDesc':
+      'Complete inventory list with all fields and calculated depreciation values as CSV for the tax advisor.',
     'assets.exportCsv': 'Export CSV',
     'assets.cutoffInv': 'Cut-off date inventory',
     'assets.cutoffDate': 'Cut-off date',
@@ -842,15 +890,18 @@ const LANG = {
     'settings.bag': 'Bag',
     'settings.from': 'From',
     'settings.to': 'To',
-    'settings.restoreDescHtml': 'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
+    'settings.restoreDescHtml':
+      'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
     'mcp.title': 'MCP Server',
-    'mcp.desc': 'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Claude connects automatically via OAuth \u2014 just paste the URL.',
+    'mcp.desc':
+      'Allows Claude and other AI assistants to access the MeisterTracker database via the Model Context Protocol. Claude connects automatically via OAuth \u2014 just paste the URL.',
     'mcp.enable': 'Enable MCP server',
     'mcp.connectorUrl': 'Connector URL',
     'mcp.copy': 'Copy',
     'mcp.apiKey': 'API Key (scripts / automation)',
     'mcp.generateKey': 'Generate API key',
-    'mcp.keyHint': 'For scripts or tools that cannot use OAuth. Use as Bearer token in the Authorization header. The key is only shown once.',
+    'mcp.keyHint':
+      'For scripts or tools that cannot use OAuth. Use as Bearer token in the Authorization header. The key is only shown once.',
     'mcp.save': 'Save',
     'mcp.active': 'MCP server active',
     'mcp.noKey': 'MCP enabled \u2014 ready to connect via OAuth.',
@@ -877,13 +928,15 @@ const LANG = {
     'mcp.activeSessions': 'Sessions',
     'mcp.deleteClient': 'Delete',
     'mcp.confirmDelete': 'Delete this client? All its active sessions will be revoked.',
-    'mcp.confirmDeleteAuto': 'Revoke this auto-registered client? Claude will register a new client on its next connection.',
+    'mcp.confirmDeleteAuto':
+      'Revoke this auto-registered client? Claude will register a new client on its next connection.',
     'mcp.clientDeleted': 'Client deleted.',
     'mcp.step1': '1. Enable MCP server and save',
     'mcp.step2': '2. Copy the connector URL above',
     'mcp.step3': '3. In Claude: Settings \u2192 Connectors \u2192 Add \u2192 paste the URL',
     'mcp.step4': '4. Log in when prompted \u2014 done! Claude connects automatically via OAuth.',
-    'mcp.features': 'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
+    'mcp.features':
+      'Available features: Daily briefing, manage batches, tasks, calendar, inventory, harvests, cultures, zone overview',
     'todo.taskPlaceholder': 'e.g. Clean humidity tent',
     'todo.descPlaceholder': 'Additional details...',
     'inv.hardwood': 'Hardwood pellets',
@@ -938,7 +991,8 @@ const LANG = {
     'asset.save': 'Save',
     'asset.reset': 'Reset',
     'asset.csvExport': 'CSV Export',
-    'asset.csvExportDesc': 'Complete inventory list with all fields and calculated depreciation values as CSV for the tax advisor.',
+    'asset.csvExportDesc':
+      'Complete inventory list with all fields and calculated depreciation values as CSV for the tax advisor.',
     'asset.exportCsv': 'Export CSV',
     'asset.cutoffInventory': 'Cut-off date inventory',
     'asset.cutoffDate': 'Cut-off date',
@@ -976,7 +1030,8 @@ const LANG = {
     'zones.errTooManyRacks': 'Too many racks (max. 50)',
     'zones.hasBags': '{count} bags — remove first',
     'zones.directBags': '{count} not in rack',
-    'zones.directBagsHint': 'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
+    'zones.directBagsHint':
+      'These bags were scanned to the zone, not a specific rack. Move them to a rack for accurate tracking.',
     'zones.dragToReorder': 'Drag to reorder',
     'zones.edit': 'Edit',
     'zones.editTitle': 'Edit Zone',
@@ -1113,9 +1168,12 @@ const LANG = {
     'log.loadMore': 'Load more...',
     'settings.encryptPwPh': 'Encryption password',
     'settings.decryptPwPh': 'Decryption password',
-    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Calendar:</strong> Add a new \u201cCalDAV\u201d or \u201cnetwork calendar\u201d and paste the CalDAV URL above.',
-    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with \u201cLogin with URL\u201d and paste the URL.',
-    'caldav.howApple': '<strong>Apple Calendar (iPhone/Mac):</strong> Settings \u2192 Calendar \u2192 Accounts \u2192 Add CalDAV account. Server = the URL above.',
+    'caldav.howThunderbird':
+      '<strong>Thunderbird / GNOME Calendar:</strong> Add a new \u201cCalDAV\u201d or \u201cnetwork calendar\u201d and paste the CalDAV URL above.',
+    'caldav.howAndroid':
+      '<strong>Android (DAVx5):</strong> Install DAVx5 from F-Droid or Play Store. Add account with \u201cLogin with URL\u201d and paste the URL.',
+    'caldav.howApple':
+      '<strong>Apple Calendar (iPhone/Mac):</strong> Settings \u2192 Calendar \u2192 Accounts \u2192 Add CalDAV account. Server = the URL above.',
     'inv.delKgPh': 'e.g. 1000 or 847.5',
     'inv.delNotePh': 'e.g. Agrobs, batch 2025-03',
     'inv.adjAbsPh': 'e.g. 847.5',
@@ -1228,7 +1286,8 @@ const LANG = {
     'inv.thAlertBelow': 'Alert below (kg)',
     'inv.thEstBags': 'Est. bags (avg)',
     'inv.avgCompTitle': 'Average composition used for estimates',
-    'inv.avgCompDesc': 'These averages are used to calculate "\u2248X bags" on the stock cards. They are estimates only \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
+    'inv.avgCompDesc':
+      'These averages are used to calculate "\u2248X bags" on the stock cards. They are estimates only \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
     'inv.hwPct': 'Hardwood %',
     'inv.wbPct': 'Wheat bran %',
     'inv.waterPct': 'Water % (RH)',
@@ -1254,8 +1313,9 @@ const LANG = {
     'batch.noBagsToMove': 'No bags to move',
     // Server restart
     'server.restartTitle': 'Restart server?',
-    'server.restartMsg': 'Code will be updated from GitHub and the server will restart. All users will be briefly disconnected.',
-    'server.restartConfirm': 'Yes, restart',
+    'server.restartMsg':
+      'Code will be updated from GitHub and the server will restart. All users will be briefly disconnected.',
+    'server.restartConfirm': 'Yes, restart'
   },
   de: {
     // Common (reused across modals / dialogs)
@@ -1450,12 +1510,18 @@ const LANG = {
     'dash.harvested': 'Geerntet',
     'dash.rackN': 'Regal {n}',
     'dash.legend.title': 'Farb\u00fcbersicht',
-    'dash.legend.species': 'Farbiger Balken links an Batch-Karten — jede Art bekommt ihre eigene Farbe, damit man sie auf einen Blick erkennt.',
-    'dash.legend.zoneDot': 'Zonen-Punkt in Abschnitts\u00fcberschriften — zeigt die Farbe des jeweiligen Ortes (konfiguriert unter Tools \u2192 Zonen).',
-    'dash.legend.orangeDot': 'Oranger Punkt in Batch-Aufgaben — Warnung, Aufgabe wird bald f\u00e4llig oder ben\u00f6tigt Aufmerksamkeit.',
-    'dash.legend.redDot': 'Roter Punkt in Batch-Aufgaben — dringend, \u00fcberf\u00e4llig oder kritische Aktion erforderlich.',
-    'dash.legend.overdue': 'Rosa hinterlegte Batch-Karte — Batch ist \u00fcberf\u00e4llig (F\u00e4lligkeitsdatum \u00fcberschritten, noch in Inkubation).',
-    'dash.legend.capacity': 'Roter Kapazit\u00e4tsbalken — Standort hat seine konfigurierte Maximalkapazit\u00e4t \u00fcberschritten.',
+    'dash.legend.species':
+      'Farbiger Balken links an Batch-Karten — jede Art bekommt ihre eigene Farbe, damit man sie auf einen Blick erkennt.',
+    'dash.legend.zoneDot':
+      'Zonen-Punkt in Abschnitts\u00fcberschriften — zeigt die Farbe des jeweiligen Ortes (konfiguriert unter Tools \u2192 Zonen).',
+    'dash.legend.orangeDot':
+      'Oranger Punkt in Batch-Aufgaben — Warnung, Aufgabe wird bald f\u00e4llig oder ben\u00f6tigt Aufmerksamkeit.',
+    'dash.legend.redDot':
+      'Roter Punkt in Batch-Aufgaben — dringend, \u00fcberf\u00e4llig oder kritische Aktion erforderlich.',
+    'dash.legend.overdue':
+      'Rosa hinterlegte Batch-Karte — Batch ist \u00fcberf\u00e4llig (F\u00e4lligkeitsdatum \u00fcberschritten, noch in Inkubation).',
+    'dash.legend.capacity':
+      'Roter Kapazit\u00e4tsbalken — Standort hat seine konfigurierte Maximalkapazit\u00e4t \u00fcberschritten.',
     // Status
     'status.INCUBATING': 'INKUBATION',
     'status.FRUITING': 'FRUCHTEND',
@@ -1647,7 +1713,8 @@ const LANG = {
     'th.parent': 'Eltern',
     // Print
     'print.printerInfo': 'Druckt direkt auf ZDesigner GK420d',
-    'print.printerInfoDetail': '\u00fcber den Server \u2014 kein Dialog n\u00f6tig. Server und Drucker m\u00fcssen eingeschaltet sein.',
+    'print.printerInfoDetail':
+      '\u00fcber den Server \u2014 kein Dialog n\u00f6tig. Server und Drucker m\u00fcssen eingeschaltet sein.',
     'print.bagLabels': 'Beutel-Etiketten',
     'print.labLabels': 'Labor-Etiketten',
     'print.refBarcodes': 'Referenz-Barcodes',
@@ -1721,7 +1788,8 @@ const LANG = {
     'days.inDays': 'F\u00e4llig in {n} Tagen',
     // Team
     'team.members': 'Teammitglieder',
-    'team.membersDesc': 'F\u00fcge Teammitglieder hinzu, um Aufgaben individuell zuzuweisen. Jedes Mitglied kann optional einen eigenen CalDAV-Kalender erhalten.',
+    'team.membersDesc':
+      'F\u00fcge Teammitglieder hinzu, um Aufgaben individuell zuzuweisen. Jedes Mitglied kann optional einen eigenen CalDAV-Kalender erhalten.',
     'team.noMembers': 'Noch keine Teammitglieder. F\u00fcge unten das erste Mitglied hinzu.',
     'team.name': 'Name',
     'team.role': 'Rolle (optional)',
@@ -1731,7 +1799,8 @@ const LANG = {
     'team.removeBtn': 'Entfernen',
     // CalDAV
     'caldav.title': 'CalDAV-Kalenderserver',
-    'caldav.desc': 'Dieser Server beinhaltet einen CalDAV-Server. Verbinde eine Kalender-App (Apple Kalender, Thunderbird, DAVx5 auf Android) um deine Aufgaben zu sehen.',
+    'caldav.desc':
+      'Dieser Server beinhaltet einen CalDAV-Server. Verbinde eine Kalender-App (Apple Kalender, Thunderbird, DAVx5 auf Android) um deine Aufgaben zu sehen.',
     'caldav.urlTitle': 'CalDAV-URL (in der Kalender-App verwenden)',
     'caldav.password': 'Optional: mit Passwort sch\u00fctzen',
     'caldav.username': 'Benutzername',
@@ -1747,31 +1816,42 @@ const LANG = {
     'caldav.writingTasks': 'Schreibe Aufgaben in Kalender-Dateien...',
     'caldav.howToConnect': 'So verbinden',
     'caldav.copyUrl': 'URL kopieren',
-    'caldav.loginHint': '<strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.',
-    'caldav.hiwShared': '<strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-F\u00e4lligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.',
-    'caldav.hiwPersonal': '<strong>Pers\u00f6nliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zus\u00e4tzlich.',
-    'caldav.hiwVisibility': '<strong>Sichtbarkeit:</strong> Standardm\u00e4\u00dfig sind alle Aufgaben f\u00fcr alle sichtbar (im Betriebskalender). Einzelne Aufgaben k\u00f6nnen als "Nur f\u00fcr zugewiesene Person" markiert werden \u2014 diese erscheinen dann nur im pers\u00f6nlichen Kalender.',
-    'caldav.hiwTwoWay': '<strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. \u00c4nderungen in der Kalender-App werden zur\u00fcckgespeichert.',
+    'caldav.loginHint':
+      '<strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.',
+    'caldav.hiwShared':
+      '<strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-F\u00e4lligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.',
+    'caldav.hiwPersonal':
+      '<strong>Pers\u00f6nliche Kalender (<code>benutzername</code>):</strong> Jeder User-Account bekommt automatisch einen eigenen Kalender. Zugewiesene Aufgaben erscheinen dort zus\u00e4tzlich.',
+    'caldav.hiwVisibility':
+      '<strong>Sichtbarkeit:</strong> Standardm\u00e4\u00dfig sind alle Aufgaben f\u00fcr alle sichtbar (im Betriebskalender). Einzelne Aufgaben k\u00f6nnen als "Nur f\u00fcr zugewiesene Person" markiert werden \u2014 diese erscheinen dann nur im pers\u00f6nlichen Kalender.',
+    'caldav.hiwTwoWay':
+      '<strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. \u00c4nderungen in der Kalender-App werden zur\u00fcckgespeichert.',
     // DuckDNS / Let's Encrypt / Server
     'duckdns.title': 'DuckDNS Dynamic DNS',
-    'duckdns.desc': 'Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain f\u00fcr Zugriff \u00fcber das Internet. Die \u00f6ffentliche IP wird automatisch alle 5 Minuten aktualisiert.',
+    'duckdns.desc':
+      'Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain f\u00fcr Zugriff \u00fcber das Internet. Die \u00f6ffentliche IP wird automatisch alle 5 Minuten aktualisiert.',
     'duckdns.enable': 'DuckDNS aktivieren',
     'duckdns.subdomain': 'Subdomain',
     'duckdns.subdomainPlaceholder': 'meinserver',
     'duckdns.token': 'DuckDNS Token',
-    'duckdns.tokenHint': 'Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login.',
+    'duckdns.tokenHint':
+      'Token findest du auf <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> nach dem Login.',
     'duckdns.updateNow': 'IP jetzt aktualisieren',
     'le.title': "Let's Encrypt TLS-Zertifikat",
-    'le.desc': "Kostenloses, vertrauensw\u00fcrdiges TLS-Zertifikat von Let's Encrypt f\u00fcr deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.",
+    'le.desc':
+      "Kostenloses, vertrauensw\u00fcrdiges TLS-Zertifikat von Let's Encrypt f\u00fcr deine DuckDNS-Domain. Ersetzt das selbstsignierte Zertifikat. Wird automatisch vor Ablauf erneuert.",
     'le.enableAutoRenew': "Let's Encrypt Auto-Renewal aktivieren",
     'le.requestNow': 'Zertifikat jetzt anfordern',
-    'le.note': 'Keine zus\u00e4tzliche Software erforderlich \u2014 funktioniert auf allen Betriebssystemen (Linux, macOS, Windows).',
+    'le.note':
+      'Keine zus\u00e4tzliche Software erforderlich \u2014 funktioniert auf allen Betriebssystemen (Linux, macOS, Windows).',
     'server.info': 'Server-Info',
     'server.updateRestart': 'Update & Neustart',
-    'server.updateDesc': 'Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.',
+    'server.updateDesc':
+      'Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.',
     'server.updateBtn': 'Server aktualisieren & neustarten',
     'migrate.title': 'Einmalige Datenmigration',
-    'migrate.desc': 'Benennt alle vorhandenen Chargen-IDs auf das neue K\u00fcrzel-Format um (z.B. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Zeigt eine Vorschau aller \u00c4nderungen vor der Ausf\u00fchrung.',
+    'migrate.desc':
+      'Benennt alle vorhandenen Chargen-IDs auf das neue K\u00fcrzel-Format um (z.B. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Zeigt eine Vorschau aller \u00c4nderungen vor der Ausf\u00fchrung.',
     'migrate.btn': 'Chargen-IDs migrieren',
     'caldav.howItWorks': 'So funktioniert es',
     // More / Settings
@@ -1781,16 +1861,20 @@ const LANG = {
     'settings.clear': 'L\u00f6schen',
     'settings.noScans': 'Noch keine Scans.',
     'settings.clearLog': 'Gesamtes Scan-Log l\u00f6schen?',
-    'settings.clearLogMsg': 'L\u00f6scht dauerhaft alle {n} Scan-Eintr\u00e4ge. Chargen und Ernten werden nicht gel\u00f6scht.',
+    'settings.clearLogMsg':
+      'L\u00f6scht dauerhaft alle {n} Scan-Eintr\u00e4ge. Chargen und Ernten werden nicht gel\u00f6scht.',
     'settings.clearLogBtn': 'Ja, alles l\u00f6schen',
     'settings.downloadBackupTitle': 'Backup herunterladen',
-    'settings.downloadBackupDesc': 'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
+    'settings.downloadBackupDesc':
+      'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
     'settings.downloadBackupBtn': 'Backup herunterladen',
     'settings.restoreBackupTitle': 'Backup wiederherstellen',
-    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
+    'settings.restoreDescHtml':
+      'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
     'settings.restoreBtn': 'Wiederherstellen',
     'settings.syncInfo': 'Sync-Info',
-    'settings.syncInfoDesc': 'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',
+    'settings.syncInfoDesc':
+      'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',
     'settings.restoreBackup': 'Dieses Backup wiederherstellen?',
     'settings.restoreMsg': 'Ersetzt ALLE Daten auf dem Server für alle Benutzer. Kann nicht rückgängig gemacht werden.',
     'settings.restoreConfirm': 'Ja, wiederherstellen',
@@ -1811,7 +1895,8 @@ const LANG = {
     'inv.logDelivery': 'Lieferung erfassen',
     'inv.usageLog': 'Verbrauchsprotokoll',
     'inv.alertThresholds': 'Warnschwellen',
-    'inv.alertThresholdsDesc': 'Mindestbestand f\u00fcr Warnung festlegen. Auch die Standard-Beutelgr\u00f6\u00dfe f\u00fcr die Sch\u00e4tzung "reicht f\u00fcr X Beutel" einstellen.',
+    'inv.alertThresholdsDesc':
+      'Mindestbestand f\u00fcr Warnung festlegen. Auch die Standard-Beutelgr\u00f6\u00dfe f\u00fcr die Sch\u00e4tzung "reicht f\u00fcr X Beutel" einstellen.',
     'inv.lowStock': 'NIEDRIGER BESTAND',
     'inv.alertBelow': 'Warnung unter {n}kg',
     'inv.logDeliveryBtn': '+ Lieferung erfassen',
@@ -1835,9 +1920,11 @@ const LANG = {
     'inv.enterQty': 'Bitte eine Menge gr\u00f6\u00dfer als 0 eingeben',
     'inv.enterAmount': 'Bitte einen neuen Gesamtwert oder Anpassungsbetrag eingeben',
     'inv.grainBags': '\u2248 {n} K\u00f6rnerbeutel \u00e0 {kg}kg',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg Bl\u00f6cke <span style="font-size:10px;color:var(--c-text-muted)">(Sch\u00e4tzung)</span>',
+    'inv.blocks':
+      '\u2248 <strong>{n}</strong> \u00d7 {kg}kg Bl\u00f6cke <span style="font-size:10px;color:var(--c-text-muted)">(Sch\u00e4tzung)</span>',
     'inv.avgComposition': 'Durchschnittszusammensetzung f\u00fcr Sch\u00e4tzungen',
-    'inv.avgCompDesc': 'Diese Durchschnittswerte berechnen "\u007eX Beutel" auf den Bestandskarten. Nur <strong>Sch\u00e4tzwerte</strong> \u2014 exakter Verbrauch wird bei Chargenerstellung mit Substratrezept erfasst.',
+    'inv.avgCompDesc':
+      'Diese Durchschnittswerte berechnen "\u007eX Beutel" auf den Bestandskarten. Nur <strong>Sch\u00e4tzwerte</strong> \u2014 exakter Verbrauch wird bei Chargenerstellung mit Substratrezept erfasst.',
     'inv.hardwoodPct': 'Hartholz %',
     'inv.wheatBranPct': 'Weizenkleie %',
     'inv.waterPct': 'Wasser % (RH)',
@@ -1890,7 +1977,8 @@ const LANG = {
     'assets.deleteMsg': 'Die Anlage {id} wird unwiderruflich gel\u00f6scht.',
     'assets.deleteBtn': 'Ja, l\u00f6schen',
     'assets.csvExport': 'CSV-Export',
-    'assets.csvDesc': 'Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV f\u00fcr den Steuerberater.',
+    'assets.csvDesc':
+      'Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV f\u00fcr den Steuerberater.',
     'assets.exportCsv': 'CSV exportieren',
     'assets.cutoffInv': 'Stichtags-Inventur',
     'assets.cutoffDate': 'Stichtag',
@@ -2052,11 +2140,13 @@ const LANG = {
     'print.assetLabelsPrinted.one': '{n} Inventar-Etikett gedruckt',
     'print.assetLabelsPrinted.other': '{n} Inventar-Etiketten gedruckt',
     // CalDAV feedback
-    'caldav.done': 'Fertig! {n} Aufgaben in Kalender geschrieben.{errors} Kalender-Apps k\u00f6nnen sie jetzt via CalDAV sehen.',
+    'caldav.done':
+      'Fertig! {n} Aufgaben in Kalender geschrieben.{errors} Kalender-Apps k\u00f6nnen sie jetzt via CalDAV sehen.',
     'caldav.syncFail': 'Sync fehlgeschlagen: {err}',
     'caldav.syncError': 'Sync-Fehler: {err}',
     // Backup validation
-    'settings.valid': 'G\u00fcltig: {date} \u2014 {batches} Chargen, {scans} Scans, {cultures} Kulturen, Inventar: {inv}.',
+    'settings.valid':
+      'G\u00fcltig: {date} \u2014 {batches} Chargen, {scans} Scans, {cultures} Kulturen, Inventar: {inv}.',
     // Static HTML keys
     'batch.batchId': 'Chargen-ID',
     'batch.species': 'Art',
@@ -2068,15 +2158,18 @@ const LANG = {
     'settings.bag': 'Beutel',
     'settings.from': 'Von',
     'settings.to': 'Nach',
-    'settings.restoreDescHtml': 'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
+    'settings.restoreDescHtml':
+      'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Nutzer.</strong>',
     'mcp.title': 'MCP Server',
-    'mcp.desc': 'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Claude verbindet sich automatisch per OAuth \u2014 einfach die URL einfügen.',
+    'mcp.desc':
+      'Ermöglicht Claude und anderen KI-Assistenten Zugriff auf die MeisterTracker-Datenbank über das Model Context Protocol. Claude verbindet sich automatisch per OAuth \u2014 einfach die URL einfügen.',
     'mcp.enable': 'MCP Server aktivieren',
     'mcp.connectorUrl': 'Connector URL',
     'mcp.copy': 'Kopieren',
     'mcp.apiKey': 'API-Schlüssel (Skripte / Automatisierung)',
     'mcp.generateKey': 'API-Schlüssel generieren',
-    'mcp.keyHint': 'Für Skripte oder Tools, die kein OAuth unterstützen. Als Bearer-Token im Authorization-Header verwenden. Wird nur einmal angezeigt.',
+    'mcp.keyHint':
+      'Für Skripte oder Tools, die kein OAuth unterstützen. Als Bearer-Token im Authorization-Header verwenden. Wird nur einmal angezeigt.',
     'mcp.save': 'Speichern',
     'mcp.active': 'MCP Server aktiv',
     'mcp.noKey': 'MCP aktiviert \u2014 bereit zur Verbindung über OAuth.',
@@ -2095,7 +2188,8 @@ const LANG = {
     'mcp.diagManualClients': 'Manuelle Clients',
     'mcp.diagSessions': 'Aktive MCP-Sitzungen',
     'mcp.oauthTitle': 'Verbundene Clients',
-    'mcp.oauthDesc': 'Clients, die sich per OAuth verbunden haben. Claude registriert sich automatisch, wenn du die Connector-URL hinzufügst.',
+    'mcp.oauthDesc':
+      'Clients, die sich per OAuth verbunden haben. Claude registriert sich automatisch, wenn du die Connector-URL hinzufügst.',
     'mcp.noClients': 'Noch keine verbundenen Clients. Verbinde Claude, indem du die URL oben einfügst.',
     'mcp.clientName': 'Name',
     'mcp.unnamed': '(unbenannt)',
@@ -2103,13 +2197,15 @@ const LANG = {
     'mcp.activeSessions': 'Sitzungen',
     'mcp.deleteClient': 'Löschen',
     'mcp.confirmDelete': 'Diesen Client löschen? Alle aktiven Sitzungen werden widerrufen.',
-    'mcp.confirmDeleteAuto': 'Diesen auto-registrierten Client widerrufen? Claude registriert sich bei der nächsten Verbindung erneut.',
+    'mcp.confirmDeleteAuto':
+      'Diesen auto-registrierten Client widerrufen? Claude registriert sich bei der nächsten Verbindung erneut.',
     'mcp.clientDeleted': 'Client gelöscht.',
     'mcp.step1': '1. MCP Server aktivieren und speichern',
     'mcp.step2': '2. Connector URL oben kopieren',
     'mcp.step3': '3. In Claude: Einstellungen \u2192 Connectors \u2192 Hinzufügen \u2192 URL einfügen',
     'mcp.step4': '4. Bei Aufforderung einloggen \u2014 fertig! Claude verbindet sich automatisch per OAuth.',
-    'mcp.features': 'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
+    'mcp.features':
+      'Verfügbare Funktionen: Tagesbriefing, Batches verwalten, Aufgaben, Kalender, Inventar, Ernten, Kulturen, Zonen-Übersicht',
     'todo.taskPlaceholder': 'z.B. Feuchtigkeitszelt reinigen',
     'todo.descPlaceholder': 'Weitere Details...',
     'inv.hardwood': 'Hartholzpellets',
@@ -2164,7 +2260,8 @@ const LANG = {
     'asset.save': 'Speichern',
     'asset.reset': 'Zur\u00fccksetzen',
     'asset.csvExport': 'CSV-Export',
-    'asset.csvExportDesc': 'Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV f\u00fcr den Steuerberater.',
+    'asset.csvExportDesc':
+      'Komplette Inventarliste mit allen Feldern und berechneten Abschreibungswerten als CSV f\u00fcr den Steuerberater.',
     'asset.exportCsv': 'CSV exportieren',
     'asset.cutoffInventory': 'Stichtags-Inventur',
     'asset.cutoffDate': 'Stichtag',
@@ -2202,7 +2299,8 @@ const LANG = {
     'zones.errTooManyRacks': 'Zu viele Racks (max. 50)',
     'zones.hasBags': '{count} Bags — erst entfernen',
     'zones.directBags': '{count} ohne Rack',
-    'zones.directBagsHint': 'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
+    'zones.directBagsHint':
+      'Diese Bags wurden zur Zone gescannt, nicht zu einem Rack. Verschiebe sie in ein Rack für genaues Tracking.',
     'zones.dragToReorder': 'Zum Neuordnen ziehen',
     'zones.edit': 'Bearbeiten',
     'zones.editTitle': 'Zone bearbeiten',
@@ -2346,9 +2444,12 @@ const LANG = {
     'settings.encryptPwPh': 'Verschl\u00fcsselungspasswort',
     'settings.decryptPwPh': 'Entschl\u00fcsselungspasswort',
     // CalDAV how-tos
-    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Kalender:</strong> Neuen \u201eCalDAV\u201c- oder \u201eNetzwerkkalender\u201c hinzuf\u00fcgen und die CalDAV-URL oben einf\u00fcgen.',
-    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> DAVx5 aus F-Droid oder Play Store installieren. Konto mit \u201eAnmeldung mit URL\u201c hinzuf\u00fcgen und URL einf\u00fcgen.',
-    'caldav.howApple': '<strong>Apple Kalender (iPhone/Mac):</strong> Einstellungen \u2192 Kalender \u2192 Konten \u2192 CalDAV-Konto hinzuf\u00fcgen. Server = die obige URL.',
+    'caldav.howThunderbird':
+      '<strong>Thunderbird / GNOME Kalender:</strong> Neuen \u201eCalDAV\u201c- oder \u201eNetzwerkkalender\u201c hinzuf\u00fcgen und die CalDAV-URL oben einf\u00fcgen.',
+    'caldav.howAndroid':
+      '<strong>Android (DAVx5):</strong> DAVx5 aus F-Droid oder Play Store installieren. Konto mit \u201eAnmeldung mit URL\u201c hinzuf\u00fcgen und URL einf\u00fcgen.',
+    'caldav.howApple':
+      '<strong>Apple Kalender (iPhone/Mac):</strong> Einstellungen \u2192 Kalender \u2192 Konten \u2192 CalDAV-Konto hinzuf\u00fcgen. Server = die obige URL.',
     // Inventory placeholders
     'inv.delKgPh': 'z. B. 1000 oder 847,5',
     'inv.delNotePh': 'z. B. Agrobs, Charge 2025-03',
@@ -2463,7 +2564,8 @@ const LANG = {
     'inv.thAlertBelow': 'Alarm unter (kg)',
     'inv.thEstBags': 'Gesch. Beutel (Durchschn.)',
     'inv.avgCompTitle': 'Durchschnittliche Zusammensetzung f\u00fcr Sch\u00e4tzungen',
-    'inv.avgCompDesc': 'Diese Durchschnittswerte werden f\u00fcr die "\u2248X Beutel"-Anzeige auf den Lagerkarten verwendet. Sie sind nur Sch\u00e4tzungen \u2014 der genaue Verbrauch wird erfasst, wenn eine Charge mit spezifischem Substratrezept erstellt wird.',
+    'inv.avgCompDesc':
+      'Diese Durchschnittswerte werden f\u00fcr die "\u2248X Beutel"-Anzeige auf den Lagerkarten verwendet. Sie sind nur Sch\u00e4tzungen \u2014 der genaue Verbrauch wird erfasst, wenn eine Charge mit spezifischem Substratrezept erstellt wird.',
     'inv.hwPct': 'Hartholz %',
     'inv.wbPct': 'Weizenkleie %',
     'inv.waterPct': 'Wasser % (RH)',
@@ -2489,8 +2591,9 @@ const LANG = {
     'batch.noBagsToMove': 'Keine Bags zu verschieben',
     // Server restart
     'server.restartTitle': 'Server neustarten?',
-    'server.restartMsg': 'Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.',
-    'server.restartConfirm': 'Ja, neustarten',
+    'server.restartMsg':
+      'Der Code wird von GitHub aktualisiert und der Server neu gestartet. Alle Benutzer werden kurz getrennt.',
+    'server.restartConfirm': 'Ja, neustarten'
   },
   pt: {
     // Common (reused across modals / dialogs)
@@ -2685,11 +2788,16 @@ const LANG = {
     'dash.harvested': 'Colhido',
     'dash.rackN': 'Estante {n}',
     'dash.legend.title': 'Guia de cores',
-    'dash.legend.species': 'Faixa colorida \u00e0 esquerda dos cart\u00f5es de lote — cada esp\u00e9cie tem sua pr\u00f3pria cor para identifica\u00e7\u00e3o r\u00e1pida.',
-    'dash.legend.zoneDot': 'Ponto da zona nos cabe\u00e7alhos de se\u00e7\u00e3o — mostra a cor de cada local (configurado em Ferramentas \u2192 Zonas).',
-    'dash.legend.orangeDot': 'Ponto laranja nas tarefas de lote — aviso, tarefa prestes a vencer ou precisa de aten\u00e7\u00e3o.',
-    'dash.legend.redDot': 'Ponto vermelho nas tarefas de lote — urgente, atrasado ou a\u00e7\u00e3o cr\u00edtica necess\u00e1ria.',
-    'dash.legend.overdue': 'Cart\u00e3o de lote com fundo rosa — lote atrasado (ap\u00f3s a data de vencimento, ainda em incuba\u00e7\u00e3o).',
+    'dash.legend.species':
+      'Faixa colorida \u00e0 esquerda dos cart\u00f5es de lote — cada esp\u00e9cie tem sua pr\u00f3pria cor para identifica\u00e7\u00e3o r\u00e1pida.',
+    'dash.legend.zoneDot':
+      'Ponto da zona nos cabe\u00e7alhos de se\u00e7\u00e3o — mostra a cor de cada local (configurado em Ferramentas \u2192 Zonas).',
+    'dash.legend.orangeDot':
+      'Ponto laranja nas tarefas de lote — aviso, tarefa prestes a vencer ou precisa de aten\u00e7\u00e3o.',
+    'dash.legend.redDot':
+      'Ponto vermelho nas tarefas de lote — urgente, atrasado ou a\u00e7\u00e3o cr\u00edtica necess\u00e1ria.',
+    'dash.legend.overdue':
+      'Cart\u00e3o de lote com fundo rosa — lote atrasado (ap\u00f3s a data de vencimento, ainda em incuba\u00e7\u00e3o).',
     'dash.legend.capacity': 'Barra de capacidade vermelha — local excedeu sua capacidade m\u00e1xima configurada.',
     // Status
     'status.INCUBATING': 'INCUBANDO',
@@ -2882,7 +2990,8 @@ const LANG = {
     'th.parent': 'Origem',
     // Print
     'print.printerInfo': 'Imprimindo diretamente na ZDesigner GK420d',
-    'print.printerInfoDetail': 'via servidor \u2014 sem di\u00e1logo. Certifique-se de que o servidor est\u00e1 rodando e a impressora ligada.',
+    'print.printerInfoDetail':
+      'via servidor \u2014 sem di\u00e1logo. Certifique-se de que o servidor est\u00e1 rodando e a impressora ligada.',
     'print.bagLabels': 'Etiquetas de sacos',
     'print.labLabels': 'Etiquetas de lab',
     'print.refBarcodes': 'C\u00f3digos de refer\u00eancia',
@@ -2956,7 +3065,8 @@ const LANG = {
     'days.inDays': 'Vence em {n} dias',
     // Team
     'team.members': 'Membros da equipe',
-    'team.membersDesc': 'Adicione membros da equipe para atribuir tarefas individualmente. Cada membro pode ter seu pr\u00f3prio calend\u00e1rio CalDAV.',
+    'team.membersDesc':
+      'Adicione membros da equipe para atribuir tarefas individualmente. Cada membro pode ter seu pr\u00f3prio calend\u00e1rio CalDAV.',
     'team.noMembers': 'Nenhum membro ainda. Adicione o primeiro abaixo.',
     'team.name': 'Nome',
     'team.role': 'Fun\u00e7\u00e3o (opcional)',
@@ -2966,7 +3076,8 @@ const LANG = {
     'team.removeBtn': 'Remover',
     // CalDAV
     'caldav.title': 'Servidor de calend\u00e1rio CalDAV',
-    'caldav.desc': 'Este servidor inclui um servidor CalDAV. Conecte um app de calend\u00e1rio (Apple Calendar, Thunderbird, DAVx5 no Android) para ver suas tarefas.',
+    'caldav.desc':
+      'Este servidor inclui um servidor CalDAV. Conecte um app de calend\u00e1rio (Apple Calendar, Thunderbird, DAVx5 no Android) para ver suas tarefas.',
     'caldav.urlTitle': 'URL CalDAV (use no seu app de calend\u00e1rio)',
     'caldav.password': 'Opcional: proteger com senha',
     'caldav.username': 'Usu\u00e1rio',
@@ -2982,31 +3093,42 @@ const LANG = {
     'caldav.writingTasks': 'Escrevendo tarefas nos arquivos de calend\u00e1rio...',
     'caldav.howToConnect': 'Como conectar',
     'caldav.copyUrl': 'Copiar URL',
-    'caldav.loginHint': '<strong>Login:</strong> Use o login da sua conta (utilizador &amp; senha) para autenticar no app de calend\u00e1rio.',
-    'caldav.hiwShared': '<strong>Calend\u00e1rio partilhado (<code>meisterpilze</code>):</strong> Todas as tarefas, eventos e prazos de lotes v\u00e3o para aqui. Toda a equipa v\u00ea este calend\u00e1rio.',
-    'caldav.hiwPersonal': '<strong>Calend\u00e1rios pessoais (<code>utilizador</code>):</strong> Cada conta de utilizador recebe um calend\u00e1rio pr\u00f3prio. Tarefas atribu\u00eddas aparecem l\u00e1 tamb\u00e9m.',
-    'caldav.hiwVisibility': '<strong>Visibilidade:</strong> Por padr\u00e3o todas as tarefas s\u00e3o vis\u00edveis para todos (no calend\u00e1rio partilhado). Tarefas individuais podem ser marcadas como "apenas respons\u00e1vel" \u2014 aparecem apenas no calend\u00e1rio pessoal.',
-    'caldav.hiwTwoWay': '<strong>Sincroniza\u00e7\u00e3o bidirecional:</strong> As tarefas s\u00e3o guardadas como ficheiros de calend\u00e1rio no servidor. Os apps de calend\u00e1rio leem via CalDAV. Altera\u00e7\u00f5es no app de calend\u00e1rio s\u00e3o sincronizadas de volta.',
+    'caldav.loginHint':
+      '<strong>Login:</strong> Use o login da sua conta (utilizador &amp; senha) para autenticar no app de calend\u00e1rio.',
+    'caldav.hiwShared':
+      '<strong>Calend\u00e1rio partilhado (<code>meisterpilze</code>):</strong> Todas as tarefas, eventos e prazos de lotes v\u00e3o para aqui. Toda a equipa v\u00ea este calend\u00e1rio.',
+    'caldav.hiwPersonal':
+      '<strong>Calend\u00e1rios pessoais (<code>utilizador</code>):</strong> Cada conta de utilizador recebe um calend\u00e1rio pr\u00f3prio. Tarefas atribu\u00eddas aparecem l\u00e1 tamb\u00e9m.',
+    'caldav.hiwVisibility':
+      '<strong>Visibilidade:</strong> Por padr\u00e3o todas as tarefas s\u00e3o vis\u00edveis para todos (no calend\u00e1rio partilhado). Tarefas individuais podem ser marcadas como "apenas respons\u00e1vel" \u2014 aparecem apenas no calend\u00e1rio pessoal.',
+    'caldav.hiwTwoWay':
+      '<strong>Sincroniza\u00e7\u00e3o bidirecional:</strong> As tarefas s\u00e3o guardadas como ficheiros de calend\u00e1rio no servidor. Os apps de calend\u00e1rio leem via CalDAV. Altera\u00e7\u00f5es no app de calend\u00e1rio s\u00e3o sincronizadas de volta.',
     // DuckDNS / Let's Encrypt / Server
     'duckdns.title': 'DuckDNS DNS din\u00e2mico',
-    'duckdns.desc': 'Liga o teu servidor a um dom\u00ednio DuckDNS gratuito para acesso pela internet. O IP p\u00fablico \u00e9 atualizado automaticamente a cada 5 minutos.',
+    'duckdns.desc':
+      'Liga o teu servidor a um dom\u00ednio DuckDNS gratuito para acesso pela internet. O IP p\u00fablico \u00e9 atualizado automaticamente a cada 5 minutos.',
     'duckdns.enable': 'Ativar DuckDNS',
     'duckdns.subdomain': 'Subdom\u00ednio',
     'duckdns.subdomainPlaceholder': 'meuservidor',
     'duckdns.token': 'Token DuckDNS',
-    'duckdns.tokenHint': 'Encontra o token em <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> ap\u00f3s o login.',
+    'duckdns.tokenHint':
+      'Encontra o token em <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> ap\u00f3s o login.',
     'duckdns.updateNow': 'Atualizar IP agora',
     'le.title': "Certificado TLS Let's Encrypt",
-    'le.desc': "Certificado TLS gratuito e confi\u00e1vel da Let's Encrypt para o teu dom\u00ednio DuckDNS. Substitui o certificado autoassinado. Renovado automaticamente antes do fim da validade.",
+    'le.desc':
+      "Certificado TLS gratuito e confi\u00e1vel da Let's Encrypt para o teu dom\u00ednio DuckDNS. Substitui o certificado autoassinado. Renovado automaticamente antes do fim da validade.",
     'le.enableAutoRenew': "Ativar renova\u00e7\u00e3o autom\u00e1tica Let's Encrypt",
     'le.requestNow': 'Pedir certificado agora',
-    'le.note': 'Sem software adicional necess\u00e1rio \u2014 funciona em todos os sistemas operativos (Linux, macOS, Windows).',
+    'le.note':
+      'Sem software adicional necess\u00e1rio \u2014 funciona em todos os sistemas operativos (Linux, macOS, Windows).',
     'server.info': 'Info do servidor',
     'server.updateRestart': 'Atualizar e reiniciar',
-    'server.updateDesc': 'Obt\u00e9m o c\u00f3digo mais recente do GitHub e reinicia o servidor. Todos os utilizadores ser\u00e3o desligados brevemente.',
+    'server.updateDesc':
+      'Obt\u00e9m o c\u00f3digo mais recente do GitHub e reinicia o servidor. Todos os utilizadores ser\u00e3o desligados brevemente.',
     'server.updateBtn': 'Atualizar e reiniciar servidor',
     'migrate.title': 'Migra\u00e7\u00e3o de dados \u00fanica',
-    'migrate.desc': 'Renomeia todos os IDs de lotes existentes para o novo formato K\u00fcrzel (ex. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Mostra uma pr\u00e9-visualiza\u00e7\u00e3o antes de aplicar.',
+    'migrate.desc':
+      'Renomeia todos os IDs de lotes existentes para o novo formato K\u00fcrzel (ex. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Mostra uma pr\u00e9-visualiza\u00e7\u00e3o antes de aplicar.',
     'migrate.btn': 'Migrar IDs de lotes',
     'caldav.howItWorks': 'Como funciona',
     // More / Settings
@@ -3016,16 +3138,20 @@ const LANG = {
     'settings.clear': 'Limpar',
     'settings.noScans': 'Nenhum scan ainda.',
     'settings.clearLog': 'Limpar todo o log de scan?',
-    'settings.clearLogMsg': 'Exclui permanentemente todas as {n} entradas de scan. Lotes e colheitas n\u00e3o s\u00e3o exclu\u00eddos.',
+    'settings.clearLogMsg':
+      'Exclui permanentemente todas as {n} entradas de scan. Lotes e colheitas n\u00e3o s\u00e3o exclu\u00eddos.',
     'settings.clearLogBtn': 'Sim, limpar tudo',
     'settings.downloadBackupTitle': 'Baixar backup',
-    'settings.downloadBackupDesc': 'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
+    'settings.downloadBackupDesc':
+      'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
     'settings.downloadBackupBtn': 'Baixar backup',
     'settings.restoreBackupTitle': 'Restaurar backup',
-    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreDescHtml':
+      'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
     'settings.restoreBtn': 'Restaurar',
     'settings.syncInfo': 'Info de sincronização',
-    'settings.syncInfoDesc': 'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
+    'settings.syncInfoDesc':
+      'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',
     'settings.restoreBackup': 'Restaurar este backup?',
     'settings.restoreMsg': 'Substitui TODOS os dados no servidor para todos os usuários. Não pode ser desfeito.',
     'settings.restoreConfirm': 'Sim, restaurar',
@@ -3046,7 +3172,8 @@ const LANG = {
     'inv.logDelivery': 'Registrar entrega',
     'inv.usageLog': 'Hist\u00f3rico de uso',
     'inv.alertThresholds': 'Limites de alerta',
-    'inv.alertThresholdsDesc': 'Defina o n\u00edvel m\u00ednimo de estoque para alerta. Defina tamb\u00e9m o tamanho padr\u00e3o do saco para calcular "suficiente para X sacos".',
+    'inv.alertThresholdsDesc':
+      'Defina o n\u00edvel m\u00ednimo de estoque para alerta. Defina tamb\u00e9m o tamanho padr\u00e3o do saco para calcular "suficiente para X sacos".',
     'inv.lowStock': 'ESTOQUE BAIXO',
     'inv.alertBelow': 'Alerta abaixo de {n}kg',
     'inv.logDeliveryBtn': '+ Registrar entrega',
@@ -3058,7 +3185,8 @@ const LANG = {
     'inv.addToStock': 'Adicionar ao estoque',
     'inv.afterDelivery': 'Ap\u00f3s entrega:',
     'inv.manualAdj': 'Ajuste manual',
-    'inv.manualAdjDesc': 'Use para corrigir estoque ap\u00f3s contagem f\u00edsica, deteriora\u00e7\u00e3o ou discrep\u00e2ncia.',
+    'inv.manualAdjDesc':
+      'Use para corrigir estoque ap\u00f3s contagem f\u00edsica, deteriora\u00e7\u00e3o ou discrep\u00e2ncia.',
     'inv.setStockTo': 'Definir estoque para (kg)',
     'inv.orAddSubtract': 'ou adicionar / subtrair',
     'inv.adjustBy': 'Ajustar em (kg) \u2014 negativo para subtrair',
@@ -3070,9 +3198,11 @@ const LANG = {
     'inv.enterQty': 'Insira uma quantidade maior que 0',
     'inv.enterAmount': 'Insira um novo total ou valor de ajuste',
     'inv.grainBags': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',
-    'inv.blocks': '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocos <span style="font-size:10px;color:var(--c-text-muted)">(estimativa)</span>',
+    'inv.blocks':
+      '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocos <span style="font-size:10px;color:var(--c-text-muted)">(estimativa)</span>',
     'inv.avgComposition': 'Composi\u00e7\u00e3o m\u00e9dia para estimativas',
-    'inv.avgCompDesc': 'Estas m\u00e9dias calculam "\u007eX sacos" nos cart\u00f5es de estoque. S\u00e3o apenas <strong>estimativas</strong> \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica.',
+    'inv.avgCompDesc':
+      'Estas m\u00e9dias calculam "\u007eX sacos" nos cart\u00f5es de estoque. S\u00e3o apenas <strong>estimativas</strong> \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica.',
     'inv.hardwoodPct': 'Madeira dura %',
     'inv.wheatBranPct': 'Farelo de trigo %',
     'inv.waterPct': '\u00c1gua % (RH)',
@@ -3125,7 +3255,8 @@ const LANG = {
     'assets.deleteMsg': 'O ativo {id} ser\u00e1 exclu\u00eddo permanentemente.',
     'assets.deleteBtn': 'Sim, excluir',
     'assets.csvExport': 'Exportar CSV',
-    'assets.csvDesc': 'Lista completa de invent\u00e1rio com todos os campos e valores de deprecia\u00e7\u00e3o calculados em CSV.',
+    'assets.csvDesc':
+      'Lista completa de invent\u00e1rio com todos os campos e valores de deprecia\u00e7\u00e3o calculados em CSV.',
     'assets.exportCsv': 'Exportar CSV',
     'assets.cutoffInv': 'Invent\u00e1rio na data de refer\u00eancia',
     'assets.cutoffDate': 'Data de refer\u00eancia',
@@ -3287,11 +3418,13 @@ const LANG = {
     'print.assetLabelsPrinted.one': '{n} etiqueta de invent\u00e1rio impressa',
     'print.assetLabelsPrinted.other': '{n} etiquetas de invent\u00e1rio impressas',
     // CalDAV feedback
-    'caldav.done': 'Conclu\u00eddo! {n} tarefas escritas no calend\u00e1rio.{errors} Apps de calend\u00e1rio podem v\u00ea-las via CalDAV.',
+    'caldav.done':
+      'Conclu\u00eddo! {n} tarefas escritas no calend\u00e1rio.{errors} Apps de calend\u00e1rio podem v\u00ea-las via CalDAV.',
     'caldav.syncFail': 'Sincroniza\u00e7\u00e3o falhou: {err}',
     'caldav.syncError': 'Erro de sincroniza\u00e7\u00e3o: {err}',
     // Backup validation
-    'settings.valid': 'V\u00e1lido: {date} \u2014 {batches} lotes, {scans} scans, {cultures} culturas, invent\u00e1rio: {inv}.',
+    'settings.valid':
+      'V\u00e1lido: {date} \u2014 {batches} lotes, {scans} scans, {cultures} culturas, invent\u00e1rio: {inv}.',
     // Static HTML keys
     'batch.batchId': 'ID do lote',
     'batch.species': 'Esp\u00e9cie',
@@ -3303,15 +3436,18 @@ const LANG = {
     'settings.bag': 'Saco',
     'settings.from': 'De',
     'settings.to': 'Para',
-    'settings.restoreDescHtml': 'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
+    'settings.restoreDescHtml':
+      'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
     'mcp.title': 'Servidor MCP',
-    'mcp.desc': 'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. O Claude conecta automaticamente via OAuth \u2014 basta colar a URL.',
+    'mcp.desc':
+      'Permite que o Claude e outros assistentes de IA acessem o banco de dados do MeisterTracker via Model Context Protocol. O Claude conecta automaticamente via OAuth \u2014 basta colar a URL.',
     'mcp.enable': 'Ativar servidor MCP',
     'mcp.connectorUrl': 'URL do Connector',
     'mcp.copy': 'Copiar',
     'mcp.apiKey': 'Chave de API (scripts / automação)',
     'mcp.generateKey': 'Gerar chave de API',
-    'mcp.keyHint': 'Para scripts ou ferramentas que não suportam OAuth. Use como Bearer token no header Authorization. A chave é exibida apenas uma vez.',
+    'mcp.keyHint':
+      'Para scripts ou ferramentas que não suportam OAuth. Use como Bearer token no header Authorization. A chave é exibida apenas uma vez.',
     'mcp.save': 'Salvar',
     'mcp.active': 'Servidor MCP ativo',
     'mcp.noKey': 'MCP ativado \u2014 pronto para conectar via OAuth.',
@@ -3330,7 +3466,8 @@ const LANG = {
     'mcp.diagManualClients': 'Clientes manuais',
     'mcp.diagSessions': 'Sessões MCP ativas',
     'mcp.oauthTitle': 'Clientes Conectados',
-    'mcp.oauthDesc': 'Clientes conectados via OAuth. O Claude se registra automaticamente ao adicionar a URL do connector.',
+    'mcp.oauthDesc':
+      'Clientes conectados via OAuth. O Claude se registra automaticamente ao adicionar a URL do connector.',
     'mcp.noClients': 'Nenhum cliente conectado ainda. Conecte o Claude colando a URL acima.',
     'mcp.clientName': 'Nome',
     'mcp.unnamed': '(sem nome)',
@@ -3338,13 +3475,15 @@ const LANG = {
     'mcp.activeSessions': 'Sessões',
     'mcp.deleteClient': 'Excluir',
     'mcp.confirmDelete': 'Excluir este cliente? Todas as sessões ativas serão revogadas.',
-    'mcp.confirmDeleteAuto': 'Revogar este cliente auto-registrado? O Claude registrará um novo cliente na próxima conexão.',
+    'mcp.confirmDeleteAuto':
+      'Revogar este cliente auto-registrado? O Claude registrará um novo cliente na próxima conexão.',
     'mcp.clientDeleted': 'Cliente excluído.',
     'mcp.step1': '1. Ativar servidor MCP e salvar',
     'mcp.step2': '2. Copiar a URL do connector acima',
     'mcp.step3': '3. No Claude: Configurações \u2192 Connectors \u2192 Adicionar \u2192 colar a URL',
     'mcp.step4': '4. Faça login quando solicitado \u2014 pronto! O Claude conecta automaticamente via OAuth.',
-    'mcp.features': 'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
+    'mcp.features':
+      'Funções disponíveis: Briefing diário, gerenciar lotes, tarefas, calendário, inventário, colheitas, culturas, visão geral das zonas',
     'todo.taskPlaceholder': 'ex. Limpar tenda de umidade',
     'todo.descPlaceholder': 'Detalhes adicionais...',
     'inv.hardwood': 'Pellets de madeira dura',
@@ -3399,7 +3538,8 @@ const LANG = {
     'asset.save': 'Salvar',
     'asset.reset': 'Redefinir',
     'asset.csvExport': 'Exportar CSV',
-    'asset.csvExportDesc': 'Lista completa de invent\u00e1rio com todos os campos e valores de deprecia\u00e7\u00e3o calculados como CSV para o contador.',
+    'asset.csvExportDesc':
+      'Lista completa de invent\u00e1rio com todos os campos e valores de deprecia\u00e7\u00e3o calculados como CSV para o contador.',
     'asset.exportCsv': 'Exportar CSV',
     'asset.cutoffInventory': 'Invent\u00e1rio de data de corte',
     'asset.cutoffDate': 'Data de corte',
@@ -3437,7 +3577,8 @@ const LANG = {
     'zones.errTooManyRacks': 'Muitos racks (máx. 50)',
     'zones.hasBags': '{count} bags — remova primeiro',
     'zones.directBags': '{count} sem rack',
-    'zones.directBagsHint': 'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
+    'zones.directBagsHint':
+      'Esses bags foram escaneados para a zona, não para um rack específico. Mova-os para um rack para rastreamento preciso.',
     'zones.dragToReorder': 'Arraste para reordenar',
     'zones.edit': 'Editar',
     'zones.editTitle': 'Editar zona',
@@ -3581,9 +3722,12 @@ const LANG = {
     'settings.encryptPwPh': 'Senha de encripta\u00e7\u00e3o',
     'settings.decryptPwPh': 'Senha de desencripta\u00e7\u00e3o',
     // CalDAV how-tos
-    'caldav.howThunderbird': '<strong>Thunderbird / GNOME Calendar:</strong> Adicione um novo calend\u00e1rio \u201cCalDAV\u201d ou \u201cde rede\u201d e cole o URL CalDAV acima.',
-    'caldav.howAndroid': '<strong>Android (DAVx5):</strong> Instale o DAVx5 do F-Droid ou Play Store. Adicione conta com \u201cLogin com URL\u201d e cole o URL.',
-    'caldav.howApple': '<strong>Apple Calendar (iPhone/Mac):</strong> Defini\u00e7\u00f5es \u2192 Calend\u00e1rio \u2192 Contas \u2192 Adicionar conta CalDAV. Servidor = o URL acima.',
+    'caldav.howThunderbird':
+      '<strong>Thunderbird / GNOME Calendar:</strong> Adicione um novo calend\u00e1rio \u201cCalDAV\u201d ou \u201cde rede\u201d e cole o URL CalDAV acima.',
+    'caldav.howAndroid':
+      '<strong>Android (DAVx5):</strong> Instale o DAVx5 do F-Droid ou Play Store. Adicione conta com \u201cLogin com URL\u201d e cole o URL.',
+    'caldav.howApple':
+      '<strong>Apple Calendar (iPhone/Mac):</strong> Defini\u00e7\u00f5es \u2192 Calend\u00e1rio \u2192 Contas \u2192 Adicionar conta CalDAV. Servidor = o URL acima.',
     // Inventory placeholders
     'inv.delKgPh': 'ex. 1000 ou 847,5',
     'inv.delNotePh': 'ex. Agrobs, lote 2025-03',
@@ -3646,7 +3790,8 @@ const LANG = {
     'server.sseLabel': 'Clientes SSE',
     'server.ramLabel': 'RAM',
     // Migration
-    'migrate.alreadyCurrent': 'Todos os IDs de lote j\u00e1 est\u00e3o atuais. Nenhuma altera\u00e7\u00e3o necess\u00e1ria.',
+    'migrate.alreadyCurrent':
+      'Todos os IDs de lote j\u00e1 est\u00e3o atuais. Nenhuma altera\u00e7\u00e3o necess\u00e1ria.',
     'migrate.confirm': 'Iniciar migra\u00e7\u00e3o? Todos os IDs antigos ser\u00e3o renomeados.',
     'migrate.complete': 'Migra\u00e7\u00e3o conclu\u00edda: ',
     'migrate.success': 'Migra\u00e7\u00e3o bem-sucedida: ',
@@ -3698,7 +3843,8 @@ const LANG = {
     'inv.thAlertBelow': 'Alerta abaixo (kg)',
     'inv.thEstBags': 'Est. sacos (m\u00e9d.)',
     'inv.avgCompTitle': 'Composi\u00e7\u00e3o m\u00e9dia usada para estimativas',
-    'inv.avgCompDesc': 'Estas m\u00e9dias s\u00e3o usadas para calcular "\u2248X sacos" nos cart\u00f5es de estoque. S\u00e3o apenas estimativas \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica de substrato.',
+    'inv.avgCompDesc':
+      'Estas m\u00e9dias s\u00e3o usadas para calcular "\u2248X sacos" nos cart\u00f5es de estoque. S\u00e3o apenas estimativas \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica de substrato.',
     'inv.hwPct': 'Madeira dura %',
     'inv.wbPct': 'Farelo de trigo %',
     'inv.waterPct': '\u00c1gua % (RH)',
@@ -3711,7 +3857,8 @@ const LANG = {
     'assets.printBtn': 'Imprimir',
     // Camera
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
-    'cam.permDenied': 'Permiss\u00e3o de c\u00e2mera negada. Permita o acesso \u00e0 c\u00e2mera nas configura\u00e7\u00f5es do navegador.',
+    'cam.permDenied':
+      'Permiss\u00e3o de c\u00e2mera negada. Permita o acesso \u00e0 c\u00e2mera nas configura\u00e7\u00f5es do navegador.',
     'cam.notFound': 'Nenhuma c\u00e2mera encontrada.',
     'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
     'cam.unknownError': 'Erro de c\u00e2mera: {err}',
@@ -3724,238 +3871,423 @@ const LANG = {
     'batch.noBagsToMove': 'Sem sacos para mover',
     // Server restart
     'server.restartTitle': 'Reiniciar servidor?',
-    'server.restartMsg': 'O c\u00f3digo ser\u00e1 atualizado do GitHub e o servidor reiniciado. Todos os usu\u00e1rios ser\u00e3o desconectados brevemente.',
-    'server.restartConfirm': 'Sim, reiniciar',
+    'server.restartMsg':
+      'O c\u00f3digo ser\u00e1 atualizado do GitHub e o servidor reiniciado. Todos os usu\u00e1rios ser\u00e3o desconectados brevemente.',
+    'server.restartConfirm': 'Sim, reiniciar'
   }
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const ACTIONS=['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'];
-let ZONES=[],ALL_RACKS=[],LOCS=[],RACK_ZONE={};
-const toZone=loc=>{if(!loc)return loc;if(RACK_ZONE[loc])return RACK_ZONE[loc];if(ZONES.includes(loc))return loc;const z=ZONES.find(z=>loc.startsWith(z+'_'));return z||loc;};
+const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST'];
+let ZONES = [],
+  ALL_RACKS = [],
+  LOCS = [],
+  RACK_ZONE = {};
+const toZone = (loc) => {
+  if (!loc) return loc;
+  if (RACK_ZONE[loc]) return RACK_ZONE[loc];
+  if (ZONES.includes(loc)) return loc;
+  const z = ZONES.find((z) => loc.startsWith(z + '_'));
+  return z || loc;
+};
 // ABBR removed — kuerzel comes from mushroomStrains (Pilzsorten) now.
-const SP_COLORS=['#e11d48','#0284c7','#059669','#d97706','#7c3aed','#0d9488','#ea580c','#db2777','#0891b2','#65a30d'];
-let REF_GROUPS=[];
-const KNOWN_ZONE_I18N={SPAWN:'dash.zoneSpawn',INC:'dash.zoneInc',TENT1:'dash.zoneTent1',TENT2:'dash.zoneTent2',TENT3:'dash.zoneTent3',CONTAM:'dash.zoneContam'};
-function zoneDisplayName(id){
-  if(!id)return id;
-  if(KNOWN_ZONE_I18N[id])return t(KNOWN_ZONE_I18N[id]);
-  const z=zones.find(x=>x.id===id);
-  if(z)return z.name;
+const SP_COLORS = [
+  '#e11d48',
+  '#0284c7',
+  '#059669',
+  '#d97706',
+  '#7c3aed',
+  '#0d9488',
+  '#ea580c',
+  '#db2777',
+  '#0891b2',
+  '#65a30d'
+];
+let REF_GROUPS = [];
+const KNOWN_ZONE_I18N = {
+  SPAWN: 'dash.zoneSpawn',
+  INC: 'dash.zoneInc',
+  TENT1: 'dash.zoneTent1',
+  TENT2: 'dash.zoneTent2',
+  TENT3: 'dash.zoneTent3',
+  CONTAM: 'dash.zoneContam'
+};
+function zoneDisplayName(id) {
+  if (!id) return id;
+  if (KNOWN_ZONE_I18N[id]) return t(KNOWN_ZONE_I18N[id]);
+  const z = zones.find((x) => x.id === id);
+  if (z) return z.name;
   // Try as rack ID: find parent zone and return "ZoneName / rackSuffix"
-  for(const zone of zones){
-    const rack=zone.racks.find(r=>r.id===id);
-    if(rack)return(zone.name||zone.id)+'/'+(id.slice(zone.id.length+1)||id);
+  for (const zone of zones) {
+    const rack = zone.racks.find((r) => r.id === id);
+    if (rack) return (zone.name || zone.id) + '/' + (id.slice(zone.id.length + 1) || id);
   }
   return id;
 }
-function zoneByRole(role){return zones.filter(z=>z.role===role)}
-function rebuildZoneConstants(){
-  ZONES=zones.map(z=>z.id);
-  ALL_RACKS=zones.flatMap(z=>z.racks.map(r=>r.id));
-  LOCS=[...ZONES,...ALL_RACKS];
-  RACK_ZONE={};
-  zones.forEach(z=>z.racks.forEach(r=>{RACK_ZONE[r.id]=z.id}));
-  ZONE_LABELS={};ZONE_COLORS={};
-  zones.forEach(z=>{ZONE_LABELS[z.id]=KNOWN_ZONE_I18N[z.id]||z.name;ZONE_COLORS[z.id]=z.color});
-  locColor={...ZONE_COLORS};
-  // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
-  REF_GROUPS=[{g:'Actions',items:['ADD','MOVE','MOVE_BATCH','REMOVE','HARVEST'].map(a=>({val:a,label:a}))}];
-  REF_GROUPS.push({g:'Zones',items:ZONES.map(z=>{const bc=barcodeByEntity.get('zone:'+z);return{val:bc?String(bc):z,label:z}})});
-  zones.filter(z=>z.racks.length>0).forEach(z=>{
-    const rIds=z.racks.map(r=>r.id);
-    for(let i=0;i<rIds.length;i+=5){const chunk=rIds.slice(i,i+5);const label=z.name+' Racks '+(i+1)+'–'+(i+chunk.length);REF_GROUPS.push({g:label,items:chunk.map(r=>{const bc=barcodeByEntity.get('rack:'+r);return{val:bc?String(bc):r,label:r}})})}
+function zoneByRole(role) {
+  return zones.filter((z) => z.role === role);
+}
+function rebuildZoneConstants() {
+  ZONES = zones.map((z) => z.id);
+  ALL_RACKS = zones.flatMap((z) => z.racks.map((r) => r.id));
+  LOCS = [...ZONES, ...ALL_RACKS];
+  RACK_ZONE = {};
+  zones.forEach((z) =>
+    z.racks.forEach((r) => {
+      RACK_ZONE[r.id] = z.id;
+    })
+  );
+  ZONE_LABELS = {};
+  ZONE_COLORS = {};
+  zones.forEach((z) => {
+    ZONE_LABELS[z.id] = KNOWN_ZONE_I18N[z.id] || z.name;
+    ZONE_COLORS[z.id] = z.color;
   });
+  locColor = { ...ZONE_COLORS };
+  // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
+  REF_GROUPS = [
+    { g: 'Actions', items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST'].map((a) => ({ val: a, label: a })) }
+  ];
+  REF_GROUPS.push({
+    g: 'Zones',
+    items: ZONES.map((z) => {
+      const bc = barcodeByEntity.get('zone:' + z);
+      return { val: bc ? String(bc) : z, label: z };
+    })
+  });
+  zones
+    .filter((z) => z.racks.length > 0)
+    .forEach((z) => {
+      const rIds = z.racks.map((r) => r.id);
+      for (let i = 0; i < rIds.length; i += 5) {
+        const chunk = rIds.slice(i, i + 5);
+        const label = z.name + ' Racks ' + (i + 1) + '–' + (i + chunk.length);
+        REF_GROUPS.push({
+          g: label,
+          items: chunk.map((r) => {
+            const bc = barcodeByEntity.get('rack:' + r);
+            return { val: bc ? String(bc) : r, label: r };
+          })
+        });
+      }
+    });
 }
 
 // ─── DATA ────────────────────────────────────────────────────
-let mushroomStrains=[],batches=[],scanLog=[],movements=[],manualTasks=[],harvests=[],cultures=[],inventory={},teamMembers=[],caldav={},duckdns={},assets=[],zones=[],suppliers=[];
+let mushroomStrains = [],
+  batches = [],
+  scanLog = [],
+  movements = [],
+  manualTasks = [],
+  harvests = [],
+  cultures = [],
+  inventory = {},
+  teamMembers = [],
+  caldav = {},
+  duckdns = {},
+  assets = [],
+  zones = [],
+  suppliers = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
-let barcodeRegistry=new Map(),barcodeByEntity=new Map();
-let appUsers=[];let calEvSelectedAssignees=[];let calTaskSelectedAssignees=[];
-let scan={action:null,from:null,to:null,count:0,harvestBag:null};
-let confirmCb=null,noteId=null,saving=false,lastHash='';
-let spMap={};
-const spColor=s=>{const k=(s||'').toLowerCase();if(!spMap[k])spMap[k]=SP_COLORS[Object.keys(spMap).length%SP_COLORS.length];return spMap[k]};
-const spDot=s=>`<span class="sp-dot" style="background:${spColor(s)}"></span>`;
+let barcodeRegistry = new Map(),
+  barcodeByEntity = new Map();
+let appUsers = [];
+let calEvSelectedAssignees = [];
+let calTaskSelectedAssignees = [];
+let scan = { action: null, from: null, to: null, count: 0, harvestBag: null };
+let confirmCb = null,
+  noteId = null,
+  saving = false,
+  lastHash = '';
+let spMap = {};
+const spColor = (s) => {
+  const k = (s || '').toLowerCase();
+  if (!spMap[k]) spMap[k] = SP_COLORS[Object.keys(spMap).length % SP_COLORS.length];
+  return spMap[k];
+};
+const spDot = (s) => `<span class="sp-dot" style="background:${spColor(s)}"></span>`;
 
 // ─── HTML ESCAPING ──────────────────────────────────────────
-function esc(s){
-  if(s==null)return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
-function safeHref(url){if(!url)return '';const u=String(url).trim();return /^https?:\/\//i.test(u)?esc(u):'';}
-function safeColor(c,fallback){
-  if(!c)return fallback||'#16a34a';
-  return /^#[0-9a-fA-F]{3,8}$/.test(c)?c:(fallback||'#16a34a');
+function safeHref(url) {
+  if (!url) return '';
+  const u = String(url).trim();
+  return /^https?:\/\//i.test(u) ? esc(u) : '';
+}
+function safeColor(c, fallback) {
+  if (!c) return fallback || '#16a34a';
+  return /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : fallback || '#16a34a';
 }
 
 // ─── AUTH ────────────────────────────────────────────────────
-let currentUser=null;
-let dashMode=localStorage.getItem('mp-dash-mode')||'farm';
-let ovPeriod=localStorage.getItem('mp-ov-period')||'week';
-async function authFetch(url,opts){
-  const r=await fetch(url,opts);
-  if(r.status===401){window.location.href='/login.html';throw new Error('unauthorized');}
+let currentUser = null;
+let dashMode = localStorage.getItem('mp-dash-mode') || 'farm';
+let ovPeriod = localStorage.getItem('mp-ov-period') || 'week';
+async function authFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    window.location.href = '/login.html';
+    throw new Error('unauthorized');
+  }
   return r;
 }
-function _apiCall(method,path,body){
+function _apiCall(method, path, body) {
   _mutating++;
-  setSyncStatus('busy','Saving...');
-  const opts={method,headers:{}};
-  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}
-  return authFetch(path,opts).then(r=>{
-    return r.json().catch(()=>({})).then(d=>{
+  setSyncStatus('busy', 'Saving...');
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  return authFetch(path, opts)
+    .then((r) => {
+      return r
+        .json()
+        .catch(() => ({}))
+        .then((d) => {
+          _mutating--;
+          if (!r.ok) {
+            const msg = d.error || 'HTTP ' + r.status;
+            setSyncStatus('err', msg);
+            return d.error ? d : { error: msg };
+          }
+          if (_mutating === 0) setSyncStatus('ok', 'Saved · gerade eben');
+          return d;
+        });
+    })
+    .catch((e) => {
       _mutating--;
-      if(!r.ok){
-        const msg=d.error||('HTTP '+r.status);
-        setSyncStatus('err',msg);
-        return d.error?d:{error:msg};
-      }
-      if(_mutating===0)setSyncStatus('ok','Saved · gerade eben');
-      return d;
+      setSyncStatus('err', 'Save error: ' + (e.message || 'check server'));
+      console.error('API error:', method, path, e);
+      return { error: e.message || 'Network error' };
     });
-  }).catch(e=>{
-    _mutating--;
-    setSyncStatus('err','Save error: '+(e.message||'check server'));
-    console.error('API error:',method,path,e);
-    return {error:e.message||'Network error'};
+}
+function apiPost(path, body) {
+  return _apiCall('POST', path, body);
+}
+function apiPatch(path, body) {
+  return _apiCall('PATCH', path, body);
+}
+function apiDelete(path) {
+  return _apiCall('DELETE', path);
+}
+async function invDelta(mat, deltaKg, type, ref) {
+  return apiPost('/api/inventory/delta', { mat, deltaKg, type, ref });
+}
+async function invDeltas(deltas) {
+  for (const d of deltas) await invDelta(d.mat, d.deltaKg, d.type, d.ref);
+}
+async function invSetAbsolute(mat, value, type, ref) {
+  return apiPost('/api/inventory/set', { mat, value, type, ref });
+}
+async function saveInvConfig() {
+  return apiPost('/api/inventory/config', {
+    thresholds: inventory.thresholds,
+    avgComposition: inventory.avgComposition
   });
 }
-function apiPost(path,body){return _apiCall('POST',path,body)}
-function apiPatch(path,body){return _apiCall('PATCH',path,body)}
-function apiDelete(path){return _apiCall('DELETE',path)}
-async function invDelta(mat,deltaKg,type,ref){return apiPost('/api/inventory/delta',{mat,deltaKg,type,ref})}
-async function invDeltas(deltas){for(const d of deltas)await invDelta(d.mat,d.deltaKg,d.type,d.ref)}
-async function invSetAbsolute(mat,value,type,ref){return apiPost('/api/inventory/set',{mat,value,type,ref})}
-async function saveInvConfig(){return apiPost('/api/inventory/config',{thresholds:inventory.thresholds,avgComposition:inventory.avgComposition})}
-async function saveLabThresholds(){return apiPost('/api/lab-thresholds',{labThresholds:inventory.labThresholds})}
-async function loadCurrentUser(){
-  try{const r=await authFetch('/api/auth/me');currentUser=await r.json();}catch(e){if(e.message!=='unauthorized')console.error('Auth check failed:',e)}
-  showServerTab();showMcpTab();showAdminNav();
+async function saveLabThresholds() {
+  return apiPost('/api/lab-thresholds', { labThresholds: inventory.labThresholds });
 }
-function showAdminNav(){
-  const btn=document.getElementById('n-settings');
-  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+async function loadCurrentUser() {
+  try {
+    const r = await authFetch('/api/auth/me');
+    currentUser = await r.json();
+  } catch (e) {
+    if (e.message !== 'unauthorized') console.error('Auth check failed:', e);
+  }
+  showServerTab();
+  showMcpTab();
+  showAdminNav();
+}
+function showAdminNav() {
+  const btn = document.getElementById('n-settings');
+  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
-async function loadData(){
-  setSyncStatus('busy','Syncing...');
-  try{
-    const d=await authFetch('/api/data').then(r=>r.json());
-    lastHash=JSON.stringify(d);
+async function loadData() {
+  setSyncStatus('busy', 'Syncing...');
+  try {
+    const d = await authFetch('/api/data').then((r) => r.json());
+    lastHash = JSON.stringify(d);
     applyData(d);
-    lastSyncTime=Date.now();setSyncStatus('ok',t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)}));
+    lastSyncTime = Date.now();
+    setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
     refresh();
-  }catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
+  } catch (e) {
+    if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
+  }
 }
-function applyData(d){
-  mushroomStrains=d.mushroomStrains||[];
-  batches=d.batches||[];scanLog=d.scanLog||[];movements=d.movements||d.scanLog||[];manualTasks=d.manualTasks||[];
-  harvests=d.harvests||[];cultures=d.cultures||[];
-  inventory=d.inventory||defaultInventory();
-  teamMembers=d.teamMembers||[];caldav=d.caldav||{};duckdns=d.duckdns||{};assets=d.assets||[];
-  calendarEvents=d.calendarEvents||[];zones=d.zones||[];suppliers=d.suppliers||[];
+function applyData(d) {
+  mushroomStrains = d.mushroomStrains || [];
+  batches = d.batches || [];
+  scanLog = d.scanLog || [];
+  movements = d.movements || d.scanLog || [];
+  manualTasks = d.manualTasks || [];
+  harvests = d.harvests || [];
+  cultures = d.cultures || [];
+  inventory = d.inventory || defaultInventory();
+  teamMembers = d.teamMembers || [];
+  caldav = d.caldav || {};
+  duckdns = d.duckdns || {};
+  assets = d.assets || [];
+  calendarEvents = d.calendarEvents || [];
+  zones = d.zones || [];
+  suppliers = d.suppliers || [];
   // Build barcode registry from server data
-  barcodeRegistry=new Map();barcodeByEntity=new Map();
-  for(const bc of d.barcodes||[]){
-    barcodeRegistry.set(bc.barcode,{type:bc.entity_type,id:bc.entity_id});
-    barcodeByEntity.set(bc.entity_type+':'+bc.entity_id,bc.barcode);
+  barcodeRegistry = new Map();
+  barcodeByEntity = new Map();
+  for (const bc of d.barcodes || []) {
+    barcodeRegistry.set(bc.barcode, { type: bc.entity_type, id: bc.entity_id });
+    barcodeByEntity.set(bc.entity_type + ':' + bc.entity_id, bc.barcode);
   }
   rebuildZoneConstants();
-  batches.forEach(b=>spColor(b.species));cultures.forEach(c=>spColor(c.species));
+  batches.forEach((b) => spColor(b.species));
+  cultures.forEach((c) => spColor(c.species));
   fillStrainSelects();
-  fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);updateTodoBadge();
-  if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
+  fillCultureSelect('nb-culture', ['PD', 'LC']);
+  fillCultureSelect('gs-culture', ['PD', 'LC']);
+  updateTodoBadge();
+  if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
 }
-function defaultInventory(){
-  return{
-    stock:{hardwood:0,wheatbran:0,gypsum:0,grain:0},
-    thresholds:{hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}},
+function defaultInventory() {
+  return {
+    stock: { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 },
+    thresholds: { hardwood: { minKg: 50 }, wheatbran: { minKg: 20 }, gypsum: { minKg: 5 }, grain: { minKg: 10 } },
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
-    avgComposition:{hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1},
-    labThresholds:{MC:0,PD:0,LC:0,G2G:0,GS:0},
-    log:[]
+    avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 },
+    labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 },
+    log: []
   };
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
-let _mutating=0; // tracks in-flight mutations to block pollSync from overwriting
-let lastSyncTime=null;
-function formatRelativeTime(ts){
-  const sec=Math.round((Date.now()-ts)/1000);
-  if(sec<5)return t('time.justNow');
-  if(sec<60)return t('time.secsAgo',{n:sec});
-  const min=Math.floor(sec/60);
-  if(min<60)return t('time.minsAgo',{n:min});
-  return t('time.hoursAgo',{n:Math.floor(min/60)});
+let _mutating = 0; // tracks in-flight mutations to block pollSync from overwriting
+let lastSyncTime = null;
+function formatRelativeTime(ts) {
+  const sec = Math.round((Date.now() - ts) / 1000);
+  if (sec < 5) return t('time.justNow');
+  if (sec < 60) return t('time.secsAgo', { n: sec });
+  const min = Math.floor(sec / 60);
+  if (min < 60) return t('time.minsAgo', { n: min });
+  return t('time.hoursAgo', { n: Math.floor(min / 60) });
 }
-function setSyncStatus(cls,msg){document.getElementById('sync-dot').className='sync-dot '+cls;document.getElementById('sync-label').textContent=msg;const m=document.getElementById('sync-dot-m');if(m)m.className='sync-dot '+cls;if(cls==='ok')lastSyncTime=Date.now()}
+function setSyncStatus(cls, msg) {
+  document.getElementById('sync-dot').className = 'sync-dot ' + cls;
+  document.getElementById('sync-label').textContent = msg;
+  const m = document.getElementById('sync-dot-m');
+  if (m) m.className = 'sync-dot ' + cls;
+  if (cls === 'ok') lastSyncTime = Date.now();
+}
 // Update relative time display every 5 seconds
-setInterval(()=>{
-  if(!lastSyncTime)return;
-  const dot=document.getElementById('sync-dot');
-  if(!dot||!dot.classList.contains('ok'))return;
-  document.getElementById('sync-label').textContent=t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)});
-},5000);
-let _polling=false;
-async function pollSync(){
-  if(_mutating>0||_polling)return;
-  _polling=true;
-  try{const d=await authFetch('/api/data').then(r=>r.json());const h=JSON.stringify(d);if(h!==lastHash){lastHash=h;applyData(d);lastSyncTime=Date.now();setSyncStatus('ok',t('sync.syncedAt',{time:formatRelativeTime(lastSyncTime)}));refresh();}else{lastSyncTime=lastSyncTime||Date.now()}}catch(e){if(e.message!=='unauthorized')setSyncStatus('err','Sync error')}
-  finally{_polling=false}
+setInterval(() => {
+  if (!lastSyncTime) return;
+  const dot = document.getElementById('sync-dot');
+  if (!dot || !dot.classList.contains('ok')) return;
+  document.getElementById('sync-label').textContent = t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) });
+}, 5000);
+let _polling = false;
+async function pollSync() {
+  if (_mutating > 0 || _polling) return;
+  _polling = true;
+  try {
+    const d = await authFetch('/api/data').then((r) => r.json());
+    const h = JSON.stringify(d);
+    if (h !== lastHash) {
+      lastHash = h;
+      applyData(d);
+      lastSyncTime = Date.now();
+      setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
+      refresh();
+    } else {
+      lastSyncTime = lastSyncTime || Date.now();
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
+  } finally {
+    _polling = false;
+  }
 }
 
 // ── SSE real-time sync (replaces 5s polling for connected clients) ──
-let _sse=null;
-let _sseReconnectTimer=null;
-let _sseRetryDelay=1000;
-function connectSSE(){
-  if(_sse)return;
-  try{
-    _sse=new EventSource('/api/events');
-    _sse.onopen=function(){
-      _sseRetryDelay=1000; // Reset backoff on successful connection
-      setSyncStatus('ok','Connected');
+let _sse = null;
+let _sseReconnectTimer = null;
+let _sseRetryDelay = 1000;
+function connectSSE() {
+  if (_sse) return;
+  try {
+    _sse = new EventSource('/api/events');
+    _sse.onopen = function () {
+      _sseRetryDelay = 1000; // Reset backoff on successful connection
+      setSyncStatus('ok', 'Connected');
     };
-    _sse.onmessage=function(ev){
-      try{
-        const msg=JSON.parse(ev.data);
-        if(msg.type==='data-changed'&&_mutating===0)pollSync();
-        if(msg.type==='connected')setSyncStatus('ok','Connected');
-      }catch(e){/* ignore parse errors */}
-    };
-    _sse.onerror=function(){
-      _sse.close();_sse=null;
-      setSyncStatus('err','Connection lost');
-      // Exponential backoff reconnect, capped at 30s
-      if(!_sseReconnectTimer){
-        _sseReconnectTimer=setTimeout(()=>{_sseReconnectTimer=null;connectSSE()},Math.min(_sseRetryDelay,30000));
-        _sseRetryDelay=Math.min(_sseRetryDelay*2,30000);
+    _sse.onmessage = function (ev) {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'data-changed' && _mutating === 0) pollSync();
+        if (msg.type === 'connected') setSyncStatus('ok', 'Connected');
+      } catch (e) {
+        /* ignore parse errors */
       }
     };
-  }catch(e){/* SSE not supported — polling fallback active */}
+    _sse.onerror = function () {
+      _sse.close();
+      _sse = null;
+      setSyncStatus('err', 'Connection lost');
+      // Exponential backoff reconnect, capped at 30s
+      if (!_sseReconnectTimer) {
+        _sseReconnectTimer = setTimeout(
+          () => {
+            _sseReconnectTimer = null;
+            connectSSE();
+          },
+          Math.min(_sseRetryDelay, 30000)
+        );
+        _sseRetryDelay = Math.min(_sseRetryDelay * 2, 30000);
+      }
+    };
+  } catch (e) {
+    /* SSE not supported — polling fallback active */
+  }
 }
-function disconnectSSE(){if(_sse){_sse.close();_sse=null}if(_sseReconnectTimer){clearTimeout(_sseReconnectTimer);_sseReconnectTimer=null}_sseRetryDelay=1000}
+function disconnectSSE() {
+  if (_sse) {
+    _sse.close();
+    _sse = null;
+  }
+  if (_sseReconnectTimer) {
+    clearTimeout(_sseReconnectTimer);
+    _sseReconnectTimer = null;
+  }
+  _sseRetryDelay = 1000;
+}
 
 // ─── SIDEBAR ────────────────────────────────────────────────
-function toggleSidebar(){
-  const sb=document.getElementById('sidebar');
-  const ov=document.getElementById('sb-overlay');
-  const isMobile=window.innerWidth<=768;
-  if(isMobile){
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
-  }else{
+  } else {
     sb.classList.toggle('sb-collapsed');
     document.body.classList.toggle('sb-is-collapsed');
   }
 }
 // Close sidebar on mobile when navigating
-function sbCloseMobile(){
-  if(window.innerWidth<=768){
+function sbCloseMobile() {
+  if (window.innerWidth <= 768) {
     document.getElementById('sidebar').classList.remove('sb-open');
     document.getElementById('sb-overlay').classList.remove('sb-show');
     document.body.classList.remove('sb-mobile-open');
@@ -3963,730 +4295,1473 @@ function sbCloseMobile(){
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
-const PAGES={dash:'n-dash',batch:'n-batch',lab:'n-lab',assets:'n-assets',print:'n-print',cal:'n-cal',settings:'n-settings',strains:'n-strains'};
-function go(page,btnId){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('p-'+page).classList.add('active');
+const PAGES = {
+  dash: 'n-dash',
+  batch: 'n-batch',
+  lab: 'n-lab',
+  assets: 'n-assets',
+  print: 'n-print',
+  cal: 'n-cal',
+  settings: 'n-settings',
+  strains: 'n-strains'
+};
+function go(page, btnId) {
+  document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+  document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
+  document.getElementById('p-' + page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
-  if(page==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
-  if(page==='batch')renderBatches();
-  if(page==='lab')renderCultures();
-  if(page==='inv'){renderInvStock();}
-  if(page==='zones')renderZones();
-  if(page==='assets')renderAssets();
-  if(page==='print'){fillBatchSelect();renderLabList();}
-  if(page==='cal'){renderCalendar();loadCalDAVImports().then(()=>renderCalendar());}
-  if(page==='settings')renderLog();
-  if(page==='strains')renderStrains();
+  if (page === 'dash') {
+    renderStatus();
+    renderDashAlerts();
+    renderDashBatchTasks();
+    renderDashLabStock();
+  }
+  if (page === 'batch') renderBatches();
+  if (page === 'lab') renderCultures();
+  if (page === 'inv') {
+    renderInvStock();
+  }
+  if (page === 'zones') renderZones();
+  if (page === 'assets') renderAssets();
+  if (page === 'print') {
+    fillBatchSelect();
+    renderLabList();
+  }
+  if (page === 'cal') {
+    renderCalendar();
+    loadCalDAVImports().then(() => renderCalendar());
+  }
+  if (page === 'settings') renderLog();
+  if (page === 'strains') renderStrains();
   updateTodoBadge();
   sbCloseMobile();
 }
-function openStab(page,sub){
-  document.querySelectorAll(`#p-${page} .stab`).forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll(`#p-${page} .sp`).forEach(p=>p.classList.remove('active'));
-  const stEl=document.getElementById(`st-${page}-${sub}`);if(stEl)stEl.classList.add('active');
-  const spEl=document.getElementById(`sp-${page}-${sub}`);if(spEl)spEl.classList.add('active');
-  if(page==='batch'&&sub==='list')renderBatches();
-  if(page==='batch'&&sub==='harvest')renderHarvests();
-  if(page==='lab'&&sub==='cultures')renderCultures();
-  if(page==='lab'&&sub==='work'){lwUpdate();renderLabLog();}
-  if(page==='lab'&&sub==='lineage')fillLineageSelect();
-  if(page==='inv'&&sub==='stock')renderInvStock();
-  if(page==='inv'&&sub==='delivery'){delMatChange();adjMatChange();}
-  if(page==='inv'&&sub==='log')renderInvLog();
-  if(page==='assets'&&sub==='list')renderAssets();
-  if(page==='assets'&&sub==='add')resetAssetForm();
-  if(page==='assets'&&sub==='export')initExportTab();
-  if(page==='assets'&&sub==='labels')renderAssetLabelList();
-  if(page==='print'&&sub==='bags')fillBatchSelect();
-  if(page==='print'&&sub==='lab'){renderLabList();renderLabPreview();}
-  if(page==='print'&&sub==='ref')renderRefBarcodes();
-  if(page==='cal'&&sub==='cal'){loadCalDAVImports().then(()=>renderCalendar());}
-  if(page==='settings'&&sub==='caldav')loadCaldavSettings();
-  if(page==='settings'&&sub==='duckdns')loadDuckdnsSettings();
-  if(page==='settings'&&sub==='mcp')loadMcpSettings();
-  if(page==='settings'&&sub==='log')renderLog();
+function openStab(page, sub) {
+  document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll(`#p-${page} .sp`).forEach((p) => p.classList.remove('active'));
+  const stEl = document.getElementById(`st-${page}-${sub}`);
+  if (stEl) stEl.classList.add('active');
+  const spEl = document.getElementById(`sp-${page}-${sub}`);
+  if (spEl) spEl.classList.add('active');
+  if (page === 'batch' && sub === 'list') renderBatches();
+  if (page === 'batch' && sub === 'harvest') renderHarvests();
+  if (page === 'lab' && sub === 'cultures') renderCultures();
+  if (page === 'lab' && sub === 'work') {
+    lwUpdate();
+    renderLabLog();
+  }
+  if (page === 'lab' && sub === 'lineage') fillLineageSelect();
+  if (page === 'inv' && sub === 'stock') renderInvStock();
+  if (page === 'inv' && sub === 'delivery') {
+    delMatChange();
+    adjMatChange();
+  }
+  if (page === 'inv' && sub === 'log') renderInvLog();
+  if (page === 'assets' && sub === 'list') renderAssets();
+  if (page === 'assets' && sub === 'add') resetAssetForm();
+  if (page === 'assets' && sub === 'export') initExportTab();
+  if (page === 'assets' && sub === 'labels') renderAssetLabelList();
+  if (page === 'print' && sub === 'bags') fillBatchSelect();
+  if (page === 'print' && sub === 'lab') {
+    renderLabList();
+    renderLabPreview();
+  }
+  if (page === 'print' && sub === 'ref') renderRefBarcodes();
+  if (page === 'cal' && sub === 'cal') {
+    loadCalDAVImports().then(() => renderCalendar());
+  }
+  if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
+  if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
+  if (page === 'settings' && sub === 'mcp') loadMcpSettings();
+  if (page === 'settings' && sub === 'log') renderLog();
 }
-function refresh(){
-  const active=document.querySelector('.page.active');if(!active)return;
-  const id=active.id.replace('p-','');
-  if(id==='dash'){renderStatus();renderDashAlerts();renderDashBatchTasks();renderDashLabStock();}
-  if(id==='batch')renderBatches();
-  if(id==='lab')renderCultures();
-  if(id==='inv')renderInvStock();
-  if(id==='assets')renderAssets();
-  if(id==='zones')renderZones();
-  if(id==='cal')renderCalendar();
-  if(id==='strains')renderStrains();
+function refresh() {
+  const active = document.querySelector('.page.active');
+  if (!active) return;
+  const id = active.id.replace('p-', '');
+  if (id === 'dash') {
+    renderStatus();
+    renderDashAlerts();
+    renderDashBatchTasks();
+    renderDashLabStock();
+  }
+  if (id === 'batch') renderBatches();
+  if (id === 'lab') renderCultures();
+  if (id === 'inv') renderInvStock();
+  if (id === 'assets') renderAssets();
+  if (id === 'zones') renderZones();
+  if (id === 'cal') renderCalendar();
+  if (id === 'strains') renderStrains();
   updateTodoBadge();
 }
 
 // ─── MODALS ──────────────────────────────────────────────────
-function confirm2(title,body,label,cb){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;document.getElementById('m-ok').textContent=label||'Confirm';confirmCb=cb;document.getElementById('m-confirm').classList.add('open')}
-function closeConfirm(){document.getElementById('m-confirm').classList.remove('open');confirmCb=null}
-document.getElementById('m-ok').onclick=()=>{if(confirmCb)confirmCb();closeConfirm()};
-document.getElementById('m-confirm').addEventListener('click',e=>{if(e.target.id==='m-confirm')closeConfirm()});
-let promptCb=null;
-function prompt2(title,placeholder,cb){document.getElementById('m-pr-title').textContent=title;const inp=document.getElementById('m-pr-input');inp.value='';inp.placeholder=placeholder||'';promptCb=cb;document.getElementById('m-prompt').classList.add('open');setTimeout(()=>inp.focus(),80)}
-function closePrompt(){document.getElementById('m-prompt').classList.remove('open');promptCb=null}
-document.getElementById('m-pr-ok').onclick=()=>{if(promptCb)promptCb(document.getElementById('m-pr-input').value.trim());closePrompt()};
-document.getElementById('m-pr-cancel').onclick=closePrompt;
-document.getElementById('m-prompt').addEventListener('click',e=>{if(e.target.id==='m-prompt')closePrompt()});
-document.getElementById('m-pr-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('m-pr-ok').click()}});
-function openNote(id){const b=batches.find(x=>x.batchId===id);if(!b)return;noteId=id;document.getElementById('m-note-title').textContent=t('note.prefix')+id;document.getElementById('m-note-text').value=b.notes||'';document.getElementById('m-note').classList.add('open');setTimeout(()=>document.getElementById('m-note-text').focus(),80)}
-function closeNote(){document.getElementById('m-note').classList.remove('open');noteId=null}
-function saveNote(){const b=batches.find(x=>x.batchId===noteId);if(b){b.notes=document.getElementById('m-note-text').value.trim();apiPatch('/api/batches/'+encodeURIComponent(noteId),{notes:b.notes});renderBatches()}closeNote()}
-document.getElementById('m-note').addEventListener('click',e=>{if(e.target.id==='m-note')closeNote()});
+function confirm2(title, body, label, cb) {
+  document.getElementById('m-title').textContent = title;
+  document.getElementById('m-body').textContent = body;
+  document.getElementById('m-ok').textContent = label || 'Confirm';
+  confirmCb = cb;
+  document.getElementById('m-confirm').classList.add('open');
+}
+function closeConfirm() {
+  document.getElementById('m-confirm').classList.remove('open');
+  confirmCb = null;
+}
+document.getElementById('m-ok').onclick = () => {
+  if (confirmCb) confirmCb();
+  closeConfirm();
+};
+document.getElementById('m-confirm').addEventListener('click', (e) => {
+  if (e.target.id === 'm-confirm') closeConfirm();
+});
+let promptCb = null;
+function prompt2(title, placeholder, cb) {
+  document.getElementById('m-pr-title').textContent = title;
+  const inp = document.getElementById('m-pr-input');
+  inp.value = '';
+  inp.placeholder = placeholder || '';
+  promptCb = cb;
+  document.getElementById('m-prompt').classList.add('open');
+  setTimeout(() => inp.focus(), 80);
+}
+function closePrompt() {
+  document.getElementById('m-prompt').classList.remove('open');
+  promptCb = null;
+}
+document.getElementById('m-pr-ok').onclick = () => {
+  if (promptCb) promptCb(document.getElementById('m-pr-input').value.trim());
+  closePrompt();
+};
+document.getElementById('m-pr-cancel').onclick = closePrompt;
+document.getElementById('m-prompt').addEventListener('click', (e) => {
+  if (e.target.id === 'm-prompt') closePrompt();
+});
+document.getElementById('m-pr-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('m-pr-ok').click();
+  }
+});
+function openNote(id) {
+  const b = batches.find((x) => x.batchId === id);
+  if (!b) return;
+  noteId = id;
+  document.getElementById('m-note-title').textContent = t('note.prefix') + id;
+  document.getElementById('m-note-text').value = b.notes || '';
+  document.getElementById('m-note').classList.add('open');
+  setTimeout(() => document.getElementById('m-note-text').focus(), 80);
+}
+function closeNote() {
+  document.getElementById('m-note').classList.remove('open');
+  noteId = null;
+}
+function saveNote() {
+  const b = batches.find((x) => x.batchId === noteId);
+  if (b) {
+    b.notes = document.getElementById('m-note-text').value.trim();
+    apiPatch('/api/batches/' + encodeURIComponent(noteId), { notes: b.notes });
+    renderBatches();
+  }
+  closeNote();
+}
+document.getElementById('m-note').addEventListener('click', (e) => {
+  if (e.target.id === 'm-note') closeNote();
+});
 
 // Batch-add modal
-function openBatchAdd(){
-  const bs=document.getElementById('ba-batch');
-  bs.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
-  const ls=document.getElementById('ba-loc');
-  ls.innerHTML=[...ZONES,...ALL_RACKS].map(l=>`<option value="${l}">${l}</option>`).join('');
-  bs.onchange=baPreview;ls.onchange=baPreview;
+function openBatchAdd() {
+  const bs = document.getElementById('ba-batch');
+  bs.innerHTML =
+    '<option value="">— choose batch —</option>' +
+    batches.map((b) => `<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
+  const ls = document.getElementById('ba-loc');
+  ls.innerHTML = [...ZONES, ...ALL_RACKS].map((l) => `<option value="${l}">${l}</option>`).join('');
+  bs.onchange = baPreview;
+  ls.onchange = baPreview;
   document.getElementById('m-batchadd').classList.add('open');
 }
-function closeBatchAdd(){document.getElementById('m-batchadd').classList.remove('open')}
-function baPreview(){const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,b=batches.find(x=>x.batchId===id);document.getElementById('ba-prev').textContent=b?`Will log ${b.bags.length} bags → ${loc}`:'';}
-document.getElementById('m-batchadd').addEventListener('click',e=>{if(e.target.id==='m-batchadd')closeBatchAdd()});
-function confirmBatchAdd(){
-  const id=document.getElementById('ba-batch').value,loc=document.getElementById('ba-loc').value,batch=batches.find(x=>x.batchId===id);
-  if(!id||!batch){alert(t('batchadd.selectBatch'));return}
-  if(!loc){alert(t('batchadd.selectLoc'));return}
-  const now=new Date().toISOString();
-  const entries=[];
-  batch.bags.forEach(bagId=>{
-    const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:now,action:'ADD',batch:id,bag:bagId,from:null,to:loc,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
-    scanLog.push(entry);movements.push(entry);
-    if(!sessionStartTime)sessionStartTime=Date.now();
+function closeBatchAdd() {
+  document.getElementById('m-batchadd').classList.remove('open');
+}
+function baPreview() {
+  const id = document.getElementById('ba-batch').value,
+    loc = document.getElementById('ba-loc').value,
+    b = batches.find((x) => x.batchId === id);
+  document.getElementById('ba-prev').textContent = b ? `Will log ${b.bags.length} bags → ${loc}` : '';
+}
+document.getElementById('m-batchadd').addEventListener('click', (e) => {
+  if (e.target.id === 'm-batchadd') closeBatchAdd();
+});
+function confirmBatchAdd() {
+  const id = document.getElementById('ba-batch').value,
+    loc = document.getElementById('ba-loc').value,
+    batch = batches.find((x) => x.batchId === id);
+  if (!id || !batch) {
+    alert(t('batchadd.selectBatch'));
+    return;
+  }
+  if (!loc) {
+    alert(t('batchadd.selectLoc'));
+    return;
+  }
+  const now = new Date().toISOString();
+  const entries = [];
+  batch.bags.forEach((bagId) => {
+    const tempId = 's' + ++_scanTempIdCounter;
+    const entry = {
+      time: now,
+      action: 'ADD',
+      batch: id,
+      bag: bagId,
+      from: null,
+      to: loc,
+      species: batch.species,
+      strain: batch.strain,
+      user: currentUser?.username || null,
+      _tempId: tempId
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(entry);
     scan.count++;
     entries.push(entry);
   });
-  apiPost('/api/scan-log',{entries}).then(function(r){
-    if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]});
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        if (r.ids[i]) e._serverId = r.ids[i];
+      });
   });
-  updateSD();setFb('ok',`Batch ADD: ${batch.bags.length} bags → ${loc}`);closeBatchAdd();
+  updateSD();
+  setFb('ok', `Batch ADD: ${batch.bags.length} bags → ${loc}`);
+  closeBatchAdd();
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
-const abbrev=s=>{if(!s)return'BAGX';const ms=mushroomStrains.find(x=>x.name.toLowerCase()===s.toLowerCase());if(ms&&ms.kuerzel)return ms.kuerzel;return s.replace(/\s+/g,'').slice(0,4).toUpperCase().padEnd(4,'X')};
-const todayStr=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(2)};
-const genBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),n=batches.filter(b=>b.batchId.startsWith(ab+'-'+dt)).length;return ab+'-'+dt+'-'+String(n+1).padStart(2,'0')};
-const sbadge=s=>{const m={INCUBATING:'b-inc',FRUITING:'b-tent','SPAWN RUN':'b-spawn',CONTAM:'b-contam',DONE:'b-done',EMPTY:'b-done'};return`<span class="badge ${m[s]||'b-done'}">${s}</span>`};
+const abbrev = (s) => {
+  if (!s) return 'BAGX';
+  const ms = mushroomStrains.find((x) => x.name.toLowerCase() === s.toLowerCase());
+  if (ms && ms.kuerzel) return ms.kuerzel;
+  return s.replace(/\s+/g, '').slice(0, 4).toUpperCase().padEnd(4, 'X');
+};
+const todayStr = () => {
+  const d = new Date();
+  return (
+    String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear()).slice(2)
+  );
+};
+const genBatchId = (sp) => {
+  const ab = abbrev(sp),
+    dt = todayStr(),
+    n = batches.filter((b) => b.batchId.startsWith(ab + '-' + dt)).length;
+  return ab + '-' + dt + '-' + String(n + 1).padStart(2, '0');
+};
+const sbadge = (s) => {
+  const m = {
+    INCUBATING: 'b-inc',
+    FRUITING: 'b-tent',
+    'SPAWN RUN': 'b-spawn',
+    CONTAM: 'b-contam',
+    DONE: 'b-done',
+    EMPTY: 'b-done'
+  };
+  return `<span class="badge ${m[s] || 'b-done'}">${s}</span>`;
+};
 
 // ─── STATUS CALC ─────────────────────────────────────────────
-function getStatus(id){
-  const c={};ZONES.forEach(z=>c[z]=0);
-  scanLog.filter(e=>e.batch===id).forEach(e=>{
-    const tz=toZone(e.to),fz=toZone(e.from);
-    if(e.action==='ADD'&&e.to&&c[tz]!==undefined)c[tz]=Math.max(0,c[tz]+1);
-    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);if(e.to&&c[tz]!==undefined)c[tz]++}
-    if(e.action==='REMOVE'&&e.from&&c[fz]!==undefined)c[fz]=Math.max(0,c[fz]-1);
-  });
-  const total=Object.values(c).reduce((a,b)=>a+b,0);
+function getStatus(id) {
+  const c = {};
+  ZONES.forEach((z) => (c[z] = 0));
+  scanLog
+    .filter((e) => e.batch === id)
+    .forEach((e) => {
+      const tz = toZone(e.to),
+        fz = toZone(e.from);
+      if (e.action === 'ADD' && e.to && c[tz] !== undefined) c[tz] = Math.max(0, c[tz] + 1);
+      if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+        if (e.from && c[fz] !== undefined) c[fz] = Math.max(0, c[fz] - 1);
+        if (e.to && c[tz] !== undefined) c[tz]++;
+      }
+      if (e.action === 'REMOVE' && e.from && c[fz] !== undefined) c[fz] = Math.max(0, c[fz] - 1);
+    });
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
   // Aggregate by role
-  const byRole={};zones.forEach(z=>{if(!byRole[z.role])byRole[z.role]=0;byRole[z.role]+=c[z.id]||0});
-  let status='EMPTY',action='';
-  if(byRole.fruiting>0){status='FRUITING';action=t('status.action.harvest')}
-  else if(byRole.incubation>0){status='INCUBATING';action=t('status.action.moveTent')}
-  else if(byRole.spawn>0){status='SPAWN RUN';action=t('status.action.monitorSpawn')}
-  else if(byRole.contaminated>0){status='CONTAM';action=t('status.action.discard')}
-  else if(total===0&&scanLog.some(e=>e.batch===id)){status='DONE'}
-  return{c,total,status,action};
+  const byRole = {};
+  zones.forEach((z) => {
+    if (!byRole[z.role]) byRole[z.role] = 0;
+    byRole[z.role] += c[z.id] || 0;
+  });
+  let status = 'EMPTY',
+    action = '';
+  if (byRole.fruiting > 0) {
+    status = 'FRUITING';
+    action = t('status.action.harvest');
+  } else if (byRole.incubation > 0) {
+    status = 'INCUBATING';
+    action = t('status.action.moveTent');
+  } else if (byRole.spawn > 0) {
+    status = 'SPAWN RUN';
+    action = t('status.action.monitorSpawn');
+  } else if (byRole.contaminated > 0) {
+    status = 'CONTAM';
+    action = t('status.action.discard');
+  } else if (total === 0 && scanLog.some((e) => e.batch === id)) {
+    status = 'DONE';
+  }
+  return { c, total, status, action };
 }
-const getHarvested=id=>harvests.filter(h=>h.batch===id).reduce((s,h)=>s+(h.grams||0),0);
+const getHarvested = (id) => harvests.filter((h) => h.batch === id).reduce((s, h) => s + (h.grams || 0), 0);
 
 // ─── DASHBOARD ───────────────────────────────────────────────
-let harvestChartInst=null,batchYieldInst=null,timelineInst=null;
+let harvestChartInst = null,
+  batchYieldInst = null,
+  timelineInst = null;
 
-function buildSparkSvg(data,color){
-  if(!data||data.length<2)return'';
-  const w=80,h=22,max=Math.max(...data,1);
-  const pts=data.map((v,i)=>[Math.round(i/(data.length-1)*w),Math.round(h-v/max*(h-2))]);
-  const line=pts.map((p,i)=>(i===0?'M':'L')+p[0]+','+p[1]).join(' ');
-  const area=line+` L${w},${h} L0,${h} Z`;
-  return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="met-spark"><path d="${area}" fill="${color}" opacity=".12"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function buildSparkSvg(data, color) {
+  if (!data || data.length < 2) return '';
+  const w = 80,
+    h = 22,
+    max = Math.max(...data, 1);
+  const pts = data.map((v, i) => [Math.round((i / (data.length - 1)) * w), Math.round(h - (v / max) * (h - 2))]);
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
+  const area = line + ` L${w},${h} L0,${h} Z`;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="met-spark"><path d="${area}" fill="${color}" opacity=".12"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
-function harvestSparkData(){
-  const days=[];const now=new Date();
-  for(let i=6;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);days.push(d.toISOString().slice(0,10))}
-  return days.map(day=>harvests.filter(h=>(h.time||'').slice(0,10)===day).reduce((s,h)=>s+(h.grams||0),0));
+function harvestSparkData() {
+  const days = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days.map((day) =>
+    harvests.filter((h) => (h.time || '').slice(0, 10) === day).reduce((s, h) => s + (h.grams || 0), 0)
+  );
 }
-function countDueToday(){
-  const today=new Date();today.setHours(0,0,0,0);
-  return batches.filter(b=>{
-    const{status}=getStatus(b.batchId);
-    if(status==='DONE'||status==='EMPTY')return false;
-    const due=new Date(b.due);due.setHours(0,0,0,0);
-    const dl=Math.round((due-today)/864e5);
-    return dl<=0||(status==='FRUITING')||(status==='CONTAM');
+function countDueToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return batches.filter((b) => {
+    const { status } = getStatus(b.batchId);
+    if (status === 'DONE' || status === 'EMPTY') return false;
+    const due = new Date(b.due);
+    due.setHours(0, 0, 0, 0);
+    const dl = Math.round((due - today) / 864e5);
+    return dl <= 0 || status === 'FRUITING' || status === 'CONTAM';
   }).length;
 }
-function renderPipelineKPIs(tot,spawn,inc,tent,done,contam){
-  const el=document.getElementById('metrics');
-  if(!el)return;
+function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
+  const el = document.getElementById('metrics');
+  if (!el) return;
   // Pick up zone colors if configured
-  const zSpawn=zones.find(z=>z.role==='spawn');
-  const zInc=zones.find(z=>z.role==='incubation');
-  const zTent=zones.find(z=>z.role==='fruiting');
-  const zContam=zones.find(z=>z.role==='contaminated');
-  const stages=[
-    {label:'SPAWN',value:spawn,color:zSpawn?.color||'#a855f7',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`},
-    {label:'INC',value:inc,color:zInc?.color||'#0ea5e9',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`},
-    {label:'TENT',value:tent,color:zTent?.color||'#10b981',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`},
-    {label:'DONE',value:done,color:'#64748b',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`},
-    {label:'CONTAM',value:contam,color:zContam?.color||'#ef4444',icon:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`}
+  const zSpawn = zones.find((z) => z.role === 'spawn');
+  const zInc = zones.find((z) => z.role === 'incubation');
+  const zTent = zones.find((z) => z.role === 'fruiting');
+  const zContam = zones.find((z) => z.role === 'contaminated');
+  const stages = [
+    {
+      label: 'SPAWN',
+      value: spawn,
+      color: zSpawn?.color || '#a855f7',
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`
+    },
+    {
+      label: 'INC',
+      value: inc,
+      color: zInc?.color || '#0ea5e9',
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+    },
+    {
+      label: 'TENT',
+      value: tent,
+      color: zTent?.color || '#10b981',
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`
+    },
+    {
+      label: 'DONE',
+      value: done,
+      color: '#64748b',
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`
+    },
+    {
+      label: 'CONTAM',
+      value: contam,
+      color: zContam?.color || '#ef4444',
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+    }
   ];
-  const totalRow=`<div class="metrics-total-row"><span class="metrics-total-label">${t('dash.totalBatches')}</span><span class="metrics-total-value">${tot}</span></div>`;
-  el.innerHTML=totalRow+`<div class="g5 metrics-pipeline">${stages.map(s=>`<div class="met" style="border-left-color:${s.color}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${s.color}">${s.icon}</span>${s.label}</div><div class="met-v" style="color:${s.value>0?s.color:'var(--c-text-muted)'}">${s.value}</div></div>`).join('')}</div>`;
+  const totalRow = `<div class="metrics-total-row"><span class="metrics-total-label">${t('dash.totalBatches')}</span><span class="metrics-total-value">${tot}</span></div>`;
+  el.innerHTML =
+    totalRow +
+    `<div class="g5 metrics-pipeline">${stages.map((s) => `<div class="met" style="border-left-color:${s.color}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${s.color}">${s.icon}</span>${s.label}</div><div class="met-v" style="color:${s.value > 0 ? s.color : 'var(--c-text-muted)'}">${s.value}</div></div>`).join('')}</div>`;
 }
 
-function renderOverviewKPIs(){
-  if(dashMode!=='overview')return;
-  const weekEl=document.getElementById('ov-kpi-week');
-  const qualEl=document.getElementById('ov-kpi-quality');
-  if(!weekEl||!qualEl)return;
+function renderOverviewKPIs() {
+  if (dashMode !== 'overview') return;
+  const weekEl = document.getElementById('ov-kpi-week');
+  const qualEl = document.getElementById('ov-kpi-quality');
+  if (!weekEl || !qualEl) return;
 
   applyOvPeriod();
 
-  const now=Date.now();
-  const nowDate=new Date();
+  const now = Date.now();
+  const nowDate = new Date();
 
   // Period start based on selected period
   let periodStart;
-  if(ovPeriod==='week') periodStart=new Date(now-7*864e5);
-  else if(ovPeriod==='month') periodStart=new Date(nowDate.getFullYear(),nowDate.getMonth(),1);
-  else periodStart=new Date(nowDate.getFullYear(),0,1);
+  if (ovPeriod === 'week') periodStart = new Date(now - 7 * 864e5);
+  else if (ovPeriod === 'month') periodStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+  else periodStart = new Date(nowDate.getFullYear(), 0, 1);
 
   // ── PRODUCTION ─────────────────────────────────────────────
   // 1. Bags created
-  const bagsCreated=batches.filter(b=>new Date(b.created)>=periodStart).reduce((s,b)=>s+(b.qty||0),0);
+  const bagsCreated = batches.filter((b) => new Date(b.created) >= periodStart).reduce((s, b) => s + (b.qty || 0), 0);
 
   // 2. Grain used (kg) — from inventory log
-  const grainUsed=(inventory.log||[]).filter(e=>e.mat==='grain'&&e.type==='batch'&&new Date(e.time)>=periodStart).reduce((s,e)=>s+Math.abs(e.deltaKg||0),0);
+  const grainUsed = (inventory.log || [])
+    .filter((e) => e.mat === 'grain' && e.type === 'batch' && new Date(e.time) >= periodStart)
+    .reduce((s, e) => s + Math.abs(e.deltaKg || 0), 0);
 
   // 3. Harvest (kg)
-  const periodHarvests=harvests.filter(h=>new Date(h.time)>=periodStart);
-  const periodHarvestKg=periodHarvests.reduce((s,h)=>s+(h.grams||0),0)/1000;
+  const periodHarvests = harvests.filter((h) => new Date(h.time) >= periodStart);
+  const periodHarvestKg = periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / 1000;
 
   // 4. Substrate used (kg) — hardwood and wheat bran tracked separately
-  let hardwoodUsed=0,wheatbranUsed=0;
-  (inventory.log||[]).forEach(e=>{
-    if(e.type!=='batch'||new Date(e.time)<periodStart)return;
-    if(e.mat==='hardwood')hardwoodUsed+=Math.abs(e.deltaKg||0);
-    else if(e.mat==='wheatbran')wheatbranUsed+=Math.abs(e.deltaKg||0);
+  let hardwoodUsed = 0,
+    wheatbranUsed = 0;
+  (inventory.log || []).forEach((e) => {
+    if (e.type !== 'batch' || new Date(e.time) < periodStart) return;
+    if (e.mat === 'hardwood') hardwoodUsed += Math.abs(e.deltaKg || 0);
+    else if (e.mat === 'wheatbran') wheatbranUsed += Math.abs(e.deltaKg || 0);
   });
 
   // ── QUALITY & EFFICIENCY ──────────────────────────────────
   // 5. Avg yield per bag (g) — total grams / unique bags ever harvested
-  const uniqueHarvestedBags=new Set(harvests.map(h=>h.bag)).size;
-  const avgYield=uniqueHarvestedBags>0?Math.round(harvests.reduce((s,h)=>s+(h.grams||0),0)/uniqueHarvestedBags):0;
+  const uniqueHarvestedBags = new Set(harvests.map((h) => h.bag)).size;
+  const avgYield =
+    uniqueHarvestedBags > 0 ? Math.round(harvests.reduce((s, h) => s + (h.grams || 0), 0) / uniqueHarvestedBags) : 0;
 
   // 6. Contamination rate (%)
-  const allBagsPlaced=new Set(scanLog.filter(e=>e.action==='ADD'&&e.bag).map(e=>e.bag)).size;
-  const contamBagSet=new Set();
-  scanLog.forEach(e=>{
-    if(!e.to||!e.bag)return;
-    const z=zones.find(x=>x.id===toZone(e.to));
-    if(z&&z.role==='contaminated')contamBagSet.add(e.bag);
+  const allBagsPlaced = new Set(scanLog.filter((e) => e.action === 'ADD' && e.bag).map((e) => e.bag)).size;
+  const contamBagSet = new Set();
+  scanLog.forEach((e) => {
+    if (!e.to || !e.bag) return;
+    const z = zones.find((x) => x.id === toZone(e.to));
+    if (z && z.role === 'contaminated') contamBagSet.add(e.bag);
   });
-  const contamRate=allBagsPlaced>0?+(contamBagSet.size/allBagsPlaced*100).toFixed(1):0;
-  const contamColor=contamRate===0?'var(--c-green)':contamRate<=5?'var(--c-amber)':'var(--c-red)';
-  const contamBg=contamRate===0?'var(--c-green-light)':contamRate<=5?'var(--c-amber-light)':'var(--c-red-light)';
+  const contamRate = allBagsPlaced > 0 ? +((contamBagSet.size / allBagsPlaced) * 100).toFixed(1) : 0;
+  const contamColor = contamRate === 0 ? 'var(--c-green)' : contamRate <= 5 ? 'var(--c-amber)' : 'var(--c-red)';
+  const contamBg =
+    contamRate === 0 ? 'var(--c-green-light)' : contamRate <= 5 ? 'var(--c-amber-light)' : 'var(--c-red-light)';
 
   // 7. Days without contamination (streak)
-  const contamEvents=scanLog.filter(e=>{
-    if(!e.to||!e.bag)return false;
-    const z=zones.find(x=>x.id===toZone(e.to));
-    return z&&z.role==='contaminated';
+  const contamEvents = scanLog.filter((e) => {
+    if (!e.to || !e.bag) return false;
+    const z = zones.find((x) => x.id === toZone(e.to));
+    return z && z.role === 'contaminated';
   });
-  let daysSinceContam=null,daysSinceLabel='';
-  if(contamEvents.length===0){
-    daysSinceContam=batches.length>0?Math.floor((now-new Date(batches[0].created))/864e5):null;
-    daysSinceLabel=t('dash.ov.neverContam');
-  }else{
-    daysSinceContam=Math.floor((now-new Date(contamEvents[contamEvents.length-1].time))/864e5);
-    daysSinceLabel=daysSinceContam===1?t('dash.ov.dayAgo'):t('dash.ov.daysAgo',{n:daysSinceContam});
+  let daysSinceContam = null,
+    daysSinceLabel = '';
+  if (contamEvents.length === 0) {
+    daysSinceContam = batches.length > 0 ? Math.floor((now - new Date(batches[0].created)) / 864e5) : null;
+    daysSinceLabel = t('dash.ov.neverContam');
+  } else {
+    daysSinceContam = Math.floor((now - new Date(contamEvents[contamEvents.length - 1].time)) / 864e5);
+    daysSinceLabel = daysSinceContam === 1 ? t('dash.ov.dayAgo') : t('dash.ov.daysAgo', { n: daysSinceContam });
   }
-  const streakColor=daysSinceContam===null?'var(--c-text-muted)':daysSinceContam>=14?'var(--c-green)':daysSinceContam>=7?'var(--c-amber)':'var(--c-red)';
-  const streakBg=daysSinceContam===null?'var(--c-bg)':daysSinceContam>=14?'var(--c-green-light)':daysSinceContam>=7?'var(--c-amber-light)':'var(--c-red-light)';
+  const streakColor =
+    daysSinceContam === null
+      ? 'var(--c-text-muted)'
+      : daysSinceContam >= 14
+        ? 'var(--c-green)'
+        : daysSinceContam >= 7
+          ? 'var(--c-amber)'
+          : 'var(--c-red)';
+  const streakBg =
+    daysSinceContam === null
+      ? 'var(--c-bg)'
+      : daysSinceContam >= 14
+        ? 'var(--c-green-light)'
+        : daysSinceContam >= 7
+          ? 'var(--c-amber-light)'
+          : 'var(--c-red-light)';
 
   // 8. Flush 2+ bags (bags that have had ≥2 harvests logged)
-  const bagFlushMax={};
-  harvests.forEach(h=>{if(!bagFlushMax[h.bag]||h.flush>bagFlushMax[h.bag])bagFlushMax[h.bag]=h.flush||1;});
-  const flush2Plus=Object.values(bagFlushMax).filter(f=>f>=2).length;
+  const bagFlushMax = {};
+  harvests.forEach((h) => {
+    if (!bagFlushMax[h.bag] || h.flush > bagFlushMax[h.bag]) bagFlushMax[h.bag] = h.flush || 1;
+  });
+  const flush2Plus = Object.values(bagFlushMax).filter((f) => f >= 2).length;
 
   // ── HELPER ────────────────────────────────────────────────
-  function card(icon,value,label,sub,accentColor,accentBg){
-    return`<div class="ov-kpi-card">
+  function card(icon, value, label, sub, accentColor, accentBg) {
+    return `<div class="ov-kpi-card">
       <div class="ov-kpi-icon" style="color:${accentColor};background:${accentBg}">${icon}</div>
       <div class="ov-kpi-body">
         <div class="ov-kpi-value" style="color:${accentColor}">${value}</div>
         <div class="ov-kpi-label">${label}</div>
-        ${sub?`<div class="ov-kpi-sub">${sub}</div>`:''}
+        ${sub ? `<div class="ov-kpi-sub">${sub}</div>` : ''}
       </div>
     </div>`;
   }
 
-  const fmtKg=v=>v>=10?Math.round(v)+'kg':v.toFixed(1)+'kg';
+  const fmtKg = (v) => (v >= 10 ? Math.round(v) + 'kg' : v.toFixed(1) + 'kg');
 
   // Icons
-  const iconBag=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
-  const iconGrain=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 6v12M8 8l4 4 4-4M8 16l4-4 4 4"/></svg>`;
-  const iconHarvest=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
-  const iconSubstrate=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>`;
-  const iconYield=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`;
-  const iconContam=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
-  const iconStreak=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
-  const iconFlush=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
+  const iconBag = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
+  const iconGrain = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 6v12M8 8l4 4 4-4M8 16l4-4 4 4"/></svg>`;
+  const iconHarvest = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+  const iconSubstrate = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>`;
+  const iconYield = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`;
+  const iconContam = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+  const iconStreak = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+  const iconFlush = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
 
-  const periodSub=t('dash.ov.period'+ovPeriod.charAt(0).toUpperCase()+ovPeriod.slice(1));
-  const periodLabel=document.getElementById('ov-period-label');
-  if(periodLabel) periodLabel.textContent=periodSub;
+  const periodSub = t('dash.ov.period' + ovPeriod.charAt(0).toUpperCase() + ovPeriod.slice(1));
+  const periodLabel = document.getElementById('ov-period-label');
+  if (periodLabel) periodLabel.textContent = periodSub;
 
-  weekEl.innerHTML=[
-    card(iconBag, bagsCreated||'0', t('dash.ov.bagsCreated'), periodSub, '#0ea5e9','#dbeafe'),
-    card(iconGrain, grainUsed>0?fmtKg(grainUsed):'—', t('dash.ov.grainUsed'), t('dash.ov.fromBatches'), '#a855f7','#f3e8ff'),
-    card(iconHarvest, periodHarvestKg>0?fmtKg(periodHarvestKg):'—', t('dash.ov.harvestThisWeek'), periodHarvests.length+' '+t('dash.ov.harvests'), '#d97706','#fef3c7'),
-    card(iconSubstrate, hardwoodUsed>0?fmtKg(hardwoodUsed):'—', t('dash.ov.hardwoodUsed'), t('dash.ov.fromBatches'), '#0d9488','#ccfbf1'),
-    card(iconSubstrate, wheatbranUsed>0?fmtKg(wheatbranUsed):'—', t('dash.ov.wheatbranUsed'), t('dash.ov.fromBatches'), '#059669','#d1fae5'),
+  weekEl.innerHTML = [
+    card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#0ea5e9', '#dbeafe'),
+    card(
+      iconGrain,
+      grainUsed > 0 ? fmtKg(grainUsed) : '—',
+      t('dash.ov.grainUsed'),
+      t('dash.ov.fromBatches'),
+      '#a855f7',
+      '#f3e8ff'
+    ),
+    card(
+      iconHarvest,
+      periodHarvestKg > 0 ? fmtKg(periodHarvestKg) : '—',
+      t('dash.ov.harvestThisWeek'),
+      periodHarvests.length + ' ' + t('dash.ov.harvests'),
+      '#d97706',
+      '#fef3c7'
+    ),
+    card(
+      iconSubstrate,
+      hardwoodUsed > 0 ? fmtKg(hardwoodUsed) : '—',
+      t('dash.ov.hardwoodUsed'),
+      t('dash.ov.fromBatches'),
+      '#0d9488',
+      '#ccfbf1'
+    ),
+    card(
+      iconSubstrate,
+      wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
+      t('dash.ov.wheatbranUsed'),
+      t('dash.ov.fromBatches'),
+      '#059669',
+      '#d1fae5'
+    )
   ].join('');
 
-  qualEl.innerHTML=[
-    card(iconYield, avgYield>0?avgYield+'g':'—', t('dash.ov.avgYield'), t('dash.ov.perBag'), '#16a34a','#dcfce7'),
-    card(iconContam, contamRate+'%', t('dash.ov.contamRate'), contamBagSet.size+' / '+allBagsPlaced+' '+t('dash.ov.bags'), contamColor, contamBg),
-    card(iconStreak, daysSinceContam!==null?daysSinceContam:t('dash.ov.na'), t('dash.ov.daysSinceContam'), daysSinceLabel, streakColor, streakBg),
-    card(iconFlush, flush2Plus||'0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1','#e0e7ff'),
+  qualEl.innerHTML = [
+    card(
+      iconYield,
+      avgYield > 0 ? avgYield + 'g' : '—',
+      t('dash.ov.avgYield'),
+      t('dash.ov.perBag'),
+      '#16a34a',
+      '#dcfce7'
+    ),
+    card(
+      iconContam,
+      contamRate + '%',
+      t('dash.ov.contamRate'),
+      contamBagSet.size + ' / ' + allBagsPlaced + ' ' + t('dash.ov.bags'),
+      contamColor,
+      contamBg
+    ),
+    card(
+      iconStreak,
+      daysSinceContam !== null ? daysSinceContam : t('dash.ov.na'),
+      t('dash.ov.daysSinceContam'),
+      daysSinceLabel,
+      streakColor,
+      streakBg
+    ),
+    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1', '#e0e7ff')
   ].join('');
 
   // Show the right chart container for the period
-  ['week','month','year'].forEach(p=>{
-    const el=document.getElementById('ov-charts-'+p);
-    if(el) el.style.display=ovPeriod===p?'':'none';
+  ['week', 'month', 'year'].forEach((p) => {
+    const el = document.getElementById('ov-charts-' + p);
+    if (el) el.style.display = ovPeriod === p ? '' : 'none';
   });
-  if(ovPeriod==='month') renderMonthCharts(periodStart);
-  else if(ovPeriod==='year') renderYearCharts(periodStart);
+  if (ovPeriod === 'month') renderMonthCharts(periodStart);
+  else if (ovPeriod === 'year') renderYearCharts(periodStart);
 }
 
-function renderHarvestChart(){
-  const canvas=document.getElementById('harvest-chart');
-  if(!canvas)return;
-  const bySpecies={};
-  harvests.forEach(h=>{if(!bySpecies[h.species])bySpecies[h.species]=0;bySpecies[h.species]+=h.grams||0});
-  const labels=Object.keys(bySpecies);
-  const data=labels.map(s=>bySpecies[s]/1000);
-  if(harvestChartInst){harvestChartInst.destroy();harvestChartInst=null}
-  if(!labels.length){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('harvest.noData'),canvas.width/2,80);return}
-  const fmtKg=v=>(Math.round(v*100)/100)+'kg';
-  const ctx=canvas.getContext('2d');
-  const bgColors=labels.map(s=>{
-    const base=spColor(s);
-    const g=ctx.createLinearGradient(0,0,0,canvas.clientHeight||180);
-    g.addColorStop(0,base+'ee');g.addColorStop(1,base+'55');
+function renderHarvestChart() {
+  const canvas = document.getElementById('harvest-chart');
+  if (!canvas) return;
+  const bySpecies = {};
+  harvests.forEach((h) => {
+    if (!bySpecies[h.species]) bySpecies[h.species] = 0;
+    bySpecies[h.species] += h.grams || 0;
+  });
+  const labels = Object.keys(bySpecies);
+  const data = labels.map((s) => bySpecies[s] / 1000);
+  if (harvestChartInst) {
+    harvestChartInst.destroy();
+    harvestChartInst = null;
+  }
+  if (!labels.length) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(t('harvest.noData'), canvas.width / 2, 80);
+    return;
+  }
+  const fmtKg = (v) => Math.round(v * 100) / 100 + 'kg';
+  const ctx = canvas.getContext('2d');
+  const bgColors = labels.map((s) => {
+    const base = spColor(s);
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 180);
+    g.addColorStop(0, base + 'ee');
+    g.addColorStop(1, base + '55');
     return g;
   });
-  const dataLabelPlugin={
-    id:'harvestDataLabels',
-    afterDatasetsDraw(chart){
-      const{ctx:c,data}=chart;
-      chart.getDatasetMeta(0).data.forEach((bar,i)=>{
-        const val=data.datasets[0].data[i];
-        if(!val)return;
-        c.save();c.fillStyle='#475569';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='bottom';
-        c.fillText(fmtKg(val),bar.x,bar.y-4);c.restore();
+  const dataLabelPlugin = {
+    id: 'harvestDataLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx: c, data } = chart;
+      chart.getDatasetMeta(0).data.forEach((bar, i) => {
+        const val = data.datasets[0].data[i];
+        if (!val) return;
+        c.save();
+        c.fillStyle = '#475569';
+        c.font = 'bold 11px system-ui';
+        c.textAlign = 'center';
+        c.textBaseline = 'bottom';
+        c.fillText(fmtKg(val), bar.x, bar.y - 4);
+        c.restore();
       });
     }
   };
-  harvestChartInst=new Chart(canvas,{
-    type:'bar',
-    plugins:[dataLabelPlugin],
-    data:{labels,datasets:[{data,backgroundColor:bgColors,borderColor:labels.map(s=>spColor(s)),borderWidth:1.5,borderRadius:8,borderSkipped:false}]},
-    options:{responsive:true,layout:{padding:{top:22}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtKg(c.parsed.y)}}},scales:{y:{ticks:{callback:v=>fmtKg(v),color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{grid:{display:false},ticks:{color:'#64748b'}}}}
+  harvestChartInst = new Chart(canvas, {
+    type: 'bar',
+    plugins: [dataLabelPlugin],
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: bgColors,
+          borderColor: labels.map((s) => spColor(s)),
+          borderWidth: 1.5,
+          borderRadius: 8,
+          borderSkipped: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtKg(c.parsed.y) } } },
+      scales: {
+        y: { ticks: { callback: (v) => fmtKg(v), color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+        x: { grid: { display: false }, ticks: { color: '#64748b' } }
+      }
+    }
   });
 }
 
-let weeklyHarvestInst=null;
-let ovMonthHarvestInst=null,ovMonthSubstrateInst=null,ovYearHarvestInst=null,ovYearBagsInst=null;
-function renderWeeklyHarvestChart(){
-  const canvas=document.getElementById('weekly-harvest-chart');
-  if(!canvas)return;
-  const byWeek={};
-  harvests.forEach(h=>{
-    const d=new Date(h.time);
-    const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
-    const key=mon.toISOString().slice(0,10);
-    byWeek[key]=(byWeek[key]||0)+(h.grams||0);
+let weeklyHarvestInst = null;
+let ovMonthHarvestInst = null,
+  ovMonthSubstrateInst = null,
+  ovYearHarvestInst = null,
+  ovYearBagsInst = null;
+function renderWeeklyHarvestChart() {
+  const canvas = document.getElementById('weekly-harvest-chart');
+  if (!canvas) return;
+  const byWeek = {};
+  harvests.forEach((h) => {
+    const d = new Date(h.time);
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - d.getDay() + 1);
+    const key = mon.toISOString().slice(0, 10);
+    byWeek[key] = (byWeek[key] || 0) + (h.grams || 0);
   });
-  const weekKeys=Object.keys(byWeek).sort().slice(-10);
-  if(weeklyHarvestInst){weeklyHarvestInst.destroy();weeklyHarvestInst=null}
-  const badge=document.getElementById('dash-weekly-trend-badge');
-  if(!weekKeys.length){
-    const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';
-    ctx.fillText(t('dash.noHarvestData'),canvas.width/2,60);
-    if(badge)badge.innerHTML='';return;
+  const weekKeys = Object.keys(byWeek).sort().slice(-10);
+  if (weeklyHarvestInst) {
+    weeklyHarvestInst.destroy();
+    weeklyHarvestInst = null;
+  }
+  const badge = document.getElementById('dash-weekly-trend-badge');
+  if (!weekKeys.length) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(t('dash.noHarvestData'), canvas.width / 2, 60);
+    if (badge) badge.innerHTML = '';
+    return;
   }
   // Trend badge: compare last completed week vs previous
-  if(badge&&weekKeys.length>=2){
-    const lastVal=byWeek[weekKeys[weekKeys.length-1]]/1000;
-    const prevVal=byWeek[weekKeys[weekKeys.length-2]]/1000;
-    const delta=lastVal-prevVal;
-    const pct=prevVal>0?Math.abs(Math.round(delta/prevVal*100)):null;
-    const up=delta>=0;
-    badge.innerHTML=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${up?'var(--c-green-light)':'var(--c-red-light)'};color:${up?'var(--c-green-dark)':'var(--c-red-dark)'}">${up?'↑':'↓'}${pct!==null?pct+'%':''} vs prev</span>`;
-  }else if(badge){badge.innerHTML='';}
+  if (badge && weekKeys.length >= 2) {
+    const lastVal = byWeek[weekKeys[weekKeys.length - 1]] / 1000;
+    const prevVal = byWeek[weekKeys[weekKeys.length - 2]] / 1000;
+    const delta = lastVal - prevVal;
+    const pct = prevVal > 0 ? Math.abs(Math.round((delta / prevVal) * 100)) : null;
+    const up = delta >= 0;
+    badge.innerHTML = `<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${up ? 'var(--c-green-light)' : 'var(--c-red-light)'};color:${up ? 'var(--c-green-dark)' : 'var(--c-red-dark)'}">${up ? '↑' : '↓'}${pct !== null ? pct + '%' : ''} vs prev</span>`;
+  } else if (badge) {
+    badge.innerHTML = '';
+  }
   // Check which key is the current (potentially incomplete) week
-  const nowMon=new Date();nowMon.setDate(nowMon.getDate()-nowMon.getDay()+1);nowMon.setHours(0,0,0,0);
-  const thisWeekKey=nowMon.toISOString().slice(0,10);
-  const values=weekKeys.map(k=>byWeek[k]/1000);
-  const ctx=canvas.getContext('2d');
-  const grad=ctx.createLinearGradient(0,0,0,canvas.clientHeight||180);
-  grad.addColorStop(0,'rgba(245,158,11,0.35)');
-  grad.addColorStop(1,'rgba(245,158,11,0.01)');
-  const pointColors=weekKeys.map(k=>k===thisWeekKey?'rgba(245,158,11,0.45)':'rgba(245,158,11,1)');
-  const pointBorderColors=weekKeys.map(k=>k===thisWeekKey?'rgba(245,158,11,0.6)':'rgba(245,158,11,1)');
-  weeklyHarvestInst=new Chart(canvas,{
-    type:'line',
-    data:{
-      labels:weekKeys.map(k=>{const d=new Date(k);return fmtDtShort(d)+(k===thisWeekKey?' *':'')}),
-      datasets:[{
-        data:values,fill:true,backgroundColor:grad,
-        borderColor:'rgba(245,158,11,0.9)',borderWidth:2.5,
-        pointBackgroundColor:pointColors,pointBorderColor:pointBorderColors,
-        pointRadius:4,pointHoverRadius:7,tension:0.35
-      }]
+  const nowMon = new Date();
+  nowMon.setDate(nowMon.getDate() - nowMon.getDay() + 1);
+  nowMon.setHours(0, 0, 0, 0);
+  const thisWeekKey = nowMon.toISOString().slice(0, 10);
+  const values = weekKeys.map((k) => byWeek[k] / 1000);
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 180);
+  grad.addColorStop(0, 'rgba(245,158,11,0.35)');
+  grad.addColorStop(1, 'rgba(245,158,11,0.01)');
+  const pointColors = weekKeys.map((k) => (k === thisWeekKey ? 'rgba(245,158,11,0.45)' : 'rgba(245,158,11,1)'));
+  const pointBorderColors = weekKeys.map((k) => (k === thisWeekKey ? 'rgba(245,158,11,0.6)' : 'rgba(245,158,11,1)'));
+  weeklyHarvestInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: weekKeys.map((k) => {
+        const d = new Date(k);
+        return fmtDtShort(d) + (k === thisWeekKey ? ' *' : '');
+      }),
+      datasets: [
+        {
+          data: values,
+          fill: true,
+          backgroundColor: grad,
+          borderColor: 'rgba(245,158,11,0.9)',
+          borderWidth: 2.5,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointBorderColors,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          tension: 0.35
+        }
+      ]
     },
-    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>(Math.round(c.parsed.y*100)/100)+'kg',title:items=>{const lbl=items[0].label;return lbl.endsWith(' *')?lbl.slice(0,-2)+' (this week)':lbl}}}},
-      scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{font:{size:10},color:'#64748b'},grid:{display:false}}}}
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (c) => Math.round(c.parsed.y * 100) / 100 + 'kg',
+            title: (items) => {
+              const lbl = items[0].label;
+              return lbl.endsWith(' *') ? lbl.slice(0, -2) + ' (this week)' : lbl;
+            }
+          }
+        }
+      },
+      scales: {
+        y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+        x: { ticks: { font: { size: 10 }, color: '#64748b' }, grid: { display: false } }
+      }
+    }
   });
 }
 
-function renderMonthCharts(monthStart){
-  const nowDate=new Date();
+function renderMonthCharts(monthStart) {
+  const nowDate = new Date();
 
-  const canvas1=document.getElementById('ov-month-harvest-chart');
-  if(canvas1){
-    const dayMap={};
-    harvests.forEach(h=>{
-      const d=new Date(h.time);
-      if(d<monthStart)return;
-      const key=d.toISOString().slice(0,10);
-      dayMap[key]=(dayMap[key]||0)+(h.grams||0);
+  const canvas1 = document.getElementById('ov-month-harvest-chart');
+  if (canvas1) {
+    const dayMap = {};
+    harvests.forEach((h) => {
+      const d = new Date(h.time);
+      if (d < monthStart) return;
+      const key = d.toISOString().slice(0, 10);
+      dayMap[key] = (dayMap[key] || 0) + (h.grams || 0);
     });
-    const days=[];
-    const cur=new Date(monthStart);
-    while(cur<=nowDate){days.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+1);}
-    if(ovMonthHarvestInst){ovMonthHarvestInst.destroy();ovMonthHarvestInst=null;}
-    const ctx1=canvas1.getContext('2d');
-    const grad1=ctx1.createLinearGradient(0,0,0,180);
-    grad1.addColorStop(0,'rgba(245,158,11,0.35)');grad1.addColorStop(1,'rgba(245,158,11,0.01)');
-    ovMonthHarvestInst=new Chart(canvas1,{
-      type:'line',
-      data:{labels:days.map(k=>fmtDtShort(new Date(k))),datasets:[{data:days.map(k=>(dayMap[k]||0)/1000),fill:true,backgroundColor:grad1,borderColor:'rgba(245,158,11,0.9)',borderWidth:2,pointRadius:days.length>20?0:3,tension:0.3}]},
-      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(2)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{font:{size:9},color:'#64748b',maxTicksLimit:12},grid:{display:false}}}}
+    const days = [];
+    const cur = new Date(monthStart);
+    while (cur <= nowDate) {
+      days.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (ovMonthHarvestInst) {
+      ovMonthHarvestInst.destroy();
+      ovMonthHarvestInst = null;
+    }
+    const ctx1 = canvas1.getContext('2d');
+    const grad1 = ctx1.createLinearGradient(0, 0, 0, 180);
+    grad1.addColorStop(0, 'rgba(245,158,11,0.35)');
+    grad1.addColorStop(1, 'rgba(245,158,11,0.01)');
+    ovMonthHarvestInst = new Chart(canvas1, {
+      type: 'line',
+      data: {
+        labels: days.map((k) => fmtDtShort(new Date(k))),
+        datasets: [
+          {
+            data: days.map((k) => (dayMap[k] || 0) / 1000),
+            fill: true,
+            backgroundColor: grad1,
+            borderColor: 'rgba(245,158,11,0.9)',
+            borderWidth: 2,
+            pointRadius: days.length > 20 ? 0 : 3,
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + 'kg' } } },
+        scales: {
+          y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 12 }, grid: { display: false } }
+        }
+      }
     });
   }
 
-  const canvas2=document.getElementById('ov-month-substrate-chart');
-  if(canvas2){
-    const weekHw={},weekWb={};
-    (inventory.log||[]).forEach(e=>{
-      if(e.type!=='batch')return;
-      if(e.mat!=='hardwood'&&e.mat!=='wheatbran')return;
-      const d=new Date(e.time);
-      if(d<monthStart)return;
-      const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
-      const key=mon.toISOString().slice(0,10);
-      if(e.mat==='hardwood')weekHw[key]=(weekHw[key]||0)+Math.abs(e.deltaKg||0);
-      else weekWb[key]=(weekWb[key]||0)+Math.abs(e.deltaKg||0);
+  const canvas2 = document.getElementById('ov-month-substrate-chart');
+  if (canvas2) {
+    const weekHw = {},
+      weekWb = {};
+    (inventory.log || []).forEach((e) => {
+      if (e.type !== 'batch') return;
+      if (e.mat !== 'hardwood' && e.mat !== 'wheatbran') return;
+      const d = new Date(e.time);
+      if (d < monthStart) return;
+      const mon = new Date(d);
+      mon.setDate(d.getDate() - d.getDay() + 1);
+      const key = mon.toISOString().slice(0, 10);
+      if (e.mat === 'hardwood') weekHw[key] = (weekHw[key] || 0) + Math.abs(e.deltaKg || 0);
+      else weekWb[key] = (weekWb[key] || 0) + Math.abs(e.deltaKg || 0);
     });
-    const weekKeys=[...new Set([...Object.keys(weekHw),...Object.keys(weekWb)])].sort();
-    if(ovMonthSubstrateInst){ovMonthSubstrateInst.destroy();ovMonthSubstrateInst=null;}
-    if(!weekKeys.length){
-      const ctx=canvas2.getContext('2d');ctx.clearRect(0,0,canvas2.width,canvas2.height);
-      ctx.fillStyle='#aaa';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(t('dash.noHarvestData'),canvas2.width/2,60);
-    }else{
-      ovMonthSubstrateInst=new Chart(canvas2,{
-        type:'bar',
-        data:{labels:weekKeys.map(k=>'w/'+k.slice(5,10)),datasets:[
-          {label:t('dash.ov.hardwood'),data:weekKeys.map(k=>+(weekHw[k]||0).toFixed(1)),backgroundColor:'#0d9488',borderRadius:3},
-          {label:t('dash.ov.wheatbran'),data:weekKeys.map(k=>+(weekWb[k]||0).toFixed(1)),backgroundColor:'#059669',borderRadius:3}
-        ]},
-        options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(1)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+    const weekKeys = [...new Set([...Object.keys(weekHw), ...Object.keys(weekWb)])].sort();
+    if (ovMonthSubstrateInst) {
+      ovMonthSubstrateInst.destroy();
+      ovMonthSubstrateInst = null;
+    }
+    if (!weekKeys.length) {
+      const ctx = canvas2.getContext('2d');
+      ctx.clearRect(0, 0, canvas2.width, canvas2.height);
+      ctx.fillStyle = '#aaa';
+      ctx.font = '12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(t('dash.noHarvestData'), canvas2.width / 2, 60);
+    } else {
+      ovMonthSubstrateInst = new Chart(canvas2, {
+        type: 'bar',
+        data: {
+          labels: weekKeys.map((k) => 'w/' + k.slice(5, 10)),
+          datasets: [
+            {
+              label: t('dash.ov.hardwood'),
+              data: weekKeys.map((k) => +(weekHw[k] || 0).toFixed(1)),
+              backgroundColor: '#0d9488',
+              borderRadius: 3
+            },
+            {
+              label: t('dash.ov.wheatbran'),
+              data: weekKeys.map((k) => +(weekWb[k] || 0).toFixed(1)),
+              backgroundColor: '#059669',
+              borderRadius: 3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } }
+          },
+          scales: {
+            y: {
+              ticks: { callback: (v) => v + 'kg', color: '#64748b' },
+              grid: { color: '#f1f5f9' },
+              beginAtZero: true
+            },
+            x: { ticks: { color: '#64748b' }, grid: { display: false } }
+          }
+        }
       });
     }
   }
 }
 
-function renderYearCharts(yearStart){
-  const nowDate=new Date();
-  const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const monthKeys=Array.from({length:12},(_,i)=>`${nowDate.getFullYear()}-${String(i+1).padStart(2,'0')}`);
+function renderYearCharts(yearStart) {
+  const nowDate = new Date();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
 
-  const canvas1=document.getElementById('ov-year-harvest-chart');
-  if(canvas1){
-    const monthMap={};
-    harvests.forEach(h=>{
-      const d=new Date(h.time);
-      if(d<yearStart)return;
-      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      monthMap[key]=(monthMap[key]||0)+(h.grams||0);
+  const canvas1 = document.getElementById('ov-year-harvest-chart');
+  if (canvas1) {
+    const monthMap = {};
+    harvests.forEach((h) => {
+      const d = new Date(h.time);
+      if (d < yearStart) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthMap[key] = (monthMap[key] || 0) + (h.grams || 0);
     });
-    if(ovYearHarvestInst){ovYearHarvestInst.destroy();ovYearHarvestInst=null;}
-    ovYearHarvestInst=new Chart(canvas1,{
-      type:'bar',
-      data:{labels:monthNames,datasets:[{data:monthKeys.map(k=>+((monthMap[k]||0)/1000).toFixed(2)),backgroundColor:monthKeys.map((_,i)=>i===nowDate.getMonth()?'rgba(245,158,11,0.9)':'rgba(245,158,11,0.45)'),borderRadius:4}]},
-      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(2)+'kg'}}},scales:{y:{ticks:{callback:v=>v+'kg',color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+    if (ovYearHarvestInst) {
+      ovYearHarvestInst.destroy();
+      ovYearHarvestInst = null;
+    }
+    ovYearHarvestInst = new Chart(canvas1, {
+      type: 'bar',
+      data: {
+        labels: monthNames,
+        datasets: [
+          {
+            data: monthKeys.map((k) => +((monthMap[k] || 0) / 1000).toFixed(2)),
+            backgroundColor: monthKeys.map((_, i) =>
+              i === nowDate.getMonth() ? 'rgba(245,158,11,0.9)' : 'rgba(245,158,11,0.45)'
+            ),
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + 'kg' } } },
+        scales: {
+          y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+          x: { ticks: { color: '#64748b' }, grid: { display: false } }
+        }
+      }
     });
   }
 
-  const canvas2=document.getElementById('ov-year-bags-chart');
-  if(canvas2){
-    const bagMap={};
-    batches.forEach(b=>{
-      const d=new Date(b.created);
-      if(d<yearStart)return;
-      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      bagMap[key]=(bagMap[key]||0)+(b.qty||0);
+  const canvas2 = document.getElementById('ov-year-bags-chart');
+  if (canvas2) {
+    const bagMap = {};
+    batches.forEach((b) => {
+      const d = new Date(b.created);
+      if (d < yearStart) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      bagMap[key] = (bagMap[key] || 0) + (b.qty || 0);
     });
-    if(ovYearBagsInst){ovYearBagsInst.destroy();ovYearBagsInst=null;}
-    ovYearBagsInst=new Chart(canvas2,{
-      type:'bar',
-      data:{labels:monthNames,datasets:[{data:monthKeys.map(k=>bagMap[k]||0),backgroundColor:monthKeys.map((_,i)=>i===nowDate.getMonth()?'rgba(14,165,233,0.9)':'rgba(14,165,233,0.45)'),borderRadius:4}]},
-      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' '+t('dash.ov.bags')}}},scales:{y:{ticks:{color:'#64748b'},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b'},grid:{display:false}}}}
+    if (ovYearBagsInst) {
+      ovYearBagsInst.destroy();
+      ovYearBagsInst = null;
+    }
+    ovYearBagsInst = new Chart(canvas2, {
+      type: 'bar',
+      data: {
+        labels: monthNames,
+        datasets: [
+          {
+            data: monthKeys.map((k) => bagMap[k] || 0),
+            backgroundColor: monthKeys.map((_, i) =>
+              i === nowDate.getMonth() ? 'rgba(14,165,233,0.9)' : 'rgba(14,165,233,0.45)'
+            ),
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } }
+        },
+        scales: {
+          y: { ticks: { color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+          x: { ticks: { color: '#64748b' }, grid: { display: false } }
+        }
+      }
     });
   }
 }
 
 // ── KPI History (daily snapshot trend charts) ───────────────
-let kpiHistoryData=null;
-let ovHistHarvestInst=null,ovHistBagsInst=null,ovHistPipelineInst=null,ovHistContamInst=null,ovHistStockInst=null;
+let kpiHistoryData = null;
+let ovHistHarvestInst = null,
+  ovHistBagsInst = null,
+  ovHistPipelineInst = null,
+  ovHistContamInst = null,
+  ovHistStockInst = null;
 
-async function loadKpiHistory(){
-  try{
-    const r=await fetch('/api/kpi-snapshots?limit=90');
-    if(!r.ok)return;
-    const j=await r.json();
-    kpiHistoryData=j.items||[];
+async function loadKpiHistory() {
+  try {
+    const r = await fetch('/api/kpi-snapshots?limit=90');
+    if (!r.ok) return;
+    const j = await r.json();
+    kpiHistoryData = j.items || [];
     renderKpiHistory();
-  }catch(e){console.warn('KPI history load failed',e);}
+  } catch (e) {
+    console.warn('KPI history load failed', e);
+  }
 }
 
-function renderKpiHistory(){
-  const wrap=document.getElementById('ov-kpi-history');
-  const emptyEl=document.getElementById('ov-history-empty');
-  const chartsEl=document.getElementById('ov-history-charts');
-  if(!wrap)return;
-  if(dashMode!=='overview'){wrap.style.display='none';return;}
-  wrap.style.display='';
-
-  if(!kpiHistoryData||kpiHistoryData.length<2){
-    if(emptyEl)emptyEl.style.display='';
-    if(chartsEl)chartsEl.style.display='none';
+function renderKpiHistory() {
+  const wrap = document.getElementById('ov-kpi-history');
+  const emptyEl = document.getElementById('ov-history-empty');
+  const chartsEl = document.getElementById('ov-history-charts');
+  if (!wrap) return;
+  if (dashMode !== 'overview') {
+    wrap.style.display = 'none';
     return;
   }
-  if(emptyEl)emptyEl.style.display='none';
-  if(chartsEl)chartsEl.style.display='';
+  wrap.style.display = '';
 
-  const labels=kpiHistoryData.map(s=>s.date.slice(5)); // MM-DD
-  const chartOpts=(yLabel,cb)=>({responsive:true,plugins:{legend:{display:true,labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:cb||undefined}}},scales:{y:{ticks:{color:'#64748b',callback:v=>v+yLabel},grid:{color:'#f1f5f9'},beginAtZero:true},x:{ticks:{color:'#64748b',maxRotation:45},grid:{display:false}}}});
-  const lineDs=(label,data,color,fill)=>({label,data,borderColor:color,backgroundColor:fill||color+'33',tension:0.3,pointRadius:2,fill:!!fill});
+  if (!kpiHistoryData || kpiHistoryData.length < 2) {
+    if (emptyEl) emptyEl.style.display = '';
+    if (chartsEl) chartsEl.style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (chartsEl) chartsEl.style.display = '';
+
+  const labels = kpiHistoryData.map((s) => s.date.slice(5)); // MM-DD
+  const chartOpts = (yLabel, cb) => ({
+    responsive: true,
+    plugins: {
+      legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+      tooltip: { callbacks: { label: cb || undefined } }
+    },
+    scales: {
+      y: { ticks: { color: '#64748b', callback: (v) => v + yLabel }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+      x: { ticks: { color: '#64748b', maxRotation: 45 }, grid: { display: false } }
+    }
+  });
+  const lineDs = (label, data, color, fill) => ({
+    label,
+    data,
+    borderColor: color,
+    backgroundColor: fill || color + '33',
+    tension: 0.3,
+    pointRadius: 2,
+    fill: !!fill
+  });
 
   // 1. Harvest chart
-  const c1=document.getElementById('ov-history-harvest-chart');
-  if(c1){
-    if(ovHistHarvestInst){ovHistHarvestInst.destroy();ovHistHarvestInst=null;}
-    ovHistHarvestInst=new Chart(c1,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.harvestThisWeek'),kpiHistoryData.map(s=>+(s.harvest_kg||0).toFixed(2)),'#d97706','#fef3c733')]},options:chartOpts('kg',c=>c.parsed.y.toFixed(2)+'kg')});
+  const c1 = document.getElementById('ov-history-harvest-chart');
+  if (c1) {
+    if (ovHistHarvestInst) {
+      ovHistHarvestInst.destroy();
+      ovHistHarvestInst = null;
+    }
+    ovHistHarvestInst = new Chart(c1, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          lineDs(
+            t('dash.ov.harvestThisWeek'),
+            kpiHistoryData.map((s) => +(s.harvest_kg || 0).toFixed(2)),
+            '#d97706',
+            '#fef3c733'
+          )
+        ]
+      },
+      options: chartOpts('kg', (c) => c.parsed.y.toFixed(2) + 'kg')
+    });
   }
 
   // 2. Bags created chart
-  const c2=document.getElementById('ov-history-bags-chart');
-  if(c2){
-    if(ovHistBagsInst){ovHistBagsInst.destroy();ovHistBagsInst=null;}
-    ovHistBagsInst=new Chart(c2,{type:'bar',data:{labels,datasets:[{label:t('dash.ov.bagsCreated'),data:kpiHistoryData.map(s=>s.bags_created||0),backgroundColor:'rgba(14,165,233,0.6)',borderRadius:3}]},options:chartOpts('',c=>c.parsed.y+' '+t('dash.ov.bags'))});
+  const c2 = document.getElementById('ov-history-bags-chart');
+  if (c2) {
+    if (ovHistBagsInst) {
+      ovHistBagsInst.destroy();
+      ovHistBagsInst = null;
+    }
+    ovHistBagsInst = new Chart(c2, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: t('dash.ov.bagsCreated'),
+            data: kpiHistoryData.map((s) => s.bags_created || 0),
+            backgroundColor: 'rgba(14,165,233,0.6)',
+            borderRadius: 3
+          }
+        ]
+      },
+      options: chartOpts('', (c) => c.parsed.y + ' ' + t('dash.ov.bags'))
+    });
   }
 
   // 3. Pipeline chart (stacked area)
-  const c3=document.getElementById('ov-history-pipeline-chart');
-  if(c3){
-    if(ovHistPipelineInst){ovHistPipelineInst.destroy();ovHistPipelineInst=null;}
-    ovHistPipelineInst=new Chart(c3,{type:'line',data:{labels,datasets:[
-      lineDs(t('dash.ov.spawn'),kpiHistoryData.map(s=>s.bags_spawn||0),'#a855f7','#a855f733'),
-      lineDs(t('dash.ov.incubation'),kpiHistoryData.map(s=>s.bags_incubation||0),'#0ea5e9','#0ea5e933'),
-      lineDs(t('dash.ov.fruiting'),kpiHistoryData.map(s=>s.bags_fruiting||0),'#10b981','#10b98133'),
-      lineDs(t('dash.ov.contaminated'),kpiHistoryData.map(s=>s.bags_contaminated||0),'#ef4444','#ef444433')
-    ]},options:chartOpts('')});
+  const c3 = document.getElementById('ov-history-pipeline-chart');
+  if (c3) {
+    if (ovHistPipelineInst) {
+      ovHistPipelineInst.destroy();
+      ovHistPipelineInst = null;
+    }
+    ovHistPipelineInst = new Chart(c3, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          lineDs(
+            t('dash.ov.spawn'),
+            kpiHistoryData.map((s) => s.bags_spawn || 0),
+            '#a855f7',
+            '#a855f733'
+          ),
+          lineDs(
+            t('dash.ov.incubation'),
+            kpiHistoryData.map((s) => s.bags_incubation || 0),
+            '#0ea5e9',
+            '#0ea5e933'
+          ),
+          lineDs(
+            t('dash.ov.fruiting'),
+            kpiHistoryData.map((s) => s.bags_fruiting || 0),
+            '#10b981',
+            '#10b98133'
+          ),
+          lineDs(
+            t('dash.ov.contaminated'),
+            kpiHistoryData.map((s) => s.bags_contaminated || 0),
+            '#ef4444',
+            '#ef444433'
+          )
+        ]
+      },
+      options: chartOpts('')
+    });
   }
 
   // 4. Contamination rate chart
-  const c4=document.getElementById('ov-history-contam-chart');
-  if(c4){
-    if(ovHistContamInst){ovHistContamInst.destroy();ovHistContamInst=null;}
-    ovHistContamInst=new Chart(c4,{type:'line',data:{labels,datasets:[lineDs(t('dash.ov.contamRate'),kpiHistoryData.map(s=>+(s.contam_rate_pct||0).toFixed(1)),'#ef4444','#ef444422')]},options:chartOpts('%',c=>c.parsed.y.toFixed(1)+'%')});
+  const c4 = document.getElementById('ov-history-contam-chart');
+  if (c4) {
+    if (ovHistContamInst) {
+      ovHistContamInst.destroy();
+      ovHistContamInst = null;
+    }
+    ovHistContamInst = new Chart(c4, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          lineDs(
+            t('dash.ov.contamRate'),
+            kpiHistoryData.map((s) => +(s.contam_rate_pct || 0).toFixed(1)),
+            '#ef4444',
+            '#ef444422'
+          )
+        ]
+      },
+      options: chartOpts('%', (c) => c.parsed.y.toFixed(1) + '%')
+    });
   }
 
   // 5. Stock levels chart
-  const c5=document.getElementById('ov-history-stock-chart');
-  if(c5){
-    if(ovHistStockInst){ovHistStockInst.destroy();ovHistStockInst=null;}
-    ovHistStockInst=new Chart(c5,{type:'line',data:{labels,datasets:[
-      lineDs(t('dash.ov.hardwoodUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_hardwood_kg||0).toFixed(1)),'#0d9488'),
-      lineDs(t('dash.ov.wheatbranUsed').replace(/ .*/,''),kpiHistoryData.map(s=>+(s.stock_wheatbran_kg||0).toFixed(1)),'#059669'),
-      lineDs(t('dash.ov.grain'),kpiHistoryData.map(s=>+(s.stock_grain_kg||0).toFixed(1)),'#a855f7')
-    ]},options:chartOpts('kg',c=>c.parsed.y.toFixed(1)+'kg')});
+  const c5 = document.getElementById('ov-history-stock-chart');
+  if (c5) {
+    if (ovHistStockInst) {
+      ovHistStockInst.destroy();
+      ovHistStockInst = null;
+    }
+    ovHistStockInst = new Chart(c5, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          lineDs(
+            t('dash.ov.hardwoodUsed').replace(/ .*/, ''),
+            kpiHistoryData.map((s) => +(s.stock_hardwood_kg || 0).toFixed(1)),
+            '#0d9488'
+          ),
+          lineDs(
+            t('dash.ov.wheatbranUsed').replace(/ .*/, ''),
+            kpiHistoryData.map((s) => +(s.stock_wheatbran_kg || 0).toFixed(1)),
+            '#059669'
+          ),
+          lineDs(
+            t('dash.ov.grain'),
+            kpiHistoryData.map((s) => +(s.stock_grain_kg || 0).toFixed(1)),
+            '#a855f7'
+          )
+        ]
+      },
+      options: chartOpts('kg', (c) => c.parsed.y.toFixed(1) + 'kg')
+    });
   }
 }
 
-async function takeKpiSnapshot(){
-  try{
-    const r=await fetch('/api/kpi-snapshots/now',{method:'POST'});
-    if(r.status===401||r.status===403){alert(t('dash.ov.snapshotAuthErr')||'Admin login required');return;}
-    if(!r.ok)throw new Error('Failed');
-    const j=await r.json();
-    if(j.skipped){alert(t('dash.ov.snapshotSkipped')||'Snapshot already taken today');}
-    else{alert(t('dash.ov.snapshotOk')||'Snapshot saved!');}
+async function takeKpiSnapshot() {
+  try {
+    const r = await fetch('/api/kpi-snapshots/now', { method: 'POST' });
+    if (r.status === 401 || r.status === 403) {
+      alert(t('dash.ov.snapshotAuthErr') || 'Admin login required');
+      return;
+    }
+    if (!r.ok) throw new Error('Failed');
+    const j = await r.json();
+    if (j.skipped) {
+      alert(t('dash.ov.snapshotSkipped') || 'Snapshot already taken today');
+    } else {
+      alert(t('dash.ov.snapshotOk') || 'Snapshot saved!');
+    }
     await loadKpiHistory();
-  }catch(e){console.error('Snapshot failed',e);alert(t('dash.ov.snapshotErr')||'Snapshot failed');}
+  } catch (e) {
+    console.error('Snapshot failed', e);
+    alert(t('dash.ov.snapshotErr') || 'Snapshot failed');
+  }
 }
 
-function _kpiGroupKey(dateStr,period){
-  const d=new Date(dateStr+'T00:00:00');
-  if(period==='monthly')return dateStr.slice(0,7);
-  if(period==='weekly'){
-    const thu=new Date(d);thu.setDate(d.getDate()-((d.getDay()+6)%7)+3);
-    const y=thu.getFullYear();
-    const w=Math.ceil(((thu-new Date(y,0,4))/864e5+new Date(y,0,4).getDay()+6)/7);
-    return y+'-W'+String(w).padStart(2,'0');
+function _kpiGroupKey(dateStr, period) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (period === 'monthly') return dateStr.slice(0, 7);
+  if (period === 'weekly') {
+    const thu = new Date(d);
+    thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
+    const y = thu.getFullYear();
+    const w = Math.ceil(((thu - new Date(y, 0, 4)) / 864e5 + new Date(y, 0, 4).getDay() + 6) / 7);
+    return y + '-W' + String(w).padStart(2, '0');
   }
   return dateStr;
 }
 
-function _kpiAggregate(rows,period){
-  if(period==='daily')return rows;
-  const sumF=['bags_created','grain_used_kg','harvest_kg','hardwood_used_kg','wheatbran_used_kg'];
-  const lastF=['avg_yield_g','contam_rate_pct','contam_bags','total_bags_placed','days_since_contam',
-    'flush_2plus','bags_spawn','bags_incubation','bags_fruiting','bags_contaminated',
-    'total_batches','stock_hardwood_kg','stock_wheatbran_kg','stock_grain_kg'];
-  const groups={};const order=[];
-  rows.forEach(r=>{
-    const k=_kpiGroupKey(r.date,period);
-    if(!groups[k]){groups[k]={key:k,rows:[]};order.push(k);}
+function _kpiAggregate(rows, period) {
+  if (period === 'daily') return rows;
+  const sumF = ['bags_created', 'grain_used_kg', 'harvest_kg', 'hardwood_used_kg', 'wheatbran_used_kg'];
+  const lastF = [
+    'avg_yield_g',
+    'contam_rate_pct',
+    'contam_bags',
+    'total_bags_placed',
+    'days_since_contam',
+    'flush_2plus',
+    'bags_spawn',
+    'bags_incubation',
+    'bags_fruiting',
+    'bags_contaminated',
+    'total_batches',
+    'stock_hardwood_kg',
+    'stock_wheatbran_kg',
+    'stock_grain_kg'
+  ];
+  const groups = {};
+  const order = [];
+  rows.forEach((r) => {
+    const k = _kpiGroupKey(r.date, period);
+    if (!groups[k]) {
+      groups[k] = { key: k, rows: [] };
+      order.push(k);
+    }
     groups[k].rows.push(r);
   });
-  return order.map(k=>{
-    const g=groups[k];const last=g.rows[g.rows.length-1];
-    const agg={date:g.key+' ('+g.rows[0].date+' \u2013 '+last.date+')'};
-    sumF.forEach(f=>{agg[f]=+g.rows.reduce((s,r)=>s+(r[f]||0),0).toFixed(2);});
-    lastF.forEach(f=>{agg[f]=last[f];});
+  return order.map((k) => {
+    const g = groups[k];
+    const last = g.rows[g.rows.length - 1];
+    const agg = { date: g.key + ' (' + g.rows[0].date + ' \u2013 ' + last.date + ')' };
+    sumF.forEach((f) => {
+      agg[f] = +g.rows.reduce((s, r) => s + (r[f] || 0), 0).toFixed(2);
+    });
+    lastF.forEach((f) => {
+      agg[f] = last[f];
+    });
     return agg;
   });
 }
 
-async function exportKpiCSV(){
-  try{
-    const r=await fetch('/api/kpi-snapshots');
-    if(!r.ok)throw new Error('Failed');
-    const j=await r.json();
-    const raw=j.items||[];
-    if(!raw.length){alert(t('dash.ov.historyNoData'));return;}
-    const period=(document.getElementById('kpi-csv-period')||{}).value||'weekly';
-    const rows=_kpiAggregate(raw,period);
-    const hdr=['Period','Bags created','Grain used (kg)','Harvest (kg)','Hardwood used (kg)','Wheat bran used (kg)',
-      'Avg yield (g)','Contam rate (%)','Contam bags','Total bags placed','Days since contam',
-      'Flush 2+','Bags spawn','Bags incubation','Bags fruiting','Bags contaminated',
-      'Total batches','Stock hardwood (kg)','Stock wheat bran (kg)','Stock grain (kg)'];
-    const csvRows=rows.map(s=>[s.date,s.bags_created,s.grain_used_kg,s.harvest_kg,s.hardwood_used_kg,s.wheatbran_used_kg,
-      s.avg_yield_g,s.contam_rate_pct,s.contam_bags,s.total_bags_placed,s.days_since_contam,
-      s.flush_2plus,s.bags_spawn,s.bags_incubation,s.bags_fruiting,s.bags_contaminated,
-      s.total_batches,s.stock_hardwood_kg,s.stock_wheatbran_kg,s.stock_grain_kg]);
-    const csv='\uFEFF'+[hdr,...csvRows].map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kpi_'+period+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
-  }catch(e){console.error('KPI CSV export failed',e);}
+async function exportKpiCSV() {
+  try {
+    const r = await fetch('/api/kpi-snapshots');
+    if (!r.ok) throw new Error('Failed');
+    const j = await r.json();
+    const raw = j.items || [];
+    if (!raw.length) {
+      alert(t('dash.ov.historyNoData'));
+      return;
+    }
+    const period = (document.getElementById('kpi-csv-period') || {}).value || 'weekly';
+    const rows = _kpiAggregate(raw, period);
+    const hdr = [
+      'Period',
+      'Bags created',
+      'Grain used (kg)',
+      'Harvest (kg)',
+      'Hardwood used (kg)',
+      'Wheat bran used (kg)',
+      'Avg yield (g)',
+      'Contam rate (%)',
+      'Contam bags',
+      'Total bags placed',
+      'Days since contam',
+      'Flush 2+',
+      'Bags spawn',
+      'Bags incubation',
+      'Bags fruiting',
+      'Bags contaminated',
+      'Total batches',
+      'Stock hardwood (kg)',
+      'Stock wheat bran (kg)',
+      'Stock grain (kg)'
+    ];
+    const csvRows = rows.map((s) => [
+      s.date,
+      s.bags_created,
+      s.grain_used_kg,
+      s.harvest_kg,
+      s.hardwood_used_kg,
+      s.wheatbran_used_kg,
+      s.avg_yield_g,
+      s.contam_rate_pct,
+      s.contam_bags,
+      s.total_bags_placed,
+      s.days_since_contam,
+      s.flush_2plus,
+      s.bags_spawn,
+      s.bags_incubation,
+      s.bags_fruiting,
+      s.bags_contaminated,
+      s.total_batches,
+      s.stock_hardwood_kg,
+      s.stock_wheatbran_kg,
+      s.stock_grain_kg
+    ]);
+    const csv =
+      '\uFEFF' +
+      [hdr, ...csvRows]
+        .map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';'))
+        .join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'kpi_' + period + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+  } catch (e) {
+    console.error('KPI CSV export failed', e);
+  }
 }
 
-const CHEVRON_SVG='<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
-let ZONE_LABELS={};
-let ZONE_COLORS={};
-function rackLabel(id){const m=id.match(/\d+$/);return m?t('dash.rackN',{n:m[0]}):id.replace(/_/g,' ')}
+const CHEVRON_SVG =
+  '<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+let ZONE_LABELS = {};
+let ZONE_COLORS = {};
+function rackLabel(id) {
+  const m = id.match(/\d+$/);
+  return m ? t('dash.rackN', { n: m[0] }) : id.replace(/_/g, ' ');
+}
 
-function renderStatus(){
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
-  const el=document.getElementById('dash-locations');
-  if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+t('dash.noZones')+'</div>';renderPipelineKPIs(0,0,0,0,0,0);renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
-  if(!batches.length){el.innerHTML='<div class="empty">'+t('dash.noBatches')+'</div>';renderPipelineKPIs(0,0,0,0,0,0);renderOverviewKPIs();if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}applyDashMode();return}
+function renderStatus() {
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
+  const el = document.getElementById('dash-locations');
+  if (!el) return;
+  if (!zones.length) {
+    el.innerHTML = '<div class="empty">' + t('dash.noZones') + '</div>';
+    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderOverviewKPIs();
+    if (dashMode === 'overview' && ovPeriod === 'week') {
+      renderHarvestChart();
+      renderWeeklyHarvestChart();
+    }
+    applyDashMode();
+    return;
+  }
+  if (!batches.length) {
+    el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
+    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderOverviewKPIs();
+    if (dashMode === 'overview' && ovPeriod === 'week') {
+      renderHarvestChart();
+      renderWeeklyHarvestChart();
+    }
+    applyDashMode();
+    return;
+  }
 
   // Compute per-batch status
-  let tspawn=0,ti=0,tt=0,tc=0;
-  const batchData=batches.map(b=>{
-    const{c,total,status}=getStatus(b.batchId);
-    zones.forEach(z=>{
-      if(z.role==='spawn')tspawn+=c[z.id]||0;
-      if(z.role==='incubation')ti+=c[z.id]||0;
-      if(z.role==='fruiting')tt+=c[z.id]||0;
-      if(z.role==='contaminated')tc+=c[z.id]||0;
+  let tspawn = 0,
+    ti = 0,
+    tt = 0,
+    tc = 0;
+  const batchData = batches.map((b) => {
+    const { c, total, status } = getStatus(b.batchId);
+    zones.forEach((z) => {
+      if (z.role === 'spawn') tspawn += c[z.id] || 0;
+      if (z.role === 'incubation') ti += c[z.id] || 0;
+      if (z.role === 'fruiting') tt += c[z.id] || 0;
+      if (z.role === 'contaminated') tc += c[z.id] || 0;
     });
-    const harv=getHarvested(b.batchId);
-    const due=new Date(b.due);
-    const ov=due<new Date()&&zones.some(z=>(z.role==='incubation'||z.role==='spawn')&&(c[z.id]||0)>0);
-    return{b,c,total,status,harv,due,ov};
+    const harv = getHarvested(b.batchId);
+    const due = new Date(b.due);
+    const ov =
+      due < new Date() && zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
+    return { b, c, total, status, harv, due, ov };
   });
 
   // Filter by search
-  const filtered=batchData.filter(d=>!q||d.b.batchId.toLowerCase().includes(q)||(d.b.species||'').toLowerCase().includes(q)||(d.b.strain||'').toLowerCase().includes(q)||(d.b.strainName||'').toLowerCase().includes(q));
+  const filtered = batchData.filter(
+    (d) =>
+      !q ||
+      d.b.batchId.toLowerCase().includes(q) ||
+      (d.b.species || '').toLowerCase().includes(q) ||
+      (d.b.strain || '').toLowerCase().includes(q) ||
+      (d.b.strainName || '').toLowerCase().includes(q)
+  );
 
-  let html='';
+  let html = '';
   // Render zones dynamically by role
-  const fruitingZones=zones.filter(z=>z.role==='fruiting');
-  const contamZones=zones.filter(z=>z.role==='contaminated');
-  zones.filter(z=>z.role!=='fruiting'&&z.role!=='contaminated').forEach(z=>{
-    if(z.racks.length>0)html+=renderRackSection(z.id,z.racks.map(r=>r.id),filtered);
-    else html+=renderSimpleZoneSection(z,filtered);
-  });
-  if(fruitingZones.length)html+=renderFruitingSection(fruitingZones,filtered);
-  contamZones.forEach(z=>{
-    const contamBags=getZoneBags(z.id);
-    if(Object.keys(contamBags).length>0)html+=renderContamSection(z,filtered);
+  const fruitingZones = zones.filter((z) => z.role === 'fruiting');
+  const contamZones = zones.filter((z) => z.role === 'contaminated');
+  zones
+    .filter((z) => z.role !== 'fruiting' && z.role !== 'contaminated')
+    .forEach((z) => {
+      if (z.racks.length > 0)
+        html += renderRackSection(
+          z.id,
+          z.racks.map((r) => r.id),
+          filtered
+        );
+      else html += renderSimpleZoneSection(z, filtered);
+    });
+  if (fruitingZones.length) html += renderFruitingSection(fruitingZones, filtered);
+  contamZones.forEach((z) => {
+    const contamBags = getZoneBags(z.id);
+    if (Object.keys(contamBags).length > 0) html += renderContamSection(z, filtered);
   });
 
-  el.innerHTML=html;
-  const tdone=batchData.filter(d=>d.status==='DONE').length;
-  renderPipelineKPIs(batches.length,tspawn,ti,tt,tdone,tc);
+  el.innerHTML = html;
+  const tdone = batchData.filter((d) => d.status === 'DONE').length;
+  renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
   renderOverviewKPIs();
-  if(dashMode==='overview'&&ovPeriod==='week'){renderHarvestChart();renderWeeklyHarvestChart();}
+  if (dashMode === 'overview' && ovPeriod === 'week') {
+    renderHarvestChart();
+    renderWeeklyHarvestChart();
+  }
   applyDashMode();
   updateActionBar();
 }
 
-function renderRackSection(zone,racks,filtered){
-  const color=ZONE_COLORS[zone];
-  const zoneObj=zones.find(z=>z.id===zone);
-  const cap=zoneObj?zoneObj.maxCapacity:null;
-  let totalBags=0;
-  racks.forEach(r=>totalBags+=Object.keys(getRackBags(r)).length);
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
+function renderRackSection(zone, racks, filtered) {
+  const color = ZONE_COLORS[zone];
+  const zoneObj = zones.find((z) => z.id === zone);
+  const cap = zoneObj ? zoneObj.maxCapacity : null;
+  let totalBags = 0;
+  racks.forEach((r) => (totalBags += Object.keys(getRackBags(r)).length));
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
 
-  let rackCards=racks.map(rackId=>{
-    const bags=getRackBags(rackId);
-    const count=Object.keys(bags).length;
-    const byBatch={};
-    Object.entries(bags).forEach(([bagId,d])=>{
-      if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
-      byBatch[d.batchId].bags.push({id:bagId,loc:rackId});
-    });
-    // Filter batches by search
-    const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
+  let rackCards = racks
+    .map((rackId) => {
+      const bags = getRackBags(rackId);
+      const count = Object.keys(bags).length;
+      const byBatch = {};
+      Object.entries(bags).forEach(([bagId, d]) => {
+        if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
+        byBatch[d.batchId].bags.push({ id: bagId, loc: rackId });
+      });
+      // Filter batches by search
+      const batchEntries = Object.entries(byBatch).filter(
+        ([bid, d]) =>
+          !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
+      );
 
-    let batchHtml=batchEntries.map(([bid,d])=>{
-      const bd=filtered.find(f=>f.b.batchId===bid);
-      const ov=bd?bd.ov:false;
-      d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-      return`<div class="batch-card${ov?' batch-overdue':''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+      let batchHtml = batchEntries
+        .map(([bid, d]) => {
+          const bd = filtered.find((f) => f.b.batchId === bid);
+          const ov = bd ? bd.ov : false;
+          d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
+          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
           <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
@@ -4694,38 +5769,47 @@ function renderRackSection(zone,racks,filtered){
         <div class="batch-card-meta">
           <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
           <span>${esc(d.st)}</span>
-          ${bd&&bd.ov?`<span class="overdue-text">${t('dash.overdue')}</span>`:''}
+          ${bd && bd.ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}
         </div>
-        <div class="batch-card-chips">${d.bags.map(bg=>{
-          const sel=selectedLocBags.has(bg.id);
-          return`<span class="bag-chip${sel?' selected':''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
-        }).join('')}</div>
+        <div class="batch-card-chips">${d.bags
+          .map((bg) => {
+            const sel = selectedLocBags.has(bg.id);
+            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+          })
+          .join('')}</div>
       </div>`;
-    }).join('');
-    if(!batchEntries.length&&!count)batchHtml=`<div style="font-size:11px;color:var(--c-text-muted);font-style:italic">${t('dash.empty')}</div>`;
+        })
+        .join('');
+      if (!batchEntries.length && !count)
+        batchHtml = `<div style="font-size:11px;color:var(--c-text-muted);font-style:italic">${t('dash.empty')}</div>`;
 
-    return`<div class="rack-card-new">
+      return `<div class="rack-card-new">
       <div class="rack-card-header">
         <span class="rack-card-name">${rackLabel(rackId)}</span>
-        <span class="rack-card-count">${tp('dash.bags',count)}</span>
+        <span class="rack-card-count">${tp('dash.bags', count)}</span>
       </div>
-      <div class="rack-card-bar"><div class="rack-card-bar-fill" style="background:${color};width:${Math.min(100,Math.round(count/20*100))}%"></div></div>
+      <div class="rack-card-bar"><div class="rack-card-bar-fill" style="background:${color};width:${Math.min(100, Math.round((count / 20) * 100))}%"></div></div>
       <div class="rack-card-batches">${batchHtml}</div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 
-  const rackCount=racks.length;
-  const gridClass=rackCount>4?'rack-grid rack-grid-5col':'rack-grid';
-  const capHtml=cap?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags>cap?'#ef4444':color};width:${Math.min(100,Math.round(totalBags/cap*100))}%;border-radius:3px"></div></div>
-      <span style="font-size:11px;color:${totalBags>cap?'#ef4444':'var(--c-text-muted)'};white-space:nowrap">${Math.round(totalBags/cap*100)}%</span>
-    </div>`:'';
-  const zoneHasUrgent=filtered.some(d=>d.ov&&Object.keys(d.c).some(zid=>zid===zone||racks.includes(zid)));
-  const sectionClass='location-section'+(dashMode==='farm'&&zoneHasUrgent?'':' collapsed');
-  return`<div class="${sectionClass}" data-zone="${esc(zone)}">
+  const rackCount = racks.length;
+  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : 'rack-grid';
+  const capHtml = cap
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags > cap ? '#ef4444' : color};width:${Math.min(100, Math.round((totalBags / cap) * 100))}%;border-radius:3px"></div></div>
+      <span style="font-size:11px;color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
+    </div>`
+    : '';
+  const zoneHasUrgent = filtered.some(
+    (d) => d.ov && Object.keys(d.c).some((zid) => zid === zone || racks.includes(zid))
+  );
+  const sectionClass = 'location-section' + (dashMode === 'farm' && zoneHasUrgent ? '' : ' collapsed');
+  return `<div class="${sectionClass}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
-      <span class="location-section-count">${cap?totalBags+' / '+cap+' Bags':tp('dash.bags',totalBags)}</span>
+      <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
     </div>
     <div class="location-section-body">${capHtml}
       <div class="${gridClass}">${rackCards}</div>
@@ -4733,35 +5817,40 @@ function renderRackSection(zone,racks,filtered){
   </div>`;
 }
 
-function renderFruitingSection(fruitingZones,filtered){
-  let totalBags=0;
-  fruitingZones.forEach(z=>totalBags+=Object.keys(getZoneBags(z.id)).length);
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
-  const color=fruitingZones[0]?.color||'#22c55e';
+function renderFruitingSection(fruitingZones, filtered) {
+  let totalBags = 0;
+  fruitingZones.forEach((z) => (totalBags += Object.keys(getZoneBags(z.id)).length));
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
+  const color = fruitingZones[0]?.color || '#22c55e';
 
-  const tentCols=fruitingZones.map(z=>{
-    const bags=getZoneBags(z.id);
-    const entries=Object.entries(bags);
-    const byBatch={};
-    entries.forEach(([bagId,d])=>{
-      if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
-      byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
-    });
-    const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
+  const tentCols = fruitingZones
+    .map((z) => {
+      const bags = getZoneBags(z.id);
+      const entries = Object.entries(bags);
+      const byBatch = {};
+      entries.forEach(([bagId, d]) => {
+        if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
+        byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
+      });
+      const batchEntries = Object.entries(byBatch).filter(
+        ([bid, d]) =>
+          !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
+      );
 
-    if(!batchEntries.length){
-      return`<div class="tent-column">
+      if (!batchEntries.length) {
+        return `<div class="tent-column">
         <div class="tent-column-header">${zoneDisplayName(z.id)}</div>
         <div class="tent-column-empty">${t('dash.empty')}</div>
       </div>`;
-    }
-    const cards=batchEntries.map(([bid,d])=>{
-      const bd=filtered.find(f=>f.b.batchId===bid);
-      const harv=bd?bd.harv:0;
-      const due=bd?bd.due:null;
-      const ov=bd?bd.ov:false;
-      d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-      return`<div class="batch-card${ov?' batch-overdue':''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+      }
+      const cards = batchEntries
+        .map(([bid, d]) => {
+          const bd = filtered.find((f) => f.b.batchId === bid);
+          const harv = bd ? bd.harv : 0;
+          const due = bd ? bd.due : null;
+          const ov = bd ? bd.ov : false;
+          d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
+          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
           <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
@@ -4769,31 +5858,37 @@ function renderFruitingSection(fruitingZones,filtered){
         <div class="batch-card-meta">
           <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
           <span>${esc(d.st)}</span>
-          ${harv>0?`<span style="color:var(--c-amber-dark);font-weight:500">${t('dash.harvested')}: ${harv}g</span>`:''}
-          ${due?`<span style="color:${ov?'var(--c-red-dark)':'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov?' \u26a0':''}</span>`:''}
+          ${harv > 0 ? `<span style="color:var(--c-amber-dark);font-weight:500">${t('dash.harvested')}: ${harv}g</span>` : ''}
+          ${due ? `<span style="color:${ov ? 'var(--c-red-dark)' : 'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov ? ' \u26a0' : ''}</span>` : ''}
         </div>
-        <div class="batch-card-chips">${d.bags.map(bg=>{
-          const sel=selectedLocBags.has(bg.id);
-          return`<span class="bag-chip${sel?' selected':''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
-        }).join('')}</div>
+        <div class="batch-card-chips">${d.bags
+          .map((bg) => {
+            const sel = selectedLocBags.has(bg.id);
+            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+          })
+          .join('')}</div>
       </div>`;
-    }).join('');
-    const cap=z.maxCapacity;
-    const capBar=cap?`<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
-        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length>cap?'#ef4444':z.color||color};width:${Math.min(100,Math.round(entries.length/cap*100))}%;border-radius:3px"></div></div>
-        <span style="font-size:10px;color:${entries.length>cap?'#ef4444':'var(--c-text-muted)'}">${Math.round(entries.length/cap*100)}%</span>
-      </div>`:'';
-    return`<div class="tent-column">
-      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap?entries.length+'/'+cap:entries.length})</span></div>${capBar}
+        })
+        .join('');
+      const cap = z.maxCapacity;
+      const capBar = cap
+        ? `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
+        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : z.color || color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
+        <span style="font-size:10px;color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
+      </div>`
+        : '';
+      return `<div class="tent-column">
+      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
       ${cards}
     </div>`;
-  }).join('');
+    })
+    .join('');
 
-  const fruitSectionClass='location-section'+(dashMode==='farm'&&totalBags>0?'':' collapsed');
-  return`<div class="${fruitSectionClass}" data-zone="fruiting">
+  const fruitSectionClass = 'location-section' + (dashMode === 'farm' && totalBags > 0 ? '' : ' collapsed');
+  return `<div class="${fruitSectionClass}" data-zone="fruiting">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
-      <span class="location-section-count">${tp('dash.bags',totalBags)}</span>
+      <span class="location-section-count">${tp('dash.bags', totalBags)}</span>
     </div>
     <div class="location-section-body">
       <div class="tent-columns">${tentCols}</div>
@@ -4801,57 +5896,70 @@ function renderFruitingSection(fruitingZones,filtered){
   </div>`;
 }
 
-function renderSimpleZoneSection(zone,filtered){
-  const bags=getZoneBags(zone.id);
-  const entries=Object.entries(bags);
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
-  const byBatch={};
-  entries.forEach(([bagId,d])=>{
-    if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
-    byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
+function renderSimpleZoneSection(zone, filtered) {
+  const bags = getZoneBags(zone.id);
+  const entries = Object.entries(bags);
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
+  const byBatch = {};
+  entries.forEach(([bagId, d]) => {
+    if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
+    byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
   });
-  const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
-  const cards=batchEntries.map(([bid,d])=>{
-    d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-    return`<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+  const batchEntries = Object.entries(byBatch).filter(
+    ([bid, d]) =>
+      !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
+  );
+  const cards = batchEntries
+    .map(([bid, d]) => {
+      d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
+      return `<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
       <div class="batch-card-meta"><span style="font-family:monospace;font-size:10px">${esc(bid)}</span><span>${esc(d.st)}</span></div>
-      <div class="batch-card-chips">${d.bags.map(bg=>{
-        const sel=selectedLocBags.has(bg.id);
-        return`<span class="bag-chip${sel?' selected':''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
-      }).join('')}</div>
+      <div class="batch-card-chips">${d.bags
+        .map((bg) => {
+          const sel = selectedLocBags.has(bg.id);
+          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+        })
+        .join('')}</div>
     </div>`;
-  }).join('');
-  if(!cards)return'';
-  const cap=zone.maxCapacity;
-  const capHtml=cap?`<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length>cap?'#ef4444':zone.color};width:${Math.min(100,Math.round(entries.length/cap*100))}%;border-radius:3px"></div></div>
-      <span style="font-size:11px;color:${entries.length>cap?'#ef4444':'var(--c-text-muted)'};white-space:nowrap">${Math.round(entries.length/cap*100)}%</span>
-    </div>`:'';
-  return`<div class="location-section">
+    })
+    .join('');
+  if (!cards) return '';
+  const cap = zone.maxCapacity;
+  const capHtml = cap
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : zone.color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
+      <span style="font-size:11px;color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
+    </div>`
+    : '';
+  return `<div class="location-section">
     <div class="location-section-header">
       <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${zoneDisplayName(zone.id)}</div>
-      <span class="location-section-count">${cap?entries.length+' / '+cap+' Bags':tp('dash.bags',entries.length)}</span>
+      <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
     </div>${capHtml}
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
   </div>`;
 }
 
-function renderContamSection(zone,filtered){
-  const bags=getZoneBags(zone.id);
-  const entries=Object.entries(bags);
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
-  const byBatch={};
-  entries.forEach(([bagId,d])=>{
-    if(!byBatch[d.batchId])byBatch[d.batchId]={sp:d.species,st:d.strain,bags:[]};
-    byBatch[d.batchId].bags.push({id:bagId,loc:d.loc});
+function renderContamSection(zone, filtered) {
+  const bags = getZoneBags(zone.id);
+  const entries = Object.entries(bags);
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
+  const byBatch = {};
+  entries.forEach(([bagId, d]) => {
+    if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
+    byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
   });
-  const batchEntries=Object.entries(byBatch).filter(([bid,d])=>!q||bid.toLowerCase().includes(q)||d.sp.toLowerCase().includes(q)||d.st.toLowerCase().includes(q));
-  if(!batchEntries.length)return'';
+  const batchEntries = Object.entries(byBatch).filter(
+    ([bid, d]) =>
+      !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
+  );
+  if (!batchEntries.length) return '';
 
-  const cards=batchEntries.map(([bid,d])=>{
-    d.bags.sort((a,b)=>(parseInt(a.id.split('-').pop())||0)-(parseInt(b.id.split('-').pop())||0));
-    return`<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+  const cards = batchEntries
+    .map(([bid, d]) => {
+      d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
+      return `<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header">
         <span class="batch-card-species">${esc(d.sp)}</span>
         <span class="batch-card-count">${d.bags.length}</span>
@@ -4860,296 +5968,417 @@ function renderContamSection(zone,filtered){
         <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
         <span>${esc(d.st)}</span>
       </div>
-      <div class="batch-card-chips">${d.bags.map(bg=>{
-        const sel=selectedLocBags.has(bg.id);
-        return`<span class="bag-chip${sel?' selected':''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
-      }).join('')}</div>
+      <div class="batch-card-chips">${d.bags
+        .map((bg) => {
+          const sel = selectedLocBags.has(bg.id);
+          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+        })
+        .join('')}</div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 
-  return`<div class="location-section contam-section">
+  return `<div class="location-section contam-section">
     <div class="location-section-header">
       <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${zoneDisplayName(zone.id)}</div>
-      <span class="location-section-count">${tp('dash.bags',entries.length)}</span>
+      <span class="location-section-count">${tp('dash.bags', entries.length)}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
   </div>`;
 }
 
-function updateActionBar(){
-  const bar=document.getElementById('loc-action-bar');
-  if(!bar)return;
-  const n=selectedLocBags.size;
-  if(n>0){
-    bar.style.display='flex';
-    bar.innerHTML=`<span class="action-bar-count">${tp('dash.bagsSelected',n)}</span><span style="flex:1"></span>
+function updateActionBar() {
+  const bar = document.getElementById('loc-action-bar');
+  if (!bar) return;
+  const n = selectedLocBags.size;
+  if (n > 0) {
+    bar.style.display = 'flex';
+    bar.innerHTML = `<span class="action-bar-count">${tp('dash.bagsSelected', n)}</span><span style="flex:1"></span>
       <button class="btn btn-sm" onclick="locSelectAllVisible()" style="font-size:11px">${t('dash.selectAll')}</button>
       <button class="btn btn-sm" onclick="selectedLocBags.clear();renderStatus()" style="font-size:11px">${t('dash.clear')}</button>
       <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
       <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>`;
-  }else{
-    bar.style.display='none';
+  } else {
+    bar.style.display = 'none';
   }
 }
 
-function locSelectAllVisible(){
-  const q=(document.getElementById('status-q')?.value||'').toLowerCase();
-  ZONES.forEach(z=>{
-    const bags=getZoneBags(z);
-    Object.entries(bags).forEach(([bagId,d])=>{
-      if(!q||bagId.toLowerCase().includes(q)||(d.batchId||'').toLowerCase().includes(q)||(d.species||'').toLowerCase().includes(q)||(d.strain||'').toLowerCase().includes(q))
-        selectedLocBags.set(bagId,{batchId:d.batchId,loc:d.loc});
+function locSelectAllVisible() {
+  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
+  ZONES.forEach((z) => {
+    const bags = getZoneBags(z);
+    Object.entries(bags).forEach(([bagId, d]) => {
+      if (
+        !q ||
+        bagId.toLowerCase().includes(q) ||
+        (d.batchId || '').toLowerCase().includes(q) ||
+        (d.species || '').toLowerCase().includes(q) ||
+        (d.strain || '').toLowerCase().includes(q)
+      )
+        selectedLocBags.set(bagId, { batchId: d.batchId, loc: d.loc });
     });
   });
   renderStatus();
 }
-function setDashMode(mode){
-  dashMode=mode;
-  localStorage.setItem('mp-dash-mode',mode);
+function setDashMode(mode) {
+  dashMode = mode;
+  localStorage.setItem('mp-dash-mode', mode);
   applyDashMode();
   renderStatus();
 }
-function applyDashMode(){
-  const farmBtn=document.getElementById('dash-view-farm');
-  const ovBtn=document.getElementById('dash-view-overview');
-  const charts=document.getElementById('dash-charts-section');
-  const farmSection=document.getElementById('dash-farm-section');
-  if(farmBtn)farmBtn.classList.toggle('active',dashMode==='farm');
-  if(ovBtn)ovBtn.classList.toggle('active',dashMode==='overview');
-  if(charts)charts.style.display=dashMode==='overview'?'':'none';
-  if(farmSection)farmSection.style.display=dashMode==='farm'?'':'none';
-  const histWrap=document.getElementById('ov-kpi-history');
-  if(histWrap)histWrap.style.display=dashMode==='overview'?'':'none';
-  if(dashMode==='overview'&&!kpiHistoryData)loadKpiHistory();
+function applyDashMode() {
+  const farmBtn = document.getElementById('dash-view-farm');
+  const ovBtn = document.getElementById('dash-view-overview');
+  const charts = document.getElementById('dash-charts-section');
+  const farmSection = document.getElementById('dash-farm-section');
+  if (farmBtn) farmBtn.classList.toggle('active', dashMode === 'farm');
+  if (ovBtn) ovBtn.classList.toggle('active', dashMode === 'overview');
+  if (charts) charts.style.display = dashMode === 'overview' ? '' : 'none';
+  if (farmSection) farmSection.style.display = dashMode === 'farm' ? '' : 'none';
+  const histWrap = document.getElementById('ov-kpi-history');
+  if (histWrap) histWrap.style.display = dashMode === 'overview' ? '' : 'none';
+  if (dashMode === 'overview' && !kpiHistoryData) loadKpiHistory();
 }
-function setOvPeriod(p){
-  ovPeriod=p;
-  localStorage.setItem('mp-ov-period',p);
+function setOvPeriod(p) {
+  ovPeriod = p;
+  localStorage.setItem('mp-ov-period', p);
   renderOverviewKPIs();
-  if(p==='week'){renderHarvestChart();renderWeeklyHarvestChart();}
+  if (p === 'week') {
+    renderHarvestChart();
+    renderWeeklyHarvestChart();
+  }
 }
-function applyOvPeriod(){
-  ['week','month','year'].forEach(p=>{
-    const btn=document.getElementById('ov-p-'+p);
-    if(btn)btn.classList.toggle('active',ovPeriod===p);
+function applyOvPeriod() {
+  ['week', 'month', 'year'].forEach((p) => {
+    const btn = document.getElementById('ov-p-' + p);
+    if (btn) btn.classList.toggle('active', ovPeriod === p);
   });
 }
 
-function renderDashAlerts(){
-  const invAlerts=getInvAlerts().map(a=>({...a,goPage:'inv',goBtn:'n-inv'}));
+function renderDashAlerts() {
+  const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
   // Overdue batches
-  const today=new Date();today.setHours(0,0,0,0);
-  const overdueCount=batches.filter(b=>{
-    const{status}=getStatus(b.batchId);
-    if(['DONE','EMPTY','FRUITING','CONTAM'].includes(status))return false;
-    return new Date(b.due)<today;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overdueCount = batches.filter((b) => {
+    const { status } = getStatus(b.batchId);
+    if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
+    return new Date(b.due) < today;
   }).length;
-  const overdueAlerts=overdueCount?[{text:tp('alert.batchOverdue',overdueCount),urgent:overdueCount>=3,goPage:'batch',goBtn:'n-batch'}]:[];
+  const overdueAlerts = overdueCount
+    ? [{ text: tp('alert.batchOverdue', overdueCount), urgent: overdueCount >= 3, goPage: 'batch', goBtn: 'n-batch' }]
+    : [];
   // Zone capacity warnings (≥90%)
-  const capAlerts=[];
-  zones.forEach(z=>{
-    if(!z.maxCapacity)return;
-    let cnt=0;
-    if(z.racks&&z.racks.length)z.racks.forEach(r=>cnt+=Object.keys(getRackBags(r.id)).length);
-    else cnt=Object.keys(getZoneBags(z.id)).length;
-    const pct=Math.round(cnt/z.maxCapacity*100);
-    if(pct>=90)capAlerts.push({text:zoneDisplayName(z.id)+': '+cnt+'/'+z.maxCapacity+' bags ('+pct+'% full)',urgent:pct>=100,goPage:'zones',goBtn:'n-zones'});
+  const capAlerts = [];
+  zones.forEach((z) => {
+    if (!z.maxCapacity) return;
+    let cnt = 0;
+    if (z.racks && z.racks.length) z.racks.forEach((r) => (cnt += Object.keys(getRackBags(r.id)).length));
+    else cnt = Object.keys(getZoneBags(z.id)).length;
+    const pct = Math.round((cnt / z.maxCapacity) * 100);
+    if (pct >= 90)
+      capAlerts.push({
+        text: zoneDisplayName(z.id) + ': ' + cnt + '/' + z.maxCapacity + ' bags (' + pct + '% full)',
+        urgent: pct >= 100,
+        goPage: 'zones',
+        goBtn: 'n-zones'
+      });
   });
-  const dueToday=countDueToday();
-  const dueTodayAlerts=dueToday>0?[{text:tp('alert.dueToday',dueToday),urgent:dueToday>=3,goPage:'batch',goBtn:'n-batch'}]:[];
-  const labAlerts=getLabAlerts().map(a=>({...a,goPage:'lab',goBtn:'n-lab'}));
-  const allAlerts=[...dueTodayAlerts,...overdueAlerts,...invAlerts,...labAlerts,...capAlerts];
-  const card=document.getElementById('dash-alerts-card');
-  const el=document.getElementById('dash-alerts');
-  if(!allAlerts.length){card.style.display='none';return}
-  card.style.display='';
-  el.innerHTML=allAlerts.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent?'#fca5a5':'#fed7aa'};border-left:4px solid ${a.urgent?'#dc2626':'#ea580c'};color:${a.urgent?'#7f1d1d':'#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent?'#dc2626':'#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button></div>`).join('');
-}
-function renderDashBatchTasks(){
-  const filter=document.getElementById('dash-batch-filter')?.value||'all';
-  const tasks=buildAutoTasks();
-  const shown=filter==='urgent'?tasks.filter(tk=>tk.urgent||tk.warn):tasks;
-  const el=document.getElementById('dash-batch-tasks');
-  if(!el)return;
-  if(!tasks.length){el.innerHTML='<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';return}
-  function taskBtn(tk){
-    const id=esc(tk.batchId);
-    if(tk.taskAction==='move')return`<button class="btn btn-sm btn-p" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
-    if(tk.taskAction==='harvest')return`<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>`;
-    if(tk.taskAction==='discard')return`<button class="btn btn-sm btn-r" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
-    return`<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+  const dueToday = countDueToday();
+  const dueTodayAlerts =
+    dueToday > 0
+      ? [{ text: tp('alert.dueToday', dueToday), urgent: dueToday >= 3, goPage: 'batch', goBtn: 'n-batch' }]
+      : [];
+  const labAlerts = getLabAlerts().map((a) => ({ ...a, goPage: 'lab', goBtn: 'n-lab' }));
+  const allAlerts = [...dueTodayAlerts, ...overdueAlerts, ...invAlerts, ...labAlerts, ...capAlerts];
+  const card = document.getElementById('dash-alerts-card');
+  const el = document.getElementById('dash-alerts');
+  if (!allAlerts.length) {
+    card.style.display = 'none';
+    return;
   }
-  el.innerHTML=shown.length?shown.map(tk=>{
-    const parts=tk.text.split(tk.batchId);
-    const textWithLink=esc(parts[0]||'')+`<span class="dash-task-batch-id" onclick="go('batch','n-batch')" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>`+esc(parts.slice(1).join(tk.batchId)||'');
-    return'<div class="todo-row '+(tk.urgent?'urgent':tk.warn?'warn':'')+'" style="padding:6px 8px;margin-bottom:3px;--sp-color:'+spColor(tk.species)+'">'
-      +(tk.urgent?'<span class="pdot high"></span>':tk.warn?'<span class="pdot med"></span>':'')
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+textWithLink+'</div>'
-      +'<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">'+esc(tk.detail)+'</div></div>'
-      +taskBtn(tk)+'</div>';
-  }).join('')
-    :'<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">'+t('dash.noUrgent')+'</div>';
+  card.style.display = '';
+  el.innerHTML = allAlerts
+    .map(
+      (a) =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button></div>`
+    )
+    .join('');
+}
+function renderDashBatchTasks() {
+  const filter = document.getElementById('dash-batch-filter')?.value || 'all';
+  const tasks = buildAutoTasks();
+  const shown = filter === 'urgent' ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
+  const el = document.getElementById('dash-batch-tasks');
+  if (!el) return;
+  if (!tasks.length) {
+    el.innerHTML =
+      '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+      t('dash.noUrgent') +
+      '</div>';
+    return;
+  }
+  function taskBtn(tk) {
+    const id = esc(tk.batchId);
+    if (tk.taskAction === 'move')
+      return `<button class="btn btn-sm btn-p" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
+    if (tk.taskAction === 'harvest')
+      return `<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>`;
+    if (tk.taskAction === 'discard')
+      return `<button class="btn btn-sm btn-r" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
+    return `<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+  }
+  el.innerHTML = shown.length
+    ? shown
+        .map((tk) => {
+          const parts = tk.text.split(tk.batchId);
+          const textWithLink =
+            esc(parts[0] || '') +
+            `<span class="dash-task-batch-id" onclick="go('batch','n-batch')" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
+            esc(parts.slice(1).join(tk.batchId) || '');
+          return (
+            '<div class="todo-row ' +
+            (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
+            '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+            spColor(tk.species) +
+            '">' +
+            (tk.urgent ? '<span class="pdot high"></span>' : tk.warn ? '<span class="pdot med"></span>' : '') +
+            '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
+            textWithLink +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
+            esc(tk.detail) +
+            '</div></div>' +
+            taskBtn(tk) +
+            '</div>'
+          );
+        })
+        .join('')
+    : '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+      t('dash.noUrgent') +
+      '</div>';
 }
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
-const LAB_TYPES=['MC','PD','LC','G2G','GS'];
-const LAB_LABELS={MC:'Mother cultures',PD:'Petri dishes',LC:'Liquid cultures',G2G:'G2G',GS:null};
-function getLabLabel(type){if(type==='GS')return t('lab.gsLabel');return LAB_LABELS[type]||type}
-function getLabStockCounts(){
-  const counts={MC:0,PD:0,LC:0,G2G:0,GS:0};
-  cultures.filter(c=>c.status==='active').forEach(c=>{if(counts[c.type]!==undefined)counts[c.type]++});
+const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+const LAB_LABELS = { MC: 'Mother cultures', PD: 'Petri dishes', LC: 'Liquid cultures', G2G: 'G2G', GS: null };
+function getLabLabel(type) {
+  if (type === 'GS') return t('lab.gsLabel');
+  return LAB_LABELS[type] || type;
+}
+function getLabStockCounts() {
+  const counts = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  cultures
+    .filter((c) => c.status === 'active')
+    .forEach((c) => {
+      if (counts[c.type] !== undefined) counts[c.type]++;
+    });
   // Grain spawn = batches with batchType 'grain' that are still active
-  batches.filter(b=>b.batchType==='grain').forEach(b=>{
-    const{status}=getStatus(b.batchId);
-    if(!['DONE','EMPTY','CONTAM'].includes(status))counts.GS++;
-  });
+  batches
+    .filter((b) => b.batchType === 'grain')
+    .forEach((b) => {
+      const { status } = getStatus(b.batchId);
+      if (!['DONE', 'EMPTY', 'CONTAM'].includes(status)) counts.GS++;
+    });
   return counts;
 }
-function getLabStrainBreakdown(){
-  const breakdown={MC:{},PD:{},LC:{},G2G:{},GS:{}};
-  cultures.filter(c=>c.status==='active').forEach(c=>{
-    if(!breakdown[c.type])return;
-    const name=c.strainName||c.species||'Unknown';
-    const kz=c.strainKuerzel||c.strain||'';
-    const desc=c.strainDescriptor||'';
-    const key=name+'|'+kz;
-    if(!breakdown[c.type][key])breakdown[c.type][key]={name,kz,desc,count:0,color:spColor(name)};
-    breakdown[c.type][key].count++;
-  });
-  batches.filter(b=>b.batchType==='grain').forEach(b=>{
-    const{status}=getStatus(b.batchId);
-    if(['DONE','EMPTY','CONTAM'].includes(status))return;
-    const name=b.strainName||b.species||'Unknown';
-    const kz=b.strainKuerzel||b.strain||'';
-    const desc=b.strainDescriptor||'';
-    const key=name+'|'+kz;
-    if(!breakdown.GS[key])breakdown.GS[key]={name,kz,desc,count:0,color:spColor(name)};
-    breakdown.GS[key].count++;
-  });
+function getLabStrainBreakdown() {
+  const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {} };
+  cultures
+    .filter((c) => c.status === 'active')
+    .forEach((c) => {
+      if (!breakdown[c.type]) return;
+      const name = c.strainName || c.species || 'Unknown';
+      const kz = c.strainKuerzel || c.strain || '';
+      const desc = c.strainDescriptor || '';
+      const key = name + '|' + kz;
+      if (!breakdown[c.type][key]) breakdown[c.type][key] = { name, kz, desc, count: 0, color: spColor(name) };
+      breakdown[c.type][key].count++;
+    });
+  batches
+    .filter((b) => b.batchType === 'grain')
+    .forEach((b) => {
+      const { status } = getStatus(b.batchId);
+      if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) return;
+      const name = b.strainName || b.species || 'Unknown';
+      const kz = b.strainKuerzel || b.strain || '';
+      const desc = b.strainDescriptor || '';
+      const key = name + '|' + kz;
+      if (!breakdown.GS[key]) breakdown.GS[key] = { name, kz, desc, count: 0, color: spColor(name) };
+      breakdown.GS[key].count++;
+    });
   return breakdown;
 }
-const LAB_TYPE_COLORS={MC:{bg:'#f3e8ff',fg:'#6b21a8',accent:'#a855f7'},PD:{bg:'#dbeafe',fg:'#1e40af',accent:'#3b82f6'},LC:{bg:'#dcfce7',fg:'#166534',accent:'#22c55e'},G2G:{bg:'#fef3c7',fg:'#92400e',accent:'#f59e0b'},GS:{bg:'#fce4ec',fg:'#880e4f',accent:'#e91e63'}};
-function renderDashLabStock(){
-  const el=document.getElementById('dash-lab-stock');
-  if(!el)return;
-  if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
-  const counts=getLabStockCounts();
-  const breakdown=getLabStrainBreakdown();
-  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">'+LAB_TYPES.map(type=>{
-    const count=counts[type]||0;
-    const min=inventory.labThresholds[type]||0;
-    const low=min>0&&count<min;
-    const label=getLabLabel(type);
-    const tc=LAB_TYPE_COLORS[type];
-    const strains=Object.values(breakdown[type]||{}).sort((a,b)=>b.count-a.count);
-    const strainRows=strains.map(s=>{
-      const pct=count>0?Math.round(s.count/count*100):0;
-      return`<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+const LAB_TYPE_COLORS = {
+  MC: { bg: '#f3e8ff', fg: '#6b21a8', accent: '#a855f7' },
+  PD: { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' },
+  LC: { bg: '#dcfce7', fg: '#166534', accent: '#22c55e' },
+  G2G: { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' },
+  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' }
+};
+function renderDashLabStock() {
+  const el = document.getElementById('dash-lab-stock');
+  if (!el) return;
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  const counts = getLabStockCounts();
+  const breakdown = getLabStrainBreakdown();
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">' +
+    LAB_TYPES.map((type) => {
+      const count = counts[type] || 0;
+      const min = inventory.labThresholds[type] || 0;
+      const low = min > 0 && count < min;
+      const label = getLabLabel(type);
+      const tc = LAB_TYPE_COLORS[type];
+      const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
+      const strainRows = strains
+        .map((s) => {
+          const pct = count > 0 ? Math.round((s.count / count) * 100) : 0;
+          return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
-        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz||s.name)}${s.desc?' '+esc(s.desc):''}">${esc(s.kz||s.name)}${s.desc?' <span style="color:var(--c-text-muted);font-size:10px">'+esc(s.desc)+'</span>':''}</span>
+        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(s.desc) + '</span>' : ''}</span>
         <span style="font-size:11px;font-weight:600;color:var(--c-text);min-width:18px;text-align:right">${s.count}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px"></div></div>
       </div>`;
-    }).join('');
-    const emptyMsg=count===0?`<div style="font-size:11px;color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`:'';
-    return`<div style="background:var(--c-bg);border:1px solid ${low?'var(--c-red)':'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low?'var(--c-red)':tc.accent}"></div>
+        })
+        .join('');
+      const emptyMsg =
+        count === 0
+          ? `<div style="font-size:11px;color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`
+          : '';
+      return `<div style="background:var(--c-bg);border:1px solid ${low ? 'var(--c-red)' : 'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low ? 'var(--c-red)' : tc.accent}"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;margin-top:2px">
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
           <span style="font-size:11px;color:var(--c-text-sec)">${esc(label)}</span>
         </div>
-        ${low?'<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">'+t('lab.lowStock')+'</span>':''}
+        ${low ? '<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">' + t('lab.lowStock') + '</span>' : ''}
       </div>
-      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length?'8':'2'}px">
-        <span style="font-size:28px;font-weight:800;color:${low?'var(--c-red-dark)':'var(--c-text)'};line-height:1">${count}</span>
-        <span style="font-size:11px;color:var(--c-text-muted)">${min>0?'/ min '+min:''}</span>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length ? '8' : '2'}px">
+        <span style="font-size:28px;font-weight:800;color:${low ? 'var(--c-red-dark)' : 'var(--c-text)'};line-height:1">${count}</span>
+        <span style="font-size:11px;color:var(--c-text-muted)">${min > 0 ? '/ min ' + min : ''}</span>
       </div>
-      ${strains.length?'<div style="border-top:1px solid var(--c-border);padding-top:6px">'+strainRows+'</div>':emptyMsg}
+      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + '</div>' : emptyMsg}
       <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:8px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
     </div>`;
-  }).join('')+'</div>';
+    }).join('') +
+    '</div>';
 }
-function setLabMin(type){
-  if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
-  const cur=inventory.labThresholds[type]||0;
-  const val=prompt(t('lab.setMinimum')+' \u2014 '+getLabLabel(type),cur);
-  if(val===null)return;
-  inventory.labThresholds[type]=parseInt(val)||0;
+function setLabMin(type) {
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  const cur = inventory.labThresholds[type] || 0;
+  const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type), cur);
+  if (val === null) return;
+  inventory.labThresholds[type] = parseInt(val) || 0;
   saveLabThresholds();
   renderDashLabStock();
   renderDashAlerts();
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
-function getRackBags(rackId){
-  const bags={};
-  scanLog.forEach(e=>{
-    if(e.action==='ADD'&&e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};
-    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){if(e.to===rackId&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain};if(e.from===rackId&&e.bag)delete bags[e.bag];}
-    if(e.action==='REMOVE'&&e.from===rackId&&e.bag)delete bags[e.bag];
+function getRackBags(rackId) {
+  const bags = {};
+  scanLog.forEach((e) => {
+    if (e.action === 'ADD' && e.to === rackId && e.bag)
+      bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain };
+    if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      if (e.to === rackId && e.bag) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain };
+      if (e.from === rackId && e.bag) delete bags[e.bag];
+    }
+    if (e.action === 'REMOVE' && e.from === rackId && e.bag) delete bags[e.bag];
   });
   return bags;
 }
-function renderRacks(){renderStatus()}
-function showRack(){}
+function renderRacks() {
+  renderStatus();
+}
+function showRack() {}
 
 // ─── LOCATION BAG INTERACTIONS ──────────────────────────────
-const selectedLocBags=new Map(); // bagId → {batchId, loc}
-function getZoneBags(zone){
-  const bags={};
-  scanLog.forEach(e=>{
-    const tz=toZone(e.to),fz=toZone(e.from);
-    if(e.action==='ADD'&&tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
-    if(e.action==='MOVE'||e.action==='MOVE_BATCH'){
-      if(tz===zone&&e.bag)bags[e.bag]={batchId:e.batch,species:e.species,strain:e.strain,loc:e.to};
-      if(fz===zone&&e.bag)delete bags[e.bag];
+const selectedLocBags = new Map(); // bagId → {batchId, loc}
+function getZoneBags(zone) {
+  const bags = {};
+  scanLog.forEach((e) => {
+    const tz = toZone(e.to),
+      fz = toZone(e.from);
+    if (e.action === 'ADD' && tz === zone && e.bag)
+      bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
+    if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      if (tz === zone && e.bag) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
+      if (fz === zone && e.bag) delete bags[e.bag];
     }
-    if(e.action==='REMOVE'&&fz===zone&&e.bag)delete bags[e.bag];
+    if (e.action === 'REMOVE' && fz === zone && e.bag) delete bags[e.bag];
   });
   return bags;
 }
-function renderLocTabs(){renderStatus()}
-function toggleLocBag(bagId,batchId,loc){
-  if(selectedLocBags.has(bagId))selectedLocBags.delete(bagId);
-  else selectedLocBags.set(bagId,{batchId,loc});
+function renderLocTabs() {
+  renderStatus();
+}
+function toggleLocBag(bagId, batchId, loc) {
+  if (selectedLocBags.has(bagId)) selectedLocBags.delete(bagId);
+  else selectedLocBags.set(bagId, { batchId, loc });
   // Toggle chip class
-  const el=document.querySelector(`.bag-chip[data-bag="${CSS.escape(bagId)}"]`);
-  if(el)el.classList.toggle('selected',selectedLocBags.has(bagId));
+  const el = document.querySelector(`.bag-chip[data-bag="${CSS.escape(bagId)}"]`);
+  if (el) el.classList.toggle('selected', selectedLocBags.has(bagId));
   updateActionBar();
 }
-function locSelectAll(){locSelectAllVisible()}
-function openLocMovePopup(){
-  if(!selectedLocBags.size)return;
-  const n=selectedLocBags.size;
+function locSelectAll() {
+  locSelectAllVisible();
+}
+function openLocMovePopup() {
+  if (!selectedLocBags.size) return;
+  const n = selectedLocBags.size;
   // Determine source zone(s) for display
-  const fromLocs=new Set();
-  selectedLocBags.forEach(d=>fromLocs.add(toZone(d.loc)));
-  const fromLabel=fromLocs.size===1?[...fromLocs][0]:'Mixed';
-  const m=document.getElementById('m-locmove');
-  document.getElementById('lm-title').textContent=tp('dash.bags',n);
-  document.getElementById('lm-info').textContent=t('dash.currentlyIn',{loc:fromLabel});
-  document.getElementById('lm-confirm').style.display='none';
-  const grid=document.getElementById('lm-grid');
-  grid.style.display='flex';
-  grid.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">'+t('dash.zones')+'</div>'
-    +ZONES.map(z=>{const zObj=zones.find(x=>x.id===z);return`<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color||'#888'}">${esc(zoneDisplayName(z))}</button>`}).join('')
-    +(ALL_RACKS.length?'<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">'+t('dash.racks')+'</div>':'')
-    +ALL_RACKS.map(r=>`<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`).join('');
+  const fromLocs = new Set();
+  selectedLocBags.forEach((d) => fromLocs.add(toZone(d.loc)));
+  const fromLabel = fromLocs.size === 1 ? [...fromLocs][0] : 'Mixed';
+  const m = document.getElementById('m-locmove');
+  document.getElementById('lm-title').textContent = tp('dash.bags', n);
+  document.getElementById('lm-info').textContent = t('dash.currentlyIn', { loc: fromLabel });
+  document.getElementById('lm-confirm').style.display = 'none';
+  const grid = document.getElementById('lm-grid');
+  grid.style.display = 'flex';
+  grid.innerHTML =
+    '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">' +
+    t('dash.zones') +
+    '</div>' +
+    ZONES.map((z) => {
+      const zObj = zones.find((x) => x.id === z);
+      return `<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color || '#888'}">${esc(zoneDisplayName(z))}</button>`;
+    }).join('') +
+    (ALL_RACKS.length
+      ? '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">' +
+        t('dash.racks') +
+        '</div>'
+      : '') +
+    ALL_RACKS.map(
+      (r) =>
+        `<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`
+    ).join('');
   m.classList.add('open');
 }
-function locPreConfirm(toLoc){
-  document.getElementById('lm-grid').style.display='none';
-  const c=document.getElementById('lm-confirm');
-  c.style.display='block';
-  const n=selectedLocBags.size;
-  const ids=[...selectedLocBags.keys()];
-  const preview=ids.length<=6?ids.map(id=>id.split('-').pop()).join(', '):ids.slice(0,5).map(id=>id.split('-').pop()).join(', ')+' + '+(ids.length-5)+' more';
-  const fromLocs=new Set();
-  selectedLocBags.forEach(d=>fromLocs.add(toZone(d.loc)));
-  const fromLabel=fromLocs.size===1?[...fromLocs][0]:'Mixed';
-  c.innerHTML=`<div style="text-align:center;padding:12px 0">
-    <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags',{n:n})}</div>
+function locPreConfirm(toLoc) {
+  document.getElementById('lm-grid').style.display = 'none';
+  const c = document.getElementById('lm-confirm');
+  c.style.display = 'block';
+  const n = selectedLocBags.size;
+  const ids = [...selectedLocBags.keys()];
+  const preview =
+    ids.length <= 6
+      ? ids.map((id) => id.split('-').pop()).join(', ')
+      : ids
+          .slice(0, 5)
+          .map((id) => id.split('-').pop())
+          .join(', ') +
+        ' + ' +
+        (ids.length - 5) +
+        ' more';
+  const fromLocs = new Set();
+  selectedLocBags.forEach((d) => fromLocs.add(toZone(d.loc)));
+  const fromLabel = fromLocs.size === 1 ? [...fromLocs][0] : 'Mixed';
+  c.innerHTML = `<div style="text-align:center;padding:12px 0">
+    <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags', { n: n })}</div>
     <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px;font-family:monospace">${preview}</div>
     <div style="font-size:20px;margin-bottom:16px">${esc(fromLabel)} \u2192 <strong>${esc(toLoc)}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
@@ -5158,288 +6387,555 @@ function locPreConfirm(toLoc){
     </div>
   </div>`;
 }
-function renderLocBody(){renderStatus()}
+function renderLocBody() {
+  renderStatus();
+}
 // Event delegation for bag chip clicks
-document.getElementById('dash-locations').addEventListener('click',function(e){
-  const chip=e.target.closest('.bag-chip[data-bag]');
-  if(!chip)return;
-  e.preventDefault();e.stopPropagation();
-  toggleLocBag(chip.dataset.bag,chip.dataset.batch,chip.dataset.loc);
+document.getElementById('dash-locations').addEventListener('click', function (e) {
+  const chip = e.target.closest('.bag-chip[data-bag]');
+  if (!chip) return;
+  e.preventDefault();
+  e.stopPropagation();
+  toggleLocBag(chip.dataset.bag, chip.dataset.batch, chip.dataset.loc);
 });
-let lastLocUndoCount=0;
-function locMoveTo(toLoc){
-  if(!selectedLocBags.size)return;
-  const now=new Date().toISOString();
-  const n=selectedLocBags.size;const entries=[];
-  selectedLocBags.forEach((d,bagId)=>{
-    const b=batches.find(x=>x.batchId===d.batchId);
-    const entry={time:now,action:'MOVE',batch:d.batchId,bag:bagId,from:d.loc,to:toLoc,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+let lastLocUndoCount = 0;
+function locMoveTo(toLoc) {
+  if (!selectedLocBags.size) return;
+  const now = new Date().toISOString();
+  const n = selectedLocBags.size;
+  const entries = [];
+  selectedLocBags.forEach((d, bagId) => {
+    const b = batches.find((x) => x.batchId === d.batchId);
+    const entry = {
+      time: now,
+      action: 'MOVE',
+      batch: d.batchId,
+      bag: bagId,
+      from: d.loc,
+      to: toLoc,
+      species: b?.species || null,
+      strain: b?.strain || null,
+      user: currentUser?.username || null
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount=n;
-  selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log',{entries});updateSD();renderStatus();
-  setLocFb(t('scanFb.moved',{n:n,loc:toLoc}));
+  lastLocUndoCount = n;
+  selectedLocBags.clear();
+  document.getElementById('m-locmove').classList.remove('open');
+  apiPost('/api/scan-log', { entries });
+  updateSD();
+  renderStatus();
+  setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
 }
-function locRemoveSelected(){
-  if(!selectedLocBags.size)return;
-  const n=selectedLocBags.size;
-  if(!confirm(t('scanFb.confirmRemove',{n:n})))return;
-  const now=new Date().toISOString();
-  const entries=[];selectedLocBags.forEach((d,bagId)=>{
-    const b=batches.find(x=>x.batchId===d.batchId);const entry={time:now,action:'REMOVE',batch:d.batchId,bag:bagId,from:d.loc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null};scanLog.push(entry);movements.push(entry);entries.push(entry);
+function locRemoveSelected() {
+  if (!selectedLocBags.size) return;
+  const n = selectedLocBags.size;
+  if (!confirm(t('scanFb.confirmRemove', { n: n }))) return;
+  const now = new Date().toISOString();
+  const entries = [];
+  selectedLocBags.forEach((d, bagId) => {
+    const b = batches.find((x) => x.batchId === d.batchId);
+    const entry = {
+      time: now,
+      action: 'REMOVE',
+      batch: d.batchId,
+      bag: bagId,
+      from: d.loc,
+      to: null,
+      species: b?.species || null,
+      strain: b?.strain || null,
+      user: currentUser?.username || null
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount=n;
-  selectedLocBags.clear();document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log',{entries});updateSD();renderStatus();
-  setLocFb(t('scanFb.removed',{n:n}));
+  lastLocUndoCount = n;
+  selectedLocBags.clear();
+  document.getElementById('m-locmove').classList.remove('open');
+  apiPost('/api/scan-log', { entries });
+  updateSD();
+  renderStatus();
+  setLocFb(t('scanFb.removed', { n: n }));
 }
-function setLocFb(msg){
-  const el=document.getElementById('scan-toast');
-  el.className='scan-toast fb-ok visible';
-  el.innerHTML=msg+' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
+function setLocFb(msg) {
+  const el = document.getElementById('scan-toast');
+  el.className = 'scan-toast fb-ok visible';
+  el.innerHTML =
+    msg +
+    ' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
   clearTimeout(_toastTimer);
-  _toastTimer=setTimeout(()=>el.classList.remove('visible'),5000);
+  _toastTimer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
-function locUndo(){
-  if(!lastLocUndoCount)return;
-  const n2=lastLocUndoCount;scanLog.splice(scanLog.length-n2,n2);
-  lastLocUndoCount=0;
-  apiDelete('/api/scan-log/last/'+n2);updateSD();renderStatus();
-  setFb('ok','Undo successful');
+function locUndo() {
+  if (!lastLocUndoCount) return;
+  const n2 = lastLocUndoCount;
+  scanLog.splice(scanLog.length - n2, n2);
+  lastLocUndoCount = 0;
+  apiDelete('/api/scan-log/last/' + n2);
+  updateSD();
+  renderStatus();
+  setFb('ok', 'Undo successful');
 }
 
 // ─── BATCHES ─────────────────────────────────────────────────
-function nbTypeChange(){nbPreview()}
-function setBagWeight(kg){
-  document.getElementById('nb-weight').value=kg;
+function nbTypeChange() {
+  nbPreview();
+}
+function setBagWeight(kg) {
+  document.getElementById('nb-weight').value = kg;
   // Highlight the active button
-  ['wbtn-3','wbtn-5'].forEach(id=>{
-    const btn=document.getElementById(id);
-    if(!btn)return;
-    const btnKg=parseFloat(btn.textContent);
-    btn.className='btn btn-sm'+(btnKg===kg?' btn-p':'');
+  ['wbtn-3', 'wbtn-5'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const btnKg = parseFloat(btn.textContent);
+    btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
   });
   nbPreview();
 }
-function nbPreview(){
-  const strainSel=document.getElementById('nb-strain-sel');
-  const strainId=strainSel?parseInt(strainSel.value)||null:null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  const sp=ms?ms.name:'',st=ms?ms.kuerzel:'';
-  const qty=parseInt(document.getElementById('nb-qty').value)||0;
-  document.getElementById('nb-prev').textContent=(sp&&st)?genBatchId(sp)+' ('+qty+' bags)':'—';
-  const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
-  if(!qty||!bagKg){document.getElementById('nb-mat-preview').style.display='none';return}
-  let lines=[];
+function nbPreview() {
+  const strainSel = document.getElementById('nb-strain-sel');
+  const strainId = strainSel ? parseInt(strainSel.value) || null : null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  const sp = ms ? ms.name : '',
+    st = ms ? ms.kuerzel : '';
+  const qty = parseInt(document.getElementById('nb-qty').value) || 0;
+  document.getElementById('nb-prev').textContent = sp && st ? genBatchId(sp) + ' (' + qty + ' bags)' : '—';
+  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  if (!qty || !bagKg) {
+    document.getElementById('nb-mat-preview').style.display = 'none';
+    return;
+  }
+  let lines = [];
   {
-    const hw=parseFloat(document.getElementById('nb-hw').value)||0;
-    const wb=parseFloat(document.getElementById('nb-wb').value)||0;
-    const rh=parseFloat(document.getElementById('nb-rh').value)||0;
-    const gyp=document.getElementById('nb-gyp').checked;
-    if(hw||wb){
+    const hw = parseFloat(document.getElementById('nb-hw').value) || 0;
+    const wb = parseFloat(document.getElementById('nb-wb').value) || 0;
+    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const gyp = document.getElementById('nb-gyp').checked;
+    if (hw || wb) {
       // Correct calculation: subtract water first, then split dry matter
       // dryKg = bagKg × (1 - rh/100)
-      const dryKg = rh>0 ? bagKg*(1-rh/100) : bagKg;
-      const hwKg=qty*dryKg*(hw/100);
-      const wbKg=qty*dryKg*(wb/100);
-      const gypKg=gyp?qty*dryKg*0.01:0;
-      const hwStock=inventory.stock?.hardwood||0;
-      const wbStock=inventory.stock?.wheatbran||0;
-      const gypStock=inventory.stock?.gypsum||0;
-      if(rh>0) lines.push(`<strong>Bag:</strong> ${bagKg}kg total → ${dryKg.toFixed(3)}kg dry matter per bag (${rh}% water removed)`);
-      if(hw) lines.push(`<strong>Hardwood (${hw}%):</strong> ${hwKg.toFixed(3)} kg needed — ${hwStock.toFixed(2)} kg in stock ${hwStock>=hwKg?'✓':'⚠ short by '+(hwKg-hwStock).toFixed(2)+'kg'}`);
-      if(wb) lines.push(`<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock>=wbKg?'✓':'⚠ short by '+(wbKg-wbStock).toFixed(2)+'kg'}`);
-      if(gyp) lines.push(`<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock>=gypKg?'✓':'⚠'}`);
+      const dryKg = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+      const hwKg = qty * dryKg * (hw / 100);
+      const wbKg = qty * dryKg * (wb / 100);
+      const gypKg = gyp ? qty * dryKg * 0.01 : 0;
+      const hwStock = inventory.stock?.hardwood || 0;
+      const wbStock = inventory.stock?.wheatbran || 0;
+      const gypStock = inventory.stock?.gypsum || 0;
+      if (rh > 0)
+        lines.push(
+          `<strong>Bag:</strong> ${bagKg}kg total → ${dryKg.toFixed(3)}kg dry matter per bag (${rh}% water removed)`
+        );
+      if (hw)
+        lines.push(
+          `<strong>Hardwood (${hw}%):</strong> ${hwKg.toFixed(3)} kg needed — ${hwStock.toFixed(2)} kg in stock ${hwStock >= hwKg ? '✓' : '⚠ short by ' + (hwKg - hwStock).toFixed(2) + 'kg'}`
+        );
+      if (wb)
+        lines.push(
+          `<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock >= wbKg ? '✓' : '⚠ short by ' + (wbKg - wbStock).toFixed(2) + 'kg'}`
+        );
+      if (gyp)
+        lines.push(
+          `<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock >= gypKg ? '✓' : '⚠'}`
+        );
       lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
     }
   }
-  const el=document.getElementById('nb-mat-preview');
-  if(lines.length){el.innerHTML=lines.join('<br>');el.style.display='block';}
-  else el.style.display='none';
+  const el = document.getElementById('nb-mat-preview');
+  if (lines.length) {
+    el.innerHTML = lines.join('<br>');
+    el.style.display = 'block';
+  } else el.style.display = 'none';
 }
-function nbSubSum(){const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0,s=hw+wb;document.getElementById('nb-subsum').textContent=(hw||wb)?'Total: '+s+'%'+(s!==100?' — should add up to 100%':''):'';nbPreview()}
-function createBatch(){
-  const strainSel=document.getElementById('nb-strain-sel');
-  const strainId=strainSel?parseInt(strainSel.value)||null:null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
-  const sp=ms.name,st=ms.kuerzel;
-  const qty=parseInt(document.getElementById('nb-qty').value)||0,days=parseInt(document.getElementById('nb-days').value)||14;
-  const bagKg=parseFloat(document.getElementById('nb-weight').value)||0;
-  if(qty<1){alert(t('batch.fillQty'));return}
-  if(!bagKg){alert(t('batch.enterWeight'));return}
-  const hw=parseFloat(document.getElementById('nb-hw').value)||0,wb=parseFloat(document.getElementById('nb-wb').value)||0;
-  const substrate=(hw||wb)?{hardwood:hw,wheatbran:wb,rh:parseFloat(document.getElementById('nb-rh').value)||null,gypsum:document.getElementById('nb-gyp').checked}:null;
-  const strainText=(document.getElementById('nb-strain-text')||{}).value?.trim()||'';
-  const batchId=genBatchId(sp);spColor(sp);
-  const due=new Date();due.setDate(due.getDate()+days);
-  const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
-  const batchType='block';
-  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate,bagKg,batchType,sourceId:document.getElementById('nb-culture').value||null,notes:document.getElementById('nb-notes').value.trim(),strainText,created:new Date().toISOString(),due:due.toISOString(),bags});
+function nbSubSum() {
+  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
+    wb = parseFloat(document.getElementById('nb-wb').value) || 0,
+    s = hw + wb;
+  document.getElementById('nb-subsum').textContent =
+    hw || wb ? 'Total: ' + s + '%' + (s !== 100 ? ' — should add up to 100%' : '') : '';
+  nbPreview();
+}
+function createBatch() {
+  const strainSel = document.getElementById('nb-strain-sel');
+  const strainId = strainSel ? parseInt(strainSel.value) || null : null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  if (!strainId || !ms) {
+    alert(t('strains.noStrainsHint'));
+    return;
+  }
+  const sp = ms.name,
+    st = ms.kuerzel;
+  const qty = parseInt(document.getElementById('nb-qty').value) || 0,
+    days = parseInt(document.getElementById('nb-days').value) || 14;
+  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  if (qty < 1) {
+    alert(t('batch.fillQty'));
+    return;
+  }
+  if (!bagKg) {
+    alert(t('batch.enterWeight'));
+    return;
+  }
+  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
+    wb = parseFloat(document.getElementById('nb-wb').value) || 0;
+  const substrate =
+    hw || wb
+      ? {
+          hardwood: hw,
+          wheatbran: wb,
+          rh: parseFloat(document.getElementById('nb-rh').value) || null,
+          gypsum: document.getElementById('nb-gyp').checked
+        }
+      : null;
+  const strainText = (document.getElementById('nb-strain-text') || {}).value?.trim() || '';
+  const batchId = genBatchId(sp);
+  spColor(sp);
+  const due = new Date();
+  due.setDate(due.getDate() + days);
+  const bags = Array.from({ length: qty }, (_, i) => batchId + '-' + String(i + 1).padStart(2, '0'));
+  const batchType = 'block';
+  batches.push({
+    batchId,
+    species: sp,
+    strain: st,
+    strainId,
+    strainName: ms.name,
+    strainKuerzel: ms.kuerzel,
+    qty,
+    days,
+    substrate,
+    bagKg,
+    batchType,
+    sourceId: document.getElementById('nb-culture').value || null,
+    notes: document.getElementById('nb-notes').value.trim(),
+    strainText,
+    created: new Date().toISOString(),
+    due: due.toISOString(),
+    bags
+  });
 
   // Save batch to server
-  const batchObj=batches[batches.length-1];
-  apiPost('/api/batches',batchObj).then(r=>{
-    if(r&&r.error){
+  const batchObj = batches[batches.length - 1];
+  apiPost('/api/batches', batchObj).then((r) => {
+    if (r && r.error) {
       // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
-      const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
-      if(i>=0)batches.splice(i,1);
-      alert(t('batch.saveFailed')+r.error);
-      renderBatches();renderStatus();
+      const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
+      if (i >= 0) batches.splice(i, 1);
+      alert(t('batch.saveFailed') + r.error);
+      renderBatches();
+      renderStatus();
     }
     // Register new barcode numbers from server response
-    if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}
+    if (r && r.bagBarcodes) {
+      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+        barcodeRegistry.set(bc, { type: 'bag', id });
+        barcodeByEntity.set('bag:' + id, bc);
+      }
+    }
   });
 
   // Auto-deduct materials from inventory via server-side deltas
-  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  const deltas=[];
-  if(substrate){
-    const rh=parseFloat(document.getElementById('nb-rh').value)||0;
-    const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
-    const hwUsed=qty*dryKgPerBag*(hw/100);
-    const wbUsed=qty*dryKgPerBag*(wb/100);
-    if(hwUsed>0){inventory.stock.hardwood=Math.max(0,inventory.stock.hardwood-hwUsed);deltas.push({mat:'hardwood',deltaKg:-hwUsed,type:'batch',ref:batchId})}
-    if(wbUsed>0){inventory.stock.wheatbran=Math.max(0,inventory.stock.wheatbran-wbUsed);deltas.push({mat:'wheatbran',deltaKg:-wbUsed,type:'batch',ref:batchId})}
-    if(substrate.gypsum){const gypUsed=qty*dryKgPerBag*0.01;inventory.stock.gypsum=Math.max(0,inventory.stock.gypsum-gypUsed);deltas.push({mat:'gypsum',deltaKg:-gypUsed,type:'batch',ref:batchId})}
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  const deltas = [];
+  if (substrate) {
+    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    const hwUsed = qty * dryKgPerBag * (hw / 100);
+    const wbUsed = qty * dryKgPerBag * (wb / 100);
+    if (hwUsed > 0) {
+      inventory.stock.hardwood = Math.max(0, inventory.stock.hardwood - hwUsed);
+      deltas.push({ mat: 'hardwood', deltaKg: -hwUsed, type: 'batch', ref: batchId });
+    }
+    if (wbUsed > 0) {
+      inventory.stock.wheatbran = Math.max(0, inventory.stock.wheatbran - wbUsed);
+      deltas.push({ mat: 'wheatbran', deltaKg: -wbUsed, type: 'batch', ref: batchId });
+    }
+    if (substrate.gypsum) {
+      const gypUsed = qty * dryKgPerBag * 0.01;
+      inventory.stock.gypsum = Math.max(0, inventory.stock.gypsum - gypUsed);
+      deltas.push({ mat: 'gypsum', deltaKg: -gypUsed, type: 'batch', ref: batchId });
+    }
   }
-  if(deltas.length)invDeltas(deltas);
-  if(document.getElementById('nb-strain-sel'))document.getElementById('nb-strain-sel').value='';
-  const nbStrainTextEl=document.getElementById('nb-strain-text');if(nbStrainTextEl)nbStrainTextEl.value='';
-  document.getElementById('nb-qty').value='10';document.getElementById('nb-days').value='14';
-  document.getElementById('nb-notes').value='';document.getElementById('nb-mat-preview').style.display='none';
-  nbPreview();updateTodoBadge();
+  if (deltas.length) invDeltas(deltas);
+  if (document.getElementById('nb-strain-sel')) document.getElementById('nb-strain-sel').value = '';
+  const nbStrainTextEl = document.getElementById('nb-strain-text');
+  if (nbStrainTextEl) nbStrainTextEl.value = '';
+  document.getElementById('nb-qty').value = '10';
+  document.getElementById('nb-days').value = '14';
+  document.getElementById('nb-notes').value = '';
+  document.getElementById('nb-mat-preview').style.display = 'none';
+  nbPreview();
+  updateTodoBadge();
   // Show zone picker — required before print
-  openZonePickModal(batchObj,bags,function(){
-    document.getElementById('nb-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
-    document.getElementById('nb-result').style.display='block';
+  openZonePickModal(batchObj, bags, function () {
+    document.getElementById('nb-bags').innerHTML = bags
+      .map(
+        (b) =>
+          `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+      )
+      .join('');
+    document.getElementById('nb-result').style.display = 'block';
   });
 }
-function goToPrintBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const s=document.getElementById('print-batch'),last=batches[batches.length-1];if(last){s.value=last.batchId;renderBagPreview()}},100)}
+function goToPrintBatch() {
+  go('print', 'n-print');
+  setTimeout(() => {
+    openStab('print', 'bags');
+    fillBatchSelect();
+    const s = document.getElementById('print-batch'),
+      last = batches[batches.length - 1];
+    if (last) {
+      s.value = last.batchId;
+      renderBagPreview();
+    }
+  }, 100);
+}
 // Move all active bags in a batch to a destination zone/rack.
 // Shared by the scan engine (MOVE_BATCH action) and the batch list dropdown.
 // Calls back with (movedCount, skippedCount) when done.
-function moveBatchTo(batch,dest,cb){
-  const now=new Date().toISOString();const entries=[];let skipped=0;
-  batch.bags.forEach(bagId=>{
-    const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
-    if(!bagLast||bagLast.action==='REMOVE')return;
-    const curLoc=bagLast.to||null;
-    if(curLoc&&curLoc.toUpperCase()===dest.toUpperCase()){skipped++;return}
-    const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:now,action:'MOVE',batch:batch.batchId,bag:bagId,from:curLoc,to:dest,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
-    scanLog.push(entry);movements.push(entry);entries.push(entry);
-    if(!sessionStartTime)sessionStartTime=Date.now();
+function moveBatchTo(batch, dest, cb) {
+  const now = new Date().toISOString();
+  const entries = [];
+  let skipped = 0;
+  batch.bags.forEach((bagId) => {
+    const bagLast = [...scanLog]
+      .reverse()
+      .find(
+        (e) =>
+          (e.bag || '').toUpperCase() === bagId.toUpperCase() &&
+          (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+      );
+    if (!bagLast || bagLast.action === 'REMOVE') return;
+    const curLoc = bagLast.to || null;
+    if (curLoc && curLoc.toUpperCase() === dest.toUpperCase()) {
+      skipped++;
+      return;
+    }
+    const tempId = 's' + ++_scanTempIdCounter;
+    const entry = {
+      time: now,
+      action: 'MOVE',
+      batch: batch.batchId,
+      bag: bagId,
+      from: curLoc,
+      to: dest,
+      species: batch.species,
+      strain: batch.strain,
+      user: currentUser?.username || null,
+      _tempId: tempId
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    entries.push(entry);
+    if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(entry);
   });
-  if(!entries.length){if(cb)cb(0,skipped);return}
-  if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
-  apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
-  if(cb)cb(entries.length,skipped);
+  if (!entries.length) {
+    if (cb) cb(0, skipped);
+    return;
+  }
+  if (scanChannel)
+    entries.forEach((e) =>
+      scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
+    );
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        if (r.ids[i]) e._serverId = r.ids[i];
+      });
+  });
+  if (cb) cb(entries.length, skipped);
 }
 
 // Add all bags in bagIds to a location (initial placement — ADD action, from=null).
-function addBagsToLocation(batch,bagIds,dest,cb){
-  const now=new Date().toISOString();const entries=[];
-  bagIds.forEach(bagId=>{
-    const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:now,action:'ADD',batch:batch.batchId,bag:bagId,from:null,to:dest,species:batch.species,strain:batch.strain,user:currentUser?.username||null,_tempId:tempId};
-    scanLog.push(entry);movements.push(entry);entries.push(entry);
-    if(!sessionStartTime)sessionStartTime=Date.now();
+function addBagsToLocation(batch, bagIds, dest, cb) {
+  const now = new Date().toISOString();
+  const entries = [];
+  bagIds.forEach((bagId) => {
+    const tempId = 's' + ++_scanTempIdCounter;
+    const entry = {
+      time: now,
+      action: 'ADD',
+      batch: batch.batchId,
+      bag: bagId,
+      from: null,
+      to: dest,
+      species: batch.species,
+      strain: batch.strain,
+      user: currentUser?.username || null,
+      _tempId: tempId
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    entries.push(entry);
+    if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(entry);
   });
-  if(!entries.length){if(cb)cb(0);return}
-  if(scanChannel)entries.forEach(e=>scanChannel.postMessage({type:'scan-entry',entry:{bag:e.bag,batch:e.batch,action:e.action,to:e.to}}));
-  apiPost('/api/scan-log',{entries}).then(function(r){if(r&&r.ids)entries.forEach((e,i)=>{if(r.ids[i])e._serverId=r.ids[i]})});
-  if(cb)cb(entries.length);
+  if (!entries.length) {
+    if (cb) cb(0);
+    return;
+  }
+  if (scanChannel)
+    entries.forEach((e) =>
+      scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
+    );
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        if (r.ids[i]) e._serverId = r.ids[i];
+      });
+  });
+  if (cb) cb(entries.length);
 }
 
 // Zone picker modal — shown after batch creation, user must pick a destination.
 // onDone() is called after a zone is picked so the caller can show print panel.
-function openZonePickModal(batch,bags,onDone){
-  const m=document.getElementById('m-zone-pick');if(!m)return;
-  document.getElementById('zp-title').textContent=t('batch.whereGo');
-  document.getElementById('zp-info').textContent=t('batch.whereGoInfo',{id:batch.batchId,n:bags.length});
-  const container=document.getElementById('zp-zones');
-  container.innerHTML='';
-  if(!zones.length){
-    container.innerHTML='<div style="color:var(--c-text-muted);font-style:italic;font-size:13px">'+esc(t('batch.noLocations'))+'</div>';
-  }else{
-    zones.forEach(z=>{
-      const wrap=document.createElement('div');
-      wrap.style.cssText='display:flex;align-items:center;gap:8px;background:var(--c-bg);border-radius:8px;padding:10px 12px';
+function openZonePickModal(batch, bags, onDone) {
+  const m = document.getElementById('m-zone-pick');
+  if (!m) return;
+  document.getElementById('zp-title').textContent = t('batch.whereGo');
+  document.getElementById('zp-info').textContent = t('batch.whereGoInfo', { id: batch.batchId, n: bags.length });
+  const container = document.getElementById('zp-zones');
+  container.innerHTML = '';
+  if (!zones.length) {
+    container.innerHTML =
+      '<div style="color:var(--c-text-muted);font-style:italic;font-size:13px">' +
+      esc(t('batch.noLocations')) +
+      '</div>';
+  } else {
+    zones.forEach((z) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText =
+        'display:flex;align-items:center;gap:8px;background:var(--c-bg);border-radius:8px;padding:10px 12px';
       // Zone button
-      const btn=document.createElement('button');
-      btn.type='button';btn.className='btn btn-p';
-      btn.textContent=z.name||z.id;
-      btn.style.cssText='flex:1;min-width:0;text-align:left;font-weight:600';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-p';
+      btn.textContent = z.name || z.id;
+      btn.style.cssText = 'flex:1;min-width:0;text-align:left;font-weight:600';
       // Optional rack selector
-      let rackSel=null;
-      if(z.racks&&z.racks.length){
-        rackSel=document.createElement('select');
-        rackSel.style.cssText='font-size:12px;max-width:120px';
-        rackSel.innerHTML='<option value="">\u2014 '+esc(t('zones.noRacks'))+' \u2014</option>'+z.racks.map(r=>`<option value="${esc(r.id)}">${esc(r.id.slice(z.id.length+1)||r.id)}</option>`).join('');
+      let rackSel = null;
+      if (z.racks && z.racks.length) {
+        rackSel = document.createElement('select');
+        rackSel.style.cssText = 'font-size:12px;max-width:120px';
+        rackSel.innerHTML =
+          '<option value="">\u2014 ' +
+          esc(t('zones.noRacks')) +
+          ' \u2014</option>' +
+          z.racks
+            .map((r) => `<option value="${esc(r.id)}">${esc(r.id.slice(z.id.length + 1) || r.id)}</option>`)
+            .join('');
         wrap.appendChild(rackSel);
       }
-      btn.addEventListener('click',function(){
-        const dest=rackSel&&rackSel.value?rackSel.value:z.id;
-        m.style.display='none';
-        addBagsToLocation(batch,bags,dest,function(added){
-          setFb('ok',batch.batchId+': '+added+' Bags \u2192 '+zoneDisplayName(dest));
-          updateSD();renderBatches();renderStatus();
+      btn.addEventListener('click', function () {
+        const dest = rackSel && rackSel.value ? rackSel.value : z.id;
+        m.style.display = 'none';
+        addBagsToLocation(batch, bags, dest, function (added) {
+          setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest));
+          updateSD();
+          renderBatches();
+          renderStatus();
         });
-        if(onDone)onDone();
+        if (onDone) onDone();
       });
-      wrap.insertBefore(btn,wrap.firstChild);
+      wrap.insertBefore(btn, wrap.firstChild);
       container.appendChild(wrap);
     });
   }
-  m.style.display='flex';
+  m.style.display = 'flex';
 }
 
 // Move-batch modal — select destination for an entire batch from Alle Chargen.
-function openMoveBatchModal(batchId){
-  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
-  const m=document.getElementById('m-move-batch');if(!m)return;
-  document.getElementById('mb-title').textContent=t('batch.moveMenuTitle',{id:batchId});
-  const container=document.getElementById('mb-zones');
-  container.innerHTML='';
-  if(!zones.length){
-    container.innerHTML='<div style="padding:8px 0;color:var(--c-text-muted);font-style:italic">'+esc(t('batch.noLocations'))+'</div>';
-  }else{
-    zones.forEach(z=>{
+function openMoveBatchModal(batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return;
+  const m = document.getElementById('m-move-batch');
+  if (!m) return;
+  document.getElementById('mb-title').textContent = t('batch.moveMenuTitle', { id: batchId });
+  const container = document.getElementById('mb-zones');
+  container.innerHTML = '';
+  if (!zones.length) {
+    container.innerHTML =
+      '<div style="padding:8px 0;color:var(--c-text-muted);font-style:italic">' +
+      esc(t('batch.noLocations')) +
+      '</div>';
+  } else {
+    zones.forEach((z) => {
       // Zone row
-      const zRow=document.createElement('button');
-      zRow.type='button';
-      zRow.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;border-left:3px solid '+(z.color||'#888');
-      zRow.textContent=z.name||z.id;
-      zRow.addEventListener('mouseenter',()=>{zRow.style.background='var(--c-bg)'});
-      zRow.addEventListener('mouseleave',()=>{zRow.style.background='none'});
-      zRow.addEventListener('click',()=>{
+      const zRow = document.createElement('button');
+      zRow.type = 'button';
+      zRow.style.cssText =
+        'display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;border-left:3px solid ' +
+        (z.color || '#888');
+      zRow.textContent = z.name || z.id;
+      zRow.addEventListener('mouseenter', () => {
+        zRow.style.background = 'var(--c-bg)';
+      });
+      zRow.addEventListener('mouseleave', () => {
+        zRow.style.background = 'none';
+      });
+      zRow.addEventListener('click', () => {
         document.getElementById('m-move-batch').classList.remove('open');
-        moveBatchTo(b,z.id,function(moved,skipped){
-          if(!moved){setFb('err',t('batch.noBagsToMove')+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(z.id)+')':''));return}
-          setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(z.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
-          updateSD();renderBatches();
+        moveBatchTo(b, z.id, function (moved, skipped) {
+          if (!moved) {
+            setFb(
+              'err',
+              t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(z.id) + ')' : '')
+            );
+            return;
+          }
+          setFb(
+            'ok',
+            b.batchId +
+              ': ' +
+              moved +
+              ' Bags \u2192 ' +
+              zoneDisplayName(z.id) +
+              (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
+          );
+          updateSD();
+          renderBatches();
         });
       });
       container.appendChild(zRow);
       // Rack rows
-      (z.racks||[]).forEach(r=>{
-        const rRow=document.createElement('button');
-        rRow.type='button';
-        rRow.style.cssText='display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-size:12px;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
-        rRow.textContent=r.id.slice(z.id.length+1)||r.id;
-        rRow.addEventListener('mouseenter',()=>{rRow.style.background='var(--c-bg)'});
-        rRow.addEventListener('mouseleave',()=>{rRow.style.background='none'});
-        rRow.addEventListener('click',()=>{
+      (z.racks || []).forEach((r) => {
+        const rRow = document.createElement('button');
+        rRow.type = 'button';
+        rRow.style.cssText =
+          'display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-size:12px;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
+        rRow.textContent = r.id.slice(z.id.length + 1) || r.id;
+        rRow.addEventListener('mouseenter', () => {
+          rRow.style.background = 'var(--c-bg)';
+        });
+        rRow.addEventListener('mouseleave', () => {
+          rRow.style.background = 'none';
+        });
+        rRow.addEventListener('click', () => {
           document.getElementById('m-move-batch').classList.remove('open');
-          moveBatchTo(b,r.id,function(moved,skipped){
-            if(!moved){setFb('err',t('batch.noBagsToMove')+(skipped?' ('+skipped+' bereits in '+zoneDisplayName(r.id)+')':''));return}
-            setFb('ok',b.batchId+': '+moved+' Bags \u2192 '+zoneDisplayName(r.id)+(skipped?' ('+skipped+' \u00fcbersprungen)':''));
-            updateSD();renderBatches();
+          moveBatchTo(b, r.id, function (moved, skipped) {
+            if (!moved) {
+              setFb(
+                'err',
+                t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(r.id) + ')' : '')
+              );
+              return;
+            }
+            setFb(
+              'ok',
+              b.batchId +
+                ': ' +
+                moved +
+                ' Bags \u2192 ' +
+                zoneDisplayName(r.id) +
+                (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
+            );
+            updateSD();
+            renderBatches();
           });
         });
         container.appendChild(rRow);
@@ -5449,841 +6945,1465 @@ function openMoveBatchModal(batchId){
   document.getElementById('m-move-batch').classList.add('open');
 }
 
-const tableSort={batches:null,cultures:null};
-function sortCmp(a,b){
-  if(a==null&&b==null)return 0;
-  if(a==null)return 1;
-  if(b==null)return -1;
-  if(typeof a==='number'&&typeof b==='number')return a-b;
-  return String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
+const tableSort = { batches: null, cultures: null };
+function sortCmp(a, b) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
-function applyTableSort(rows,state,keyFn){
-  if(!state)return rows;
-  const sign=state.dir==='desc'?-1:1;
-  return [...rows].sort((a,b)=>sign*sortCmp(keyFn(a,state.key),keyFn(b,state.key)));
+function applyTableSort(rows, state, keyFn) {
+  if (!state) return rows;
+  const sign = state.dir === 'desc' ? -1 : 1;
+  return [...rows].sort((a, b) => sign * sortCmp(keyFn(a, state.key), keyFn(b, state.key)));
 }
-function cycleTableSort(table,key){
-  const cur=tableSort[table];
-  tableSort[table]=!cur||cur.key!==key
-    ?{key,dir:'asc'}
-    :cur.dir==='asc'?{key,dir:'desc'}:null;
+function cycleTableSort(table, key) {
+  const cur = tableSort[table];
+  tableSort[table] = !cur || cur.key !== key ? { key, dir: 'asc' } : cur.dir === 'asc' ? { key, dir: 'desc' } : null;
 }
-function updateSortIndicators(table,activeState){
-  const bodyId=table==='batches'?'batches-body':'cultures-body';
-  const body=document.getElementById(bodyId);if(!body)return;
-  const thead=body.closest('table').tHead;if(!thead)return;
-  thead.querySelectorAll('th[data-sort]').forEach(th=>{
-    const active=activeState&&activeState.key===th.dataset.sort;
-    th.classList.toggle('active',!!active);
-    let arrow=th.querySelector('.arrow');
-    if(!arrow){arrow=document.createElement('span');arrow.className='arrow';th.appendChild(arrow);}
-    arrow.textContent=active?(activeState.dir==='asc'?' \u25B2':' \u25BC'):' \u21C5';
+function updateSortIndicators(table, activeState) {
+  const bodyId = table === 'batches' ? 'batches-body' : 'cultures-body';
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+  const thead = body.closest('table').tHead;
+  if (!thead) return;
+  thead.querySelectorAll('th[data-sort]').forEach((th) => {
+    const active = activeState && activeState.key === th.dataset.sort;
+    th.classList.toggle('active', !!active);
+    let arrow = th.querySelector('.arrow');
+    if (!arrow) {
+      arrow = document.createElement('span');
+      arrow.className = 'arrow';
+      th.appendChild(arrow);
+    }
+    arrow.textContent = active ? (activeState.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ' \u21C5';
   });
 }
-function renderBatches(){
-  const q=(document.getElementById('batch-q').value||'').toLowerCase(),body=document.getElementById('batches-body');
-  updateSortIndicators('batches',tableSort.batches);
-  if(!batches.length){body.innerHTML='<tr><td colspan="12" class="empty">'+t('dash.noBatches')+'</td></tr>';return}
-  const filtered=batches.filter(b=>!q||b.batchId.toLowerCase().includes(q)||(b.species||'').toLowerCase().includes(q)||(b.strain||'').toLowerCase().includes(q)||(b.strainName||'').toLowerCase().includes(q));
-  const sorted=applyTableSort(filtered,tableSort.batches,(b,k)=>{
-    if(k==='strain')return b.strainName||b.strain||'';
-    if(k==='status')return getStatus(b.batchId).status;
-    if(k==='qty'||k==='days')return Number(b[k])||0;
+function renderBatches() {
+  const q = (document.getElementById('batch-q').value || '').toLowerCase(),
+    body = document.getElementById('batches-body');
+  updateSortIndicators('batches', tableSort.batches);
+  if (!batches.length) {
+    body.innerHTML = '<tr><td colspan="12" class="empty">' + t('dash.noBatches') + '</td></tr>';
+    return;
+  }
+  const filtered = batches.filter(
+    (b) =>
+      !q ||
+      b.batchId.toLowerCase().includes(q) ||
+      (b.species || '').toLowerCase().includes(q) ||
+      (b.strain || '').toLowerCase().includes(q) ||
+      (b.strainName || '').toLowerCase().includes(q)
+  );
+  const sorted = applyTableSort(filtered, tableSort.batches, (b, k) => {
+    if (k === 'strain') return b.strainName || b.strain || '';
+    if (k === 'status') return getStatus(b.batchId).status;
+    if (k === 'qty' || k === 'days') return Number(b[k]) || 0;
     return b[k];
   });
-  body.innerHTML=sorted.map(b=>{
-    const{status}=getStatus(b.batchId);
-    const sub=b.substrate?[`<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,b.substrate.rh?`<span class="sub-tag">RH ${b.substrate.rh}%</span>`:'',b.substrate.gypsum?`<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`:''].join(''):'<span style="color:#ccc;font-size:11px">—</span>';
-    const src=b.sourceId?`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`:'<span style="color:#ccc;font-size:11px">—</span>';
-    const note=b.notes?`<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length>22?b.notes.slice(0,22)+'\u2026':b.notes)}</span>`:`<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-    const strainDisplay=b.strainName?(esc(b.strainName)+(b.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(b.strainKuerzel)+')</span>':'')):esc(b.strain||'—');
-    const canMove=status!=='DONE';
-    const moveBtn=canMove?`<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`:'';
-    return`<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
-  }).join('')||'<tr><td colspan="12" class="empty">'+t('dash.noMatches')+'</td></tr>';
+  body.innerHTML =
+    sorted
+      .map((b) => {
+        const { status } = getStatus(b.batchId);
+        const sub = b.substrate
+          ? [
+              `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
+              b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
+              b.substrate.gypsum
+                ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
+                : ''
+            ].join('')
+          : '<span style="color:#ccc;font-size:11px">—</span>';
+        const src = b.sourceId
+          ? `<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`
+          : '<span style="color:#ccc;font-size:11px">—</span>';
+        const note = b.notes
+          ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
+          : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
+        const strainDisplay = b.strainName
+          ? esc(b.strainName) +
+            (b.strainKuerzel
+              ? ' <span style="font-size:10px;color:var(--c-text-muted)">(' + esc(b.strainKuerzel) + ')</span>'
+              : '')
+          : esc(b.strain || '—');
+        const canMove = status !== 'DONE';
+        const moveBtn = canMove
+          ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
+          : '';
+        return `<tr><td style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td>${spDot(b.species)}${esc(b.species)}</td><td>${strainDisplay}</td><td>${b.qty}</td><td>${b.days}d</td><td>${sub}</td><td>${src}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td>${sbadge(status)}</td><td>${note}</td><td style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
+      })
+      .join('') || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
 }
-let locColor={};
-function toggleBatchBags(batchId){
-  const existing=document.getElementById('brow-'+batchId);
-  if(existing){existing.remove();document.getElementById('btog-'+batchId).innerHTML='&#9654;';return}
-  const b=batches.find(x=>x.batchId===batchId);if(!b)return;
-  document.getElementById('btog-'+batchId).innerHTML='&#9660;';
-  const parentRow=document.getElementById('btog-'+batchId).closest('tr');
-  const tr=document.createElement('tr');tr.id='brow-'+batchId;
-  const td=document.createElement('td');td.colSpan=12;td.style.cssText='background:var(--c-bg);padding:8px 12px';
-  td.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px">'+b.bags.map(bag=>{
-    const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
-    let loc='—',color='#aaa';
-    if(last){
-      if(last.action==='REMOVE'){loc=t('bagInfo.removed');color='#999'}
-      else if(last.to){loc=zoneDisplayName(last.to);const z=toZone(last.to);color=locColor[z]||'#888'}
-    }
-    const num=bag.split('-').pop();
-    return`<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last&&last.action==='REMOVE'?';text-decoration:line-through;opacity:.5':''}">
+let locColor = {};
+function toggleBatchBags(batchId) {
+  const existing = document.getElementById('brow-' + batchId);
+  if (existing) {
+    existing.remove();
+    document.getElementById('btog-' + batchId).innerHTML = '&#9654;';
+    return;
+  }
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return;
+  document.getElementById('btog-' + batchId).innerHTML = '&#9660;';
+  const parentRow = document.getElementById('btog-' + batchId).closest('tr');
+  const tr = document.createElement('tr');
+  tr.id = 'brow-' + batchId;
+  const td = document.createElement('td');
+  td.colSpan = 12;
+  td.style.cssText = 'background:var(--c-bg);padding:8px 12px';
+  td.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
+    b.bags
+      .map((bag) => {
+        const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+        let loc = '—',
+          color = '#aaa';
+        if (last) {
+          if (last.action === 'REMOVE') {
+            loc = t('bagInfo.removed');
+            color = '#999';
+          } else if (last.to) {
+            loc = zoneDisplayName(last.to);
+            const z = toZone(last.to);
+            color = locColor[z] || '#888';
+          }
+        }
+        const num = bag.split('-').pop();
+        return `<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
       ${num} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
     </span>`;
-  }).join('')+'</div>';
-  tr.appendChild(td);parentRow.after(tr);
+      })
+      .join('') +
+    '</div>';
+  tr.appendChild(td);
+  parentRow.after(tr);
 }
-let addBagsBatchId=null;
-let _lastNewBags=[];
-function openAddBags(batchId){
-  const b=batches.find(x=>x.batchId===batchId);
-  if(!b)return;
-  addBagsBatchId=batchId;
-  document.getElementById('ab-phase-input').style.display='';
-  document.getElementById('ab-phase-result').style.display='none';
-  document.getElementById('m-addbags-title').textContent=t('addBags.title');
-  document.getElementById('ab-info').textContent=t('addBags.info',{id:batchId,n:b.bags.length,last:b.bags[b.bags.length-1]});
-  document.getElementById('ab-qty').value=1;
-  document.getElementById('ab-preview').style.display='none';
+let addBagsBatchId = null;
+let _lastNewBags = [];
+function openAddBags(batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return;
+  addBagsBatchId = batchId;
+  document.getElementById('ab-phase-input').style.display = '';
+  document.getElementById('ab-phase-result').style.display = 'none';
+  document.getElementById('m-addbags-title').textContent = t('addBags.title');
+  document.getElementById('ab-info').textContent = t('addBags.info', {
+    id: batchId,
+    n: b.bags.length,
+    last: b.bags[b.bags.length - 1]
+  });
+  document.getElementById('ab-qty').value = 1;
+  document.getElementById('ab-preview').style.display = 'none';
   document.getElementById('m-addbags').classList.add('open');
-  setTimeout(()=>document.getElementById('ab-qty').focus(),80);
+  setTimeout(() => document.getElementById('ab-qty').focus(), 80);
 }
-function confirmAddBags(){
-  const b=batches.find(x=>x.batchId===addBagsBatchId);
-  if(!b)return;
-  const qty=parseInt(document.getElementById('ab-qty').value)||0;
-  if(qty<1){alert(t('addBags.enterQty'));return}
-  const lastNum=parseInt(b.bags[b.bags.length-1].split('-').pop())||b.bags.length;
-  const newBags=Array.from({length:qty},(_,i)=>b.batchId+'-'+String(lastNum+1+i).padStart(2,'0'));
-  b.bags=[...b.bags,...newBags];
-  b.qty=b.bags.length;
-  _lastNewBags=newBags;
-  apiPatch('/api/batches/'+encodeURIComponent(b.batchId)+'/bags',{add:newBags,newQty:b.qty}).then(r=>{if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}});
+function confirmAddBags() {
+  const b = batches.find((x) => x.batchId === addBagsBatchId);
+  if (!b) return;
+  const qty = parseInt(document.getElementById('ab-qty').value) || 0;
+  if (qty < 1) {
+    alert(t('addBags.enterQty'));
+    return;
+  }
+  const lastNum = parseInt(b.bags[b.bags.length - 1].split('-').pop()) || b.bags.length;
+  const newBags = Array.from({ length: qty }, (_, i) => b.batchId + '-' + String(lastNum + 1 + i).padStart(2, '0'));
+  b.bags = [...b.bags, ...newBags];
+  b.qty = b.bags.length;
+  _lastNewBags = newBags;
+  apiPatch('/api/batches/' + encodeURIComponent(b.batchId) + '/bags', { add: newBags, newQty: b.qty }).then((r) => {
+    if (r && r.bagBarcodes) {
+      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+        barcodeRegistry.set(bc, { type: 'bag', id });
+        barcodeByEntity.set('bag:' + id, bc);
+      }
+    }
+  });
   // Switch to result phase
-  document.getElementById('ab-phase-input').style.display='none';
-  document.getElementById('m-addbags-title').textContent=t('addBags.addedTitle');
-  document.getElementById('ab-result-info').textContent=t('addBags.added',{qty:qty,id:b.batchId,total:b.bags.length});
-  document.getElementById('ab-new-bags').innerHTML=newBags.map(id=>
-    '<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">'+esc(id)+'</span>'
-  ).join('');
-  document.getElementById('ab-phase-result').style.display='';
+  document.getElementById('ab-phase-input').style.display = 'none';
+  document.getElementById('m-addbags-title').textContent = t('addBags.addedTitle');
+  document.getElementById('ab-result-info').textContent = t('addBags.added', {
+    qty: qty,
+    id: b.batchId,
+    total: b.bags.length
+  });
+  document.getElementById('ab-new-bags').innerHTML = newBags
+    .map(
+      (id) =>
+        '<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">' +
+        esc(id) +
+        '</span>'
+    )
+    .join('');
+  document.getElementById('ab-phase-result').style.display = '';
   renderBatches();
 }
-async function printNewBags(){
-  const b=batches.find(x=>x.batchId===addBagsBatchId);
-  if(!b||!_lastNewBags.length)return;
-  const zpl=makeBagZPL(_lastNewBags,b,'full');
-  const err=await sendToPrinter(zpl);
-  if(err){
-    const blob=new Blob([zpl],{type:'text/plain'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=b.batchId+'_new_labels.zpl';a.click();
-  }else{
-    setFb('ok',t('addBags.printed',{n:_lastNewBags.length,id:b.batchId}));
+async function printNewBags() {
+  const b = batches.find((x) => x.batchId === addBagsBatchId);
+  if (!b || !_lastNewBags.length) return;
+  const zpl = makeBagZPL(_lastNewBags, b, 'full');
+  const err = await sendToPrinter(zpl);
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = b.batchId + '_new_labels.zpl';
+    a.click();
+  } else {
+    setFb('ok', t('addBags.printed', { n: _lastNewBags.length, id: b.batchId }));
   }
   document.getElementById('m-addbags').classList.remove('open');
 }
-document.getElementById('m-addbags').addEventListener('click',e=>{if(e.target.id==='m-addbags')document.getElementById('m-addbags').classList.remove('open')});
+document.getElementById('m-addbags').addEventListener('click', (e) => {
+  if (e.target.id === 'm-addbags') document.getElementById('m-addbags').classList.remove('open');
+});
 
-function delBatch(id){confirm2(t('batch.deleteBatch',{id:id}),t('batch.deleteMsg'),t('batch.deleteBtn'),()=>{
-  const b=batches.find(x=>x.batchId===id);
-  // Reverse inventory deductions locally
-  if(b&&inventory.stock){
-    if(b.batchType==='grain'){
-      inventory.stock.grain=(inventory.stock.grain||0)+b.qty*(b.bagKg||3);
-    }else if(b.substrate){
-      const rh=b.substrate.rh||0,bagKg=b.bagKg||3;
-      const dryKgPerBag=rh>0?bagKg*(1-rh/100):bagKg;
-      if(b.substrate.hardwood)inventory.stock.hardwood=(inventory.stock.hardwood||0)+b.qty*dryKgPerBag*(b.substrate.hardwood/100);
-      if(b.substrate.wheatbran)inventory.stock.wheatbran=(inventory.stock.wheatbran||0)+b.qty*dryKgPerBag*(b.substrate.wheatbran/100);
-      if(b.substrate.gypsum)inventory.stock.gypsum=(inventory.stock.gypsum||0)+b.qty*dryKgPerBag*0.01;
+function delBatch(id) {
+  confirm2(t('batch.deleteBatch', { id: id }), t('batch.deleteMsg'), t('batch.deleteBtn'), () => {
+    const b = batches.find((x) => x.batchId === id);
+    // Reverse inventory deductions locally
+    if (b && inventory.stock) {
+      if (b.batchType === 'grain') {
+        inventory.stock.grain = (inventory.stock.grain || 0) + b.qty * (b.bagKg || 3);
+      } else if (b.substrate) {
+        const rh = b.substrate.rh || 0,
+          bagKg = b.bagKg || 3;
+        const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+        if (b.substrate.hardwood)
+          inventory.stock.hardwood =
+            (inventory.stock.hardwood || 0) + b.qty * dryKgPerBag * (b.substrate.hardwood / 100);
+        if (b.substrate.wheatbran)
+          inventory.stock.wheatbran =
+            (inventory.stock.wheatbran || 0) + b.qty * dryKgPerBag * (b.substrate.wheatbran / 100);
+        if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + b.qty * dryKgPerBag * 0.01;
+      }
     }
-  }
-  batches=batches.filter(x=>x.batchId!==id);apiDelete('/api/batches/'+encodeURIComponent(id));renderBatches();renderStatus();
-})}
+    batches = batches.filter((x) => x.batchId !== id);
+    apiDelete('/api/batches/' + encodeURIComponent(id));
+    renderBatches();
+    renderStatus();
+  });
+}
 
 // ─── HARVESTS ────────────────────────────────────────────────
-function showHarvestPanel(bagId,batchId){
-  const b=batches.find(x=>x.batchId===batchId);
-  scan.harvestBag={bagId,batchId,species:b?.species,strain:b?.strain};
-  document.getElementById('hp-lbl').textContent=t('harvest.logHarvest')+' \u2014 '+bagId;
-  document.getElementById('hp-bag').value=bagId;document.getElementById('hp-grams').value='';
+function showHarvestPanel(bagId, batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  scan.harvestBag = { bagId, batchId, species: b?.species, strain: b?.strain };
+  document.getElementById('hp-lbl').textContent = t('harvest.logHarvest') + ' \u2014 ' + bagId;
+  document.getElementById('hp-bag').value = bagId;
+  document.getElementById('hp-grams').value = '';
   closeCamScan();
   closeScanModal();
-  document.getElementById('harvest-panel').style.display='block';
-  setTimeout(()=>document.getElementById('hp-grams').focus(),80);
-  setFb('harvest',t('harvest.bagScanned',{bag:bagId}),{noModal:true});
+  document.getElementById('harvest-panel').style.display = 'block';
+  setTimeout(() => document.getElementById('hp-grams').focus(), 80);
+  setFb('harvest', t('harvest.bagScanned', { bag: bagId }), { noModal: true });
 }
-function confirmHarvest(){
-  const g=parseFloat(document.getElementById('hp-grams').value),f=parseInt(document.getElementById('hp-flush').value)||1;
-  if(!g||g<=0){alert(t('harvest.enterWeight'));return}
-  const p=scan.harvestBag;
-  const tempId='s'+(++_scanTempIdCounter);
-  const hEntry={time:new Date().toISOString(),batch:p.batchId,bag:p.bagId,species:p.species,strain:p.strain,grams:g,flush:f};
-  harvests.push(hEntry);apiPost('/api/harvests',hEntry);
+function confirmHarvest() {
+  const g = parseFloat(document.getElementById('hp-grams').value),
+    f = parseInt(document.getElementById('hp-flush').value) || 1;
+  if (!g || g <= 0) {
+    alert(t('harvest.enterWeight'));
+    return;
+  }
+  const p = scan.harvestBag;
+  const tempId = 's' + ++_scanTempIdCounter;
+  const hEntry = {
+    time: new Date().toISOString(),
+    batch: p.batchId,
+    bag: p.bagId,
+    species: p.species,
+    strain: p.strain,
+    grams: g,
+    flush: f
+  };
+  harvests.push(hEntry);
+  apiPost('/api/harvests', hEntry);
   // Track in sessionEntries so session summary counts HARVEST and it appears in the log
-  const sEntry={time:hEntry.time,action:'HARVEST',batch:p.batchId,bag:p.bagId,from:null,to:null,species:p.species,strain:p.strain,grams:g,flush:f,_tempId:tempId};
-  if(!sessionStartTime)sessionStartTime=Date.now();
+  const sEntry = {
+    time: hEntry.time,
+    action: 'HARVEST',
+    batch: p.batchId,
+    bag: p.bagId,
+    from: null,
+    to: null,
+    species: p.species,
+    strain: p.strain,
+    grams: g,
+    flush: f,
+    _tempId: tempId
+  };
+  if (!sessionStartTime) sessionStartTime = Date.now();
   sessionEntries.push(sEntry);
-  scan.harvestBag=null;scan.count++;
-  document.getElementById('harvest-panel').style.display='none';
-  setFb('ok',t('harvest.logged',{bag:p.bagId,g:g,f:f}),sEntry);updateSD();
+  scan.harvestBag = null;
+  scan.count++;
+  document.getElementById('harvest-panel').style.display = 'none';
+  setFb('ok', t('harvest.logged', { bag: p.bagId, g: g, f: f }), sEntry);
+  updateSD();
 }
-function cancelHarvest(){scan.harvestBag=null;document.getElementById('harvest-panel').style.display='none';setFb('info',t('harvest.cancelled'))}
-document.getElementById('hp-grams').addEventListener('keydown',e=>{if(e.key==='Enter')confirmHarvest()});
-function renderHarvests(){
-  const q=(document.getElementById('harvest-q').value||'').toLowerCase(),body=document.getElementById('harvest-body');
-  const items=[...harvests].reverse().filter(h=>!q||h.batch.toLowerCase().includes(q)||(h.species||'').toLowerCase().includes(q)).slice(0,200);
-  body.innerHTML=items.length?items.map(h=>`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag)||'\u2014'}</td><td>${h.species?spDot(h.species)+esc(h.species):'\u2014'}</td><td>${esc(h.strain)||'\u2014'}</td><td>${h.flush||1}</td><td style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`).join(''):'<tr><td colspan="7" class="empty">'+t('harvest.noHarvests')+'</td></tr>';
+function cancelHarvest() {
+  scan.harvestBag = null;
+  document.getElementById('harvest-panel').style.display = 'none';
+  setFb('info', t('harvest.cancelled'));
+}
+document.getElementById('hp-grams').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmHarvest();
+});
+function renderHarvests() {
+  const q = (document.getElementById('harvest-q').value || '').toLowerCase(),
+    body = document.getElementById('harvest-body');
+  const items = [...harvests]
+    .reverse()
+    .filter((h) => !q || h.batch.toLowerCase().includes(q) || (h.species || '').toLowerCase().includes(q))
+    .slice(0, 200);
+  body.innerHTML = items.length
+    ? items
+        .map(
+          (h) =>
+            `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch) || '\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag) || '\u2014'}</td><td>${h.species ? spDot(h.species) + esc(h.species) : '\u2014'}</td><td>${esc(h.strain) || '\u2014'}</td><td>${h.flush || 1}</td><td style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`
+        )
+        .join('')
+    : '<tr><td colspan="7" class="empty">' + t('harvest.noHarvests') + '</td></tr>';
 
-  const byBatch={};
-  harvests.forEach(h=>{if(!byBatch[h.batch])byBatch[h.batch]={total:0,flushes:{},species:h.species};byBatch[h.batch].total+=h.grams;byBatch[h.batch].flushes[h.flush]=(byBatch[h.batch].flushes[h.flush]||0)+h.grams});
-  const ids=Object.keys(byBatch).sort((a,b)=>byBatch[b].total-byBatch[a].total);
-  const tot=harvests.reduce((s,h)=>s+h.grams,0);
-  document.getElementById('harvest-metrics').innerHTML=ids.length?[
-    [t('harvest.totalHarvested'),tot>=1000?(tot/1000).toFixed(1)+'kg':tot+'g'],
-    [t('harvest.batchesWithYield'),ids.length],
-    [t('harvest.topBatch'),ids[0]?byBatch[ids[0]].total+'g':'\u2014']
-  ].map(([l,v])=>`<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:var(--c-amber-dark)">${v}</div></div>`).join(''):'';
+  const byBatch = {};
+  harvests.forEach((h) => {
+    if (!byBatch[h.batch]) byBatch[h.batch] = { total: 0, flushes: {}, species: h.species };
+    byBatch[h.batch].total += h.grams;
+    byBatch[h.batch].flushes[h.flush] = (byBatch[h.batch].flushes[h.flush] || 0) + h.grams;
+  });
+  const ids = Object.keys(byBatch).sort((a, b) => byBatch[b].total - byBatch[a].total);
+  const tot = harvests.reduce((s, h) => s + h.grams, 0);
+  document.getElementById('harvest-metrics').innerHTML = ids.length
+    ? [
+        [t('harvest.totalHarvested'), tot >= 1000 ? (tot / 1000).toFixed(1) + 'kg' : tot + 'g'],
+        [t('harvest.batchesWithYield'), ids.length],
+        [t('harvest.topBatch'), ids[0] ? byBatch[ids[0]].total + 'g' : '\u2014']
+      ]
+        .map(
+          ([l, v]) =>
+            `<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:var(--c-amber-dark)">${v}</div></div>`
+        )
+        .join('')
+    : '';
 
-  if(!ids.length){
-    document.getElementById('harvest-totals').innerHTML='<div class="empty">'+t('harvest.noData')+'</div>';
+  if (!ids.length) {
+    document.getElementById('harvest-totals').innerHTML = '<div class="empty">' + t('harvest.noData') + '</div>';
     return;
   }
 
   // Bar chart: yield per batch
-  const batchYieldCanvas=document.getElementById('batch-yield-chart');
-  if(batchYieldCanvas){
-    if(batchYieldInst){batchYieldInst.destroy();batchYieldInst=null}
-    batchYieldInst=new Chart(batchYieldCanvas,{
-      type:'bar',
-      data:{
-        labels:ids.slice(0,12),
-        datasets:[{label:'Grams',data:ids.slice(0,12).map(id=>byBatch[id].total),backgroundColor:ids.slice(0,12).map(id=>spColor(byBatch[id].species)),borderRadius:5,borderSkipped:false}]
+  const batchYieldCanvas = document.getElementById('batch-yield-chart');
+  if (batchYieldCanvas) {
+    if (batchYieldInst) {
+      batchYieldInst.destroy();
+      batchYieldInst = null;
+    }
+    batchYieldInst = new Chart(batchYieldCanvas, {
+      type: 'bar',
+      data: {
+        labels: ids.slice(0, 12),
+        datasets: [
+          {
+            label: 'Grams',
+            data: ids.slice(0, 12).map((id) => byBatch[id].total),
+            backgroundColor: ids.slice(0, 12).map((id) => spColor(byBatch[id].species)),
+            borderRadius: 5,
+            borderSkipped: false
+          }
+        ]
       },
-      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9}},grid:{display:false}}}}
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + 'g' } } },
+        scales: {
+          y: { ticks: { callback: (v) => v + 'g' }, grid: { color: '#f0ede8' } },
+          x: { ticks: { font: { size: 9 } }, grid: { display: false } }
+        }
+      }
     });
   }
 
   // Line chart: harvest over time by week
-  const byWeek={};
-  harvests.forEach(h=>{
-    const d=new Date(h.time);
-    const mon=new Date(d);mon.setDate(d.getDate()-d.getDay()+1);
-    const key=mon.toISOString().slice(0,10);
-    byWeek[key]=(byWeek[key]||0)+h.grams;
+  const byWeek = {};
+  harvests.forEach((h) => {
+    const d = new Date(h.time);
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - d.getDay() + 1);
+    const key = mon.toISOString().slice(0, 10);
+    byWeek[key] = (byWeek[key] || 0) + h.grams;
   });
-  const weekKeys=Object.keys(byWeek).sort();
-  const timelineCanvas=document.getElementById('harvest-timeline-chart');
-  if(timelineCanvas){
-    if(timelineInst){timelineInst.destroy();timelineInst=null}
-    timelineInst=new Chart(timelineCanvas,{
-      type:'line',
-      data:{
-        labels:weekKeys.map(k=>{const d=new Date(k);return fmtDtShort(d)}),
-        datasets:[{label:'g/week',data:weekKeys.map(k=>byWeek[k]),fill:true,borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.12)',tension:.4,pointRadius:3,pointBackgroundColor:'#f59e0b'}]
+  const weekKeys = Object.keys(byWeek).sort();
+  const timelineCanvas = document.getElementById('harvest-timeline-chart');
+  if (timelineCanvas) {
+    if (timelineInst) {
+      timelineInst.destroy();
+      timelineInst = null;
+    }
+    timelineInst = new Chart(timelineCanvas, {
+      type: 'line',
+      data: {
+        labels: weekKeys.map((k) => {
+          const d = new Date(k);
+          return fmtDtShort(d);
+        }),
+        datasets: [
+          {
+            label: 'g/week',
+            data: weekKeys.map((k) => byWeek[k]),
+            fill: true,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,.12)',
+            tension: 0.4,
+            pointRadius: 3,
+            pointBackgroundColor: '#f59e0b'
+          }
+        ]
       },
-      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+'g'}}},scales:{y:{ticks:{callback:v=>v+'g'},grid:{color:'#f0ede8'}},x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}}}}
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + 'g' } } },
+        scales: {
+          y: { ticks: { callback: (v) => v + 'g' }, grid: { color: '#f0ede8' } },
+          x: { ticks: { font: { size: 9 }, maxRotation: 0 }, grid: { display: false } }
+        }
+      }
     });
   }
 
   // Per-batch totals with flush breakdown
-  const max=byBatch[ids[0]].total;
-  document.getElementById('harvest-totals').innerHTML=ids.map(id=>{
-    const d=byBatch[id],pct=Math.round((d.total/max)*100);
-    return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${Object.entries(d.flushes).map(([f,g])=>`Flush ${f}: ${g}g`).join(' · ')}</div></div>`;
-  }).join('');
+  const max = byBatch[ids[0]].total;
+  document.getElementById('harvest-totals').innerHTML = ids
+    .map((id) => {
+      const d = byBatch[id],
+        pct = Math.round((d.total / max) * 100);
+      return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${Object.entries(
+        d.flushes
+      )
+        .map(([f, g]) => `Flush ${f}: ${g}g`)
+        .join(' · ')}</div></div>`;
+    })
+    .join('');
 }
 
 // ─── TO-DO ───────────────────────────────────────────────────
-function buildAutoTasks(){
-  const tasks=[],today=new Date();today.setHours(0,0,0,0);
-  batches.forEach(b=>{
-    const{status,action}=getStatus(b.batchId);if(status==='DONE'||status==='EMPTY')return;
-    const due=new Date(b.due);due.setHours(0,0,0,0);
-    const dl=Math.round((due-today)/(864e5));
-    let urgent=false,warn=false,text='',detail='',taskAction=null;
-    if(status==='INCUBATING'||status==='SPAWN RUN'){
-      if(dl<0){urgent=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueAgo',{n:Math.abs(dl)});taskAction='move'}
-      else if(dl<=2){warn=true;text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl});taskAction='move'}
-      else{text=`${b.batchId} \u2014 ${action}`;detail=t('todo.dueIn',{n:dl})}
-    }else if(status==='FRUITING'){text=`${b.batchId} \u2014 ${t('status.action.harvest')}`;detail=`${b.species}/${b.strain} ${t('todo.fruiting')}`;warn=true;taskAction='harvest'}
-    else if(status==='CONTAM'){text=`${b.batchId} \u2014 ${t('status.action.discard')}`;detail=`${b.species}/${b.strain}`;urgent=true;taskAction='discard'}
-    if(text)tasks.push({text,detail,urgent,warn,species:b.species,batchId:b.batchId,taskAction});
+function buildAutoTasks() {
+  const tasks = [],
+    today = new Date();
+  today.setHours(0, 0, 0, 0);
+  batches.forEach((b) => {
+    const { status, action } = getStatus(b.batchId);
+    if (status === 'DONE' || status === 'EMPTY') return;
+    const due = new Date(b.due);
+    due.setHours(0, 0, 0, 0);
+    const dl = Math.round((due - today) / 864e5);
+    let urgent = false,
+      warn = false,
+      text = '',
+      detail = '',
+      taskAction = null;
+    if (status === 'INCUBATING' || status === 'SPAWN RUN') {
+      if (dl < 0) {
+        urgent = true;
+        text = `${b.batchId} \u2014 ${action}`;
+        detail = t('todo.dueAgo', { n: Math.abs(dl) });
+        taskAction = 'move';
+      } else if (dl <= 2) {
+        warn = true;
+        text = `${b.batchId} \u2014 ${action}`;
+        detail = t('todo.dueIn', { n: dl });
+        taskAction = 'move';
+      } else {
+        text = `${b.batchId} \u2014 ${action}`;
+        detail = t('todo.dueIn', { n: dl });
+      }
+    } else if (status === 'FRUITING') {
+      text = `${b.batchId} \u2014 ${t('status.action.harvest')}`;
+      detail = `${b.species}/${b.strain} ${t('todo.fruiting')}`;
+      warn = true;
+      taskAction = 'harvest';
+    } else if (status === 'CONTAM') {
+      text = `${b.batchId} \u2014 ${t('status.action.discard')}`;
+      detail = `${b.species}/${b.strain}`;
+      urgent = true;
+      taskAction = 'discard';
+    }
+    if (text) tasks.push({ text, detail, urgent, warn, species: b.species, batchId: b.batchId, taskAction });
   });
   return tasks;
 }
-function toggleTask(id){const t=manualTasks.find(x=>x.id===id);if(!t)return;t.done=!t.done;t.caldavSynced=null;apiPatch('/api/tasks/'+id,{done:t.done,caldavSynced:null});renderCalendar();updateTodoBadge();if(caldav.enabled&&t.caldavUid)pushTaskCaldav(t)}
-function deleteTask(id){const tk=manualTasks.find(x=>x.id===id);if(!tk)return;confirm2(t('task.deleteTitle'),t('task.deleteMsg'),t('common.delete'),()=>{manualTasks=manualTasks.filter(x=>x.id!==id);apiDelete('/api/tasks/'+id);renderCalendar();updateTodoBadge()})}
-function updateTodoBadge(){const n=manualTasks.filter(t=>!t.done).length;const el=document.getElementById('n-cal');if(el)el.classList.toggle('alert',n>0);const bd=buildAutoTasks().filter(t=>t.urgent||t.warn).length+getInvAlerts().length;const de=document.getElementById('n-dash');if(de)de.classList.toggle('alert',bd>0)}
-
-// ─── TEAM MEMBERS ───────────────────────────────────────────
-function renderTeam(){
-  const el=document.getElementById('team-list');
-  if(typeof fillCalendarUserFilter==='function')fillCalendarUserFilter();
-  if(!el)return;
-  if(!teamMembers.length){el.innerHTML='<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';return}
-  el.innerHTML=teamMembers.map(m=>`<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role?`<span style="font-size:11px;color:var(--c-text-muted)">${esc(m.role)}</span>`:''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`).join('');
+function toggleTask(id) {
+  const t = manualTasks.find((x) => x.id === id);
+  if (!t) return;
+  t.done = !t.done;
+  t.caldavSynced = null;
+  apiPatch('/api/tasks/' + id, { done: t.done, caldavSynced: null });
+  renderCalendar();
+  updateTodoBadge();
+  if (caldav.enabled && t.caldavUid) pushTaskCaldav(t);
 }
-function addMember(){
-  const name=document.getElementById('member-name').value.trim();if(!name)return;
-  const role=document.getElementById('member-role').value.trim();
-  if(teamMembers.some(m=>m.name.toLowerCase()===name.toLowerCase()))return;
-  const member={name,role:role||null,added:new Date().toISOString()};
-  teamMembers.push(member);
-  document.getElementById('member-name').value='';document.getElementById('member-role').value='';
-  apiPost('/api/team',member).then(r=>{if(r&&r.id)member.id=r.id;renderTeam()});
-}
-function removeMember(id){const m=teamMembers.find(x=>x.id===id);if(!m)return;confirm2('Remove member?','Remove '+m.name+' from the team. Their existing task assignments remain.','Remove',()=>{teamMembers=teamMembers.filter(x=>x.id!==id);apiDelete('/api/team/'+id);renderTeam()})}
-
-// ─── CalDAV SYNC ────────────────────────────────────────────
-function loadCaldavSettings(){
-  // Show the CalDAV URL for this server
-  const url=location.protocol+'//'+location.hostname+':'+location.port+'/caldav/calendars/';
-  document.getElementById('caldav-url-display').textContent=url;
-  document.getElementById('caldav-enabled').checked=!!caldav.enabled;
-}
-function saveCaldavSettings(){
-  caldav.enabled=document.getElementById('caldav-enabled').checked;
-  apiPost('/api/caldav/config',caldav).then(r=>{
-    if(r.error){showCaldavStatus(r.error,'var(--c-red-dark)')}
-    else{showCaldavStatus(t('caldav.settingsSaved'),'var(--c-green-dark)')}
+function deleteTask(id) {
+  const tk = manualTasks.find((x) => x.id === id);
+  if (!tk) return;
+  confirm2(t('task.deleteTitle'), t('task.deleteMsg'), t('common.delete'), () => {
+    manualTasks = manualTasks.filter((x) => x.id !== id);
+    apiDelete('/api/tasks/' + id);
+    renderCalendar();
+    updateTodoBadge();
   });
 }
-function showCaldavStatus(msg,color){
-  const el=document.getElementById('caldav-status');
-  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
-  setTimeout(()=>{el.style.display='none'},8000);
+function updateTodoBadge() {
+  const n = manualTasks.filter((t) => !t.done).length;
+  const el = document.getElementById('n-cal');
+  if (el) el.classList.toggle('alert', n > 0);
+  const bd = buildAutoTasks().filter((t) => t.urgent || t.warn).length + getInvAlerts().length;
+  const de = document.getElementById('n-dash');
+  if (de) de.classList.toggle('alert', bd > 0);
 }
-async function syncCaldavNow(){
-  if(!caldav.enabled){showCaldavStatus('Enable sync first, then save settings.','#92400e');return}
-  const btn=document.getElementById('caldav-sync-btn');btn.disabled=true;btn.textContent=t('caldav.syncing');
-  showCaldavStatus('Writing tasks to calendar files...','#888');
-  try{
-    const r=await authFetch('/api/caldav/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caldav,teamMembers,manualTasks})}).then(r=>r.json());
-    if(r.error){showCaldavStatus('Sync failed: '+r.error,'var(--c-red-dark)')}
-    else{
-      showCaldavStatus(`Done! ${r.pushed} tasks written to calendar.${r.errors?' ('+r.errors+' errors)':''}  Calendar clients can now see them via CalDAV.`, r.errors?'var(--c-amber-dark)':'var(--c-green-dark)');
+
+// ─── TEAM MEMBERS ───────────────────────────────────────────
+function renderTeam() {
+  const el = document.getElementById('team-list');
+  if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
+  if (!el) return;
+  if (!teamMembers.length) {
+    el.innerHTML = '<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';
+    return;
+  }
+  el.innerHTML = teamMembers
+    .map(
+      (m) =>
+        `<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role ? `<span style="font-size:11px;color:var(--c-text-muted)">${esc(m.role)}</span>` : ''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`
+    )
+    .join('');
+}
+function addMember() {
+  const name = document.getElementById('member-name').value.trim();
+  if (!name) return;
+  const role = document.getElementById('member-role').value.trim();
+  if (teamMembers.some((m) => m.name.toLowerCase() === name.toLowerCase())) return;
+  const member = { name, role: role || null, added: new Date().toISOString() };
+  teamMembers.push(member);
+  document.getElementById('member-name').value = '';
+  document.getElementById('member-role').value = '';
+  apiPost('/api/team', member).then((r) => {
+    if (r && r.id) member.id = r.id;
+    renderTeam();
+  });
+}
+function removeMember(id) {
+  const m = teamMembers.find((x) => x.id === id);
+  if (!m) return;
+  confirm2(
+    'Remove member?',
+    'Remove ' + m.name + ' from the team. Their existing task assignments remain.',
+    'Remove',
+    () => {
+      teamMembers = teamMembers.filter((x) => x.id !== id);
+      apiDelete('/api/team/' + id);
+      renderTeam();
+    }
+  );
+}
+
+// ─── CalDAV SYNC ────────────────────────────────────────────
+function loadCaldavSettings() {
+  // Show the CalDAV URL for this server
+  const url = location.protocol + '//' + location.hostname + ':' + location.port + '/caldav/calendars/';
+  document.getElementById('caldav-url-display').textContent = url;
+  document.getElementById('caldav-enabled').checked = !!caldav.enabled;
+}
+function saveCaldavSettings() {
+  caldav.enabled = document.getElementById('caldav-enabled').checked;
+  apiPost('/api/caldav/config', caldav).then((r) => {
+    if (r.error) {
+      showCaldavStatus(r.error, 'var(--c-red-dark)');
+    } else {
+      showCaldavStatus(t('caldav.settingsSaved'), 'var(--c-green-dark)');
+    }
+  });
+}
+function showCaldavStatus(msg, color) {
+  const el = document.getElementById('caldav-status');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+  setTimeout(() => {
+    el.style.display = 'none';
+  }, 8000);
+}
+async function syncCaldavNow() {
+  if (!caldav.enabled) {
+    showCaldavStatus('Enable sync first, then save settings.', '#92400e');
+    return;
+  }
+  const btn = document.getElementById('caldav-sync-btn');
+  btn.disabled = true;
+  btn.textContent = t('caldav.syncing');
+  showCaldavStatus('Writing tasks to calendar files...', '#888');
+  try {
+    const r = await authFetch('/api/caldav/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caldav, teamMembers, manualTasks })
+    }).then((r) => r.json());
+    if (r.error) {
+      showCaldavStatus('Sync failed: ' + r.error, 'var(--c-red-dark)');
+    } else {
+      showCaldavStatus(
+        `Done! ${r.pushed} tasks written to calendar.${r.errors ? ' (' + r.errors + ' errors)' : ''}  Calendar clients can now see them via CalDAV.`,
+        r.errors ? 'var(--c-amber-dark)' : 'var(--c-green-dark)'
+      );
       // Selective refresh: only reload tasks to get updated caldavUid/caldavSynced
       // instead of loadData() which would overwrite ALL local state
-      try{const td=await authFetch('/api/data').then(r=>r.json());if(td.manualTasks)manualTasks=td.manualTasks;if(td.calendarEvents)calendarEvents=td.calendarEvents}catch{}
+      try {
+        const td = await authFetch('/api/data').then((r) => r.json());
+        if (td.manualTasks) manualTasks = td.manualTasks;
+        if (td.calendarEvents) calendarEvents = td.calendarEvents;
+      } catch {}
       renderCalendar();
     }
-  }catch(e){showCaldavStatus('Sync error: '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent=t('caldav.syncNow')}
+  } catch (e) {
+    showCaldavStatus('Sync error: ' + e.message, 'var(--c-red-dark)');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('caldav.syncNow');
+  }
 }
-async function pushTaskCaldav(task){
-  if(!caldav.enabled)return;
-  try{
-    const r=await authFetch('/api/caldav/push-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task})}).then(r=>r.json());
-    if(r.ok&&r.uid){task.caldavUid=r.uid;task.caldavSynced=new Date().toISOString();apiPatch('/api/tasks/'+task.id,{caldavUid:task.caldavUid,caldavSynced:task.caldavSynced});renderCalendar()}
-  }catch(e){console.error('CalDAV push error:',e)}
+async function pushTaskCaldav(task) {
+  if (!caldav.enabled) return;
+  try {
+    const r = await authFetch('/api/caldav/push-one', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task })
+    }).then((r) => r.json());
+    if (r.ok && r.uid) {
+      task.caldavUid = r.uid;
+      task.caldavSynced = new Date().toISOString();
+      apiPatch('/api/tasks/' + task.id, { caldavUid: task.caldavUid, caldavSynced: task.caldavSynced });
+      renderCalendar();
+    }
+  } catch (e) {
+    console.error('CalDAV push error:', e);
+  }
 }
 
 // ─── DUCKDNS ────────────────────────────────────────────────
-async function loadDuckdnsSettings(){
-  try{
-    const r=await authFetch('/api/duckdns/config');
-    if(!r.ok)return;
-    const cfg=await r.json();
-    document.getElementById('duckdns-enabled').checked=!!cfg.enabled;
-    document.getElementById('duckdns-domain').value=cfg.domain||'';
-    const tokenEl=document.getElementById('duckdns-token');
-    tokenEl.value='';
-    tokenEl.placeholder=cfg.hasToken?'••••••••••':'';
-    document.getElementById('duckdns-le-enabled').checked=!!cfg.leEnabled;
-  }catch(e){/* non-admin */}
+async function loadDuckdnsSettings() {
+  try {
+    const r = await authFetch('/api/duckdns/config');
+    if (!r.ok) return;
+    const cfg = await r.json();
+    document.getElementById('duckdns-enabled').checked = !!cfg.enabled;
+    document.getElementById('duckdns-domain').value = cfg.domain || '';
+    const tokenEl = document.getElementById('duckdns-token');
+    tokenEl.value = '';
+    tokenEl.placeholder = cfg.hasToken ? '••••••••••' : '';
+    document.getElementById('duckdns-le-enabled').checked = !!cfg.leEnabled;
+  } catch (e) {
+    /* non-admin */
+  }
   await refreshDuckdnsStatus();
 }
-async function refreshDuckdnsStatus(){
-  try{
-    const r=await authFetch('/api/duckdns/status');
-    if(!r.ok)return;
-    const s=await r.json();
-    const banner=document.getElementById('duckdns-status-banner');
-    if(s.enabled&&s.domain){
-      banner.style.display='block';
-      if(s.lastIp){
-        banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
-        banner.innerHTML='<strong>'+s.domain+'</strong> &rarr; '+s.lastIp+(s.lastIpUpdate?' <span style="color:var(--c-text-muted)">('+fmtDtTime(s.lastIpUpdate)+')</span>':'');
-      }else{
-        banner.style.background='var(--c-amber-light)';banner.style.border='1px solid var(--c-amber-border)';banner.style.color='var(--c-amber-dark)';
-        banner.textContent=t('duckdns.noUpdateYet');
+async function refreshDuckdnsStatus() {
+  try {
+    const r = await authFetch('/api/duckdns/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    const banner = document.getElementById('duckdns-status-banner');
+    if (s.enabled && s.domain) {
+      banner.style.display = 'block';
+      if (s.lastIp) {
+        banner.style.background = 'var(--c-primary-light)';
+        banner.style.border = '1px solid var(--c-green-border)';
+        banner.style.color = 'var(--c-green-dark)';
+        banner.innerHTML =
+          '<strong>' +
+          s.domain +
+          '</strong> &rarr; ' +
+          s.lastIp +
+          (s.lastIpUpdate ? ' <span style="color:var(--c-text-muted)">(' + fmtDtTime(s.lastIpUpdate) + ')</span>' : '');
+      } else {
+        banner.style.background = 'var(--c-amber-light)';
+        banner.style.border = '1px solid var(--c-amber-border)';
+        banner.style.color = 'var(--c-amber-dark)';
+        banner.textContent = t('duckdns.noUpdateYet');
       }
-    }else{banner.style.display='none'}
-    const certEl=document.getElementById('le-cert-status');
-    if(s.cert&&s.cert.exists){
-      certEl.style.display='block';
-      if(s.cert.type==='letsencrypt'&&s.leExpiry){
-        const daysLeft=Math.round((new Date(s.leExpiry)-Date.now())/86400000);
-        const ok=daysLeft>30,warn=daysLeft>7;
-        certEl.style.background=ok?'var(--c-primary-light)':warn?'var(--c-amber-light)':'var(--c-red-light)';
-        certEl.style.border='1px solid '+(ok?'var(--c-green-border)':warn?'var(--c-amber-border)':'var(--c-red-border)');
-        certEl.style.color=ok?'var(--c-green-dark)':warn?'var(--c-amber-dark)':'var(--c-red-dark)';
-        certEl.innerHTML=t('le.certActive')+'. '+t('le.certIssued',{domain:s.domain||'',date:fmtDt(s.leExpiry)});
-      }else{
-        certEl.style.background='var(--c-blue-light)';certEl.style.border='1px solid var(--c-blue-border)';certEl.style.color='var(--c-blue-dark)';
-        certEl.textContent=t('duckdns.currentCert')+s.cert.type;
+    } else {
+      banner.style.display = 'none';
+    }
+    const certEl = document.getElementById('le-cert-status');
+    if (s.cert && s.cert.exists) {
+      certEl.style.display = 'block';
+      if (s.cert.type === 'letsencrypt' && s.leExpiry) {
+        const daysLeft = Math.round((new Date(s.leExpiry) - Date.now()) / 86400000);
+        const ok = daysLeft > 30,
+          warn = daysLeft > 7;
+        certEl.style.background = ok ? 'var(--c-primary-light)' : warn ? 'var(--c-amber-light)' : 'var(--c-red-light)';
+        certEl.style.border =
+          '1px solid ' + (ok ? 'var(--c-green-border)' : warn ? 'var(--c-amber-border)' : 'var(--c-red-border)');
+        certEl.style.color = ok ? 'var(--c-green-dark)' : warn ? 'var(--c-amber-dark)' : 'var(--c-red-dark)';
+        certEl.innerHTML =
+          t('le.certActive') + '. ' + t('le.certIssued', { domain: s.domain || '', date: fmtDt(s.leExpiry) });
+      } else {
+        certEl.style.background = 'var(--c-blue-light)';
+        certEl.style.border = '1px solid var(--c-blue-border)';
+        certEl.style.color = 'var(--c-blue-dark)';
+        certEl.textContent = t('duckdns.currentCert') + s.cert.type;
       }
-    }else{certEl.style.display='none'}
-  }catch(e){/* non-admin */}
+    } else {
+      certEl.style.display = 'none';
+    }
+  } catch (e) {
+    /* non-admin */
+  }
 }
-function showDuckdnsStatus(msg,color){
-  const el=document.getElementById('duckdns-ip-status');
-  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
-  setTimeout(()=>{el.style.display='none'},8000);
+function showDuckdnsStatus(msg, color) {
+  const el = document.getElementById('duckdns-ip-status');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+  setTimeout(() => {
+    el.style.display = 'none';
+  }, 8000);
 }
-function showLeStatus(msg,color){
-  const el=document.getElementById('le-status');
-  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
-  setTimeout(()=>{el.style.display='none'},15000);
+function showLeStatus(msg, color) {
+  const el = document.getElementById('le-status');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+  setTimeout(() => {
+    el.style.display = 'none';
+  }, 15000);
 }
-async function saveDuckdnsSettings(){
-  const tokenVal=document.getElementById('duckdns-token').value.trim();
-  const cfg={
-    enabled:document.getElementById('duckdns-enabled').checked,
-    domain:document.getElementById('duckdns-domain').value.trim().toLowerCase(),
-    leEnabled:document.getElementById('duckdns-le-enabled').checked
+async function saveDuckdnsSettings() {
+  const tokenVal = document.getElementById('duckdns-token').value.trim();
+  const cfg = {
+    enabled: document.getElementById('duckdns-enabled').checked,
+    domain: document.getElementById('duckdns-domain').value.trim().toLowerCase(),
+    leEnabled: document.getElementById('duckdns-le-enabled').checked
   };
-  if(tokenVal)cfg.token=tokenVal;
-  if(cfg.enabled&&!cfg.domain){showDuckdnsStatus(t('duckdns.subdomainRequired'),'var(--c-red-dark)');return}
-  if(cfg.enabled&&!tokenVal&&!document.getElementById('duckdns-token').placeholder){showDuckdnsStatus(t('duckdns.tokenRequired'),'var(--c-red-dark)');return}
-  try{
-    const r=await apiPost('/api/duckdns/config',cfg);
-    if(r.error){showDuckdnsStatus(t('common.error')+': '+r.error,'var(--c-red-dark)')}
-    else{showDuckdnsStatus(t('duckdns.saved'),'var(--c-green-dark)');refreshDuckdnsStatus()}
-  }catch(e){showDuckdnsStatus('Fehler: '+e.message,'var(--c-red-dark)')}
+  if (tokenVal) cfg.token = tokenVal;
+  if (cfg.enabled && !cfg.domain) {
+    showDuckdnsStatus(t('duckdns.subdomainRequired'), 'var(--c-red-dark)');
+    return;
+  }
+  if (cfg.enabled && !tokenVal && !document.getElementById('duckdns-token').placeholder) {
+    showDuckdnsStatus(t('duckdns.tokenRequired'), 'var(--c-red-dark)');
+    return;
+  }
+  try {
+    const r = await apiPost('/api/duckdns/config', cfg);
+    if (r.error) {
+      showDuckdnsStatus(t('common.error') + ': ' + r.error, 'var(--c-red-dark)');
+    } else {
+      showDuckdnsStatus(t('duckdns.saved'), 'var(--c-green-dark)');
+      refreshDuckdnsStatus();
+    }
+  } catch (e) {
+    showDuckdnsStatus('Fehler: ' + e.message, 'var(--c-red-dark)');
+  }
 }
-async function triggerDuckdnsUpdate(){
-  const btn=document.getElementById('duckdns-update-btn');
-  btn.disabled=true;btn.textContent=t('duckdns.updating');
-  showDuckdnsStatus(t('duckdns.sendingIp'),'#888');
-  try{
-    const r=await authFetch('/api/duckdns/update-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const data=await r.json();
-    if(data.error){showDuckdnsStatus(t('common.error')+': '+data.error,'var(--c-red-dark)')}
-    else{showDuckdnsStatus(t('duckdns.ipUpdated'),'var(--c-green-dark)');refreshDuckdnsStatus()}
-  }catch(e){showDuckdnsStatus(t('common.error')+': '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent=t('duckdns.updateNow')}
+async function triggerDuckdnsUpdate() {
+  const btn = document.getElementById('duckdns-update-btn');
+  btn.disabled = true;
+  btn.textContent = t('duckdns.updating');
+  showDuckdnsStatus(t('duckdns.sendingIp'), '#888');
+  try {
+    const r = await authFetch('/api/duckdns/update-ip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    const data = await r.json();
+    if (data.error) {
+      showDuckdnsStatus(t('common.error') + ': ' + data.error, 'var(--c-red-dark)');
+    } else {
+      showDuckdnsStatus(t('duckdns.ipUpdated'), 'var(--c-green-dark)');
+      refreshDuckdnsStatus();
+    }
+  } catch (e) {
+    showDuckdnsStatus(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('duckdns.updateNow');
+  }
 }
-async function requestLeCert(){
-  const btn=document.getElementById('le-request-btn');
-  btn.disabled=true;btn.textContent=t('le.requesting');
-  showLeStatus(t('le.certRequesting'),'#888');
-  try{
-    const r=await authFetch('/api/duckdns/request-cert',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const data=await r.json();
-    if(data.error){showLeStatus(t('common.error')+': '+data.error,'var(--c-red-dark)')}
-    else{showLeStatus(t('le.certIssued',{domain:data.domain,date:fmtDt(data.expiry)}),'var(--c-green-dark)');refreshDuckdnsStatus()}
-  }catch(e){showLeStatus(t('common.error')+': '+e.message,'var(--c-red-dark)')}
-  finally{btn.disabled=false;btn.textContent=t('le.requestNow')}
+async function requestLeCert() {
+  const btn = document.getElementById('le-request-btn');
+  btn.disabled = true;
+  btn.textContent = t('le.requesting');
+  showLeStatus(t('le.certRequesting'), '#888');
+  try {
+    const r = await authFetch('/api/duckdns/request-cert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    const data = await r.json();
+    if (data.error) {
+      showLeStatus(t('common.error') + ': ' + data.error, 'var(--c-red-dark)');
+    } else {
+      showLeStatus(t('le.certIssued', { domain: data.domain, date: fmtDt(data.expiry) }), 'var(--c-green-dark)');
+      refreshDuckdnsStatus();
+    }
+  } catch (e) {
+    showLeStatus(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('le.requestNow');
+  }
 }
 
 // ─── MCP TAB (admin-only) ───────────────────────────────────
-function showMcpTab(){
-  const btn=document.getElementById('st-settings-mcp');
-  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+function showMcpTab() {
+  const btn = document.getElementById('st-settings-mcp');
+  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
 }
 
 // ─── SERVER TAB ─────────────────────────────────────────────
-function showServerTab(){
-  const btn=document.getElementById('st-settings-server');
-  if(btn&&currentUser&&currentUser.role==='admin')btn.style.display='';
+function showServerTab() {
+  const btn = document.getElementById('st-settings-server');
+  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
 }
-async function loadServerTab(){
-  const el=document.getElementById('server-info');
-  if(!el)return;
-  if(!currentUser||currentUser.role!=='admin'){el.textContent=t('server.adminRequired');return}
-  try{
-    const r=await authFetch('/api/health');
-    const h=await r.json();
-    const uptimeH=Math.floor(h.uptime/3600);
-    const uptimeM=Math.floor((h.uptime%3600)/60);
-    const platLabel=h.platform==='win32'?'Windows':h.platform==='darwin'?'macOS':'Linux';
-    el.innerHTML='<div><b>'+t('server.statusLabel')+':</b> '+esc(h.status)+'</div>'+
-      '<div><b>'+t('server.versionLabel')+':</b> '+esc(h.version)+'</div>'+
-      '<div><b>'+t('server.platformLabel')+':</b> '+platLabel+'</div>'+
-      '<div><b>'+t('server.nodeLabel')+':</b> '+esc(h.nodeVersion||'–')+'</div>'+
-      '<div><b>'+t('server.uptimeLabel')+':</b> '+uptimeH+'h '+uptimeM+'m</div>'+
-      '<div><b>'+t('server.sseLabel')+':</b> '+h.sseClients+'</div>'+
-      (h.memory?'<div><b>'+t('server.ramLabel')+':</b> '+h.memory.rss+' MB</div>':'');
-  }catch(e){el.textContent=t('server.loadError')}
+async function loadServerTab() {
+  const el = document.getElementById('server-info');
+  if (!el) return;
+  if (!currentUser || currentUser.role !== 'admin') {
+    el.textContent = t('server.adminRequired');
+    return;
+  }
+  try {
+    const r = await authFetch('/api/health');
+    const h = await r.json();
+    const uptimeH = Math.floor(h.uptime / 3600);
+    const uptimeM = Math.floor((h.uptime % 3600) / 60);
+    const platLabel = h.platform === 'win32' ? 'Windows' : h.platform === 'darwin' ? 'macOS' : 'Linux';
+    el.innerHTML =
+      '<div><b>' +
+      t('server.statusLabel') +
+      ':</b> ' +
+      esc(h.status) +
+      '</div>' +
+      '<div><b>' +
+      t('server.versionLabel') +
+      ':</b> ' +
+      esc(h.version) +
+      '</div>' +
+      '<div><b>' +
+      t('server.platformLabel') +
+      ':</b> ' +
+      platLabel +
+      '</div>' +
+      '<div><b>' +
+      t('server.nodeLabel') +
+      ':</b> ' +
+      esc(h.nodeVersion || '–') +
+      '</div>' +
+      '<div><b>' +
+      t('server.uptimeLabel') +
+      ':</b> ' +
+      uptimeH +
+      'h ' +
+      uptimeM +
+      'm</div>' +
+      '<div><b>' +
+      t('server.sseLabel') +
+      ':</b> ' +
+      h.sseClients +
+      '</div>' +
+      (h.memory ? '<div><b>' + t('server.ramLabel') + ':</b> ' + h.memory.rss + ' MB</div>' : '');
+  } catch (e) {
+    el.textContent = t('server.loadError');
+  }
 }
-async function runBatchIdMigration(){
-  const renames=[];
-  batches.forEach(b=>{
+async function runBatchIdMigration() {
+  const renames = [];
+  batches.forEach((b) => {
     // Use strainKuerzel stored on the batch itself (set at creation time).
     // Fall back to a strain lookup only if strainKuerzel is missing (e.g. very old batches).
-    const kuerzel=b.strainKuerzel||(mushroomStrains.find(s=>s.id===b.strainId)||{}).kuerzel;
-    if(!kuerzel)return;
-    const isGrain=b.batchType==='grain';
-    const parts=b.batchId.split('-');
-    if(parts.length<2)return;
+    const kuerzel = b.strainKuerzel || (mushroomStrains.find((s) => s.id === b.strainId) || {}).kuerzel;
+    if (!kuerzel) return;
+    const isGrain = b.batchType === 'grain';
+    const parts = b.batchId.split('-');
+    if (parts.length < 2) return;
     // Detect the type prefix (if any) and extract kuerzel + date suffix.
     // Formats handled:
     //   block (new/current): SHII-100426-01       → no prefix
     //   grain (new):         G-SHII-100426-01     → parts[0]='G'
     //   grain (old, no sep): GSHII-100426-01      → parts[0] starts with 'G' and length>1
-    let currentKuerzel,datePart,correctFormat;
-    if(isGrain&&parts[0]==='G'){
+    let currentKuerzel, datePart, correctFormat;
+    if (isGrain && parts[0] === 'G') {
       // New G- style
-      currentKuerzel=parts[1];datePart=parts.slice(2).join('-');correctFormat=true;
-    }else if(isGrain){
+      currentKuerzel = parts[1];
+      datePart = parts.slice(2).join('-');
+      correctFormat = true;
+    } else if (isGrain) {
       // Old style without separator: GSHII-... → strip leading G
-      currentKuerzel=parts[0].slice(1);datePart=parts.slice(1).join('-');correctFormat=false;
-    }else{
-      currentKuerzel=parts[0];datePart=parts.slice(1).join('-');correctFormat=true;
+      currentKuerzel = parts[0].slice(1);
+      datePart = parts.slice(1).join('-');
+      correctFormat = false;
+    } else {
+      currentKuerzel = parts[0];
+      datePart = parts.slice(1).join('-');
+      correctFormat = true;
     }
-    if(currentKuerzel===kuerzel&&correctFormat)return; // already correct
-    const newId=isGrain?'G-'+kuerzel+'-'+datePart:kuerzel+'-'+datePart;
-    renames.push({oldId:b.batchId,newId});
+    if (currentKuerzel === kuerzel && correctFormat) return; // already correct
+    const newId = isGrain ? 'G-' + kuerzel + '-' + datePart : kuerzel + '-' + datePart;
+    renames.push({ oldId: b.batchId, newId });
   });
-  if(!renames.length){alert(t('migrate.alreadyCurrent'));return}
-  const preview=renames.map(r=>`${r.oldId}  →  ${r.newId}`).join('\n');
-  if(!confirm(t('migrate.confirm')+'\n\n'+preview))return;
-  let done=0,failed=0,failedList=[];
+  if (!renames.length) {
+    alert(t('migrate.alreadyCurrent'));
+    return;
+  }
+  const preview = renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  if (!confirm(t('migrate.confirm') + '\n\n' + preview)) return;
+  let done = 0,
+    failed = 0,
+    failedList = [];
   // Hold _mutating elevated for the whole loop so SSE-triggered pollSync cannot
   // overwrite in-memory state between individual rename requests.
   // apiPost internally does its own _mutating++/--, so the net value stays ≥1 throughout.
   _mutating++;
-  try{
-    for(const{oldId,newId}of renames){
-      try{
-        const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
-        if(!r||r.error){failed++;failedList.push(oldId+': '+(r&&r.error||'unknown error'));continue}
-        batches.forEach(b=>{
-          if(b.batchId===oldId){
-            const oldBags=b.bags||[];
-            b.batchId=newId;b.bags=oldBags.map(bag=>bag.replace(oldId,newId));
+  try {
+    for (const { oldId, newId } of renames) {
+      try {
+        const r = await apiPost('/api/batches/' + encodeURIComponent(oldId) + '/rename', { newId });
+        if (!r || r.error) {
+          failed++;
+          failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error'));
+          continue;
+        }
+        batches.forEach((b) => {
+          if (b.batchId === oldId) {
+            const oldBags = b.bags || [];
+            b.batchId = newId;
+            b.bags = oldBags.map((bag) => bag.replace(oldId, newId));
             // Update barcode registry: re-key renamed bags
-            oldBags.forEach((oldBag,i)=>{
-              const newBag=b.bags[i];
-              const bc=barcodeByEntity.get('bag:'+oldBag);
-              if(bc!=null){
-                barcodeByEntity.delete('bag:'+oldBag);
-                barcodeByEntity.set('bag:'+newBag,bc);
-                barcodeRegistry.set(bc,{type:'bag',id:newBag});
+            oldBags.forEach((oldBag, i) => {
+              const newBag = b.bags[i];
+              const bc = barcodeByEntity.get('bag:' + oldBag);
+              if (bc != null) {
+                barcodeByEntity.delete('bag:' + oldBag);
+                barcodeByEntity.set('bag:' + newBag, bc);
+                barcodeRegistry.set(bc, { type: 'bag', id: newBag });
               }
             });
           }
         });
-        scanLog.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
-        movements.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
-        harvests.forEach(h=>{if(h.batch===oldId){h.batch=newId;if(h.bag)h.bag=h.bag.replace(oldId,newId)}});
+        scanLog.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        movements.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        harvests.forEach((h) => {
+          if (h.batch === oldId) {
+            h.batch = newId;
+            if (h.bag) h.bag = h.bag.replace(oldId, newId);
+          }
+        });
         done++;
-      }catch(e){failed++;failedList.push(oldId+': '+e.message)}
+      } catch (e) {
+        failed++;
+        failedList.push(oldId + ': ' + e.message);
+      }
     }
-  }finally{
+  } finally {
     _mutating--;
   }
-  renderBatches();renderStatus();
-  if(failed){
-    alert(t('migrate.complete')+done+' renamed, '+failed+' errors:\n\n'+failedList.join('\n'));
-  }else{
-    alert(t('migrate.success')+done+' batches renamed.');
+  renderBatches();
+  renderStatus();
+  if (failed) {
+    alert(t('migrate.complete') + done + ' renamed, ' + failed + ' errors:\n\n' + failedList.join('\n'));
+  } else {
+    alert(t('migrate.success') + done + ' batches renamed.');
   }
 }
 
-function restartServer(){
-  confirm2(t('server.restartTitle'),t('server.restartMsg'),t('server.restartConfirm'),async()=>{
-    const btn=document.getElementById('btn-server-restart');
-    const status=document.getElementById('server-restart-status');
-    btn.disabled=true;btn.textContent=t('server.restarting');
-    status.style.display='block';status.style.color='var(--c-text-muted)';
-    status.textContent=t('server.updateStatus');
-    try{
-      await authFetch('/api/server/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      status.textContent=t('server.waitReconnect');
-      let attempts=0;
-      const poll=setInterval(async()=>{
+function restartServer() {
+  confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
+    const btn = document.getElementById('btn-server-restart');
+    const status = document.getElementById('server-restart-status');
+    btn.disabled = true;
+    btn.textContent = t('server.restarting');
+    status.style.display = 'block';
+    status.style.color = 'var(--c-text-muted)';
+    status.textContent = t('server.updateStatus');
+    try {
+      await authFetch('/api/server/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+      status.textContent = t('server.waitReconnect');
+      let attempts = 0;
+      const poll = setInterval(async () => {
         attempts++;
-        try{
-          const r=await fetch('/api/health');
-          if(r.ok){clearInterval(poll);window.location.reload()}
-        }catch(e){/* still down */}
-        if(attempts>60){clearInterval(poll);status.textContent=t('server.noResponse');status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent=t('server.updateBtn')}
-      },3000);
-    }catch(e){status.textContent=t('common.error')+': '+e.message;status.style.color='var(--c-red-dark)';btn.disabled=false;btn.textContent=t('server.updateBtn')}
+        try {
+          const r = await fetch('/api/health');
+          if (r.ok) {
+            clearInterval(poll);
+            window.location.reload();
+          }
+        } catch (e) {
+          /* still down */
+        }
+        if (attempts > 60) {
+          clearInterval(poll);
+          status.textContent = t('server.noResponse');
+          status.style.color = 'var(--c-red-dark)';
+          btn.disabled = false;
+          btn.textContent = t('server.updateBtn');
+        }
+      }, 3000);
+    } catch (e) {
+      status.textContent = t('common.error') + ': ' + e.message;
+      status.style.color = 'var(--c-red-dark)';
+      btn.disabled = false;
+      btn.textContent = t('server.updateBtn');
+    }
   });
 }
 
 // ─── MCP SETTINGS ───────────────────────────────────────────
-let _mcpToken='';
-async function loadMcpSettings(){
-  try{
-    const r=await authFetch('/api/mcp/config');
-    if(!r.ok)return;
-    const cfg=await r.json();
-    document.getElementById('mcp-enabled').checked=cfg.enabled;
-    document.getElementById('mcp-url').value=cfg.connectorUrl||'';
+let _mcpToken = '';
+async function loadMcpSettings() {
+  try {
+    const r = await authFetch('/api/mcp/config');
+    if (!r.ok) return;
+    const cfg = await r.json();
+    document.getElementById('mcp-enabled').checked = cfg.enabled;
+    document.getElementById('mcp-url').value = cfg.connectorUrl || '';
     toggleMcpSections(cfg.enabled);
-    const banner=document.getElementById('mcp-status-banner');
-    if(cfg.enabled){
-      banner.style.display='block';banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
-      banner.textContent=t('mcp.active');
-    }else{banner.style.display='none'}
-    const statusR=await authFetch('/api/mcp/status');
-    if(statusR.ok){
-      const st=await statusR.json();
-      if(st.activeSessions>0){
-        banner.style.display='block';banner.style.background='var(--c-primary-light)';banner.style.border='1px solid var(--c-green-border)';banner.style.color='var(--c-green-dark)';
-        banner.textContent=t('mcp.sessions').replace('{n}',st.activeSessions);
+    const banner = document.getElementById('mcp-status-banner');
+    if (cfg.enabled) {
+      banner.style.display = 'block';
+      banner.style.background = 'var(--c-primary-light)';
+      banner.style.border = '1px solid var(--c-green-border)';
+      banner.style.color = 'var(--c-green-dark)';
+      banner.textContent = t('mcp.active');
+    } else {
+      banner.style.display = 'none';
+    }
+    const statusR = await authFetch('/api/mcp/status');
+    if (statusR.ok) {
+      const st = await statusR.json();
+      if (st.activeSessions > 0) {
+        banner.style.display = 'block';
+        banner.style.background = 'var(--c-primary-light)';
+        banner.style.border = '1px solid var(--c-green-border)';
+        banner.style.color = 'var(--c-green-dark)';
+        banner.textContent = t('mcp.sessions').replace('{n}', st.activeSessions);
       }
     }
-    if(cfg.enabled) loadOAuthClients();
-  }catch(e){/* non-admin */}
+    if (cfg.enabled) loadOAuthClients();
+  } catch (e) {
+    /* non-admin */
+  }
 }
-function toggleMcpSections(enabled){
-  document.getElementById('mcp-url-section').style.display=enabled?'block':'none';
-  document.getElementById('mcp-token-section').style.display=enabled?'block':'none';
-  document.getElementById('mcp-guide-card').style.display=enabled?'block':'none';
-  document.getElementById('mcp-diag-card').style.display=enabled?'block':'none';
-  document.getElementById('mcp-oauth-card').style.display=enabled?'block':'none';
+function toggleMcpSections(enabled) {
+  document.getElementById('mcp-url-section').style.display = enabled ? 'block' : 'none';
+  document.getElementById('mcp-token-section').style.display = enabled ? 'block' : 'none';
+  document.getElementById('mcp-guide-card').style.display = enabled ? 'block' : 'none';
+  document.getElementById('mcp-diag-card').style.display = enabled ? 'block' : 'none';
+  document.getElementById('mcp-oauth-card').style.display = enabled ? 'block' : 'none';
 }
-function showMcpStatus(msg,color){
-  const el=document.getElementById('mcp-status');
-  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
-  setTimeout(()=>{el.style.display='none'},8000);
+function showMcpStatus(msg, color) {
+  const el = document.getElementById('mcp-status');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+  setTimeout(() => {
+    el.style.display = 'none';
+  }, 8000);
 }
-async function saveMcpSettings(){
-  try{
-    const r=await apiPost('/api/mcp/config',{enabled:document.getElementById('mcp-enabled').checked});
-    if(r.error){showMcpStatus(t('mcp.error').replace('{msg}',r.error),'var(--c-red-dark)')}
-    else{showMcpStatus(t('mcp.saved'),'var(--c-green-dark)');loadMcpSettings()}
-  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
+async function saveMcpSettings() {
+  try {
+    const r = await apiPost('/api/mcp/config', { enabled: document.getElementById('mcp-enabled').checked });
+    if (r.error) {
+      showMcpStatus(t('mcp.error').replace('{msg}', r.error), 'var(--c-red-dark)');
+    } else {
+      showMcpStatus(t('mcp.saved'), 'var(--c-green-dark)');
+      loadMcpSettings();
+    }
+  } catch (e) {
+    showMcpStatus(t('mcp.error').replace('{msg}', e.message), 'var(--c-red-dark)');
+  }
 }
-async function generateMcpToken(){
-  try{
-    const r=await authFetch('/api/mcp/generate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const data=await r.json();
-    if(data.error){showMcpStatus(t('mcp.error').replace('{msg}',data.error),'var(--c-red-dark)');return}
-    _mcpToken=data.token;
-    document.getElementById('mcp-token-display').textContent=data.token;
-    document.getElementById('mcp-token-display').style.display='block';
-    document.getElementById('mcp-copy-token-btn').style.display='inline-flex';
-    showMcpStatus(t('mcp.keyGenerated'),'var(--c-green-dark)');
-  }catch(e){showMcpStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
+async function generateMcpToken() {
+  try {
+    const r = await authFetch('/api/mcp/generate-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    const data = await r.json();
+    if (data.error) {
+      showMcpStatus(t('mcp.error').replace('{msg}', data.error), 'var(--c-red-dark)');
+      return;
+    }
+    _mcpToken = data.token;
+    document.getElementById('mcp-token-display').textContent = data.token;
+    document.getElementById('mcp-token-display').style.display = 'block';
+    document.getElementById('mcp-copy-token-btn').style.display = 'inline-flex';
+    showMcpStatus(t('mcp.keyGenerated'), 'var(--c-green-dark)');
+  } catch (e) {
+    showMcpStatus(t('mcp.error').replace('{msg}', e.message), 'var(--c-red-dark)');
+  }
 }
 
-async function runMcpDiagnostics(){
-  const el=document.getElementById('mcp-diag-result');
-  el.innerHTML='<p style="color:var(--c-text-muted)">'+t('mcp.diagRunning')+'</p>';
-  try{
-    const r=await authFetch('/api/mcp/diagnostics');
-    if(!r.ok){el.innerHTML='<p style="color:var(--c-red-dark)">'+t('mcp.diagFailed')+'</p>';return}
-    const d=await r.json();
-    let html='<table style="width:100%;font-size:12px;border-collapse:collapse">';
-    const row=(label,val,color)=>'<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">'+label+'</td><td style="padding:4px 8px;color:'+(color||'#333')+'">'+val+'</td></tr>';
-    const checks=d.checks||{};
-    for(const[k,v]of Object.entries(checks)){
-      const pass=v.startsWith('PASS');
-      html+=row(k,esc(v),pass?'var(--c-green-dark)':'var(--c-red-dark)');
+async function runMcpDiagnostics() {
+  const el = document.getElementById('mcp-diag-result');
+  el.innerHTML = '<p style="color:var(--c-text-muted)">' + t('mcp.diagRunning') + '</p>';
+  try {
+    const r = await authFetch('/api/mcp/diagnostics');
+    if (!r.ok) {
+      el.innerHTML = '<p style="color:var(--c-red-dark)">' + t('mcp.diagFailed') + '</p>';
+      return;
     }
-    html+=row('Protocol',esc(d.protocol));
-    html+=row('Base URL','<code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">'+esc(d.connectorUrl)+'</code>');
-    html+=row(t('mcp.diagAutoClients'),String(d.oauthClients?.auto||0));
-    html+=row(t('mcp.diagManualClients'),String(d.oauthClients?.manual||0));
-    html+=row(t('mcp.diagSessions'),String(d.activeSessions||0));
-    html+='</table>';
-    if(d.hint)html+='<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">'+esc(d.hint)+'</div>';
-    el.innerHTML=html;
-  }catch(e){el.innerHTML='<p style="color:var(--c-red-dark)">Error: '+esc(e.message)+'</p>'}
+    const d = await r.json();
+    let html = '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    const row = (label, val, color) =>
+      '<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">' +
+      label +
+      '</td><td style="padding:4px 8px;color:' +
+      (color || '#333') +
+      '">' +
+      val +
+      '</td></tr>';
+    const checks = d.checks || {};
+    for (const [k, v] of Object.entries(checks)) {
+      const pass = v.startsWith('PASS');
+      html += row(k, esc(v), pass ? 'var(--c-green-dark)' : 'var(--c-red-dark)');
+    }
+    html += row('Protocol', esc(d.protocol));
+    html += row(
+      'Base URL',
+      '<code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">' +
+        esc(d.connectorUrl) +
+        '</code>'
+    );
+    html += row(t('mcp.diagAutoClients'), String(d.oauthClients?.auto || 0));
+    html += row(t('mcp.diagManualClients'), String(d.oauthClients?.manual || 0));
+    html += row(t('mcp.diagSessions'), String(d.activeSessions || 0));
+    html += '</table>';
+    if (d.hint)
+      html +=
+        '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">' +
+        esc(d.hint) +
+        '</div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--c-red-dark)">Error: ' + esc(e.message) + '</p>';
+  }
 }
 
 // ─── OAUTH CLIENT MANAGEMENT ────────────────────────────────
-function showOAuthStatus(msg,color){
-  const el=document.getElementById('oauth-client-status');
-  el.style.display='block';el.style.color=color||'#888';el.textContent=msg;
-  setTimeout(()=>{el.style.display='none'},8000);
+function showOAuthStatus(msg, color) {
+  const el = document.getElementById('oauth-client-status');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+  setTimeout(() => {
+    el.style.display = 'none';
+  }, 8000);
 }
-async function loadOAuthClients(){
-  try{
-    const r=await authFetch('/api/mcp/oauth-clients');
-    if(!r.ok)return;
-    const data=await r.json();
-    const list=document.getElementById('oauth-client-list');
-    if(!list)return;
-    if(!data.clients||data.clients.length===0){
-      list.innerHTML='<p style="color:var(--c-text-muted);font-size:12px">'+t('mcp.noClients')+'</p>';
+async function loadOAuthClients() {
+  try {
+    const r = await authFetch('/api/mcp/oauth-clients');
+    if (!r.ok) return;
+    const data = await r.json();
+    const list = document.getElementById('oauth-client-list');
+    if (!list) return;
+    if (!data.clients || data.clients.length === 0) {
+      list.innerHTML = '<p style="color:var(--c-text-muted);font-size:12px">' + t('mcp.noClients') + '</p>';
       return;
     }
-    list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.clientName')+'</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.created')+'</th>'+
-      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">'+t('mcp.activeSessions')+'</th>'+
-      '<th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>'+
-      data.clients.map(c=>{
-        const name=c.clientName||t('mcp.unnamed');
-        return '<tr>'+
-          '<td style="padding:6px">'+esc(name)+'</td>'+
-          '<td style="padding:6px;font-family:monospace">'+esc(c.clientId.slice(0,8))+'…</td>'+
-          '<td style="padding:6px">'+esc(c.created?c.created.slice(0,10):'')+'</td>'+
-          '<td style="padding:6px;text-align:center">'+c.activeSessions+'</td>'+
-          '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="'+esc(c.clientId)+'" data-auto="'+(c.autoRegistered?1:0)+'">'+t('mcp.deleteClient')+'</button></td></tr>';
-      }).join('')+
+    list.innerHTML =
+      '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' +
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">' +
+      t('mcp.clientName') +
+      '</th>' +
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Client ID</th>' +
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">' +
+      t('mcp.created') +
+      '</th>' +
+      '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">' +
+      t('mcp.activeSessions') +
+      '</th>' +
+      '<th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      data.clients
+        .map((c) => {
+          const name = c.clientName || t('mcp.unnamed');
+          return (
+            '<tr>' +
+            '<td style="padding:6px">' +
+            esc(name) +
+            '</td>' +
+            '<td style="padding:6px;font-family:monospace">' +
+            esc(c.clientId.slice(0, 8)) +
+            '…</td>' +
+            '<td style="padding:6px">' +
+            esc(c.created ? c.created.slice(0, 10) : '') +
+            '</td>' +
+            '<td style="padding:6px;text-align:center">' +
+            c.activeSessions +
+            '</td>' +
+            '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="' +
+            esc(c.clientId) +
+            '" data-auto="' +
+            (c.autoRegistered ? 1 : 0) +
+            '">' +
+            t('mcp.deleteClient') +
+            '</button></td></tr>'
+          );
+        })
+        .join('') +
       '</tbody></table>';
-    list.onclick=function(e){
-      const btn=e.target.closest('[data-oauth-action="delete"]');
-      if(!btn)return;
-      deleteOAuthClient(btn.dataset.clientId,btn.dataset.auto==='1');
+    list.onclick = function (e) {
+      const btn = e.target.closest('[data-oauth-action="delete"]');
+      if (!btn) return;
+      deleteOAuthClient(btn.dataset.clientId, btn.dataset.auto === '1');
     };
-  }catch(e){console.error('loadOAuthClients:',e)}
+  } catch (e) {
+    console.error('loadOAuthClients:', e);
+  }
 }
-async function deleteOAuthClient(clientId,isAuto){
-  if(!confirm(isAuto?t('mcp.confirmDeleteAuto'):t('mcp.confirmDelete')))return;
-  try{
-    const r=await authFetch('/api/mcp/oauth-clients/'+encodeURIComponent(clientId),{method:'DELETE'});
-    const data=await r.json();
-    if(data.error){showOAuthStatus(t('mcp.error').replace('{msg}',data.error),'var(--c-red-dark)');return}
-    showOAuthStatus(t('mcp.clientDeleted'),'var(--c-green-dark)');
+async function deleteOAuthClient(clientId, isAuto) {
+  if (!confirm(isAuto ? t('mcp.confirmDeleteAuto') : t('mcp.confirmDelete'))) return;
+  try {
+    const r = await authFetch('/api/mcp/oauth-clients/' + encodeURIComponent(clientId), { method: 'DELETE' });
+    const data = await r.json();
+    if (data.error) {
+      showOAuthStatus(t('mcp.error').replace('{msg}', data.error), 'var(--c-red-dark)');
+      return;
+    }
+    showOAuthStatus(t('mcp.clientDeleted'), 'var(--c-green-dark)');
     loadOAuthClients();
-  }catch(e){showOAuthStatus(t('mcp.error').replace('{msg}',e.message),'var(--c-red-dark)')}
+  } catch (e) {
+    showOAuthStatus(t('mcp.error').replace('{msg}', e.message), 'var(--c-red-dark)');
+  }
 }
 
 // ─── SCAN LOG ────────────────────────────────────────────────
-let logSortCol='time',logSortDir='desc',logDisplayLimit=200;
-function toggleLogSort(col){if(logSortCol===col)logSortDir=logSortDir==='desc'?'asc':'desc';else{logSortCol=col;logSortDir='desc'}renderLog()}
-function renderLog(){
-  const q=(document.getElementById('log-q').value||'').toLowerCase();
-  const actionF=document.getElementById('log-action-filter').value;
-  const dateFrom=document.getElementById('log-date-from').value;
-  const dateTo=document.getElementById('log-date-to').value;
-  const body=document.getElementById('log-body');
-  let items=[...scanLog];
+let logSortCol = 'time',
+  logSortDir = 'desc',
+  logDisplayLimit = 200;
+function toggleLogSort(col) {
+  if (logSortCol === col) logSortDir = logSortDir === 'desc' ? 'asc' : 'desc';
+  else {
+    logSortCol = col;
+    logSortDir = 'desc';
+  }
+  renderLog();
+}
+function renderLog() {
+  const q = (document.getElementById('log-q').value || '').toLowerCase();
+  const actionF = document.getElementById('log-action-filter').value;
+  const dateFrom = document.getElementById('log-date-from').value;
+  const dateTo = document.getElementById('log-date-to').value;
+  const body = document.getElementById('log-body');
+  let items = [...scanLog];
   // Filters
-  if(q)items=items.filter(e=>JSON.stringify(e).toLowerCase().includes(q));
-  if(actionF)items=items.filter(e=>e.action===actionF);
-  if(dateFrom)items=items.filter(e=>e.time>=dateFrom);
-  if(dateTo)items=items.filter(e=>e.time<dateTo+'T23:59:59');
+  if (q) items = items.filter((e) => JSON.stringify(e).toLowerCase().includes(q));
+  if (actionF) items = items.filter((e) => e.action === actionF);
+  if (dateFrom) items = items.filter((e) => e.time >= dateFrom);
+  if (dateTo) items = items.filter((e) => e.time < dateTo + 'T23:59:59');
   // Sort
-  const dir=logSortDir==='desc'?-1:1;
-  items.sort((a,b)=>{const av=a[logSortCol]||'',bv=b[logSortCol]||'';return av<bv?-dir:av>bv?dir:0});
-  // Sort indicators
-  document.querySelectorAll('[id^="log-sort-"]').forEach(el=>el.textContent='');
-  const si=document.getElementById('log-sort-'+logSortCol);if(si)si.textContent=logSortDir==='desc'?'▼':'▲';
-  // Count display
-  const total=scanLog.length,filtered=items.length;
-  const countEl=document.getElementById('log-count');
-  if(countEl)countEl.textContent=filtered===total?t('log.entries',{n:total}):t('log.entriesFiltered',{n:filtered,total:total});
-  // Paginate
-  const hasMore=items.length>logDisplayLimit;
-  items=items.slice(0,logDisplayLimit);
-  const now=Date.now(),h24=24*60*60*1000;
-  body.innerHTML=items.length?items.map(e=>{
-    const isRecent=(now-new Date(e.time).getTime())<h24;
-    return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user)||'\u2014'}</td><td><span class="badge ${e.action==='ADD'?'b-add':e.action==='REMOVE'?'b-remove':e.action==='HARVEST'?'b-harvest':'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch)||'\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag)||'\u2014'}</td><td>${esc(e.from)||'\u2014'}</td><td>${esc(e.to)||'\u2014'}</td><td>${e.species?spDot(e.species)+esc(e.species):'\u2014'}</td><td>${isRecent?'<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\''+esc(e.time)+'\',\''+esc(e.batch)+'\',\''+esc(e.action)+'\')" title="'+t('common.delete')+'">✕</button>':''}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">'+t('settings.noScans')+'</td></tr>';
-  const loadMore=document.getElementById('log-load-more');if(loadMore)loadMore.style.display=hasMore?'block':'none';
-}
-function deleteLogEntry(btn,time,batch,action){
-  confirm2(t('log.deleteEntry'),t('log.deleteEntryMsg',{action:action,batch:batch,time:fmtDtTime(time)}),t('common.delete'),()=>{
-    const idx=scanLog.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
-    if(idx===-1)return;
-    const entry=scanLog[idx];
-    scanLog.splice(idx,1);
-    const mi=movements.findIndex(e=>e.time===time&&e.batch===batch&&e.action===action);
-    if(mi!==-1)movements.splice(mi,1);
-    const serverId=entry._serverId||entry.id;
-    if(serverId)apiDelete('/api/scan-log/'+serverId);
-    renderLog();renderStatus();
+  const dir = logSortDir === 'desc' ? -1 : 1;
+  items.sort((a, b) => {
+    const av = a[logSortCol] || '',
+      bv = b[logSortCol] || '';
+    return av < bv ? -dir : av > bv ? dir : 0;
   });
+  // Sort indicators
+  document.querySelectorAll('[id^="log-sort-"]').forEach((el) => (el.textContent = ''));
+  const si = document.getElementById('log-sort-' + logSortCol);
+  if (si) si.textContent = logSortDir === 'desc' ? '▼' : '▲';
+  // Count display
+  const total = scanLog.length,
+    filtered = items.length;
+  const countEl = document.getElementById('log-count');
+  if (countEl)
+    countEl.textContent =
+      filtered === total ? t('log.entries', { n: total }) : t('log.entriesFiltered', { n: filtered, total: total });
+  // Paginate
+  const hasMore = items.length > logDisplayLimit;
+  items = items.slice(0, logDisplayLimit);
+  const now = Date.now(),
+    h24 = 24 * 60 * 60 * 1000;
+  body.innerHTML = items.length
+    ? items
+        .map((e) => {
+          const isRecent = now - new Date(e.time).getTime() < h24;
+          return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td style="font-size:11px">${esc(e.user) || '\u2014'}</td><td><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td>${esc(e.from) || '\u2014'}</td><td>${esc(e.to) || '\u2014'}</td><td>${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td>${isRecent ? '<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\'' + esc(e.time) + "','" + esc(e.batch) + "','" + esc(e.action) + '\')" title="' + t('common.delete') + '">✕</button>' : ''}</td></tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="9" class="empty">' + t('settings.noScans') + '</td></tr>';
+  const loadMore = document.getElementById('log-load-more');
+  if (loadMore) loadMore.style.display = hasMore ? 'block' : 'none';
 }
-function clearLog(){confirm2(t('settings.clearLog'),t('settings.clearLogMsg',{n:scanLog.length}),t('settings.clearLogBtn'),async()=>{await apiDelete('/api/scan-log');scanLog=[];renderLog()})}
+function deleteLogEntry(btn, time, batch, action) {
+  confirm2(
+    t('log.deleteEntry'),
+    t('log.deleteEntryMsg', { action: action, batch: batch, time: fmtDtTime(time) }),
+    t('common.delete'),
+    () => {
+      const idx = scanLog.findIndex((e) => e.time === time && e.batch === batch && e.action === action);
+      if (idx === -1) return;
+      const entry = scanLog[idx];
+      scanLog.splice(idx, 1);
+      const mi = movements.findIndex((e) => e.time === time && e.batch === batch && e.action === action);
+      if (mi !== -1) movements.splice(mi, 1);
+      const serverId = entry._serverId || entry.id;
+      if (serverId) apiDelete('/api/scan-log/' + serverId);
+      renderLog();
+      renderStatus();
+    }
+  );
+}
+function clearLog() {
+  confirm2(
+    t('settings.clearLog'),
+    t('settings.clearLogMsg', { n: scanLog.length }),
+    t('settings.clearLogBtn'),
+    async () => {
+      await apiDelete('/api/scan-log');
+      scanLog = [];
+      renderLog();
+    }
+  );
+}
 
 // ─── INVENTORY ───────────────────────────────────────────────
-const MAT_LABELS={hardwood:'Hardwood pellets',wheatbran:'Wheat bran',gypsum:'Gypsum',grain:'Grain'};
-const MAT_COLORS={hardwood:'#92400e',wheatbran:'#166534',gypsum:'#1e40af',grain:'#6b21a8'};
-const MAT_BG={hardwood:'#fff7ed',wheatbran:'#f0fdf4',gypsum:'#eff6ff',grain:'#faf5ff'};
-const MAT_BORDER={hardwood:'#fed7aa',wheatbran:'#bbf7d0',gypsum:'#bfdbfe',grain:'#e9d5ff'};
+const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain' };
+const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8' };
+const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff' };
+const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff' };
 
-function invLog(mat,deltaKg,type,ref,time){
-  if(!inventory.log)inventory.log=[];
-  const running=inventory.stock[mat]||0;
-  inventory.log.push({time:time||new Date().toISOString(),mat,deltaKg,running,type,ref});
+function invLog(mat, deltaKg, type, ref, time) {
+  if (!inventory.log) inventory.log = [];
+  const running = inventory.stock[mat] || 0;
+  inventory.log.push({ time: time || new Date().toISOString(), mat, deltaKg, running, type, ref });
 }
 
-function getAvgComp(){
+function getAvgComp() {
   // Returns the average composition settings, with fallback defaults
-  const a=inventory.avgComposition||{};
-  return{
-    hwPct:a.hwPct??75,
-    wbPct:a.wbPct??25,
-    rhPct:a.rhPct??63,
-    bagKg:a.bagKg??3,
-    grainBagKg:a.grainBagKg??1
+  const a = inventory.avgComposition || {};
+  return {
+    hwPct: a.hwPct ?? 75,
+    wbPct: a.wbPct ?? 25,
+    rhPct: a.rhPct ?? 63,
+    bagKg: a.bagKg ?? 3,
+    grainBagKg: a.grainBagKg ?? 1
   };
 }
 
-function estBagsFromMat(mat,stockKg){
+function estBagsFromMat(mat, stockKg) {
   // Estimate how many fruiting blocks (or grain bags) can be made from this material
   // For HW/WB: dry matter per bag = bagKg × (1 − rh/100), split by avg %
   // For grain: simply stockKg / grainBagKg
-  const c=getAvgComp();
-  if(mat==='grain'){
-    return{bags:c.grainBagKg>0?Math.floor(stockKg/c.grainBagKg):0,bagKg:c.grainBagKg,isGrain:true};
+  const c = getAvgComp();
+  if (mat === 'grain') {
+    return { bags: c.grainBagKg > 0 ? Math.floor(stockKg / c.grainBagKg) : 0, bagKg: c.grainBagKg, isGrain: true };
   }
-  const dryPerBag=c.bagKg*(1-c.rhPct/100);  // dry matter per bag
-  let matPerBag=0;
-  if(mat==='hardwood') matPerBag=dryPerBag*(c.hwPct/100);
-  if(mat==='wheatbran') matPerBag=dryPerBag*(c.wbPct/100);
-  if(mat==='gypsum') matPerBag=dryPerBag*0.01;
-  const bags=matPerBag>0?Math.floor(stockKg/matPerBag):0;
-  return{bags,matPerBag,bagKg:c.bagKg,isGrain:false};
+  const dryPerBag = c.bagKg * (1 - c.rhPct / 100); // dry matter per bag
+  let matPerBag = 0;
+  if (mat === 'hardwood') matPerBag = dryPerBag * (c.hwPct / 100);
+  if (mat === 'wheatbran') matPerBag = dryPerBag * (c.wbPct / 100);
+  if (mat === 'gypsum') matPerBag = dryPerBag * 0.01;
+  const bags = matPerBag > 0 ? Math.floor(stockKg / matPerBag) : 0;
+  return { bags, matPerBag, bagKg: c.bagKg, isGrain: false };
 }
 
-function renderInvStock(){
-  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  if(!inventory.thresholds)inventory.thresholds={hardwood:{minKg:50},wheatbran:{minKg:20},gypsum:{minKg:5},grain:{minKg:10}};
-  if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
+function renderInvStock() {
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  if (!inventory.thresholds)
+    inventory.thresholds = {
+      hardwood: { minKg: 50 },
+      wheatbran: { minKg: 20 },
+      gypsum: { minKg: 5 },
+      grain: { minKg: 10 }
+    };
+  if (!inventory.avgComposition)
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 };
 
-  const cards=document.getElementById('inv-cards');
-  cards.innerHTML=Object.keys(MAT_LABELS).map(mat=>{
-    const stock=inventory.stock[mat]||0;
-    const thresh=inventory.thresholds[mat]||{minKg:0};
-    const low=thresh.minKg>0&&stock<thresh.minKg;
-    const {bags,bagKg,matPerBag,isGrain}=estBagsFromMat(mat,stock);
-    const pct=thresh.minKg>0?Math.min(100,Math.round((stock/Math.max(stock,thresh.minKg*3))*100)):Math.min(100,Math.round((stock/Math.max(stock,100))*100));
-    const estNote=isGrain
-      ? t('inv.grainBagsEst',{n:bags,kg:bagKg})
-      : t('inv.blocksEst',{n:'<strong>'+bags+'</strong>',kg:bagKg})+' <span style="font-size:10px;color:var(--c-text-muted)">'+t('inv.avgEstimate')+'</span>';
-    return`<div style="background:${MAT_BG[mat]};border:1px solid ${low?'var(--c-red)':MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
+  const cards = document.getElementById('inv-cards');
+  cards.innerHTML = Object.keys(MAT_LABELS)
+    .map((mat) => {
+      const stock = inventory.stock[mat] || 0;
+      const thresh = inventory.thresholds[mat] || { minKg: 0 };
+      const low = thresh.minKg > 0 && stock < thresh.minKg;
+      const { bags, bagKg, matPerBag, isGrain } = estBagsFromMat(mat, stock);
+      const pct =
+        thresh.minKg > 0
+          ? Math.min(100, Math.round((stock / Math.max(stock, thresh.minKg * 3)) * 100))
+          : Math.min(100, Math.round((stock / Math.max(stock, 100)) * 100));
+      const estNote = isGrain
+        ? t('inv.grainBagsEst', { n: bags, kg: bagKg })
+        : t('inv.blocksEst', { n: '<strong>' + bags + '</strong>', kg: bagKg }) +
+          ' <span style="font-size:10px;color:var(--c-text-muted)">' +
+          t('inv.avgEstimate') +
+          '</span>';
+      return `<div style="background:${MAT_BG[mat]};border:1px solid ${low ? 'var(--c-red)' : MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
-        ${low?`<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>`:''}
+        ${low ? `<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>` : ''}
       </div>
       <div style="font-size:26px;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:var(--c-text-muted)">kg</span></div>
       <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
-        <div style="height:100%;border-radius:3px;background:${low?'var(--c-red)':MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
+        <div style="height:100%;border-radius:3px;background:${low ? 'var(--c-red)' : MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
       </div>
       <div style="font-size:12px;color:var(--c-text-sec);line-height:1.6">${estNote}</div>
-      ${thresh.minKg>0?`<div style="font-size:11px;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'};margin-top:2px">${t('inv.alertBelow',{n:thresh.minKg})}</div>`:''}
+      ${thresh.minKg > 0 ? `<div style="font-size:11px;color:${low ? 'var(--c-red-dark)' : 'var(--c-text-muted)'};margin-top:2px">${t('inv.alertBelow', { n: thresh.minKg })}</div>` : ''}
       <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">${t('inv.logDelivery')}</button>
-      ${(()=>{const sups=getSuppliersForMat(mat);if(!sups.length)return'';
-        return`<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:var(--c-text-sec)">
-          <span style="font-weight:600;color:${low?'var(--c-red-dark)':'var(--c-text-muted)'}">${low?t('inv.reorderFrom'):t('inv.suppliers')}:</span>
-          ${sups.map(s=>safeHref(s.url)?`<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>`:`<span style="margin-left:4px">${esc(s.name)}</span>`).join(',')}
-        </div>`;})()}
+      ${(() => {
+        const sups = getSuppliersForMat(mat);
+        if (!sups.length) return '';
+        return `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:var(--c-text-sec)">
+          <span style="font-weight:600;color:${low ? 'var(--c-red-dark)' : 'var(--c-text-muted)'}">${low ? t('inv.reorderFrom') : t('inv.suppliers')}:</span>
+          ${sups.map((s) => (safeHref(s.url) ? `<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>` : `<span style="margin-left:4px">${esc(s.name)}</span>`)).join(',')}
+        </div>`;
+      })()}
     </div>`;
-  }).join('');
+    })
+    .join('');
   renderThresholds();
 }
 
-function renderThresholds(){
-  const el=document.getElementById('inv-thresholds');
-  if(!el)return;
-  const c=getAvgComp();
+function renderThresholds() {
+  const el = document.getElementById('inv-thresholds');
+  if (!el) return;
+  const c = getAvgComp();
 
   // Per-material alert thresholds
-  const threshHtml=`<div style="overflow-x:auto;margin-bottom:16px"><table>
+  const threshHtml = `<div style="overflow-x:auto;margin-bottom:16px"><table>
     <thead><tr><th>${t('inv.thMaterial')}</th><th>${t('inv.thInStock')}</th><th>${t('inv.thAlertBelow')}</th><th>${t('inv.thEstBags')}</th></tr></thead>
     <tbody>
-    ${Object.keys(MAT_LABELS).map(mat=>{
-      const stock=inventory.stock[mat]||0;
-      const t=inventory.thresholds[mat]||{minKg:0};
-      const {bags}=estBagsFromMat(mat,stock);
-      return`<tr>
+    ${Object.keys(MAT_LABELS)
+      .map((mat) => {
+        const stock = inventory.stock[mat] || 0;
+        const t = inventory.thresholds[mat] || { minKg: 0 };
+        const { bags } = estBagsFromMat(mat, stock);
+        return `<tr>
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
         <td><input type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
         <td style="font-size:12px;color:var(--c-text-sec)">~${bags} bags <span style="font-size:10px;color:var(--c-text-muted)">(avg)</span></td>
       </tr>`;
-    }).join('')}
+      })
+      .join('')}
     </tbody>
   </table></div>`;
 
   // Average composition settings
-  const compHtml=`<div style="background:var(--c-bg);border-radius:8px;padding:12px">
+  const compHtml = `<div style="background:var(--c-bg);border-radius:8px;padding:12px">
     <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
       ${t('inv.avgCompTitle')}
     </div>
@@ -6303,1243 +8423,2084 @@ function renderThresholds(){
         <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
-      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg*(1-c.rhPct/100)*(c.hwPct/100)).toFixed(3)}kg hardwood + ~${(c.bagKg*(1-c.rhPct/100)*(c.wbPct/100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
+      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg * (1 - c.rhPct / 100) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(c.bagKg * (1 - c.rhPct / 100) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
     </div>
   </div>`;
 
-  el.innerHTML=threshHtml+compHtml;
+  el.innerHTML = threshHtml + compHtml;
 }
 
-function updateAvgComp(key,val){
-  if(!inventory.avgComposition)inventory.avgComposition={hwPct:75,wbPct:25,rhPct:63,bagKg:3,grainBagKg:1};
-  inventory.avgComposition[key]=parseFloat(val)||0;
-  saveInvConfig();renderInvStock();
+function updateAvgComp(key, val) {
+  if (!inventory.avgComposition)
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 };
+  inventory.avgComposition[key] = parseFloat(val) || 0;
+  saveInvConfig();
+  renderInvStock();
 }
 
-function updateThreshold(mat,key,val){
-  if(!inventory.thresholds)inventory.thresholds={};
-  if(!inventory.thresholds[mat])inventory.thresholds[mat]={minKg:0};
-  inventory.thresholds[mat][key]=parseFloat(val)||0;
-  saveInvConfig();renderInvStock();
+function updateThreshold(mat, key, val) {
+  if (!inventory.thresholds) inventory.thresholds = {};
+  if (!inventory.thresholds[mat]) inventory.thresholds[mat] = { minKg: 0 };
+  inventory.thresholds[mat][key] = parseFloat(val) || 0;
+  saveInvConfig();
+  renderInvStock();
 }
 
-function delMatChange(){
-  const mat=document.getElementById('del-mat').value;
-  const stock=inventory.stock?.[mat]||0;
-  document.getElementById('del-current').textContent=t('inv.currentStock',{n:stock.toFixed(2)});
-  document.getElementById('del-kg').value='';
-  document.getElementById('del-preview').style.display='none';
+function delMatChange() {
+  const mat = document.getElementById('del-mat').value;
+  const stock = inventory.stock?.[mat] || 0;
+  document.getElementById('del-current').textContent = t('inv.currentStock', { n: stock.toFixed(2) });
+  document.getElementById('del-kg').value = '';
+  document.getElementById('del-preview').style.display = 'none';
 }
-function delPreview(){
-  const mat=document.getElementById('del-mat').value;
-  const kg=parseFloat(document.getElementById('del-kg').value)||0;
-  const el=document.getElementById('del-preview');
-  if(!kg){el.style.display='none';return}
-  const cur=inventory.stock?.[mat]||0;
-  el.innerHTML=t('inv.afterDeliveryLabel')+'<strong>'+(cur+kg).toFixed(2)+' kg</strong> ('+cur.toFixed(2)+' + '+kg+' kg)';
-  el.style.display='block';
-}
-function adjMatChange(){
-  const mat=document.getElementById('adj-mat').value;
-  const stock=inventory.stock?.[mat]||0;
-  document.getElementById('adj-current').textContent=t('inv.currentStock',{n:stock.toFixed(2)});
-  document.getElementById('adj-absolute').value='';
-  document.getElementById('adj-delta').value='';
-  document.getElementById('adj-preview').style.display='none';
-}
-function adjPreview(mode){
-  const mat=document.getElementById('adj-mat').value;
-  const cur=inventory.stock?.[mat]||0;
-  const el=document.getElementById('adj-preview');
-  let newVal,diff;
-  if(mode==='absolute'){
-    const abs=parseFloat(document.getElementById('adj-absolute').value);
-    if(isNaN(abs)){el.style.display='none';return}
-    document.getElementById('adj-delta').value='';
-    newVal=Math.max(0,abs);diff=newVal-cur;
-    el.innerHTML=t('inv.setToLabel')+'<strong>'+newVal.toFixed(2)+' kg</strong> '+(diff>=0?'+':'')+diff.toFixed(2)+t('inv.kgFromCurrent');
-  }else{
-    const delta=parseFloat(document.getElementById('adj-delta').value);
-    if(isNaN(delta)){el.style.display='none';return}
-    document.getElementById('adj-absolute').value='';
-    newVal=Math.max(0,cur+delta);diff=delta;
-    el.innerHTML=t('inv.newTotalLabel')+'<strong>'+newVal.toFixed(2)+' kg</strong> ('+(diff>=0?'+':'')+diff.toFixed(2)+' kg)';
+function delPreview() {
+  const mat = document.getElementById('del-mat').value;
+  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const el = document.getElementById('del-preview');
+  if (!kg) {
+    el.style.display = 'none';
+    return;
   }
-  el.style.display='block';
+  const cur = inventory.stock?.[mat] || 0;
+  el.innerHTML =
+    t('inv.afterDeliveryLabel') +
+    '<strong>' +
+    (cur + kg).toFixed(2) +
+    ' kg</strong> (' +
+    cur.toFixed(2) +
+    ' + ' +
+    kg +
+    ' kg)';
+  el.style.display = 'block';
 }
-function logDelivery(){
-  const mat=document.getElementById('del-mat').value;
-  const kg=parseFloat(document.getElementById('del-kg').value)||0;
-  const note=document.getElementById('del-note').value.trim();
-  if(kg<=0){alert(t('inv.enterQty'));return}
-  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  inventory.stock[mat]=(inventory.stock[mat]||0)+kg;
-  invDelta(mat,kg,'delivery',note||'delivery');
-  document.getElementById('del-kg').value='';document.getElementById('del-note').value='';
-  document.getElementById('del-preview').style.display='none';
-  openStab('inv','stock');renderInvStock();
-  setFb('ok','Delivery logged: +'+kg+'kg '+MAT_LABELS[mat]+' now '+inventory.stock[mat].toFixed(2)+'kg total');
+function adjMatChange() {
+  const mat = document.getElementById('adj-mat').value;
+  const stock = inventory.stock?.[mat] || 0;
+  document.getElementById('adj-current').textContent = t('inv.currentStock', { n: stock.toFixed(2) });
+  document.getElementById('adj-absolute').value = '';
+  document.getElementById('adj-delta').value = '';
+  document.getElementById('adj-preview').style.display = 'none';
 }
-function logAdjustment(){
-  const mat=document.getElementById('adj-mat').value;
-  const absVal=document.getElementById('adj-absolute').value;
-  const deltaVal=document.getElementById('adj-delta').value;
-  const reason=document.getElementById('adj-reason').value.trim()||'Manual adjustment';
-  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  const cur=inventory.stock[mat]||0;
-  let newStock,delta;
-  if(absVal!==''){
-    newStock=Math.max(0,parseFloat(absVal)||0);delta=newStock-cur;
-  }else if(deltaVal!==''){
-    delta=parseFloat(deltaVal)||0;newStock=Math.max(0,cur+delta);
-  }else{alert(t('inv.enterAmount'));return}
-  inventory.stock[mat]=newStock;
-  invSetAbsolute(mat,newStock,'adjustment',reason);
-  document.getElementById('adj-absolute').value='';document.getElementById('adj-delta').value='';
-  document.getElementById('adj-reason').value='';document.getElementById('adj-preview').style.display='none';
-  openStab('inv','stock');renderInvStock();
-  setFb('ok','Adjusted '+MAT_LABELS[mat]+': '+(delta>=0?'+':'')+delta.toFixed(2)+'kg now '+newStock.toFixed(2)+'kg');
+function adjPreview(mode) {
+  const mat = document.getElementById('adj-mat').value;
+  const cur = inventory.stock?.[mat] || 0;
+  const el = document.getElementById('adj-preview');
+  let newVal, diff;
+  if (mode === 'absolute') {
+    const abs = parseFloat(document.getElementById('adj-absolute').value);
+    if (isNaN(abs)) {
+      el.style.display = 'none';
+      return;
+    }
+    document.getElementById('adj-delta').value = '';
+    newVal = Math.max(0, abs);
+    diff = newVal - cur;
+    el.innerHTML =
+      t('inv.setToLabel') +
+      '<strong>' +
+      newVal.toFixed(2) +
+      ' kg</strong> ' +
+      (diff >= 0 ? '+' : '') +
+      diff.toFixed(2) +
+      t('inv.kgFromCurrent');
+  } else {
+    const delta = parseFloat(document.getElementById('adj-delta').value);
+    if (isNaN(delta)) {
+      el.style.display = 'none';
+      return;
+    }
+    document.getElementById('adj-absolute').value = '';
+    newVal = Math.max(0, cur + delta);
+    diff = delta;
+    el.innerHTML =
+      t('inv.newTotalLabel') +
+      '<strong>' +
+      newVal.toFixed(2) +
+      ' kg</strong> (' +
+      (diff >= 0 ? '+' : '') +
+      diff.toFixed(2) +
+      ' kg)';
+  }
+  el.style.display = 'block';
+}
+function logDelivery() {
+  const mat = document.getElementById('del-mat').value;
+  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const note = document.getElementById('del-note').value.trim();
+  if (kg <= 0) {
+    alert(t('inv.enterQty'));
+    return;
+  }
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  inventory.stock[mat] = (inventory.stock[mat] || 0) + kg;
+  invDelta(mat, kg, 'delivery', note || 'delivery');
+  document.getElementById('del-kg').value = '';
+  document.getElementById('del-note').value = '';
+  document.getElementById('del-preview').style.display = 'none';
+  openStab('inv', 'stock');
+  renderInvStock();
+  setFb(
+    'ok',
+    'Delivery logged: +' + kg + 'kg ' + MAT_LABELS[mat] + ' now ' + inventory.stock[mat].toFixed(2) + 'kg total'
+  );
+}
+function logAdjustment() {
+  const mat = document.getElementById('adj-mat').value;
+  const absVal = document.getElementById('adj-absolute').value;
+  const deltaVal = document.getElementById('adj-delta').value;
+  const reason = document.getElementById('adj-reason').value.trim() || 'Manual adjustment';
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  const cur = inventory.stock[mat] || 0;
+  let newStock, delta;
+  if (absVal !== '') {
+    newStock = Math.max(0, parseFloat(absVal) || 0);
+    delta = newStock - cur;
+  } else if (deltaVal !== '') {
+    delta = parseFloat(deltaVal) || 0;
+    newStock = Math.max(0, cur + delta);
+  } else {
+    alert(t('inv.enterAmount'));
+    return;
+  }
+  inventory.stock[mat] = newStock;
+  invSetAbsolute(mat, newStock, 'adjustment', reason);
+  document.getElementById('adj-absolute').value = '';
+  document.getElementById('adj-delta').value = '';
+  document.getElementById('adj-reason').value = '';
+  document.getElementById('adj-preview').style.display = 'none';
+  openStab('inv', 'stock');
+  renderInvStock();
+  setFb(
+    'ok',
+    'Adjusted ' +
+      MAT_LABELS[mat] +
+      ': ' +
+      (delta >= 0 ? '+' : '') +
+      delta.toFixed(2) +
+      'kg now ' +
+      newStock.toFixed(2) +
+      'kg'
+  );
 }
 
-function renderInvLog(){
-  const filter=document.getElementById('inv-log-filter').value;
-  const body=document.getElementById('inv-log-body');
-  if(!inventory.log||!inventory.log.length){body.innerHTML='<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';return}
-  const rows=[...inventory.log].reverse().filter(e=>filter==='all'||e.mat===filter).slice(0,200);
+function renderInvLog() {
+  const filter = document.getElementById('inv-log-filter').value;
+  const body = document.getElementById('inv-log-body');
+  if (!inventory.log || !inventory.log.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';
+    return;
+  }
+  const rows = [...inventory.log]
+    .reverse()
+    .filter((e) => filter === 'all' || e.mat === filter)
+    .slice(0, 200);
   // Build running totals per material going forwards for display
-  body.innerHTML=rows.map(e=>`<tr>
+  body.innerHTML = rows
+    .map(
+      (e) => `<tr>
     <td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td>
     <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
-    <td style="font-weight:600;color:${e.deltaKg<0?'var(--c-red-dark)':'var(--c-green-dark)'}">${e.deltaKg>0?'+':''}${e.deltaKg.toFixed(2)} kg</td>
-    <td style="font-size:11px">${(e.running||0).toFixed(1)} kg</td>
-    <td><span class="badge ${e.type==='delivery'?'b-add':e.type==='adjustment'?'b-move':'b-harvest'}">${e.type}</span></td>
-    <td style="font-size:11px;color:var(--c-text-sec)">${esc(e.ref)||'—'}</td>
-  </tr>`).join('');
+    <td style="font-weight:600;color:${e.deltaKg < 0 ? 'var(--c-red-dark)' : 'var(--c-green-dark)'}">${e.deltaKg > 0 ? '+' : ''}${e.deltaKg.toFixed(2)} kg</td>
+    <td style="font-size:11px">${(e.running || 0).toFixed(1)} kg</td>
+    <td><span class="badge ${e.type === 'delivery' ? 'b-add' : e.type === 'adjustment' ? 'b-move' : 'b-harvest'}">${e.type}</span></td>
+    <td style="font-size:11px;color:var(--c-text-sec)">${esc(e.ref) || '—'}</td>
+  </tr>`
+    )
+    .join('');
 }
 
 // Show low-stock alerts in dashboard
-function getInvAlerts(){
-  if(!inventory.stock||!inventory.thresholds)return[];
-  return Object.keys(MAT_LABELS).filter(mat=>{
-    const stock=inventory.stock[mat]||0;
-    const thresh=(inventory.thresholds[mat]||{}).minKg||0;
-    return thresh>0&&stock<thresh;
-  }).map(mat=>{
-    const stock=inventory.stock[mat]||0;
-    const thresh=inventory.thresholds[mat].minKg;
-    const {bags}=estBagsFromMat(mat,stock);
-    const sups=getSuppliersForMat(mat);
-    const supNote=sups.length?` — ${t('inv.reorderFrom')}: ${sups.map(s=>s.name).join(', ')}`:'';
-    return{text:`Low stock: ${MAT_LABELS[mat]}`,detail:`${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold${supNote}`,urgent:stock<thresh*0.5,warn:true,species:null};
-  });
+function getInvAlerts() {
+  if (!inventory.stock || !inventory.thresholds) return [];
+  return Object.keys(MAT_LABELS)
+    .filter((mat) => {
+      const stock = inventory.stock[mat] || 0;
+      const thresh = (inventory.thresholds[mat] || {}).minKg || 0;
+      return thresh > 0 && stock < thresh;
+    })
+    .map((mat) => {
+      const stock = inventory.stock[mat] || 0;
+      const thresh = inventory.thresholds[mat].minKg;
+      const { bags } = estBagsFromMat(mat, stock);
+      const sups = getSuppliersForMat(mat);
+      const supNote = sups.length ? ` — ${t('inv.reorderFrom')}: ${sups.map((s) => s.name).join(', ')}` : '';
+      return {
+        text: `Low stock: ${MAT_LABELS[mat]}`,
+        detail: `${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold${supNote}`,
+        urgent: stock < thresh * 0.5,
+        warn: true,
+        species: null
+      };
+    });
 }
 
 // Show low lab stock alerts in dashboard
-function getLabAlerts(){
-  if(!inventory.labThresholds)return[];
-  const counts=getLabStockCounts();
-  return LAB_TYPES.filter(type=>{
-    const min=inventory.labThresholds[type]||0;
-    return min>0&&counts[type]<min;
-  }).map(type=>{
-    const count=counts[type]||0;
-    const min=inventory.labThresholds[type];
-    const label=getLabLabel(type);
-    return{text:t('lab.lowLabAlert',{type:label}),detail:t('lab.belowMin',{n:count,min:min}),urgent:count===0,warn:true};
+function getLabAlerts() {
+  if (!inventory.labThresholds) return [];
+  const counts = getLabStockCounts();
+  return LAB_TYPES.filter((type) => {
+    const min = inventory.labThresholds[type] || 0;
+    return min > 0 && counts[type] < min;
+  }).map((type) => {
+    const count = counts[type] || 0;
+    const min = inventory.labThresholds[type];
+    const label = getLabLabel(type);
+    return {
+      text: t('lab.lowLabAlert', { type: label }),
+      detail: t('lab.belowMin', { n: count, min: min }),
+      urgent: count === 0,
+      warn: true
+    };
   });
 }
 
 // ─── SUPPLIERS ───────────────────────────────────────────────
-function renderSuppliers(){
-  const el=document.getElementById('suppliers-list');
-  if(!el)return;
-  if(!suppliers.length){el.innerHTML=`<p style="color:var(--c-text-muted);font-size:13px">${t('inv.noSuppliers')}</p>`;return}
-  const grouped={};
-  Object.keys(MAT_LABELS).forEach(m=>grouped[m]=[]);
-  suppliers.forEach(s=>{if(grouped[s.mat])grouped[s.mat].push(s)});
-  el.innerHTML=Object.keys(MAT_LABELS).map(mat=>{
-    const list=grouped[mat];
-    if(!list.length)return'';
-    return`<div style="margin-bottom:16px">
+function renderSuppliers() {
+  const el = document.getElementById('suppliers-list');
+  if (!el) return;
+  if (!suppliers.length) {
+    el.innerHTML = `<p style="color:var(--c-text-muted);font-size:13px">${t('inv.noSuppliers')}</p>`;
+    return;
+  }
+  const grouped = {};
+  Object.keys(MAT_LABELS).forEach((m) => (grouped[m] = []));
+  suppliers.forEach((s) => {
+    if (grouped[s.mat]) grouped[s.mat].push(s);
+  });
+  el.innerHTML = Object.keys(MAT_LABELS)
+    .map((mat) => {
+      const list = grouped[mat];
+      if (!list.length) return '';
+      return `<div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]};margin-bottom:6px">${MAT_LABELS[mat]}</div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>${t('inv.supplierName')}</th><th>${t('inv.supplierUrl')}</th><th>${t('inv.supplierPhone')}</th><th>${t('inv.supplierNotes')}</th><th></th></tr></thead>
-        <tbody>${list.map(s=>`<tr>
+        <tbody>${list
+          .map(
+            (s) => `<tr>
           <td style="font-weight:500">${esc(s.name)}</td>
-          <td>${safeHref(s.url)?`<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>`:esc(s.url)||'-'}</td>
-          <td style="font-size:12px">${s.phone?esc(s.phone):'-'}</td>
-          <td style="font-size:12px;color:var(--c-text-sec)">${s.notes?esc(s.notes):'-'}</td>
+          <td>${safeHref(s.url) ? `<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>` : esc(s.url) || '-'}</td>
+          <td style="font-size:12px">${s.phone ? esc(s.phone) : '-'}</td>
+          <td style="font-size:12px;color:var(--c-text-sec)">${s.notes ? esc(s.notes) : '-'}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-sm" onclick="editSupplier(${s.id})" style="font-size:11px">${t('inv.editSupplier')}</button>
             <button class="btn btn-sm" onclick="removeSupplier(${s.id})" style="font-size:11px;color:var(--c-red-dark)">${t('inv.deleteSupplier')}</button>
           </td>
-        </tr>`).join('')}</tbody>
+        </tr>`
+          )
+          .join('')}</tbody>
       </table></div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 }
 
-function editSupplier(id){
-  const existing=id?suppliers.find(s=>s.id===id):null;
-  const matOpts=Object.keys(MAT_LABELS).map(m=>`<option value="${m}"${existing&&existing.mat===m?' selected':''}>${MAT_LABELS[m]}</option>`).join('');
-  const html=`<div style="display:flex;flex-direction:column;gap:10px">
+function editSupplier(id) {
+  const existing = id ? suppliers.find((s) => s.id === id) : null;
+  const matOpts = Object.keys(MAT_LABELS)
+    .map((m) => `<option value="${m}"${existing && existing.mat === m ? ' selected' : ''}>${MAT_LABELS[m]}</option>`)
+    .join('');
+  const html = `<div style="display:flex;flex-direction:column;gap:10px">
     <div><label>${t('inv.material')}</label><select id="sup-mat">${matOpts}</select></div>
-    <div><label>${t('inv.supplierName')}</label><input type="text" id="sup-name" value="${existing?esc(existing.name):''}" placeholder="e.g. Agrobs GmbH" /></div>
-    <div><label>${t('inv.supplierUrl')}</label><input type="text" id="sup-url" value="${existing&&existing.url?esc(existing.url):''}" placeholder="https://..." /></div>
-    <div><label>${t('inv.supplierPhone')}</label><input type="text" id="sup-phone" value="${existing&&existing.phone?esc(existing.phone):''}" placeholder="+49..." /></div>
-    <div><label>${t('inv.supplierNotes')}</label><input type="text" id="sup-notes" value="${existing&&existing.notes?esc(existing.notes):''}" placeholder="e.g. order number, contact person" /></div>
+    <div><label>${t('inv.supplierName')}</label><input type="text" id="sup-name" value="${existing ? esc(existing.name) : ''}" placeholder="e.g. Agrobs GmbH" /></div>
+    <div><label>${t('inv.supplierUrl')}</label><input type="text" id="sup-url" value="${existing && existing.url ? esc(existing.url) : ''}" placeholder="https://..." /></div>
+    <div><label>${t('inv.supplierPhone')}</label><input type="text" id="sup-phone" value="${existing && existing.phone ? esc(existing.phone) : ''}" placeholder="+49..." /></div>
+    <div><label>${t('inv.supplierNotes')}</label><input type="text" id="sup-notes" value="${existing && existing.notes ? esc(existing.notes) : ''}" placeholder="e.g. order number, contact person" /></div>
   </div>`;
-  document.getElementById('m-title').textContent=existing?t('inv.editSupplier'):t('inv.addSupplier');
-  document.getElementById('m-body').innerHTML=html;
-  document.getElementById('m-ok').textContent=existing?t('inv.editSupplier'):t('inv.addSupplier');
-  confirmCb=async()=>{
-    const s={mat:document.getElementById('sup-mat').value,name:document.getElementById('sup-name').value.trim(),url:document.getElementById('sup-url').value.trim(),phone:document.getElementById('sup-phone').value.trim(),notes:document.getElementById('sup-notes').value.trim()};
-    if(!s.name){alert(t('zones.nameRequired'));return}
-    if(existing)s.id=existing.id;
-    const r=await apiPost('/api/suppliers',s);
-    if(r&&r.id&&!existing){s.id=r.id;suppliers.push(s)}
-    else if(existing){Object.assign(existing,s)}
-    renderSuppliers();renderInvStock();
-    setFb('ok',t('inv.supplierSaved'));
+  document.getElementById('m-title').textContent = existing ? t('inv.editSupplier') : t('inv.addSupplier');
+  document.getElementById('m-body').innerHTML = html;
+  document.getElementById('m-ok').textContent = existing ? t('inv.editSupplier') : t('inv.addSupplier');
+  confirmCb = async () => {
+    const s = {
+      mat: document.getElementById('sup-mat').value,
+      name: document.getElementById('sup-name').value.trim(),
+      url: document.getElementById('sup-url').value.trim(),
+      phone: document.getElementById('sup-phone').value.trim(),
+      notes: document.getElementById('sup-notes').value.trim()
+    };
+    if (!s.name) {
+      alert(t('zones.nameRequired'));
+      return;
+    }
+    if (existing) s.id = existing.id;
+    const r = await apiPost('/api/suppliers', s);
+    if (r && r.id && !existing) {
+      s.id = r.id;
+      suppliers.push(s);
+    } else if (existing) {
+      Object.assign(existing, s);
+    }
+    renderSuppliers();
+    renderInvStock();
+    setFb('ok', t('inv.supplierSaved'));
   };
   document.getElementById('m-confirm').classList.add('open');
 }
 
-async function removeSupplier(id){
-  const s=suppliers.find(x=>x.id===id);
-  if(!s)return;
-  confirm2(t('inv.deleteSupplier'),'Remove '+s.name+' ('+MAT_LABELS[s.mat]+')?',t('inv.deleteSupplier'),async()=>{
-    await apiDelete('/api/suppliers/'+id);
-    suppliers=suppliers.filter(x=>x.id!==id);
-    renderSuppliers();renderInvStock();
-    setFb('ok',t('inv.supplierDeleted'));
-  });
+async function removeSupplier(id) {
+  const s = suppliers.find((x) => x.id === id);
+  if (!s) return;
+  confirm2(
+    t('inv.deleteSupplier'),
+    'Remove ' + s.name + ' (' + MAT_LABELS[s.mat] + ')?',
+    t('inv.deleteSupplier'),
+    async () => {
+      await apiDelete('/api/suppliers/' + id);
+      suppliers = suppliers.filter((x) => x.id !== id);
+      renderSuppliers();
+      renderInvStock();
+      setFb('ok', t('inv.supplierDeleted'));
+    }
+  );
 }
 
-function getSuppliersForMat(mat){
-  return suppliers.filter(s=>s.mat===mat);
+function getSuppliersForMat(mat) {
+  return suppliers.filter((s) => s.mat === mat);
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
-function setStatus(el,msg,ok){el.style.color=ok?'var(--c-green-dark)':'var(--c-red-dark)';el.textContent=msg}
-async function downloadBackup(){
-  const pw=document.getElementById('backup-dl-pw').value;
-  const st=document.getElementById('backup-dl-status');
-  if(!pw||pw.length<8){setStatus(st,t('users.minPw'),false);return}
-  setStatus(st,'Preparing backup…',true);
-  try{
-    const r=await authFetch('/api/backup/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-    if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Download failed',false);return}
-    const blob=await r.blob();
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    const cd=r.headers.get('content-disposition')||'';
-    const m=cd.match(/filename="(.+?)"/);
-    a.download=m?m[1]:'meisterpilze_backup.enc';
-    a.click();URL.revokeObjectURL(a.href);
-    setStatus(st,'Backup downloaded.',true);
-    document.getElementById('backup-dl-pw').value='';
-  }catch(err){setStatus(st,'Download failed',false)}
+function setStatus(el, msg, ok) {
+  el.style.color = ok ? 'var(--c-green-dark)' : 'var(--c-red-dark)';
+  el.textContent = msg;
 }
-function restoreBackup(){
-  const file=document.getElementById('restore-file').files[0];
-  const pw=document.getElementById('backup-restore-pw').value;
-  const st=document.getElementById('backup-restore-status');
-  if(!file){setStatus(st,'Select a .enc backup file.',false);return}
-  if(!pw){setStatus(st,'Enter the decryption password.',false);return}
-  confirm2(t('settings.restoreBackup')||'Restore this backup?',t('settings.restoreMsg')||'Replaces ALL data on the server for all users. Cannot be undone.',t('settings.restoreConfirm')||'Yes, restore',async()=>{
-    setStatus(st,'Restoring…',true);
-    try{
-      const buf=await file.arrayBuffer();
-      const r=await authFetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/octet-stream','x-backup-password':pw},body:buf});
-      if(!r.ok){const e=await r.json().catch(()=>({}));setStatus(st,e.error||'Restore failed',false);return}
-      setStatus(st,'Restored successfully. Reloading…',true);
-      document.getElementById('backup-restore-pw').value='';
-      setTimeout(()=>window.location.reload(),1500);
-    }catch(err){setStatus(st,'Restore failed',false)}
-  });
+async function downloadBackup() {
+  const pw = document.getElementById('backup-dl-pw').value;
+  const st = document.getElementById('backup-dl-status');
+  if (!pw || pw.length < 8) {
+    setStatus(st, t('users.minPw'), false);
+    return;
+  }
+  setStatus(st, 'Preparing backup…', true);
+  try {
+    const r = await authFetch('/api/backup/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      setStatus(st, e.error || 'Download failed', false);
+      return;
+    }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const cd = r.headers.get('content-disposition') || '';
+    const m = cd.match(/filename="(.+?)"/);
+    a.download = m ? m[1] : 'meisterpilze_backup.enc';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus(st, 'Backup downloaded.', true);
+    document.getElementById('backup-dl-pw').value = '';
+  } catch (err) {
+    setStatus(st, 'Download failed', false);
+  }
+}
+function restoreBackup() {
+  const file = document.getElementById('restore-file').files[0];
+  const pw = document.getElementById('backup-restore-pw').value;
+  const st = document.getElementById('backup-restore-status');
+  if (!file) {
+    setStatus(st, 'Select a .enc backup file.', false);
+    return;
+  }
+  if (!pw) {
+    setStatus(st, 'Enter the decryption password.', false);
+    return;
+  }
+  confirm2(
+    t('settings.restoreBackup') || 'Restore this backup?',
+    t('settings.restoreMsg') || 'Replaces ALL data on the server for all users. Cannot be undone.',
+    t('settings.restoreConfirm') || 'Yes, restore',
+    async () => {
+      setStatus(st, 'Restoring…', true);
+      try {
+        const buf = await file.arrayBuffer();
+        const r = await authFetch('/api/backup/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream', 'x-backup-password': pw },
+          body: buf
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          setStatus(st, e.error || 'Restore failed', false);
+          return;
+        }
+        setStatus(st, 'Restored successfully. Reloading…', true);
+        document.getElementById('backup-restore-pw').value = '';
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err) {
+        setStatus(st, 'Restore failed', false);
+      }
+    }
+  );
 }
 
 // ─── ZONES (Location Management) ────────────────────────────
-const ROLE_LABELS={spawn:'zones.roleSpawn',incubation:'zones.roleIncubation',fruiting:'zones.roleFruiting',contaminated:'zones.roleContaminated'};
-const ROLE_ORDER=['spawn','incubation','fruiting','contaminated'];
-function renderZones(){
-  const el=document.getElementById('zones-list');
-  if(!el)return;
-  if(!zones.length){el.innerHTML='<div class="empty">'+esc(t('zones.empty'))+'</div>';return}
+const ROLE_LABELS = {
+  spawn: 'zones.roleSpawn',
+  incubation: 'zones.roleIncubation',
+  fruiting: 'zones.roleFruiting',
+  contaminated: 'zones.roleContaminated'
+};
+const ROLE_ORDER = ['spawn', 'incubation', 'fruiting', 'contaminated'];
+function renderZones() {
+  const el = document.getElementById('zones-list');
+  if (!el) return;
+  if (!zones.length) {
+    el.innerHTML = '<div class="empty">' + esc(t('zones.empty')) + '</div>';
+    return;
+  }
   // Group zones by role in canonical order; unknown roles go last.
-  const groups={};
-  ROLE_ORDER.forEach(r=>{groups[r]=[]});
-  const extraRoles=[];
-  zones.forEach(z=>{
-    if(groups[z.role])groups[z.role].push(z);
-    else{
-      if(!groups[z.role]){groups[z.role]=[];extraRoles.push(z.role)}
+  const groups = {};
+  ROLE_ORDER.forEach((r) => {
+    groups[r] = [];
+  });
+  const extraRoles = [];
+  zones.forEach((z) => {
+    if (groups[z.role]) groups[z.role].push(z);
+    else {
+      if (!groups[z.role]) {
+        groups[z.role] = [];
+        extraRoles.push(z.role);
+      }
       groups[z.role].push(z);
     }
   });
   // Within each group: sort by sortOrder (fallback to name for stability).
-  Object.keys(groups).forEach(role=>{
-    groups[role].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+  Object.keys(groups).forEach((role) => {
+    groups[role].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
   });
-  const renderZone=z=>{
-    const zoneBags=getZoneBags(z.id);
-    const bagCount=Object.keys(zoneBags).length;
-    const rackIds=new Set(z.racks.map(r=>r.id));
-    const directCount=Object.values(zoneBags).filter(b=>!rackIds.has(b.loc)).length;
-    const rackHtml=z.racks.length
-      ?z.racks.map(r=>{
-        const rBags=Object.keys(getRackBags(r.id)).length;
-        return`<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags===0?`<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>`:''}</span>`;
-      }).join('')
-      :'<span style="color:var(--c-text-muted);font-size:11px">'+t('zones.noRacks')+'</span>';
-    return`<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
+  const renderZone = (z) => {
+    const zoneBags = getZoneBags(z.id);
+    const bagCount = Object.keys(zoneBags).length;
+    const rackIds = new Set(z.racks.map((r) => r.id));
+    const directCount = Object.values(zoneBags).filter((b) => !rackIds.has(b.loc)).length;
+    const rackHtml = z.racks.length
+      ? z.racks
+          .map((r) => {
+            const rBags = Object.keys(getRackBags(r.id)).length;
+            return `<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags === 0 ? `<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>` : ''}</span>`;
+          })
+          .join('')
+      : '<span style="color:var(--c-text-muted);font-size:11px">' + t('zones.noRacks') + '</span>';
+    return `<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
         <span class="zone-row-name">${esc(z.name)}</span>
-        <span class="badge">${esc(t(ROLE_LABELS[z.role])||z.role)}</span>
-        <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity?bagCount+' / '+z.maxCapacity+' Bags':tp('dash.bags',bagCount)}</span>
-        ${directCount>0?`<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags',{count:directCount}))}</span>`:''}
-        ${directCount>0&&z.racks.length?`<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>`:''}
+        <span class="badge">${esc(t(ROLE_LABELS[z.role]) || z.role)}</span>
+        <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity ? bagCount + ' / ' + z.maxCapacity + ' Bags' : tp('dash.bags', bagCount)}</span>
+        ${directCount > 0 ? `<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags', { count: directCount }))}</span>` : ''}
+        ${directCount > 0 && z.racks.length ? `<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>` : ''}
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="rename-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('batch.zones.rename'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
         <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
-        ${bagCount===0
-          ?`<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
-          :`<button class="btn btn-sm btn-r" disabled title="${esc(t('zones.hasBags',{count:bagCount}))}" style="font-size:11px;opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`}
+        ${
+          bagCount === 0
+            ? `<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
+            : `<button class="btn btn-sm btn-r" disabled title="${esc(t('zones.hasBags', { count: bagCount }))}" style="font-size:11px;opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`
+        }
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
       <div class="zone-qr-panel" id="zone-qr-${esc(z.id)}" style="display:none"></div>
     </div>`;
   };
-  const orderedRoles=[...ROLE_ORDER,...extraRoles];
-  el.innerHTML=orderedRoles.map(role=>{
-    const zs=groups[role];
-    if(!zs||!zs.length)return'';
-    const label=esc(t(ROLE_LABELS[role])||role);
-    const header=`<div class="zone-group-header">${label}</div>`;
-    return header+zs.map(renderZone).join('');
-  }).join('');
+  const orderedRoles = [...ROLE_ORDER, ...extraRoles];
+  el.innerHTML = orderedRoles
+    .map((role) => {
+      const zs = groups[role];
+      if (!zs || !zs.length) return '';
+      const label = esc(t(ROLE_LABELS[role]) || role);
+      const header = `<div class="zone-group-header">${label}</div>`;
+      return header + zs.map(renderZone).join('');
+    })
+    .join('');
 }
 // Drag-and-drop state for zone reordering.
-let draggedZoneId=null;
-let draggedZoneRole=null;
-function clearZoneDropHints(){
-  document.querySelectorAll('.zone-row.zone-drop-before,.zone-row.zone-drop-after').forEach(r=>{
-    r.classList.remove('zone-drop-before','zone-drop-after');
+let draggedZoneId = null;
+let draggedZoneRole = null;
+function clearZoneDropHints() {
+  document.querySelectorAll('.zone-row.zone-drop-before,.zone-row.zone-drop-after').forEach((r) => {
+    r.classList.remove('zone-drop-before', 'zone-drop-after');
   });
 }
-function onZoneDragStart(e){
-  const handle=e.target.closest('.zone-drag-handle');
-  if(!handle){return}
-  const row=handle.closest('.zone-row');
-  if(!row){return}
-  draggedZoneId=row.dataset.zoneId;
-  draggedZoneRole=row.dataset.zoneRole;
-  if(e.dataTransfer){
-    e.dataTransfer.effectAllowed='move';
-    try{e.dataTransfer.setData('text/plain',draggedZoneId)}catch(_){}
-    try{
-      const rect=row.getBoundingClientRect();
-      e.dataTransfer.setDragImage(row,e.clientX-rect.left,e.clientY-rect.top);
-    }catch(_){}
+function onZoneDragStart(e) {
+  const handle = e.target.closest('.zone-drag-handle');
+  if (!handle) {
+    return;
+  }
+  const row = handle.closest('.zone-row');
+  if (!row) {
+    return;
+  }
+  draggedZoneId = row.dataset.zoneId;
+  draggedZoneRole = row.dataset.zoneRole;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', draggedZoneId);
+    } catch (_) {}
+    try {
+      const rect = row.getBoundingClientRect();
+      e.dataTransfer.setDragImage(row, e.clientX - rect.left, e.clientY - rect.top);
+    } catch (_) {}
   }
   // Delay the dragging class so the browser snapshots the row before we dim it.
-  setTimeout(()=>{row.classList.add('zone-dragging')},0);
+  setTimeout(() => {
+    row.classList.add('zone-dragging');
+  }, 0);
 }
-function onZoneDragOver(e){
-  if(!draggedZoneId)return;
-  const row=e.target.closest('.zone-row');
-  if(!row||row.dataset.zoneRole!==draggedZoneRole||row.dataset.zoneId===draggedZoneId){
-    clearZoneDropHints();return;
+function onZoneDragOver(e) {
+  if (!draggedZoneId) return;
+  const row = e.target.closest('.zone-row');
+  if (!row || row.dataset.zoneRole !== draggedZoneRole || row.dataset.zoneId === draggedZoneId) {
+    clearZoneDropHints();
+    return;
   }
   e.preventDefault();
-  if(e.dataTransfer)e.dataTransfer.dropEffect='move';
-  const rect=row.getBoundingClientRect();
-  const before=(e.clientY-rect.top)<rect.height/2;
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  const rect = row.getBoundingClientRect();
+  const before = e.clientY - rect.top < rect.height / 2;
   clearZoneDropHints();
-  row.classList.add(before?'zone-drop-before':'zone-drop-after');
+  row.classList.add(before ? 'zone-drop-before' : 'zone-drop-after');
 }
-function onZoneDrop(e){
-  if(!draggedZoneId)return;
-  const row=e.target.closest('.zone-row');
-  if(!row||row.dataset.zoneRole!==draggedZoneRole||row.dataset.zoneId===draggedZoneId){
-    clearZoneDropHints();return;
+function onZoneDrop(e) {
+  if (!draggedZoneId) return;
+  const row = e.target.closest('.zone-row');
+  if (!row || row.dataset.zoneRole !== draggedZoneRole || row.dataset.zoneId === draggedZoneId) {
+    clearZoneDropHints();
+    return;
   }
   e.preventDefault();
-  const rect=row.getBoundingClientRect();
-  const before=(e.clientY-rect.top)<rect.height/2;
-  const targetId=row.dataset.zoneId;
-  const sourceId=draggedZoneId;
-  const role=draggedZoneRole;
+  const rect = row.getBoundingClientRect();
+  const before = e.clientY - rect.top < rect.height / 2;
+  const targetId = row.dataset.zoneId;
+  const sourceId = draggedZoneId;
+  const role = draggedZoneRole;
   clearZoneDropHints();
-  reorderZoneWithinRole(sourceId,targetId,before,role);
+  reorderZoneWithinRole(sourceId, targetId, before, role);
 }
-function onZoneDragEnd(){
-  document.querySelectorAll('.zone-row.zone-dragging').forEach(r=>r.classList.remove('zone-dragging'));
+function onZoneDragEnd() {
+  document.querySelectorAll('.zone-row.zone-dragging').forEach((r) => r.classList.remove('zone-dragging'));
   clearZoneDropHints();
-  draggedZoneId=null;
-  draggedZoneRole=null;
+  draggedZoneId = null;
+  draggedZoneRole = null;
 }
-async function reorderZoneWithinRole(sourceId,targetId,before,role){
-  const sameRole=zones
-    .filter(x=>x.role===role)
-    .sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
-  const srcIdx=sameRole.findIndex(x=>x.id===sourceId);
-  if(srcIdx<0)return;
-  const [src]=sameRole.splice(srcIdx,1);
-  let tgtIdx=sameRole.findIndex(x=>x.id===targetId);
-  if(tgtIdx<0)sameRole.push(src);
-  else sameRole.splice(before?tgtIdx:tgtIdx+1,0,src);
+async function reorderZoneWithinRole(sourceId, targetId, before, role) {
+  const sameRole = zones
+    .filter((x) => x.role === role)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+  const srcIdx = sameRole.findIndex((x) => x.id === sourceId);
+  if (srcIdx < 0) return;
+  const [src] = sameRole.splice(srcIdx, 1);
+  let tgtIdx = sameRole.findIndex((x) => x.id === targetId);
+  if (tgtIdx < 0) sameRole.push(src);
+  else sameRole.splice(before ? tgtIdx : tgtIdx + 1, 0, src);
   // Build full order: roles in canonical order + any extras, each group in its new local order.
-  const groups={};
-  ROLE_ORDER.forEach(r=>{groups[r]=[]});
-  const extra=[];
-  zones.forEach(x=>{
-    if(x.role===role)return;
-    if(!groups[x.role]){groups[x.role]=[];extra.push(x.role)}
+  const groups = {};
+  ROLE_ORDER.forEach((r) => {
+    groups[r] = [];
+  });
+  const extra = [];
+  zones.forEach((x) => {
+    if (x.role === role) return;
+    if (!groups[x.role]) {
+      groups[x.role] = [];
+      extra.push(x.role);
+    }
     groups[x.role].push(x);
   });
-  groups[role]=sameRole;
-  Object.keys(groups).forEach(r=>{
-    if(r!==role)groups[r].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.name.localeCompare(b.name));
+  groups[role] = sameRole;
+  Object.keys(groups).forEach((r) => {
+    if (r !== role) groups[r].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
   });
-  const fullOrder=[...ROLE_ORDER,...extra].flatMap(r=>groups[r]||[]).map(x=>x.id);
+  const fullOrder = [...ROLE_ORDER, ...extra].flatMap((r) => groups[r] || []).map((x) => x.id);
   // Optimistic local update so the UI moves immediately.
-  fullOrder.forEach((id,idx)=>{
-    const zz=zones.find(x=>x.id===id);
-    if(zz)zz.sortOrder=idx+1;
+  fullOrder.forEach((id, idx) => {
+    const zz = zones.find((x) => x.id === id);
+    if (zz) zz.sortOrder = idx + 1;
   });
   renderZones();
-  try{
-    const res=await apiPost('/api/zones/reorder',{order:fullOrder});
-    if(res&&res.error){alert(res.error);await loadData()}
-  }catch(err){
-    console.error('reorder zones error:',err);
-    alert(t('zones.errorReorder',{err:err.message||'unknown error'}));
+  try {
+    const res = await apiPost('/api/zones/reorder', { order: fullOrder });
+    if (res && res.error) {
+      alert(res.error);
+      await loadData();
+    }
+  } catch (err) {
+    console.error('reorder zones error:', err);
+    alert(t('zones.errorReorder', { err: err.message || 'unknown error' }));
     await loadData();
   }
 }
-async function addZone(){
-  const nameRaw=document.getElementById('zone-name').value.trim();
+async function addZone() {
+  const nameRaw = document.getElementById('zone-name').value.trim();
   // ID is derived from uppercase version for stability; display name keeps user casing
-  const id=nameRaw.toUpperCase().replace(/[^A-Z0-9]/g,'_').replace(/^_+|_+$/g,'');
-  if(!id||id.length<2){alert(t('zones.errShort'));return}
-  if(nameRaw.length>50){alert(t('zones.errLong'));return}
-  if(!/^[A-Z]/.test(id)){alert(t('zones.errIdStart'));return}
-  const dup=zones.find(z=>z.id===id);
-  if(dup){alert(t('zones.errExists')+' ('+dup.name+')');return}
-  const role=document.getElementById('zone-role').value;
-  const color=document.getElementById('zone-color').value;
-  const racksRaw=document.getElementById('zone-racks').value.trim();
-  const racks=racksRaw?[...new Set(racksRaw.split(',').map(r=>id+'_'+r.trim().toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(r=>r!==id+'_'))]:[];
-  if(racks.some(r=>r===id+'_'||r.length<=id.length+1)){alert(t('zones.errRackEmpty'));return}
-  if(racks.length>50){alert(t('zones.errTooManyRacks'));return}
-  const capVal=document.getElementById('zone-capacity').value.trim();
-  const maxCapacity=capVal?parseInt(capVal,10):null;
-  if(maxCapacity!==null&&(!Number.isFinite(maxCapacity)||maxCapacity<1)){alert(t('zones.errCapacity'));return}
-  try{
-    const now=new Date().toISOString();
-    const res=await apiPost('/api/zones',{id,name:nameRaw,role,color,sortOrder:zones.length+1,racks,maxCapacity,created:now});
-    if(res.error){alert(res.error);return}
-    zones.push({id,name:nameRaw,role,color,sortOrder:zones.length+1,maxCapacity,racks:racks.map((r,i)=>({id:r,sortOrder:i+1}))});
-    rebuildZoneConstants();renderZones();renderStatus();
-    document.getElementById('zone-name').value='';
-    document.getElementById('zone-racks').value='';
-    document.getElementById('zone-color').value='#10b981';
-    document.getElementById('zone-role').value='fruiting';
-    document.getElementById('zone-capacity').value='';
-  }catch(e){
-    console.error('addZone error:',e);
-    alert(t('zones.errorCreate',{err:e.message||'unknown error'}));
+  const id = nameRaw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!id || id.length < 2) {
+    alert(t('zones.errShort'));
+    return;
+  }
+  if (nameRaw.length > 50) {
+    alert(t('zones.errLong'));
+    return;
+  }
+  if (!/^[A-Z]/.test(id)) {
+    alert(t('zones.errIdStart'));
+    return;
+  }
+  const dup = zones.find((z) => z.id === id);
+  if (dup) {
+    alert(t('zones.errExists') + ' (' + dup.name + ')');
+    return;
+  }
+  const role = document.getElementById('zone-role').value;
+  const color = document.getElementById('zone-color').value;
+  const racksRaw = document.getElementById('zone-racks').value.trim();
+  const racks = racksRaw
+    ? [
+        ...new Set(
+          racksRaw
+            .split(',')
+            .map(
+              (r) =>
+                id +
+                '_' +
+                r
+                  .trim()
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, '')
+            )
+            .filter((r) => r !== id + '_')
+        )
+      ]
+    : [];
+  if (racks.some((r) => r === id + '_' || r.length <= id.length + 1)) {
+    alert(t('zones.errRackEmpty'));
+    return;
+  }
+  if (racks.length > 50) {
+    alert(t('zones.errTooManyRacks'));
+    return;
+  }
+  const capVal = document.getElementById('zone-capacity').value.trim();
+  const maxCapacity = capVal ? parseInt(capVal, 10) : null;
+  if (maxCapacity !== null && (!Number.isFinite(maxCapacity) || maxCapacity < 1)) {
+    alert(t('zones.errCapacity'));
+    return;
+  }
+  try {
+    const now = new Date().toISOString();
+    const res = await apiPost('/api/zones', {
+      id,
+      name: nameRaw,
+      role,
+      color,
+      sortOrder: zones.length + 1,
+      racks,
+      maxCapacity,
+      created: now
+    });
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    zones.push({
+      id,
+      name: nameRaw,
+      role,
+      color,
+      sortOrder: zones.length + 1,
+      maxCapacity,
+      racks: racks.map((r, i) => ({ id: r, sortOrder: i + 1 }))
+    });
+    rebuildZoneConstants();
+    renderZones();
+    renderStatus();
+    document.getElementById('zone-name').value = '';
+    document.getElementById('zone-racks').value = '';
+    document.getElementById('zone-color').value = '#10b981';
+    document.getElementById('zone-role').value = 'fruiting';
+    document.getElementById('zone-capacity').value = '';
+  } catch (e) {
+    console.error('addZone error:', e);
+    alert(t('zones.errorCreate', { err: e.message || 'unknown error' }));
   }
 }
-function renameZone(id){
-  const z=zones.find(x=>x.id===id);if(!z)return;
-  prompt2(t('batch.zones.renamePrompt',{old:z.name}),z.name,function(newName){
-    if(!newName||!newName.trim())return;
-    newName=newName.trim();
-    if(newName===z.name)return;
-    apiPatch('/api/zones/'+encodeURIComponent(id)+'/name',{name:newName}).then(res=>{
-      if(res&&res.error){alert(res.error);return}
-      z.name=newName;
-      renderZones();renderStatus();renderBatches();
+function renameZone(id) {
+  const z = zones.find((x) => x.id === id);
+  if (!z) return;
+  prompt2(t('batch.zones.renamePrompt', { old: z.name }), z.name, function (newName) {
+    if (!newName || !newName.trim()) return;
+    newName = newName.trim();
+    if (newName === z.name) return;
+    apiPatch('/api/zones/' + encodeURIComponent(id) + '/name', { name: newName }).then((res) => {
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      z.name = newName;
+      renderZones();
+      renderStatus();
+      renderBatches();
     });
   });
 }
-function removeZone(id){
-  const z=zones.find(x=>x.id===id);if(!z)return;
-  confirm2(t('zones.deleteTitle'),t('zones.deleteMsg',{name:z.name}),t('zones.delete'),async()=>{
-    const res=await apiDelete('/api/zones/'+encodeURIComponent(id));
-    if(res.error){alert(res.error);return}
-    zones=zones.filter(x=>x.id!==id);
-    rebuildZoneConstants();renderZones();renderStatus();
+function removeZone(id) {
+  const z = zones.find((x) => x.id === id);
+  if (!z) return;
+  confirm2(t('zones.deleteTitle'), t('zones.deleteMsg', { name: z.name }), t('zones.delete'), async () => {
+    const res = await apiDelete('/api/zones/' + encodeURIComponent(id));
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
+    zones = zones.filter((x) => x.id !== id);
+    rebuildZoneConstants();
+    renderZones();
+    renderStatus();
   });
 }
-function addRackToZone(zoneId){
-  prompt2(t('zones.rackPrompt'),'R3',function(name){
-    if(!name)return;
-    const rackId=zoneId+'_'+name.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
-    if(ALL_RACKS.includes(rackId)){alert(t('zones.errRackExists'));return}
-    apiPost('/api/zones/'+encodeURIComponent(zoneId)+'/racks',{id:rackId}).then(res=>{
-      if(res.error){alert(res.error);return}
-      const zone=zones.find(z=>z.id===zoneId);
-      if(zone)zone.racks.push({id:rackId,sortOrder:zone.racks.length+1});
-      rebuildZoneConstants();renderZones();renderStatus();
+function addRackToZone(zoneId) {
+  prompt2(t('zones.rackPrompt'), 'R3', function (name) {
+    if (!name) return;
+    const rackId =
+      zoneId +
+      '_' +
+      name
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+    if (ALL_RACKS.includes(rackId)) {
+      alert(t('zones.errRackExists'));
+      return;
+    }
+    apiPost('/api/zones/' + encodeURIComponent(zoneId) + '/racks', { id: rackId }).then((res) => {
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      const zone = zones.find((z) => z.id === zoneId);
+      if (zone) zone.racks.push({ id: rackId, sortOrder: zone.racks.length + 1 });
+      rebuildZoneConstants();
+      renderZones();
+      renderStatus();
     });
   });
 }
-function removeRack(rackId){
-  confirm2(t('zones.rackDeleteTitle'),t('zones.rackDeleteMsg',{name:rackId}),t('zones.delete'),()=>{
-    apiDelete('/api/racks/'+encodeURIComponent(rackId)).then(res=>{
-      if(res.error){alert(res.error);return}
-      zones.forEach(z=>{z.racks=z.racks.filter(r=>r.id!==rackId)});
-      rebuildZoneConstants();renderZones();renderStatus();
+function removeRack(rackId) {
+  confirm2(t('zones.rackDeleteTitle'), t('zones.rackDeleteMsg', { name: rackId }), t('zones.delete'), () => {
+    apiDelete('/api/racks/' + encodeURIComponent(rackId)).then((res) => {
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      zones.forEach((z) => {
+        z.racks = z.racks.filter((r) => r.id !== rackId);
+      });
+      rebuildZoneConstants();
+      renderZones();
+      renderStatus();
     });
   });
 }
-function bulkMoveToRack(zoneId){
-  const z=zones.find(x=>x.id===zoneId);if(!z||!z.racks.length)return;
-  const zoneBags=getZoneBags(zoneId);
-  const rackIds=new Set(z.racks.map(r=>r.id));
-  const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
-  if(!directBags.length)return;
-  const m=document.getElementById('m-locmove');
-  document.getElementById('lm-title').textContent=t('zones.moveToRackTitle',{count:directBags.length});
-  document.getElementById('lm-info').textContent=zoneDisplayName(zoneId);
-  document.getElementById('lm-confirm').style.display='none';
-  const grid=document.getElementById('lm-grid');
-  grid.style.display='flex';
-  grid.innerHTML=z.racks.map(r=>{
-    const rBags=Object.keys(getRackBags(r.id)).length;
-    return`<button class="btn btn-sm" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="font-size:12px;padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
-  }).join('');
+function bulkMoveToRack(zoneId) {
+  const z = zones.find((x) => x.id === zoneId);
+  if (!z || !z.racks.length) return;
+  const zoneBags = getZoneBags(zoneId);
+  const rackIds = new Set(z.racks.map((r) => r.id));
+  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(b.loc));
+  if (!directBags.length) return;
+  const m = document.getElementById('m-locmove');
+  document.getElementById('lm-title').textContent = t('zones.moveToRackTitle', { count: directBags.length });
+  document.getElementById('lm-info').textContent = zoneDisplayName(zoneId);
+  document.getElementById('lm-confirm').style.display = 'none';
+  const grid = document.getElementById('lm-grid');
+  grid.style.display = 'flex';
+  grid.innerHTML = z.racks
+    .map((r) => {
+      const rBags = Object.keys(getRackBags(r.id)).length;
+      return `<button class="btn btn-sm" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="font-size:12px;padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
+    })
+    .join('');
   m.classList.add('open');
 }
-async function executeBulkMoveToRack(zoneId,rackId){
-  const z=zones.find(x=>x.id===zoneId);if(!z)return;
-  const zoneBags=getZoneBags(zoneId);
-  const rackIds=new Set(z.racks.map(r=>r.id));
-  const directBags=Object.entries(zoneBags).filter(([,b])=>!rackIds.has(b.loc));
-  if(!directBags.length)return;
-  const entries=directBags.map(([bagId,b])=>({action:'MOVE',batch:b.batchId,bag:bagId,from:b.loc,to:rackId,species:b.species,strain:b.strain,time:new Date().toISOString()}));
-  const res=await apiPost('/api/scan-log',{entries});
-  if(res.error){alert(res.error);return}
-  entries.forEach(e=>scanLog.push(e));
+async function executeBulkMoveToRack(zoneId, rackId) {
+  const z = zones.find((x) => x.id === zoneId);
+  if (!z) return;
+  const zoneBags = getZoneBags(zoneId);
+  const rackIds = new Set(z.racks.map((r) => r.id));
+  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(b.loc));
+  if (!directBags.length) return;
+  const entries = directBags.map(([bagId, b]) => ({
+    action: 'MOVE',
+    batch: b.batchId,
+    bag: bagId,
+    from: b.loc,
+    to: rackId,
+    species: b.species,
+    strain: b.strain,
+    time: new Date().toISOString()
+  }));
+  const res = await apiPost('/api/scan-log', { entries });
+  if (res.error) {
+    alert(res.error);
+    return;
+  }
+  entries.forEach((e) => scanLog.push(e));
   document.getElementById('m-locmove').classList.remove('open');
-  renderZones();renderStatus();
-  setFb('ok',t('zones.movedToRack',{count:directBags.length,rack:rackId}));
+  renderZones();
+  renderStatus();
+  setFb('ok', t('zones.movedToRack', { count: directBags.length, rack: rackId }));
 }
 
 // ─── ZONE QR CODES ──────────────────────────────────────────
-async function renderZoneQrPanel(zoneId){
-  const panel=document.getElementById('zone-qr-'+zoneId);
-  if(!panel)return;
+async function renderZoneQrPanel(zoneId) {
+  const panel = document.getElementById('zone-qr-' + zoneId);
+  if (!panel) return;
   // Toggle if already loaded
-  if(panel.dataset.loaded){
-    const show=panel.style.display==='none';
-    panel.style.display=show?'':'none';
-    const btn=panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
-    if(btn)btn.textContent=show?t('zones.hideQr'):t('zones.showQr');
+  if (panel.dataset.loaded) {
+    const show = panel.style.display === 'none';
+    panel.style.display = show ? '' : 'none';
+    const btn = panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
+    if (btn) btn.textContent = show ? t('zones.hideQr') : t('zones.showQr');
     return;
   }
-  panel.style.display='';
-  panel.dataset.loaded='1';
-  const btn=panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
-  if(btn)btn.textContent=t('zones.hideQr');
-  const z=zones.find(x=>x.id===zoneId);
-  if(!z)return;
-  const items=[zoneId,...z.racks.map(r=>r.id)];
-  const grid=document.createElement('div');
-  grid.className='zone-qr-grid';
-  for(const val of items){
-    const cell=document.createElement('div');
-    cell.className='zone-qr-cell';
-    const img=await makeQR(val);
-    if(img){img.style.cssText='width:80px;height:80px';cell.appendChild(img)}
-    const lbl=document.createElement('div');
-    lbl.className='zone-qr-label';
-    lbl.textContent=val;
+  panel.style.display = '';
+  panel.dataset.loaded = '1';
+  const btn = panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
+  if (btn) btn.textContent = t('zones.hideQr');
+  const z = zones.find((x) => x.id === zoneId);
+  if (!z) return;
+  const items = [zoneId, ...z.racks.map((r) => r.id)];
+  const grid = document.createElement('div');
+  grid.className = 'zone-qr-grid';
+  for (const val of items) {
+    const cell = document.createElement('div');
+    cell.className = 'zone-qr-cell';
+    const img = await makeQR(val);
+    if (img) {
+      img.style.cssText = 'width:80px;height:80px';
+      cell.appendChild(img);
+    }
+    const lbl = document.createElement('div');
+    lbl.className = 'zone-qr-label';
+    lbl.textContent = val;
     cell.appendChild(lbl);
     grid.appendChild(cell);
   }
-  panel.innerHTML='';
+  panel.innerHTML = '';
   panel.appendChild(grid);
 }
 
-async function printZoneQrBrowser(zoneId){
-  const z=zones.find(x=>x.id===zoneId);
-  if(!z)return;
-  const items=[zoneId,...z.racks.map(r=>r.id)];
-  await printQrSheet(items,z.name);
+async function printZoneQrBrowser(zoneId) {
+  const z = zones.find((x) => x.id === zoneId);
+  if (!z) return;
+  const items = [zoneId, ...z.racks.map((r) => r.id)];
+  await printQrSheet(items, z.name);
 }
 
-async function printAllZoneQrBrowser(){
-  const items=[...ZONES,...ALL_RACKS];
-  await printQrSheet(items,'All Zones');
+async function printAllZoneQrBrowser() {
+  const items = [...ZONES, ...ALL_RACKS];
+  await printQrSheet(items, 'All Zones');
 }
 
-async function printQrSheet(items,title){
-  const sheet=document.getElementById('ref-print-sheet');
-  sheet.innerHTML='';
-  const hdr=document.createElement('div');
-  hdr.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
-  hdr.textContent='Meisterpilze — QR Codes: '+title;
+async function printQrSheet(items, title) {
+  const sheet = document.getElementById('ref-print-sheet');
+  sheet.innerHTML = '';
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
+  hdr.textContent = 'Meisterpilze — QR Codes: ' + title;
   sheet.appendChild(hdr);
-  const row=document.createElement('div');
-  row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';
-  for(const val of items){
-    const cell=document.createElement('div');
-    cell.style.cssText='border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';
-    const img=await makeQR(val);
-    if(img){img.style.width='80px';img.style.height='80px';cell.appendChild(img)}
-    const lbl=document.createElement('div');
-    lbl.style.cssText='font-size:10px;font-weight:bold;font-family:Arial,sans-serif';
-    lbl.textContent=val;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';
+  for (const val of items) {
+    const cell = document.createElement('div');
+    cell.style.cssText =
+      'border:1px solid var(--c-border);border-radius:5px;padding:5px 7px;text-align:center;background:var(--c-surface);page-break-inside:avoid';
+    const img = await makeQR(val);
+    if (img) {
+      img.style.width = '80px';
+      img.style.height = '80px';
+      cell.appendChild(img);
+    }
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;font-weight:bold;font-family:Arial,sans-serif';
+    lbl.textContent = val;
     cell.appendChild(lbl);
     row.appendChild(cell);
   }
   sheet.appendChild(row);
-  setTimeout(()=>window.print(),600);
+  setTimeout(() => window.print(), 600);
 }
 
 // ─── ASSETS (Anlageinventar) ────────────────────────────────
-let editingAssetId=null;
-let selectedAssetIds=new Set();
+let editingAssetId = null;
+let selectedAssetIds = new Set();
 
-function formatEur(n){return n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'}
+function formatEur(n) {
+  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
 
-function computeDepreciation(asset,refDate){
-  const ref=refDate?new Date(refDate):new Date();
-  const entry=new Date(asset.entryDate);
-  const isGwg=asset.purchasePrice<=800;
-  if(asset.purchasePrice<=0||asset.usefulLife<=0)return{annualDepr:0,accumulated:0,bookValue:asset.purchasePrice,isGwg};
-  const annualDepr=asset.purchasePrice/asset.usefulLife;
+function computeDepreciation(asset, refDate) {
+  const ref = refDate ? new Date(refDate) : new Date();
+  const entry = new Date(asset.entryDate);
+  const isGwg = asset.purchasePrice <= 800;
+  if (asset.purchasePrice <= 0 || asset.usefulLife <= 0)
+    return { annualDepr: 0, accumulated: 0, bookValue: asset.purchasePrice, isGwg };
+  const annualDepr = asset.purchasePrice / asset.usefulLife;
   // Calculate elapsed days for prorated depreciation
-  let msElapsed=ref.getTime()-entry.getTime();
-  if(msElapsed<0)msElapsed=0;
-  const yearsElapsed=msElapsed/(365.25*24*60*60*1000);
-  let accumulated=Math.min(annualDepr*yearsElapsed,asset.purchasePrice);
-  accumulated=Math.round(accumulated*100)/100;
-  let bookValue=asset.purchasePrice-accumulated;
+  let msElapsed = ref.getTime() - entry.getTime();
+  if (msElapsed < 0) msElapsed = 0;
+  const yearsElapsed = msElapsed / (365.25 * 24 * 60 * 60 * 1000);
+  let accumulated = Math.min(annualDepr * yearsElapsed, asset.purchasePrice);
+  accumulated = Math.round(accumulated * 100) / 100;
+  let bookValue = asset.purchasePrice - accumulated;
   // Erinnerungswert: 1€ if fully depreciated but still active
-  if(bookValue<1&&asset.status==='aktiv'&&asset.purchasePrice>0)bookValue=1;
-  if(bookValue<0)bookValue=0;
-  bookValue=Math.round(bookValue*100)/100;
-  return{annualDepr:Math.round(annualDepr*100)/100,accumulated,bookValue,isGwg};
+  if (bookValue < 1 && asset.status === 'aktiv' && asset.purchasePrice > 0) bookValue = 1;
+  if (bookValue < 0) bookValue = 0;
+  bookValue = Math.round(bookValue * 100) / 100;
+  return { annualDepr: Math.round(annualDepr * 100) / 100, accumulated, bookValue, isGwg };
 }
 
-function nextAssetId(){
-  let max=0;
-  assets.forEach(a=>{const m=a.assetId.match(/^INV-(\d+)$/);if(m)max=Math.max(max,parseInt(m[1]))});
-  return'INV-'+String(max+1).padStart(4,'0');
+function nextAssetId() {
+  let max = 0;
+  assets.forEach((a) => {
+    const m = a.assetId.match(/^INV-(\d+)$/);
+    if (m) max = Math.max(max, parseInt(m[1]));
+  });
+  return 'INV-' + String(max + 1).padStart(4, '0');
 }
 
-function assetStatusBadge(s){return`<span class="badge badge-${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`}
+function assetStatusBadge(s) {
+  return `<span class="badge badge-${s}">${s.charAt(0).toUpperCase() + s.slice(1)}</span>`;
+}
 
-function renderAssets(){
-  const cat=document.getElementById('asset-cat-filter').value;
-  const stat=document.getElementById('asset-stat-filter').value;
-  const q=(document.getElementById('asset-search').value||'').toLowerCase().trim();
-  const now=new Date();
+function renderAssets() {
+  const cat = document.getElementById('asset-cat-filter').value;
+  const stat = document.getElementById('asset-stat-filter').value;
+  const q = (document.getElementById('asset-search').value || '').toLowerCase().trim();
+  const now = new Date();
 
-  let rows=assets.filter(a=>{
-    if(cat!=='all'&&a.category!==cat)return false;
-    if(stat!=='all'&&a.status!==stat)return false;
-    if(q){const hay=(a.assetId+' '+a.name+' '+(a.supplier||'')+' '+(a.serialNumber||'')+' '+(a.location||'')).toLowerCase();if(!hay.includes(q))return false}
-    return true;
-  }).sort((a,b)=>b.assetId.localeCompare(a.assetId));
+  let rows = assets
+    .filter((a) => {
+      if (cat !== 'all' && a.category !== cat) return false;
+      if (stat !== 'all' && a.status !== stat) return false;
+      if (q) {
+        const hay = (
+          a.assetId +
+          ' ' +
+          a.name +
+          ' ' +
+          (a.supplier || '') +
+          ' ' +
+          (a.serialNumber || '') +
+          ' ' +
+          (a.location || '')
+        ).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.assetId.localeCompare(a.assetId));
 
   // Stats
-  const aktiv=assets.filter(a=>a.status==='aktiv');
-  const totalPurchase=aktiv.reduce((s,a)=>s+a.purchasePrice,0);
-  const totalBook=aktiv.reduce((s,a)=>s+computeDepreciation(a).bookValue,0);
-  const gwgCount=aktiv.filter(a=>a.purchasePrice<=800).length;
-  document.getElementById('asset-stats').innerHTML=
-    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">${t('assets.total')}</div></div>`+
-    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">${t('assets.purchaseValueActive')}</div></div>`+
-    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">${t('assets.bookValueToday')}</div></div>`+
+  const aktiv = assets.filter((a) => a.status === 'aktiv');
+  const totalPurchase = aktiv.reduce((s, a) => s + a.purchasePrice, 0);
+  const totalBook = aktiv.reduce((s, a) => s + computeDepreciation(a).bookValue, 0);
+  const gwgCount = aktiv.filter((a) => a.purchasePrice <= 800).length;
+  document.getElementById('asset-stats').innerHTML =
+    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">${t('assets.total')}</div></div>` +
+    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">${t('assets.purchaseValueActive')}</div></div>` +
+    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">${t('assets.bookValueToday')}</div></div>` +
     `<div class="met"><div class="met-v">${gwgCount}</div><div class="met-l">${t('assets.gwg')}</div></div>`;
 
   // Table
-  const body=document.getElementById('assets-body');
-  if(!rows.length){body.innerHTML='<tr><td colspan="8" class="empty">Keine Anlagen erfasst. Klicke auf "Hinzufügen" um loszulegen.</td></tr>';return}
-  body.innerHTML=rows.map(a=>{
-    const d=computeDepreciation(a);
-    const gwg=d.isGwg?'<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>':'';
-    return`<tr>
+  const body = document.getElementById('assets-body');
+  if (!rows.length) {
+    body.innerHTML =
+      '<tr><td colspan="8" class="empty">Keine Anlagen erfasst. Klicke auf "Hinzufügen" um loszulegen.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows
+    .map((a) => {
+      const d = computeDepreciation(a);
+      const gwg = d.isGwg ? '<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>' : '';
+      return `<tr>
       <td style="font-family:monospace;font-size:11px;font-weight:500">${esc(a.assetId)}</td>
       <td>${esc(a.name)}${gwg}</td>
       <td>${esc(a.category)}</td>
       <td style="text-align:right">${formatEur(a.purchasePrice)}</td>
       <td style="text-align:right">${formatEur(d.bookValue)}</td>
       <td>${assetStatusBadge(a.status)}</td>
-      <td style="font-size:11px;color:var(--c-text-sec)">${esc(a.location)||'—'}</td>
+      <td style="font-size:11px;color:var(--c-text-sec)">${esc(a.location) || '—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.editBtn')}</button>
         <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.printBtn')}</button>
         <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:var(--c-red-dark)">×</button>
       </td>
-    </tr>`}).join('');
+    </tr>`;
+    })
+    .join('');
 }
 
-function resetAssetForm(){
-  editingAssetId=null;
-  document.getElementById('asset-name').value='';
-  document.getElementById('asset-category').value='Maschinen';
-  document.getElementById('asset-entry-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('asset-price').value='';
-  document.getElementById('asset-life').value='5';
-  document.getElementById('asset-depr-method').value='linear';
-  document.getElementById('asset-supplier').value='';
-  document.getElementById('asset-invoice').value='';
-  document.getElementById('asset-serial').value='';
-  document.getElementById('asset-location').value='';
-  document.getElementById('asset-status').value='aktiv';
-  document.getElementById('asset-exit-date').value='';
-  document.getElementById('asset-exit-row').style.display='none';
-  document.getElementById('asset-notes').value='';
-  document.getElementById('asset-id-preview').textContent=t('assets.newId',{id:nextAssetId()});
+function resetAssetForm() {
+  editingAssetId = null;
+  document.getElementById('asset-name').value = '';
+  document.getElementById('asset-category').value = 'Maschinen';
+  document.getElementById('asset-entry-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('asset-price').value = '';
+  document.getElementById('asset-life').value = '5';
+  document.getElementById('asset-depr-method').value = 'linear';
+  document.getElementById('asset-supplier').value = '';
+  document.getElementById('asset-invoice').value = '';
+  document.getElementById('asset-serial').value = '';
+  document.getElementById('asset-location').value = '';
+  document.getElementById('asset-status').value = 'aktiv';
+  document.getElementById('asset-exit-date').value = '';
+  document.getElementById('asset-exit-row').style.display = 'none';
+  document.getElementById('asset-notes').value = '';
+  document.getElementById('asset-id-preview').textContent = t('assets.newId', { id: nextAssetId() });
   // Fill location datalist
-  const locs=[...new Set(assets.map(a=>a.location).filter(Boolean))];
-  document.getElementById('asset-loc-list').innerHTML=locs.map(l=>`<option value="${esc(l)}">`).join('');
+  const locs = [...new Set(assets.map((a) => a.location).filter(Boolean))];
+  document.getElementById('asset-loc-list').innerHTML = locs.map((l) => `<option value="${esc(l)}">`).join('');
 }
 
-function assetStatusChange(){
-  const s=document.getElementById('asset-status').value;
-  document.getElementById('asset-exit-row').style.display=s==='aktiv'?'none':'block';
+function assetStatusChange() {
+  const s = document.getElementById('asset-status').value;
+  document.getElementById('asset-exit-row').style.display = s === 'aktiv' ? 'none' : 'block';
 }
 
-function editAsset(id){
-  const a=assets.find(x=>x.assetId===id);if(!a)return;
-  editingAssetId=id;
-  document.getElementById('asset-name').value=a.name;
-  document.getElementById('asset-category').value=a.category;
-  document.getElementById('asset-entry-date').value=a.entryDate;
-  document.getElementById('asset-price').value=a.purchasePrice;
-  document.getElementById('asset-life').value=a.usefulLife;
-  document.getElementById('asset-depr-method').value=a.depreciationMethod||'linear';
-  document.getElementById('asset-supplier').value=a.supplier||'';
-  document.getElementById('asset-invoice').value=a.invoiceNumber||'';
-  document.getElementById('asset-serial').value=a.serialNumber||'';
-  document.getElementById('asset-location').value=a.location||'';
-  document.getElementById('asset-status').value=a.status;
-  document.getElementById('asset-exit-date').value=a.exitDate||'';
-  document.getElementById('asset-exit-row').style.display=a.status==='aktiv'?'none':'block';
-  document.getElementById('asset-notes').value=a.notes||'';
-  document.getElementById('asset-id-preview').textContent=t('assets.editing',{id});
-  openStab('assets','add');
+function editAsset(id) {
+  const a = assets.find((x) => x.assetId === id);
+  if (!a) return;
+  editingAssetId = id;
+  document.getElementById('asset-name').value = a.name;
+  document.getElementById('asset-category').value = a.category;
+  document.getElementById('asset-entry-date').value = a.entryDate;
+  document.getElementById('asset-price').value = a.purchasePrice;
+  document.getElementById('asset-life').value = a.usefulLife;
+  document.getElementById('asset-depr-method').value = a.depreciationMethod || 'linear';
+  document.getElementById('asset-supplier').value = a.supplier || '';
+  document.getElementById('asset-invoice').value = a.invoiceNumber || '';
+  document.getElementById('asset-serial').value = a.serialNumber || '';
+  document.getElementById('asset-location').value = a.location || '';
+  document.getElementById('asset-status').value = a.status;
+  document.getElementById('asset-exit-date').value = a.exitDate || '';
+  document.getElementById('asset-exit-row').style.display = a.status === 'aktiv' ? 'none' : 'block';
+  document.getElementById('asset-notes').value = a.notes || '';
+  document.getElementById('asset-id-preview').textContent = t('assets.editing', { id });
+  openStab('assets', 'add');
 }
 
-function saveAsset(){
-  const name=document.getElementById('asset-name').value.trim();
-  const category=document.getElementById('asset-category').value;
-  const entryDate=document.getElementById('asset-entry-date').value;
-  const price=parseFloat(document.getElementById('asset-price').value);
-  const life=parseInt(document.getElementById('asset-life').value);
-  if(!name||!entryDate||isNaN(price)||price<0||isNaN(life)||life<1){alert(t('assets.fillRequired'));return}
-  const status=document.getElementById('asset-status').value;
-  const obj={
-    assetId:editingAssetId||nextAssetId(),
-    name,category,entryDate,
-    exitDate:status!=='aktiv'?document.getElementById('asset-exit-date').value||null:null,
-    purchasePrice:price,usefulLife:life,
-    depreciationMethod:document.getElementById('asset-depr-method').value,
-    supplier:document.getElementById('asset-supplier').value.trim()||null,
-    invoiceNumber:document.getElementById('asset-invoice').value.trim()||null,
-    serialNumber:document.getElementById('asset-serial').value.trim()||null,
-    location:document.getElementById('asset-location').value.trim()||null,
+function saveAsset() {
+  const name = document.getElementById('asset-name').value.trim();
+  const category = document.getElementById('asset-category').value;
+  const entryDate = document.getElementById('asset-entry-date').value;
+  const price = parseFloat(document.getElementById('asset-price').value);
+  const life = parseInt(document.getElementById('asset-life').value);
+  if (!name || !entryDate || isNaN(price) || price < 0 || isNaN(life) || life < 1) {
+    alert(t('assets.fillRequired'));
+    return;
+  }
+  const status = document.getElementById('asset-status').value;
+  const obj = {
+    assetId: editingAssetId || nextAssetId(),
+    name,
+    category,
+    entryDate,
+    exitDate: status !== 'aktiv' ? document.getElementById('asset-exit-date').value || null : null,
+    purchasePrice: price,
+    usefulLife: life,
+    depreciationMethod: document.getElementById('asset-depr-method').value,
+    supplier: document.getElementById('asset-supplier').value.trim() || null,
+    invoiceNumber: document.getElementById('asset-invoice').value.trim() || null,
+    serialNumber: document.getElementById('asset-serial').value.trim() || null,
+    location: document.getElementById('asset-location').value.trim() || null,
     status,
-    notes:document.getElementById('asset-notes').value.trim(),
-    created:editingAssetId?(assets.find(a=>a.assetId===editingAssetId)||{}).created||new Date().toISOString():new Date().toISOString()
+    notes: document.getElementById('asset-notes').value.trim(),
+    created: editingAssetId
+      ? (assets.find((a) => a.assetId === editingAssetId) || {}).created || new Date().toISOString()
+      : new Date().toISOString()
   };
-  if(editingAssetId){const i=assets.findIndex(a=>a.assetId===editingAssetId);if(i>=0)assets[i]=obj;else assets.push(obj)}
-  else assets.push(obj);
-  apiPost('/api/assets',obj);editingAssetId=null;
-  openStab('assets','list');
+  if (editingAssetId) {
+    const i = assets.findIndex((a) => a.assetId === editingAssetId);
+    if (i >= 0) assets[i] = obj;
+    else assets.push(obj);
+  } else assets.push(obj);
+  apiPost('/api/assets', obj);
+  editingAssetId = null;
+  openStab('assets', 'list');
 }
 
-function deleteAsset(id){
-  confirm2('Anlage löschen?','Die Anlage '+id+' wird unwiderruflich gelöscht.','Ja, löschen',()=>{
-    assets=assets.filter(a=>a.assetId!==id);apiDelete('/api/assets/'+encodeURIComponent(id));renderAssets();
+function deleteAsset(id) {
+  confirm2('Anlage löschen?', 'Die Anlage ' + id + ' wird unwiderruflich gelöscht.', 'Ja, löschen', () => {
+    assets = assets.filter((a) => a.assetId !== id);
+    apiDelete('/api/assets/' + encodeURIComponent(id));
+    renderAssets();
   });
 }
 
 // ─── ASSET EXPORT ───────────────────────────────────────────
-function initExportTab(){
-  const y=new Date().getFullYear();
-  document.getElementById('stichtag-date').value=y+'-12-31';
+function initExportTab() {
+  const y = new Date().getFullYear();
+  document.getElementById('stichtag-date').value = y + '-12-31';
 }
 
-function exportAssetCSV(){
-  const hdr=['Inventar-Nr','Bezeichnung','Kategorie','Anschaffungsdatum','Anschaffungskosten','Nutzungsdauer (J.)','Jahres-AfA','Kumulierte AfA','Buchwert','GWG','Status','Lieferant','Rechnungsnr','Seriennr','Standort','Abgangsdatum','Bemerkungen'];
-  const rows=assets.map(a=>{
-    const d=computeDepreciation(a);
-    return[a.assetId,a.name,a.category,fmtDE(a.entryDate),fmtNum(a.purchasePrice),a.usefulLife,fmtNum(d.annualDepr),fmtNum(d.accumulated),fmtNum(d.bookValue),d.isGwg?'Ja':'Nein',a.status,a.supplier||'',a.invoiceNumber||'',a.serialNumber||'',a.location||'',a.exitDate?fmtDE(a.exitDate):'',a.notes||''];
+function exportAssetCSV() {
+  const hdr = [
+    'Inventar-Nr',
+    'Bezeichnung',
+    'Kategorie',
+    'Anschaffungsdatum',
+    'Anschaffungskosten',
+    'Nutzungsdauer (J.)',
+    'Jahres-AfA',
+    'Kumulierte AfA',
+    'Buchwert',
+    'GWG',
+    'Status',
+    'Lieferant',
+    'Rechnungsnr',
+    'Seriennr',
+    'Standort',
+    'Abgangsdatum',
+    'Bemerkungen'
+  ];
+  const rows = assets.map((a) => {
+    const d = computeDepreciation(a);
+    return [
+      a.assetId,
+      a.name,
+      a.category,
+      fmtDE(a.entryDate),
+      fmtNum(a.purchasePrice),
+      a.usefulLife,
+      fmtNum(d.annualDepr),
+      fmtNum(d.accumulated),
+      fmtNum(d.bookValue),
+      d.isGwg ? 'Ja' : 'Nein',
+      a.status,
+      a.supplier || '',
+      a.invoiceNumber || '',
+      a.serialNumber || '',
+      a.location || '',
+      a.exitDate ? fmtDE(a.exitDate) : '',
+      a.notes || ''
+    ];
   });
-  const csv='\uFEFF'+[hdr,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventar_'+todayStr()+'.csv';a.click();
+  const csv =
+    '\uFEFF' +
+    [hdr, ...rows].map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inventar_' + todayStr() + '.csv';
+  a.click();
 }
 
-function fmtDE(iso){if(!iso)return'';const d=new Date(iso);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear()}
-function fmtNum(n){return String(Math.round(n*100)/100).replace('.',',')}
+function fmtDE(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+}
+function fmtNum(n) {
+  return String(Math.round(n * 100) / 100).replace('.', ',');
+}
 
-function renderStichtagReport(){
-  const ref=document.getElementById('stichtag-date').value;
-  if(!ref){alert(t('assets.chooseCutoff'));return}
-  const aktiv=assets.filter(a=>a.status==='aktiv'||(a.exitDate&&a.exitDate>ref));
-  let totalPurchase=0,totalBook=0,totalAccum=0;
-  const rows=aktiv.map(a=>{
-    const d=computeDepreciation(a,ref);
-    totalPurchase+=a.purchasePrice;totalBook+=d.bookValue;totalAccum+=d.accumulated;
-    return`<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
+function renderStichtagReport() {
+  const ref = document.getElementById('stichtag-date').value;
+  if (!ref) {
+    alert(t('assets.chooseCutoff'));
+    return;
+  }
+  const aktiv = assets.filter((a) => a.status === 'aktiv' || (a.exitDate && a.exitDate > ref));
+  let totalPurchase = 0,
+    totalBook = 0,
+    totalAccum = 0;
+  const rows = aktiv.map((a) => {
+    const d = computeDepreciation(a, ref);
+    totalPurchase += a.purchasePrice;
+    totalBook += d.bookValue;
+    totalAccum += d.accumulated;
+    return `<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
   });
-  document.getElementById('stichtag-result').innerHTML=
-    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">${t('cutoff.date',{date:fmtDE(ref),n:aktiv.length})}</div>`+
-    `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>`+
-    rows.join('')+
-    `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>`+
+  document.getElementById('stichtag-result').innerHTML =
+    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">${t('cutoff.date', { date: fmtDE(ref), n: aktiv.length })}</div>` +
+    `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>` +
+    rows.join('') +
+    `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>` +
     `</tbody></table></div>`;
 }
 
 // ─── ASSET LABELS ───────────────────────────────────────────
-function renderAssetLabelList(){
-  const el=document.getElementById('asset-label-list');
-  if(!assets.length){el.innerHTML='<div class="empty">Keine Anlagen vorhanden.</div>';return}
-  el.innerHTML=assets.filter(a=>a.status==='aktiv').map(a=>{
-    const chk=selectedAssetIds.has(a.assetId)?'checked':'';
-    return`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
+function renderAssetLabelList() {
+  const el = document.getElementById('asset-label-list');
+  if (!assets.length) {
+    el.innerHTML = '<div class="empty">Keine Anlagen vorhanden.</div>';
+    return;
+  }
+  el.innerHTML = assets
+    .filter((a) => a.status === 'aktiv')
+    .map((a) => {
+      const chk = selectedAssetIds.has(a.assetId) ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
       <input type="checkbox" ${chk} onchange="toggleAssetLabel('${esc(a.assetId)}',this.checked)">
       <span style="font-family:monospace;font-weight:500">${esc(a.assetId)}</span>
       <span style="color:var(--c-text-sec)">${esc(a.name)}</span>
       <span style="color:var(--c-text-muted);font-size:11px">${esc(a.category)}</span>
     </label>`;
-  }).join('');
+    })
+    .join('');
 }
 
-function toggleAssetLabel(id,on){if(on)selectedAssetIds.add(id);else selectedAssetIds.delete(id)}
-function toggleAllAssetLabels(on){
-  if(on)assets.filter(a=>a.status==='aktiv').forEach(a=>selectedAssetIds.add(a.assetId));
+function toggleAssetLabel(id, on) {
+  if (on) selectedAssetIds.add(id);
+  else selectedAssetIds.delete(id);
+}
+function toggleAllAssetLabels(on) {
+  if (on) assets.filter((a) => a.status === 'aktiv').forEach((a) => selectedAssetIds.add(a.assetId));
   else selectedAssetIds.clear();
   renderAssetLabelList();
 }
 
-function makeAssetZPL(ids){
-  const truncated=[];
-  const zpl=ids.map(id=>{
-    const a=assets.find(x=>x.assetId===id);if(!a)return'';
-    const numBc=barcodeByEntity.get('asset:'+id);
-    const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
-    const loc=(a.category||'')+(a.location?' / '+a.location:'');
-    const nameTrunc=a.name.length>28?a.name.slice(0,26)+'..':a.name;
-    if(a.name.length>28||loc.length>36) truncated.push(a.name||id);
-    const bc=bcParams(bcVal);
-    return'^XA^PW400^LL240^CI28^LH0,0'+
-      '^FO'+bc.x+',40^BY'+bc.mw+',2.0,72^BCN,72,N,N,N^FD'+bcVal+'^FS'+
-      '^FO0,120^FB400,1,0,C^A0N,30,30^FD'+id+'^FS'+
-      '^FO0,156^FB400,1,0,C^A0N,22,22^FD'+nameTrunc+'^FS'+
-      '^FO0,182^FB400,1,0,C^A0N,18,18^FD'+loc.slice(0,36)+'^FS'+
-      '^XZ';
-  }).filter(Boolean).join('\n');
-  if(truncated.length) alert(t('print.warnTruncated',{id:truncated.join(', ')}));
+function makeAssetZPL(ids) {
+  const truncated = [];
+  const zpl = ids
+    .map((id) => {
+      const a = assets.find((x) => x.assetId === id);
+      if (!a) return '';
+      const numBc = barcodeByEntity.get('asset:' + id);
+      const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
+      const loc = (a.category || '') + (a.location ? ' / ' + a.location : '');
+      const nameTrunc = a.name.length > 28 ? a.name.slice(0, 26) + '..' : a.name;
+      if (a.name.length > 28 || loc.length > 36) truncated.push(a.name || id);
+      const bc = bcParams(bcVal);
+      return (
+        '^XA^PW400^LL240^CI28^LH0,0' +
+        '^FO' +
+        bc.x +
+        ',40^BY' +
+        bc.mw +
+        ',2.0,72^BCN,72,N,N,N^FD' +
+        bcVal +
+        '^FS' +
+        '^FO0,120^FB400,1,0,C^A0N,30,30^FD' +
+        id +
+        '^FS' +
+        '^FO0,156^FB400,1,0,C^A0N,22,22^FD' +
+        nameTrunc +
+        '^FS' +
+        '^FO0,182^FB400,1,0,C^A0N,18,18^FD' +
+        loc.slice(0, 36) +
+        '^FS' +
+        '^XZ'
+      );
+    })
+    .filter(Boolean)
+    .join('\n');
+  if (truncated.length) alert(t('print.warnTruncated', { id: truncated.join(', ') }));
   return zpl;
 }
 
-async function printAssetLabels(){
-  const ids=[...selectedAssetIds];
-  if(!ids.length){alert(t('assets.selectAsset'));return}
-  const zpl=makeAssetZPL(ids);
-  const err=await sendToPrinter(zpl);
-  if(err)alert(t('assets.printError')+err);
-  else setFb('ok',ids.length+' Inventar-Etikett'+(ids.length!==1?'en':'')+' gedruckt');
+async function printAssetLabels() {
+  const ids = [...selectedAssetIds];
+  if (!ids.length) {
+    alert(t('assets.selectAsset'));
+    return;
+  }
+  const zpl = makeAssetZPL(ids);
+  const err = await sendToPrinter(zpl);
+  if (err) alert(t('assets.printError') + err);
+  else setFb('ok', ids.length + ' Inventar-Etikett' + (ids.length !== 1 ? 'en' : '') + ' gedruckt');
 }
 
-function downloadAssetZPL(){
-  const ids=[...selectedAssetIds];
-  if(!ids.length){alert(t('assets.selectAsset'));return}
-  const zpl=makeAssetZPL(ids);
-  const blob=new Blob([zpl],{type:'text/plain'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventar_labels.zpl';a.click();
+function downloadAssetZPL() {
+  const ids = [...selectedAssetIds];
+  if (!ids.length) {
+    alert(t('assets.selectAsset'));
+    return;
+  }
+  const zpl = makeAssetZPL(ids);
+  const blob = new Blob([zpl], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inventar_labels.zpl';
+  a.click();
 }
 
-async function quickPrintAsset(id){
-  const zpl=makeAssetZPL([id]);
-  const err=await sendToPrinter(zpl);
-  if(err){const blob=new Blob([zpl],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+'_label.zpl';a.click()}
+async function quickPrintAsset(id) {
+  const zpl = makeAssetZPL([id]);
+  const err = await sendToPrinter(zpl);
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = id + '_label.zpl';
+    a.click();
+  }
 }
 
 // ─── MUSHROOM STRAINS ────────────────────────────────────────
-function fillStrainSelects(){
-  const opts='<option value="">'+t('strains.selectPlaceholder')+'</option>'+
-    mushroomStrains.map(ms=>`<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
-  const hint=mushroomStrains.length===0;
-  ['nb-strain-sel','lw-st'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    const cur=el.value;
-    el.innerHTML=opts;
-    if(cur)el.value=cur;
+function fillStrainSelects() {
+  const opts =
+    '<option value="">' +
+    t('strains.selectPlaceholder') +
+    '</option>' +
+    mushroomStrains.map((ms) => `<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
+  const hint = mushroomStrains.length === 0;
+  ['nb-strain-sel', 'lw-st'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const cur = el.value;
+    el.innerHTML = opts;
+    if (cur) el.value = cur;
   });
-  const nbHint=document.getElementById('nb-no-strains-hint');
-  if(nbHint)nbHint.style.display=hint?'block':'none';
+  const nbHint = document.getElementById('nb-no-strains-hint');
+  if (nbHint) nbHint.style.display = hint ? 'block' : 'none';
 }
 
-function renderStrains(){
-  const body=document.getElementById('strains-body');
-  if(!body)return;
-  if(!mushroomStrains.length){
-    body.innerHTML='<tr><td colspan="4" class="empty">Noch keine Pilzsorten angelegt.</td></tr>';
+function renderStrains() {
+  const body = document.getElementById('strains-body');
+  if (!body) return;
+  if (!mushroomStrains.length) {
+    body.innerHTML = '<tr><td colspan="4" class="empty">Noch keine Pilzsorten angelegt.</td></tr>';
     return;
   }
   // Count usage
-  const batchCount=id=>batches.filter(b=>b.strainId===id).length;
-  const cultureCount=id=>cultures.filter(c=>c.strainId===id).length;
-  body.innerHTML=mushroomStrains.map(ms=>{
-    const bc=batchCount(ms.id),cc=cultureCount(ms.id);
-    const inUse=bc>0||cc>0;
-    const usageParts=[];
-    if(bc>0)usageParts.push(bc+' '+t('strains.batches'));
-    if(cc>0)usageParts.push(cc+' '+t('strains.cultures'));
-    const usageText=usageParts.join(', ')||'—';
-    return`<tr>
+  const batchCount = (id) => batches.filter((b) => b.strainId === id).length;
+  const cultureCount = (id) => cultures.filter((c) => c.strainId === id).length;
+  body.innerHTML = mushroomStrains
+    .map((ms) => {
+      const bc = batchCount(ms.id),
+        cc = cultureCount(ms.id);
+      const inUse = bc > 0 || cc > 0;
+      const usageParts = [];
+      if (bc > 0) usageParts.push(bc + ' ' + t('strains.batches'));
+      if (cc > 0) usageParts.push(cc + ' ' + t('strains.cultures'));
+      const usageText = usageParts.join(', ') || '—';
+      return `<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
-      <td style="font-size:12px;color:var(--c-text-sec)">${ms.description?esc(ms.description):'<span style="color:var(--c-text-muted)">—</span>'}</td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('assets.editBtn')}</button>
-        <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse?'disabled title="'+t('strains.deleteProtected')+'"':''} style="padding:2px 7px">&#x2715;</button>
+        <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse ? 'disabled title="' + t('strains.deleteProtected') + '"' : ''} style="padding:2px 7px">&#x2715;</button>
       </td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 }
 
-function saveMStrain(){
-  const name=document.getElementById('ms-name').value.trim();
-  const kuerzel=document.getElementById('ms-kuerzel').value.trim().toUpperCase();
-  const desc=document.getElementById('ms-desc').value.trim();
-  const editId=document.getElementById('ms-edit-id').value;
-  if(!name||!kuerzel){alert(t('strains.required'));return}
-  if(kuerzel.length!==4){alert(t('strains.kuerzelLength'));return}
-  const payload={name,kuerzel,description:desc};
-  const req=editId?apiPatch('/api/mushroom-strains/'+editId,payload):apiPost('/api/mushroom-strains',payload);
-  req.then(r=>{
-    if(r&&r.error){alert(t('common.error')+': '+r.error);return}
-    if(!editId&&r&&r.id){mushroomStrains.push({id:r.id,name,kuerzel,description:desc,created:new Date().toISOString()})}
-    else if(editId){const ms=mushroomStrains.find(x=>x.id===parseInt(editId));if(ms){ms.name=name;ms.kuerzel=kuerzel;ms.description=desc}}
-    mushroomStrains.sort((a,b)=>a.name.localeCompare(b.name));
+function saveMStrain() {
+  const name = document.getElementById('ms-name').value.trim();
+  const kuerzel = document.getElementById('ms-kuerzel').value.trim().toUpperCase();
+  const desc = document.getElementById('ms-desc').value.trim();
+  const editId = document.getElementById('ms-edit-id').value;
+  if (!name || !kuerzel) {
+    alert(t('strains.required'));
+    return;
+  }
+  if (kuerzel.length !== 4) {
+    alert(t('strains.kuerzelLength'));
+    return;
+  }
+  const payload = { name, kuerzel, description: desc };
+  const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
+  req.then((r) => {
+    if (r && r.error) {
+      alert(t('common.error') + ': ' + r.error);
+      return;
+    }
+    if (!editId && r && r.id) {
+      mushroomStrains.push({ id: r.id, name, kuerzel, description: desc, created: new Date().toISOString() });
+    } else if (editId) {
+      const ms = mushroomStrains.find((x) => x.id === parseInt(editId));
+      if (ms) {
+        ms.name = name;
+        ms.kuerzel = kuerzel;
+        ms.description = desc;
+      }
+    }
+    mushroomStrains.sort((a, b) => a.name.localeCompare(b.name));
     fillStrainSelects();
     renderStrains();
     cancelMStrain();
   });
 }
 
-function editMStrain(id){
-  const ms=mushroomStrains.find(x=>x.id===id);if(!ms)return;
-  document.getElementById('ms-name').value=ms.name;
-  document.getElementById('ms-kuerzel').value=ms.kuerzel;
-  document.getElementById('ms-desc').value=ms.description||'';
-  document.getElementById('ms-edit-id').value=id;
-  document.getElementById('ms-save-btn').textContent=t('strains.saveChanges');
-  document.getElementById('ms-cancel-btn').style.display='';
+function editMStrain(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  document.getElementById('ms-name').value = ms.name;
+  document.getElementById('ms-kuerzel').value = ms.kuerzel;
+  document.getElementById('ms-desc').value = ms.description || '';
+  document.getElementById('ms-edit-id').value = id;
+  document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
+  document.getElementById('ms-cancel-btn').style.display = '';
   document.getElementById('ms-name').focus();
 }
 
-function cancelMStrain(){
-  document.getElementById('ms-name').value='';
-  document.getElementById('ms-kuerzel').value='';
-  document.getElementById('ms-desc').value='';
-  document.getElementById('ms-edit-id').value='';
-  document.getElementById('ms-save-btn').setAttribute('data-i18n','strains.save');
-  document.getElementById('ms-save-btn').textContent=t('strains.save');
-  document.getElementById('ms-cancel-btn').style.display='none';
+function cancelMStrain() {
+  document.getElementById('ms-name').value = '';
+  document.getElementById('ms-kuerzel').value = '';
+  document.getElementById('ms-desc').value = '';
+  document.getElementById('ms-edit-id').value = '';
+  document.getElementById('ms-save-btn').setAttribute('data-i18n', 'strains.save');
+  document.getElementById('ms-save-btn').textContent = t('strains.save');
+  document.getElementById('ms-cancel-btn').style.display = 'none';
 }
 
-function deleteMStrain(id){
-  const ms=mushroomStrains.find(x=>x.id===id);if(!ms)return;
-  confirm2('Pilzsorte löschen?','Pilzsorte "'+ms.name+'" wirklich löschen?','Löschen',()=>{
-    apiDelete('/api/mushroom-strains/'+id).then(r=>{
-      if(r&&r.error){alert(t('common.error')+': '+r.error);return}
-      mushroomStrains=mushroomStrains.filter(x=>x.id!==id);
-      fillStrainSelects();renderStrains();
+function deleteMStrain(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  confirm2('Pilzsorte löschen?', 'Pilzsorte "' + ms.name + '" wirklich löschen?', 'Löschen', () => {
+    apiDelete('/api/mushroom-strains/' + id).then((r) => {
+      if (r && r.error) {
+        alert(t('common.error') + ': ' + r.error);
+        return;
+      }
+      mushroomStrains = mushroomStrains.filter((x) => x.id !== id);
+      fillStrainSelects();
+      renderStrains();
     });
   });
 }
 
-function nbStrainChanged(){
+function nbStrainChanged() {
   nbPreview();
 }
 
 // ─── CULTURES ────────────────────────────────────────────────
-const ctBadge=t=>{const m={MC:'badge-mc',PD:'badge-pd',LC:'badge-lc',G2G:'badge-g2g'};return`<span class="badge ${m[t]||''}">${t}</span>`}
-const csBadge=s=>{const m={active:'badge-active',stored:'badge-stored',used:'badge-used',contam:'badge-contam'};return`<span class="badge ${m[s]||''}">${s}</span>`}
+const ctBadge = (t) => {
+  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g' };
+  return `<span class="badge ${m[t] || ''}">${t}</span>`;
+};
+const csBadge = (s) => {
+  const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', contam: 'badge-contam' };
+  return `<span class="badge ${m[s] || ''}">${s}</span>`;
+};
 // Culture strain display: prefer strainName (kuerzel) from mushroom_strains lookup,
 // fall back to legacy free-text strain field for historical rows without strain_id.
-function cultureStrainDisplay(c){
-  if(c.strainName){
-    return esc(c.strainName)+(c.strainKuerzel?' <span style="font-size:10px;color:var(--c-text-muted)">('+esc(c.strainKuerzel)+')</span>':'');
+function cultureStrainDisplay(c) {
+  if (c.strainName) {
+    return (
+      esc(c.strainName) +
+      (c.strainKuerzel
+        ? ' <span style="font-size:10px;color:var(--c-text-muted)">(' + esc(c.strainKuerzel) + ')</span>'
+        : '')
+    );
   }
-  return esc(c.strain)||'\u2014';
+  return esc(c.strain) || '\u2014';
 }
-function fillCultureSelect(id,types){const s=document.getElementById(id);if(!s)return;const cur=s.value;s.innerHTML='<option value="">— none —</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&(!types||types.includes(c.type))).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)} (${esc(c.type)})</option>`).join('');if(cur)s.value=cur}
-function renderCultures(){
-  const type=document.getElementById('cult-type').value,stat=document.getElementById('cult-stat').value,body=document.getElementById('cultures-body');
-  const activeState=tableSort.cultures||{key:'created',dir:'desc'};
-  updateSortIndicators('cultures',activeState);
-  const filtered=cultures.filter(c=>(type==='all'||c.type===type)&&(stat==='all'||c.status===stat));
-  const rows=applyTableSort(filtered,activeState,(c,k)=>{
-    if(k==='strain')return c.strainName||c.strain||'';
+function fillCultureSelect(id, types) {
+  const s = document.getElementById(id);
+  if (!s) return;
+  const cur = s.value;
+  s.innerHTML =
+    '<option value="">— none —</option>' +
+    cultures
+      .filter((c) => (c.status === 'active' || c.status === 'stored') && (!types || types.includes(c.type)))
+      .map(
+        (c) =>
+          `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName || c.species)}/${esc(c.strainKuerzel || c.strain)} (${esc(c.type)})</option>`
+      )
+      .join('');
+  if (cur) s.value = cur;
+}
+function renderCultures() {
+  const type = document.getElementById('cult-type').value,
+    stat = document.getElementById('cult-stat').value,
+    body = document.getElementById('cultures-body');
+  const activeState = tableSort.cultures || { key: 'created', dir: 'desc' };
+  updateSortIndicators('cultures', activeState);
+  const filtered = cultures.filter((c) => (type === 'all' || c.type === type) && (stat === 'all' || c.status === stat));
+  const rows = applyTableSort(filtered, activeState, (c, k) => {
+    if (k === 'strain') return c.strainName || c.strain || '';
     return c[k];
   });
-  if(!rows.length){body.innerHTML='<tr><td colspan="9" class="empty">'+t('lab.noCultures')+'</td></tr>';return}
-  body.innerHTML=rows.map(c=>`<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${cultureStrainDisplay(c)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes)||'\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status==='active'?'selected':''}>${t('lab.active')}</option><option value="stored" ${c.status==='stored'?'selected':''}>${t('lab.stored')}</option><option value="used" ${c.status==='used'?'selected':''}>${t('lab.usedUp')}</option><option value="contam" ${c.status==='contam'?'selected':''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`).join('');
-}
-function setCultureStatus(id,status){const c=cultures.find(x=>x.id===id);if(c){c.status=status;apiPatch('/api/cultures/'+encodeURIComponent(id),{status});renderCultures()}}
-function deleteCulture(id){
-  const c=cultures.find(x=>x.id===id);if(!c)return;
-  const childCount=cultures.filter(x=>x.parentId===id).length;
-  const batchCount=batches.filter(b=>b.sourceId===id).length;
-  let warning='';
-  if(childCount||batchCount){
-    const parts=[];
-    if(childCount)parts.push(t('lab.deleteChildren',{n:childCount}));
-    if(batchCount)parts.push(t('lab.deleteBatches',{n:batchCount}));
-    warning=' \u26A0 '+parts.join(' ')+' '+t('lab.deleteRefWarn');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="9" class="empty">' + t('lab.noCultures') + '</td></tr>';
+    return;
   }
-  confirm2(t('lab.deleteCultureTitle'),t('lab.deleteCultureMsg',{id:id})+warning,t('lab.deleteCulture'),()=>{
-    cultures=cultures.filter(x=>x.id!==id);
-    apiDelete('/api/cultures/'+encodeURIComponent(id));
-    renderCultures();renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);
+  body.innerHTML = rows
+    .map(
+      (c) =>
+        `<tr><td style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td>${ctBadge(c.type)}</td><td>${spDot(c.species)}${esc(c.species)}</td><td>${cultureStrainDisplay(c)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${csBadge(c.status)}</td><td style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+    )
+    .join('');
+}
+function setCultureStatus(id, status) {
+  const c = cultures.find((x) => x.id === id);
+  if (c) {
+    c.status = status;
+    apiPatch('/api/cultures/' + encodeURIComponent(id), { status });
+    renderCultures();
+  }
+}
+function deleteCulture(id) {
+  const c = cultures.find((x) => x.id === id);
+  if (!c) return;
+  const childCount = cultures.filter((x) => x.parentId === id).length;
+  const batchCount = batches.filter((b) => b.sourceId === id).length;
+  let warning = '';
+  if (childCount || batchCount) {
+    const parts = [];
+    if (childCount) parts.push(t('lab.deleteChildren', { n: childCount }));
+    if (batchCount) parts.push(t('lab.deleteBatches', { n: batchCount }));
+    warning = ' \u26A0 ' + parts.join(' ') + ' ' + t('lab.deleteRefWarn');
+  }
+  confirm2(t('lab.deleteCultureTitle'), t('lab.deleteCultureMsg', { id: id }) + warning, t('lab.deleteCulture'), () => {
+    cultures = cultures.filter((x) => x.id !== id);
+    apiDelete('/api/cultures/' + encodeURIComponent(id));
+    renderCultures();
+    renderLabLog();
+    fillCultureSelect('nb-culture', ['PD', 'LC']);
+    fillCultureSelect('gs-culture', ['PD', 'LC']);
   });
 }
 
 // ─── LAB WORK ────────────────────────────────────────────────
-function lwUpdate(){
-  const type=document.getElementById('lw-type').value;
-  const pr=document.getElementById('lw-parent-row'),sr=document.getElementById('lw-source-row'),ql=document.getElementById('lw-qty-lbl');
-  const kbRows=document.getElementById('lw-kb-rows'),qtyRow=document.getElementById('lw-qty-row');
-  const strainTextRow=document.getElementById('lw-strain-text-row');
-  const gsResult=document.getElementById('gs-result');
+function lwUpdate() {
+  const type = document.getElementById('lw-type').value;
+  const pr = document.getElementById('lw-parent-row'),
+    sr = document.getElementById('lw-source-row'),
+    ql = document.getElementById('lw-qty-lbl');
+  const kbRows = document.getElementById('lw-kb-rows'),
+    qtyRow = document.getElementById('lw-qty-row');
+  const strainTextRow = document.getElementById('lw-strain-text-row');
+  const gsResult = document.getElementById('gs-result');
   // Hide KB result when switching away from KB
-  if(type!=='KB'&&gsResult)gsResult.style.display='none';
-  if(type==='KB'){
-    pr.style.display='none';sr.style.display='none';
-    if(qtyRow)qtyRow.style.display='none';
-    if(kbRows)kbRows.style.display='flex';
-    if(strainTextRow)strainTextRow.style.display='block';
-    document.getElementById('lw-prev-box').style.display='none';
-    fillCultureSelect('gs-culture',['PD','LC']);
+  if (type !== 'KB' && gsResult) gsResult.style.display = 'none';
+  if (type === 'KB') {
+    pr.style.display = 'none';
+    sr.style.display = 'none';
+    if (qtyRow) qtyRow.style.display = 'none';
+    if (kbRows) kbRows.style.display = 'flex';
+    if (strainTextRow) strainTextRow.style.display = 'block';
+    document.getElementById('lw-prev-box').style.display = 'none';
+    fillCultureSelect('gs-culture', ['PD', 'LC']);
     gsPreview();
-  }else{
-    if(kbRows)kbRows.style.display='none';
-    if(strainTextRow)strainTextRow.style.display='none';
-    if(qtyRow)qtyRow.style.display='block';
-    if(type==='MC'){pr.style.display='none';sr.style.display='block';ql.textContent=t('lab.qtyTubes')}
-    else if(type==='PD'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.parentMcPdLc');fillParentSelect(['MC','PD','LC']);sr.style.display='none';ql.textContent=t('lab.qtyDishes')}
-    else if(type==='LC'){pr.style.display='block';document.getElementById('lw-parent-lbl').textContent=t('lab.sourcePdMc');fillParentSelect(['MC','PD']);sr.style.display='none';ql.textContent=t('lab.qtyFlasks')}
-    else{pr.style.display='none';sr.style.display='none';ql.textContent=t('lab.qtyBags')}
+  } else {
+    if (kbRows) kbRows.style.display = 'none';
+    if (strainTextRow) strainTextRow.style.display = 'none';
+    if (qtyRow) qtyRow.style.display = 'block';
+    if (type === 'MC') {
+      pr.style.display = 'none';
+      sr.style.display = 'block';
+      ql.textContent = t('lab.qtyTubes');
+    } else if (type === 'PD') {
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.parentMcPdLc');
+      fillParentSelect(['MC', 'PD', 'LC']);
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtyDishes');
+    } else if (type === 'LC') {
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.sourcePdMc');
+      fillParentSelect(['MC', 'PD']);
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtyFlasks');
+    } else {
+      pr.style.display = 'none';
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtyBags');
+    }
     lwPreview();
   }
 }
-function fillParentSelect(types){const s=document.getElementById('lw-parent');const cur=s.value;s.innerHTML='<option value="">'+t('lab.noneNewIsolation')+'</option>'+cultures.filter(c=>(c.status==='active'||c.status==='stored')&&types.includes(c.type)).map(c=>`<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName||c.species)}/${esc(c.strainKuerzel||c.strain)}</option>`).join('');if(cur)s.value=cur}
-function lwPreview(){
-  const type=document.getElementById('lw-type').value;
-  const strainId=parseInt(document.getElementById('lw-st')?.value)||null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  const sp=ms?ms.name:'';
-  const qty=parseInt(document.getElementById('lw-qty').value)||1;
-  const box=document.getElementById('lw-prev-box'),prev=document.getElementById('lw-prev');
-  if(!sp||type==='G2G'||type==='KB'){box.style.display='none';return}
-  const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
-  const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
-  prev.textContent=Array.from({length:qty},(_,i)=>prefix+String(existing+i+1).padStart(2,'0')).join('\n');
-  box.style.display='block';
+function fillParentSelect(types) {
+  const s = document.getElementById('lw-parent');
+  const cur = s.value;
+  s.innerHTML =
+    '<option value="">' +
+    t('lab.noneNewIsolation') +
+    '</option>' +
+    cultures
+      .filter((c) => (c.status === 'active' || c.status === 'stored') && types.includes(c.type))
+      .map(
+        (c) =>
+          `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName || c.species)}/${esc(c.strainKuerzel || c.strain)}</option>`
+      )
+      .join('');
+  if (cur) s.value = cur;
+}
+function lwPreview() {
+  const type = document.getElementById('lw-type').value;
+  const strainId = parseInt(document.getElementById('lw-st')?.value) || null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  const sp = ms ? ms.name : '';
+  const qty = parseInt(document.getElementById('lw-qty').value) || 1;
+  const box = document.getElementById('lw-prev-box'),
+    prev = document.getElementById('lw-prev');
+  if (!sp || type === 'G2G' || type === 'KB') {
+    box.style.display = 'none';
+    return;
+  }
+  const prefix = type + '-' + abbrev(sp) + '-' + todayStr() + '-';
+  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
+  prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(existing + i + 1).padStart(2, '0')).join(
+    '\n'
+  );
+  box.style.display = 'block';
 }
 // lw-st change and lw-qty input listeners live in initEventListeners()
-function logLabWork(){
-  const type=document.getElementById('lw-type').value;
-  const strainSel=document.getElementById('lw-st');
-  const strainId=strainSel?parseInt(strainSel.value)||null:null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  if(!ms){alert(t('lab.selectPilzsorte'));return}
-  const sp=ms.name,st=ms.kuerzel;
-  const parentId=document.getElementById('lw-parent')?.value||null,qty=parseInt(document.getElementById('lw-qty').value)||1;
-  if(type==='G2G'){alert(t('lab.g2gNote'));return}
-  const prefix=type+'-'+abbrev(sp)+'-'+todayStr()+'-';
-  const existing=cultures.filter(c=>c.id.startsWith(prefix)).length;
-  const newC=Array.from({length:qty},(_,i)=>({id:prefix+String(existing+i+1).padStart(2,'0'),type,species:sp,strain:st||'',strainId,strainName:sp,strainKuerzel:st||null,parentId:parentId||null,source:document.getElementById('lw-source')?.value.trim()||null,status:'active',notes:document.getElementById('lw-notes').value.trim(),created:new Date().toISOString()}));
-  cultures.push(...newC);apiPost('/api/cultures',{cultures:newC}).then(r=>{if(r&&r.cultureBarcodes){for(const[id,bc]of Object.entries(r.cultureBarcodes)){barcodeRegistry.set(bc,{type:'culture',id});barcodeByEntity.set('culture:'+id,bc)}}});
-  document.getElementById('lw-notes').value='';document.getElementById('lw-qty').value='1';
-  if(document.getElementById('lw-source'))document.getElementById('lw-source').value='';
-  renderLabLog();fillCultureSelect('nb-culture',['PD','LC']);fillCultureSelect('gs-culture',['PD','LC']);lwPreview();
-  const ids=newC.map(c=>c.id).join(', ');
-  if(confirm(t('lab.logged',{n:newC.length,type:type})+'\n'+ids+'\n\n'+t('lab.printNow'))){
-    selectedLabIds=new Set(newC.map(c=>c.id));go('print','n-print');
-    setTimeout(()=>{openStab('print','lab');renderLabList();renderLabPreview();},150);
+function logLabWork() {
+  const type = document.getElementById('lw-type').value;
+  const strainSel = document.getElementById('lw-st');
+  const strainId = strainSel ? parseInt(strainSel.value) || null : null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  if (!ms) {
+    alert(t('lab.selectPilzsorte'));
+    return;
+  }
+  const sp = ms.name,
+    st = ms.kuerzel;
+  const parentId = document.getElementById('lw-parent')?.value || null,
+    qty = parseInt(document.getElementById('lw-qty').value) || 1;
+  if (type === 'G2G') {
+    alert(t('lab.g2gNote'));
+    return;
+  }
+  const prefix = type + '-' + abbrev(sp) + '-' + todayStr() + '-';
+  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
+  const newC = Array.from({ length: qty }, (_, i) => ({
+    id: prefix + String(existing + i + 1).padStart(2, '0'),
+    type,
+    species: sp,
+    strain: st || '',
+    strainId,
+    strainName: sp,
+    strainKuerzel: st || null,
+    parentId: parentId || null,
+    source: document.getElementById('lw-source')?.value.trim() || null,
+    status: 'active',
+    notes: document.getElementById('lw-notes').value.trim(),
+    created: new Date().toISOString()
+  }));
+  cultures.push(...newC);
+  apiPost('/api/cultures', { cultures: newC }).then((r) => {
+    if (r && r.cultureBarcodes) {
+      for (const [id, bc] of Object.entries(r.cultureBarcodes)) {
+        barcodeRegistry.set(bc, { type: 'culture', id });
+        barcodeByEntity.set('culture:' + id, bc);
+      }
+    }
+  });
+  document.getElementById('lw-notes').value = '';
+  document.getElementById('lw-qty').value = '1';
+  if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
+  renderLabLog();
+  fillCultureSelect('nb-culture', ['PD', 'LC']);
+  fillCultureSelect('gs-culture', ['PD', 'LC']);
+  lwPreview();
+  const ids = newC.map((c) => c.id).join(', ');
+  if (confirm(t('lab.logged', { n: newC.length, type: type }) + '\n' + ids + '\n\n' + t('lab.printNow'))) {
+    selectedLabIds = new Set(newC.map((c) => c.id));
+    go('print', 'n-print');
+    setTimeout(() => {
+      openStab('print', 'lab');
+      renderLabList();
+      renderLabPreview();
+    }, 150);
   }
 }
-function renderLabLog(){const body=document.getElementById('lab-log-body');const rows=[...cultures].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,50);body.innerHTML=rows.length?rows.map(c=>{const name=c.strainName||c.species||'';const kz=c.strainKuerzel||c.strain||'';return`<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId)||'\u2014'}</td><td>${spDot(name)}${esc(name)}${kz?' / '+esc(kz):''}</td></tr>`}).join(''):'<tr><td colspan="5" class="empty">'+t('lab.noLabWork')+'</td></tr>'}
+function renderLabLog() {
+  const body = document.getElementById('lab-log-body');
+  const rows = [...cultures].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 50);
+  body.innerHTML = rows.length
+    ? rows
+        .map((c) => {
+          const name = c.strainName || c.species || '';
+          const kz = c.strainKuerzel || c.strain || '';
+          return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td>${spDot(name)}${esc(name)}${kz ? ' / ' + esc(kz) : ''}</td></tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="5" class="empty">' + t('lab.noLabWork') + '</td></tr>';
+}
 
 // ─── GRAIN SPAWN (Lab tab) ──────────────────────────────────
-const genGrainBatchId=sp=>{const ab=abbrev(sp),dt=todayStr(),prefix='G-'+ab+'-'+dt;const n=batches.filter(b=>b.batchId.startsWith(prefix+'-')).length;return prefix+'-'+String(n+1).padStart(2,'0')};
-function gsSetWeight(kg){
-  document.getElementById('gs-weight').value=kg;
-  ['gs-wbtn-07','gs-wbtn-1','gs-wbtn-2','gs-wbtn-5'].forEach(id=>{
-    const btn=document.getElementById(id);if(!btn)return;
-    const btnKg=parseFloat(btn.textContent);
-    btn.className='btn btn-sm'+(btnKg===kg?' btn-p':'');
+const genGrainBatchId = (sp) => {
+  const ab = abbrev(sp),
+    dt = todayStr(),
+    prefix = 'G-' + ab + '-' + dt;
+  const n = batches.filter((b) => b.batchId.startsWith(prefix + '-')).length;
+  return prefix + '-' + String(n + 1).padStart(2, '0');
+};
+function gsSetWeight(kg) {
+  document.getElementById('gs-weight').value = kg;
+  ['gs-wbtn-07', 'gs-wbtn-1', 'gs-wbtn-2', 'gs-wbtn-5'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const btnKg = parseFloat(btn.textContent);
+    btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
   });
   gsPreview();
 }
-function gsPreview(){
-  const strainSel=document.getElementById('lw-st');
-  const strainId=strainSel?parseInt(strainSel.value)||null:null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  const sp=ms?ms.name:'';
-  const qty=parseInt(document.getElementById('gs-qty').value)||0;
-  const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
-  document.getElementById('gs-prev').textContent=(sp)?genGrainBatchId(sp)+' ('+qty+' bags)':'\u2014';
-  const el=document.getElementById('gs-mat-preview');
-  if(!qty||!bagKg){el.style.display='none';return}
-  const totalGrain=qty*bagKg;
-  const avail=inventory.stock?.grain||0;
-  const enough=avail>=totalGrain;
-  el.innerHTML=`<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${qty} \u00d7 ${bagKg} kg)<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough?'\u2713 '+t('batch.sufficient'):'\u26A0 '+t('batch.onlyEnoughFor',{n:Math.floor(avail/bagKg)})}`;
-  el.style.display='block';
+function gsPreview() {
+  const strainSel = document.getElementById('lw-st');
+  const strainId = strainSel ? parseInt(strainSel.value) || null : null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  const sp = ms ? ms.name : '';
+  const qty = parseInt(document.getElementById('gs-qty').value) || 0;
+  const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
+  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp) + ' (' + qty + ' bags)' : '\u2014';
+  const el = document.getElementById('gs-mat-preview');
+  if (!qty || !bagKg) {
+    el.style.display = 'none';
+    return;
+  }
+  const totalGrain = qty * bagKg;
+  const avail = inventory.stock?.grain || 0;
+  const enough = avail >= totalGrain;
+  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${qty} \u00d7 ${bagKg} kg)<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.onlyEnoughFor', { n: Math.floor(avail / bagKg) })}`;
+  el.style.display = 'block';
 }
-function createGrainBatch(){
-  const strainSel=document.getElementById('lw-st');
-  const strainId=strainSel?parseInt(strainSel.value)||null:null;
-  const ms=strainId?mushroomStrains.find(x=>x.id===strainId):null;
-  if(!strainId||!ms){alert(t('strains.noStrainsHint'));return}
-  const sp=ms.name,st=ms.kuerzel;
-  const qty=parseInt(document.getElementById('gs-qty').value)||0;
-  const days=parseInt(document.getElementById('gs-days').value)||14;
-  const bagKg=parseFloat(document.getElementById('gs-weight').value)||0;
-  if(qty<1){alert(t('batch.fillQty'));return}
-  if(!bagKg){alert(t('batch.enterWeight'));return}
-  const lwStrainText=(document.getElementById('lw-strain-text')||{}).value?.trim()||'';
-  const batchId=genGrainBatchId(sp);spColor(sp);
-  const due=new Date();due.setDate(due.getDate()+days);
-  const bags=Array.from({length:qty},(_,i)=>batchId+'-'+String(i+1).padStart(2,'0'));
-  batches.push({batchId,species:sp,strain:st,strainId,strainName:ms.name,strainKuerzel:ms.kuerzel,qty,days,substrate:null,bagKg,batchType:'grain',sourceId:document.getElementById('gs-culture').value||null,notes:document.getElementById('lw-notes').value.trim(),strainText:lwStrainText,created:new Date().toISOString(),due:due.toISOString(),bags});
-  const batchObj=batches[batches.length-1];
-  apiPost('/api/batches',batchObj).then(r=>{
-    if(r&&r.error){
-      const i=batches.findIndex(b=>b.batchId===batchObj.batchId);
-      if(i>=0)batches.splice(i,1);
-      alert(t('batch.saveFailed')+r.error);
-      renderBatches();renderStatus();
+function createGrainBatch() {
+  const strainSel = document.getElementById('lw-st');
+  const strainId = strainSel ? parseInt(strainSel.value) || null : null;
+  const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
+  if (!strainId || !ms) {
+    alert(t('strains.noStrainsHint'));
+    return;
+  }
+  const sp = ms.name,
+    st = ms.kuerzel;
+  const qty = parseInt(document.getElementById('gs-qty').value) || 0;
+  const days = parseInt(document.getElementById('gs-days').value) || 14;
+  const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
+  if (qty < 1) {
+    alert(t('batch.fillQty'));
+    return;
+  }
+  if (!bagKg) {
+    alert(t('batch.enterWeight'));
+    return;
+  }
+  const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
+  const batchId = genGrainBatchId(sp);
+  spColor(sp);
+  const due = new Date();
+  due.setDate(due.getDate() + days);
+  const bags = Array.from({ length: qty }, (_, i) => batchId + '-' + String(i + 1).padStart(2, '0'));
+  batches.push({
+    batchId,
+    species: sp,
+    strain: st,
+    strainId,
+    strainName: ms.name,
+    strainKuerzel: ms.kuerzel,
+    qty,
+    days,
+    substrate: null,
+    bagKg,
+    batchType: 'grain',
+    sourceId: document.getElementById('gs-culture').value || null,
+    notes: document.getElementById('lw-notes').value.trim(),
+    strainText: lwStrainText,
+    created: new Date().toISOString(),
+    due: due.toISOString(),
+    bags
+  });
+  const batchObj = batches[batches.length - 1];
+  apiPost('/api/batches', batchObj).then((r) => {
+    if (r && r.error) {
+      const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
+      if (i >= 0) batches.splice(i, 1);
+      alert(t('batch.saveFailed') + r.error);
+      renderBatches();
+      renderStatus();
     }
-    if(r&&r.bagBarcodes){for(const[id,bc]of Object.entries(r.bagBarcodes)){barcodeRegistry.set(bc,{type:'bag',id});barcodeByEntity.set('bag:'+id,bc)}}
+    if (r && r.bagBarcodes) {
+      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+        barcodeRegistry.set(bc, { type: 'bag', id });
+        barcodeByEntity.set('bag:' + id, bc);
+      }
+    }
   });
   // Deduct grain from inventory
-  if(!inventory.stock)inventory.stock={hardwood:0,wheatbran:0,gypsum:0,grain:0};
-  const grainUsed=qty*bagKg;
-  inventory.stock.grain=Math.max(0,(inventory.stock.grain||0)-grainUsed);
-  invDeltas([{mat:'grain',deltaKg:-grainUsed,type:'batch',ref:batchId}]);
-  if(strainSel)strainSel.value='';
-  const lwStrainEl=document.getElementById('lw-strain-text');if(lwStrainEl)lwStrainEl.value='';
-  document.getElementById('gs-qty').value='10';document.getElementById('gs-days').value='14';
-  document.getElementById('lw-notes').value='';document.getElementById('gs-mat-preview').style.display='none';
-  gsPreview();updateTodoBadge();renderBatches();
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  const grainUsed = qty * bagKg;
+  inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
+  invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
+  if (strainSel) strainSel.value = '';
+  const lwStrainEl = document.getElementById('lw-strain-text');
+  if (lwStrainEl) lwStrainEl.value = '';
+  document.getElementById('gs-qty').value = '10';
+  document.getElementById('gs-days').value = '14';
+  document.getElementById('lw-notes').value = '';
+  document.getElementById('gs-mat-preview').style.display = 'none';
+  gsPreview();
+  updateTodoBadge();
+  renderBatches();
   // Show zone picker — required before print
-  openZonePickModal(batchObj,bags,function(){
-    document.getElementById('gs-bags').innerHTML=bags.map(b=>`<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`).join('');
-    document.getElementById('gs-result').style.display='block';
+  openZonePickModal(batchObj, bags, function () {
+    document.getElementById('gs-bags').innerHTML = bags
+      .map(
+        (b) =>
+          `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+      )
+      .join('');
+    document.getElementById('gs-result').style.display = 'block';
   });
 }
-function goToPrintGrainBatch(){go('print','n-print');setTimeout(()=>{openStab('print','bags');fillBatchSelect();const last=batches[batches.length-1];if(last){const s=document.getElementById('print-batch');s.value=last.batchId;renderBagPreview()}},100)}
+function goToPrintGrainBatch() {
+  go('print', 'n-print');
+  setTimeout(() => {
+    openStab('print', 'bags');
+    fillBatchSelect();
+    const last = batches[batches.length - 1];
+    if (last) {
+      const s = document.getElementById('print-batch');
+      s.value = last.batchId;
+      renderBagPreview();
+    }
+  }, 100);
+}
 
 // ─── LINEAGE ─────────────────────────────────────────────────
 // Lineage intentionally uses the legacy c.species / c.strain fields so that
 // historical rows without a strain_id still render with their original
 // species/kuerzel values. Do not swap to strainName here — old lineage nodes
 // would lose their labels.
-function fillLineageSelect(){const s=document.getElementById('lineage-sel');const cur=s.value;s.innerHTML='<option value="">'+t('lab.selectCultureBatch')+'</option>'+(cultures.length?`<optgroup label="Cultures">${cultures.map(c=>`<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`:'')+( batches.length?`<optgroup label="Batches">${batches.map(b=>`<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`:'');if(cur)s.value=cur}
-function buildTree(rootId,rootType){
-  const seen=new Set();const getAnc=id=>{if(seen.has(id))return[];seen.add(id);const c=cultures.find(x=>x.id===id);if(!c)return[];const node={id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created};if(c.parentId){const p=cultures.find(x=>x.id===c.parentId);if(p)return[...getAnc(c.parentId),node]}return[node]};
-  const getDesc=(id,depth)=>{if(depth>6)return[];const ch=[];cultures.filter(c=>c.parentId===id).forEach(c=>ch.push({...c,harvest:0,children:getDesc(c.id,depth+1)}));batches.filter(b=>b.sourceId===id).forEach(b=>{const{status}=getStatus(b.batchId);ch.push({id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]})});return ch};
-  if(rootType==='C'){const anc=getAnc(rootId);const c=cultures.find(x=>x.id===rootId);if(!c)return null;const root={...anc[anc.length-1]||{id:c.id,type:c.type,species:c.species,strain:c.strain,status:c.status,created:c.created}};root.children=getDesc(rootId,0);if(anc.length>1){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=i===anc.length-1?root.children:[];cur.children=[anc[i]];cur=anc[i]}return tree}return root}
-  else{const b=batches.find(x=>x.batchId===rootId);if(!b)return null;const{status}=getStatus(b.batchId);const bn={id:b.batchId,type:'BATCH',species:b.species,strain:b.strain,status,harvest:getHarvested(b.batchId),created:b.created,children:[]};if(b.sourceId){const anc=getAnc(b.sourceId);if(anc.length){let tree=anc[0],cur=tree;for(let i=1;i<anc.length;i++){anc[i].children=[];cur.children=[anc[i]];cur=anc[i]}cur.children=[bn];return tree}}return bn}
+function fillLineageSelect() {
+  const s = document.getElementById('lineage-sel');
+  const cur = s.value;
+  s.innerHTML =
+    '<option value="">' +
+    t('lab.selectCultureBatch') +
+    '</option>' +
+    (cultures.length
+      ? `<optgroup label="Cultures">${cultures.map((c) => `<option value="C:${esc(c.id)}">${esc(c.id)} (${esc(c.type)} — ${esc(c.species)})</option>`).join('')}</optgroup>`
+      : '') +
+    (batches.length
+      ? `<optgroup label="Batches">${batches.map((b) => `<option value="B:${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('')}</optgroup>`
+      : '');
+  if (cur) s.value = cur;
 }
-const NODE_BG={MC:'#f3e8ff',PD:'#dbeafe',LC:'#dcfce7',BATCH:'#fff7ed'};
-const NODE_BD={MC:'#c084fc',PD:'#93c5fd',LC:'#86efac',BATCH:'#fdba74'};
-function treeHtml(node,depth){const ch=node.children?.length?`<div style="margin-left:${depth?20:0}px;padding-left:16px;border-left:2px solid var(--c-border);margin-top:5px">${node.children.map(c=>treeHtml(c,depth+1)).join('')}</div>`:'';const harv=node.harvest>0?`<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>`:'';return`<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type]||'#f5f4f0'};border:1px solid ${NODE_BD[node.type]||'#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:var(--c-text-sec)">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:var(--c-text-sec)">${esc(node.species)||''}${node.strain?' / '+esc(node.strain):''}</span><span style="font-size:10px;color:var(--c-text-muted)">${esc(node.status)||''}</span>${harv}<span style="font-size:10px;color:var(--c-text-muted)">${node.created?fmtDt(node.created):''}</span></div>${ch}</div>`}
-function renderLineage(){const val=document.getElementById('lineage-sel').value,body=document.getElementById('lineage-body');if(!val){body.innerHTML='<div class="empty">'+t('lab.selectAbove')+'</div>';return}const[type,id]=val.split(':');const tree=buildTree(id,type);body.innerHTML=tree?`<div style="padding:4px 0">${treeHtml(tree,0)}</div>`:'<div class="empty">'+t('lab.noLineageData')+'</div>'}
+function buildTree(rootId, rootType) {
+  const seen = new Set();
+  const getAnc = (id) => {
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const c = cultures.find((x) => x.id === id);
+    if (!c) return [];
+    const node = { id: c.id, type: c.type, species: c.species, strain: c.strain, status: c.status, created: c.created };
+    if (c.parentId) {
+      const p = cultures.find((x) => x.id === c.parentId);
+      if (p) return [...getAnc(c.parentId), node];
+    }
+    return [node];
+  };
+  const getDesc = (id, depth) => {
+    if (depth > 6) return [];
+    const ch = [];
+    cultures
+      .filter((c) => c.parentId === id)
+      .forEach((c) => ch.push({ ...c, harvest: 0, children: getDesc(c.id, depth + 1) }));
+    batches
+      .filter((b) => b.sourceId === id)
+      .forEach((b) => {
+        const { status } = getStatus(b.batchId);
+        ch.push({
+          id: b.batchId,
+          type: 'BATCH',
+          species: b.species,
+          strain: b.strain,
+          status,
+          harvest: getHarvested(b.batchId),
+          created: b.created,
+          children: []
+        });
+      });
+    return ch;
+  };
+  if (rootType === 'C') {
+    const anc = getAnc(rootId);
+    const c = cultures.find((x) => x.id === rootId);
+    if (!c) return null;
+    const root = {
+      ...(anc[anc.length - 1] || {
+        id: c.id,
+        type: c.type,
+        species: c.species,
+        strain: c.strain,
+        status: c.status,
+        created: c.created
+      })
+    };
+    root.children = getDesc(rootId, 0);
+    if (anc.length > 1) {
+      let tree = anc[0],
+        cur = tree;
+      for (let i = 1; i < anc.length; i++) {
+        anc[i].children = i === anc.length - 1 ? root.children : [];
+        cur.children = [anc[i]];
+        cur = anc[i];
+      }
+      return tree;
+    }
+    return root;
+  } else {
+    const b = batches.find((x) => x.batchId === rootId);
+    if (!b) return null;
+    const { status } = getStatus(b.batchId);
+    const bn = {
+      id: b.batchId,
+      type: 'BATCH',
+      species: b.species,
+      strain: b.strain,
+      status,
+      harvest: getHarvested(b.batchId),
+      created: b.created,
+      children: []
+    };
+    if (b.sourceId) {
+      const anc = getAnc(b.sourceId);
+      if (anc.length) {
+        let tree = anc[0],
+          cur = tree;
+        for (let i = 1; i < anc.length; i++) {
+          anc[i].children = [];
+          cur.children = [anc[i]];
+          cur = anc[i];
+        }
+        cur.children = [bn];
+        return tree;
+      }
+    }
+    return bn;
+  }
+}
+const NODE_BG = { MC: '#f3e8ff', PD: '#dbeafe', LC: '#dcfce7', BATCH: '#fff7ed' };
+const NODE_BD = { MC: '#c084fc', PD: '#93c5fd', LC: '#86efac', BATCH: '#fdba74' };
+function treeHtml(node, depth) {
+  const ch = node.children?.length
+    ? `<div style="margin-left:${depth ? 20 : 0}px;padding-left:16px;border-left:2px solid var(--c-border);margin-top:5px">${node.children.map((c) => treeHtml(c, depth + 1)).join('')}</div>`
+    : '';
+  const harv = node.harvest > 0 ? `<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>` : '';
+  return `<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type] || '#f5f4f0'};border:1px solid ${NODE_BD[node.type] || '#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:var(--c-text-sec)">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:var(--c-text-sec)">${esc(node.species) || ''}${node.strain ? ' / ' + esc(node.strain) : ''}</span><span style="font-size:10px;color:var(--c-text-muted)">${esc(node.status) || ''}</span>${harv}<span style="font-size:10px;color:var(--c-text-muted)">${node.created ? fmtDt(node.created) : ''}</span></div>${ch}</div>`;
+}
+function renderLineage() {
+  const val = document.getElementById('lineage-sel').value,
+    body = document.getElementById('lineage-body');
+  if (!val) {
+    body.innerHTML = '<div class="empty">' + t('lab.selectAbove') + '</div>';
+    return;
+  }
+  const [type, id] = val.split(':');
+  const tree = buildTree(id, type);
+  body.innerHTML = tree
+    ? `<div style="padding:4px 0">${treeHtml(tree, 0)}</div>`
+    : '<div class="empty">' + t('lab.noLineageData') + '</div>';
+}
 
 // ─── BAG INFO MODAL ──────────────────────────────────────────
-let biBagId=null,biBatchId=null;
-function openBagInfo(bagId,batchId,batch){
-  biBagId=bagId;biBatchId=batchId;
-  const b=batch||batches.find(x=>x.batchId.toUpperCase()===batchId.toUpperCase());
-  const el=document.getElementById('bi-body');
-  if(!b){el.innerHTML='<p style="color:var(--c-red-dark)">'+t('batch.notFound')+': '+esc(batchId)+'</p>';document.getElementById('m-baginfo').classList.add('open');return}
-  document.getElementById('bi-title').textContent=bagId;
+let biBagId = null,
+  biBatchId = null;
+function openBagInfo(bagId, batchId, batch) {
+  biBagId = bagId;
+  biBatchId = batchId;
+  const b = batch || batches.find((x) => x.batchId.toUpperCase() === batchId.toUpperCase());
+  const el = document.getElementById('bi-body');
+  if (!b) {
+    el.innerHTML = '<p style="color:var(--c-red-dark)">' + t('batch.notFound') + ': ' + esc(batchId) + '</p>';
+    document.getElementById('m-baginfo').classList.add('open');
+    return;
+  }
+  document.getElementById('bi-title').textContent = bagId;
   // Current location
-  const bagLogs=scanLog.filter(e=>(e.bag||'').toUpperCase()===bagId.toUpperCase());
-  let currentLoc=t('bagInfo.notPlaced');
-  if(bagLogs.length){
-    const last=bagLogs[bagLogs.length-1];
-    if(last.action==='REMOVE')currentLoc=t('bagInfo.removed');
-    else if(last.action==='ADD'||last.action==='MOVE')currentLoc=last.to||'Unknown';
+  const bagLogs = scanLog.filter((e) => (e.bag || '').toUpperCase() === bagId.toUpperCase());
+  let currentLoc = t('bagInfo.notPlaced');
+  if (bagLogs.length) {
+    const last = bagLogs[bagLogs.length - 1];
+    if (last.action === 'REMOVE') currentLoc = t('bagInfo.removed');
+    else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
-  const bagHarvests=harvests.filter(h=>(h.bag||'').toUpperCase()===bagId.toUpperCase());
-  const totalHarv=bagHarvests.reduce((s,h)=>s+(h.grams||0),0);
-  el.innerHTML=`
+  const bagHarvests = harvests.filter((h) => (h.bag || '').toUpperCase() === bagId.toUpperCase());
+  const totalHarv = bagHarvests.reduce((s, h) => s + (h.grams || 0), 0);
+  el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strainName?(esc(b.strainName)+' <span style="font-size:12px;color:var(--c-text-muted)">('+esc(b.strainKuerzel||b.strain||'')+')</span>'):(esc(b.strain)||'\u2014')}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strainName ? esc(b.strainName) + ' <span style="font-size:12px;color:var(--c-text-muted)">(' + esc(b.strainKuerzel || b.strain || '') + ')</span>' : esc(b.strain) || '\u2014'}</div></div>
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
-      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv>0?totalHarv+'g':t('bagInfo.noneYet')}</div></div>
+      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
-      ${b.bags.map(bag=>{
-        const isThis=bag.toUpperCase()===bagId.toUpperCase();
-        const bagNum=bag.split('-').pop();
-        const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());
-        const loc=!bagLast?'—':bagLast.action==='REMOVE'?'✗':bagLast.to||'?';
-        return`<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis?'var(--c-text)':'var(--c-bg)'};color:${isThis?'#fff':'var(--c-text-sec)'};border:1px solid ${isThis?'var(--c-text)':'var(--c-border)'}" title="${loc}">
-          ${bagNum} <span style="font-size:9px;color:${isThis?'var(--c-text-muted)':'var(--c-border)'}">${loc}</span>
+      ${b.bags
+        .map((bag) => {
+          const isThis = bag.toUpperCase() === bagId.toUpperCase();
+          const bagNum = bag.split('-').pop();
+          const bagLast = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+          const loc = !bagLast ? '—' : bagLast.action === 'REMOVE' ? '✗' : bagLast.to || '?';
+          return `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${loc}">
+          ${bagNum} <span style="font-size:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${loc}</span>
         </span>`;
-      }).join('')}
+        })
+        .join('')}
     </div>
-    ${bagHarvests.length?`<div style="margin-top:10px;font-size:12px;color:var(--c-amber-dark)"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map(h=>`Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>`:''}
+    ${bagHarvests.length ? `<div style="margin-top:10px;font-size:12px;color:var(--c-amber-dark)"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map((h) => `Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>` : ''}
   `;
   closeCamScan();
   closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
-  setFb('info',t('scanFb.bagInfo',{bag:bagId}),{noModal:true});
+  setFb('info', t('scanFb.bagInfo', { bag: bagId }), { noModal: true });
 }
-function biSetAction(action){
+function biSetAction(action) {
   document.getElementById('m-baginfo').classList.remove('open');
-  scan.action=action;scan.from=null;scan.to=null;scan.harvestBag=null;
+  scan.action = action;
+  scan.from = null;
+  scan.to = null;
+  scan.harvestBag = null;
   updateSD();
-  if(action==='HARVEST'){
-    showHarvestPanel(biBagId,biBatchId);
-  }else if(action==='REMOVE'){
-    const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===biBagId.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
-    const fromLoc=bagLast?bagLast.to:null;
-    const b=batches.find(x=>x.batchId.toUpperCase()===(biBatchId||'').toUpperCase());
-    const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:new Date().toISOString(),action:'REMOVE',batch:biBatchId,bag:biBagId,from:fromLoc,to:null,species:b?.species||null,strain:b?.strain||null,user:currentUser?.username||null,_tempId:tempId};
-    scanLog.push(entry);movements.push(entry);
-    if(!sessionStartTime)sessionStartTime=Date.now();
+  if (action === 'HARVEST') {
+    showHarvestPanel(biBagId, biBatchId);
+  } else if (action === 'REMOVE') {
+    const bagLast = [...scanLog]
+      .reverse()
+      .find(
+        (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
+      );
+    const fromLoc = bagLast ? bagLast.to : null;
+    const b = batches.find((x) => x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+    const tempId = 's' + ++_scanTempIdCounter;
+    const entry = {
+      time: new Date().toISOString(),
+      action: 'REMOVE',
+      batch: biBatchId,
+      bag: biBagId,
+      from: fromLoc,
+      to: null,
+      species: b?.species || null,
+      strain: b?.strain || null,
+      user: currentUser?.username || null,
+      _tempId: tempId
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(entry);
     scan.count++;
-    apiPost('/api/scan-log',{entries:[entry]}).then(function(r){if(r&&r.ids&&r.ids[0])entry._serverId=r.ids[0]});
+    apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
+      if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
+    });
     updateSD();
-    setFb('ok',t('scanFb.removeLogged',{bag:biBagId}),entry);
-  }else{
-    setFb('ok',t('scanFb.actionReady',{action:action}));
+    setFb('ok', t('scanFb.removeLogged', { bag: biBagId }), entry);
+  } else {
+    setFb('ok', t('scanFb.actionReady', { action: action }));
   }
 }
-document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id==='m-baginfo')document.getElementById('m-baginfo').classList.remove('open')});
+document.getElementById('m-baginfo').addEventListener('click', (e) => {
+  if (e.target.id === 'm-baginfo') document.getElementById('m-baginfo').classList.remove('open');
+});
 
 // ─── PRINT — BAG LABELS ──────────────────────────────────────
 // ─── PRINT via server → ZPL → Windows spooler → GK420d ──────
@@ -7547,11 +10508,11 @@ document.getElementById('m-baginfo').addEventListener('click',e=>{if(e.target.id
 // Hyphens encoded as underscores in barcode to fix German keyboard scanning.
 
 // Legacy species abbreviation (only used for scanning old barcode labels).
-function spAbbrev(species){
-  if(!species)return'XX';
-  const words=species.trim().split(/\s+/);
-  if(words.length===1)return words[0].slice(0,2).toUpperCase();
-  return(words[0][0]+words[1][0]).toUpperCase();
+function spAbbrev(species) {
+  if (!species) return 'XX';
+  const words = species.trim().split(/\s+/);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
 }
 // Calculate Code 128 module width + centered x-offset for ZPL labels.
 // Label is 400 dots wide; need 20-dot quiet zone each side → 360 usable dots.
@@ -7559,7 +10520,15 @@ function spAbbrev(species){
 // Returns {mw, x} where x centers the barcode horizontally with minimum quiet zones.
 // Code 128 quiet zone = 10× module width. Try mw=3, then 2, then 1.
 // qzMult: quiet zone multiplier (default 10). Use 5 for lab labels to allow wider bars.
-function bcParams(val,qzMult){const mods=35+val.length*11;let mw=3;qzMult=qzMult||10;const qz=m=>m*qzMult;while(mw>1&&mods*mw+2*qz(mw)>400)mw--;const w=mods*mw;return{mw,x:Math.max(qz(mw),Math.round((400-w)/2))}}
+function bcParams(val, qzMult) {
+  const mods = 35 + val.length * 11;
+  let mw = 3;
+  qzMult = qzMult || 10;
+  const qz = (m) => m * qzMult;
+  while (mw > 1 && mods * mw + 2 * qz(mw) > 400) mw--;
+  const w = mods * mw;
+  return { mw, x: Math.max(qz(mw), Math.round((400 - w) / 2)) };
+}
 
 // ─── Unified label layout: SINGLE SOURCE OF TRUTH for ZPL + preview ───
 // Canvas is 400×240 dots (50×30mm @ 203dpi). bagLabelItems/labLabelItems
@@ -7575,108 +10544,160 @@ function bcParams(val,qzMult){const mods=35+val.length*11;let mw=3;qzMult=qzMult
 // Sanitize a string for use inside a ZPL ^FD...^FS field.
 // ^ starts ZPL commands and ~ starts ZPL control sequences — both must be removed
 // so user-supplied text (species names, notes, IDs) cannot inject ZPL commands.
-function zplText(s){return String(s||'').replace(/[\^~]/g,'');}
+function zplText(s) {
+  return String(s || '').replace(/[\^~]/g, '');
+}
 
-function itemsToZPL(items){
+function itemsToZPL(items) {
   // Compute label height from content (min 160, max 240) so short labels don't waste media.
-  let maxY=140;
-  for(const it of items){
-    const bottom=it.type==='barcode'?(it.y+it.h):(it.type==='text'?(it.y+it.fontH):(it.y+(it.size||80)));
-    if(bottom>maxY)maxY=bottom;
+  let maxY = 140;
+  for (const it of items) {
+    const bottom = it.type === 'barcode' ? it.y + it.h : it.type === 'text' ? it.y + it.fontH : it.y + (it.size || 80);
+    if (bottom > maxY) maxY = bottom;
   }
-  const ll=Math.min(240,Math.max(160,maxY+10));
-  let z='^XA^PW400^LL'+ll+'^CI28^LH0,0';
-  for(const it of items){
-    if(it.type==='barcode'){
-      z+='^FO'+it.x+','+it.y+'^BY'+it.mw+',2.0,'+it.h+'^BCN,'+it.h+',N,N,N^FD'+zplText(it.val)+'^FS';
-    }else if(it.type==='text'){
-      const fw=it.fontW||it.fontH;
-      const bw=it.blockW||400;
-      const bx=it.x||0;
-      z+='^FO'+bx+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+zplText(it.text)+'^FS';
+  const ll = Math.min(240, Math.max(160, maxY + 10));
+  let z = '^XA^PW400^LL' + ll + '^CI28^LH0,0';
+  for (const it of items) {
+    if (it.type === 'barcode') {
+      z +=
+        '^FO' +
+        it.x +
+        ',' +
+        it.y +
+        '^BY' +
+        it.mw +
+        ',2.0,' +
+        it.h +
+        '^BCN,' +
+        it.h +
+        ',N,N,N^FD' +
+        zplText(it.val) +
+        '^FS';
+    } else if (it.type === 'text') {
+      const fw = it.fontW || it.fontH;
+      const bw = it.blockW || 400;
+      const bx = it.x || 0;
+      z +=
+        '^FO' + bx + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw + '^FD' + zplText(it.text) + '^FS';
       // ZPL has no bold flag; double-draw at x+1 thickens strokes.
-      if(it.bold) z+='^FO'+(bx+1)+','+it.y+'^FB'+bw+',1,0,C^A0N,'+it.fontH+','+fw+'^FD'+zplText(it.text)+'^FS';
-    }else if(it.type==='qr'){
-      z+='^FO'+it.x+','+it.y+'^BQN,2,4^FDMM,A'+zplText(it.val)+'^FS';
+      if (it.bold)
+        z +=
+          '^FO' +
+          (bx + 1) +
+          ',' +
+          it.y +
+          '^FB' +
+          bw +
+          ',1,0,C^A0N,' +
+          it.fontH +
+          ',' +
+          fw +
+          '^FD' +
+          zplText(it.text) +
+          '^FS';
+    } else if (it.type === 'qr') {
+      z += '^FO' + it.x + ',' + it.y + '^BQN,2,4^FDMM,A' + zplText(it.val) + '^FS';
     }
   }
-  return z+'^XZ';
+  return z + '^XZ';
 }
 
 // Builds one preview cell as an SVG. Returns {cell, deferred} — insert cell
 // into the DOM first, then call renderPreviewDeferred(deferred) to attach
 // JsBarcode/QRCode content to the live nodes.
-function buildPreviewCell(items){
-  const cell=document.createElement('div');
-  cell.style.cssText='position:relative;border:1px solid var(--c-border);border-radius:5px;background:#fff;overflow:hidden;aspect-ratio:5/3';
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.setAttribute('viewBox','0 0 400 240');
-  svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:block';
+function buildPreviewCell(items) {
+  const cell = document.createElement('div');
+  cell.style.cssText =
+    'position:relative;border:1px solid var(--c-border);border-radius:5px;background:#fff;overflow:hidden;aspect-ratio:5/3';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 400 240');
+  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
   cell.appendChild(svg);
-  const deferred=[];
-  for(const it of items){
-    if(it.type==='barcode'){
-      const inner=document.createElementNS('http://www.w3.org/2000/svg','svg');
-      inner.setAttribute('x',it.x);
-      inner.setAttribute('y',it.y);
-      inner.setAttribute('width',it.w);
-      inner.setAttribute('height',it.h);
+  const deferred = [];
+  for (const it of items) {
+    if (it.type === 'barcode') {
+      const inner = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      inner.setAttribute('x', it.x);
+      inner.setAttribute('y', it.y);
+      inner.setAttribute('width', it.w);
+      inner.setAttribute('height', it.h);
       svg.appendChild(inner);
-      deferred.push({kind:'bc',el:inner,val:it.val,mw:it.mw,w:it.w,h:it.h});
-    }else if(it.type==='text'){
-      const bw=it.blockW||400;
-      const cx=(it.x||0)+bw/2;
+      deferred.push({ kind: 'bc', el: inner, val: it.val, mw: it.mw, w: it.w, h: it.h });
+    } else if (it.type === 'text') {
+      const bw = it.blockW || 400;
+      const cx = (it.x || 0) + bw / 2;
       // ZPL A0 font height ≈ character height; baseline ≈ 82% from top.
-      const by=it.y+it.fontH*0.82;
-      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
-      t.setAttribute('x',cx);
-      t.setAttribute('y',by);
-      t.setAttribute('text-anchor','middle');
-      t.setAttribute('font-family','Helvetica,Arial,sans-serif');
-      t.setAttribute('font-size',it.fontH);
-      t.setAttribute('fill','#000');
-      if(it.bold) t.setAttribute('font-weight','bold');
-      t.textContent=it.text;
+      const by = it.y + it.fontH * 0.82;
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', cx);
+      t.setAttribute('y', by);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('font-family', 'Helvetica,Arial,sans-serif');
+      t.setAttribute('font-size', it.fontH);
+      t.setAttribute('fill', '#000');
+      if (it.bold) t.setAttribute('font-weight', 'bold');
+      t.textContent = it.text;
       svg.appendChild(t);
-    }else if(it.type==='qr'){
+    } else if (it.type === 'qr') {
       // QR as HTML overlay positioned with % from ZPL coords (qrcode.js → img/canvas).
-      const qrDiv=document.createElement('div');
-      const L=(it.x/400*100).toFixed(2);
-      const T=(it.y/240*100).toFixed(2);
-      const W=(it.size/400*100).toFixed(2);
-      qrDiv.style.cssText='position:absolute;left:'+L+'%;top:'+T+'%;width:'+W+'%;aspect-ratio:1;background:#fff';
+      const qrDiv = document.createElement('div');
+      const L = ((it.x / 400) * 100).toFixed(2);
+      const T = ((it.y / 240) * 100).toFixed(2);
+      const W = ((it.size / 400) * 100).toFixed(2);
+      qrDiv.style.cssText =
+        'position:absolute;left:' + L + '%;top:' + T + '%;width:' + W + '%;aspect-ratio:1;background:#fff';
       cell.appendChild(qrDiv);
-      deferred.push({kind:'qr',el:qrDiv,val:it.val});
+      deferred.push({ kind: 'qr', el: qrDiv, val: it.val });
     }
   }
-  return {cell,deferred};
+  return { cell, deferred };
 }
 
-function renderPreviewDeferred(deferred,baseDelay){
-  baseDelay=baseDelay||20;
-  deferred.forEach((d,i)=>{
-    setTimeout(()=>{
-      if(d.kind==='bc'){
-        try{
-          JsBarcode(d.el,d.val,{format:'CODE128',width:d.mw,height:d.h,displayValue:false,margin:0,background:'#fff',lineColor:'#000'});
-          // JsBarcode rewrites width/height on the svg; capture those as a
-          // viewBox and restore our (x,y,w,h) so bars stretch to our cell.
-          const w=parseFloat(d.el.getAttribute('width'))||d.w;
-          const h=parseFloat(d.el.getAttribute('height'))||d.h;
-          d.el.setAttribute('viewBox','0 0 '+w+' '+h);
-          d.el.setAttribute('width',d.w);
-          d.el.setAttribute('height',d.h);
-          d.el.setAttribute('preserveAspectRatio','none');
-        }catch{}
-      }else if(d.kind==='qr'){
-        try{
-          new QRCode(d.el,{text:d.val,width:64,height:64,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});
-          const img=d.el.querySelector('img')||d.el.querySelector('canvas');
-          if(img){img.style.cssText='display:block;width:100%;height:100%'}
-        }catch{}
-      }
-    },baseDelay+i*12);
+function renderPreviewDeferred(deferred, baseDelay) {
+  baseDelay = baseDelay || 20;
+  deferred.forEach((d, i) => {
+    setTimeout(
+      () => {
+        if (d.kind === 'bc') {
+          try {
+            JsBarcode(d.el, d.val, {
+              format: 'CODE128',
+              width: d.mw,
+              height: d.h,
+              displayValue: false,
+              margin: 0,
+              background: '#fff',
+              lineColor: '#000'
+            });
+            // JsBarcode rewrites width/height on the svg; capture those as a
+            // viewBox and restore our (x,y,w,h) so bars stretch to our cell.
+            const w = parseFloat(d.el.getAttribute('width')) || d.w;
+            const h = parseFloat(d.el.getAttribute('height')) || d.h;
+            d.el.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+            d.el.setAttribute('width', d.w);
+            d.el.setAttribute('height', d.h);
+            d.el.setAttribute('preserveAspectRatio', 'none');
+          } catch {}
+        } else if (d.kind === 'qr') {
+          try {
+            new QRCode(d.el, {
+              text: d.val,
+              width: 64,
+              height: 64,
+              colorDark: '#000',
+              colorLight: '#fff',
+              correctLevel: QRCode.CorrectLevel.L
+            });
+            const img = d.el.querySelector('img') || d.el.querySelector('canvas');
+            if (img) {
+              img.style.cssText = 'display:block;width:100%;height:100%';
+            }
+          } catch {}
+        }
+      },
+      baseDelay + i * 12
+    );
   });
 }
 
@@ -7684,610 +10705,1011 @@ function renderPreviewDeferred(deferred,baseDelay){
 //   'minimal' — barcode + Line 1 (bag ID) only
 //   'sorte'   — + Line 2 (Pilzsorte written out + notes)
 //   'full'    — + Line 3 (Fälligkeit)
-function bagLabelItems(bagId,batch,detail,_legacyFallbackIds){
-  const items=[];
+function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
+  const items = [];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
-  const numBc=barcodeByEntity.get('bag:'+bagId);
+  const numBc = barcodeByEntity.get('bag:' + bagId);
   let bcVal;
-  if(numBc){
-    bcVal=String(numBc);
-  }else{
+  if (numBc) {
+    bcVal = String(numBc);
+  } else {
     // Legacy fallback for bags without barcode assignment
-    if(_legacyFallbackIds) _legacyFallbackIds.push(bagId);
-    const isGrain=batch.batchType==='grain';
-    const parts=bagId.split('-');
-    if(parts.length===4){
-      const kz=(batch.strainKuerzel||batch.strain||'BAGX').toUpperCase();
-      const mmdd=parts[1].slice(2,4)+parts[1].slice(0,2);
-      const bagNum=parseInt(parts[3],10);
-      bcVal=(isGrain?'G':'')+kz+'_'+mmdd+'_'+bagNum;
-    }else{
-      bcVal=bagId.replace(/-/g,'_');
+    if (_legacyFallbackIds) _legacyFallbackIds.push(bagId);
+    const isGrain = batch.batchType === 'grain';
+    const parts = bagId.split('-');
+    if (parts.length === 4) {
+      const kz = (batch.strainKuerzel || batch.strain || 'BAGX').toUpperCase();
+      const mmdd = parts[1].slice(2, 4) + parts[1].slice(0, 2);
+      const bagNum = parseInt(parts[3], 10);
+      bcVal = (isGrain ? 'G' : '') + kz + '_' + mmdd + '_' + bagNum;
+    } else {
+      bcVal = bagId.replace(/-/g, '_');
     }
   }
-  const bc=bcParams(bcVal);
-  // Fixed barcode size regardless of detail level: ≥5mm top margin (40 dots),
+  // Fixed barcode/QR size regardless of detail level: ≥5mm top margin (40 dots),
   // 90-dot barcode fits all 3 text lines below within the 240-dot canvas.
-  const bcY=40,bcH=90;
-  items.push({type:'barcode',x:bc.x,y:bcY,w:400-2*bc.x,h:bcH,val:bcVal,mw:bc.mw});
+  const bcY = 40,
+    bcH = 90;
+  if (qr) {
+    items.push({ type: 'qr', x: 146, y: bcY, size: 108, val: bagId });
+  } else {
+    const bc = bcParams(bcVal);
+    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
+  }
   // Line 1 — bag ID in monospaced kürzel format (always shown)
-  const line1Y=bcY+bcH+6;
-  items.push({type:'text',y:line1Y,fontH:24,text:bagId});
-  if(detail==='sorte'||detail==='full'){
+  const line1Y = bcY + bcH + 6;
+  items.push({ type: 'text', y: line1Y, fontH: 24, text: bagId });
+  if (detail === 'sorte' || detail === 'full') {
     // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 13 chars on label)
-    const species=batch.strainName||batch.species||'';
-    const strainTxt=(batch.strainText||'').trim();
-    const rawNotes=(batch.notes||'').trim();
-    const notes=rawNotes.length>13?rawNotes.slice(0,13)+'\u2026':rawNotes;
-    let parts=[species];
-    if(strainTxt)parts.push(strainTxt);
-    if(notes)parts.push(notes);
-    const line2=parts.join(' \u2013 ');
-    if(line2) items.push({type:'text',y:line1Y+28,fontH:24,text:line2});
+    const species = batch.strainName || batch.species || '';
+    const strainTxt = (batch.strainText || '').trim();
+    const rawNotes = (batch.notes || '').trim();
+    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+    let parts = [species];
+    if (strainTxt) parts.push(strainTxt);
+    if (notes) parts.push(notes);
+    const line2 = parts.join(' \u2013 ');
+    if (line2) items.push({ type: 'text', y: line1Y + 28, fontH: 24, text: line2 });
   }
-  if(detail==='full'&&batch.due){
+  if (detail === 'full' && batch.due) {
     // Line 3 — Fälligkeit, bold
-    const due=new Date(batch.due);
-    const dueStr=String(due.getDate()).padStart(2,'0')+'.'+String(due.getMonth()+1).padStart(2,'0')+'.'+due.getFullYear();
-    const line3Y=(detail==='full')?line1Y+56:line1Y+28;
-    items.push({type:'text',y:line3Y,fontH:28,text:'F\u00e4llig: '+dueStr,bold:true});
+    const due = new Date(batch.due);
+    const dueStr =
+      String(due.getDate()).padStart(2, '0') +
+      '.' +
+      String(due.getMonth() + 1).padStart(2, '0') +
+      '.' +
+      due.getFullYear();
+    const line3Y = detail === 'full' ? line1Y + 56 : line1Y + 28;
+    items.push({ type: 'text', y: line3Y, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
   }
   return items;
 }
 
-function labLabelItems(id,c,opts){
-  const items=[];
+function labLabelItems(id, c, detail, qr) {
+  const items = [];
   // Prefer mushroom_strains lookup fields; fall back to legacy species/strain.
-  const name=c.strainName||c.species||'';
-  const kz=c.strainDescriptor||'';
-  const sp=name+(kz?' \u2013 '+kz:'');
-  const ds=fmtDt(c.created);
+  const name = c.strainName || c.species || '';
+  const kz = c.strainDescriptor || '';
+  const sp = name + (kz ? ' \u2013 ' + kz : '');
+  const ds = fmtDt(c.created);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
-  const numBc=barcodeByEntity.get('culture:'+id);
-  const bcVal=numBc?String(numBc):id.replace(/-/g,'_');
-  const bc=bcParams(bcVal);
-  // Fixed barcode size — same as bag labels: ≥5mm top margin, 90-dot height.
-  const bcY=40,bcH=90;
-  // QR occupies the right ~128 dots; text and barcode stay left of it
-  const textBlockW=opts.qr?272:400;
-  if(opts.bc){
-    const bcW=opts.qr?Math.max(0,272-2*bc.x):(400-2*bc.x);
-    items.push({type:'barcode',x:bc.x,y:bcY,w:bcW,h:bcH,val:bcVal,mw:bc.mw});
+  const numBc = barcodeByEntity.get('culture:' + id);
+  const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
+  // Fixed barcode/QR size — same as bag labels: ≥5mm top margin, 90-dot height.
+  const bcY = 40,
+    bcH = 90;
+  if (qr) {
+    items.push({ type: 'qr', x: 146, y: bcY, size: 108, val: id });
+  } else {
+    const bc = bcParams(bcVal);
+    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
   }
-  // Line 1 — culture ID, optionally with parent appended (fontH 24 matching bag labels)
-  const line1Y=opts.bc?bcY+bcH+6:12;
-  const line1Text=opts.par&&c.parentId?id+' \u2190 '+c.parentId:id;
-  items.push({type:'text',x:0,y:line1Y,blockW:textBlockW,fontH:24,text:line1Text});
-  // Line 2 — species + descriptor (fontH 24, same as bag Pilzsorte line)
-  if(opts.sp&&sp) items.push({type:'text',x:0,y:line1Y+28,blockW:textBlockW,fontH:24,text:sp});
-  // Line 3 — date created, bold (fontH 28, same as bag Fälligkeit line)
-  if(opts.dt){
-    const line3Y=line1Y+(opts.sp&&sp?56:28);
-    items.push({type:'text',x:0,y:line3Y,blockW:textBlockW,fontH:28,text:ds,bold:true});
+  // Line 1 — culture ID, with parent if available (always shown)
+  const line1Y = bcY + bcH + 6;
+  const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+  items.push({ type: 'text', x: 0, y: line1Y, fontH: 24, text: line1Text });
+  if (detail === 'sorte' || detail === 'full') {
+    // Line 2 — species + descriptor
+    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, fontH: 24, text: sp });
   }
-  if(opts.qr) items.push({type:'qr',x:280,y:bcY,size:108,val:id});
+  if (detail === 'full' && c.created) {
+    // Line 3 — date created, bold
+    const line3Y = line1Y + (detail === 'full' && sp ? 56 : 28);
+    items.push({ type: 'text', x: 0, y: line3Y, fontH: 28, text: ds, bold: true });
+  }
   return items;
 }
 
-function makeBagZPL(bags,batch,detail){
-  const legacyFallbackIds=[];
-  const zpl=bags.map(bagId=>itemsToZPL(bagLabelItems(bagId,batch,detail,legacyFallbackIds))).join('\n');
-  if(legacyFallbackIds.length){
+function makeBagZPL(bags, batch, detail, qr) {
+  const legacyFallbackIds = [];
+  const zpl = bags.map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, detail, legacyFallbackIds, qr))).join('\n');
+  if (legacyFallbackIds.length) {
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
-    alert(t('print.warnNumericBarcodes',{list:legacyFallbackIds.join(', ')}));
+    alert(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }));
   }
   return zpl;
 }
 
-function makeLabZPL(ids,opts){
-  return ids.map(id=>{
-    const c=cultures.find(x=>x.id===id);
-    return c?itemsToZPL(labLabelItems(id,c,opts)):'';
-  }).filter(Boolean).join('\n');
+function makeLabZPL(ids, detail, qr) {
+  return ids
+    .map((id) => {
+      const c = cultures.find((x) => x.id === id);
+      return c ? itemsToZPL(labLabelItems(id, c, detail, qr)) : '';
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
+function toggleBagRange() {
+  document.getElementById('bag-range-inputs').style.display =
+    document.getElementById('print-range').value === 'range' ? 'inline-flex' : 'none';
+}
 
-
-function toggleBagRange(){document.getElementById('bag-range-inputs').style.display=document.getElementById('print-range').value==='range'?'inline-flex':'none'}
-
-async function printBagLabels(){
-  const b=batches.find(x=>x.batchId===document.getElementById('print-batch').value);
-  if(!b){alert(t('print.selectBatchFirst'));return}
-  let bags=b.bags;
-  if(document.getElementById('print-range').value==='range'){
-    const from=parseInt(document.getElementById('bag-from').value)||1;
-    const to=parseInt(document.getElementById('bag-to').value)||b.bags.length;
-    bags=b.bags.filter(bagId=>{const n=parseInt(bagId.split('-').pop());return n>=from&&n<=to});
-    if(!bags.length){alert(t('print.noBagsInRange'));return}
+async function printBagLabels() {
+  const b = batches.find((x) => x.batchId === document.getElementById('print-batch').value);
+  if (!b) {
+    alert(t('print.selectBatchFirst'));
+    return;
   }
-  const zpl=makeBagZPL(bags,b,document.getElementById('print-mode').value);
-  if(!zpl||!zpl.includes('^XA')){alert(t('print.noLabels'));return}
-  const err=await sendToPrinter(zpl);
-  if(err)alert(t('print.printError',{err}));
-  else setFb('ok','Printed '+bags.length+' labels for '+b.batchId);
+  let bags = b.bags;
+  if (document.getElementById('print-range').value === 'range') {
+    const from = parseInt(document.getElementById('bag-from').value) || 1;
+    const to = parseInt(document.getElementById('bag-to').value) || b.bags.length;
+    bags = b.bags.filter((bagId) => {
+      const n = parseInt(bagId.split('-').pop());
+      return n >= from && n <= to;
+    });
+    if (!bags.length) {
+      alert(t('print.noBagsInRange'));
+      return;
+    }
+  }
+  const zpl = makeBagZPL(
+    bags,
+    b,
+    document.getElementById('print-mode').value,
+    document.getElementById('bag-qr').checked
+  );
+  if (!zpl || !zpl.includes('^XA')) {
+    alert(t('print.noLabels'));
+    return;
+  }
+  const err = await sendToPrinter(zpl);
+  if (err) alert(t('print.printError', { err }));
+  else setFb('ok', 'Printed ' + bags.length + ' labels for ' + b.batchId);
 }
 
-async function printLabLabels(){
-  const ids=[...selectedLabIds];
-  if(!ids.length){alert(t('print.selectCulture'));return}
-  const zpl=makeLabZPL(ids,getLabOpts());
-  if(!zpl||!zpl.includes('^XA')){alert(t('print.noLabels'));return}
-  const err=await sendToPrinter(zpl);
-  if(err)alert(t('print.printError',{err}));
-  else setFb('ok','Printed '+ids.length+' lab label'+(ids.length!==1?'s':''));
+async function printLabLabels() {
+  const ids = [...selectedLabIds];
+  if (!ids.length) {
+    alert(t('print.selectCulture'));
+    return;
+  }
+  const zpl = makeLabZPL(ids, document.getElementById('lab-mode').value, document.getElementById('lab-qr').checked);
+  if (!zpl || !zpl.includes('^XA')) {
+    alert(t('print.noLabels'));
+    return;
+  }
+  const err = await sendToPrinter(zpl);
+  if (err) alert(t('print.printError', { err }));
+  else setFb('ok', 'Printed ' + ids.length + ' lab label' + (ids.length !== 1 ? 's' : ''));
 }
 
-async function quickPrintCulture(id){
-  const zpl=makeLabZPL([id],{bc:true,qr:false,sp:true,par:true,dt:true});
-  const err=await sendToPrinter(zpl);
-  if(err){
+async function quickPrintCulture(id) {
+  const zpl = makeLabZPL([id], 'full', false);
+  const err = await sendToPrinter(zpl);
+  if (err) {
     // fallback: download ZPL
-    const blob=new Blob([zpl],{type:'text/plain'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+'_label.zpl';a.click();
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = id + '_label.zpl';
+    a.click();
   }
 }
 
-async function sendToPrinter(zpl){
-  try{
-    const r=await authFetch('/api/print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zpl})});
-    const d=await r.json();
-    if(d.ok)return null;
-    return d.error||'Print failed';
-  }catch(e){return'Could not reach server: '+e.message;}
+async function sendToPrinter(zpl) {
+  try {
+    const r = await authFetch('/api/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zpl })
+    });
+    const d = await r.json();
+    if (d.ok) return null;
+    return d.error || 'Print failed';
+  } catch (e) {
+    return 'Could not reach server: ' + e.message;
+  }
 }
 
+function fillBatchSelect() {
+  const s = document.getElementById('print-batch');
+  const cur = s.value;
+  s.innerHTML =
+    '<option value="">— choose batch —</option>' +
+    batches
+      .map((b) => `<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`)
+      .join('');
+  if (cur) s.value = cur;
+}
 
-
-function fillBatchSelect(){const s=document.getElementById('print-batch');const cur=s.value;s.innerHTML='<option value="">— choose batch —</option>'+batches.map(b=>`<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`).join('');if(cur)s.value=cur}
-
-function renderBagPreview(){
-  const id=document.getElementById('print-batch').value;
-  const el=document.getElementById('bag-preview');
-  const mode=document.getElementById('print-mode').value;
-  if(!id){el.innerHTML='<div class="empty">Select a batch above.</div>';return}
-  const batch=batches.find(b=>b.batchId===id);
-  if(!batch)return;
-  const wrap=document.createElement('div');
-  wrap.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
-  const allDeferred=[];
-  batch.bags.forEach(bagId=>{
-    const {cell,deferred}=buildPreviewCell(bagLabelItems(bagId,batch,mode));
+function renderBagPreview() {
+  const id = document.getElementById('print-batch').value;
+  const el = document.getElementById('bag-preview');
+  const mode = document.getElementById('print-mode').value;
+  const qr = document.getElementById('bag-qr').checked;
+  if (!id) {
+    el.innerHTML = '<div class="empty">Select a batch above.</div>';
+    return;
+  }
+  const batch = batches.find((b) => b.batchId === id);
+  if (!batch) return;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
+  const allDeferred = [];
+  batch.bags.forEach((bagId) => {
+    const { cell, deferred } = buildPreviewCell(bagLabelItems(bagId, batch, mode, null, qr));
     wrap.appendChild(cell);
     allDeferred.push(...deferred);
   });
-  el.innerHTML='';
+  el.innerHTML = '';
   el.appendChild(wrap);
-  renderPreviewDeferred(allDeferred,30);
+  renderPreviewDeferred(allDeferred, 30);
 }
 
-let selectedLabIds=new Set();
-function renderLabList(){const filter=document.getElementById('lab-filter').value,el=document.getElementById('lab-list'),today=todayStr();const rows=cultures.filter(c=>{if(filter==='all')return c.status==='active'||c.status==='stored';if(filter==='today'){const d=new Date(c.created);return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')===today}return c.type===filter}).sort((a,b)=>b.created.localeCompare(a.created));el.innerHTML=rows.length?rows.map(c=>`<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id)?'checked':''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type==='MC'?'badge-mc':c.type==='PD'?'badge-pd':'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain?' / '+esc(c.strain):''}</span></label>`).join(''):'<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>'}
-function toggleLabId(id,on){if(on)selectedLabIds.add(id);else selectedLabIds.delete(id);renderLabPreview()}
-function getLabOpts(){return{bc:document.getElementById('lp-bc').checked,qr:document.getElementById('lp-qr').checked,sp:document.getElementById('lp-sp').checked,par:document.getElementById('lp-par').checked,dt:document.getElementById('lp-dt').checked}}
-function renderLabPreview(){
-  const el=document.getElementById('lab-preview');
-  const ids=[...selectedLabIds];
-  if(!ids.length){el.innerHTML='<div class="empty">Tick cultures in the list to preview labels.</div>';return}
-  const opts=getLabOpts();
-  const wrap=document.createElement('div');
-  wrap.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
-  const allDeferred=[];
-  ids.forEach(id=>{
-    const c=cultures.find(x=>x.id===id);
-    if(!c)return;
-    const {cell,deferred}=buildPreviewCell(labLabelItems(id,c,opts));
+let selectedLabIds = new Set();
+function renderLabList() {
+  const filter = document.getElementById('lab-filter').value,
+    el = document.getElementById('lab-list'),
+    today = todayStr();
+  const rows = cultures
+    .filter((c) => {
+      if (filter === 'all') return c.status === 'active' || c.status === 'stored';
+      if (filter === 'today') {
+        const d = new Date(c.created);
+        return (
+          String(d.getFullYear()).slice(2) +
+            String(d.getMonth() + 1).padStart(2, '0') +
+            String(d.getDate()).padStart(2, '0') ===
+          today
+        );
+      }
+      return c.type === filter;
+    })
+    .sort((a, b) => b.created.localeCompare(a.created));
+  el.innerHTML = rows.length
+    ? rows
+        .map(
+          (c) =>
+            `<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id) ? 'checked' : ''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type === 'MC' ? 'badge-mc' : c.type === 'PD' ? 'badge-pd' : 'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain ? ' / ' + esc(c.strain) : ''}</span></label>`
+        )
+        .join('')
+    : '<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>';
+}
+function toggleLabId(id, on) {
+  if (on) selectedLabIds.add(id);
+  else selectedLabIds.delete(id);
+  renderLabPreview();
+}
+function renderLabPreview() {
+  const el = document.getElementById('lab-preview');
+  const ids = [...selectedLabIds];
+  if (!ids.length) {
+    el.innerHTML = '<div class="empty">Tick cultures in the list to preview labels.</div>';
+    return;
+  }
+  const detail = document.getElementById('lab-mode').value;
+  const qr = document.getElementById('lab-qr').checked;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px';
+  const allDeferred = [];
+  ids.forEach((id) => {
+    const c = cultures.find((x) => x.id === id);
+    if (!c) return;
+    const { cell, deferred } = buildPreviewCell(labLabelItems(id, c, detail, qr));
     wrap.appendChild(cell);
     allDeferred.push(...deferred);
   });
-  el.innerHTML='';
+  el.innerHTML = '';
   el.appendChild(wrap);
-  renderPreviewDeferred(allDeferred,30);
+  renderPreviewDeferred(allDeferred, 30);
 }
 
 // ─── REF BARCODES ────────────────────────────────────────────
-async function makeQR(val){return new Promise(resolve=>{const div=document.createElement('div');div.style.cssText='display:inline-block';try{new QRCode(div,{text:val,width:120,height:120,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.L});setTimeout(()=>{const img=div.querySelector('img')||div.querySelector('canvas');if(img){img.style.cssText='display:block;width:100%;height:auto';resolve(img)}else resolve(null)},100)}catch{resolve(null)}})}
+async function makeQR(val) {
+  return new Promise((resolve) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:inline-block';
+    try {
+      new QRCode(div, {
+        text: val,
+        width: 120,
+        height: 120,
+        colorDark: '#000',
+        colorLight: '#fff',
+        correctLevel: QRCode.CorrectLevel.L
+      });
+      setTimeout(() => {
+        const img = div.querySelector('img') || div.querySelector('canvas');
+        if (img) {
+          img.style.cssText = 'display:block;width:100%;height:auto';
+          resolve(img);
+        } else resolve(null);
+      }, 100);
+    } catch {
+      resolve(null);
+    }
+  });
+}
 
-async function renderRefBarcodes(){const grid=document.getElementById('ref-grid');grid.innerHTML='';const useQR=document.getElementById('ref-qr').checked;for(const group of REF_GROUPS){const card=document.createElement('div');card.className='card';card.innerHTML=`<div class="sec">${group.g}</div>`;const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;align-items:flex-end';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.className='bc-cell';cell.style.cssText='min-width:140px;text-align:center;padding:8px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface)';if(useQR){const img=await makeQR(val);if(img)cell.appendChild(img);const lbl=document.createElement('div');lbl.style.cssText='font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.style.cssText='display:block';cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:60,displayValue:false,margin:14,background:'#fff',lineColor:'#000'})}catch{}},20);const lbl=document.createElement('div');lbl.style.cssText='font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px;text-align:center';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}card.appendChild(row);grid.appendChild(card)}}
-async function printRef(){const sheet=document.getElementById('ref-print-sheet');sheet.innerHTML='';const useQR=document.getElementById('ref-qr').checked;const title=document.createElement('div');title.style.cssText='font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';title.textContent='Meisterpilze — Reference '+(useQR?'QR Codes':'Barcodes');sheet.appendChild(title);let delay=0;for(const group of REF_GROUPS){const sec=document.createElement('div');sec.style.cssText='font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';sec.textContent=group.g;sheet.appendChild(sec);const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:20px;padding:0 8px';for(const item of group.items){const val=item.val,label=item.label;const cell=document.createElement('div');cell.style.cssText='border:1px solid var(--c-border);border-radius:6px;padding:12px 16px;text-align:center;background:var(--c-surface);page-break-inside:avoid';if(useQR){const img=await makeQR(val);if(img){img.style.width='90px';img.style.height='90px';cell.appendChild(img)}const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}else{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');cell.appendChild(svg);setTimeout(()=>{try{JsBarcode(svg,val,{format:'CODE128',width:2,height:60,displayValue:false,margin:14,background:'#fff',lineColor:'#000'})}catch{}},delay);delay+=25;const lbl=document.createElement('div');lbl.style.cssText='font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';lbl.textContent=label;cell.appendChild(lbl)}row.appendChild(cell)}sheet.appendChild(row)}setTimeout(()=>window.print(),useQR?800:delay+200)}
+async function renderRefBarcodes() {
+  const grid = document.getElementById('ref-grid');
+  grid.innerHTML = '';
+  const useQR = document.getElementById('ref-qr').checked;
+  for (const group of REF_GROUPS) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="sec">${group.g}</div>`;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;align-items:flex-end';
+    for (const item of group.items) {
+      const val = item.val,
+        label = item.label;
+      const cell = document.createElement('div');
+      cell.className = 'bc-cell';
+      cell.style.cssText =
+        'min-width:140px;text-align:center;padding:8px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface)';
+      if (useQR) {
+        const img = await makeQR(val);
+        if (img) cell.appendChild(img);
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px';
+        lbl.textContent = label;
+        cell.appendChild(lbl);
+      } else {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.style.cssText = 'display:block';
+        cell.appendChild(svg);
+        setTimeout(() => {
+          try {
+            JsBarcode(svg, val, {
+              format: 'CODE128',
+              width: 2,
+              height: 60,
+              displayValue: false,
+              margin: 14,
+              background: '#fff',
+              lineColor: '#000'
+            });
+          } catch {}
+        }, 20);
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px;text-align:center';
+        lbl.textContent = label;
+        cell.appendChild(lbl);
+      }
+      row.appendChild(cell);
+    }
+    card.appendChild(row);
+    grid.appendChild(card);
+  }
+}
+async function printRef() {
+  const sheet = document.getElementById('ref-print-sheet');
+  sheet.innerHTML = '';
+  const useQR = document.getElementById('ref-qr').checked;
+  const title = document.createElement('div');
+  title.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
+  title.textContent = 'Meisterpilze — Reference ' + (useQR ? 'QR Codes' : 'Barcodes');
+  sheet.appendChild(title);
+  let delay = 0;
+  for (const group of REF_GROUPS) {
+    const sec = document.createElement('div');
+    sec.style.cssText =
+      'font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';
+    sec.textContent = group.g;
+    sheet.appendChild(sec);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;padding:0 8px';
+    for (const item of group.items) {
+      const val = item.val,
+        label = item.label;
+      const cell = document.createElement('div');
+      cell.style.cssText =
+        'border:1px solid var(--c-border);border-radius:6px;padding:12px 16px;text-align:center;background:var(--c-surface);page-break-inside:avoid';
+      if (useQR) {
+        const img = await makeQR(val);
+        if (img) {
+          img.style.width = '90px';
+          img.style.height = '90px';
+          cell.appendChild(img);
+        }
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
+        lbl.textContent = label;
+        cell.appendChild(lbl);
+      } else {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        cell.appendChild(svg);
+        setTimeout(() => {
+          try {
+            JsBarcode(svg, val, {
+              format: 'CODE128',
+              width: 2,
+              height: 60,
+              displayValue: false,
+              margin: 14,
+              background: '#fff',
+              lineColor: '#000'
+            });
+          } catch {}
+        }, delay);
+        delay += 25;
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
+        lbl.textContent = label;
+        cell.appendChild(lbl);
+      }
+      row.appendChild(cell);
+    }
+    sheet.appendChild(row);
+  }
+  setTimeout(() => window.print(), useQR ? 800 : delay + 200);
+}
 
 // ─── GLOBAL SCAN ENGINE ──────────────────────────────────────
 // Session tracking
-let sessionEntries=[];
-let sessionStartTime=null;
-let sessionErrors=0;
-let _lastScanVal=null;
+let sessionEntries = [];
+let sessionStartTime = null;
+let sessionErrors = 0;
+let _lastScanVal = null;
 // Audio feedback
-let _scanAudioCtx=null;
-let scanAudioEnabled=true;
+let _scanAudioCtx = null;
+let scanAudioEnabled = true;
 // iOS requires AudioContext creation during a user gesture; call this from gesture handlers
-function _initScanAudio(){
-  if(!_scanAudioCtx){try{_scanAudioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch{}}
-  if(_scanAudioCtx&&_scanAudioCtx.state==='suspended')_scanAudioCtx.resume().catch(function(){});
+function _initScanAudio() {
+  if (!_scanAudioCtx) {
+    try {
+      _scanAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch {}
+  }
+  if (_scanAudioCtx && _scanAudioCtx.state === 'suspended') _scanAudioCtx.resume().catch(function () {});
 }
-function _scanBeep(freq,dur){
-  if(!scanAudioEnabled)return;
-  try{
+function _scanBeep(freq, dur) {
+  if (!scanAudioEnabled) return;
+  try {
     _initScanAudio();
-    if(!_scanAudioCtx)return;
-    var o=_scanAudioCtx.createOscillator();var g=_scanAudioCtx.createGain();
-    o.connect(g);g.connect(_scanAudioCtx.destination);
-    o.frequency.value=freq;g.gain.value=0.15;o.start();
-    g.gain.exponentialRampToValueAtTime(0.001,_scanAudioCtx.currentTime+dur/1000);
-    o.stop(_scanAudioCtx.currentTime+dur/1000);
-  }catch{}
+    if (!_scanAudioCtx) return;
+    var o = _scanAudioCtx.createOscillator();
+    var g = _scanAudioCtx.createGain();
+    o.connect(g);
+    g.connect(_scanAudioCtx.destination);
+    o.frequency.value = freq;
+    g.gain.value = 0.15;
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.001, _scanAudioCtx.currentTime + dur / 1000);
+    o.stop(_scanAudioCtx.currentTime + dur / 1000);
+  } catch {}
 }
 // Pleasant success chirp: 880Hz sine, 120ms with soft attack/release envelope
-function _scanBeepOk(){
-  if(!scanAudioEnabled)return;
-  try{
+function _scanBeepOk() {
+  if (!scanAudioEnabled) return;
+  try {
     _initScanAudio();
-    if(!_scanAudioCtx)return;
-    var ctx=_scanAudioCtx;var now=ctx.currentTime;
-    var o=ctx.createOscillator();var g=ctx.createGain();
-    o.type='sine';o.frequency.setValueAtTime(880,now);
-    o.connect(g);g.connect(ctx.destination);
-    g.gain.setValueAtTime(0.0001,now);
-    g.gain.exponentialRampToValueAtTime(0.22,now+0.015);
-    g.gain.exponentialRampToValueAtTime(0.0001,now+0.12);
-    o.start(now);o.stop(now+0.13);
-  }catch{}
+    if (!_scanAudioCtx) return;
+    var ctx = _scanAudioCtx;
+    var now = ctx.currentTime;
+    var o = ctx.createOscillator();
+    var g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(880, now);
+    o.connect(g);
+    g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.22, now + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    o.start(now);
+    o.stop(now + 0.13);
+  } catch {}
 }
 // Sharp error buzz: two dissonant square waves (280Hz + 350Hz), 350ms with gap
-function _scanBeepErr(){
-  if(!scanAudioEnabled)return;
-  try{
+function _scanBeepErr() {
+  if (!scanAudioEnabled) return;
+  try {
     _initScanAudio();
-    if(!_scanAudioCtx)return;
-    var ctx=_scanAudioCtx;var t0=ctx.currentTime;
-    function tone(start,dur){
-      var o1=ctx.createOscillator();var o2=ctx.createOscillator();var g=ctx.createGain();
-      o1.type='square';o2.type='square';
-      o1.frequency.setValueAtTime(280,start);
-      o2.frequency.setValueAtTime(350,start);
-      o1.connect(g);o2.connect(g);g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.0001,start);
-      g.gain.exponentialRampToValueAtTime(0.18,start+0.01);
-      g.gain.setValueAtTime(0.18,start+dur-0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001,start+dur);
-      o1.start(start);o2.start(start);
-      o1.stop(start+dur);o2.stop(start+dur);
+    if (!_scanAudioCtx) return;
+    var ctx = _scanAudioCtx;
+    var t0 = ctx.currentTime;
+    function tone(start, dur) {
+      var o1 = ctx.createOscillator();
+      var o2 = ctx.createOscillator();
+      var g = ctx.createGain();
+      o1.type = 'square';
+      o2.type = 'square';
+      o1.frequency.setValueAtTime(280, start);
+      o2.frequency.setValueAtTime(350, start);
+      o1.connect(g);
+      o2.connect(g);
+      g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.18, start + 0.01);
+      g.gain.setValueAtTime(0.18, start + dur - 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o1.start(start);
+      o2.start(start);
+      o1.stop(start + dur);
+      o2.stop(start + dur);
     }
-    tone(t0,0.14);
-    tone(t0+0.21,0.14);
-  }catch{}
+    tone(t0, 0.14);
+    tone(t0 + 0.21, 0.14);
+  } catch {}
 }
 // Tab navigation for 3-tab scan modal
-function switchScanTab(tab){
-  var tabs=document.querySelectorAll('.scan-tab');
-  var panels=document.querySelectorAll('.scan-tab-panel');
-  for(var i=0;i<tabs.length;i++){
-    var t=tabs[i];
-    if(t.getAttribute('data-scan-tab')===tab)t.classList.add('active');
+function switchScanTab(tab) {
+  var tabs = document.querySelectorAll('.scan-tab');
+  var panels = document.querySelectorAll('.scan-tab-panel');
+  for (var i = 0; i < tabs.length; i++) {
+    var t = tabs[i];
+    if (t.getAttribute('data-scan-tab') === tab) t.classList.add('active');
     else t.classList.remove('active');
   }
-  for(var j=0;j<panels.length;j++){
-    var p=panels[j];
-    if(p.getAttribute('data-scan-panel')===tab)p.classList.add('active');
+  for (var j = 0; j < panels.length; j++) {
+    var p = panels[j];
+    if (p.getAttribute('data-scan-panel') === tab) p.classList.add('active');
     else p.classList.remove('active');
   }
 }
 // Render the "Letzte Erfolge" tab from sessionEntries (session successes)
-function renderScanSuccesses(){
-  var list=document.getElementById('scan-successes-list');
-  if(!list)return;
-  list.innerHTML='';
-  var succ=(sessionEntries||[]).filter(function(e){return e&&e.action&&(e.batch||e.bag)});
-  var cnt=document.getElementById('scan-tab-succ-count');
-  if(cnt)cnt.textContent=String(succ.length);
+function renderScanSuccesses() {
+  var list = document.getElementById('scan-successes-list');
+  if (!list) return;
+  list.innerHTML = '';
+  var succ = (sessionEntries || []).filter(function (e) {
+    return e && e.action && (e.batch || e.bag);
+  });
+  var cnt = document.getElementById('scan-tab-succ-count');
+  if (cnt) cnt.textContent = String(succ.length);
   // Newest first
-  for(var i=succ.length-1;i>=0;i--){
-    var e=succ[i];
-    var row=document.createElement('div');
-    row.className='scan-success-row';
-    if(e._tempId)row.setAttribute('data-succ-id',e._tempId);
-    var tm=e.time?new Date(e.time):new Date();
-    var timeStr=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0');
-    var label=e.bag||e.batch||'';
-    var locStr=e.action==='MOVE'?((e.from||'?')+' → '+(e.to||'?'))
-      :e.action==='ADD'?('→ '+(e.to||''))
-      :e.action==='REMOVE'?('✕ '+(e.from||''))
-      :e.action==='HARVEST'?'🍄':'';
-    row.innerHTML='<span class="scan-success-time">'+timeStr+'</span>'
-      +'<span class="badge b-'+esc((e.action||'').toLowerCase())+'">'+esc(e.action||'')+'</span>'
-      +'<span class="scan-success-body"><b>'+esc(label)+'</b>'
-      +(locStr?' <span class="scan-success-loc">'+esc(locStr)+'</span>':'')+'</span>'
-      +'<button class="scan-success-undo" onclick="undoSuccessRow(this)" title="Undo">↩ Undo</button>';
+  for (var i = succ.length - 1; i >= 0; i--) {
+    var e = succ[i];
+    var row = document.createElement('div');
+    row.className = 'scan-success-row';
+    if (e._tempId) row.setAttribute('data-succ-id', e._tempId);
+    var tm = e.time ? new Date(e.time) : new Date();
+    var timeStr =
+      tm.getHours().toString().padStart(2, '0') +
+      ':' +
+      tm.getMinutes().toString().padStart(2, '0') +
+      ':' +
+      tm.getSeconds().toString().padStart(2, '0');
+    var label = e.bag || e.batch || '';
+    var locStr =
+      e.action === 'MOVE'
+        ? (e.from || '?') + ' → ' + (e.to || '?')
+        : e.action === 'ADD'
+          ? '→ ' + (e.to || '')
+          : e.action === 'REMOVE'
+            ? '✕ ' + (e.from || '')
+            : e.action === 'HARVEST'
+              ? '🍄'
+              : '';
+    row.innerHTML =
+      '<span class="scan-success-time">' +
+      timeStr +
+      '</span>' +
+      '<span class="badge b-' +
+      esc((e.action || '').toLowerCase()) +
+      '">' +
+      esc(e.action || '') +
+      '</span>' +
+      '<span class="scan-success-body"><b>' +
+      esc(label) +
+      '</b>' +
+      (locStr ? ' <span class="scan-success-loc">' + esc(locStr) + '</span>' : '') +
+      '</span>' +
+      '<button class="scan-success-undo" onclick="undoSuccessRow(this)" title="Undo">↩ Undo</button>';
     list.appendChild(row);
   }
 }
 // Undo from "Letzte Erfolge" tab row
-function undoSuccessRow(btn){
-  var row=btn.closest('.scan-success-row');
-  var tempId=row?row.getAttribute('data-succ-id'):null;
-  if(!tempId)return;
+function undoSuccessRow(btn) {
+  var row = btn.closest('.scan-success-row');
+  var tempId = row ? row.getAttribute('data-succ-id') : null;
+  if (!tempId) return;
   // Delegate to existing undoScanEntry via a matching log-entry button, or perform undo directly
-  var logBtn=document.querySelector('.scan-log-entry[data-scan-id="'+tempId+'"] .sle-undo');
-  if(logBtn){undoScanEntry(logBtn);renderScanSuccesses();return}
+  var logBtn = document.querySelector('.scan-log-entry[data-scan-id="' + tempId + '"] .sle-undo');
+  if (logBtn) {
+    undoScanEntry(logBtn);
+    renderScanSuccesses();
+    return;
+  }
   // Fallback: mirror undoScanEntry logic for entries not in the visible log
-  var idx=sessionEntries.findIndex(function(e){return e._tempId===tempId});
-  if(idx===-1)return;
-  var entry=sessionEntries[idx];
-  var si=scanLog.findIndex(function(e){return e._tempId===tempId});if(si!==-1)scanLog.splice(si,1);
-  var mi=movements.findIndex(function(e){return e._tempId===tempId});if(mi!==-1)movements.splice(mi,1);
-  sessionEntries.splice(idx,1);
-  if(entry._serverId)apiDelete('/api/scan-log/'+entry._serverId);
-  scan.count=Math.max(0,scan.count-1);
-  _scanBeep(400,100);
-  setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
-  updateSD();renderStatus();renderScanSuccesses();
+  var idx = sessionEntries.findIndex(function (e) {
+    return e._tempId === tempId;
+  });
+  if (idx === -1) return;
+  var entry = sessionEntries[idx];
+  var si = scanLog.findIndex(function (e) {
+    return e._tempId === tempId;
+  });
+  if (si !== -1) scanLog.splice(si, 1);
+  var mi = movements.findIndex(function (e) {
+    return e._tempId === tempId;
+  });
+  if (mi !== -1) movements.splice(mi, 1);
+  sessionEntries.splice(idx, 1);
+  if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  scan.count = Math.max(0, scan.count - 1);
+  _scanBeep(400, 100);
+  setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
+  updateSD();
+  renderStatus();
+  renderScanSuccesses();
 }
 // Transient overlay background flash to reinforce feedback
-var _scanBgFlashTimer=null;
-function _flashScanBg(type){
-  var ov=document.getElementById('scan-overlay');
-  if(!ov)return;
-  ov.classList.remove('scan-bg-ok','scan-bg-err');
-  if(type==='ok')ov.classList.add('scan-bg-ok');
-  else if(type==='err')ov.classList.add('scan-bg-err');
+var _scanBgFlashTimer = null;
+function _flashScanBg(type) {
+  var ov = document.getElementById('scan-overlay');
+  if (!ov) return;
+  ov.classList.remove('scan-bg-ok', 'scan-bg-err');
+  if (type === 'ok') ov.classList.add('scan-bg-ok');
+  else if (type === 'err') ov.classList.add('scan-bg-err');
   else return;
   clearTimeout(_scanBgFlashTimer);
-  _scanBgFlashTimer=setTimeout(function(){
-    ov.classList.remove('scan-bg-ok','scan-bg-err');
-  },800);
+  _scanBgFlashTimer = setTimeout(function () {
+    ov.classList.remove('scan-bg-ok', 'scan-bg-err');
+  }, 800);
 }
 // Multi-tab scan dedup via BroadcastChannel
-const scanChannel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('meister-scans'):null;
-if(scanChannel){
-  scanChannel.onmessage=function(ev){
-    if(ev.data&&ev.data.type==='scan-entry'){
+const scanChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('meister-scans') : null;
+if (scanChannel) {
+  scanChannel.onmessage = function (ev) {
+    if (ev.data && ev.data.type === 'scan-entry') {
       // Add to sessionEntries for dedup checking across tabs
       sessionEntries.push(ev.data.entry);
     }
   };
 }
 // Duplicate detection
-let _pendingDupe=null;let _pendingDupeTimer=null;
+let _pendingDupe = null;
+let _pendingDupeTimer = null;
 // Remove confirmation
-let _pendingRemove=null;let _pendingRemoveTimer=null;
+let _pendingRemove = null;
+let _pendingRemoveTimer = null;
 
-function openScanModal(){
+function openScanModal() {
   document.getElementById('scan-overlay').classList.add('open');
-  if(window.innerWidth<=768)document.body.style.overflow='hidden';
+  if (window.innerWidth <= 768) document.body.style.overflow = 'hidden';
 }
-function closeScanModal(){
+function closeScanModal() {
   document.getElementById('scan-overlay').classList.remove('open');
-  document.body.style.overflow='';
+  document.body.style.overflow = '';
 }
-function _addLogEntry(type,msg,entryData){
-  const log=document.getElementById('scan-modal-log');
-  const el=document.createElement('div');
-  el.className='scan-log-entry log-'+type;
-  if(entryData&&entryData._tempId)el.setAttribute('data-scan-id',entryData._tempId);
-  const tm=new Date();
-  const timeStr=tm.getHours().toString().padStart(2,'0')+':'+tm.getMinutes().toString().padStart(2,'0')+':'+tm.getSeconds().toString().padStart(2,'0');
-  if(entryData&&entryData.action&&entryData.batch){
-    const sp=entryData.species||'';
-    const bagLabel=entryData.bag||entryData.batch;
-    const locStr=entryData.action==='MOVE'?(entryData.from+' → '+entryData.to)
-      :entryData.action==='ADD'?('→ '+entryData.to)
-      :entryData.action==='REMOVE'?('✕ '+(entryData.from||''))
-      :entryData.action==='HARVEST'?(entryData.grams?entryData.grams+'g (Flush '+(entryData.flush||1)+')':'')
-      :'';
+function _addLogEntry(type, msg, entryData) {
+  const log = document.getElementById('scan-modal-log');
+  const el = document.createElement('div');
+  el.className = 'scan-log-entry log-' + type;
+  if (entryData && entryData._tempId) el.setAttribute('data-scan-id', entryData._tempId);
+  const tm = new Date();
+  const timeStr =
+    tm.getHours().toString().padStart(2, '0') +
+    ':' +
+    tm.getMinutes().toString().padStart(2, '0') +
+    ':' +
+    tm.getSeconds().toString().padStart(2, '0');
+  if (entryData && entryData.action && entryData.batch) {
+    const sp = entryData.species || '';
+    const bagLabel = entryData.bag || entryData.batch;
+    const locStr =
+      entryData.action === 'MOVE'
+        ? entryData.from + ' → ' + entryData.to
+        : entryData.action === 'ADD'
+          ? '→ ' + entryData.to
+          : entryData.action === 'REMOVE'
+            ? '✕ ' + (entryData.from || '')
+            : entryData.action === 'HARVEST'
+              ? entryData.grams
+                ? entryData.grams + 'g (Flush ' + (entryData.flush || 1) + ')'
+                : ''
+              : '';
     // Harvest entries are not undoable via the scan-log endpoint (harvests live in a separate table)
-    const canUndo=entryData.action!=='HARVEST';
-    el.innerHTML='<span class="sle-time">'+timeStr+'</span>'
-      +'<span class="badge b-'+esc(entryData.action.toLowerCase())+'">'+esc(entryData.action)+'</span> '
-      +'<span class="sle-msg"><b>'+esc(bagLabel)+'</b>'+(sp?' <span style="color:var(--c-text-muted);font-size:10px">'+esc(sp)+'</span>':'')
-      +(locStr?' <span style="color:var(--c-text-muted)">'+esc(locStr)+'</span>':'')+'</span>'
-      +(canUndo?'<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>':'');
-  }else{
-    el.innerHTML='<span class="sle-time">'+timeStr+'</span><span class="sle-msg">'+esc(msg)+'</span>';
+    const canUndo = entryData.action !== 'HARVEST';
+    el.innerHTML =
+      '<span class="sle-time">' +
+      timeStr +
+      '</span>' +
+      '<span class="badge b-' +
+      esc(entryData.action.toLowerCase()) +
+      '">' +
+      esc(entryData.action) +
+      '</span> ' +
+      '<span class="sle-msg"><b>' +
+      esc(bagLabel) +
+      '</b>' +
+      (sp ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(sp) + '</span>' : '') +
+      (locStr ? ' <span style="color:var(--c-text-muted)">' + esc(locStr) + '</span>' : '') +
+      '</span>' +
+      (canUndo ? '<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>' : '');
+  } else {
+    el.innerHTML = '<span class="sle-time">' + timeStr + '</span><span class="sle-msg">' + esc(msg) + '</span>';
   }
   log.prepend(el);
-  while(log.children.length>80)log.lastChild.remove();
+  while (log.children.length > 80) log.lastChild.remove();
 }
-let _toastTimer=null;
-let _camHudToastTimer=null;
-function setFb(type,msg,opts){
-  const entryData=opts&&opts._tempId?opts:null;
+let _toastTimer = null;
+let _camHudToastTimer = null;
+function setFb(type, msg, opts) {
+  const entryData = opts && opts._tempId ? opts : null;
   // When camera is active, show feedback on camera HUD instead of scan overlay
-  if(_camScanner&&(!opts||!opts.noModal)){
-    _showCamHudToast(type,msg);
+  if (_camScanner && (!opts || !opts.noModal)) {
+    _showCamHudToast(type, msg);
     updateCamHud();
-  }else{
-    if(!opts||!opts.noModal)openScanModal();
+  } else {
+    if (!opts || !opts.noModal) openScanModal();
   }
   // Always update scan overlay toast + log (for when user opens it later)
-  const el=document.getElementById('scan-toast');
-  el.className='scan-toast-inline fb-'+type;
-  el.textContent=msg;
-  requestAnimationFrame(()=>el.classList.add('visible'));
+  const el = document.getElementById('scan-toast');
+  el.className = 'scan-toast-inline fb-' + type;
+  el.textContent = msg;
+  requestAnimationFrame(() => el.classList.add('visible'));
   clearTimeout(_toastTimer);
-  _toastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
-  if(type==='err')sessionErrors++;
-  if(type==='ok'){_scanBeepOk();_flashScanBg('ok');if(typeof switchScanTab==='function')switchScanTab('current');}
-  else if(type==='err'){_scanBeepErr();_flashScanBg('err');if(typeof switchScanTab==='function')switchScanTab('current');}
-  _addLogEntry(type,msg,entryData);
-  if(type==='ok'&&typeof renderScanSuccesses==='function')renderScanSuccesses();
+  _toastTimer = setTimeout(() => el.classList.remove('visible'), type === 'err' ? 4000 : 3000);
+  if (type === 'err') sessionErrors++;
+  if (type === 'ok') {
+    _scanBeepOk();
+    _flashScanBg('ok');
+    if (typeof switchScanTab === 'function') switchScanTab('current');
+  } else if (type === 'err') {
+    _scanBeepErr();
+    _flashScanBg('err');
+    if (typeof switchScanTab === 'function') switchScanTab('current');
+  }
+  _addLogEntry(type, msg, entryData);
+  if (type === 'ok' && typeof renderScanSuccesses === 'function') renderScanSuccesses();
 }
-function _showCamHudToast(type,msg){
-  const el=document.getElementById('cam-hud-toast');
-  el.className='cam-hud-toast ht-'+type;
-  el.textContent=msg;
-  requestAnimationFrame(()=>el.classList.add('visible'));
+function _showCamHudToast(type, msg) {
+  const el = document.getElementById('cam-hud-toast');
+  el.className = 'cam-hud-toast ht-' + type;
+  el.textContent = msg;
+  requestAnimationFrame(() => el.classList.add('visible'));
   clearTimeout(_camHudToastTimer);
-  _camHudToastTimer=setTimeout(()=>el.classList.remove('visible'),type==='err'?4000:3000);
+  _camHudToastTimer = setTimeout(() => el.classList.remove('visible'), type === 'err' ? 4000 : 3000);
 }
-function updateCamHud(){
-  document.getElementById('ch-action').textContent=scan.action||'—';
-  document.getElementById('ch-from').textContent=scan.from||'—';
-  document.getElementById('ch-to').textContent=scan.to||'—';
-  document.getElementById('ch-count').textContent=scan.count;
+function updateCamHud() {
+  document.getElementById('ch-action').textContent = scan.action || '—';
+  document.getElementById('ch-from').textContent = scan.from || '—';
+  document.getElementById('ch-to').textContent = scan.to || '—';
+  document.getElementById('ch-count').textContent = scan.count;
   // Action chip color
-  const actionChip=document.getElementById('cam-chip-action');
-  actionChip.className='cam-chip'+(scan.action?' ch-set ch-'+scan.action.toLowerCase():'');
+  const actionChip = document.getElementById('cam-chip-action');
+  actionChip.className = 'cam-chip' + (scan.action ? ' ch-set ch-' + scan.action.toLowerCase() : '');
   // Show/hide from/arrow chips based on action
-  const fromChip=document.getElementById('cam-chip-from');
-  const arrowChip=document.getElementById('cam-chip-arrow');
-  const toChip=document.getElementById('cam-chip-to');
+  const fromChip = document.getElementById('cam-chip-from');
+  const arrowChip = document.getElementById('cam-chip-arrow');
+  const toChip = document.getElementById('cam-chip-to');
   // MOVE no longer needs FROM — FROM is auto-derived per bag
-  fromChip.style.display='none';
-  arrowChip.style.display='none';
-  toChip.className='cam-chip'+((scan.action==='ADD'||scan.action==='MOVE')&&scan.to?' ch-set':'');
-  toChip.style.display=(scan.action==='ADD'||scan.action==='MOVE')?'':'none';
-  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to);
-  toChip.classList.toggle('ch-pulse',toPulse);
+  fromChip.style.display = 'none';
+  arrowChip.style.display = 'none';
+  toChip.className = 'cam-chip' + ((scan.action === 'ADD' || scan.action === 'MOVE') && scan.to ? ' ch-set' : '');
+  toChip.style.display = scan.action === 'ADD' || scan.action === 'MOVE' ? '' : 'none';
+  const toPulse = (scan.action === 'ADD' && !scan.to) || (scan.action === 'MOVE' && !scan.to);
+  toChip.classList.toggle('ch-pulse', toPulse);
   // Count chip highlight
-  const countChip=document.getElementById('cam-chip-count');
-  countChip.className='cam-chip'+(scan.count>0?' ch-set':'');
+  const countChip = document.getElementById('cam-chip-count');
+  countChip.className = 'cam-chip' + (scan.count > 0 ? ' ch-set' : '');
 }
-function updateSD(){
-  document.getElementById('s-action').textContent=scan.action||'—';
-  document.getElementById('s-from').textContent=scan.from||'—';
-  document.getElementById('s-to').textContent=scan.to||'—';
-  document.getElementById('s-count').textContent=scan.count;
+function updateSD() {
+  document.getElementById('s-action').textContent = scan.action || '—';
+  document.getElementById('s-from').textContent = scan.from || '—';
+  document.getElementById('s-to').textContent = scan.to || '—';
+  document.getElementById('s-count').textContent = scan.count;
   // Action-colored header
-  const modal=document.getElementById('scan-modal');
-  modal.className='scan-modal'+(scan.action?' scan-action-'+scan.action.toLowerCase():'');
+  const modal = document.getElementById('scan-modal');
+  modal.className = 'scan-modal' + (scan.action ? ' scan-action-' + scan.action.toLowerCase() : '');
   // MOVE: hide FROM chip — FROM is auto-derived per bag
-  const fromChip=document.getElementById('chip-from');
-  fromChip.style.display=(scan.action==='MOVE'||scan.action==='MOVE_BATCH')?'none':'';
+  const fromChip = document.getElementById('chip-from');
+  fromChip.style.display = scan.action === 'MOVE' || scan.action === 'MOVE_BATCH' ? 'none' : '';
   // Chip pulse hints
-  const chipTo=document.getElementById('chip-to');
-  const toPulse=(scan.action==='ADD'&&!scan.to)||(scan.action==='MOVE'&&!scan.to)||(scan.action==='MOVE_BATCH'&&!scan.to);
-  chipTo.classList.toggle('chip-pulse',toPulse);
+  const chipTo = document.getElementById('chip-to');
+  const toPulse =
+    (scan.action === 'ADD' && !scan.to) ||
+    (scan.action === 'MOVE' && !scan.to) ||
+    (scan.action === 'MOVE_BATCH' && !scan.to);
+  chipTo.classList.toggle('chip-pulse', toPulse);
   // Last scan chip
-  const lastChip=document.getElementById('chip-last');
-  if(_lastScanVal){lastChip.style.display='';document.getElementById('s-last').textContent=_lastScanVal}
+  const lastChip = document.getElementById('chip-last');
+  if (_lastScanVal) {
+    lastChip.style.display = '';
+    document.getElementById('s-last').textContent = _lastScanVal;
+  }
   // Count bump animation
-  const countChip=document.getElementById('chip-count');
-  countChip.classList.remove('count-bump');void countChip.offsetWidth;
-  if(scan.count>0)countChip.classList.add('count-bump');
+  const countChip = document.getElementById('chip-count');
+  countChip.classList.remove('count-bump');
+  void countChip.offsetWidth;
+  if (scan.count > 0) countChip.classList.add('count-bump');
   // Session end button
-  document.getElementById('btn-end-session').style.display=sessionEntries.length>0?'':'none';
+  document.getElementById('btn-end-session').style.display = sessionEntries.length > 0 ? '' : 'none';
   // Also sync camera HUD if it exists
   updateCamHud();
 }
-function resetScan(){
-  scan={action:null,from:null,to:null,count:scan.count,harvestBag:null};
-  document.getElementById('harvest-panel').style.display='none';
-  _pendingDupe=null;_pendingRemove=null;
-  clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
-  updateSD();setFb('info',t('scanFb.setAction'));
+function resetScan() {
+  scan = { action: null, from: null, to: null, count: scan.count, harvestBag: null };
+  document.getElementById('harvest-panel').style.display = 'none';
+  _pendingDupe = null;
+  _pendingRemove = null;
+  clearTimeout(_pendingDupeTimer);
+  clearTimeout(_pendingRemoveTimer);
+  updateSD();
+  setFb('info', t('scanFb.setAction'));
 }
 // Undo a single scan entry by clicking the ↩ button
-function undoScanEntry(btn){
-  const row=btn.closest('.scan-log-entry');
-  const tempId=row?row.getAttribute('data-scan-id'):null;
-  if(!tempId)return;
-  const idx=sessionEntries.findIndex(e=>e._tempId===tempId);
-  if(idx===-1)return;
-  const entry=sessionEntries[idx];
+function undoScanEntry(btn) {
+  const row = btn.closest('.scan-log-entry');
+  const tempId = row ? row.getAttribute('data-scan-id') : null;
+  if (!tempId) return;
+  const idx = sessionEntries.findIndex((e) => e._tempId === tempId);
+  if (idx === -1) return;
+  const entry = sessionEntries[idx];
   // Remove from scanLog + movements
-  const si=scanLog.findIndex(e=>e._tempId===tempId);if(si!==-1)scanLog.splice(si,1);
-  const mi=movements.findIndex(e=>e._tempId===tempId);if(mi!==-1)movements.splice(mi,1);
-  sessionEntries.splice(idx,1);
+  const si = scanLog.findIndex((e) => e._tempId === tempId);
+  if (si !== -1) scanLog.splice(si, 1);
+  const mi = movements.findIndex((e) => e._tempId === tempId);
+  if (mi !== -1) movements.splice(mi, 1);
+  sessionEntries.splice(idx, 1);
   // Delete from server
-  if(entry._serverId)apiDelete('/api/scan-log/'+entry._serverId);
+  if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
   // Remove DOM row
-  if(row)row.remove();
-  scan.count=Math.max(0,scan.count-1);
-  _scanBeep(400,100);
-  setFb('info','Undo: '+entry.action+' '+(entry.bag||entry.batch));
-  updateSD();renderStatus();
-  if(typeof renderScanSuccesses==='function')renderScanSuccesses();
+  if (row) row.remove();
+  scan.count = Math.max(0, scan.count - 1);
+  _scanBeep(400, 100);
+  setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
+  updateSD();
+  renderStatus();
+  if (typeof renderScanSuccesses === 'function') renderScanSuccesses();
 }
 // Ctrl+Z undo support
-let _ctrlZPending=false;let _ctrlZTimer=null;
-document.addEventListener('keydown',function(e){
-  if(!document.getElementById('scan-overlay').classList.contains('open'))return;
-  if(e.ctrlKey&&e.key==='z'){
+let _ctrlZPending = false;
+let _ctrlZTimer = null;
+document.addEventListener('keydown', function (e) {
+  if (!document.getElementById('scan-overlay').classList.contains('open')) return;
+  if (e.ctrlKey && e.key === 'z') {
     e.preventDefault();
-    if(sessionEntries.length===0){setFb('info','Nichts zum Rückgängig machen');return}
-    if(!_ctrlZPending){
-      _ctrlZPending=true;
-      setFb('info','Ctrl+Z nochmal drücken zum Bestätigen');
-      _ctrlZTimer=setTimeout(()=>{_ctrlZPending=false},2000);
+    if (sessionEntries.length === 0) {
+      setFb('info', 'Nichts zum Rückgängig machen');
       return;
     }
-    _ctrlZPending=false;clearTimeout(_ctrlZTimer);
-    // Walk backwards to find the most recent undoable entry (skip HARVEST)
-    let lastUndoable=null;
-    for(let i=sessionEntries.length-1;i>=0;i--){
-      if(sessionEntries[i].action!=='HARVEST'){lastUndoable=sessionEntries[i];break}
+    if (!_ctrlZPending) {
+      _ctrlZPending = true;
+      setFb('info', 'Ctrl+Z nochmal drücken zum Bestätigen');
+      _ctrlZTimer = setTimeout(() => {
+        _ctrlZPending = false;
+      }, 2000);
+      return;
     }
-    if(!lastUndoable){setFb('info','Keine Scans zum Rückgängig machen');return}
-    const btn=document.querySelector('[data-scan-id="'+lastUndoable._tempId+'"] .sle-undo');
-    if(btn)undoScanEntry(btn);
+    _ctrlZPending = false;
+    clearTimeout(_ctrlZTimer);
+    // Walk backwards to find the most recent undoable entry (skip HARVEST)
+    let lastUndoable = null;
+    for (let i = sessionEntries.length - 1; i >= 0; i--) {
+      if (sessionEntries[i].action !== 'HARVEST') {
+        lastUndoable = sessionEntries[i];
+        break;
+      }
+    }
+    if (!lastUndoable) {
+      setFb('info', 'Keine Scans zum Rückgängig machen');
+      return;
+    }
+    const btn = document.querySelector('[data-scan-id="' + lastUndoable._tempId + '"] .sle-undo');
+    if (btn) undoScanEntry(btn);
   }
 });
 // End session → show summary
-function endScanSession(){
-  if(sessionEntries.length===0)return;
+function endScanSession() {
+  if (sessionEntries.length === 0) return;
   // Summary lives in the "current" tab panel — make sure it's visible
-  if(typeof switchScanTab==='function')switchScanTab('current');
-  const sumEl=document.getElementById('scan-session-summary');
+  if (typeof switchScanTab === 'function') switchScanTab('current');
+  const sumEl = document.getElementById('scan-session-summary');
   // Hide log, show summary
-  document.getElementById('scan-modal-log').style.display='none';
-  document.getElementById('scan-toast').style.display='none';
-  sumEl.style.display='block';
-  const dur=sessionStartTime?Math.round((Date.now()-sessionStartTime)/60000):0;
-  const startStr=sessionStartTime?new Date(sessionStartTime).toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'}):'';
-  const endStr=new Date().toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('scan-modal-log').style.display = 'none';
+  document.getElementById('scan-toast').style.display = 'none';
+  sumEl.style.display = 'block';
+  const dur = sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 60000) : 0;
+  const startStr = sessionStartTime
+    ? new Date(sessionStartTime).toLocaleTimeString('de', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  const endStr = new Date().toLocaleTimeString('de', { hour: '2-digit', minute: '2-digit' });
   // Count by action
-  const counts={ADD:0,MOVE:0,REMOVE:0,HARVEST:0};
-  const touchedBatches=new Map();
-  sessionEntries.forEach(e=>{
-    if(counts[e.action]!==undefined)counts[e.action]++;
-    if(e.batch&&!touchedBatches.has(e.batch))touchedBatches.set(e.batch,e.species||'');
+  const counts = { ADD: 0, MOVE: 0, REMOVE: 0, HARVEST: 0 };
+  const touchedBatches = new Map();
+  sessionEntries.forEach((e) => {
+    if (counts[e.action] !== undefined) counts[e.action]++;
+    if (e.batch && !touchedBatches.has(e.batch)) touchedBatches.set(e.batch, e.species || '');
   });
   // Location summary
-  const locSummary=[];
-  if(counts.ADD>0){
-    const locs={};sessionEntries.filter(e=>e.action==='ADD').forEach(e=>{locs[e.to]=(locs[e.to]||0)+1});
-    Object.entries(locs).forEach(([l,n])=>locSummary.push(n+' Bags → '+esc(l)));
+  const locSummary = [];
+  if (counts.ADD > 0) {
+    const locs = {};
+    sessionEntries
+      .filter((e) => e.action === 'ADD')
+      .forEach((e) => {
+        locs[e.to] = (locs[e.to] || 0) + 1;
+      });
+    Object.entries(locs).forEach(([l, n]) => locSummary.push(n + ' Bags → ' + esc(l)));
   }
-  if(counts.MOVE>0){
-    const moves={};sessionEntries.filter(e=>e.action==='MOVE').forEach(e=>{const k=esc(e.from)+' → '+esc(e.to);moves[k]=(moves[k]||0)+1});
-    Object.entries(moves).forEach(([k,n])=>locSummary.push(n+' Bags '+k));
+  if (counts.MOVE > 0) {
+    const moves = {};
+    sessionEntries
+      .filter((e) => e.action === 'MOVE')
+      .forEach((e) => {
+        const k = esc(e.from) + ' → ' + esc(e.to);
+        moves[k] = (moves[k] || 0) + 1;
+      });
+    Object.entries(moves).forEach(([k, n]) => locSummary.push(n + ' Bags ' + k));
   }
-  let batchHtml='';
-  touchedBatches.forEach((sp,bid)=>{batchHtml+='<span>'+esc(bid)+(sp?' ('+esc(sp)+')':'')+'</span>';});
-  sumEl.innerHTML='<h3>'+t('scan.sessionSummary')+'</h3>'
-    +'<div class="scan-summary-grid">'
-    +'<div class="scan-summary-stat"><div class="ss-num">'+scan.count+'</div><div class="ss-lbl">'+t('scan.totalCount')+'</div></div>'
-    +(counts.ADD?'<div class="scan-summary-stat" style="border-top:3px solid #86efac"><div class="ss-num">'+counts.ADD+'</div><div class="ss-lbl">ADD</div></div>':'')
-    +(counts.MOVE?'<div class="scan-summary-stat" style="border-top:3px solid #93c5fd"><div class="ss-num">'+counts.MOVE+'</div><div class="ss-lbl">MOVE</div></div>':'')
-    +(counts.REMOVE?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+counts.REMOVE+'</div><div class="ss-lbl">REMOVE</div></div>':'')
-    +(counts.HARVEST?'<div class="scan-summary-stat" style="border-top:3px solid #fcd34d"><div class="ss-num">'+counts.HARVEST+'</div><div class="ss-lbl">HARVEST</div></div>':'')
-    +(sessionErrors?'<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">'+sessionErrors+'</div><div class="ss-lbl">'+t('scan.sessionErrors')+'</div></div>':'')
-    +'</div>'
-    +'<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">'+t('scan.duration')+': '+dur+' Min'+(startStr?' ('+startStr+' – '+endStr+')':'')+'</div>'
-    +(batchHtml?'<div class="scan-summary-batches">'+t('scan.batches')+': '+batchHtml+'</div>':'')
-    +(locSummary.length?'<div style="font-size:12px;margin-bottom:12px">'+locSummary.join(' · ')+'</div>':'')
-    +'<div class="scan-summary-actions">'
-    +'<button class="btn-xs" onclick="closeScanSession()">'+t('scan.close')+'</button>'
-    +'<button class="btn-xs green" onclick="newScanSession()">'+t('scan.newSession')+'</button>'
-    +'</div>';
+  let batchHtml = '';
+  touchedBatches.forEach((sp, bid) => {
+    batchHtml += '<span>' + esc(bid) + (sp ? ' (' + esc(sp) + ')' : '') + '</span>';
+  });
+  sumEl.innerHTML =
+    '<h3>' +
+    t('scan.sessionSummary') +
+    '</h3>' +
+    '<div class="scan-summary-grid">' +
+    '<div class="scan-summary-stat"><div class="ss-num">' +
+    scan.count +
+    '</div><div class="ss-lbl">' +
+    t('scan.totalCount') +
+    '</div></div>' +
+    (counts.ADD
+      ? '<div class="scan-summary-stat" style="border-top:3px solid #86efac"><div class="ss-num">' +
+        counts.ADD +
+        '</div><div class="ss-lbl">ADD</div></div>'
+      : '') +
+    (counts.MOVE
+      ? '<div class="scan-summary-stat" style="border-top:3px solid #93c5fd"><div class="ss-num">' +
+        counts.MOVE +
+        '</div><div class="ss-lbl">MOVE</div></div>'
+      : '') +
+    (counts.REMOVE
+      ? '<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">' +
+        counts.REMOVE +
+        '</div><div class="ss-lbl">REMOVE</div></div>'
+      : '') +
+    (counts.HARVEST
+      ? '<div class="scan-summary-stat" style="border-top:3px solid #fcd34d"><div class="ss-num">' +
+        counts.HARVEST +
+        '</div><div class="ss-lbl">HARVEST</div></div>'
+      : '') +
+    (sessionErrors
+      ? '<div class="scan-summary-stat" style="border-top:3px solid #fca5a5"><div class="ss-num">' +
+        sessionErrors +
+        '</div><div class="ss-lbl">' +
+        t('scan.sessionErrors') +
+        '</div></div>'
+      : '') +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">' +
+    t('scan.duration') +
+    ': ' +
+    dur +
+    ' Min' +
+    (startStr ? ' (' + startStr + ' – ' + endStr + ')' : '') +
+    '</div>' +
+    (batchHtml ? '<div class="scan-summary-batches">' + t('scan.batches') + ': ' + batchHtml + '</div>' : '') +
+    (locSummary.length ? '<div style="font-size:12px;margin-bottom:12px">' + locSummary.join(' · ') + '</div>' : '') +
+    '<div class="scan-summary-actions">' +
+    '<button class="btn-xs" onclick="closeScanSession()">' +
+    t('scan.close') +
+    '</button>' +
+    '<button class="btn-xs green" onclick="newScanSession()">' +
+    t('scan.newSession') +
+    '</button>' +
+    '</div>';
 }
-function closeScanSession(){
-  document.getElementById('scan-session-summary').style.display='none';
-  document.getElementById('scan-modal-log').style.display='';
-  document.getElementById('scan-toast').style.display='';
+function closeScanSession() {
+  document.getElementById('scan-session-summary').style.display = 'none';
+  document.getElementById('scan-modal-log').style.display = '';
+  document.getElementById('scan-toast').style.display = '';
   closeScanModal();
 }
-function newScanSession(){
-  document.getElementById('scan-session-summary').style.display='none';
-  document.getElementById('scan-modal-log').style.display='';
-  document.getElementById('scan-toast').style.display='';
-  document.getElementById('scan-modal-log').innerHTML='';
-  sessionEntries=[];sessionStartTime=null;sessionErrors=0;_lastScanVal=null;
-  scan.count=0;
-  if(typeof renderScanSuccesses==='function')renderScanSuccesses();
+function newScanSession() {
+  document.getElementById('scan-session-summary').style.display = 'none';
+  document.getElementById('scan-modal-log').style.display = '';
+  document.getElementById('scan-toast').style.display = '';
+  document.getElementById('scan-modal-log').innerHTML = '';
+  sessionEntries = [];
+  sessionStartTime = null;
+  sessionErrors = 0;
+  _lastScanVal = null;
+  scan.count = 0;
+  if (typeof renderScanSuccesses === 'function') renderScanSuccesses();
   resetScan();
 }
-let _scanTempIdCounter=0;
-function processScan(raw){
+let _scanTempIdCounter = 0;
+function processScan(raw) {
   // Underscore/hyphen convention:
   // - Location barcodes use UNDERSCORES (e.g. INC_BUERO_01, SPAWN_R1) — kept as-is
   // - Action commands use UNDERSCORES — kept as-is
@@ -8295,315 +11717,560 @@ function processScan(raw){
   // German HID barcode scanners send underscores for hyphens, so we convert
   // only for non-location, non-action values. Adding new location formats that
   // use hyphens would break this logic — always use underscores for locations.
-  let val=raw.trim().toUpperCase();if(!val)return;
+  let val = raw.trim().toUpperCase();
+  if (!val) return;
 
   // ── Numeric barcode lookup (new system: 7+ digit numbers) ──
-  const numVal=parseInt(val,10);
-  if(/^\d{7,}$/.test(val)&&numVal>=1000000){
-    const entry=barcodeRegistry.get(numVal);
-    if(!entry){setFb('err','Unbekannter Barcode: '+val);return}
-    if(entry.type==='bag'){
-      val=entry.id; // e.g. "SHI-260327-01-06"
-      setFb('info',t('scanFb.matched',{val:val,batch:val.split('-').slice(0,-1).join('-')}));
-    }else if(entry.type==='culture'){
-      val=entry.id; // e.g. "MC-SHI-260327-01"
-    }else if(entry.type==='zone'||entry.type==='rack'){
-      val=entry.id; // e.g. "INC" or "INC_R1"
-    }else if(entry.type==='asset'){
-      setFb('info','Asset: '+entry.id);return;
+  const numVal = parseInt(val, 10);
+  if (/^\d{7,}$/.test(val) && numVal >= 1000000) {
+    const entry = barcodeRegistry.get(numVal);
+    if (!entry) {
+      setFb('err', 'Unbekannter Barcode: ' + val);
+      return;
     }
-  }else{
+    if (entry.type === 'bag') {
+      val = entry.id; // e.g. "SHI-260327-01-06"
+      setFb('info', t('scanFb.matched', { val: val, batch: val.split('-').slice(0, -1).join('-') }));
+    } else if (entry.type === 'culture') {
+      val = entry.id; // e.g. "MC-SHI-260327-01"
+    } else if (entry.type === 'zone' || entry.type === 'rack') {
+      val = entry.id; // e.g. "INC" or "INC_R1"
+    } else if (entry.type === 'asset') {
+      setFb('info', 'Asset: ' + entry.id);
+      return;
+    }
+  } else {
     // ── Legacy barcode fallback ──
-    if(ACTIONS.includes(val)||LOCS.includes(val)){/* keep underscores */}
-    else{val=val.replace(/_/g,'-')} // German HID keyboard fix for bag IDs
+    if (ACTIONS.includes(val) || LOCS.includes(val)) {
+      /* keep underscores */
+    } else {
+      val = val.replace(/_/g, '-');
+    } // German HID keyboard fix for bag IDs
     // Decode barcode → full bag ID.
     // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
     // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
-    const parts=val.split('-');
-    let matchBatch=null,scannedBag='';
-    if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2])){
-      const scannedKz=parts[0];
-      const scannedMmdd=parts[1];
-      scannedBag=parts[2].padStart(2,'0');
-      matchBatch=batches.find(b=>{
-        const bKz=(b.strainKuerzel||b.strain||'').toUpperCase();
-        const bDateParts=b.batchId.split('-');
-        const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
-        return bKz===scannedKz && bMmdd===scannedMmdd;
+    const parts = val.split('-');
+    let matchBatch = null,
+      scannedBag = '';
+    if (parts.length === 3 && /^\d{4}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) {
+      const scannedKz = parts[0];
+      const scannedMmdd = parts[1];
+      scannedBag = parts[2].padStart(2, '0');
+      matchBatch = batches.find((b) => {
+        const bKz = (b.strainKuerzel || b.strain || '').toUpperCase();
+        const bDateParts = b.batchId.split('-');
+        const bMmdd = bDateParts[1] ? bDateParts[1].slice(2, 4) + bDateParts[1].slice(0, 2) : '';
+        return bKz === scannedKz && bMmdd === scannedMmdd;
       });
-    }else if(parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-      const scannedSp=parts[0];
-      const scannedSt=parts[1];
-      const scannedMmdd=parts[2];
-      scannedBag=parts[3].padStart(2,'0');
-      matchBatch=batches.find(b=>{
-        const bSp=spAbbrev(b.species);
-        const bSt=(b.strain||'000').slice(0,3).toUpperCase();
-        const bDateParts=b.batchId.split('-');
-        const bMmdd=bDateParts[1]?bDateParts[1].slice(2,4)+bDateParts[1].slice(0,2):'';
-        return bSp===scannedSp && bSt===scannedSt && bMmdd===scannedMmdd;
+    } else if (parts.length === 4 && /^\d{4}$/.test(parts[2]) && /^\d{1,2}$/.test(parts[3])) {
+      const scannedSp = parts[0];
+      const scannedSt = parts[1];
+      const scannedMmdd = parts[2];
+      scannedBag = parts[3].padStart(2, '0');
+      matchBatch = batches.find((b) => {
+        const bSp = spAbbrev(b.species);
+        const bSt = (b.strain || '000').slice(0, 3).toUpperCase();
+        const bDateParts = b.batchId.split('-');
+        const bMmdd = bDateParts[1] ? bDateParts[1].slice(2, 4) + bDateParts[1].slice(0, 2) : '';
+        return bSp === scannedSp && bSt === scannedSt && bMmdd === scannedMmdd;
       });
     }
-    if(parts.length===3&&/^\d{4}$/.test(parts[1])&&/^\d{1,2}$/.test(parts[2]) || parts.length===4&&/^\d{4}$/.test(parts[2])&&/^\d{1,2}$/.test(parts[3])){
-      if(matchBatch){
-        val=matchBatch.batchId+'-'+scannedBag;
-        setFb('info',t('scanFb.matched',{val:val,batch:matchBatch.batchId}));
-      }else{
-        setFb('err',t('scanFb.noBatchFound',{val:val}));
+    if (
+      (parts.length === 3 && /^\d{4}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) ||
+      (parts.length === 4 && /^\d{4}$/.test(parts[2]) && /^\d{1,2}$/.test(parts[3]))
+    ) {
+      if (matchBatch) {
+        val = matchBatch.batchId + '-' + scannedBag;
+        setFb('info', t('scanFb.matched', { val: val, batch: matchBatch.batchId }));
+      } else {
+        setFb('err', t('scanFb.noBatchFound', { val: val }));
         return;
       }
     }
   }
-  if(ACTIONS.includes(val)){
-    const keepTo=(val===scan.action&&scan.to);scan.action=val;scan.from=null;scan.to=keepTo?scan.to:null;scan.harvestBag=null;
-    document.getElementById('harvest-panel').style.display='none';
-    _pendingDupe=null;_pendingRemove=null;
-    clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);
+  if (ACTIONS.includes(val)) {
+    const keepTo = val === scan.action && scan.to;
+    scan.action = val;
+    scan.from = null;
+    scan.to = keepTo ? scan.to : null;
+    scan.harvestBag = null;
+    document.getElementById('harvest-panel').style.display = 'none';
+    _pendingDupe = null;
+    _pendingRemove = null;
+    clearTimeout(_pendingDupeTimer);
+    clearTimeout(_pendingRemoveTimer);
     updateSD();
-    setFb('ok',{ADD:t('scanFb.actionAdd'),MOVE:t('scanFb.actionMove'),MOVE_BATCH:'MOVE BATCH — Ziel scannen',REMOVE:t('scanFb.actionRemove'),HARVEST:t('scanFb.actionHarvest')}[val]);return;
+    setFb(
+      'ok',
+      {
+        ADD: t('scanFb.actionAdd'),
+        MOVE: t('scanFb.actionMove'),
+        MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
+        REMOVE: t('scanFb.actionRemove'),
+        HARVEST: t('scanFb.actionHarvest')
+      }[val]
+    );
+    return;
   }
-  if(LOCS.includes(val)){
+  if (LOCS.includes(val)) {
     // Warn if scanning a zone that has racks — suggest using a rack instead
-    const zoneObj=zones.find(z=>z.id===val);
-    const isZoneWithRacks=zoneObj&&zoneObj.racks.length>0;
-    if(scan.action==='ADD'){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.location',{loc:val}));return}
-    if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){scan.to=val;updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):t('scanFb.to',{loc:val}));return}
+    const zoneObj = zones.find((z) => z.id === val);
+    const isZoneWithRacks = zoneObj && zoneObj.racks.length > 0;
+    if (scan.action === 'ADD') {
+      scan.to = val;
+      updateSD();
+      setFb(
+        isZoneWithRacks ? 'warn' : 'ok',
+        isZoneWithRacks
+          ? t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id })
+          : t('scanFb.location', { loc: val })
+      );
+      return;
+    }
+    if ((scan.action === 'MOVE' || scan.action === 'MOVE_BATCH') && !scan.to) {
+      scan.to = val;
+      updateSD();
+      setFb(
+        isZoneWithRacks ? 'warn' : 'ok',
+        isZoneWithRacks
+          ? t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id })
+          : t('scanFb.to', { loc: val })
+      );
+      return;
+    }
     // No action set? Auto-set to MOVE with this location as destination
-    if(!scan.action){scan.action='MOVE';scan.to=val;scan.from=null;scan.harvestBag=null;_pendingDupe=null;_pendingRemove=null;clearTimeout(_pendingDupeTimer);clearTimeout(_pendingRemoveTimer);updateSD();setFb(isZoneWithRacks?'warn':'ok',isZoneWithRacks?t('scanFb.preferRack',{loc:val,example:zoneObj.racks[0].id}):'MOVE → '+val+' — jetzt Bags scannen');return}
-    setFb('err',t('scanFb.setAction'));return;
+    if (!scan.action) {
+      scan.action = 'MOVE';
+      scan.to = val;
+      scan.from = null;
+      scan.harvestBag = null;
+      _pendingDupe = null;
+      _pendingRemove = null;
+      clearTimeout(_pendingDupeTimer);
+      clearTimeout(_pendingRemoveTimer);
+      updateSD();
+      setFb(
+        isZoneWithRacks ? 'warn' : 'ok',
+        isZoneWithRacks
+          ? t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id })
+          : 'MOVE → ' + val + ' — jetzt Bags scannen'
+      );
+      return;
+    }
+    setFb('err', t('scanFb.setAction'));
+    return;
   }
   // Culture ID scan → open lineage
-  if(/^(MC|PD|LC)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)){
-    const c=cultures.find(x=>x.id.toUpperCase()===val);
-    if(c){closeCamScan();go('lab','n-lab');openStab('lab','lineage');setTimeout(()=>{document.getElementById('lineage-sel').value='C:'+c.id;renderLineage()},100);setFb('ok',t('scanFb.cultureScanned',{val:val}));return}
+  if (/^(MC|PD|LC)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
+    const c = cultures.find((x) => x.id.toUpperCase() === val);
+    if (c) {
+      closeCamScan();
+      go('lab', 'n-lab');
+      openStab('lab', 'lineage');
+      setTimeout(() => {
+        document.getElementById('lineage-sel').value = 'C:' + c.id;
+        renderLineage();
+      }, 100);
+      setFb('ok', t('scanFb.cultureScanned', { val: val }));
+      return;
+    }
   }
-  const isBag=/-\d{2}$/.test(val);
-  const batchId=isBag?val.split('-').slice(0,-1).join('-'):val;
-  const batch=batches.find(b=>b.batchId.toUpperCase()===batchId.toUpperCase());
-  if(batch||isBag){
-    if(!scan.action){openBagInfo(val,batchId,batch);return}
-    if(scan.action==='HARVEST'){showHarvestPanel(isBag?val:batchId,batchId);return}
-    if(scan.action==='ADD'&&!scan.to){setFb('err',t('scanFb.scanLocFirst'));return}
-    if((scan.action==='MOVE'||scan.action==='MOVE_BATCH')&&!scan.to){setFb('err',t('scanFb.scanToFirst'));return}
+  const isBag = /-\d{2}$/.test(val);
+  const batchId = isBag ? val.split('-').slice(0, -1).join('-') : val;
+  const batch = batches.find((b) => b.batchId.toUpperCase() === batchId.toUpperCase());
+  if (batch || isBag) {
+    if (!scan.action) {
+      openBagInfo(val, batchId, batch);
+      return;
+    }
+    if (scan.action === 'HARVEST') {
+      showHarvestPanel(isBag ? val : batchId, batchId);
+      return;
+    }
+    if (scan.action === 'ADD' && !scan.to) {
+      setFb('err', t('scanFb.scanLocFirst'));
+      return;
+    }
+    if ((scan.action === 'MOVE' || scan.action === 'MOVE_BATCH') && !scan.to) {
+      setFb('err', t('scanFb.scanToFirst'));
+      return;
+    }
     // MOVE_BATCH: scan any bag or batch ID → move entire batch
-    if(scan.action==='MOVE_BATCH'&&batch){
-      moveBatchTo(batch,scan.to,function(moved,skipped){
-        if(!moved){_scanBeep(500,120);setFb('err','Batch '+batch.batchId+': keine Bags zum Verschieben'+(skipped?' ('+skipped+' bereits in '+scan.to+')':''));updateSD();return}
-        setFb('ok','MOVE BATCH '+batch.batchId+': '+moved+' Bags → '+scan.to+(skipped?' ('+skipped+' übersprungen)':''));
-        scan.count+=moved;updateSD();
+    if (scan.action === 'MOVE_BATCH' && batch) {
+      moveBatchTo(batch, scan.to, function (moved, skipped) {
+        if (!moved) {
+          _scanBeep(500, 120);
+          setFb(
+            'err',
+            'Batch ' +
+              batch.batchId +
+              ': keine Bags zum Verschieben' +
+              (skipped ? ' (' + skipped + ' bereits in ' + scan.to + ')' : '')
+          );
+          updateSD();
+          return;
+        }
+        setFb(
+          'ok',
+          'MOVE BATCH ' +
+            batch.batchId +
+            ': ' +
+            moved +
+            ' Bags → ' +
+            scan.to +
+            (skipped ? ' (' + skipped + ' übersprungen)' : '')
+        );
+        scan.count += moved;
+        updateSD();
       });
       return;
     }
     // MOVE: auto-derive FROM from bag's last known location
-    if(scan.action==='MOVE'){
-      const bagLast=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'||e.action==='REMOVE'));
-      if(!bagLast){_scanBeep(300,150);setFb('err',t('scanFb.bagNotPlaced',{bag:val}));return}
-      if(bagLast.action==='REMOVE'){_scanBeep(300,150);setFb('err',t('scanFb.bagRemoved',{bag:val}));return}
-      const curLoc=bagLast.to||null;
-      if(curLoc&&curLoc.toUpperCase()===scan.to.toUpperCase()){_scanBeep(500,120);setFb('err',t('scanFb.bagAlreadyAt',{bag:val,loc:scan.to}));return}
-      scan.from=curLoc;
+    if (scan.action === 'MOVE') {
+      const bagLast = [...scanLog]
+        .reverse()
+        .find(
+          (e) =>
+            (e.bag || '').toUpperCase() === val.toUpperCase() &&
+            (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+        );
+      if (!bagLast) {
+        _scanBeep(300, 150);
+        setFb('err', t('scanFb.bagNotPlaced', { bag: val }));
+        return;
+      }
+      if (bagLast.action === 'REMOVE') {
+        _scanBeep(300, 150);
+        setFb('err', t('scanFb.bagRemoved', { bag: val }));
+        return;
+      }
+      const curLoc = bagLast.to || null;
+      if (curLoc && curLoc.toUpperCase() === scan.to.toUpperCase()) {
+        _scanBeep(500, 120);
+        setFb('err', t('scanFb.bagAlreadyAt', { bag: val, loc: scan.to }));
+        return;
+      }
+      scan.from = curLoc;
     }
     // REMOVE: auto-derive FROM from bag's last known location
-    if(scan.action==='REMOVE'){
-      const bagLastR=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===val.toUpperCase()&&(e.action==='ADD'||e.action==='MOVE'));
-      scan.from=bagLastR?bagLastR.to:null;
+    if (scan.action === 'REMOVE') {
+      const bagLastR = [...scanLog]
+        .reverse()
+        .find((e) => (e.bag || '').toUpperCase() === val.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE'));
+      scan.from = bagLastR ? bagLastR.to : null;
     }
     // REMOVE confirmation: require scanning same bag twice within 5s
-    if(scan.action==='REMOVE'){
-      if(_pendingRemove&&_pendingRemove.val===val){
-        clearTimeout(_pendingRemoveTimer);_pendingRemove=null;
-        // Confirmed — fall through to log it
-      }else{
-        _pendingRemove={val};
+    if (scan.action === 'REMOVE') {
+      if (_pendingRemove && _pendingRemove.val === val) {
         clearTimeout(_pendingRemoveTimer);
-        _pendingRemoveTimer=setTimeout(()=>{_pendingRemove=null},5000);
-        _scanBeep(300,150);
-        setFb('err','REMOVE '+val+'? Nochmal scannen zum Bestätigen.');
+        _pendingRemove = null;
+        // Confirmed — fall through to log it
+      } else {
+        _pendingRemove = { val };
+        clearTimeout(_pendingRemoveTimer);
+        _pendingRemoveTimer = setTimeout(() => {
+          _pendingRemove = null;
+        }, 5000);
+        _scanBeep(300, 150);
+        setFb('err', 'REMOVE ' + val + '? Nochmal scannen zum Bestätigen.');
         return;
       }
     }
     // Duplicate detection: warn if same bag+action+to already in session
-    const dupeKey=val+'|'+scan.action+'|'+scan.to;
-    if(scan.action!=='REMOVE'){
-      const hasDupe=sessionEntries.some(e=>(e.bag||e.batch)+'|'+e.action+'|'+e.to===dupeKey);
-      if(hasDupe){
-        if(_pendingDupe===dupeKey){
-          clearTimeout(_pendingDupeTimer);_pendingDupe=null;
-          // Confirmed duplicate — fall through
-        }else{
-          _pendingDupe=dupeKey;
+    const dupeKey = val + '|' + scan.action + '|' + scan.to;
+    if (scan.action !== 'REMOVE') {
+      const hasDupe = sessionEntries.some((e) => (e.bag || e.batch) + '|' + e.action + '|' + e.to === dupeKey);
+      if (hasDupe) {
+        if (_pendingDupe === dupeKey) {
           clearTimeout(_pendingDupeTimer);
-          _pendingDupeTimer=setTimeout(()=>{_pendingDupe=null},3000);
-          _scanBeep(500,120);
-          setFb('err',val+' bereits gescannt als '+scan.action+(scan.to?' → '+scan.to:'')+'. Nochmal scannen zum Bestätigen.');
+          _pendingDupe = null;
+          // Confirmed duplicate — fall through
+        } else {
+          _pendingDupe = dupeKey;
+          clearTimeout(_pendingDupeTimer);
+          _pendingDupeTimer = setTimeout(() => {
+            _pendingDupe = null;
+          }, 3000);
+          _scanBeep(500, 120);
+          setFb(
+            'err',
+            val +
+              ' bereits gescannt als ' +
+              scan.action +
+              (scan.to ? ' → ' + scan.to : '') +
+              '. Nochmal scannen zum Bestätigen.'
+          );
           return;
         }
       }
     }
-    const tempId='s'+(++_scanTempIdCounter);
-    const entry={time:new Date().toISOString(),action:scan.action,batch:batchId,bag:isBag?val:null,from:scan.from,to:scan.to,species:batch?.species,strain:batch?.strain,user:currentUser?.username||null,_tempId:tempId};
-    scanLog.push(entry);movements.push(entry);
-    if(!sessionStartTime)sessionStartTime=Date.now();
+    const tempId = 's' + ++_scanTempIdCounter;
+    const entry = {
+      time: new Date().toISOString(),
+      action: scan.action,
+      batch: batchId,
+      bag: isBag ? val : null,
+      from: scan.from,
+      to: scan.to,
+      species: batch?.species,
+      strain: batch?.strain,
+      user: currentUser?.username || null,
+      _tempId: tempId
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(entry);
-    if(scanChannel)scanChannel.postMessage({type:'scan-entry',entry:{bag:entry.bag,batch:entry.batch,action:entry.action,to:entry.to}});
+    if (scanChannel)
+      scanChannel.postMessage({
+        type: 'scan-entry',
+        entry: { bag: entry.bag, batch: entry.batch, action: entry.action, to: entry.to }
+      });
     scan.count++;
-    apiPost('/api/scan-log',{entries:[entry]}).then(function(r){
-      if(r&&r.ids&&r.ids[0]){entry._serverId=r.ids[0];return}
-      if(r&&r.error){
+    apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
+      if (r && r.ids && r.ids[0]) {
+        entry._serverId = r.ids[0];
+        return;
+      }
+      if (r && r.error) {
         // Retry once after 3s on server error
-        console.warn('Scan log POST failed, retrying:',r.error);
-        setTimeout(function(){
-          apiPost('/api/scan-log',{entries:[entry]}).then(function(r2){
-            if(r2&&r2.ids&&r2.ids[0])entry._serverId=r2.ids[0];
-            else if(r2&&r2.error)setFb('err','Scan gespeichert lokal, Server-Sync fehlgeschlagen: '+r2.error);
+        console.warn('Scan log POST failed, retrying:', r.error);
+        setTimeout(function () {
+          apiPost('/api/scan-log', { entries: [entry] }).then(function (r2) {
+            if (r2 && r2.ids && r2.ids[0]) entry._serverId = r2.ids[0];
+            else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
           });
-        },3000);
+        }, 3000);
       }
     });
-    _lastScanVal=isBag?val:batchId;
-    const fbTo=scan.action==='MOVE'&&scan.from?' '+scan.from+' \u2192 '+scan.to:scan.to?' \u2192 '+scan.to:'';
-    setFb('ok',t('scanFb.logged',{action:scan.action,val:val,to:fbTo,n:scan.count}),entry);
-    updateSD();return;
-  }
-  // URL QR codes: inform user instead of showing "unknown"
-  if(/^https?:\/\//i.test(raw.trim())){
-    setFb('info','QR-Code enthält URL: '+raw.trim().slice(0,80)+(raw.trim().length>80?'…':''));
+    _lastScanVal = isBag ? val : batchId;
+    const fbTo =
+      scan.action === 'MOVE' && scan.from
+        ? ' ' + scan.from + ' \u2192 ' + scan.to
+        : scan.to
+          ? ' \u2192 ' + scan.to
+          : '';
+    setFb('ok', t('scanFb.logged', { action: scan.action, val: val, to: fbTo, n: scan.count }), entry);
+    updateSD();
     return;
   }
-  setFb('err',t('scanFb.unknown',{val:val}));
+  // URL QR codes: inform user instead of showing "unknown"
+  if (/^https?:\/\//i.test(raw.trim())) {
+    setFb('info', 'QR-Code enthält URL: ' + raw.trim().slice(0, 80) + (raw.trim().length > 80 ? '…' : ''));
+    return;
+  }
+  setFb('err', t('scanFb.unknown', { val: val }));
 }
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
-const _scanBuf={chars:[],timer:null};
-const SCAN_MAX_GAP=50;
-const SCAN_MIN_LEN=3;
+const _scanBuf = { chars: [], timer: null };
+const SCAN_MAX_GAP = 50;
+const SCAN_MIN_LEN = 3;
 
-function isKnownBarcode(val){
-  val=val.toUpperCase();
+function isKnownBarcode(val) {
+  val = val.toUpperCase();
   // Numeric barcode (new system)
-  if(/^\d{7,}$/.test(val)&&parseInt(val,10)>=1000000)return true;
+  if (/^\d{7,}$/.test(val) && parseInt(val, 10) >= 1000000) return true;
   // Check actions/locations with underscores intact (barcode locations use underscores)
-  if(ACTIONS.includes(val))return true;
-  if(LOCS.includes(val))return true;
+  if (ACTIONS.includes(val)) return true;
+  if (LOCS.includes(val)) return true;
   // For bag/batch patterns, convert underscores to hyphens
-  const h=val.replace(/_/g,'-');
-  if(/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(h))return true;
-  if(/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(h))return true;
-  if(/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(h))return true;
-  if(/^[A-Z]+-\d{6}-\d{2}$/.test(h))return true;
+  const h = val.replace(/_/g, '-');
+  if (/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(h)) return true;
+  if (/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(h)) return true;
+  if (/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(h)) return true;
+  if (/^[A-Z]+-\d{6}-\d{2}$/.test(h)) return true;
   return false;
 }
 
-function _flushScanBuf(){
-  const raw=_scanBuf.chars.map(c=>c.ch).join('');
-  _scanBuf.chars=[];
-  if(raw.length<SCAN_MIN_LEN)return;
-  const cleaned=raw.trim().toUpperCase();
-  if(!isKnownBarcode(cleaned)){setFb('err',t('scanFb.unknownFormat',{val:cleaned})||'Unbekanntes Format: '+cleaned+' — Barcode prüfen.');return}
+function _flushScanBuf() {
+  const raw = _scanBuf.chars.map((c) => c.ch).join('');
+  _scanBuf.chars = [];
+  if (raw.length < SCAN_MIN_LEN) return;
+  const cleaned = raw.trim().toUpperCase();
+  if (!isKnownBarcode(cleaned)) {
+    setFb(
+      'err',
+      t('scanFb.unknownFormat', { val: cleaned }) || 'Unbekanntes Format: ' + cleaned + ' — Barcode prüfen.'
+    );
+    return;
+  }
   processScan(raw);
 }
 
-document.addEventListener('keydown',e=>{
-  if(e.ctrlKey||e.metaKey||e.altKey)return;
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   // Ignore keystrokes while user is typing in form fields — prevents the scan buffer
   // from swallowing Enter on form submits or mis-firing on fast typing in search boxes.
   // The scan modal and camera modal are exceptions: keep the buffer active there.
-  const ae=document.activeElement;
-  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT'||ae.isContentEditable)){
-    const scanOpen=document.getElementById('scan-overlay')?.classList.contains('open');
-    const camOpen=document.getElementById('m-camscan')?.classList.contains('open');
-    if(!scanOpen&&!camOpen){_scanBuf.chars=[];clearTimeout(_scanBuf.timer);return}
-  }
-  const now=performance.now();
-  if(e.key==='Enter'){
-    if(_scanBuf.chars.length>=SCAN_MIN_LEN){
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
+    const scanOpen = document.getElementById('scan-overlay')?.classList.contains('open');
+    const camOpen = document.getElementById('m-camscan')?.classList.contains('open');
+    if (!scanOpen && !camOpen) {
+      _scanBuf.chars = [];
       clearTimeout(_scanBuf.timer);
-      const allFast=_scanBuf.chars.every((c,i)=>i===0||c.t-_scanBuf.chars[i-1].t<SCAN_MAX_GAP);
-      if(allFast){
-        e.preventDefault();e.stopPropagation();
-        _flushScanBuf();return;
+      return;
+    }
+  }
+  const now = performance.now();
+  if (e.key === 'Enter') {
+    if (_scanBuf.chars.length >= SCAN_MIN_LEN) {
+      clearTimeout(_scanBuf.timer);
+      const allFast = _scanBuf.chars.every((c, i) => i === 0 || c.t - _scanBuf.chars[i - 1].t < SCAN_MAX_GAP);
+      if (allFast) {
+        e.preventDefault();
+        e.stopPropagation();
+        _flushScanBuf();
+        return;
       }
     }
-    _scanBuf.chars=[];clearTimeout(_scanBuf.timer);return;
+    _scanBuf.chars = [];
+    clearTimeout(_scanBuf.timer);
+    return;
   }
-  if(e.key.length!==1)return;
-  if(_scanBuf.chars.length>0&&now-_scanBuf.chars[_scanBuf.chars.length-1].t>SCAN_MAX_GAP){
-    _scanBuf.chars=[];
+  if (e.key.length !== 1) return;
+  if (_scanBuf.chars.length > 0 && now - _scanBuf.chars[_scanBuf.chars.length - 1].t > SCAN_MAX_GAP) {
+    _scanBuf.chars = [];
   }
-  _scanBuf.chars.push({ch:e.key,t:now});
+  _scanBuf.chars.push({ ch: e.key, t: now });
   clearTimeout(_scanBuf.timer);
-  _scanBuf.timer=setTimeout(()=>{_scanBuf.chars=[]},SCAN_MAX_GAP*2);
+  _scanBuf.timer = setTimeout(() => {
+    _scanBuf.chars = [];
+  }, SCAN_MAX_GAP * 2);
 });
 
 // ─── USER MANAGEMENT ─────────────────────────────────────────
-async function doLogout(){
-  try{await authFetch('/api/auth/logout',{method:'POST'});}catch{}
-  window.location.href='/login.html';
+async function doLogout() {
+  try {
+    await authFetch('/api/auth/logout', { method: 'POST' });
+  } catch {}
+  window.location.href = '/login.html';
 }
 
-async function loadUsersTab(){
-  const c=document.getElementById('sp-settings-users');
-  if(!c)return;
-  const acct=document.getElementById('users-account');
-  if(acct&&currentUser)acct.innerHTML=t('users.loggedInAs',{user:esc(currentUser.username),role:esc(currentUser.role)})+` <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">${t('chpw.title')}</button>`;
-  if(!currentUser||currentUser.role!=='admin'){
-    const tbl=document.getElementById('users-table');
-    if(tbl)tbl.innerHTML='<p style="color:var(--c-text-muted)">'+t('users.adminRequiredManage')+'</p>';
+async function loadUsersTab() {
+  const c = document.getElementById('sp-settings-users');
+  if (!c) return;
+  const acct = document.getElementById('users-account');
+  if (acct && currentUser)
+    acct.innerHTML =
+      t('users.loggedInAs', { user: esc(currentUser.username), role: esc(currentUser.role) }) +
+      ` <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">${t('chpw.title')}</button>`;
+  if (!currentUser || currentUser.role !== 'admin') {
+    const tbl = document.getElementById('users-table');
+    if (tbl) tbl.innerHTML = '<p style="color:var(--c-text-muted)">' + t('users.adminRequiredManage') + '</p>';
     return;
   }
-  try{
-    const r=await authFetch('/api/users');
-    const users=await r.json();
-    const tbl=document.getElementById('users-table');
-    if(!tbl)return;
-    tbl.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>'+
-      users.map(u=>`<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created?fmtDt(u.created):''}</td><td style="padding:6px">${u.username!==currentUser.username?`<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>`:''}</td></tr>`).join('')+
+  try {
+    const r = await authFetch('/api/users');
+    const users = await r.json();
+    const tbl = document.getElementById('users-table');
+    if (!tbl) return;
+    tbl.innerHTML =
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      users
+        .map(
+          (u) =>
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>` : ''}</td></tr>`
+        )
+        .join('') +
       '</tbody></table>';
-  }catch(e){console.error('Failed to load users:',e)}
+  } catch (e) {
+    console.error('Failed to load users:', e);
+  }
 }
 
-async function addUser(){
-  const u=document.getElementById('new-username').value.trim();
-  const p=document.getElementById('new-password').value;
-  const role=document.getElementById('new-role').value;
-  if(!u||!p){alert(t('users.required'));return;}
-  if(p.length<8){alert(t('users.minPw'));return;}
-  try{
-    const r=await authFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role})});
-    if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
-    document.getElementById('new-username').value='';
-    document.getElementById('new-password').value='';
+async function addUser() {
+  const u = document.getElementById('new-username').value.trim();
+  const p = document.getElementById('new-password').value;
+  const role = document.getElementById('new-role').value;
+  if (!u || !p) {
+    alert(t('users.required'));
+    return;
+  }
+  if (p.length < 8) {
+    alert(t('users.minPw'));
+    return;
+  }
+  try {
+    const r = await authFetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p, role })
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+      return;
+    }
+    document.getElementById('new-username').value = '';
+    document.getElementById('new-password').value = '';
     loadUsersTab();
-  }catch(e){alert(e.message)}
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
-async function deleteUser(id){
-  if(!confirm(t('users.deleteConfirm')))return;
-  try{
-    const r=await authFetch('/api/users/'+id,{method:'DELETE'});
-    if(!r.ok){const d=await r.json();alert(d.error||'Failed');return;}
+async function deleteUser(id) {
+  if (!confirm(t('users.deleteConfirm'))) return;
+  try {
+    const r = await authFetch('/api/users/' + id, { method: 'DELETE' });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+      return;
+    }
     loadUsersTab();
-  }catch(e){alert(e.message)}
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
-function showChangePasswordModal(){
-  const m=document.getElementById('change-pw-modal');
-  if(m){m.style.display='flex';document.getElementById('chpw-current').value='';document.getElementById('chpw-new').value='';document.getElementById('chpw-status').textContent='';}
+function showChangePasswordModal() {
+  const m = document.getElementById('change-pw-modal');
+  if (m) {
+    m.style.display = 'flex';
+    document.getElementById('chpw-current').value = '';
+    document.getElementById('chpw-new').value = '';
+    document.getElementById('chpw-status').textContent = '';
+  }
 }
-function hideChangePasswordModal(){
-  const m=document.getElementById('change-pw-modal');if(m)m.style.display='none';
+function hideChangePasswordModal() {
+  const m = document.getElementById('change-pw-modal');
+  if (m) m.style.display = 'none';
 }
-async function submitChangePassword(){
-  const cur=document.getElementById('chpw-current').value;
-  const nw=document.getElementById('chpw-new').value;
-  const st=document.getElementById('chpw-status');
-  if(!cur||!nw){st.textContent=t('chpw.required');st.style.color='red';return}
-  if(nw.length<8){st.textContent=t('chpw.minLength');st.style.color='red';return}
-  try{
-    const r=await authFetch('/api/auth/password',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});
-    if(!r.ok){const d=await r.json().catch(()=>({}));st.textContent=d.error||'Failed';st.style.color='red';return}
-    st.textContent=t('chpw.success');st.style.color='green';
-    setTimeout(()=>hideChangePasswordModal(),1500);
-  }catch(e){st.textContent=t('common.error')+': '+e.message;st.style.color='red'}
+async function submitChangePassword() {
+  const cur = document.getElementById('chpw-current').value;
+  const nw = document.getElementById('chpw-new').value;
+  const st = document.getElementById('chpw-status');
+  if (!cur || !nw) {
+    st.textContent = t('chpw.required');
+    st.style.color = 'red';
+    return;
+  }
+  if (nw.length < 8) {
+    st.textContent = t('chpw.minLength');
+    st.style.color = 'red';
+    return;
+  }
+  try {
+    const r = await authFetch('/api/auth/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: cur, newPassword: nw })
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      st.textContent = d.error || 'Failed';
+      st.style.color = 'red';
+      return;
+    }
+    st.textContent = t('chpw.success');
+    st.style.color = 'green';
+    setTimeout(() => hideChangePasswordModal(), 1500);
+  } catch (e) {
+    st.textContent = t('common.error') + ': ' + e.message;
+    st.style.color = 'red';
+  }
 }
 
 // ─── INIT ────────────────────────────────────────────────────
@@ -8614,388 +12281,703 @@ document.getElementById('lang-sel').value = currentLang;
 translatePage();
 
 // ─── CALENDAR ───────────────────────────────────────────────
-if(typeof calendarEvents==='undefined') var calendarEvents=[];
-if(typeof MS_PER_DAY==='undefined') var MS_PER_DAY=86400000;
-let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),calView='month';
-let calSelectedDate=new Date(),caldavImports=[];
-function calDays(){return (t('cal.days')||'Mo,Di,Mi,Do,Fr,Sa,So').split(',')}
-function calMonths(){return (t('cal.months')||'Januar,Februar,März,April,Mai,Juni,Juli,August,September,Oktober,November,Dezember').split(',')}
-const CAL_HOURS_START=6,CAL_HOURS_END=22;
+if (typeof calendarEvents === 'undefined') var calendarEvents = [];
+if (typeof MS_PER_DAY === 'undefined') var MS_PER_DAY = 86400000;
+let calYear = new Date().getFullYear(),
+  calMonth = new Date().getMonth(),
+  calView = 'month';
+let calSelectedDate = new Date(),
+  caldavImports = [];
+function calDays() {
+  return (t('cal.days') || 'Mo,Di,Mi,Do,Fr,Sa,So').split(',');
+}
+function calMonths() {
+  return (
+    t('cal.months') || 'Januar,Februar,März,April,Mai,Juni,Juli,August,September,Oktober,November,Dezember'
+  ).split(',');
+}
+const CAL_HOURS_START = 6,
+  CAL_HOURS_END = 22;
 
-function fmtDate(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
-function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function parseDateStr(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
+function fmtDate(y, m, d) {
+  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function parseDateStr(s) {
+  const p = s.split('-');
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
 
-function getBatchLoc(b){
-  const locs={};
-  b.bags.forEach(bag=>{const last=[...scanLog].reverse().find(e=>(e.bag||'').toUpperCase()===bag.toUpperCase());if(last&&last.action!=='REMOVE'&&last.to)locs[last.to]=(locs[last.to]||0)+1});
-  const entries=Object.entries(locs);if(!entries.length)return'';entries.sort((a,b)=>b[1]-a[1]);return entries[0][0];
-}
-function getCalendarRange(){
-  // Window for expanding recurring events — covers any visible view with margin
-  const y=calYear,m=calMonth;
-  const start=new Date(y,m-2,1);
-  const end=new Date(y,m+3,0);
-  return {start,end};
-}
-function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
-function addMonths(d,n){const x=new Date(d);x.setMonth(x.getMonth()+n);return x}
-function expandRecurringEvent(ev){
-  const out=[];
-  if(!ev.recurrence){out.push(ev.startDate);return out}
-  const {start:winStart,end:winEnd}=getCalendarRange();
-  const base=parseDateStr(ev.startDate);
-  const hardEnd=ev.recurrenceUntil?parseDateStr(ev.recurrenceUntil):null;
-  let cur=new Date(base);
-  let guard=0;
-  while(guard++<500){
-    if(hardEnd&&cur>hardEnd)break;
-    if(cur>winEnd)break;
-    if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(localDateStr(cur));
-    }
-    if(ev.recurrence==='daily')cur=addDays(cur,1);
-    else if(ev.recurrence==='weekly')cur=addDays(cur,7);
-    else if(ev.recurrence==='monthly')cur=addMonths(cur,1);
-    else break;
-  }
-  return out;
-}
-function expandRecurringTaskDates(task){
-  const out=[];
-  const startStr=task.dueDate?task.dueDate.split('T')[0]:null;
-  if(!startStr)return out;
-  if(!task.recurrence){out.push(startStr);return out}
-  const {start:winStart,end:winEnd}=getCalendarRange();
-  const base=parseDateStr(startStr);
-  const hardEnd=task.recurrenceUntil?parseDateStr(task.recurrenceUntil):null;
-  let cur=new Date(base);
-  let guard=0;
-  while(guard++<500){
-    if(hardEnd&&cur>hardEnd)break;
-    if(cur>winEnd)break;
-    if(cur>=winStart||cur.getTime()===base.getTime()){
-      out.push(localDateStr(cur));
-    }
-    if(task.recurrence==='daily')cur=addDays(cur,1);
-    else if(task.recurrence==='weekly')cur=addDays(cur,7);
-    else if(task.recurrence==='monthly')cur=addMonths(cur,1);
-    else break;
-  }
-  return out;
-}
-function collectCalendarEvents(){
-  const events=[];
-  batches.forEach(b=>{
-    if(!b.due)return;
-    const d=new Date(b.due);
-    const loc=getBatchLoc(b);
-    events.push({date:localDateStr(d),label:b.batchId+(loc?' — '+loc:''),type:'batch-due',id:b.batchId,draggable:true,allDay:true,color:'#ef4444',species:b.species});
+function getBatchLoc(b) {
+  const locs = {};
+  b.bags.forEach((bag) => {
+    const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+    if (last && last.action !== 'REMOVE' && last.to) locs[last.to] = (locs[last.to] || 0) + 1;
   });
-  manualTasks.forEach(t=>{
-    if(!t.dueDate)return;
-    const dates=expandRecurringTaskDates(t);
-    const hasTime=!!t.dueTime;
-    dates.forEach((ds,idx)=>{
+  const entries = Object.entries(locs);
+  if (!entries.length) return '';
+  entries.sort((a, b) => b[1] - a[1]);
+  return entries[0][0];
+}
+function getCalendarRange() {
+  // Window for expanding recurring events — covers any visible view with margin
+  const y = calYear,
+    m = calMonth;
+  const start = new Date(y, m - 2, 1);
+  const end = new Date(y, m + 3, 0);
+  return { start, end };
+}
+function addDays(d, n) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+function addMonths(d, n) {
+  const x = new Date(d);
+  x.setMonth(x.getMonth() + n);
+  return x;
+}
+function expandRecurringEvent(ev) {
+  const out = [];
+  if (!ev.recurrence) {
+    out.push(ev.startDate);
+    return out;
+  }
+  const { start: winStart, end: winEnd } = getCalendarRange();
+  const base = parseDateStr(ev.startDate);
+  const hardEnd = ev.recurrenceUntil ? parseDateStr(ev.recurrenceUntil) : null;
+  let cur = new Date(base);
+  let guard = 0;
+  while (guard++ < 500) {
+    if (hardEnd && cur > hardEnd) break;
+    if (cur > winEnd) break;
+    if (cur >= winStart || cur.getTime() === base.getTime()) {
+      out.push(localDateStr(cur));
+    }
+    if (ev.recurrence === 'daily') cur = addDays(cur, 1);
+    else if (ev.recurrence === 'weekly') cur = addDays(cur, 7);
+    else if (ev.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else break;
+  }
+  return out;
+}
+function expandRecurringTaskDates(task) {
+  const out = [];
+  const startStr = task.dueDate ? task.dueDate.split('T')[0] : null;
+  if (!startStr) return out;
+  if (!task.recurrence) {
+    out.push(startStr);
+    return out;
+  }
+  const { start: winStart, end: winEnd } = getCalendarRange();
+  const base = parseDateStr(startStr);
+  const hardEnd = task.recurrenceUntil ? parseDateStr(task.recurrenceUntil) : null;
+  let cur = new Date(base);
+  let guard = 0;
+  while (guard++ < 500) {
+    if (hardEnd && cur > hardEnd) break;
+    if (cur > winEnd) break;
+    if (cur >= winStart || cur.getTime() === base.getTime()) {
+      out.push(localDateStr(cur));
+    }
+    if (task.recurrence === 'daily') cur = addDays(cur, 1);
+    else if (task.recurrence === 'weekly') cur = addDays(cur, 7);
+    else if (task.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else break;
+  }
+  return out;
+}
+function collectCalendarEvents() {
+  const events = [];
+  batches.forEach((b) => {
+    if (!b.due) return;
+    const d = new Date(b.due);
+    const loc = getBatchLoc(b);
+    events.push({
+      date: localDateStr(d),
+      label: b.batchId + (loc ? ' — ' + loc : ''),
+      type: 'batch-due',
+      id: b.batchId,
+      draggable: true,
+      allDay: true,
+      color: '#ef4444',
+      species: b.species
+    });
+  });
+  manualTasks.forEach((t) => {
+    if (!t.dueDate) return;
+    const dates = expandRecurringTaskDates(t);
+    const hasTime = !!t.dueTime;
+    dates.forEach((ds, idx) => {
       // Only the base occurrence is draggable; recurring instances are locked
-      const isBase=idx===0&&ds===t.dueDate.split('T')[0];
+      const isBase = idx === 0 && ds === t.dueDate.split('T')[0];
       events.push({
-        date:ds,
-        label:t.text,
-        type:'task-due',
-        id:t.created,
-        draggable:!t.done&&!t.recurrence&&isBase,
-        allDay:!hasTime,
-        startTime:hasTime?t.dueTime:undefined,
-        endTime:hasTime?(t.dueEndTime||undefined):undefined,
-        color:'#3b82f6',
-        recurrence:t.recurrence||null
+        date: ds,
+        label: t.text,
+        type: 'task-due',
+        id: t.created,
+        draggable: !t.done && !t.recurrence && isBase,
+        allDay: !hasTime,
+        startTime: hasTime ? t.dueTime : undefined,
+        endTime: hasTime ? t.dueEndTime || undefined : undefined,
+        color: '#3b82f6',
+        recurrence: t.recurrence || null
       });
     });
   });
-  harvests.forEach(h=>{
-    if(!h.time)return;
-    const d=new Date(h.time);
-    events.push({date:localDateStr(d),label:(h.batch||'?')+' '+h.grams+'g',type:'harvest',id:null,draggable:false,allDay:true,color:'#f59e0b',species:h.species});
-  });
-  const filterName=document.getElementById('cal-filter-user')?.value||'';
-  calendarEvents.forEach(ev=>{
-    const teamList=Array.isArray(ev.teamAssignees)?ev.teamAssignees:[];
-    if(filterName&&teamList.length&&!teamList.includes(filterName))return;
-    const dates=expandRecurringEvent(ev);
-    const displayAssignees=teamList.map(n=>({userId:0,username:n}));
-    dates.forEach(ds=>{
-      events.push({date:ds,label:ev.title,type:'custom',id:ev.id,draggable:!ev.recurrence,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,color:CATEGORY_COLORS[ev.category]||ev.color||'#16a34a',description:ev.description,assignees:displayAssignees,recurrence:ev.recurrence||null});
+  harvests.forEach((h) => {
+    if (!h.time) return;
+    const d = new Date(h.time);
+    events.push({
+      date: localDateStr(d),
+      label: (h.batch || '?') + ' ' + h.grams + 'g',
+      type: 'harvest',
+      id: null,
+      draggable: false,
+      allDay: true,
+      color: '#f59e0b',
+      species: h.species
     });
   });
-  caldavImports.forEach(ev=>{
-    events.push({date:ev.date,label:ev.summary,type:'caldav-import',id:ev.uid,draggable:false,allDay:ev.allDay!==false,startTime:ev.startTime,endTime:ev.endTime,color:'#6366f1'});
+  const filterName = document.getElementById('cal-filter-user')?.value || '';
+  calendarEvents.forEach((ev) => {
+    const teamList = Array.isArray(ev.teamAssignees) ? ev.teamAssignees : [];
+    if (filterName && teamList.length && !teamList.includes(filterName)) return;
+    const dates = expandRecurringEvent(ev);
+    const displayAssignees = teamList.map((n) => ({ userId: 0, username: n }));
+    dates.forEach((ds) => {
+      events.push({
+        date: ds,
+        label: ev.title,
+        type: 'custom',
+        id: ev.id,
+        draggable: !ev.recurrence,
+        allDay: ev.allDay,
+        startTime: ev.startTime,
+        endTime: ev.endTime,
+        color: CATEGORY_COLORS[ev.category] || ev.color || '#16a34a',
+        description: ev.description,
+        assignees: displayAssignees,
+        recurrence: ev.recurrence || null
+      });
+    });
+  });
+  caldavImports.forEach((ev) => {
+    events.push({
+      date: ev.date,
+      label: ev.summary,
+      type: 'caldav-import',
+      id: ev.uid,
+      draggable: false,
+      allDay: ev.allDay !== false,
+      startTime: ev.startTime,
+      endTime: ev.endTime,
+      color: '#6366f1'
+    });
   });
   return events;
 }
 
-function renderCalendar(){
-  const title=document.getElementById('cal-title');
-  if(!title)return;
-  document.querySelectorAll('.cal-vbtn').forEach(b=>b.classList.remove('active'));
-  const btn=document.getElementById('cv-'+calView);if(btn)btn.classList.add('active');
-  if(calView==='month')renderCalMonth();
-  else if(calView==='week')renderCalWeek();
-  else if(calView==='day')renderCalDay();
+function renderCalendar() {
+  const title = document.getElementById('cal-title');
+  if (!title) return;
+  document.querySelectorAll('.cal-vbtn').forEach((b) => b.classList.remove('active'));
+  const btn = document.getElementById('cv-' + calView);
+  if (btn) btn.classList.add('active');
+  if (calView === 'month') renderCalMonth();
+  else if (calView === 'week') renderCalWeek();
+  else if (calView === 'day') renderCalDay();
 }
 
-function setCalView(v){calView=v;renderCalendar()}
-function calToday(){calYear=new Date().getFullYear();calMonth=new Date().getMonth();calSelectedDate=new Date();renderCalendar()}
-
-function calNav(delta){
-  if(calView==='month'){calMonth+=delta;if(calMonth<0){calMonth=11;calYear--}if(calMonth>11){calMonth=0;calYear++}}
-  else if(calView==='week'){calSelectedDate.setDate(calSelectedDate.getDate()+delta*7);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth()}
-  else if(calView==='day'){calSelectedDate.setDate(calSelectedDate.getDate()+delta);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth()}
+function setCalView(v) {
+  calView = v;
+  renderCalendar();
+}
+function calToday() {
+  calYear = new Date().getFullYear();
+  calMonth = new Date().getMonth();
+  calSelectedDate = new Date();
   renderCalendar();
 }
 
-function printCalendar(){
-  const modal=document.getElementById('m-cal-print');
-  if(!modal)return;
+function calNav(delta) {
+  if (calView === 'month') {
+    calMonth += delta;
+    if (calMonth < 0) {
+      calMonth = 11;
+      calYear--;
+    }
+    if (calMonth > 11) {
+      calMonth = 0;
+      calYear++;
+    }
+  } else if (calView === 'week') {
+    calSelectedDate.setDate(calSelectedDate.getDate() + delta * 7);
+    calYear = calSelectedDate.getFullYear();
+    calMonth = calSelectedDate.getMonth();
+  } else if (calView === 'day') {
+    calSelectedDate.setDate(calSelectedDate.getDate() + delta);
+    calYear = calSelectedDate.getFullYear();
+    calMonth = calSelectedDate.getMonth();
+  }
+  renderCalendar();
+}
+
+function printCalendar() {
+  const modal = document.getElementById('m-cal-print');
+  if (!modal) return;
   modal.classList.add('open');
 }
-function closeCalPrintModal(){const m=document.getElementById('m-cal-print');if(m)m.classList.remove('open')}
+function closeCalPrintModal() {
+  const m = document.getElementById('m-cal-print');
+  if (m) m.classList.remove('open');
+}
 
-function printCalendarTaskList(range){
-  const sheet=document.getElementById('print-sheet');
-  if(!sheet)return;
+function printCalendarTaskList(range) {
+  const sheet = document.getElementById('print-sheet');
+  if (!sheet) return;
 
-  const MONTHS=calMonths(),DAYS=calDays();
+  const MONTHS = calMonths(),
+    DAYS = calDays();
 
   // Determine date range — rolling window anchored on today
-  const today=new Date();today.setHours(0,0,0,0);
-  let startDate,endDate,rangeLabel;
-  if(range==='week'){
-    startDate=new Date(today);
-    endDate=new Date(today);endDate.setDate(today.getDate()+6);
-  }else{
-    startDate=new Date(today);
-    endDate=new Date(today);endDate.setDate(today.getDate()+29);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let startDate, endDate, rangeLabel;
+  if (range === 'week') {
+    startDate = new Date(today);
+    endDate = new Date(today);
+    endDate.setDate(today.getDate() + 6);
+  } else {
+    startDate = new Date(today);
+    endDate = new Date(today);
+    endDate.setDate(today.getDate() + 29);
   }
-  const sameYear=startDate.getFullYear()===endDate.getFullYear();
-  const rangePrefix=range==='week'?t('cal.weekShort'):t('cal.monthShort');
-  rangeLabel=rangePrefix+': '+startDate.getDate()+'. '+MONTHS[startDate.getMonth()]+(sameYear?'':' '+startDate.getFullYear())+' – '+endDate.getDate()+'. '+MONTHS[endDate.getMonth()]+' '+endDate.getFullYear();
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  const rangePrefix = range === 'week' ? t('cal.weekShort') : t('cal.monthShort');
+  rangeLabel =
+    rangePrefix +
+    ': ' +
+    startDate.getDate() +
+    '. ' +
+    MONTHS[startDate.getMonth()] +
+    (sameYear ? '' : ' ' + startDate.getFullYear()) +
+    ' – ' +
+    endDate.getDate() +
+    '. ' +
+    MONTHS[endDate.getMonth()] +
+    ' ' +
+    endDate.getFullYear();
 
   // Collect and filter events in range
-  const allEvents=collectCalendarEvents();
-  const startStr=fmtDate(startDate.getFullYear(),startDate.getMonth(),startDate.getDate());
-  const endStr=fmtDate(endDate.getFullYear(),endDate.getMonth(),endDate.getDate());
-  const eventsInRange=allEvents.filter(e=>e.date>=startStr&&e.date<=endStr);
+  const allEvents = collectCalendarEvents();
+  const startStr = fmtDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const eventsInRange = allEvents.filter((e) => e.date >= startStr && e.date <= endStr);
 
   // Group by date
-  const byDate={};
-  eventsInRange.forEach(e=>{(byDate[e.date]=byDate[e.date]||[]).push(e)});
+  const byDate = {};
+  eventsInRange.forEach((e) => {
+    (byDate[e.date] = byDate[e.date] || []).push(e);
+  });
 
   // Type label map
-  const typeLabels={
-    'batch-due':t('cal.legend.batches'),
-    'task-due':t('calDetail.taskDue'),
-    'harvest':t('cal.legend.harvests'),
-    'custom':t('calEntry.cat.custom'),
-    'caldav-import':t('calDetail.external')
+  const typeLabels = {
+    'batch-due': t('cal.legend.batches'),
+    'task-due': t('calDetail.taskDue'),
+    harvest: t('cal.legend.harvests'),
+    custom: t('calEntry.cat.custom'),
+    'caldav-import': t('calDetail.external')
   };
 
   // Build day list
-  const days=[];
-  for(let d=new Date(startDate);d<=endDate;d.setDate(d.getDate()+1)){
-    const ds=fmtDate(d.getFullYear(),d.getMonth(),d.getDate());
-    const dayName=DAYS[(d.getDay()+6)%7];
-    const dayEvents=(byDate[ds]||[]).slice().sort((a,b)=>{
-      if(a.allDay&&!b.allDay)return -1;
-      if(!a.allDay&&b.allDay)return 1;
-      return (a.startTime||'').localeCompare(b.startTime||'');
+  const days = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayName = DAYS[(d.getDay() + 6) % 7];
+    const dayEvents = (byDate[ds] || []).slice().sort((a, b) => {
+      if (a.allDay && !b.allDay) return -1;
+      if (!a.allDay && b.allDay) return 1;
+      return (a.startTime || '').localeCompare(b.startTime || '');
     });
-    days.push({ds,dayName,date:new Date(d),events:dayEvents});
+    days.push({ ds, dayName, date: new Date(d), events: dayEvents });
   }
 
   // Render HTML
-  const todayStr=localDateStr(new Date());
-  let bodyHtml='';
-  days.forEach(day=>{
-    const isToday=day.ds===todayStr;
-    bodyHtml+='<div class="cal-print-day'+(isToday?' today':'')+'">';
-    bodyHtml+='<div class="cal-print-day-hdr">'+day.dayName+', '+day.date.getDate()+'. '+MONTHS[day.date.getMonth()]+' '+day.date.getFullYear()+'</div>';
-    if(day.events.length===0){
-      bodyHtml+='<div class="cal-print-empty">— '+t('cal.noTasks')+' —</div>';
-    }else{
-      bodyHtml+='<ul class="cal-print-list">';
-      day.events.forEach(e=>{
-        const time=e.allDay?t('cal.allDay'):((e.startTime||'')+(e.endTime?' – '+e.endTime:''));
-        const typeLbl=typeLabels[e.type]||'';
-        const dotColor=safeColor(e.color||'#64748b');
-        const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-print-assignees">('+e.assignees.map(a=>esc(a.username)).join(', ')+')</span>':'';
-        const desc=e.description?'<div class="cal-print-desc">'+esc(e.description)+'</div>':'';
-        bodyHtml+='<li class="cal-print-item">'+
-          '<span class="cal-print-dot" style="background:'+dotColor+'"></span>'+
-          '<span class="cal-print-time">'+esc(time)+'</span>'+
-          '<span class="cal-print-type">'+typeLbl+'</span>'+
-          '<span class="cal-print-label">'+esc(e.label)+assigneeStr+desc+'</span>'+
-        '</li>';
+  const todayStr = localDateStr(new Date());
+  let bodyHtml = '';
+  days.forEach((day) => {
+    const isToday = day.ds === todayStr;
+    bodyHtml += '<div class="cal-print-day' + (isToday ? ' today' : '') + '">';
+    bodyHtml +=
+      '<div class="cal-print-day-hdr">' +
+      day.dayName +
+      ', ' +
+      day.date.getDate() +
+      '. ' +
+      MONTHS[day.date.getMonth()] +
+      ' ' +
+      day.date.getFullYear() +
+      '</div>';
+    if (day.events.length === 0) {
+      bodyHtml += '<div class="cal-print-empty">— ' + t('cal.noTasks') + ' —</div>';
+    } else {
+      bodyHtml += '<ul class="cal-print-list">';
+      day.events.forEach((e) => {
+        const time = e.allDay ? t('cal.allDay') : (e.startTime || '') + (e.endTime ? ' – ' + e.endTime : '');
+        const typeLbl = typeLabels[e.type] || '';
+        const dotColor = safeColor(e.color || '#64748b');
+        const assigneeStr =
+          e.assignees && e.assignees.length
+            ? ' <span class="cal-print-assignees">(' + e.assignees.map((a) => esc(a.username)).join(', ') + ')</span>'
+            : '';
+        const desc = e.description ? '<div class="cal-print-desc">' + esc(e.description) + '</div>' : '';
+        bodyHtml +=
+          '<li class="cal-print-item">' +
+          '<span class="cal-print-dot" style="background:' +
+          dotColor +
+          '"></span>' +
+          '<span class="cal-print-time">' +
+          esc(time) +
+          '</span>' +
+          '<span class="cal-print-type">' +
+          typeLbl +
+          '</span>' +
+          '<span class="cal-print-label">' +
+          esc(e.label) +
+          assigneeStr +
+          desc +
+          '</span>' +
+          '</li>';
       });
-      bodyHtml+='</ul>';
+      bodyHtml += '</ul>';
     }
-    bodyHtml+='</div>';
+    bodyHtml += '</div>';
   });
 
-  const totalEvents=eventsInRange.length;
-  sheet.innerHTML='<div class="cal-print-page cal-print-tasklist">'+
-    '<div class="cal-print-header">'+
-      '<div style="font-size:20px;font-weight:800;color:#111">'+esc(t('cal.taskListTitle'))+'</div>'+
-      '<div style="font-size:13px;color:#444;margin-top:2px">'+esc(rangeLabel)+'</div>'+
-      '<div style="font-size:11px;color:#666;margin-top:2px">'+totalEvents+' '+t('cal.entries')+' — '+t('cal.printed')+' '+new Date().toLocaleDateString(loc())+'</div>'+
-    '</div>'+
-    '<div class="cal-print-body">'+bodyHtml+'</div>'+
-  '</div>';
+  const totalEvents = eventsInRange.length;
+  sheet.innerHTML =
+    '<div class="cal-print-page cal-print-tasklist">' +
+    '<div class="cal-print-header">' +
+    '<div style="font-size:20px;font-weight:800;color:#111">' +
+    esc(t('cal.taskListTitle')) +
+    '</div>' +
+    '<div style="font-size:13px;color:#444;margin-top:2px">' +
+    esc(rangeLabel) +
+    '</div>' +
+    '<div style="font-size:11px;color:#666;margin-top:2px">' +
+    totalEvents +
+    ' ' +
+    t('cal.entries') +
+    ' — ' +
+    t('cal.printed') +
+    ' ' +
+    new Date().toLocaleDateString(loc()) +
+    '</div>' +
+    '</div>' +
+    '<div class="cal-print-body">' +
+    bodyHtml +
+    '</div>' +
+    '</div>';
 
   closeCalPrintModal();
-  setTimeout(()=>window.print(),150);
+  setTimeout(() => window.print(), 150);
 }
 
 // ── Month View ──
-function renderCalMonth(){
-  const container=document.getElementById('cal-container');
-  const title=document.getElementById('cal-title');
-  const months=calMonths(),days2=calDays();
-  title.textContent=months[calMonth]+' '+calYear;
-  const firstDay=new Date(calYear,calMonth,1);
-  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-  let startDow=(firstDay.getDay()+6)%7;
-  const prevLast=new Date(calYear,calMonth,0).getDate();
-  const events=collectCalendarEvents();
-  const todayStr=localDateStr(new Date());
-  const totalCells=startDow+daysInMonth;
-  const rows=Math.max(6,Math.ceil(totalCells/7));
-  const trailing=rows*7-totalCells;
+function renderCalMonth() {
+  const container = document.getElementById('cal-container');
+  const title = document.getElementById('cal-title');
+  const months = calMonths(),
+    days2 = calDays();
+  title.textContent = months[calMonth] + ' ' + calYear;
+  const firstDay = new Date(calYear, calMonth, 1);
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  let startDow = (firstDay.getDay() + 6) % 7;
+  const prevLast = new Date(calYear, calMonth, 0).getDate();
+  const events = collectCalendarEvents();
+  const todayStr = localDateStr(new Date());
+  const totalCells = startDow + daysInMonth;
+  const rows = Math.max(6, Math.ceil(totalCells / 7));
+  const trailing = rows * 7 - totalCells;
 
-  let html='<div class="cal-grid" id="cal-grid">';
-  html+=days2.map(d=>'<div class="cal-hdr">'+d+'</div>').join('');
+  let html = '<div class="cal-grid" id="cal-grid">';
+  html += days2.map((d) => '<div class="cal-hdr">' + d + '</div>').join('');
 
-  function eventsForDate(ds){
-    const de=events.filter(e=>e.date===ds);
-    const mx=3;
-    let o=de.slice(0,mx).map(e=>{
-      const drag=e.draggable?'draggable="true"':'';
-      const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      const assigneeStr=e.assignees&&e.assignees.length?' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>':'';
-      const dot=e.species?spDot(e.species):'';
-      return'<div class="'+cls+'" '+drag+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+assigneeStr+'</div>';
-    }).join('');
-    if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
+  function eventsForDate(ds) {
+    const de = events.filter((e) => e.date === ds);
+    const mx = 3;
+    let o = de
+      .slice(0, mx)
+      .map((e) => {
+        const drag = e.draggable ? 'draggable="true"' : '';
+        const cls = e.draggable ? 'cal-event' : 'cal-event no-drag';
+        const bg = e.color ? 'style="background:' + safeColor(e.color) + '"' : '';
+        const assigneeStr =
+          e.assignees && e.assignees.length
+            ? ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>'
+            : '';
+        const dot = e.species ? spDot(e.species) : '';
+        return (
+          '<div class="' +
+          cls +
+          '" ' +
+          drag +
+          ' data-type="' +
+          esc(e.type) +
+          '" data-id="' +
+          esc(e.id || '') +
+          '" title="' +
+          esc(e.label) +
+          '" ' +
+          bg +
+          '>' +
+          dot +
+          esc(e.label) +
+          assigneeStr +
+          '</div>'
+        );
+      })
+      .join('');
+    if (de.length > mx)
+      o +=
+        '<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\'' +
+        ds +
+        '\')">+' +
+        (de.length - mx) +
+        ' ' +
+        t('cal.more') +
+        '</div>';
     return o;
   }
 
-  for(let i=startDow-1;i>=0;i--){
-    const day=prevLast-i,m=calMonth===0?11:calMonth-1,y=calMonth===0?calYear-1:calYear,ds=fmtDate(y,m,day);
-    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+day+'</div>'+eventsForDate(ds)+'</div>';
+  for (let i = startDow - 1; i >= 0; i--) {
+    const day = prevLast - i,
+      m = calMonth === 0 ? 11 : calMonth - 1,
+      y = calMonth === 0 ? calYear - 1 : calYear,
+      ds = fmtDate(y, m, day);
+    html +=
+      '<div class="cal-cell other" data-date="' +
+      ds +
+      '" onclick="calCellClick(event,\'' +
+      ds +
+      '\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\'' +
+      ds +
+      '\')">' +
+      day +
+      '</div>' +
+      eventsForDate(ds) +
+      '</div>';
   }
-  for(let d=1;d<=daysInMonth;d++){
-    const ds=fmtDate(calYear,calMonth,d),cls=ds===todayStr?'cal-cell today':'cal-cell';
-    html+='<div class="'+cls+'" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = fmtDate(calYear, calMonth, d),
+      cls = ds === todayStr ? 'cal-cell today' : 'cal-cell';
+    html +=
+      '<div class="' +
+      cls +
+      '" data-date="' +
+      ds +
+      '" onclick="calCellClick(event,\'' +
+      ds +
+      '\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\'' +
+      ds +
+      '\')">' +
+      d +
+      '</div>' +
+      eventsForDate(ds) +
+      '</div>';
   }
-  for(let d=1;d<=trailing;d++){
-    const m=calMonth===11?0:calMonth+1,y=calMonth===11?calYear+1:calYear,ds=fmtDate(y,m,d);
-    html+='<div class="cal-cell other" data-date="'+ds+'" onclick="calCellClick(event,\''+ds+'\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">'+d+'</div>'+eventsForDate(ds)+'</div>';
+  for (let d = 1; d <= trailing; d++) {
+    const m = calMonth === 11 ? 0 : calMonth + 1,
+      y = calMonth === 11 ? calYear + 1 : calYear,
+      ds = fmtDate(y, m, d);
+    html +=
+      '<div class="cal-cell other" data-date="' +
+      ds +
+      '" onclick="calCellClick(event,\'' +
+      ds +
+      '\')"><div class="cal-day" onclick="event.stopPropagation();calGotoDay(\'' +
+      ds +
+      '\')">' +
+      d +
+      '</div>' +
+      eventsForDate(ds) +
+      '</div>';
   }
-  html+='</div>';
-  container.innerHTML=html;
+  html += '</div>';
+  container.innerHTML = html;
   initCalDragDrop(container);
 }
-function calCellClick(e,ds){if(e.target.closest('.cal-event')||e.target.closest('.cal-more'))return;openEventModal(ds)}
-function calGotoDay(ds){calSelectedDate=parseDateStr(ds);calYear=calSelectedDate.getFullYear();calMonth=calSelectedDate.getMonth();setCalView('day')}
+function calCellClick(e, ds) {
+  if (e.target.closest('.cal-event') || e.target.closest('.cal-more')) return;
+  openEventModal(ds);
+}
+function calGotoDay(ds) {
+  calSelectedDate = parseDateStr(ds);
+  calYear = calSelectedDate.getFullYear();
+  calMonth = calSelectedDate.getMonth();
+  setCalView('day');
+}
 
 // ── Week View ──
-function getWeekStart(d){const dt=new Date(d);const dow=(dt.getDay()+6)%7;dt.setDate(dt.getDate()-dow);dt.setHours(0,0,0,0);return dt}
+function getWeekStart(d) {
+  const dt = new Date(d);
+  const dow = (dt.getDay() + 6) % 7;
+  dt.setDate(dt.getDate() - dow);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
 
-function renderCalWeek(){
-  const container=document.getElementById('cal-container');
-  const title=document.getElementById('cal-title');
-  const ws=getWeekStart(calSelectedDate);
-  const days=[];
-  for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);days.push(d)}
-  const todayStr=localDateStr(new Date());
-  const MONTHS=calMonths(),DAYS=calDays();
-  title.textContent=days[0].getDate()+'. '+(days[0].getMonth()!==days[6].getMonth()?MONTHS[days[0].getMonth()]+' — '+days[6].getDate()+'. '+MONTHS[days[6].getMonth()]:' — '+days[6].getDate()+'. '+MONTHS[days[0].getMonth()])+' '+days[6].getFullYear();
-  const events=collectCalendarEvents();
-  const dayStrs=days.map(d=>localDateStr(d));
+function renderCalWeek() {
+  const container = document.getElementById('cal-container');
+  const title = document.getElementById('cal-title');
+  const ws = getWeekStart(calSelectedDate);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws);
+    d.setDate(ws.getDate() + i);
+    days.push(d);
+  }
+  const todayStr = localDateStr(new Date());
+  const MONTHS = calMonths(),
+    DAYS = calDays();
+  title.textContent =
+    days[0].getDate() +
+    '. ' +
+    (days[0].getMonth() !== days[6].getMonth()
+      ? MONTHS[days[0].getMonth()] + ' — ' + days[6].getDate() + '. ' + MONTHS[days[6].getMonth()]
+      : ' — ' + days[6].getDate() + '. ' + MONTHS[days[0].getMonth()]) +
+    ' ' +
+    days[6].getFullYear();
+  const events = collectCalendarEvents();
+  const dayStrs = days.map((d) => localDateStr(d));
 
-  let html='<div class="cal-week">';
-  html+='<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
-  days.forEach((d,i)=>{const ds=dayStrs[i];html+='<div class="cal-week-hdr-cell'+(ds===todayStr?' today-col':'')+'" onclick="calGotoDay(\''+ds+'\')">'+DAYS[i]+'<span class="wk-day-num">'+d.getDate()+'</span></div>'});
-  html+='</div>';
-  html+='<div class="cal-week-allday"><div class="cal-week-allday-label">'+t('cal.allDayShort')+'</div>';
-  days.forEach((d,i)=>{
-    const ds=dayStrs[i];
-    const de=events.filter(e=>e.date===ds&&e.allDay);
-    html+='<div class="cal-week-allday-cell" data-date="'+ds+'">';
-    de.forEach(e=>{
-      const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
-    });
-    html+='</div>';
+  let html = '<div class="cal-week">';
+  html += '<div class="cal-week-hdr"><div class="cal-week-hdr-cell"></div>';
+  days.forEach((d, i) => {
+    const ds = dayStrs[i];
+    html +=
+      '<div class="cal-week-hdr-cell' +
+      (ds === todayStr ? ' today-col' : '') +
+      '" onclick="calGotoDay(\'' +
+      ds +
+      '\')">' +
+      DAYS[i] +
+      '<span class="wk-day-num">' +
+      d.getDate() +
+      '</span></div>';
   });
-  html+='</div>';
-  html+='<div class="cal-week-body">';
-  for(let h=CAL_HOURS_START;h<=CAL_HOURS_END;h++){
-    html+='<div class="cal-week-time">'+String(h).padStart(2,'0')+':00</div>';
-    days.forEach((d,i)=>{
-      const ds=dayStrs[i];
-      html+='<div class="cal-week-slot'+(ds===todayStr?' today-col':'')+'" data-date="'+ds+'" data-hour="'+h+'" onclick="openEventModal(\''+ds+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';
+  html += '</div>';
+  html += '<div class="cal-week-allday"><div class="cal-week-allday-label">' + t('cal.allDayShort') + '</div>';
+  days.forEach((d, i) => {
+    const ds = dayStrs[i];
+    const de = events.filter((e) => e.date === ds && e.allDay);
+    html += '<div class="cal-week-allday-cell" data-date="' + ds + '">';
+    de.forEach((e) => {
+      const cls = e.draggable ? 'cal-event' : 'cal-event no-drag';
+      const bg = e.color ? 'style="background:' + safeColor(e.color) + '"' : '';
+      const dot = e.species ? spDot(e.species) : '';
+      html +=
+        '<div class="' +
+        cls +
+        '" ' +
+        (e.draggable ? 'draggable="true"' : '') +
+        ' data-type="' +
+        esc(e.type) +
+        '" data-id="' +
+        esc(e.id || '') +
+        '" title="' +
+        esc(e.label) +
+        '" ' +
+        bg +
+        '>' +
+        dot +
+        esc(e.label) +
+        '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="cal-week-body">';
+  for (let h = CAL_HOURS_START; h <= CAL_HOURS_END; h++) {
+    html += '<div class="cal-week-time">' + String(h).padStart(2, '0') + ':00</div>';
+    days.forEach((d, i) => {
+      const ds = dayStrs[i];
+      html +=
+        '<div class="cal-week-slot' +
+        (ds === todayStr ? ' today-col' : '') +
+        '" data-date="' +
+        ds +
+        '" data-hour="' +
+        h +
+        '" onclick="openEventModal(\'' +
+        ds +
+        "','" +
+        String(h).padStart(2, '0') +
+        ':00\')"></div>';
     });
   }
-  html+='</div></div>';
-  container.innerHTML=html;
+  html += '</div></div>';
+  container.innerHTML = html;
 
-  const body=container.querySelector('.cal-week-body');
-  if(body){
-    days.forEach((d,i)=>{
-      const ds=dayStrs[i];
-      const timed=events.filter(e=>e.date===ds&&!e.allDay&&e.startTime);
-      timed.forEach(e=>{
-        const[sh,sm]=(e.startTime||'09:00').split(':').map(Number);
-        const[eh,em]=(e.endTime||String(sh+1).padStart(2,'0')+':00').split(':').map(Number);
-        const top=((sh-CAL_HOURS_START)*48)+(sm/60*48);
-        const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
-        const col=i+2;
-        const el=document.createElement('div');
-        el.className='cal-week-ev';
-        el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:'+col;
-        const wkDot=e.species?spDot(e.species):'';
-        let wkContent=wkDot+esc(e.label);
-        if(e.assignees&&e.assignees.length)wkContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
-        if(height>=48&&e.startTime)wkContent+='<div style="opacity:.8;font-size:10px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
-        if(height>=72&&e.description)wkContent+='<div style="opacity:.7;font-size:10px;margin-top:1px">'+esc(e.description)+'</div>';
-        el.innerHTML=wkContent;
-        el.title=e.label;
-        el.dataset.type=e.type;el.dataset.id=e.id||'';
-        el.dataset.date=ds;
-        el.onclick=function(){if(!el._dragged)onCalEventClick(e)};
-        if(e.type==='custom'){
-          const rh=document.createElement('div');rh.className='ev-resize';el.appendChild(rh);
-          initEventDrag(el,body,'week',dayStrs);
-          initEventResize(el,rh,body,'week');
+  const body = container.querySelector('.cal-week-body');
+  if (body) {
+    days.forEach((d, i) => {
+      const ds = dayStrs[i];
+      const timed = events.filter((e) => e.date === ds && !e.allDay && e.startTime);
+      timed.forEach((e) => {
+        const [sh, sm] = (e.startTime || '09:00').split(':').map(Number);
+        const [eh, em] = (e.endTime || String(sh + 1).padStart(2, '0') + ':00').split(':').map(Number);
+        const top = (sh - CAL_HOURS_START) * 48 + (sm / 60) * 48;
+        const height = Math.max(24, (eh - sh) * 48 + ((em - sm) / 60) * 48);
+        const col = i + 2;
+        const el = document.createElement('div');
+        el.className = 'cal-week-ev';
+        el.style.cssText =
+          'top:' + top + 'px;height:' + height + 'px;background:' + safeColor(e.color) + ';grid-column:' + col;
+        const wkDot = e.species ? spDot(e.species) : '';
+        let wkContent = wkDot + esc(e.label);
+        if (e.assignees && e.assignees.length)
+          wkContent +=
+            ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>';
+        if (height >= 48 && e.startTime)
+          wkContent +=
+            '<div style="opacity:.8;font-size:10px">' + e.startTime + (e.endTime ? ' — ' + e.endTime : '') + '</div>';
+        if (height >= 72 && e.description)
+          wkContent += '<div style="opacity:.7;font-size:10px;margin-top:1px">' + esc(e.description) + '</div>';
+        el.innerHTML = wkContent;
+        el.title = e.label;
+        el.dataset.type = e.type;
+        el.dataset.id = e.id || '';
+        el.dataset.date = ds;
+        el.onclick = function () {
+          if (!el._dragged) onCalEventClick(e);
+        };
+        if (e.type === 'custom') {
+          const rh = document.createElement('div');
+          rh.className = 'ev-resize';
+          el.appendChild(rh);
+          initEventDrag(el, body, 'week', dayStrs);
+          initEventResize(el, rh, body, 'week');
         }
         body.appendChild(el);
       });
     });
-    const now=new Date();const nowDs=localDateStr(now);
-    const todayIdx=dayStrs.indexOf(nowDs);
-    if(todayIdx>=0){
-      const nowH=now.getHours(),nowM=now.getMinutes();
-      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
-        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
-        const line=document.createElement('div');
-        line.className='cal-week-now-line';
-        line.style.top=top+'px';
+    const now = new Date();
+    const nowDs = localDateStr(now);
+    const todayIdx = dayStrs.indexOf(nowDs);
+    if (todayIdx >= 0) {
+      const nowH = now.getHours(),
+        nowM = now.getMinutes();
+      if (nowH >= CAL_HOURS_START && nowH <= CAL_HOURS_END) {
+        const top = (nowH - CAL_HOURS_START) * 48 + (nowM / 60) * 48;
+        const line = document.createElement('div');
+        line.className = 'cal-week-now-line';
+        line.style.top = top + 'px';
         body.appendChild(line);
-        body.scrollTop=Math.max(0,top-150);
+        body.scrollTop = Math.max(0, top - 150);
       }
     }
   }
@@ -9003,75 +12985,119 @@ function renderCalWeek(){
 }
 
 // ── Day View ──
-function renderCalDay(){
-  const container=document.getElementById('cal-container');
-  const title=document.getElementById('cal-title');
-  const d=calSelectedDate;
-  const ds=localDateStr(d);
-  const DAYS=calDays(),MONTHS=calMonths();
-  const dayName=DAYS[(d.getDay()+6)%7];
-  title.textContent=dayName+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
-  const events=collectCalendarEvents();
-  const dayEvents=events.filter(e=>e.date===ds);
-  const allDay=dayEvents.filter(e=>e.allDay);
-  const timed=dayEvents.filter(e=>!e.allDay&&e.startTime);
+function renderCalDay() {
+  const container = document.getElementById('cal-container');
+  const title = document.getElementById('cal-title');
+  const d = calSelectedDate;
+  const ds = localDateStr(d);
+  const DAYS = calDays(),
+    MONTHS = calMonths();
+  const dayName = DAYS[(d.getDay() + 6) % 7];
+  title.textContent = dayName + ', ' + d.getDate() + '. ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+  const events = collectCalendarEvents();
+  const dayEvents = events.filter((e) => e.date === ds);
+  const allDay = dayEvents.filter((e) => e.allDay);
+  const timed = dayEvents.filter((e) => !e.allDay && e.startTime);
 
-  let html='<div class="cal-day-view">';
-  html+='<div class="cal-day-allday"><div class="sec">'+t('cal.allDay')+'</div>';
-  if(allDay.length){
-    allDay.forEach(e=>{
-      const cls=e.draggable?'cal-event':'cal-event no-drag';
-      const bg=e.color?'style="background:'+safeColor(e.color)+'"':'';
-      const dot=e.species?spDot(e.species):'';
-      html+='<div class="'+cls+'" '+(e.draggable?'draggable="true"':'')+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+'</div>';
+  let html = '<div class="cal-day-view">';
+  html += '<div class="cal-day-allday"><div class="sec">' + t('cal.allDay') + '</div>';
+  if (allDay.length) {
+    allDay.forEach((e) => {
+      const cls = e.draggable ? 'cal-event' : 'cal-event no-drag';
+      const bg = e.color ? 'style="background:' + safeColor(e.color) + '"' : '';
+      const dot = e.species ? spDot(e.species) : '';
+      html +=
+        '<div class="' +
+        cls +
+        '" ' +
+        (e.draggable ? 'draggable="true"' : '') +
+        ' data-type="' +
+        esc(e.type) +
+        '" data-id="' +
+        esc(e.id || '') +
+        '" title="' +
+        esc(e.label) +
+        '" ' +
+        bg +
+        '>' +
+        dot +
+        esc(e.label) +
+        '</div>';
     });
-  }else{html+='<div class="cal-day-allday-empty">'+t('cal.noAllDay')+'</div>'}
-  html+='</div>';
-  html+='<div class="cal-day-body">';
-  for(let h=CAL_HOURS_START;h<=CAL_HOURS_END;h++){
-    html+='<div class="cal-day-time">'+String(h).padStart(2,'0')+':00</div>';
-    html+='<div class="cal-day-slot" data-date="'+ds+'" data-hour="'+h+'" onclick="openEventModal(\''+ds+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';
+  } else {
+    html += '<div class="cal-day-allday-empty">' + t('cal.noAllDay') + '</div>';
   }
-  html+='</div></div>';
-  container.innerHTML=html;
+  html += '</div>';
+  html += '<div class="cal-day-body">';
+  for (let h = CAL_HOURS_START; h <= CAL_HOURS_END; h++) {
+    html += '<div class="cal-day-time">' + String(h).padStart(2, '0') + ':00</div>';
+    html +=
+      '<div class="cal-day-slot" data-date="' +
+      ds +
+      '" data-hour="' +
+      h +
+      '" onclick="openEventModal(\'' +
+      ds +
+      "','" +
+      String(h).padStart(2, '0') +
+      ':00\')"></div>';
+  }
+  html += '</div></div>';
+  container.innerHTML = html;
 
-  const body=container.querySelector('.cal-day-body');
-  if(body){
-    timed.forEach(e=>{
-      const[sh,sm]=(e.startTime||'09:00').split(':').map(Number);
-      const[eh,em]=(e.endTime||String(sh+1).padStart(2,'0')+':00').split(':').map(Number);
-      const top=((sh-CAL_HOURS_START)*48)+(sm/60*48);
-      const height=Math.max(24,((eh-sh)*48)+((em-sm)/60*48));
-      const el=document.createElement('div');
-      el.className='cal-day-ev';
-      el.style.cssText='top:'+top+'px;height:'+height+'px;background:'+safeColor(e.color)+';grid-column:2';
-      const dayDot=e.species?spDot(e.species):'';
-      let dayContent=dayDot+'<strong>'+esc(e.label)+'</strong>';
-      if(e.assignees&&e.assignees.length)dayContent+=' <span class="cal-ev-assignees">'+e.assignees.map(a=>esc(a.username)).join(', ')+'</span>';
-      if(e.startTime)dayContent+='<div style="opacity:.8;font-size:11px;margin-top:2px">'+e.startTime+(e.endTime?' — '+e.endTime:'')+'</div>';
-      if(height>=72&&e.description)dayContent+='<div style="opacity:.7;font-size:10px;margin-top:2px">'+esc(e.description)+'</div>';
-      el.innerHTML=dayContent;
-      el.title=e.label;
-      el.dataset.type=e.type;el.dataset.id=e.id||'';
-      el.dataset.date=ds;
-      el.onclick=function(){if(!el._dragged)onCalEventClick(e)};
-      if(e.type==='custom'){
-        const rh=document.createElement('div');rh.className='ev-resize';el.appendChild(rh);
-        initEventDrag(el,body,'day',null);
-        initEventResize(el,rh,body,'day');
+  const body = container.querySelector('.cal-day-body');
+  if (body) {
+    timed.forEach((e) => {
+      const [sh, sm] = (e.startTime || '09:00').split(':').map(Number);
+      const [eh, em] = (e.endTime || String(sh + 1).padStart(2, '0') + ':00').split(':').map(Number);
+      const top = (sh - CAL_HOURS_START) * 48 + (sm / 60) * 48;
+      const height = Math.max(24, (eh - sh) * 48 + ((em - sm) / 60) * 48);
+      const el = document.createElement('div');
+      el.className = 'cal-day-ev';
+      el.style.cssText =
+        'top:' + top + 'px;height:' + height + 'px;background:' + safeColor(e.color) + ';grid-column:2';
+      const dayDot = e.species ? spDot(e.species) : '';
+      let dayContent = dayDot + '<strong>' + esc(e.label) + '</strong>';
+      if (e.assignees && e.assignees.length)
+        dayContent +=
+          ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>';
+      if (e.startTime)
+        dayContent +=
+          '<div style="opacity:.8;font-size:11px;margin-top:2px">' +
+          e.startTime +
+          (e.endTime ? ' — ' + e.endTime : '') +
+          '</div>';
+      if (height >= 72 && e.description)
+        dayContent += '<div style="opacity:.7;font-size:10px;margin-top:2px">' + esc(e.description) + '</div>';
+      el.innerHTML = dayContent;
+      el.title = e.label;
+      el.dataset.type = e.type;
+      el.dataset.id = e.id || '';
+      el.dataset.date = ds;
+      el.onclick = function () {
+        if (!el._dragged) onCalEventClick(e);
+      };
+      if (e.type === 'custom') {
+        const rh = document.createElement('div');
+        rh.className = 'ev-resize';
+        el.appendChild(rh);
+        initEventDrag(el, body, 'day', null);
+        initEventResize(el, rh, body, 'day');
       }
       body.appendChild(el);
     });
-    const now=new Date();const nowDs=localDateStr(now);
-    if(ds===nowDs){
-      const nowH=now.getHours(),nowM=now.getMinutes();
-      if(nowH>=CAL_HOURS_START&&nowH<=CAL_HOURS_END){
-        const top=((nowH-CAL_HOURS_START)*48)+(nowM/60*48);
-        const line=document.createElement('div');
-        line.className='cal-day-now-line';
-        line.style.top=top+'px';
+    const now = new Date();
+    const nowDs = localDateStr(now);
+    if (ds === nowDs) {
+      const nowH = now.getHours(),
+        nowM = now.getMinutes();
+      if (nowH >= CAL_HOURS_START && nowH <= CAL_HOURS_END) {
+        const top = (nowH - CAL_HOURS_START) * 48 + (nowM / 60) * 48;
+        const line = document.createElement('div');
+        line.className = 'cal-day-now-line';
+        line.style.top = top + 'px';
         body.appendChild(line);
-        body.scrollTop=Math.max(0,top-150);
+        body.scrollTop = Math.max(0, top - 150);
       }
     }
   }
@@ -9079,787 +13105,1207 @@ function renderCalDay(){
 }
 
 // ── Calendar Drag-and-Drop ──
-function initCalDragDrop(root){
-  if(!root)return;
-  root.onclick=function(e){
-    const ev=e.target.closest('.cal-event');
-    if(!ev)return;
+function initCalDragDrop(root) {
+  if (!root) return;
+  root.onclick = function (e) {
+    const ev = e.target.closest('.cal-event');
+    if (!ev) return;
     e.stopPropagation();
-    onCalMonthEventClick(ev.dataset.type,ev.dataset.id);
+    onCalMonthEventClick(ev.dataset.type, ev.dataset.id);
   };
-  root.ondragstart=function(e){
-    const ev=e.target.closest('.cal-event');
-    if(!ev||ev.classList.contains('no-drag')){e.preventDefault();return}
-    e.dataTransfer.setData('text/plain',ev.dataset.type+'|'+ev.dataset.id);
-    e.dataTransfer.effectAllowed='move';
-    ev.style.opacity='0.4';
+  root.ondragstart = function (e) {
+    const ev = e.target.closest('.cal-event');
+    if (!ev || ev.classList.contains('no-drag')) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('text/plain', ev.dataset.type + '|' + ev.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    ev.style.opacity = '0.4';
   };
-  root.ondragend=function(e){
-    const ev=e.target.closest('.cal-event');
-    if(ev)ev.style.opacity='1';
-    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+  root.ondragend = function (e) {
+    const ev = e.target.closest('.cal-event');
+    if (ev) ev.style.opacity = '1';
+    root.querySelectorAll('.drag-over').forEach((c) => c.classList.remove('drag-over'));
   };
-  root.ondragover=function(e){
-    const cell=e.target.closest('[data-date]');
-    if(!cell)return;
-    e.preventDefault();e.dataTransfer.dropEffect='move';
-    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
+  root.ondragover = function (e) {
+    const cell = e.target.closest('[data-date]');
+    if (!cell) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    root.querySelectorAll('.drag-over').forEach((c) => c.classList.remove('drag-over'));
     cell.classList.add('drag-over');
   };
-  root.ondragleave=function(e){
-    const cell=e.target.closest('[data-date]');
-    if(cell)cell.classList.remove('drag-over');
+  root.ondragleave = function (e) {
+    const cell = e.target.closest('[data-date]');
+    if (cell) cell.classList.remove('drag-over');
   };
-  root.ondrop=function(e){
+  root.ondrop = function (e) {
     e.preventDefault();
-    root.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'));
-    const cell=e.target.closest('[data-date]');
-    if(!cell||!cell.dataset.date)return;
-    const data=e.dataTransfer.getData('text/plain');if(!data)return;
-    const[type,id]=data.split('|');
-    handleCalendarDrop(type,id,cell.dataset.date);
+    root.querySelectorAll('.drag-over').forEach((c) => c.classList.remove('drag-over'));
+    const cell = e.target.closest('[data-date]');
+    if (!cell || !cell.dataset.date) return;
+    const data = e.dataTransfer.getData('text/plain');
+    if (!data) return;
+    const [type, id] = data.split('|');
+    handleCalendarDrop(type, id, cell.dataset.date);
   };
 }
 
-function handleCalendarDrop(type,id,newDateStr){
-  if(type==='batch-due'){
-    const b=batches.find(x=>x.batchId===id);if(!b)return;
-    const newDue=new Date(newDateStr+'T12:00:00');
-    b.due=newDue.toISOString();
-    const created=new Date(b.created);
-    b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-    apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
+function handleCalendarDrop(type, id, newDateStr) {
+  if (type === 'batch-due') {
+    const b = batches.find((x) => x.batchId === id);
+    if (!b) return;
+    const newDue = new Date(newDateStr + 'T12:00:00');
+    b.due = newDue.toISOString();
+    const created = new Date(b.created);
+    b.days = Math.max(1, Math.round((newDue - created) / MS_PER_DAY));
+    apiPatch('/api/batches/' + encodeURIComponent(id), { due: b.due, days: b.days });
     renderCalendar();
-    if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
-  }else if(type==='task-due'){
-    const t=manualTasks.find(x=>x.created===id);if(!t)return;
-    t.dueDate=newDateStr;t.caldavSynced=null;
-    apiPatch('/api/tasks/'+t.id,{dueDate:newDateStr,caldavSynced:null});
+    if (typeof pushBatchCaldav === 'function') pushBatchCaldav(b);
+  } else if (type === 'task-due') {
+    const t = manualTasks.find((x) => x.created === id);
+    if (!t) return;
+    t.dueDate = newDateStr;
+    t.caldavSynced = null;
+    apiPatch('/api/tasks/' + t.id, { dueDate: newDateStr, caldavSynced: null });
     renderCalendar();
-    if(caldav.enabled&&t.caldavUid&&typeof pushTaskCaldav==='function')pushTaskCaldav(t);
-  }else if(type==='custom'){
-    const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
-    ev.startDate=newDateStr;ev.caldavSynced=null;
-    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{startDate:newDateStr,caldavSynced:null});
+    if (caldav.enabled && t.caldavUid && typeof pushTaskCaldav === 'function') pushTaskCaldav(t);
+  } else if (type === 'custom') {
+    const ev = calendarEvents.find((x) => x.id === id);
+    if (!ev) return;
+    ev.startDate = newDateStr;
+    ev.caldavSynced = null;
+    apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
     renderCalendar();
-    if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
+    if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
   }
 }
 
 // ── Time-based Drag & Resize for Week/Day views ──
-function pxToTime(px){
-  const totalMin=(px/48)*60;
-  let h=CAL_HOURS_START+Math.floor(totalMin/60);
-  let m=Math.round(totalMin%60/15)*15;
-  if(m>=60){h++;m=0}
-  h=Math.max(CAL_HOURS_START,Math.min(CAL_HOURS_END,h));
-  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+function pxToTime(px) {
+  const totalMin = (px / 48) * 60;
+  let h = CAL_HOURS_START + Math.floor(totalMin / 60);
+  let m = Math.round((totalMin % 60) / 15) * 15;
+  if (m >= 60) {
+    h++;
+    m = 0;
+  }
+  h = Math.max(CAL_HOURS_START, Math.min(CAL_HOURS_END, h));
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
-function snapPx(px){return Math.round(px/12)*12}
+function snapPx(px) {
+  return Math.round(px / 12) * 12;
+}
 
-function updateEventTime(id,newStart,newEnd,newDate){
-  const ev=calendarEvents.find(x=>x.id===id);if(!ev)return;
-  if(newStart)ev.startTime=newStart;
-  if(newEnd)ev.endTime=newEnd;
-  if(newDate)ev.startDate=newDate;
-  ev.caldavSynced=null;
-  const patch={caldavSynced:null};
-  if(newStart)patch.startTime=newStart;
-  if(newEnd)patch.endTime=newEnd;
-  if(newDate)patch.startDate=newDate;
-  apiPatch('/api/calendar-events/'+encodeURIComponent(id),patch);
+function updateEventTime(id, newStart, newEnd, newDate) {
+  const ev = calendarEvents.find((x) => x.id === id);
+  if (!ev) return;
+  if (newStart) ev.startTime = newStart;
+  if (newEnd) ev.endTime = newEnd;
+  if (newDate) ev.startDate = newDate;
+  ev.caldavSynced = null;
+  const patch = { caldavSynced: null };
+  if (newStart) patch.startTime = newStart;
+  if (newEnd) patch.endTime = newEnd;
+  if (newDate) patch.startDate = newDate;
+  apiPatch('/api/calendar-events/' + encodeURIComponent(id), patch);
   renderCalendar();
-  if(typeof pushEventCaldav==='function')pushEventCaldav(ev);
+  if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
 }
 
-function initEventDrag(el,body,viewType,dayStrs){
-  function startDrag(clientX,clientY){
-    if(el._resizing)return;
-    const startY=clientY,startX=clientX;
-    const origTop=parseFloat(el.style.top);
-    let dragging=false;el._dragged=false;
-    const onMove=function(cx,cy){
-      const dy=cy-startY;
-      const dx=cx-startX;
-      if(!dragging&&Math.abs(dy)<4&&Math.abs(dx)<4)return;
-      dragging=true;el._dragged=true;
-      el.style.top=snapPx(origTop+dy)+'px';
-      el.style.opacity='0.7';el.style.zIndex='10';
-      if(viewType==='week'&&dayStrs){
-        const bodyRect=body.getBoundingClientRect();
-        const timeColW=56;
-        const colW=(bodyRect.width-timeColW)/7;
-        const relX=cx-bodyRect.left-timeColW;
-        const newColIdx=Math.max(0,Math.min(6,Math.floor(relX/colW)));
-        el.style.gridColumn=String(newColIdx+2);
+function initEventDrag(el, body, viewType, dayStrs) {
+  function startDrag(clientX, clientY) {
+    if (el._resizing) return;
+    const startY = clientY,
+      startX = clientX;
+    const origTop = parseFloat(el.style.top);
+    let dragging = false;
+    el._dragged = false;
+    const onMove = function (cx, cy) {
+      const dy = cy - startY;
+      const dx = cx - startX;
+      if (!dragging && Math.abs(dy) < 4 && Math.abs(dx) < 4) return;
+      dragging = true;
+      el._dragged = true;
+      el.style.top = snapPx(origTop + dy) + 'px';
+      el.style.opacity = '0.7';
+      el.style.zIndex = '10';
+      if (viewType === 'week' && dayStrs) {
+        const bodyRect = body.getBoundingClientRect();
+        const timeColW = 56;
+        const colW = (bodyRect.width - timeColW) / 7;
+        const relX = cx - bodyRect.left - timeColW;
+        const newColIdx = Math.max(0, Math.min(6, Math.floor(relX / colW)));
+        el.style.gridColumn = String(newColIdx + 2);
       }
     };
-    const onUp=function(){
-      document.removeEventListener('mousemove',mmh);
-      document.removeEventListener('mouseup',muh);
-      document.removeEventListener('touchmove',tmh);
-      document.removeEventListener('touchend',teh);
-      el.style.opacity='';el.style.zIndex='';
-      if(!dragging)return;
-      const newTop=Math.max(0,snapPx(parseFloat(el.style.top)));
-      const evId=el.dataset.id;
-      const newStart=pxToTime(newTop);
-      const ce=calendarEvents.find(x=>x.id===evId);if(!ce)return;
-      const[osh,osm]=(ce.startTime||'09:00').split(':').map(Number);
-      const[oeh,oem]=(ce.endTime||'10:00').split(':').map(Number);
-      const durMin=(oeh*60+oem)-(osh*60+osm);
-      const[nsh,nsm]=newStart.split(':').map(Number);
-      const endMin=nsh*60+nsm+durMin;
-      const neh=Math.min(CAL_HOURS_END,Math.floor(endMin/60));
-      const nem=endMin%60;
-      const newEnd=String(neh).padStart(2,'0')+':'+String(nem).padStart(2,'0');
-      let newDate=el.dataset.date;
-      if(viewType==='week'&&dayStrs){
-        const newColIdx=parseInt(el.style.gridColumn)-2;
-        if(newColIdx>=0&&newColIdx<dayStrs.length)newDate=dayStrs[newColIdx];
+    const onUp = function () {
+      document.removeEventListener('mousemove', mmh);
+      document.removeEventListener('mouseup', muh);
+      document.removeEventListener('touchmove', tmh);
+      document.removeEventListener('touchend', teh);
+      el.style.opacity = '';
+      el.style.zIndex = '';
+      if (!dragging) return;
+      const newTop = Math.max(0, snapPx(parseFloat(el.style.top)));
+      const evId = el.dataset.id;
+      const newStart = pxToTime(newTop);
+      const ce = calendarEvents.find((x) => x.id === evId);
+      if (!ce) return;
+      const [osh, osm] = (ce.startTime || '09:00').split(':').map(Number);
+      const [oeh, oem] = (ce.endTime || '10:00').split(':').map(Number);
+      const durMin = oeh * 60 + oem - (osh * 60 + osm);
+      const [nsh, nsm] = newStart.split(':').map(Number);
+      const endMin = nsh * 60 + nsm + durMin;
+      const neh = Math.min(CAL_HOURS_END, Math.floor(endMin / 60));
+      const nem = endMin % 60;
+      const newEnd = String(neh).padStart(2, '0') + ':' + String(nem).padStart(2, '0');
+      let newDate = el.dataset.date;
+      if (viewType === 'week' && dayStrs) {
+        const newColIdx = parseInt(el.style.gridColumn) - 2;
+        if (newColIdx >= 0 && newColIdx < dayStrs.length) newDate = dayStrs[newColIdx];
       }
-      updateEventTime(evId,newStart,newEnd,newDate);
+      updateEventTime(evId, newStart, newEnd, newDate);
     };
-    const mmh=function(e){onMove(e.clientX,e.clientY)};
-    const muh=function(){onUp()};
-    const tmh=function(e){e.preventDefault();const t=e.touches[0];onMove(t.clientX,t.clientY)};
-    const teh=function(){onUp()};
-    document.addEventListener('mousemove',mmh);
-    document.addEventListener('mouseup',muh);
-    document.addEventListener('touchmove',tmh,{passive:false});
-    document.addEventListener('touchend',teh);
+    const mmh = function (e) {
+      onMove(e.clientX, e.clientY);
+    };
+    const muh = function () {
+      onUp();
+    };
+    const tmh = function (e) {
+      e.preventDefault();
+      const t = e.touches[0];
+      onMove(t.clientX, t.clientY);
+    };
+    const teh = function () {
+      onUp();
+    };
+    document.addEventListener('mousemove', mmh);
+    document.addEventListener('mouseup', muh);
+    document.addEventListener('touchmove', tmh, { passive: false });
+    document.addEventListener('touchend', teh);
   }
-  el.addEventListener('mousedown',function(e){
-    if(e.target.classList.contains('ev-resize'))return;
-    e.preventDefault();startDrag(e.clientX,e.clientY);
+  el.addEventListener('mousedown', function (e) {
+    if (e.target.classList.contains('ev-resize')) return;
+    e.preventDefault();
+    startDrag(e.clientX, e.clientY);
   });
-  el.addEventListener('touchstart',function(e){
-    if(e.target.classList.contains('ev-resize'))return;
-    const t=e.touches[0];startDrag(t.clientX,t.clientY);
-  },{passive:true});
+  el.addEventListener(
+    'touchstart',
+    function (e) {
+      if (e.target.classList.contains('ev-resize')) return;
+      const t = e.touches[0];
+      startDrag(t.clientX, t.clientY);
+    },
+    { passive: true }
+  );
 }
 
-function initEventResize(el,handle,body,viewType){
-  function startResize(clientY){
-    el._resizing=true;
-    const startY=clientY;
-    const origHeight=parseFloat(el.style.height);
-    let resizing=false;
-    const onMove=function(cy){
-      const dy=cy-startY;
-      if(!resizing&&Math.abs(dy)<4)return;
-      resizing=true;el._dragged=true;
-      const newH=Math.max(12,snapPx(origHeight+dy));
-      el.style.height=newH+'px';
+function initEventResize(el, handle, body, viewType) {
+  function startResize(clientY) {
+    el._resizing = true;
+    const startY = clientY;
+    const origHeight = parseFloat(el.style.height);
+    let resizing = false;
+    const onMove = function (cy) {
+      const dy = cy - startY;
+      if (!resizing && Math.abs(dy) < 4) return;
+      resizing = true;
+      el._dragged = true;
+      const newH = Math.max(12, snapPx(origHeight + dy));
+      el.style.height = newH + 'px';
     };
-    const onUp=function(){
-      document.removeEventListener('mousemove',mmh);
-      document.removeEventListener('mouseup',muh);
-      document.removeEventListener('touchmove',tmh);
-      document.removeEventListener('touchend',teh);
-      el._resizing=false;
-      if(!resizing)return;
-      const evId=el.dataset.id;
-      const newHeight=Math.max(12,parseFloat(el.style.height));
-      const topPx=parseFloat(el.style.top);
-      const endPx=topPx+newHeight;
-      const newEnd=pxToTime(endPx);
-      const newStart=pxToTime(topPx);
-      updateEventTime(evId,newStart,newEnd,null);
+    const onUp = function () {
+      document.removeEventListener('mousemove', mmh);
+      document.removeEventListener('mouseup', muh);
+      document.removeEventListener('touchmove', tmh);
+      document.removeEventListener('touchend', teh);
+      el._resizing = false;
+      if (!resizing) return;
+      const evId = el.dataset.id;
+      const newHeight = Math.max(12, parseFloat(el.style.height));
+      const topPx = parseFloat(el.style.top);
+      const endPx = topPx + newHeight;
+      const newEnd = pxToTime(endPx);
+      const newStart = pxToTime(topPx);
+      updateEventTime(evId, newStart, newEnd, null);
     };
-    const mmh=function(e){onMove(e.clientY)};
-    const muh=function(){onUp()};
-    const tmh=function(e){e.preventDefault();onMove(e.touches[0].clientY)};
-    const teh=function(){onUp()};
-    document.addEventListener('mousemove',mmh);
-    document.addEventListener('mouseup',muh);
-    document.addEventListener('touchmove',tmh,{passive:false});
-    document.addEventListener('touchend',teh);
+    const mmh = function (e) {
+      onMove(e.clientY);
+    };
+    const muh = function () {
+      onUp();
+    };
+    const tmh = function (e) {
+      e.preventDefault();
+      onMove(e.touches[0].clientY);
+    };
+    const teh = function () {
+      onUp();
+    };
+    document.addEventListener('mousemove', mmh);
+    document.addEventListener('mouseup', muh);
+    document.addEventListener('touchmove', tmh, { passive: false });
+    document.addEventListener('touchend', teh);
   }
-  handle.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();startResize(e.clientY)});
-  handle.addEventListener('touchstart',function(e){e.stopPropagation();startResize(e.touches[0].clientY)},{passive:true});
+  handle.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startResize(e.clientY);
+  });
+  handle.addEventListener(
+    'touchstart',
+    function (e) {
+      e.stopPropagation();
+      startResize(e.touches[0].clientY);
+    },
+    { passive: true }
+  );
 }
 
 // ── Calendar Event Click ──
-function onCalEventClick(ev){
-  if(ev.type==='harvest')return;
+function onCalEventClick(ev) {
+  if (ev.type === 'harvest') return;
   openEventDetail(ev);
 }
 
-function openEventDetail(ev){
-  const titleEl=document.getElementById('cal-detail-title');
-  const metaEl=document.getElementById('cal-detail-meta');
-  const badgesEl=document.getElementById('cal-detail-badges');
-  const assignEl=document.getElementById('cal-detail-assignee');
-  const descEl=document.getElementById('cal-detail-desc');
-  const btnsEl=document.getElementById('cal-detail-btns');
+function openEventDetail(ev) {
+  const titleEl = document.getElementById('cal-detail-title');
+  const metaEl = document.getElementById('cal-detail-meta');
+  const badgesEl = document.getElementById('cal-detail-badges');
+  const assignEl = document.getElementById('cal-detail-assignee');
+  const descEl = document.getElementById('cal-detail-desc');
+  const btnsEl = document.getElementById('cal-detail-btns');
 
-  if(ev.type==='custom'){
-    const ce=calendarEvents.find(x=>x.id===ev.id);if(!ce)return;
-    titleEl.textContent=ce.title;
-    const occDate=ev.date||ce.startDate;
-    let meta=new Date(occDate).toLocaleDateString(loc(),{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-    if(!ce.allDay&&ce.startTime)meta+=', '+ce.startTime+(ce.endTime?' — '+ce.endTime:'');
-    if(ce.endDate&&ce.endDate!==ce.startDate)meta+=' '+t('calEntry.until')+' '+new Date(ce.endDate).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
-    metaEl.textContent=meta;
-    const catLabels={custom:t('calEntry.cat.custom'),meeting:t('calEntry.cat.meeting'),delivery:t('calEntry.cat.delivery'),maintenance:t('calEntry.cat.maintenance')};
-    const recLabels={daily:t('calEntry.rec.daily'),weekly:t('calEntry.rec.weekly'),monthly:t('calEntry.rec.monthly')};
-    let badges='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(CATEGORY_COLORS[ce.category]||safeColor(ce.color))+';color:#fff">'+esc(catLabels[ce.category]||ce.category)+'</span>';
-    if(ce.recurrence)badges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 '+esc(recLabels[ce.recurrence]||ce.recurrence)+'</span>';
-    badgesEl.innerHTML=badges;
-    const teamList=Array.isArray(ce.teamAssignees)?ce.teamAssignees:[];
-    assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(teamList.length?teamList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
-    descEl.textContent=ce.description||'';
-    descEl.style.display=ce.description?'':'none';
-    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calEntry.delete'))+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-event" data-cal-id="'+esc(ce.id)+'">'+esc(t('calDetail.edit'))+'</button>';
-
-  }else if(ev.type==='task-due'){
-    const tk=manualTasks.find(x=>x.created===ev.id);if(!tk)return;
-    titleEl.textContent=tk.text;
-    let meta=t('calDetail.taskDue');
-    if(tk.dueDate)meta+=' — '+t('calDetail.dueLabel')+': '+new Date(tk.dueDate).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
-    if(tk.dueTime)meta+=', '+tk.dueTime+(tk.dueEndTime?' — '+tk.dueEndTime:'');
-    metaEl.textContent=meta;
-    const prioLabels={high:t('calEntry.prio.high'),med:t('calEntry.prio.med'),medium:t('calEntry.prio.med'),low:t('calEntry.prio.low')};
-    const prioColors={high:'#ef4444',med:'#f59e0b',medium:'#f59e0b',low:'#22c55e'};
-    const recLabels2={daily:t('calEntry.rec.daily'),weekly:t('calEntry.rec.weekly'),monthly:t('calEntry.rec.monthly')};
-    let tBadges='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">'+esc(t('calDetail.taskDue'))+'</span>';
-    if(tk.priority)tBadges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:'+(prioColors[tk.priority]||'#888')+';color:#fff">'+esc(prioLabels[tk.priority]||tk.priority)+'</span>';
-    if(tk.recurrence)tBadges+='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 '+esc(recLabels2[tk.recurrence]||tk.recurrence)+'</span>';
-    badgesEl.innerHTML=tBadges;
-    const assigneeList=parseTaskAssignees(tk.assignee);
-    assignEl.innerHTML=t('calDetail.assignedTo')+': <strong>'+(assigneeList.length?assigneeList.map(n=>esc(n)).join(', '):esc(t('calDetail.everyone')))+'</strong>';
-    descEl.textContent=tk.description||'';
-    descEl.style.display=tk.description?'':'none';
-    const doneLabel=tk.done?t('calDetail.markUndone'):t('calDetail.markDone');
-    btnsEl.innerHTML='<button class="btn btn-r" data-cal-action="delete-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calEntry.delete'))+'</button><button class="btn'+(tk.done?'':' btn-p')+'" data-cal-action="toggle-task" data-cal-id="'+esc(ev.id)+'">'+esc(doneLabel)+'</button><span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="edit-task" data-cal-id="'+esc(ev.id)+'">'+esc(t('calDetail.edit'))+'</button>';
-
-  }else if(ev.type==='batch-due'){
-    titleEl.textContent=ev.label;
-    const b=batches.find(x=>x.batchId===ev.id);
-    let meta=t('calDetail.batchDue');
-    if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
-    metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">'+esc(t('calDetail.batchDue'))+'</span>';
-    const curDate=b&&b.due?b.due.slice(0,10):'';
-    assignEl.innerHTML='<label style="font-size:12px;color:var(--c-text-sec)">'+esc(t('calDetail.changeDate'))+'</label> <input type="date" id="cal-detail-batch-date" value="'+curDate+'" style="margin-left:8px;font-size:13px;padding:4px 8px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);color:var(--c-text)">';
-    assignEl._currentBatchId=ev.id;
-    descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
-    descEl.style.display='';
-    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="save-batch-due" data-cal-id="'+esc(ev.id)+'">'+esc(t('calEntry.save'))+'</button>';
-
-  }else if(ev.type==='caldav-import'){
-    titleEl.textContent=ev.label;
-    let meta=t('calDetail.external');
-    if(ev.date)meta+=' — '+new Date(ev.date).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
-    if(ev.startTime)meta+=', '+ev.startTime+(ev.endTime?' — '+ev.endTime:'');
-    metaEl.textContent=meta;
-    badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">'+esc(t('calDetail.external'))+'</span>';
-    assignEl.innerHTML='';
-    descEl.textContent=ev.description||'';
-    descEl.style.display=ev.description?'':'none';
-    btnsEl.innerHTML='<button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
+  if (ev.type === 'custom') {
+    const ce = calendarEvents.find((x) => x.id === ev.id);
+    if (!ce) return;
+    titleEl.textContent = ce.title;
+    const occDate = ev.date || ce.startDate;
+    let meta = new Date(occDate).toLocaleDateString(loc(), {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    if (!ce.allDay && ce.startTime) meta += ', ' + ce.startTime + (ce.endTime ? ' — ' + ce.endTime : '');
+    if (ce.endDate && ce.endDate !== ce.startDate)
+      meta +=
+        ' ' +
+        t('calEntry.until') +
+        ' ' +
+        new Date(ce.endDate).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    metaEl.textContent = meta;
+    const catLabels = {
+      custom: t('calEntry.cat.custom'),
+      meeting: t('calEntry.cat.meeting'),
+      delivery: t('calEntry.cat.delivery'),
+      maintenance: t('calEntry.cat.maintenance')
+    };
+    const recLabels = {
+      daily: t('calEntry.rec.daily'),
+      weekly: t('calEntry.rec.weekly'),
+      monthly: t('calEntry.rec.monthly')
+    };
+    let badges =
+      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
+      (CATEGORY_COLORS[ce.category] || safeColor(ce.color)) +
+      ';color:#fff">' +
+      esc(catLabels[ce.category] || ce.category) +
+      '</span>';
+    if (ce.recurrence)
+      badges +=
+        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
+        esc(recLabels[ce.recurrence] || ce.recurrence) +
+        '</span>';
+    badgesEl.innerHTML = badges;
+    const teamList = Array.isArray(ce.teamAssignees) ? ce.teamAssignees : [];
+    assignEl.innerHTML =
+      t('calDetail.assignedTo') +
+      ': <strong>' +
+      (teamList.length ? teamList.map((n) => esc(n)).join(', ') : esc(t('calDetail.everyone'))) +
+      '</strong>';
+    descEl.textContent = ce.description || '';
+    descEl.style.display = ce.description ? '' : 'none';
+    btnsEl.innerHTML =
+      '<button class="btn btn-r" data-cal-action="delete-event" data-cal-id="' +
+      esc(ce.id) +
+      '">' +
+      esc(t('calEntry.delete')) +
+      '</button><span style="flex:1"></span><button class="btn" data-cal-action="close">' +
+      esc(t('calDetail.close')) +
+      '</button><button class="btn btn-p" data-cal-action="edit-event" data-cal-id="' +
+      esc(ce.id) +
+      '">' +
+      esc(t('calDetail.edit')) +
+      '</button>';
+  } else if (ev.type === 'task-due') {
+    const tk = manualTasks.find((x) => x.created === ev.id);
+    if (!tk) return;
+    titleEl.textContent = tk.text;
+    let meta = t('calDetail.taskDue');
+    if (tk.dueDate)
+      meta +=
+        ' — ' +
+        t('calDetail.dueLabel') +
+        ': ' +
+        new Date(tk.dueDate).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    if (tk.dueTime) meta += ', ' + tk.dueTime + (tk.dueEndTime ? ' — ' + tk.dueEndTime : '');
+    metaEl.textContent = meta;
+    const prioLabels = {
+      high: t('calEntry.prio.high'),
+      med: t('calEntry.prio.med'),
+      medium: t('calEntry.prio.med'),
+      low: t('calEntry.prio.low')
+    };
+    const prioColors = { high: '#ef4444', med: '#f59e0b', medium: '#f59e0b', low: '#22c55e' };
+    const recLabels2 = {
+      daily: t('calEntry.rec.daily'),
+      weekly: t('calEntry.rec.weekly'),
+      monthly: t('calEntry.rec.monthly')
+    };
+    let tBadges =
+      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">' +
+      esc(t('calDetail.taskDue')) +
+      '</span>';
+    if (tk.priority)
+      tBadges +=
+        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
+        (prioColors[tk.priority] || '#888') +
+        ';color:#fff">' +
+        esc(prioLabels[tk.priority] || tk.priority) +
+        '</span>';
+    if (tk.recurrence)
+      tBadges +=
+        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
+        esc(recLabels2[tk.recurrence] || tk.recurrence) +
+        '</span>';
+    badgesEl.innerHTML = tBadges;
+    const assigneeList = parseTaskAssignees(tk.assignee);
+    assignEl.innerHTML =
+      t('calDetail.assignedTo') +
+      ': <strong>' +
+      (assigneeList.length ? assigneeList.map((n) => esc(n)).join(', ') : esc(t('calDetail.everyone'))) +
+      '</strong>';
+    descEl.textContent = tk.description || '';
+    descEl.style.display = tk.description ? '' : 'none';
+    const doneLabel = tk.done ? t('calDetail.markUndone') : t('calDetail.markDone');
+    btnsEl.innerHTML =
+      '<button class="btn btn-r" data-cal-action="delete-task" data-cal-id="' +
+      esc(ev.id) +
+      '">' +
+      esc(t('calEntry.delete')) +
+      '</button><button class="btn' +
+      (tk.done ? '' : ' btn-p') +
+      '" data-cal-action="toggle-task" data-cal-id="' +
+      esc(ev.id) +
+      '">' +
+      esc(doneLabel) +
+      '</button><span style="flex:1"></span><button class="btn" data-cal-action="close">' +
+      esc(t('calDetail.close')) +
+      '</button><button class="btn btn-p" data-cal-action="edit-task" data-cal-id="' +
+      esc(ev.id) +
+      '">' +
+      esc(t('calDetail.edit')) +
+      '</button>';
+  } else if (ev.type === 'batch-due') {
+    titleEl.textContent = ev.label;
+    const b = batches.find((x) => x.batchId === ev.id);
+    let meta = t('calDetail.batchDue');
+    if (b && b.due)
+      meta += ' — ' + new Date(b.due).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    metaEl.textContent = meta;
+    badgesEl.innerHTML =
+      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">' +
+      esc(t('calDetail.batchDue')) +
+      '</span>';
+    const curDate = b && b.due ? b.due.slice(0, 10) : '';
+    assignEl.innerHTML =
+      '<label style="font-size:12px;color:var(--c-text-sec)">' +
+      esc(t('calDetail.changeDate')) +
+      '</label> <input type="date" id="cal-detail-batch-date" value="' +
+      curDate +
+      '" style="margin-left:8px;font-size:13px;padding:4px 8px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);color:var(--c-text)">';
+    assignEl._currentBatchId = ev.id;
+    descEl.textContent = b ? b.species + (b.strain ? ' (' + b.strain + ')' : '') : '';
+    descEl.style.display = '';
+    btnsEl.innerHTML =
+      '<span style="flex:1"></span><button class="btn" data-cal-action="close">' +
+      esc(t('calDetail.close')) +
+      '</button><button class="btn btn-p" data-cal-action="save-batch-due" data-cal-id="' +
+      esc(ev.id) +
+      '">' +
+      esc(t('calEntry.save')) +
+      '</button>';
+  } else if (ev.type === 'caldav-import') {
+    titleEl.textContent = ev.label;
+    let meta = t('calDetail.external');
+    if (ev.date)
+      meta += ' — ' + new Date(ev.date).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    if (ev.startTime) meta += ', ' + ev.startTime + (ev.endTime ? ' — ' + ev.endTime : '');
+    metaEl.textContent = meta;
+    badgesEl.innerHTML =
+      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">' +
+      esc(t('calDetail.external')) +
+      '</span>';
+    assignEl.innerHTML = '';
+    descEl.textContent = ev.description || '';
+    descEl.style.display = ev.description ? '' : 'none';
+    btnsEl.innerHTML = '<button class="btn" data-cal-action="close">' + esc(t('calDetail.close')) + '</button>';
   }
   document.getElementById('m-cal-detail').classList.add('open');
 }
 
-function closeEventDetail(){document.getElementById('m-cal-detail').classList.remove('open')}
+function closeEventDetail() {
+  document.getElementById('m-cal-detail').classList.remove('open');
+}
 
 // Delegated click handler for calendar detail buttons (avoids inline onclick XSS).
-document.getElementById('cal-detail-btns').addEventListener('click',function(e){
-  const btn=e.target.closest('[data-cal-action]');
-  if(!btn)return;
-  const action=btn.dataset.calAction;
-  const id=btn.dataset.calId;
-  if(action==='close')return closeEventDetail();
-  if(action==='delete-event')return deleteCalEventFromDetail(id);
-  if(action==='edit-event')return editEventFromDetail(id);
-  if(action==='delete-task')return deleteTaskFromCalendar(id);
-  if(action==='toggle-task')return toggleTaskFromCalendar(id);
-  if(action==='edit-task')return editTaskFromCalendar(id);
-  if(action==='save-batch-due')return saveBatchDueFromDetail(id);
+document.getElementById('cal-detail-btns').addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-cal-action]');
+  if (!btn) return;
+  const action = btn.dataset.calAction;
+  const id = btn.dataset.calId;
+  if (action === 'close') return closeEventDetail();
+  if (action === 'delete-event') return deleteCalEventFromDetail(id);
+  if (action === 'edit-event') return editEventFromDetail(id);
+  if (action === 'delete-task') return deleteTaskFromCalendar(id);
+  if (action === 'toggle-task') return toggleTaskFromCalendar(id);
+  if (action === 'edit-task') return editTaskFromCalendar(id);
+  if (action === 'save-batch-due') return saveBatchDueFromDetail(id);
 });
 
 // Change handler for batch due-date picker in detail modal.
-document.getElementById('cal-detail-assignee').addEventListener('change',function(e){
-  if(e.target.id!=='cal-detail-batch-date')return;
-  const newDate=e.target.value;if(!newDate)return;
-  const batchId=this._currentBatchId;if(!batchId)return;
-  handleCalendarDrop('batch-due',batchId,newDate);
+document.getElementById('cal-detail-assignee').addEventListener('change', function (e) {
+  if (e.target.id !== 'cal-detail-batch-date') return;
+  const newDate = e.target.value;
+  if (!newDate) return;
+  const batchId = this._currentBatchId;
+  if (!batchId) return;
+  handleCalendarDrop('batch-due', batchId, newDate);
   closeEventDetail();
 });
 
-function editEventFromDetail(id){
+function editEventFromDetail(id) {
   closeEventDetail();
-  const ce=calendarEvents.find(x=>x.id===id);
-  if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+  const ce = calendarEvents.find((x) => x.id === id);
+  if (ce) openEventModal(ce.startDate, ce.startTime, ce);
 }
 
-function saveBatchDueFromDetail(id){
-  const picker=document.getElementById('cal-detail-batch-date');
-  if(!picker||!picker.value)return;
-  const b=batches.find(x=>x.batchId===id);if(!b)return;
-  const newDue=new Date(picker.value+'T12:00:00');
-  b.due=newDue.toISOString();
-  const created=new Date(b.created);
-  b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
-  apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
+function saveBatchDueFromDetail(id) {
+  const picker = document.getElementById('cal-detail-batch-date');
+  if (!picker || !picker.value) return;
+  const b = batches.find((x) => x.batchId === id);
+  if (!b) return;
+  const newDue = new Date(picker.value + 'T12:00:00');
+  b.due = newDue.toISOString();
+  const created = new Date(b.created);
+  b.days = Math.max(1, Math.round((newDue - created) / MS_PER_DAY));
+  apiPatch('/api/batches/' + encodeURIComponent(id), { due: b.due, days: b.days });
   renderCalendar();
-  if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
+  if (typeof pushBatchCaldav === 'function') pushBatchCaldav(b);
   closeEventDetail();
 }
 
-function deleteCalEventFromDetail(id){
+function deleteCalEventFromDetail(id) {
   closeEventDetail();
-  confirm2(t('calEntry.deleteEvent'),t('calEntry.deleteEventMsg'),t('calEntry.delete'),()=>{
-    calendarEvents=calendarEvents.filter(x=>x.id!==id);
+  confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
+    calendarEvents = calendarEvents.filter((x) => x.id !== id);
     renderCalendar();
-    apiDelete('/api/calendar-events/'+encodeURIComponent(id));
+    apiDelete('/api/calendar-events/' + encodeURIComponent(id));
   });
 }
 
-function toggleTaskFromCalendar(taskId){
-  const t=manualTasks.find(t=>t.created===taskId);
-  if(!t)return;
+function toggleTaskFromCalendar(taskId) {
+  const t = manualTasks.find((t) => t.created === taskId);
+  if (!t) return;
   toggleTask(t.id);
   renderCalendar();
   closeEventDetail();
 }
 
-function deleteTaskFromCalendar(taskId){
+function deleteTaskFromCalendar(taskId) {
   closeEventDetail();
-  confirm2(t('calEntry.deleteTask'),t('calEntry.deleteTaskMsg'),t('calEntry.delete'),()=>{
-    const tk=manualTasks.find(x=>x.created===taskId);
-    if(!tk)return;
-    manualTasks=manualTasks.filter(x=>x.id!==tk.id);
-    apiDelete('/api/tasks/'+tk.id);
-    renderCalendar();updateTodoBadge();
+  confirm2(t('calEntry.deleteTask'), t('calEntry.deleteTaskMsg'), t('calEntry.delete'), () => {
+    const tk = manualTasks.find((x) => x.created === taskId);
+    if (!tk) return;
+    manualTasks = manualTasks.filter((x) => x.id !== tk.id);
+    apiDelete('/api/tasks/' + tk.id);
+    renderCalendar();
+    updateTodoBadge();
   });
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS={custom:'#16a34a',meeting:'#8b5cf6',delivery:'#14b8a6',maintenance:'#64748b'};
-let calEntryType='task';
+const CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+let calEntryType = 'task';
 
-function setEntryType(type){
-  const isTask=type==='task';
-  calEntryType=isTask?'task':'event';
-  document.getElementById('cal-entry-type-select').value=type;
-  document.getElementById('cal-entry-enddate-wrap').style.display=isTask?'none':'';
-  document.getElementById('cal-entry-allday-wrap').style.display='';
-  document.getElementById('cal-entry-prio-wrap').style.display=isTask?'':'none';
-  document.getElementById('cal-entry-task-assign-wrap').style.display=isTask?'':'none';
-  document.getElementById('cal-entry-ev-assign-wrap').style.display=isTask?'none':'';
-  document.getElementById('cal-entry-private-wrap').style.display=isTask?'flex':'none';
-  const recWrap=document.getElementById('cal-entry-recurrence-wrap');
-  if(recWrap)recWrap.style.display='grid';
-  document.getElementById('cal-entry-name').placeholder=isTask?t('calEntry.namePhTask'):t('calEntry.namePhEvent');
+function setEntryType(type) {
+  const isTask = type === 'task';
+  calEntryType = isTask ? 'task' : 'event';
+  document.getElementById('cal-entry-type-select').value = type;
+  document.getElementById('cal-entry-enddate-wrap').style.display = isTask ? 'none' : '';
+  document.getElementById('cal-entry-allday-wrap').style.display = '';
+  document.getElementById('cal-entry-prio-wrap').style.display = isTask ? '' : 'none';
+  document.getElementById('cal-entry-task-assign-wrap').style.display = isTask ? '' : 'none';
+  document.getElementById('cal-entry-ev-assign-wrap').style.display = isTask ? 'none' : '';
+  document.getElementById('cal-entry-private-wrap').style.display = isTask ? 'flex' : 'none';
+  const recWrap = document.getElementById('cal-entry-recurrence-wrap');
+  if (recWrap) recWrap.style.display = 'grid';
+  document.getElementById('cal-entry-name').placeholder = isTask ? t('calEntry.namePhTask') : t('calEntry.namePhEvent');
   toggleEntryTimeInputs();
   toggleRecurrenceUntil();
 }
-function toggleRecurrenceUntil(){
-  const sel=document.getElementById('cal-entry-recurrence');
-  const wrap=document.getElementById('cal-entry-recurrence-until-wrap');
-  if(sel&&wrap)wrap.style.display=sel.value?'':'none';
+function toggleRecurrenceUntil() {
+  const sel = document.getElementById('cal-entry-recurrence');
+  const wrap = document.getElementById('cal-entry-recurrence-until-wrap');
+  if (sel && wrap) wrap.style.display = sel.value ? '' : 'none';
 }
 
-function openEntryModal(type,date,time,existing){
-  const modal=document.getElementById('m-cal-entry');
-  const isEdit=!!existing;
-  document.getElementById('cal-entry-name').disabled=false;
-  document.getElementById('cal-entry-desc').closest('div').style.display='';
-  document.getElementById('cal-entry-type-select').closest('.g2').style.display='';
-  document.getElementById('cal-entry-type-select').disabled=isEdit;
-  setEntryType(type||'task');
-  if(type==='task'&&existing){
-    document.getElementById('cal-entry-title').textContent=t('calEntry.titleEdit');
-    document.getElementById('cal-entry-mode').value='edit';
-    document.getElementById('cal-entry-id').value=existing.id;
-    document.getElementById('cal-entry-name').value=existing.text;
-    document.getElementById('cal-entry-date').value=existing.dueDate?existing.dueDate.split('T')[0]:'';
-    document.getElementById('cal-entry-allday').checked=!existing.dueTime;
-    document.getElementById('cal-entry-start-time').value=existing.dueTime||'09:00';
-    document.getElementById('cal-entry-end-time').value=existing.dueEndTime||'10:00';
-    document.getElementById('cal-entry-prio').value=existing.priority||'med';
-    calTaskSelectedAssignees=parseTaskAssignees(existing.assignee);
+function openEntryModal(type, date, time, existing) {
+  const modal = document.getElementById('m-cal-entry');
+  const isEdit = !!existing;
+  document.getElementById('cal-entry-name').disabled = false;
+  document.getElementById('cal-entry-desc').closest('div').style.display = '';
+  document.getElementById('cal-entry-type-select').closest('.g2').style.display = '';
+  document.getElementById('cal-entry-type-select').disabled = isEdit;
+  setEntryType(type || 'task');
+  if (type === 'task' && existing) {
+    document.getElementById('cal-entry-title').textContent = t('calEntry.titleEdit');
+    document.getElementById('cal-entry-mode').value = 'edit';
+    document.getElementById('cal-entry-id').value = existing.id;
+    document.getElementById('cal-entry-name').value = existing.text;
+    document.getElementById('cal-entry-date').value = existing.dueDate ? existing.dueDate.split('T')[0] : '';
+    document.getElementById('cal-entry-allday').checked = !existing.dueTime;
+    document.getElementById('cal-entry-start-time').value = existing.dueTime || '09:00';
+    document.getElementById('cal-entry-end-time').value = existing.dueEndTime || '10:00';
+    document.getElementById('cal-entry-prio').value = existing.priority || 'med';
+    calTaskSelectedAssignees = parseTaskAssignees(existing.assignee);
     renderTaskAssigneePicker();
-    document.getElementById('cal-entry-desc').value=existing.description||'';
-    document.getElementById('cal-entry-private').checked=!!existing.private;
-    document.getElementById('cal-entry-recurrence').value=existing.recurrence||'';
-    document.getElementById('cal-entry-recurrence-until').value=existing.recurrenceUntil||'';
+    document.getElementById('cal-entry-desc').value = existing.description || '';
+    document.getElementById('cal-entry-private').checked = !!existing.private;
+    document.getElementById('cal-entry-recurrence').value = existing.recurrence || '';
+    document.getElementById('cal-entry-recurrence-until').value = existing.recurrenceUntil || '';
     toggleRecurrenceUntil();
-    document.getElementById('cal-entry-del-btn').style.display='';
-  }else if(type==='event'&&existing){
-    document.getElementById('cal-entry-title').textContent=t('calEntry.titleEdit');
-    document.getElementById('cal-entry-mode').value='edit';
-    document.getElementById('cal-entry-id').value=existing.id;
-    document.getElementById('cal-entry-name').value=existing.title;
-    document.getElementById('cal-entry-date').value=existing.startDate;
-    document.getElementById('cal-entry-end-date').value=existing.endDate||'';
-    document.getElementById('cal-entry-allday').checked=existing.allDay;
-    document.getElementById('cal-entry-start-time').value=existing.startTime||'09:00';
-    document.getElementById('cal-entry-end-time').value=existing.endTime||'10:00';
-    setEntryType(existing.category||'custom');
-    document.getElementById('cal-entry-desc').value=existing.description||'';
-    calEvSelectedAssignees=Array.isArray(existing.teamAssignees)?existing.teamAssignees.slice():[];
+    document.getElementById('cal-entry-del-btn').style.display = '';
+  } else if (type === 'event' && existing) {
+    document.getElementById('cal-entry-title').textContent = t('calEntry.titleEdit');
+    document.getElementById('cal-entry-mode').value = 'edit';
+    document.getElementById('cal-entry-id').value = existing.id;
+    document.getElementById('cal-entry-name').value = existing.title;
+    document.getElementById('cal-entry-date').value = existing.startDate;
+    document.getElementById('cal-entry-end-date').value = existing.endDate || '';
+    document.getElementById('cal-entry-allday').checked = existing.allDay;
+    document.getElementById('cal-entry-start-time').value = existing.startTime || '09:00';
+    document.getElementById('cal-entry-end-time').value = existing.endTime || '10:00';
+    setEntryType(existing.category || 'custom');
+    document.getElementById('cal-entry-desc').value = existing.description || '';
+    calEvSelectedAssignees = Array.isArray(existing.teamAssignees) ? existing.teamAssignees.slice() : [];
     renderAssigneePicker();
-    document.getElementById('cal-entry-recurrence').value=existing.recurrence||'';
-    document.getElementById('cal-entry-recurrence-until').value=existing.recurrenceUntil||'';
+    document.getElementById('cal-entry-recurrence').value = existing.recurrence || '';
+    document.getElementById('cal-entry-recurrence-until').value = existing.recurrenceUntil || '';
     toggleRecurrenceUntil();
-    document.getElementById('cal-entry-del-btn').style.display='';
-  }else{
-    document.getElementById('cal-entry-title').textContent=t('calEntry.titleNew');
-    document.getElementById('cal-entry-mode').value='create';
-    document.getElementById('cal-entry-id').value='';
-    document.getElementById('cal-entry-name').value='';
-    document.getElementById('cal-entry-date').value=date||localDateStr(new Date());
-    document.getElementById('cal-entry-end-date').value='';
-    document.getElementById('cal-entry-allday').checked=!time;
-    document.getElementById('cal-entry-start-time').value=time||'09:00';
-    const endH=time?String(Math.min(23,parseInt(time)+1)).padStart(2,'0')+':00':'10:00';
-    document.getElementById('cal-entry-end-time').value=endH;
-    document.getElementById('cal-entry-prio').value='med';
-    calTaskSelectedAssignees=[];renderTaskAssigneePicker();
-    document.getElementById('cal-entry-desc').value='';
-    document.getElementById('cal-entry-private').checked=false;
-    calEvSelectedAssignees=[];renderAssigneePicker();
-    document.getElementById('cal-entry-recurrence').value='';
-    document.getElementById('cal-entry-recurrence-until').value='';
+    document.getElementById('cal-entry-del-btn').style.display = '';
+  } else {
+    document.getElementById('cal-entry-title').textContent = t('calEntry.titleNew');
+    document.getElementById('cal-entry-mode').value = 'create';
+    document.getElementById('cal-entry-id').value = '';
+    document.getElementById('cal-entry-name').value = '';
+    document.getElementById('cal-entry-date').value = date || localDateStr(new Date());
+    document.getElementById('cal-entry-end-date').value = '';
+    document.getElementById('cal-entry-allday').checked = !time;
+    document.getElementById('cal-entry-start-time').value = time || '09:00';
+    const endH = time ? String(Math.min(23, parseInt(time) + 1)).padStart(2, '0') + ':00' : '10:00';
+    document.getElementById('cal-entry-end-time').value = endH;
+    document.getElementById('cal-entry-prio').value = 'med';
+    calTaskSelectedAssignees = [];
+    renderTaskAssigneePicker();
+    document.getElementById('cal-entry-desc').value = '';
+    document.getElementById('cal-entry-private').checked = false;
+    calEvSelectedAssignees = [];
+    renderAssigneePicker();
+    document.getElementById('cal-entry-recurrence').value = '';
+    document.getElementById('cal-entry-recurrence-until').value = '';
     toggleRecurrenceUntil();
-    document.getElementById('cal-entry-del-btn').style.display='none';
+    document.getElementById('cal-entry-del-btn').style.display = 'none';
   }
-  document.getElementById('cal-ev-assignee-dropdown').style.display='none';
-  const tdd=document.getElementById('cal-task-assignee-dropdown');
-  if(tdd)tdd.style.display='none';
+  document.getElementById('cal-ev-assignee-dropdown').style.display = 'none';
+  const tdd = document.getElementById('cal-task-assignee-dropdown');
+  if (tdd) tdd.style.display = 'none';
   toggleEntryTimeInputs();
   modal.classList.add('open');
-  if(!existing)setTimeout(()=>document.getElementById('cal-entry-name').focus(),50);
+  if (!existing) setTimeout(() => document.getElementById('cal-entry-name').focus(), 50);
 }
 
-function parseTaskAssignees(val){
-  if(!val)return [];
-  if(Array.isArray(val))return val.slice();
+function parseTaskAssignees(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.slice();
   // Split comma-separated for backward compat with old single-assignee strings
-  return String(val).split(',').map(s=>s.trim()).filter(Boolean);
+  return String(val)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
-function openEventModal(date,time,existing){openEntryModal(existing?'event':'custom',date,time,existing)}
-function openTaskModal(date,existing){openEntryModal('task',date,null,existing)}
+function openEventModal(date, time, existing) {
+  openEntryModal(existing ? 'event' : 'custom', date, time, existing);
+}
+function openTaskModal(date, existing) {
+  openEntryModal('task', date, null, existing);
+}
 
-function closeEntryModal(){
+function closeEntryModal() {
   document.getElementById('m-cal-entry').classList.remove('open');
-  const idEl=document.getElementById('cal-entry-id');
-  idEl.dataset.moveType='';idEl.dataset.moveId='';
+  const idEl = document.getElementById('cal-entry-id');
+  idEl.dataset.moveType = '';
+  idEl.dataset.moveId = '';
 }
-function closeEventModal(){closeEntryModal()}
-function closeCalTaskModal(){closeEntryModal()}
+function closeEventModal() {
+  closeEntryModal();
+}
+function closeCalTaskModal() {
+  closeEntryModal();
+}
 
-function toggleEntryTimeInputs(){
-  const timesEl=document.getElementById('cal-entry-times');
-  timesEl.style.display=document.getElementById('cal-entry-allday').checked?'none':'grid';
+function toggleEntryTimeInputs() {
+  const timesEl = document.getElementById('cal-entry-times');
+  timesEl.style.display = document.getElementById('cal-entry-allday').checked ? 'none' : 'grid';
 }
 
 // Normalize a user-entered time string to 24h HH:MM, or '' if invalid.
 // Accepts "9", "9:5", "930", "0930", "9:30", "09:30", etc.
-function normalizeTimeInput(raw){
-  if(raw==null)return '';
-  const s=String(raw).trim();
-  if(!s)return '';
-  const digits=s.replace(/\D/g,'');
-  let h,m;
-  if(digits.length<=2){h=parseInt(digits,10);m=0;}
-  else if(digits.length===3){h=parseInt(digits.slice(0,1),10);m=parseInt(digits.slice(1),10);}
-  else{h=parseInt(digits.slice(0,2),10);m=parseInt(digits.slice(2,4),10);}
-  if(!Number.isFinite(h)||!Number.isFinite(m))return '';
-  if(h<0||h>23||m<0||m>59)return '';
-  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+function normalizeTimeInput(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const digits = s.replace(/\D/g, '');
+  let h, m;
+  if (digits.length <= 2) {
+    h = parseInt(digits, 10);
+    m = 0;
+  } else if (digits.length === 3) {
+    h = parseInt(digits.slice(0, 1), 10);
+    m = parseInt(digits.slice(1), 10);
+  } else {
+    h = parseInt(digits.slice(0, 2), 10);
+    m = parseInt(digits.slice(2, 4), 10);
+  }
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
+  if (h < 0 || h > 23 || m < 0 || m > 59) return '';
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
-function wireTimeInput(el){
-  if(!el||el.dataset.timeWired)return;
-  el.dataset.timeWired='1';
-  el.addEventListener('blur',()=>{
-    const n=normalizeTimeInput(el.value);
-    if(n)el.value=n;
+function wireTimeInput(el) {
+  if (!el || el.dataset.timeWired) return;
+  el.dataset.timeWired = '1';
+  el.addEventListener('blur', () => {
+    const n = normalizeTimeInput(el.value);
+    if (n) el.value = n;
   });
 }
 
-function saveEntry(){
-  const mode=document.getElementById('cal-entry-mode').value;
-  if(mode==='move'){
-    const idEl=document.getElementById('cal-entry-id');
-    const moveType=idEl.dataset.moveType;
-    const moveId=idEl.dataset.moveId;
-    const newDate=document.getElementById('cal-entry-date').value;
-    if(newDate&&moveType)handleCalendarDrop(moveType,moveId,newDate);
-    closeEntryModal();return;
+function saveEntry() {
+  const mode = document.getElementById('cal-entry-mode').value;
+  if (mode === 'move') {
+    const idEl = document.getElementById('cal-entry-id');
+    const moveType = idEl.dataset.moveType;
+    const moveId = idEl.dataset.moveId;
+    const newDate = document.getElementById('cal-entry-date').value;
+    if (newDate && moveType) handleCalendarDrop(moveType, moveId, newDate);
+    closeEntryModal();
+    return;
   }
-  if(calEntryType==='task')saveEntryTask();
+  if (calEntryType === 'task') saveEntryTask();
   else saveEntryEvent();
 }
 
-function saveEntryTask(){
-  const mode=document.getElementById('cal-entry-mode').value;
-  const text=document.getElementById('cal-entry-name').value.trim();
-  if(!text)return;
-  const prio=document.getElementById('cal-entry-prio').value;
-  const due=document.getElementById('cal-entry-date').value||null;
-  const allDay=document.getElementById('cal-entry-allday').checked;
-  const dueTime=(!allDay&&due)?(normalizeTimeInput(document.getElementById('cal-entry-start-time').value)||null):null;
-  let dueEndTime=(!allDay&&due)?(normalizeTimeInput(document.getElementById('cal-entry-end-time').value)||null):null;
-  if(dueTime&&dueEndTime&&dueEndTime<=dueTime)dueEndTime=null;
-  const assignee=calTaskSelectedAssignees.length?calTaskSelectedAssignees.join(','):null;
-  const desc=document.getElementById('cal-entry-desc').value.trim()||null;
-  const priv=document.getElementById('cal-entry-private').checked;
-  const recurrence=document.getElementById('cal-entry-recurrence').value||null;
-  const recurrenceUntil=recurrence?(document.getElementById('cal-entry-recurrence-until').value||null):null;
-  if(mode==='edit'){
-    const id=parseInt(document.getElementById('cal-entry-id').value);
-    const tk=manualTasks.find(x=>x.id===id);
-    if(!tk){closeEntryModal();return}
-    tk.text=text;tk.priority=prio;tk.dueDate=due;tk.dueTime=dueTime;tk.dueEndTime=dueEndTime;tk.assignee=assignee;tk.description=desc;tk.private=priv;tk.recurrence=recurrence;tk.recurrenceUntil=recurrenceUntil;tk.caldavSynced=null;
-    apiPatch('/api/tasks/'+id,{text:tk.text,priority:tk.priority,dueDate:tk.dueDate,dueTime:tk.dueTime,dueEndTime:tk.dueEndTime,assignee:tk.assignee,description:tk.description,private:priv?1:0,recurrence,recurrenceUntil,caldavSynced:null});
-    if(caldav.enabled&&tk.caldavUid)pushTaskCaldav(tk);
-  }else{
-    const task={text,priority:prio,done:false,created:new Date().toISOString(),assignee,dueDate:due,dueTime,dueEndTime,description:desc,caldavUid:null,caldavSynced:null,private:priv,recurrence,recurrenceUntil};
+function saveEntryTask() {
+  const mode = document.getElementById('cal-entry-mode').value;
+  const text = document.getElementById('cal-entry-name').value.trim();
+  if (!text) return;
+  const prio = document.getElementById('cal-entry-prio').value;
+  const due = document.getElementById('cal-entry-date').value || null;
+  const allDay = document.getElementById('cal-entry-allday').checked;
+  const dueTime =
+    !allDay && due ? normalizeTimeInput(document.getElementById('cal-entry-start-time').value) || null : null;
+  let dueEndTime =
+    !allDay && due ? normalizeTimeInput(document.getElementById('cal-entry-end-time').value) || null : null;
+  if (dueTime && dueEndTime && dueEndTime <= dueTime) dueEndTime = null;
+  const assignee = calTaskSelectedAssignees.length ? calTaskSelectedAssignees.join(',') : null;
+  const desc = document.getElementById('cal-entry-desc').value.trim() || null;
+  const priv = document.getElementById('cal-entry-private').checked;
+  const recurrence = document.getElementById('cal-entry-recurrence').value || null;
+  const recurrenceUntil = recurrence ? document.getElementById('cal-entry-recurrence-until').value || null : null;
+  if (mode === 'edit') {
+    const id = parseInt(document.getElementById('cal-entry-id').value);
+    const tk = manualTasks.find((x) => x.id === id);
+    if (!tk) {
+      closeEntryModal();
+      return;
+    }
+    tk.text = text;
+    tk.priority = prio;
+    tk.dueDate = due;
+    tk.dueTime = dueTime;
+    tk.dueEndTime = dueEndTime;
+    tk.assignee = assignee;
+    tk.description = desc;
+    tk.private = priv;
+    tk.recurrence = recurrence;
+    tk.recurrenceUntil = recurrenceUntil;
+    tk.caldavSynced = null;
+    apiPatch('/api/tasks/' + id, {
+      text: tk.text,
+      priority: tk.priority,
+      dueDate: tk.dueDate,
+      dueTime: tk.dueTime,
+      dueEndTime: tk.dueEndTime,
+      assignee: tk.assignee,
+      description: tk.description,
+      private: priv ? 1 : 0,
+      recurrence,
+      recurrenceUntil,
+      caldavSynced: null
+    });
+    if (caldav.enabled && tk.caldavUid) pushTaskCaldav(tk);
+  } else {
+    const task = {
+      text,
+      priority: prio,
+      done: false,
+      created: new Date().toISOString(),
+      assignee,
+      dueDate: due,
+      dueTime,
+      dueEndTime,
+      description: desc,
+      caldavUid: null,
+      caldavSynced: null,
+      private: priv,
+      recurrence,
+      recurrenceUntil
+    };
     manualTasks.push(task);
-    apiPost('/api/tasks',task).then(r=>{if(r&&r.id){task.id=r.id;if(caldav.enabled&&due)pushTaskCaldav(task)}renderCalendar();updateTodoBadge()});
+    apiPost('/api/tasks', task).then((r) => {
+      if (r && r.id) {
+        task.id = r.id;
+        if (caldav.enabled && due) pushTaskCaldav(task);
+      }
+      renderCalendar();
+      updateTodoBadge();
+    });
   }
   closeEntryModal();
-  if(document.getElementById('cal-entry-id').value){renderCalendar();updateTodoBadge()}
-}
-
-function saveEntryEvent(){
-  const mode=document.getElementById('cal-entry-mode').value;
-  const name=document.getElementById('cal-entry-name').value.trim();if(!name)return;
-  const allDay=document.getElementById('cal-entry-allday').checked;
-  const category=document.getElementById('cal-entry-type-select').value;
-  const recurrence=document.getElementById('cal-entry-recurrence').value||null;
-  const recurrenceUntil=recurrence?(document.getElementById('cal-entry-recurrence-until').value||null):null;
-  const teamAssignees=calEvSelectedAssignees.slice();
-  const ev={
-    id:mode==='edit'?document.getElementById('cal-entry-id').value:('cev-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)),
-    title:name,
-    description:document.getElementById('cal-entry-desc').value.trim()||null,
-    startDate:document.getElementById('cal-entry-date').value,
-    endDate:document.getElementById('cal-entry-end-date').value||null,
-    allDay:allDay,
-    startTime:allDay?null:(normalizeTimeInput(document.getElementById('cal-entry-start-time').value)||null),
-    endTime:allDay?null:(normalizeTimeInput(document.getElementById('cal-entry-end-time').value)||null),
-    category:category,
-    color:CATEGORY_COLORS[category]||'#16a34a',
-    caldavUid:null,caldavSynced:null,
-    created:new Date().toISOString(),
-    recurrence:recurrence,
-    recurrenceUntil:recurrenceUntil,
-    teamAssignees:teamAssignees,
-    assignees:[]
-  };
-  if(mode==='edit'){
-    const idx=calendarEvents.findIndex(x=>x.id===ev.id);
-    if(idx>=0){ev.caldavUid=calendarEvents[idx].caldavUid;ev.created=calendarEvents[idx].created;calendarEvents[idx]=ev}
-    apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{title:ev.title,description:ev.description,startDate:ev.startDate,endDate:ev.endDate,allDay:ev.allDay,startTime:ev.startTime,endTime:ev.endTime,category:ev.category,color:ev.color,recurrence:ev.recurrence,recurrenceUntil:ev.recurrenceUntil,teamAssignees:ev.teamAssignees});
-  }else{
-    calendarEvents.push(ev);
-    apiPost('/api/calendar-events',ev).then(r=>{if(r&&r.id)ev.id=r.id});
+  if (document.getElementById('cal-entry-id').value) {
+    renderCalendar();
+    updateTodoBadge();
   }
-  renderCalendar();closeEntryModal();
-  if(caldav.enabled&&typeof pushEventCaldav==='function')pushEventCaldav(ev);
 }
 
-function deleteEntry(){
-  if(calEntryType==='task'){
-    const id=parseInt(document.getElementById('cal-entry-id').value);
-    if(!id){closeEntryModal();return}
-    closeEntryModal();
-    confirm2(t('calEntry.deleteTask'),t('calEntry.deleteTaskMsg'),t('calEntry.delete'),()=>{
-      manualTasks=manualTasks.filter(x=>x.id!==id);
-      apiDelete('/api/tasks/'+id);
-      renderCalendar();updateTodoBadge();
+function saveEntryEvent() {
+  const mode = document.getElementById('cal-entry-mode').value;
+  const name = document.getElementById('cal-entry-name').value.trim();
+  if (!name) return;
+  const allDay = document.getElementById('cal-entry-allday').checked;
+  const category = document.getElementById('cal-entry-type-select').value;
+  const recurrence = document.getElementById('cal-entry-recurrence').value || null;
+  const recurrenceUntil = recurrence ? document.getElementById('cal-entry-recurrence-until').value || null : null;
+  const teamAssignees = calEvSelectedAssignees.slice();
+  const ev = {
+    id:
+      mode === 'edit'
+        ? document.getElementById('cal-entry-id').value
+        : 'cev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    title: name,
+    description: document.getElementById('cal-entry-desc').value.trim() || null,
+    startDate: document.getElementById('cal-entry-date').value,
+    endDate: document.getElementById('cal-entry-end-date').value || null,
+    allDay: allDay,
+    startTime: allDay ? null : normalizeTimeInput(document.getElementById('cal-entry-start-time').value) || null,
+    endTime: allDay ? null : normalizeTimeInput(document.getElementById('cal-entry-end-time').value) || null,
+    category: category,
+    color: CATEGORY_COLORS[category] || '#16a34a',
+    caldavUid: null,
+    caldavSynced: null,
+    created: new Date().toISOString(),
+    recurrence: recurrence,
+    recurrenceUntil: recurrenceUntil,
+    teamAssignees: teamAssignees,
+    assignees: []
+  };
+  if (mode === 'edit') {
+    const idx = calendarEvents.findIndex((x) => x.id === ev.id);
+    if (idx >= 0) {
+      ev.caldavUid = calendarEvents[idx].caldavUid;
+      ev.created = calendarEvents[idx].created;
+      calendarEvents[idx] = ev;
+    }
+    apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), {
+      title: ev.title,
+      description: ev.description,
+      startDate: ev.startDate,
+      endDate: ev.endDate,
+      allDay: ev.allDay,
+      startTime: ev.startTime,
+      endTime: ev.endTime,
+      category: ev.category,
+      color: ev.color,
+      recurrence: ev.recurrence,
+      recurrenceUntil: ev.recurrenceUntil,
+      teamAssignees: ev.teamAssignees
     });
-  }else{
-    const id=document.getElementById('cal-entry-id').value;if(!id)return;
+  } else {
+    calendarEvents.push(ev);
+    apiPost('/api/calendar-events', ev).then((r) => {
+      if (r && r.id) ev.id = r.id;
+    });
+  }
+  renderCalendar();
+  closeEntryModal();
+  if (caldav.enabled && typeof pushEventCaldav === 'function') pushEventCaldav(ev);
+}
+
+function deleteEntry() {
+  if (calEntryType === 'task') {
+    const id = parseInt(document.getElementById('cal-entry-id').value);
+    if (!id) {
+      closeEntryModal();
+      return;
+    }
     closeEntryModal();
-    confirm2(t('calEntry.deleteEvent'),t('calEntry.deleteEventMsg'),t('calEntry.delete'),()=>{
-      calendarEvents=calendarEvents.filter(x=>x.id!==id);
-      apiDelete('/api/calendar-events/'+encodeURIComponent(id));
+    confirm2(t('calEntry.deleteTask'), t('calEntry.deleteTaskMsg'), t('calEntry.delete'), () => {
+      manualTasks = manualTasks.filter((x) => x.id !== id);
+      apiDelete('/api/tasks/' + id);
+      renderCalendar();
+      updateTodoBadge();
+    });
+  } else {
+    const id = document.getElementById('cal-entry-id').value;
+    if (!id) return;
+    closeEntryModal();
+    confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
+      calendarEvents = calendarEvents.filter((x) => x.id !== id);
+      apiDelete('/api/calendar-events/' + encodeURIComponent(id));
       renderCalendar();
     });
   }
 }
 
-function editTaskFromCalendar(taskId){
+function editTaskFromCalendar(taskId) {
   closeEventDetail();
-  const tk=manualTasks.find(x=>x.created===taskId);
-  if(tk)openEntryModal('task',tk.dueDate,null,tk);
+  const tk = manualTasks.find((x) => x.created === taskId);
+  if (tk) openEntryModal('task', tk.dueDate, null, tk);
 }
 
-function onCalMonthEventClick(type,id){
-  if(!type||!id)return;
-  const events=collectCalendarEvents();
-  const ev=events.find(e=>e.type===type&&String(e.id)===String(id));
-  if(ev)onCalEventClick(ev);
+function onCalMonthEventClick(type, id) {
+  if (!type || !id) return;
+  const events = collectCalendarEvents();
+  const ev = events.find((e) => e.type === type && String(e.id) === String(id));
+  if (ev) onCalEventClick(ev);
 }
 
-function openEventMoveModal(ev){
-  document.getElementById('cal-entry-title').textContent=t('calEntry.moveTitle');
-  document.getElementById('cal-entry-id').value='';
-  document.getElementById('cal-entry-mode').value='move';
-  document.getElementById('cal-entry-name').value=ev.label;
-  document.getElementById('cal-entry-name').disabled=true;
-  document.getElementById('cal-entry-date').value=ev.date;
-  document.getElementById('cal-entry-enddate-wrap').style.display='none';
-  document.getElementById('cal-entry-allday-wrap').style.display='none';
-  document.getElementById('cal-entry-times').style.display='none';
-  document.getElementById('cal-entry-prio-wrap').style.display='none';
-  document.getElementById('cal-entry-desc').closest('div').style.display='none';
-  document.getElementById('cal-entry-task-assign-wrap').style.display='none';
-  document.getElementById('cal-entry-ev-assign-wrap').style.display='none';
-  const recWrapMove=document.getElementById('cal-entry-recurrence-wrap');
-  if(recWrapMove)recWrapMove.style.display='none';
-  document.getElementById('cal-entry-private-wrap').style.display='none';
-  document.getElementById('cal-entry-del-btn').style.display='none';
-  document.getElementById('cal-entry-type-select').closest('.g2').style.display='none';
-  document.getElementById('cal-entry-id').dataset.moveType=ev.type;
-  document.getElementById('cal-entry-id').dataset.moveId=ev.id;
+function openEventMoveModal(ev) {
+  document.getElementById('cal-entry-title').textContent = t('calEntry.moveTitle');
+  document.getElementById('cal-entry-id').value = '';
+  document.getElementById('cal-entry-mode').value = 'move';
+  document.getElementById('cal-entry-name').value = ev.label;
+  document.getElementById('cal-entry-name').disabled = true;
+  document.getElementById('cal-entry-date').value = ev.date;
+  document.getElementById('cal-entry-enddate-wrap').style.display = 'none';
+  document.getElementById('cal-entry-allday-wrap').style.display = 'none';
+  document.getElementById('cal-entry-times').style.display = 'none';
+  document.getElementById('cal-entry-prio-wrap').style.display = 'none';
+  document.getElementById('cal-entry-desc').closest('div').style.display = 'none';
+  document.getElementById('cal-entry-task-assign-wrap').style.display = 'none';
+  document.getElementById('cal-entry-ev-assign-wrap').style.display = 'none';
+  const recWrapMove = document.getElementById('cal-entry-recurrence-wrap');
+  if (recWrapMove) recWrapMove.style.display = 'none';
+  document.getElementById('cal-entry-private-wrap').style.display = 'none';
+  document.getElementById('cal-entry-del-btn').style.display = 'none';
+  document.getElementById('cal-entry-type-select').closest('.g2').style.display = 'none';
+  document.getElementById('cal-entry-id').dataset.moveType = ev.type;
+  document.getElementById('cal-entry-id').dataset.moveId = ev.id;
   document.getElementById('m-cal-entry').classList.add('open');
 }
 
-async function pushEventCaldav(ev){
-  if(!caldav.enabled)return;
-  try{
-    const r=await authFetch('/api/caldav/push-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev})}).then(r=>r.json());
-    if(r.ok&&r.uid){ev.caldavUid=r.uid;ev.caldavSynced=new Date().toISOString();apiPatch('/api/calendar-events/'+encodeURIComponent(ev.id),{caldavUid:ev.caldavUid,caldavSynced:ev.caldavSynced})}
-  }catch(e){console.error('CalDAV event push error:',e)}
+async function pushEventCaldav(ev) {
+  if (!caldav.enabled) return;
+  try {
+    const r = await authFetch('/api/caldav/push-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: ev })
+    }).then((r) => r.json());
+    if (r.ok && r.uid) {
+      ev.caldavUid = r.uid;
+      ev.caldavSynced = new Date().toISOString();
+      apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), {
+        caldavUid: ev.caldavUid,
+        caldavSynced: ev.caldavSynced
+      });
+    }
+  } catch (e) {
+    console.error('CalDAV event push error:', e);
+  }
 }
 
 // ── User list + Assignee picker ──
-async function loadAppUsers(){
-  try{const r=await authFetch('/api/usernames');if(r.ok)appUsers=await r.json();fillCalendarUserFilter()}catch{appUsers=[]}
+async function loadAppUsers() {
+  try {
+    const r = await authFetch('/api/usernames');
+    if (r.ok) appUsers = await r.json();
+    fillCalendarUserFilter();
+  } catch {
+    appUsers = [];
+  }
 }
 // Combined list of selectable people: registered users + manually-added team members (deduped)
-function getSelectableAssignees(){
-  const names=new Set();
-  const out=[];
-  (appUsers||[]).forEach(u=>{if(u&&u.username&&!names.has(u.username)){names.add(u.username);out.push(u.username)}});
-  (teamMembers||[]).forEach(m=>{if(m&&m.name&&!names.has(m.name)){names.add(m.name);out.push(m.name)}});
+function getSelectableAssignees() {
+  const names = new Set();
+  const out = [];
+  (appUsers || []).forEach((u) => {
+    if (u && u.username && !names.has(u.username)) {
+      names.add(u.username);
+      out.push(u.username);
+    }
+  });
+  (teamMembers || []).forEach((m) => {
+    if (m && m.name && !names.has(m.name)) {
+      names.add(m.name);
+      out.push(m.name);
+    }
+  });
   return out;
 }
-function fillCalendarUserFilter(){
-  const sel=document.getElementById('cal-filter-user');if(!sel)return;
-  const cur=sel.value;
-  const names=getSelectableAssignees();
-  sel.innerHTML='<option value="">'+esc(t('calEntry.assignTo.all'))+'</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
-  sel.value=cur;
+function fillCalendarUserFilter() {
+  const sel = document.getElementById('cal-filter-user');
+  if (!sel) return;
+  const cur = sel.value;
+  const names = getSelectableAssignees();
+  sel.innerHTML =
+    '<option value="">' +
+    esc(t('calEntry.assignTo.all')) +
+    '</option>' +
+    names.map((n) => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+  sel.value = cur;
 }
-function renderAssigneePicker(){
-  const box=document.getElementById('cal-ev-assignees');if(!box)return;
-  const dd=document.getElementById('cal-ev-assignee-dropdown');
-  if(!calEvSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calEvSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
-  if(dd){
-    const names=getSelectableAssignees();
-    if(!names.length){
-      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
-    }else{
-      dd.innerHTML=names.map(n=>{const checked=calEvSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
+function renderAssigneePicker() {
+  const box = document.getElementById('cal-ev-assignees');
+  if (!box) return;
+  const dd = document.getElementById('cal-ev-assignee-dropdown');
+  if (!calEvSelectedAssignees.length) {
+    box.innerHTML =
+      '<span style="color:var(--c-text-muted);font-size:12px">' + esc(t('calEntry.allClickToSelect')) + '</span>';
+  } else {
+    box.innerHTML = calEvSelectedAssignees
+      .map(
+        (name) =>
+          '<span class="assignee-chip">' +
+          esc(name) +
+          ' <button data-assignee-remove="' +
+          esc(name) +
+          '">×</button></span>'
+      )
+      .join('');
+  }
+  if (dd) {
+    const names = getSelectableAssignees();
+    if (!names.length) {
+      dd.innerHTML =
+        '<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
+    } else {
+      dd.innerHTML = names
+        .map((n) => {
+          const checked = calEvSelectedAssignees.includes(n);
+          return (
+            '<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;' +
+            (checked ? 'background:#e8f5e9' : '') +
+            '" data-assignee-toggle="' +
+            esc(n) +
+            '"><input type="checkbox" ' +
+            (checked ? 'checked' : '') +
+            ' style="width:auto;margin-right:6px" data-assignee-checkbox>' +
+            esc(n) +
+            '</label>'
+          );
+        })
+        .join('');
     }
   }
 }
-function toggleAssigneeDropdown(){
-  const dd=document.getElementById('cal-ev-assignee-dropdown');if(!dd)return;
-  dd.style.display=dd.style.display==='none'?'block':'none';
+function toggleAssigneeDropdown() {
+  const dd = document.getElementById('cal-ev-assignee-dropdown');
+  if (!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
 }
-function toggleAssignee(name){
-  const i=calEvSelectedAssignees.indexOf(name);
-  if(i>=0)calEvSelectedAssignees.splice(i,1);else calEvSelectedAssignees.push(name);
+function toggleAssignee(name) {
+  const i = calEvSelectedAssignees.indexOf(name);
+  if (i >= 0) calEvSelectedAssignees.splice(i, 1);
+  else calEvSelectedAssignees.push(name);
   renderAssigneePicker();
 }
-function getSelectedAssigneeIds(){return calEvSelectedAssignees.slice()}
+function getSelectedAssigneeIds() {
+  return calEvSelectedAssignees.slice();
+}
 // Delegated click handlers for assignee picker (avoids inline onclick XSS)
-(function(){
-  const box=document.getElementById('cal-ev-assignees');
-  if(box){box.addEventListener('click',function(e){
-    const rm=e.target.closest('[data-assignee-remove]');
-    if(!rm)return;
-    e.stopPropagation();
-    toggleAssignee(rm.dataset.assigneeRemove);
-  })}
-  const dd=document.getElementById('cal-ev-assignee-dropdown');
-  if(dd){dd.addEventListener('click',function(e){
-    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
-    const lbl=e.target.closest('[data-assignee-toggle]');
-    if(!lbl)return;
-    e.stopPropagation();e.preventDefault();
-    toggleAssignee(lbl.dataset.assigneeToggle);
-  })}
+(function () {
+  const box = document.getElementById('cal-ev-assignees');
+  if (box) {
+    box.addEventListener('click', function (e) {
+      const rm = e.target.closest('[data-assignee-remove]');
+      if (!rm) return;
+      e.stopPropagation();
+      toggleAssignee(rm.dataset.assigneeRemove);
+    });
+  }
+  const dd = document.getElementById('cal-ev-assignee-dropdown');
+  if (dd) {
+    dd.addEventListener('click', function (e) {
+      if (e.target.matches('[data-assignee-checkbox]')) {
+        e.stopPropagation();
+        return;
+      }
+      const lbl = e.target.closest('[data-assignee-toggle]');
+      if (!lbl) return;
+      e.stopPropagation();
+      e.preventDefault();
+      toggleAssignee(lbl.dataset.assigneeToggle);
+    });
+  }
 })();
 
 // ── Task assignee picker (multi-select) ──
-function renderTaskAssigneePicker(){
-  const box=document.getElementById('cal-task-assignees');if(!box)return;
-  const dd=document.getElementById('cal-task-assignee-dropdown');
-  if(!calTaskSelectedAssignees.length){box.innerHTML='<span style="color:var(--c-text-muted);font-size:12px">'+esc(t('calEntry.allClickToSelect'))+'</span>'}
-  else{box.innerHTML=calTaskSelectedAssignees.map(name=>'<span class="assignee-chip">'+esc(name)+' <button data-task-assignee-remove="'+esc(name)+'">×</button></span>').join('')}
-  if(dd){
-    const names=getSelectableAssignees();
-    if(!names.length){
-      dd.innerHTML='<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">'+esc(t('calEntry.noMembers'))+'</div>';
-    }else{
-      dd.innerHTML=names.map(n=>{const checked=calTaskSelectedAssignees.includes(n);return'<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;'+(checked?'background:#e8f5e9':'')+'" data-task-assignee-toggle="'+esc(n)+'"><input type="checkbox" '+(checked?'checked':'')+' style="width:auto;margin-right:6px" data-assignee-checkbox>'+esc(n)+'</label>'}).join('');
+function renderTaskAssigneePicker() {
+  const box = document.getElementById('cal-task-assignees');
+  if (!box) return;
+  const dd = document.getElementById('cal-task-assignee-dropdown');
+  if (!calTaskSelectedAssignees.length) {
+    box.innerHTML =
+      '<span style="color:var(--c-text-muted);font-size:12px">' + esc(t('calEntry.allClickToSelect')) + '</span>';
+  } else {
+    box.innerHTML = calTaskSelectedAssignees
+      .map(
+        (name) =>
+          '<span class="assignee-chip">' +
+          esc(name) +
+          ' <button data-task-assignee-remove="' +
+          esc(name) +
+          '">×</button></span>'
+      )
+      .join('');
+  }
+  if (dd) {
+    const names = getSelectableAssignees();
+    if (!names.length) {
+      dd.innerHTML =
+        '<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
+    } else {
+      dd.innerHTML = names
+        .map((n) => {
+          const checked = calTaskSelectedAssignees.includes(n);
+          return (
+            '<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;' +
+            (checked ? 'background:#e8f5e9' : '') +
+            '" data-task-assignee-toggle="' +
+            esc(n) +
+            '"><input type="checkbox" ' +
+            (checked ? 'checked' : '') +
+            ' style="width:auto;margin-right:6px" data-assignee-checkbox>' +
+            esc(n) +
+            '</label>'
+          );
+        })
+        .join('');
     }
   }
 }
-function toggleTaskAssigneeDropdown(){
-  const dd=document.getElementById('cal-task-assignee-dropdown');if(!dd)return;
-  dd.style.display=dd.style.display==='none'?'block':'none';
+function toggleTaskAssigneeDropdown() {
+  const dd = document.getElementById('cal-task-assignee-dropdown');
+  if (!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
 }
-function toggleTaskAssignee(name){
-  const i=calTaskSelectedAssignees.indexOf(name);
-  if(i>=0)calTaskSelectedAssignees.splice(i,1);else calTaskSelectedAssignees.push(name);
+function toggleTaskAssignee(name) {
+  const i = calTaskSelectedAssignees.indexOf(name);
+  if (i >= 0) calTaskSelectedAssignees.splice(i, 1);
+  else calTaskSelectedAssignees.push(name);
   renderTaskAssigneePicker();
 }
 // Delegated click handlers for task assignee picker (avoids inline onclick XSS)
-(function(){
-  const box=document.getElementById('cal-task-assignees');
-  if(box){box.addEventListener('click',function(e){
-    const rm=e.target.closest('[data-task-assignee-remove]');
-    if(!rm)return;
-    e.stopPropagation();
-    toggleTaskAssignee(rm.dataset.taskAssigneeRemove);
-  })}
-  const dd=document.getElementById('cal-task-assignee-dropdown');
-  if(dd){dd.addEventListener('click',function(e){
-    if(e.target.matches('[data-assignee-checkbox]')){e.stopPropagation();return}
-    const lbl=e.target.closest('[data-task-assignee-toggle]');
-    if(!lbl)return;
-    e.stopPropagation();e.preventDefault();
-    toggleTaskAssignee(lbl.dataset.taskAssigneeToggle);
-  })}
+(function () {
+  const box = document.getElementById('cal-task-assignees');
+  if (box) {
+    box.addEventListener('click', function (e) {
+      const rm = e.target.closest('[data-task-assignee-remove]');
+      if (!rm) return;
+      e.stopPropagation();
+      toggleTaskAssignee(rm.dataset.taskAssigneeRemove);
+    });
+  }
+  const dd = document.getElementById('cal-task-assignee-dropdown');
+  if (dd) {
+    dd.addEventListener('click', function (e) {
+      if (e.target.matches('[data-assignee-checkbox]')) {
+        e.stopPropagation();
+        return;
+      }
+      const lbl = e.target.closest('[data-task-assignee-toggle]');
+      if (!lbl) return;
+      e.stopPropagation();
+      e.preventDefault();
+      toggleTaskAssignee(lbl.dataset.taskAssigneeToggle);
+    });
+  }
 })();
 
-async function loadCalDAVImports(){
-  try{
-    const r=await authFetch('/api/caldav/import');
-    if(r.ok)caldavImports=await r.json();
-  }catch(e){caldavImports=[];}
+async function loadCalDAVImports() {
+  try {
+    const r = await authFetch('/api/caldav/import');
+    if (r.ok) caldavImports = await r.json();
+  } catch (e) {
+    caldavImports = [];
+  }
 }
 
-if(typeof pushBatchCaldav==='undefined'){
-  window.pushBatchCaldav=async function(batch){
-    if(!caldav.enabled)return;
-    try{await authFetch('/api/caldav/push-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch})})}catch(e){console.warn('CalDAV push failed:',e.message)}
+if (typeof pushBatchCaldav === 'undefined') {
+  window.pushBatchCaldav = async function (batch) {
+    if (!caldav.enabled) return;
+    try {
+      await authFetch('/api/caldav/push-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch })
+      });
+    } catch (e) {
+      console.warn('CalDAV push failed:', e.message);
+    }
   };
 }
 
 // Escape key closes the topmost open modal
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
-  const modals = ['m-camscan','m-cal-entry','m-cal-detail','m-locmove','m-baginfo','m-addbags','m-batchadd','m-note','m-prompt','m-confirm','m-move-batch'];
+  const modals = [
+    'm-camscan',
+    'm-cal-entry',
+    'm-cal-detail',
+    'm-locmove',
+    'm-baginfo',
+    'm-addbags',
+    'm-batchadd',
+    'm-note',
+    'm-prompt',
+    'm-confirm',
+    'm-move-batch'
+  ];
   for (const id of modals) {
     const el = document.getElementById(id);
-    if (el && el.classList.contains('open')) { el.classList.remove('open'); return; }
+    if (el && el.classList.contains('open')) {
+      el.classList.remove('open');
+      return;
+    }
   }
 });
 
@@ -9869,188 +14315,301 @@ loadAppUsers();
 loadData();
 // Primary: SSE for instant updates. Fallback: poll every 30s (was 5s) for stale detection.
 connectSSE();
-setInterval(pollSync,30000);
+setInterval(pollSync, 30000);
 
 // Register service worker for PWA / offline support
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
-  navigator.serviceWorker.addEventListener('message',e=>{
-    if(e.data&&e.data.type==='offline-queue-update'){
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'offline-queue-update') {
       updateOfflineBadge(e.data.pendingCount);
     }
   });
-  window.addEventListener('online',()=>{
-    if(navigator.serviceWorker.controller){
-      navigator.serviceWorker.controller.postMessage({type:'replay-pending'});
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'replay-pending' });
     }
   });
 }
 
-function updateOfflineBadge(count){
-  let badge=document.getElementById('offline-badge');
-  if(count===0){if(badge)badge.remove();return}
-  if(!badge){
-    badge=document.createElement('span');
-    badge.id='offline-badge';
-    badge.style.cssText='display:inline-block;background:var(--c-red);color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
-    const syncEl=document.getElementById('sync-label');
-    if(syncEl)syncEl.parentNode.appendChild(badge);
+function updateOfflineBadge(count) {
+  let badge = document.getElementById('offline-badge');
+  if (count === 0) {
+    if (badge) badge.remove();
+    return;
+  }
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'offline-badge';
+    badge.style.cssText =
+      'display:inline-block;background:var(--c-red);color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
+    const syncEl = document.getElementById('sync-label');
+    if (syncEl) syncEl.parentNode.appendChild(badge);
     else document.querySelector('.topbar')?.appendChild(badge);
   }
-  badge.textContent=t('offline.queued',{n:count});
+  badge.textContent = t('offline.queued', { n: count });
 }
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
-let _camScanner=null;
-let _camClosing=false;
-let _camFacingMode='environment';
-function openCamScan(){
+let _camScanner = null;
+let _camClosing = false;
+let _camFacingMode = 'environment';
+function openCamScan() {
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
   updateCamHud(); // Sync HUD with current scan state
-  if(_camScanner||_camClosing)return;
-  _camScanner=new Html5Qrcode('cam-reader');
-  var scanner=_camScanner;
-  scanner.start(
-    {facingMode:_camFacingMode},
-    {fps:10,qrbox:function(vw,vh){var s=Math.min(250,Math.floor(Math.min(vw,vh)*0.7));return{width:s,height:s}},aspectRatio:1.0},
-    function(decoded){
-      if(scanner!==_camScanner)return;
-      scanner.pause(true);
-      processScan(decoded);
-      setTimeout(function(){if(scanner===_camScanner){try{scanner.resume()}catch(e){}}},1500);
-    },
-    function(){}
-  ).catch(function(err){
-    console.error('Camera start failed:',err);
-    var msg;var s=String(err);
-    if(/NotAllowedError|Permission/.test(s))msg=t('cam.permDenied');
-    else if(/NotFoundError/.test(s))msg=t('cam.notFound');
-    else if(/NotReadableError|TrackStartError/.test(s))msg=t('cam.inUse');
-    else msg=t('cam.unknownError',{err:err});
-    setFb('err',msg);
-    closeCamScan();
-  });
+  if (_camScanner || _camClosing) return;
+  _camScanner = new Html5Qrcode('cam-reader');
+  var scanner = _camScanner;
+  scanner
+    .start(
+      { facingMode: _camFacingMode },
+      {
+        fps: 10,
+        qrbox: function (vw, vh) {
+          var s = Math.min(250, Math.floor(Math.min(vw, vh) * 0.7));
+          return { width: s, height: s };
+        },
+        aspectRatio: 1.0
+      },
+      function (decoded) {
+        if (scanner !== _camScanner) return;
+        scanner.pause(true);
+        processScan(decoded);
+        setTimeout(function () {
+          if (scanner === _camScanner) {
+            try {
+              scanner.resume();
+            } catch (e) {}
+          }
+        }, 1500);
+      },
+      function () {}
+    )
+    .catch(function (err) {
+      console.error('Camera start failed:', err);
+      var msg;
+      var s = String(err);
+      if (/NotAllowedError|Permission/.test(s)) msg = t('cam.permDenied');
+      else if (/NotFoundError/.test(s)) msg = t('cam.notFound');
+      else if (/NotReadableError|TrackStartError/.test(s)) msg = t('cam.inUse');
+      else msg = t('cam.unknownError', { err: err });
+      setFb('err', msg);
+      closeCamScan();
+    });
 }
-function closeCamScan(){
+function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
-  if(!_camScanner)return;
-  var scanner=_camScanner;
-  _camScanner=null;
-  _camClosing=true;
-  scanner.stop().then(function(){scanner.clear()}).catch(function(){
-    // Force-stop media tracks if library cleanup fails (iOS Safari)
-    var vids=document.getElementById('cam-reader').querySelectorAll('video');
-    vids.forEach(function(v){if(v.srcObject)v.srcObject.getTracks().forEach(function(t){t.stop()})});
-    try{scanner.clear()}catch(e){}
-  }).finally(function(){_camClosing=false});
+  if (!_camScanner) return;
+  var scanner = _camScanner;
+  _camScanner = null;
+  _camClosing = true;
+  scanner
+    .stop()
+    .then(function () {
+      scanner.clear();
+    })
+    .catch(function () {
+      // Force-stop media tracks if library cleanup fails (iOS Safari)
+      var vids = document.getElementById('cam-reader').querySelectorAll('video');
+      vids.forEach(function (v) {
+        if (v.srcObject)
+          v.srcObject.getTracks().forEach(function (t) {
+            t.stop();
+          });
+      });
+      try {
+        scanner.clear();
+      } catch (e) {}
+    })
+    .finally(function () {
+      _camClosing = false;
+    });
 }
 // Stop camera when tab is hidden (saves battery, prevents "camera in use" on other apps)
-document.addEventListener('visibilitychange',function(){if(document.hidden&&_camScanner)closeCamScan()});
-function flipCamera(){
-  _camFacingMode=_camFacingMode==='environment'?'user':'environment';
-  if(_camScanner){closeCamScan();setTimeout(openCamScan,300)}
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && _camScanner) closeCamScan();
+});
+function flipCamera() {
+  _camFacingMode = _camFacingMode === 'environment' ? 'user' : 'environment';
+  if (_camScanner) {
+    closeCamScan();
+    setTimeout(openCamScan, 300);
+  }
 }
-function copyCalDavUrl(){const url=document.getElementById('caldav-url-display').textContent;navigator.clipboard.writeText(url).then(()=>{const b=document.getElementById('btn-45');b.textContent=t('common.copied');setTimeout(()=>{b.textContent=t('common.copy')},2000)}).catch(()=>{})}
+function copyCalDavUrl() {
+  const url = document.getElementById('caldav-url-display').textContent;
+  navigator.clipboard
+    .writeText(url)
+    .then(() => {
+      const b = document.getElementById('btn-45');
+      b.textContent = t('common.copied');
+      setTimeout(() => {
+        b.textContent = t('common.copy');
+      }, 2000);
+    })
+    .catch(() => {});
+}
 
 function initEventListeners() {
-  const $=id=>document.getElementById(id);
+  const $ = (id) => document.getElementById(id);
 
   // Modals
-  $('addbags-cancel-btn').addEventListener('click', () => { document.getElementById('m-addbags').classList.remove('open'); });
+  $('addbags-cancel-btn').addEventListener('click', () => {
+    document.getElementById('m-addbags').classList.remove('open');
+  });
   $('addbags-confirm-btn').addEventListener('click', confirmAddBags);
-  $('ab-done-btn').addEventListener('click', () => { document.getElementById('m-addbags').classList.remove('open'); });
+  $('ab-done-btn').addEventListener('click', () => {
+    document.getElementById('m-addbags').classList.remove('open');
+  });
   $('ab-print-btn').addEventListener('click', printNewBags);
   $('m-cancel').addEventListener('click', closeConfirm);
-  $('change-pw-modal').addEventListener('click', function(e) { if(e.target===this) hideChangePasswordModal(); });
+  $('change-pw-modal').addEventListener('click', function (e) {
+    if (e.target === this) hideChangePasswordModal();
+  });
   $('btn-1').addEventListener('click', hideChangePasswordModal);
   $('act-2').addEventListener('click', submitChangePassword);
   $('cls-3').addEventListener('click', closeNote);
   $('act-4').addEventListener('click', saveNote);
-  $('m-cal-detail').addEventListener('click', function(e) { if(e.target===this) closeEventDetail(); });
+  $('m-cal-detail').addEventListener('click', function (e) {
+    if (e.target === this) closeEventDetail();
+  });
   $('ba-batch').addEventListener('change', baPreview);
   $('ba-loc').addEventListener('change', baPreview);
   $('cls-7').addEventListener('click', closeBatchAdd);
   $('act-8').addEventListener('click', confirmBatchAdd);
-  $('m-locmove').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
-  $('cls-9').addEventListener('click', () => { document.getElementById('m-locmove').classList.remove('open'); });
+  $('m-locmove').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+  $('cls-9').addEventListener('click', () => {
+    document.getElementById('m-locmove').classList.remove('open');
+  });
   // Move-batch modal
-  $('mb-cancel-btn').addEventListener('click', () => { document.getElementById('m-move-batch').classList.remove('open'); });
-  $('m-move-batch').addEventListener('click', function(e) { if(e.target===this) this.classList.remove('open'); });
-  document.getElementById('lm-grid').addEventListener('click', e=>{
-    const btn=e.target.closest('[data-action="bulk-rack-target"]');if(!btn)return;
-    executeBulkMoveToRack(btn.dataset.zone,btn.dataset.rack);
+  $('mb-cancel-btn').addEventListener('click', () => {
+    document.getElementById('m-move-batch').classList.remove('open');
+  });
+  $('m-move-batch').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+  document.getElementById('lm-grid').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="bulk-rack-target"]');
+    if (!btn) return;
+    executeBulkMoveToRack(btn.dataset.zone, btn.dataset.rack);
   });
   $('btn-10').addEventListener('click', locRemoveSelected);
-  $('cls-11').addEventListener('click', () => { document.getElementById('m-baginfo').classList.remove('open'); });
-  $('set-12').addEventListener('click', () => { biSetAction('ADD'); });
-  $('set-13').addEventListener('click', () => { biSetAction('MOVE'); });
-  $('set-14').addEventListener('click', () => { biSetAction('HARVEST'); });
-  $('set-15').addEventListener('click', () => { biSetAction('REMOVE'); });
-  $('m-camscan').addEventListener('click', function(e) { if(e.target===this) closeCamScan(); });
+  $('cls-11').addEventListener('click', () => {
+    document.getElementById('m-baginfo').classList.remove('open');
+  });
+  $('set-12').addEventListener('click', () => {
+    biSetAction('ADD');
+  });
+  $('set-13').addEventListener('click', () => {
+    biSetAction('MOVE');
+  });
+  $('set-14').addEventListener('click', () => {
+    biSetAction('HARVEST');
+  });
+  $('set-15').addEventListener('click', () => {
+    biSetAction('REMOVE');
+  });
+  $('m-camscan').addEventListener('click', function (e) {
+    if (e.target === this) closeCamScan();
+  });
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
 
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
-  $('n-dash').addEventListener('click', () => { go('dash','n-dash'); });
-  $('n-cal').addEventListener('click', () => { go('cal','n-cal'); });
-  $('n-batch').addEventListener('click', () => { go('batch','n-batch'); });
-  $('n-lab').addEventListener('click', () => { go('lab','n-lab'); });
-  $('n-inv').addEventListener('click', () => { go('inv','n-inv'); });
-  $('n-zones').addEventListener('click', () => { go('zones','n-zones'); });
-  $('n-strains').addEventListener('click', () => { go('strains','n-strains'); renderStrains(); });
+  $('n-dash').addEventListener('click', () => {
+    go('dash', 'n-dash');
+  });
+  $('n-cal').addEventListener('click', () => {
+    go('cal', 'n-cal');
+  });
+  $('n-batch').addEventListener('click', () => {
+    go('batch', 'n-batch');
+  });
+  $('n-lab').addEventListener('click', () => {
+    go('lab', 'n-lab');
+  });
+  $('n-inv').addEventListener('click', () => {
+    go('inv', 'n-inv');
+  });
+  $('n-zones').addEventListener('click', () => {
+    go('zones', 'n-zones');
+  });
+  $('n-strains').addEventListener('click', () => {
+    go('strains', 'n-strains');
+    renderStrains();
+  });
   $('btn-add-zone').addEventListener('click', addZone);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
-  $('zone-role').addEventListener('change', function(){const c={spawn:'#a855f7',incubation:'#0ea5e9',fruiting:'#10b981',contaminated:'#ef4444'}[this.value];if(c)document.getElementById('zone-color').value=c});
+  $('zone-role').addEventListener('change', function () {
+    const c = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981', contaminated: '#ef4444' }[this.value];
+    if (c) document.getElementById('zone-color').value = c;
+  });
   // Zone list event delegation (CSP blocks inline onclick)
-  $('zones-list').addEventListener('click', e=>{
-    const btn=e.target.closest('[data-action]');if(!btn)return;
-    const action=btn.dataset.action;
-    if(action==='del-zone')removeZone(btn.dataset.zone);
-    else if(action==='rename-zone')renameZone(btn.dataset.zone);
-    else if(action==='add-rack')addRackToZone(btn.dataset.zone);
-    else if(action==='del-rack')removeRack(btn.dataset.rack);
-    else if(action==='toggle-qr')renderZoneQrPanel(btn.dataset.zone);
-    else if(action==='print-zone-qr')printZoneQrBrowser(btn.dataset.zone);
-    else if(action==='bulk-move')bulkMoveToRack(btn.dataset.zone);
+  $('zones-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === 'del-zone') removeZone(btn.dataset.zone);
+    else if (action === 'rename-zone') renameZone(btn.dataset.zone);
+    else if (action === 'add-rack') addRackToZone(btn.dataset.zone);
+    else if (action === 'del-rack') removeRack(btn.dataset.rack);
+    else if (action === 'toggle-qr') renderZoneQrPanel(btn.dataset.zone);
+    else if (action === 'print-zone-qr') printZoneQrBrowser(btn.dataset.zone);
+    else if (action === 'bulk-move') bulkMoveToRack(btn.dataset.zone);
   });
   // Drag-and-drop zone reordering.
-  const zonesList=$('zones-list');
-  zonesList.addEventListener('dragstart',onZoneDragStart);
-  zonesList.addEventListener('dragover',onZoneDragOver);
-  zonesList.addEventListener('drop',onZoneDrop);
-  zonesList.addEventListener('dragend',onZoneDragEnd);
-  zonesList.addEventListener('dragleave',e=>{
+  const zonesList = $('zones-list');
+  zonesList.addEventListener('dragstart', onZoneDragStart);
+  zonesList.addEventListener('dragover', onZoneDragOver);
+  zonesList.addEventListener('drop', onZoneDrop);
+  zonesList.addEventListener('dragend', onZoneDragEnd);
+  zonesList.addEventListener('dragleave', (e) => {
     // Clear hints only when leaving the list entirely, not when moving between rows.
-    if(!zonesList.contains(e.relatedTarget))clearZoneDropHints();
+    if (!zonesList.contains(e.relatedTarget)) clearZoneDropHints();
   });
-  $('n-assets').addEventListener('click', () => { go('assets','n-assets'); });
-  $('n-print').addEventListener('click', () => { go('print','n-print'); });
-  $('n-settings').addEventListener('click', () => { go('settings','n-settings'); });
+  $('n-assets').addEventListener('click', () => {
+    go('assets', 'n-assets');
+  });
+  $('n-print').addEventListener('click', () => {
+    go('print', 'n-print');
+  });
+  $('n-settings').addEventListener('click', () => {
+    go('settings', 'n-settings');
+  });
   $('sync-dot').addEventListener('click', loadData);
-  $('lang-sel').addEventListener('change', function() { setLang(this.value); });
+  $('lang-sel').addEventListener('change', function () {
+    setLang(this.value);
+  });
   $('tgl-17').addEventListener('click', toggleSidebar);
   $('sync-dot-m').addEventListener('click', loadData);
   $('sb-overlay').addEventListener('click', toggleSidebar);
 
   // Scan modal
   $('scan-overlay').addEventListener('click', closeScanModal);
-  $('scan-modal').addEventListener('click', e => e.stopPropagation());
+  $('scan-modal').addEventListener('click', (e) => e.stopPropagation());
   $('cls-18').addEventListener('click', closeScanModal);
   $('set-19').addEventListener('click', resetScan);
   $('btn-20').addEventListener('click', openBatchAdd);
   $('btn-end-session').addEventListener('click', endScanSession);
-  $('btn-scan-cam').addEventListener('click', function() { openCamScan(); });
-  $('btn-scan-audio').addEventListener('click', function() { scanAudioEnabled=!scanAudioEnabled;this.style.opacity=scanAudioEnabled?1:.4; });
+  $('btn-scan-cam').addEventListener('click', function () {
+    openCamScan();
+  });
+  $('btn-scan-audio').addEventListener('click', function () {
+    scanAudioEnabled = !scanAudioEnabled;
+    this.style.opacity = scanAudioEnabled ? 1 : 0.4;
+  });
   // Scan modal tab navigation
-  document.querySelectorAll('.scan-tab').forEach(function(tabBtn){
-    tabBtn.addEventListener('click',function(){
-      var name=this.getAttribute('data-scan-tab');
+  document.querySelectorAll('.scan-tab').forEach(function (tabBtn) {
+    tabBtn.addEventListener('click', function () {
+      var name = this.getAttribute('data-scan-tab');
       switchScanTab(name);
-      if(name==='successes')renderScanSuccesses();
+      if (name === 'successes') renderScanSuccesses();
     });
   });
 
@@ -10064,30 +14623,52 @@ function initEventListeners() {
   applyDashMode();
 
   // Batches — delegated actions for dynamically rendered rows (CSP-safe)
-  $('batches-body').addEventListener('click', function(e) {
+  $('batches-body').addEventListener('click', function (e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const batch = el.dataset.batch;
-    switch(el.dataset.action) {
-      case 'toggle-bags': toggleBatchBags(batch); break;
-      case 'open-note': openNote(batch); break;
-      case 'add-bags': openAddBags(batch); break;
-      case 'del-batch': delBatch(batch); break;
+    switch (el.dataset.action) {
+      case 'toggle-bags':
+        toggleBatchBags(batch);
+        break;
+      case 'open-note':
+        openNote(batch);
+        break;
+      case 'add-bags':
+        openAddBags(batch);
+        break;
+      case 'del-batch':
+        delBatch(batch);
+        break;
       case 'open-move-modal':
         openMoveBatchModal(batch);
         break;
     }
   });
-  $('st-batch-list').addEventListener('click', () => { openStab('batch','list'); });
-  $('st-batch-new').addEventListener('click', () => { openStab('batch','new'); });
-  $('st-batch-harvest').addEventListener('click', () => { openStab('batch','harvest'); });
-  $('batch-q').addEventListener('input', renderBatches);
-  $('batches-body').closest('table').tHead.addEventListener('click', e => {
-    const th=e.target.closest('th[data-sort]');if(!th)return;
-    cycleTableSort('batches',th.dataset.sort);renderBatches();
+  $('st-batch-list').addEventListener('click', () => {
+    openStab('batch', 'list');
   });
-  $('wbtn-3').addEventListener('click', () => { setBagWeight(3); });
-  $('wbtn-5').addEventListener('click', () => { setBagWeight(5); });
+  $('st-batch-new').addEventListener('click', () => {
+    openStab('batch', 'new');
+  });
+  $('st-batch-harvest').addEventListener('click', () => {
+    openStab('batch', 'harvest');
+  });
+  $('batch-q').addEventListener('input', renderBatches);
+  $('batches-body')
+    .closest('table')
+    .tHead.addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th) return;
+      cycleTableSort('batches', th.dataset.sort);
+      renderBatches();
+    });
+  $('wbtn-3').addEventListener('click', () => {
+    setBagWeight(3);
+  });
+  $('wbtn-5').addEventListener('click', () => {
+    setBagWeight(5);
+  });
   $('nb-weight').addEventListener('input', nbPreview);
   $('nb-strain-sel').addEventListener('change', nbPreview);
   $('nb-qty').addEventListener('input', nbPreview);
@@ -10101,79 +14682,145 @@ function initEventListeners() {
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
-  $('st-lab-cultures').addEventListener('click', () => { openStab('lab','cultures'); });
-  $('st-lab-work').addEventListener('click', () => { openStab('lab','work'); });
-  $('st-lab-lineage').addEventListener('click', () => { openStab('lab','lineage'); });
+  $('st-lab-cultures').addEventListener('click', () => {
+    openStab('lab', 'cultures');
+  });
+  $('st-lab-work').addEventListener('click', () => {
+    openStab('lab', 'work');
+  });
+  $('st-lab-lineage').addEventListener('click', () => {
+    openStab('lab', 'lineage');
+  });
   // Grain spawn form (now embedded in Log Work tab)
-  $('gs-wbtn-07').addEventListener('click', () => { gsSetWeight(0.7); });
-  $('gs-wbtn-1').addEventListener('click', () => { gsSetWeight(1); });
-  $('gs-wbtn-2').addEventListener('click', () => { gsSetWeight(2); });
-  $('gs-wbtn-5').addEventListener('click', () => { gsSetWeight(5); });
+  $('gs-wbtn-07').addEventListener('click', () => {
+    gsSetWeight(0.7);
+  });
+  $('gs-wbtn-1').addEventListener('click', () => {
+    gsSetWeight(1);
+  });
+  $('gs-wbtn-2').addEventListener('click', () => {
+    gsSetWeight(2);
+  });
+  $('gs-wbtn-5').addEventListener('click', () => {
+    gsSetWeight(5);
+  });
   $('gs-weight').addEventListener('input', gsPreview);
   $('gs-qty').addEventListener('input', gsPreview);
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
-  $('cultures-body').closest('table').tHead.addEventListener('click', e => {
-    const th=e.target.closest('th[data-sort]');if(!th)return;
-    cycleTableSort('cultures',th.dataset.sort);renderCultures();
-  });
+  $('cultures-body')
+    .closest('table')
+    .tHead.addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th) return;
+      cycleTableSort('cultures', th.dataset.sort);
+      renderCultures();
+    });
   $('lw-type').addEventListener('change', lwUpdate);
-  $('lw-st').addEventListener('change', () => { const type=document.getElementById('lw-type').value; if(type==='KB')gsPreview(); else lwPreview(); });
+  $('lw-st').addEventListener('change', () => {
+    const type = document.getElementById('lw-type').value;
+    if (type === 'KB') gsPreview();
+    else lwPreview();
+  });
   $('lw-qty').addEventListener('input', lwPreview);
-  $('btn-26').addEventListener('click', () => { const type=document.getElementById('lw-type').value; if(type==='KB')createGrainBatch(); else logLabWork(); });
+  $('btn-26').addEventListener('click', () => {
+    const type = document.getElementById('lw-type').value;
+    if (type === 'KB') createGrainBatch();
+    else logLabWork();
+  });
   $('lineage-sel').addEventListener('change', renderLineage);
 
   // Print
-  $('st-print-bags').addEventListener('click', () => { openStab('print','bags'); });
-  $('st-print-lab').addEventListener('click', () => { openStab('print','lab'); });
-  $('st-print-ref').addEventListener('click', () => { openStab('print','ref'); });
+  $('st-print-bags').addEventListener('click', () => {
+    openStab('print', 'bags');
+  });
+  $('st-print-lab').addEventListener('click', () => {
+    openStab('print', 'lab');
+  });
+  $('st-print-ref').addEventListener('click', () => {
+    openStab('print', 'ref');
+  });
   $('print-batch').addEventListener('change', renderBagPreview);
   $('print-mode').addEventListener('change', renderBagPreview);
+  $('bag-qr').addEventListener('change', renderBagPreview);
   $('print-range').addEventListener('change', toggleBagRange);
   $('prt-27').addEventListener('click', printBagLabels);
   $('lab-filter').addEventListener('change', renderLabList);
-  $('lp-bc').addEventListener('change', renderLabPreview);
-  $('lp-qr').addEventListener('change', renderLabPreview);
+  $('lab-mode').addEventListener('change', renderLabPreview);
+  $('lab-qr').addEventListener('change', renderLabPreview);
   $('prt-28').addEventListener('click', printLabLabels);
   $('ref-qr').addEventListener('change', renderRefBarcodes);
   $('prt-29').addEventListener('click', printRef);
 
   // Calendar
   $('btn-33').addEventListener('click', calToday);
-  $('btn-34').addEventListener('click', () => { calNav(-1); });
-  $('btn-35').addEventListener('click', () => { calNav(1); });
+  $('btn-34').addEventListener('click', () => {
+    calNav(-1);
+  });
+  $('btn-35').addEventListener('click', () => {
+    calNav(1);
+  });
   $('cal-filter-user').addEventListener('change', renderCalendar);
-  $('cv-month').addEventListener('click', () => { setCalView('month'); });
-  $('cv-week').addEventListener('click', () => { setCalView('week'); });
-  $('cv-day').addEventListener('click', () => { setCalView('day'); });
+  $('cv-month').addEventListener('click', () => {
+    setCalView('month');
+  });
+  $('cv-week').addEventListener('click', () => {
+    setCalView('week');
+  });
+  $('cv-day').addEventListener('click', () => {
+    setCalView('day');
+  });
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);
-  $('m-cal-print-week').addEventListener('click', ()=>printCalendarTaskList('week'));
-  $('m-cal-print-month').addEventListener('click', ()=>printCalendarTaskList('month'));
+  $('m-cal-print-week').addEventListener('click', () => printCalendarTaskList('week'));
+  $('m-cal-print-month').addEventListener('click', () => printCalendarTaskList('month'));
   $('m-cal-print-cancel').addEventListener('click', closeCalPrintModal);
-  $('m-cal-print').addEventListener('click', e=>{if(e.target.id==='m-cal-print')closeCalPrintModal()});
-  $('btn-cal-add').addEventListener('click', ()=>openEntryModal());
+  $('m-cal-print').addEventListener('click', (e) => {
+    if (e.target.id === 'm-cal-print') closeCalPrintModal();
+  });
+  $('btn-cal-add').addEventListener('click', () => openEntryModal());
   $('cal-entry-cancel-btn').addEventListener('click', closeEntryModal);
   $('cal-entry-save-btn').addEventListener('click', saveEntry);
   $('cal-entry-del-btn').addEventListener('click', deleteEntry);
   $('cal-entry-allday').addEventListener('change', toggleEntryTimeInputs);
   wireTimeInput($('cal-entry-start-time'));
   wireTimeInput($('cal-entry-end-time'));
-  $('cal-entry-type-select').addEventListener('change', function(){setEntryType(this.value)});
+  $('cal-entry-type-select').addEventListener('change', function () {
+    setEntryType(this.value);
+  });
   $('cal-entry-recurrence').addEventListener('change', toggleRecurrenceUntil);
-  $('m-cal-entry').addEventListener('click', e=>{if(e.target.id==='m-cal-entry')closeEntryModal()});
+  $('m-cal-entry').addEventListener('click', (e) => {
+    if (e.target.id === 'm-cal-entry') closeEntryModal();
+  });
   $('cal-ev-assignees').addEventListener('click', toggleAssigneeDropdown);
-  const taBox=$('cal-task-assignees');if(taBox)taBox.addEventListener('click', toggleTaskAssigneeDropdown);
+  const taBox = $('cal-task-assignees');
+  if (taBox) taBox.addEventListener('click', toggleTaskAssigneeDropdown);
 
   // Settings
-  $('st-settings-log').addEventListener('click', () => { openStab('settings','log'); });
-  $('st-settings-backup').addEventListener('click', () => { openStab('settings','backup'); });
-  $('st-settings-users').addEventListener('click', () => { openStab('settings','users');loadUsersTab(); });
-  $('st-settings-caldav').addEventListener('click', () => { openStab('settings','caldav'); });
-  $('st-settings-duckdns').addEventListener('click', () => { openStab('settings','duckdns'); });
-  $('st-settings-mcp').addEventListener('click', () => { openStab('settings','mcp'); });
-  $('st-settings-server').addEventListener('click', () => { openStab('settings','server'); loadServerTab(); });
+  $('st-settings-log').addEventListener('click', () => {
+    openStab('settings', 'log');
+  });
+  $('st-settings-backup').addEventListener('click', () => {
+    openStab('settings', 'backup');
+  });
+  $('st-settings-users').addEventListener('click', () => {
+    openStab('settings', 'users');
+    loadUsersTab();
+  });
+  $('st-settings-caldav').addEventListener('click', () => {
+    openStab('settings', 'caldav');
+  });
+  $('st-settings-duckdns').addEventListener('click', () => {
+    openStab('settings', 'duckdns');
+  });
+  $('st-settings-mcp').addEventListener('click', () => {
+    openStab('settings', 'mcp');
+  });
+  $('st-settings-server').addEventListener('click', () => {
+    openStab('settings', 'server');
+    loadServerTab();
+  });
   $('btn-server-restart').addEventListener('click', restartServer);
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
@@ -10181,18 +14828,33 @@ function initEventListeners() {
   $('le-request-btn').addEventListener('click', requestLeCert);
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);
   $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
-  $('mcp-enabled').addEventListener('change', function(){ toggleMcpSections(this.checked); });
-  $('mcp-copy-url-btn').addEventListener('click', ()=>{navigator.clipboard.writeText($('mcp-url').value);showMcpStatus(t('mcp.urlCopied'),'var(--c-green-dark)');});
+  $('mcp-enabled').addEventListener('change', function () {
+    toggleMcpSections(this.checked);
+  });
+  $('mcp-copy-url-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText($('mcp-url').value);
+    showMcpStatus(t('mcp.urlCopied'), 'var(--c-green-dark)');
+  });
   $('mcp-diag-btn').addEventListener('click', runMcpDiagnostics);
-  $('mcp-copy-token-btn').addEventListener('click', ()=>{navigator.clipboard.writeText(_mcpToken);showMcpStatus(t('mcp.keyCopied'),'var(--c-green-dark)');});
+  $('mcp-copy-token-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(_mcpToken);
+    showMcpStatus(t('mcp.keyCopied'), 'var(--c-green-dark)');
+  });
   $('log-action-filter').addEventListener('change', renderLog);
   $('log-date-from').addEventListener('change', renderLog);
   $('log-date-to').addEventListener('change', renderLog);
   $('log-q').addEventListener('input', renderLog);
   $('btn-37').addEventListener('click', clearLog);
-  $('tgl-38').addEventListener('click', () => { toggleLogSort('time'); });
-  $('tgl-39').addEventListener('click', () => { toggleLogSort('action'); });
-  $('ctl-40').addEventListener('click', () => { logDisplayLimit+=200;renderLog(); });
+  $('tgl-38').addEventListener('click', () => {
+    toggleLogSort('time');
+  });
+  $('tgl-39').addEventListener('click', () => {
+    toggleLogSort('action');
+  });
+  $('ctl-40').addEventListener('click', () => {
+    logDisplayLimit += 200;
+    renderLog();
+  });
   $('btn-41').addEventListener('click', downloadBackup);
   $('btn-42').addEventListener('click', restoreBackup);
   $('btn-43').addEventListener('click', doLogout);
@@ -10203,24 +14865,45 @@ function initEventListeners() {
   $('caldav-sync-btn').addEventListener('click', syncCaldavNow);
 
   // Inventory
-  $('st-inv-stock').addEventListener('click', () => { openStab('inv','stock'); });
-  $('st-inv-delivery').addEventListener('click', () => { openStab('inv','delivery'); });
-  $('st-inv-log').addEventListener('click', () => { openStab('inv','log'); });
-  $('st-inv-suppliers').addEventListener('click', () => { openStab('inv','suppliers');renderSuppliers(); });
+  $('st-inv-stock').addEventListener('click', () => {
+    openStab('inv', 'stock');
+  });
+  $('st-inv-delivery').addEventListener('click', () => {
+    openStab('inv', 'delivery');
+  });
+  $('st-inv-log').addEventListener('click', () => {
+    openStab('inv', 'log');
+  });
+  $('st-inv-suppliers').addEventListener('click', () => {
+    openStab('inv', 'suppliers');
+    renderSuppliers();
+  });
   $('del-mat').addEventListener('change', delMatChange);
   $('del-kg').addEventListener('input', delPreview);
   $('btn-47').addEventListener('click', logDelivery);
   $('adj-mat').addEventListener('change', adjMatChange);
-  $('adj-absolute').addEventListener('input', () => { adjPreview('absolute'); });
-  $('adj-delta').addEventListener('input', () => { adjPreview('delta'); });
+  $('adj-absolute').addEventListener('input', () => {
+    adjPreview('absolute');
+  });
+  $('adj-delta').addEventListener('input', () => {
+    adjPreview('delta');
+  });
   $('btn-48').addEventListener('click', logAdjustment);
   $('inv-log-filter').addEventListener('change', renderInvLog);
 
   // Assets
-  $('st-assets-list').addEventListener('click', () => { openStab('assets','list'); });
-  $('st-assets-add').addEventListener('click', () => { openStab('assets','add'); });
-  $('st-assets-export').addEventListener('click', () => { openStab('assets','export'); });
-  $('st-assets-labels').addEventListener('click', () => { openStab('assets','labels'); });
+  $('st-assets-list').addEventListener('click', () => {
+    openStab('assets', 'list');
+  });
+  $('st-assets-add').addEventListener('click', () => {
+    openStab('assets', 'add');
+  });
+  $('st-assets-export').addEventListener('click', () => {
+    openStab('assets', 'export');
+  });
+  $('st-assets-labels').addEventListener('click', () => {
+    openStab('assets', 'labels');
+  });
   $('asset-cat-filter').addEventListener('change', renderAssets);
   $('asset-stat-filter').addEventListener('change', renderAssets);
   $('asset-search').addEventListener('input', renderAssets);
@@ -10229,16 +14912,19 @@ function initEventListeners() {
   $('set-50').addEventListener('click', resetAssetForm);
   $('set-51').addEventListener('click', exportAssetCSV);
   $('ctl-52').addEventListener('click', renderStichtagReport);
-  $('tgl-53').addEventListener('click', () => { toggleAllAssetLabels(true); });
-  $('tgl-54').addEventListener('click', () => { toggleAllAssetLabels(false); });
+  $('tgl-53').addEventListener('click', () => {
+    toggleAllAssetLabels(true);
+  });
+  $('tgl-54').addEventListener('click', () => {
+    toggleAllAssetLabels(false);
+  });
   $('prt-55').addEventListener('click', printAssetLabels);
   $('set-56').addEventListener('click', downloadAssetZPL);
-
 }
 
 // Camera FAB is in the HTML *after* the <script> tag, so it doesn't exist
 // when initEventListeners() runs. Bind it once the full DOM is ready.
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   var fab = document.getElementById('cam-fab');
-  if(fab) fab.addEventListener('click', openCamScan);
+  if (fab) fab.addEventListener('click', openCamScan);
 });
