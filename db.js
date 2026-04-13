@@ -701,7 +701,8 @@ const MIGRATIONS = [
   },
   {
     version: 28,
-    description: 'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
+    description:
+      'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
     disableForeignKeys: true,
     fn(db) {
       // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so recreate the table.
