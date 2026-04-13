@@ -5008,8 +5008,9 @@ function getLabStrainBreakdown(){
     if(!breakdown[c.type])return;
     const name=c.strainName||c.species||'Unknown';
     const kz=c.strainKuerzel||c.strain||'';
+    const desc=c.strainDescriptor||'';
     const key=name+'|'+kz;
-    if(!breakdown[c.type][key])breakdown[c.type][key]={name,kz,count:0,color:spColor(name)};
+    if(!breakdown[c.type][key])breakdown[c.type][key]={name,kz,desc,count:0,color:spColor(name)};
     breakdown[c.type][key].count++;
   });
   batches.filter(b=>b.batchType==='grain').forEach(b=>{
@@ -5017,8 +5018,9 @@ function getLabStrainBreakdown(){
     if(['DONE','EMPTY','CONTAM'].includes(status))return;
     const name=b.strainName||b.species||'Unknown';
     const kz=b.strainKuerzel||b.strain||'';
+    const desc=b.strainDescriptor||'';
     const key=name+'|'+kz;
-    if(!breakdown.GS[key])breakdown.GS[key]={name,kz,count:0,color:spColor(name)};
+    if(!breakdown.GS[key])breakdown.GS[key]={name,kz,desc,count:0,color:spColor(name)};
     breakdown.GS[key].count++;
   });
   return breakdown;
@@ -5041,7 +5043,7 @@ function renderDashLabStock(){
       const pct=count>0?Math.round(s.count/count*100):0;
       return`<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
-        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.name)}${s.kz?' ('+esc(s.kz)+')':''}">${esc(s.name)}${s.kz?' <span style="color:var(--c-text-muted);font-size:10px">('+esc(s.kz)+')</span>':''}</span>
+        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz||s.name)}${s.desc?' '+esc(s.desc):''}">${esc(s.kz||s.name)}${s.desc?' <span style="color:var(--c-text-muted);font-size:10px">'+esc(s.desc)+'</span>':''}</span>
         <span style="font-size:11px;font-weight:600;color:var(--c-text);min-width:18px;text-align:right">${s.count}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px"></div></div>
       </div>`;
