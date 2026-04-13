@@ -34,7 +34,10 @@ if not "%~1"=="--relaunched" (
         ) else if exist ".git" (
             git fetch origin >nul 2>&1
             if !errorlevel! equ 0 (
-                git reset --hard origin/main
+                git reset --hard origin/main <nul 2>&1
+                if !errorlevel! neq 0 (
+                    echo  WARNING: git reset had errors ^(locked files?^). Continuing with local code.
+                )
             ) else (
                 echo  WARNING: git fetch failed. Continuing with local code.
             )
