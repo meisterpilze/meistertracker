@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(sqlite3 meistertracker.db \".tables\")"
-    ]
-  }
-}
