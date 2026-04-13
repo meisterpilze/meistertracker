@@ -22,8 +22,8 @@ if not "%~1"=="--relaunched" (
         set "GIT_DIR_VAL="
         for /f "tokens=*" %%G in ('git rev-parse --git-dir 2^>nul') do set "GIT_DIR_VAL=%%G"
         if defined GIT_DIR_VAL (
-            echo !GIT_DIR_VAL! | findstr /c:".git/worktrees/" >nul 2>&1
-            if !errorlevel! equ 0 set "IS_WORKTREE=1"
+            set "WKT_CHECK=!GIT_DIR_VAL:.git/worktrees/=!"
+            if not "!WKT_CHECK!"=="!GIT_DIR_VAL!" set "IS_WORKTREE=1"
         )
         if "!IS_WORKTREE!"=="1" (
             echo.
