@@ -5282,6 +5282,63 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- GitHub Webhook (auto-restart on push to main) --
+  if (req.method === 'POST' && req.url === '/api/webhook/github') {
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    if (!secret) {
+      jsonErr(res, 500, 'webhook secret not configured');
+      return;
+    }
+    let raw = '';
+    req.on('data', (c) => {
+      raw += c;
+    });
+    req.on('end', () => {
+      const sig = req.headers['x-hub-signature-256'];
+      if (!sig) {
+        jsonErr(res, 401, 'missing signature');
+        return;
+      }
+      const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex');
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        log('warn', 'GitHub webhook signature mismatch');
+        jsonErr(res, 401, 'bad signature');
+        return;
+      }
+      const event = req.headers['x-github-event'];
+      if (event === 'ping') {
+        jsonOk(res, { ok: true, msg: 'pong' });
+        return;
+      }
+      if (event !== 'push') {
+        jsonOk(res, { ok: true, msg: 'ignored event: ' + event });
+        return;
+      }
+      let body;
+      try {
+        body = JSON.parse(raw);
+      } catch (_) {
+        jsonErr(res, 400, 'bad json');
+        return;
+      }
+      if (body.ref !== 'refs/heads/main') {
+        jsonOk(res, { ok: true, msg: 'ignored ref: ' + body.ref });
+        return;
+      }
+      log('info', 'GitHub webhook: push to main, restarting server', { sender: body.sender && body.sender.login });
+      jsonOk(res, { ok: true, message: 'Restarting...' });
+      setTimeout(() => {
+        const scriptDir = path.resolve(__dirname);
+        if (process.platform === 'win32') {
+          spawn('cmd.exe', ['/c', 'START.bat'], { cwd: scriptDir, detached: true, stdio: 'ignore' }).unref();
+        } else {
+          spawn('bash', ['update_server.sh'], { cwd: scriptDir, detached: true, stdio: 'ignore' }).unref();
+        }
+      }, 500);
+    });
+    return;
+  }
+
   // -- Calendar Events --
   if (req.method === 'POST' && req.url === '/api/calendar-events') {
     jsonBody(req, res, (e, data) => {
