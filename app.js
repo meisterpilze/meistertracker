@@ -6173,12 +6173,14 @@ function getLabStockCounts() {
     .forEach((c) => {
       if (counts[c.type] !== undefined) counts[c.type]++;
     });
-  // Grain spawn = batches with batchType 'grain' that are still active
+  // Grain spawn = total bags across active grain batches
   batches
     .filter((b) => b.batchType === 'grain')
     .forEach((b) => {
       const { status } = getStatus(b.batchId);
-      if (!['DONE', 'EMPTY', 'CONTAM'].includes(status)) counts.GS++;
+      if (!['DONE', 'EMPTY', 'CONTAM'].includes(status)) {
+        counts.GS += (b.qty || 0);
+      }
     });
   return counts;
 }
@@ -6205,7 +6207,7 @@ function getLabStrainBreakdown() {
       const desc = b.strainDescriptor || '';
       const key = name + '|' + kz;
       if (!breakdown.GS[key]) breakdown.GS[key] = { name, kz, desc, count: 0, color: spColor(name) };
-      breakdown.GS[key].count++;
+      breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
     });
   return breakdown;
 }
@@ -6231,13 +6233,14 @@ function renderDashLabStock() {
       const label = getLabLabel(type);
       const tc = LAB_TYPE_COLORS[type];
       const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
+      const strainTotal = strains.reduce((sum, s) => sum + s.count, 0);
       const strainRows = strains
         .map((s) => {
-          const pct = count > 0 ? Math.round((s.count / count) * 100) : 0;
+          const pct = (type === 'GS' ? strainTotal : count) > 0 ? Math.round((s.count / (type === 'GS' ? strainTotal : count)) * 100) : 0;
           return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
         <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(s.desc) + '</span>' : ''}</span>
-        <span style="font-size:11px;font-weight:600;color:var(--c-text);min-width:18px;text-align:right">${s.count}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--c-text);min-width:18px;text-align:right">${type === 'GS' ? (Number.isInteger(s.count) ? s.count : s.count.toFixed(1)) + ' kg' : s.count}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px"></div></div>
       </div>`;
         })
@@ -6259,7 +6262,7 @@ function renderDashLabStock() {
         <span style="font-size:28px;font-weight:800;color:${low ? 'var(--c-red-dark)' : 'var(--c-text)'};line-height:1">${count}</span>
         <span style="font-size:11px;color:var(--c-text-muted)">${min > 0 ? '/ min ' + min : ''}</span>
       </div>
-      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + '</div>' : emptyMsg}
+      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + (type === 'GS' ? '<div style="border-top:1px solid var(--c-border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--c-text)"><span>Total</span><span>' + (Number.isInteger(strainTotal) ? strainTotal : strainTotal.toFixed(1)) + ' kg</span></div>' : '') + '</div>' : emptyMsg}
       <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:8px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
     </div>`;
     }).join('') +
