@@ -702,10 +702,9 @@ const MIGRATIONS = [
   {
     version: 28,
     description: 'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
+    disableForeignKeys: true,
     fn(db) {
       // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so recreate the table
-      // Temporarily disable FK checks — batches/cultures reference this table
-      db.exec('PRAGMA foreign_keys = OFF');
       db.exec(`
         CREATE TABLE mushroom_strains_new (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -719,7 +718,6 @@ const MIGRATIONS = [
       db.exec('INSERT INTO mushroom_strains_new SELECT * FROM mushroom_strains');
       db.exec('DROP TABLE mushroom_strains');
       db.exec('ALTER TABLE mushroom_strains_new RENAME TO mushroom_strains');
-      db.exec('PRAGMA foreign_keys = ON');
     }
   }
 ];
@@ -737,6 +735,8 @@ function runMigrations(db) {
   for (const m of MIGRATIONS) {
     if (applied.has(m.version)) continue;
     try {
+      // PRAGMA foreign_keys must be set outside a transaction to take effect
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = OFF');
       db.exec('BEGIN');
       if (m.fn) m.fn(db);
       else db.exec(m.sql);
@@ -746,9 +746,11 @@ function runMigrations(db) {
         m.description || ''
       );
       db.exec('COMMIT');
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = ON');
       console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
     } catch (e) {
       db.exec('ROLLBACK');
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = ON');
       // Tolerate "duplicate column" errors — column may already exist from initial schema
       if (e.message && e.message.includes('duplicate column')) {
         db.exec('BEGIN');
