@@ -1927,6 +1927,19 @@
                     </option>
                     <option value="full" data-i18n="print.barcodeFull">Vollständig (+ Fälligkeit)</option>
                   </select>
+                  <label
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                      font-size: 13px;
+                      color: var(--c-text);
+                      cursor: pointer;
+                      margin: 6px 0 0;
+                    "
+                    ><input type="checkbox" id="bag-qr" style="width: auto; margin: 0" />
+                    <span data-i18n="print.qrCode">QR code</span></label
+                  >
                 </div>
               </div>
               <div style="margin-bottom: 10px">
@@ -1957,19 +1970,6 @@
                   </span>
                 </div>
               </div>
-              <label
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  font-size: 13px;
-                  color: var(--c-text);
-                  cursor: pointer;
-                  margin: 0 0 10px;
-                "
-                ><input type="checkbox" id="bag-qr" style="width: auto; margin: 0" />
-                <span data-i18n="print.qrInstead">QR code instead of barcode</span></label
-              >
               <div style="display: flex; gap: 8px; flex-wrap: wrap">
                 <button id="prt-27" class="btn btn-p" data-i18n="print.printDirect">Print labels (direct)</button>
               </div>
@@ -2026,7 +2026,7 @@
                       margin: 8px 0 0;
                     "
                     ><input type="checkbox" id="lab-qr" style="width: auto; margin: 0" />
-                    <span data-i18n="print.qrInstead">QR code instead of barcode</span></label
+                    <span data-i18n="print.qrCode">QR code</span></label
                   >
                   <div style="margin-top: 12px; display: flex; gap: 8px">
                     <button id="prt-28" class="btn btn-p" data-i18n="print.printLabDirect">
