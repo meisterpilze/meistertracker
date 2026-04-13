@@ -48,7 +48,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'daily_briefing',
-    "Get today's briefing: batches due today/overdue, open tasks by assignee, low-stock alerts, and today's calendar events",
+    "Get today's operational briefing: batches due/overdue, open tasks by assignee, low-stock alerts, and calendar events. READ-ONLY overview — use other tools to take action on items.",
     { date: z.string().optional().describe('ISO date (YYYY-MM-DD), defaults to today') },
     async ({ date }) => {
       const batches = db.getAllBatches(database);
@@ -136,7 +136,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_batches',
-    'List production batches with optional filters for Pilzsorte (strainId), species, strain, batch type, or date range',
+    'List production batches with optional filters. READ-ONLY listing. To modify batches use update_batch (metadata), add_bags_to_batch (more bags), rename_batch (change ID), or delete_batch (remove entirely).',
     {
       strainId: z
         .number()
@@ -186,7 +186,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_batch_details',
-    'Get full details for a single batch including bags, scan history, harvest totals, and current bag locations',
+    'Get full details for a single batch: bags with current locations, scan history, harvest totals, and per-flush breakdown. READ-ONLY. To modify use update_batch, to record harvests use log_harvest, to move bags use move_bags.',
     { batchId: z.string().describe('Batch ID') },
     async ({ batchId }) => {
       const batch = db.readBatchById(database, batchId);
@@ -221,7 +221,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_zone_overview',
-    'Get all zones with rack counts, current bag counts, and capacity utilization',
+    'Get all zones with rack counts, current bag counts, and capacity utilization. READ-ONLY. To manage zones use manage_zones, to manage racks use manage_racks.',
     {},
     async () => {
       const zones = db.getZonesWithRacks(database).map((z) => {
@@ -248,7 +248,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_inventory_status',
-    'Get current substrate inventory levels, thresholds, and low-stock alerts',
+    'Get current substrate inventory levels, thresholds, low-stock alerts, and recent transactions. READ-ONLY. To log deliveries or usage use update_inventory.',
     {},
     async () => {
       const inv = db.getInventory(database, 20);
@@ -270,7 +270,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_tasks',
-    'List tasks with optional filters for assignee, priority, completion status, or date range',
+    'List team tasks with optional filters for assignee, priority, completion status, or date range. READ-ONLY. To create tasks use create_task, to modify use update_task.',
     {
       assignee: z.string().optional().describe('Filter by assignee name'),
       priority: z.enum(['low', 'med', 'high']).optional().describe('Filter by priority'),
@@ -307,7 +307,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_calendar_events',
-    'Get calendar events within a date range, optionally filtered by category',
+    'Get calendar events within a date range, optionally filtered by category. READ-ONLY. To create events use create_calendar_event.',
     {
       startDate: z.string().optional().describe('ISO date — start of range (default: today)'),
       endDate: z.string().optional().describe('ISO date — end of range (default: 30 days from start)'),
@@ -345,7 +345,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_cultures',
-    'List mushroom cultures with optional filters for type, Pilzsorte (strainId), species, or status',
+    'List mushroom cultures with optional filters for type (MC/PD/LC/G2G), Pilzsorte (strainId), species, or status. READ-ONLY. To modify use update_culture, to delete use delete_culture.',
     {
       type: z.string().optional().describe('Culture type (MC, PD, or LC)'),
       strainId: z
@@ -372,7 +372,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_harvest_report',
-    'Get harvest data aggregated by batch, species, or month with totals and per-flush breakdowns',
+    'Get harvest data aggregated by batch, species, or month with totals and per-flush breakdowns. READ-ONLY. To record a new harvest use log_harvest.',
     {
       groupBy: z.enum(['batch', 'species', 'month']).optional().describe('Aggregation dimension (default: batch)'),
       batchId: z.string().optional().describe('Filter to a specific batch'),
@@ -417,7 +417,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'get_scan_log',
-    'Get recent scan log entries (bag movements), optionally filtered by batch, bag, action, or date',
+    'Get scan log entries (bag movements/placements/removals) with optional filters. READ-ONLY history. To log new bag movements use move_bags.',
     {
       batchId: z.string().optional().describe('Filter by batch ID'),
       bagId: z.string().optional().describe('Filter by bag ID'),
@@ -448,7 +448,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_batch',
-    'Create a new production batch with auto-generated bags. Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain/species are stored as free-text fallback.',
+    'Create a new production batch with auto-generated bags. Prefer strainId (use list_mushroom_strains); when omitted, species is required. Does NOT auto-deduct inventory — use update_inventory separately for substrate usage. Does NOT place bags in zones — use move_bags to ADD bags after creation.',
     {
       batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
       strainId: z
@@ -523,7 +523,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_batch',
-    'Update fields on an existing batch (notes, species, strain, strainId, days, due date). Pass strainId to switch Pilzsorte — species/strain will be auto-updated from mushroom_strains. To change qty, use add_bags_to_batch instead — it keeps the inventory log consistent.',
+    'Update batch METADATA ONLY: notes, species, strain, strainId, days, due date. NOT for contamination (→ move_bags with MOVE to contam zone). NOT for harvests/weights (→ log_harvest). NOT for inventory changes (→ update_inventory). NOT for adding bags (→ add_bags_to_batch). Pass strainId to switch Pilzsorte — species/strain auto-update.',
     {
       batchId: z.string().describe('Batch ID'),
       strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
@@ -562,7 +562,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_task',
-    'Create a new task for the team',
+    'Create a team task (todo/work item). ONLY for real team work: cleaning, ordering, maintenance, reviews. NOT for documenting contamination (→ move_bags). NOT for recording harvests (→ log_harvest). NOT for inventory changes (→ update_inventory). NOT for logging bag movements (→ move_bags).',
     {
       text: z.string().describe('Task description'),
       priority: z.enum(['low', 'med', 'high']).optional().describe('Priority (default: med)'),
@@ -591,7 +591,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_task',
-    'Update a task — change text, priority, assignee, due date, description, or mark as done/undone',
+    'Update an existing team task — change text, priority, assignee, due date, description, or mark as done/undone. ONLY for modifying existing tasks. NOT for physical actions like contamination or harvests.',
     {
       id: z.number().describe('Task ID'),
       text: z.string().optional(),
@@ -662,7 +662,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'log_harvest',
-    'Record a mushroom harvest with weight, batch, bag, and flush number. Species/strain auto-fill from the batch when omitted; pass strainId to resolve from mushroom_strains instead.',
+    'Record a mushroom harvest with weight in grams. ALWAYS use this tool when grams, weight, or harvest amount is mentioned — NEVER record harvests as notes in update_batch. Species/strain auto-fill from the batch when omitted; pass strainId to resolve from mushroom_strains.',
     {
       batch: z.string().describe('Batch ID'),
       grams: z.number().describe('Harvest weight in grams (>= 0)'),
@@ -720,7 +720,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'move_bags',
-    'Log bag movement(s) between zones/racks. Supports ADD (place bag), MOVE (relocate), and REMOVE (discard)',
+    'Log physical bag movements between zones/racks. Use for ALL physical bag state changes: ADD (place bag in zone), MOVE (relocate — including to contamination zone for contaminated bags), REMOVE (permanently remove bag from zone tracking; scan history preserved). DESTRUCTIVE: REMOVE requires confirm: true. For contamination ALWAYS use MOVE to a contam zone first. Only use REMOVE when user explicitly says entsorgen/wegwerfen/löschen. NOT for recording harvests (→ log_harvest). NOT for batch metadata (→ update_batch).',
     {
       entries: z
         .array(
@@ -732,10 +732,17 @@ function createMcpServer(database, onWrite) {
             to: z.string().optional().describe('Destination zone/rack (required for ADD/MOVE)')
           })
         )
-        .describe('Array of bag movements')
+        .describe('Array of bag movements'),
+      confirm: z.boolean().optional().describe('Required true for REMOVE actions. Safety confirmation for destructive operations.')
     },
-    async ({ entries }) => {
+    async ({ entries, confirm }) => {
       try {
+        const hasRemove = entries.some((e) => e.action === 'REMOVE');
+        if (hasRemove && confirm !== true) {
+          return errResult(
+            'REMOVE entfernt Bags dauerhaft aus dem Zonen-Tracking (Scan-Historie bleibt erhalten). Bitte mit confirm: true bestätigen. Bei Kontamination besser MOVE in eine Kontam-Zone verwenden.'
+          );
+        }
         const now = new Date().toISOString();
         const enriched = entries.map((e) => {
           const b = db.readBatchById(database, e.batch);
@@ -761,7 +768,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_inventory',
-    'Log a substrate inventory change (delivery, usage, correction). Materials: hardwood, wheatbran, gypsum, grain',
+    'Log a substrate inventory change: delivery (positive deltaKg), usage (negative deltaKg), or correction. Materials: hardwood, wheatbran, gypsum, grain. ALWAYS use this for stock changes — NEVER record inventory as task (→ create_task) or batch note (→ update_batch).',
     {
       material: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain']).describe('Material type'),
       deltaKg: z.number().describe('Change in kg (positive for delivery, negative for usage)'),
@@ -787,7 +794,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'update_culture',
-    "Update a mushroom culture's status, notes, Pilzsorte (strainId), species, strain, or source. Pass strainId to switch Pilzsorte — species/strain auto-update from mushroom_strains.",
+    "Update a mushroom culture's metadata: status, notes, Pilzsorte (strainId), species, strain, or source. For status changes like 'contam' use this. NOT for physical bag handling (→ move_bags). Pass strainId to switch Pilzsorte — species/strain auto-update.",
     {
       id: z.string().describe('Culture ID'),
       status: z.string().optional().describe('New status (e.g. active, archived, contaminated)'),
@@ -820,7 +827,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'create_culture',
-    'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain is stored as free-text fallback.',
+    'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer strainId (use list_mushroom_strains); when omitted, species is required. NOT for creating production batches (→ create_batch).',
     {
       id: z.string().describe('Culture ID (e.g. MC-KINGS-250301-01)'),
       type: z.enum(['MC', 'PD', 'LC', 'G2G']).describe('Culture type'),
@@ -870,7 +877,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'list_mushroom_strains',
-    'List all Pilzsorten (mushroom strains) with id, name, kuerzel, description. Use the id with create_batch / create_culture / update_batch / update_culture / log_harvest.',
+    'List all Pilzsorten (mushroom strains) with id, name, kuerzel, description. READ-ONLY. Use the returned id with create_batch, create_culture, update_batch, update_culture, or log_harvest to link to a strain.',
     {},
     async () => {
       return json(db.listMushroomStrains(database));
@@ -928,7 +935,7 @@ function createMcpServer(database, onWrite) {
 
   server.tool(
     'delete_mushroom_strain',
-    'Delete a Pilzsorte. Fails if it is still referenced by any batch or culture (delete protection).',
+    'Delete a Pilzsorte. DESTRUCTIVE — fails safely if still referenced by any batch or culture (delete protection). Cannot be undone.',
     {
       id: z.number().describe('Pilzsorte id')
     },
