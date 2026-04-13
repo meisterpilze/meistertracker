@@ -3677,7 +3677,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (e) return;
         let session = sessionId ? mcpSessions.get(sessionId) : null;
         if (!session) {
-          const server = createMcpServer(database, () => broadcastSSE(null));
+          const server = createMcpServer(database, () => broadcastSSE(null), { printZPL, checkPrinterAvailable });
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
             onsessioninitialized: (sid) => {
