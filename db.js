@@ -721,6 +721,14 @@ const MIGRATIONS = [
       db.exec('DROP TABLE mushroom_strains');
       db.exec('ALTER TABLE mushroom_strains_new RENAME TO mushroom_strains');
     }
+  },
+  {
+    version: 29,
+    description: 'Clean up orphaned scan_log and harvests entries from previously deleted batches',
+    fn(db) {
+      db.exec('DELETE FROM scan_log WHERE batch IS NOT NULL AND batch NOT IN (SELECT batch_id FROM batches)');
+      db.exec('DELETE FROM harvests WHERE batch IS NOT NULL AND batch NOT IN (SELECT batch_id FROM batches)');
+    }
   }
 ];
 
@@ -1892,6 +1900,8 @@ function deleteBatchById(db, batchId) {
         );
       }
     }
+    db.prepare('DELETE FROM harvests WHERE batch=?').run(batchId);
+    db.prepare('DELETE FROM scan_log WHERE batch=?').run(batchId);
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
     incrementDataVersion(db);
     db.exec('COMMIT');
