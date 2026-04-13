@@ -67,17 +67,41 @@ function itemsToZPL(items) {
   let z = '^XA^PW400^LL' + ll + '^CI28^LH0,0';
   for (const it of items) {
     if (it.type === 'barcode') {
-      z += '^FO' + it.x + ',' + it.y + '^BY' + it.mw + ',2.0,' + it.h +
-        '^BCN,' + it.h + ',N,N,N^FD' + zplText(it.val) + '^FS';
+      z +=
+        '^FO' +
+        it.x +
+        ',' +
+        it.y +
+        '^BY' +
+        it.mw +
+        ',2.0,' +
+        it.h +
+        '^BCN,' +
+        it.h +
+        ',N,N,N^FD' +
+        zplText(it.val) +
+        '^FS';
     } else if (it.type === 'text') {
       const fw = it.fontW || it.fontH;
       const bw = it.blockW || 400;
       const bx = it.x || 0;
-      z += '^FO' + bx + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw +
-        '^FD' + zplText(it.text) + '^FS';
+      z +=
+        '^FO' + bx + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw + '^FD' + zplText(it.text) + '^FS';
       if (it.bold) {
-        z += '^FO' + (bx + 1) + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw +
-          '^FD' + zplText(it.text) + '^FS';
+        z +=
+          '^FO' +
+          (bx + 1) +
+          ',' +
+          it.y +
+          '^FB' +
+          bw +
+          ',1,0,C^A0N,' +
+          it.fontH +
+          ',' +
+          fw +
+          '^FD' +
+          zplText(it.text) +
+          '^FS';
       }
     } else if (it.type === 'qr') {
       z += '^FO' + it.x + ',' + it.y + '^BQN,2,4^FDMM,A' + zplText(it.val) + '^FS';
@@ -89,7 +113,8 @@ function itemsToZPL(items) {
 function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   const items = [];
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
-  const bcY = 40, bcH = 90;
+  const bcY = 40,
+    bcH = 90;
   const textW = qr ? 180 : 400;
   if (qr) {
     items.push({ type: 'qr', x: 190, y: 10, size: 200, val: bagId });
@@ -112,8 +137,12 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   }
   if (detail === 'full' && batch.due) {
     const due = new Date(batch.due);
-    const dueStr = String(due.getDate()).padStart(2, '0') + '.' +
-      String(due.getMonth() + 1).padStart(2, '0') + '.' + due.getFullYear();
+    const dueStr =
+      String(due.getDate()).padStart(2, '0') +
+      '.' +
+      String(due.getMonth() + 1).padStart(2, '0') +
+      '.' +
+      due.getFullYear();
     const line3Y = line1Y + 56;
     items.push({ type: 'text', y: line3Y, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
   }
@@ -126,7 +155,8 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const kz = c.strainDescriptor || '';
   const sp = name + (kz ? ' \u2013 ' + kz : '');
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
-  const bcY = 40, bcH = 90;
+  const bcY = 40,
+    bcH = 90;
   const textW = qr ? 180 : 400;
   if (qr) {
     items.push({ type: 'qr', x: 190, y: 10, size: 200, val: id });
@@ -1784,7 +1814,10 @@ function createMcpServer(database, onWrite, printer) {
     'Generate and print bag labels for a batch. Set preview=true to return ZPL without printing.',
     {
       batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
-      detail: z.enum(['minimal', 'sorte', 'full']).optional().describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+strain/notes, full=+due date'),
+      detail: z
+        .enum(['minimal', 'sorte', 'full'])
+        .optional()
+        .describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+strain/notes, full=+due date'),
       qr: z.boolean().optional().describe('Use QR code instead of barcode (default: false)'),
       bagFrom: z.number().optional().describe('Start of bag range (1-based, inclusive)'),
       bagTo: z.number().optional().describe('End of bag range (1-based, inclusive)'),
@@ -1845,7 +1878,10 @@ function createMcpServer(database, onWrite, printer) {
     'Generate and print labels for mushroom cultures. Set preview=true to return ZPL without printing.',
     {
       cultureIds: z.array(z.string()).describe('Array of culture IDs to print (e.g. ["MC-KINGS-250301-01"])'),
-      detail: z.enum(['minimal', 'sorte', 'full']).optional().describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+species/strain, full=+date'),
+      detail: z
+        .enum(['minimal', 'sorte', 'full'])
+        .optional()
+        .describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+species/strain, full=+date'),
       qr: z.boolean().optional().describe('Use QR code instead of barcode (default: false)'),
       preview: z.boolean().optional().describe('If true, return ZPL string without sending to printer (default: false)')
     },
