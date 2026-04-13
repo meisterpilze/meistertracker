@@ -9347,7 +9347,7 @@ function openEventDetail(ev){
     assignEl._currentBatchId=ev.id;
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
-    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
+    btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button><button class="btn btn-p" data-cal-action="save-batch-due" data-cal-id="'+esc(ev.id)+'">'+esc(t('calEntry.save'))+'</button>';
 
   }else if(ev.type==='caldav-import'){
     titleEl.textContent=ev.label;
@@ -9378,6 +9378,7 @@ document.getElementById('cal-detail-btns').addEventListener('click',function(e){
   if(action==='delete-task')return deleteTaskFromCalendar(id);
   if(action==='toggle-task')return toggleTaskFromCalendar(id);
   if(action==='edit-task')return editTaskFromCalendar(id);
+  if(action==='save-batch-due')return saveBatchDueFromDetail(id);
 });
 
 // Change handler for batch due-date picker in detail modal.
@@ -9393,6 +9394,20 @@ function editEventFromDetail(id){
   closeEventDetail();
   const ce=calendarEvents.find(x=>x.id===id);
   if(ce)openEventModal(ce.startDate,ce.startTime,ce);
+}
+
+function saveBatchDueFromDetail(id){
+  const picker=document.getElementById('cal-detail-batch-date');
+  if(!picker||!picker.value)return;
+  const b=batches.find(x=>x.batchId===id);if(!b)return;
+  const newDue=new Date(picker.value+'T12:00:00');
+  b.due=newDue.toISOString();
+  const created=new Date(b.created);
+  b.days=Math.max(1,Math.round((newDue-created)/MS_PER_DAY));
+  apiPatch('/api/batches/'+encodeURIComponent(id),{due:b.due,days:b.days});
+  renderCalendar();
+  if(typeof pushBatchCaldav==='function')pushBatchCaldav(b);
+  closeEventDetail();
 }
 
 function deleteCalEventFromDetail(id){
