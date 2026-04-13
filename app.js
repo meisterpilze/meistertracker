@@ -5938,7 +5938,20 @@ async function runBatchIdMigration(){
         const r=await apiPost('/api/batches/'+encodeURIComponent(oldId)+'/rename',{newId});
         if(!r||r.error){failed++;failedList.push(oldId+': '+(r&&r.error||'unknown error'));continue}
         batches.forEach(b=>{
-          if(b.batchId===oldId){b.batchId=newId;b.bags=(b.bags||[]).map(bag=>bag.replace(oldId,newId))}
+          if(b.batchId===oldId){
+            const oldBags=b.bags||[];
+            b.batchId=newId;b.bags=oldBags.map(bag=>bag.replace(oldId,newId));
+            // Update barcode registry: re-key renamed bags
+            oldBags.forEach((oldBag,i)=>{
+              const newBag=b.bags[i];
+              const bc=barcodeByEntity.get('bag:'+oldBag);
+              if(bc!=null){
+                barcodeByEntity.delete('bag:'+oldBag);
+                barcodeByEntity.set('bag:'+newBag,bc);
+                barcodeRegistry.set(bc,{type:'bag',id:newBag});
+              }
+            });
+          }
         });
         scanLog.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
         movements.forEach(e=>{if(e.batch===oldId){e.batch=newId;if(e.bag)e.bag=e.bag.replace(oldId,newId)}});
