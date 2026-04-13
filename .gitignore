@@ -27,3 +27,6 @@ certs/
 watchdog.pid
 watchdog.log
 watchdog-error.log
+
+# Claude Code
+.claude/

@@ -31,8 +31,154 @@ function buildBagLocationMap(scanLog) {
   return map;
 }
 
+// ── ZPL Label Generation ─────────────────────────────────
+// Ported from app.js — server-side copy so MCP tools can generate labels
+// without a browser. Canvas is 400×240 dots (50×30mm @ 203dpi).
+
+function bcParams(val, qzMult) {
+  const mods = 35 + val.length * 11;
+  let mw = 3;
+  qzMult = qzMult || 10;
+  const qz = (m) => m * qzMult;
+  while (mw > 1 && mods * mw + 2 * qz(mw) > 400) mw--;
+  const w = mods * mw;
+  return { mw, x: Math.max(qz(mw), Math.round((400 - w) / 2)) };
+}
+
+function zplText(s) {
+  return String(s || '').replace(/[\^~]/g, '');
+}
+
+function fmtDt(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return dd + '.' + mm + '.' + yy;
+}
+
+function itemsToZPL(items) {
+  let maxY = 140;
+  for (const it of items) {
+    const bottom = it.type === 'barcode' ? it.y + it.h : it.type === 'text' ? it.y + it.fontH : it.y + (it.size || 80);
+    if (bottom > maxY) maxY = bottom;
+  }
+  const ll = Math.min(240, Math.max(160, maxY + 10));
+  let z = '^XA^PW400^LL' + ll + '^CI28^LH0,0';
+  for (const it of items) {
+    if (it.type === 'barcode') {
+      z +=
+        '^FO' +
+        it.x +
+        ',' +
+        it.y +
+        '^BY' +
+        it.mw +
+        ',2.0,' +
+        it.h +
+        '^BCN,' +
+        it.h +
+        ',N,N,N^FD' +
+        zplText(it.val) +
+        '^FS';
+    } else if (it.type === 'text') {
+      const fw = it.fontW || it.fontH;
+      const bw = it.blockW || 400;
+      const bx = it.x || 0;
+      z +=
+        '^FO' + bx + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw + '^FD' + zplText(it.text) + '^FS';
+      if (it.bold) {
+        z +=
+          '^FO' +
+          (bx + 1) +
+          ',' +
+          it.y +
+          '^FB' +
+          bw +
+          ',1,0,C^A0N,' +
+          it.fontH +
+          ',' +
+          fw +
+          '^FD' +
+          zplText(it.text) +
+          '^FS';
+      }
+    } else if (it.type === 'qr') {
+      z += '^FO' + it.x + ',' + it.y + '^BQN,2,4^FDMM,A' + zplText(it.val) + '^FS';
+    }
+  }
+  return z + '^XZ';
+}
+
+function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
+  const items = [];
+  const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
+  const bcY = 40,
+    bcH = 90;
+  const textW = qr ? 180 : 400;
+  if (qr) {
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: bagId });
+  } else {
+    const bc = bcParams(bcVal);
+    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
+  }
+  const line1Y = bcY + bcH + 6;
+  items.push({ type: 'text', y: line1Y, blockW: textW, fontH: 24, text: bagId });
+  if (detail === 'sorte' || detail === 'full') {
+    const species = batch.strainName || batch.species || '';
+    const strainTxt = (batch.strainText || '').trim();
+    const rawNotes = (batch.notes || '').trim();
+    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+    const parts = [species];
+    if (strainTxt) parts.push(strainTxt);
+    if (notes) parts.push(notes);
+    const line2 = parts.join(' \u2013 ');
+    if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: textW, fontH: 24, text: line2 });
+  }
+  if (detail === 'full' && batch.due) {
+    const due = new Date(batch.due);
+    const dueStr =
+      String(due.getDate()).padStart(2, '0') +
+      '.' +
+      String(due.getMonth() + 1).padStart(2, '0') +
+      '.' +
+      due.getFullYear();
+    const line3Y = line1Y + 56;
+    items.push({ type: 'text', y: line3Y, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+  }
+  return items;
+}
+
+function labLabelItems(id, c, detail, barcodeNum, qr) {
+  const items = [];
+  const name = c.strainName || c.species || '';
+  const kz = c.strainDescriptor || '';
+  const sp = name + (kz ? ' \u2013 ' + kz : '');
+  const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
+  const bcY = 40,
+    bcH = 90;
+  const textW = qr ? 180 : 400;
+  if (qr) {
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: id });
+  } else {
+    const bc = bcParams(bcVal);
+    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
+  }
+  const line1Y = bcY + bcH + 6;
+  const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+  items.push({ type: 'text', x: 0, y: line1Y, blockW: textW, fontH: 24, text: line1Text });
+  if (detail === 'sorte' || detail === 'full') {
+    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: textW, fontH: 24, text: sp });
+  }
+  if (detail === 'full' && c.created) {
+    const line3Y = line1Y + (sp ? 56 : 28);
+    items.push({ type: 'text', x: 0, y: line3Y, blockW: textW, fontH: 28, text: fmtDt(c.created), bold: true });
+  }
+  return items;
+}
+
 // ── MCP Server Factory ────────────────────────────────────
-function createMcpServer(database, onWrite) {
+function createMcpServer(database, onWrite, printer) {
   const server = new McpServer({
     name: 'meistertracker',
     version: '1.0.0'
@@ -1640,6 +1786,151 @@ function createMcpServer(database, onWrite) {
         );
       }
       return json(db.getMaintenanceDue(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // LABEL PRINTING
+  // ──────────────────────────────────────────────────────────
+
+  server.tool(
+    'get_printer_status',
+    'Check whether the Zebra label printer is connected and available',
+    {},
+    async () => {
+      if (!printer || !printer.checkPrinterAvailable) {
+        return errResult('Printer functions not available (server not configured for printing)');
+      }
+      return new Promise((resolve) => {
+        printer.checkPrinterAvailable((err, found) => {
+          resolve(json({ available: !!found, printerName: 'ZDesigner GK420d' }));
+        });
+      });
+    }
+  );
+
+  server.tool(
+    'print_bag_labels',
+    'Generate and print bag labels for a batch. Set preview=true to return ZPL without printing.',
+    {
+      batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
+      detail: z
+        .enum(['minimal', 'sorte', 'full'])
+        .optional()
+        .describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+strain/notes, full=+due date'),
+      qr: z.boolean().optional().describe('Use QR code instead of barcode (default: false)'),
+      bagFrom: z.number().optional().describe('Start of bag range (1-based, inclusive)'),
+      bagTo: z.number().optional().describe('End of bag range (1-based, inclusive)'),
+      preview: z.boolean().optional().describe('If true, return ZPL string without sending to printer (default: false)')
+    },
+    async (params) => {
+      try {
+        const batch = db.readBatchById(database, params.batchId);
+        if (!batch) return errResult('Batch not found: ' + params.batchId);
+
+        let bags = batch.bags;
+        if (params.bagFrom || params.bagTo) {
+          const from = (params.bagFrom || 1) - 1;
+          const to = params.bagTo || bags.length;
+          bags = bags.slice(from, to);
+        }
+        if (!bags.length) return errResult('No bags in selected range');
+
+        const barcodes = db.assignBarcodes(database, 'bag', bags);
+        const detail = params.detail || 'sorte';
+        const useQr = params.qr || false;
+
+        const zpl = bags
+          .map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, detail, barcodes[bagId], useQr)))
+          .join('\n');
+
+        if (params.preview) {
+          return json({ success: true, batchId: params.batchId, labelCount: bags.length, zpl });
+        }
+
+        if (!printer || !printer.printZPL) {
+          return errResult('Printer functions not available (server not configured for printing)');
+        }
+
+        return new Promise((resolve) => {
+          printer.checkPrinterAvailable((_, found) => {
+            if (!found) {
+              resolve(errResult('Printer not found. Check that the Zebra printer is connected and powered on.'));
+              return;
+            }
+            printer.printZPL(zpl, (err) => {
+              if (err) {
+                resolve(errResult('Print failed: ' + err));
+              } else {
+                resolve(json({ success: true, batchId: params.batchId, labelCount: bags.length, printed: true }));
+              }
+            });
+          });
+        });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  server.tool(
+    'print_culture_labels',
+    'Generate and print labels for mushroom cultures. Set preview=true to return ZPL without printing.',
+    {
+      cultureIds: z.array(z.string()).describe('Array of culture IDs to print (e.g. ["MC-KINGS-250301-01"])'),
+      detail: z
+        .enum(['minimal', 'sorte', 'full'])
+        .optional()
+        .describe('Label detail level (default: sorte). minimal=barcode+ID, sorte=+species/strain, full=+date'),
+      qr: z.boolean().optional().describe('Use QR code instead of barcode (default: false)'),
+      preview: z.boolean().optional().describe('If true, return ZPL string without sending to printer (default: false)')
+    },
+    async (params) => {
+      try {
+        if (!params.cultureIds.length) return errResult('No culture IDs provided');
+        const allCultures = db.getAllCultures(database);
+        const cultureMap = new Map(allCultures.map((c) => [c.id, c]));
+
+        const missing = params.cultureIds.filter((id) => !cultureMap.has(id));
+        if (missing.length) return errResult('Cultures not found: ' + missing.join(', '));
+
+        const barcodes = db.assignBarcodes(database, 'culture', params.cultureIds);
+        const detail = params.detail || 'sorte';
+        const useQr = params.qr || false;
+
+        const zpl = params.cultureIds
+          .map((id) => {
+            const c = cultureMap.get(id);
+            return itemsToZPL(labLabelItems(id, c, detail, barcodes[id], useQr));
+          })
+          .join('\n');
+
+        if (params.preview) {
+          return json({ success: true, labelCount: params.cultureIds.length, zpl });
+        }
+
+        if (!printer || !printer.printZPL) {
+          return errResult('Printer functions not available (server not configured for printing)');
+        }
+
+        return new Promise((resolve) => {
+          printer.checkPrinterAvailable((_, found) => {
+            if (!found) {
+              resolve(errResult('Printer not found. Check that the Zebra printer is connected and powered on.'));
+              return;
+            }
+            printer.printZPL(zpl, (err) => {
+              if (err) {
+                resolve(errResult('Print failed: ' + err));
+              } else {
+                resolve(json({ success: true, labelCount: params.cultureIds.length, printed: true }));
+              }
+            });
+          });
+        });
+      } catch (e) {
+        return errResult(e.message);
+      }
     }
   );
 
