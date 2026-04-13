@@ -1059,6 +1059,7 @@ const LANG = {
     'calEntry.moveTitle': 'Move entry',
     'calDetail.close': 'Close',
     'calDetail.edit': 'Edit',
+    'calDetail.changeDate': 'Change due date',
     'calDetail.assignedTo': 'Assigned to',
     'calDetail.everyone': 'Everyone',
     'calDetail.taskDue': 'Task',
@@ -2284,6 +2285,7 @@ const LANG = {
     'calEntry.moveTitle': 'Eintrag verschieben',
     'calDetail.close': 'Schließen',
     'calDetail.edit': 'Bearbeiten',
+    'calDetail.changeDate': 'Fälligkeitsdatum ändern',
     'calDetail.assignedTo': 'Zugewiesen',
     'calDetail.everyone': 'Alle',
     'calDetail.taskDue': 'Aufgabe',
@@ -3518,6 +3520,7 @@ const LANG = {
     'calEntry.moveTitle': 'Mover entrada',
     'calDetail.close': 'Fechar',
     'calDetail.edit': 'Editar',
+    'calDetail.changeDate': 'Alterar data de vencimento',
     'calDetail.assignedTo': 'Atribuído',
     'calDetail.everyone': 'Todos',
     'calDetail.taskDue': 'Tarefa',
@@ -9324,7 +9327,9 @@ function openEventDetail(ev){
     if(b&&b.due)meta+=' — '+new Date(b.due).toLocaleDateString(loc(),{day:'numeric',month:'long',year:'numeric'});
     metaEl.textContent=meta;
     badgesEl.innerHTML='<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">'+esc(t('calDetail.batchDue'))+'</span>';
-    assignEl.innerHTML='';
+    const curDate=b&&b.due?b.due.slice(0,10):'';
+    assignEl.innerHTML='<label style="font-size:12px;color:var(--c-text-sec)">'+esc(t('calDetail.changeDate'))+'</label> <input type="date" id="cal-detail-batch-date" value="'+curDate+'" style="margin-left:8px;font-size:13px;padding:4px 8px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);color:var(--c-text)">';
+    assignEl._currentBatchId=ev.id;
     descEl.textContent=b?(b.species+(b.strain?' ('+b.strain+')':'')):'';
     descEl.style.display='';
     btnsEl.innerHTML='<span style="flex:1"></span><button class="btn" data-cal-action="close">'+esc(t('calDetail.close'))+'</button>';
@@ -9358,6 +9363,15 @@ document.getElementById('cal-detail-btns').addEventListener('click',function(e){
   if(action==='delete-task')return deleteTaskFromCalendar(id);
   if(action==='toggle-task')return toggleTaskFromCalendar(id);
   if(action==='edit-task')return editTaskFromCalendar(id);
+});
+
+// Change handler for batch due-date picker in detail modal.
+document.getElementById('cal-detail-assignee').addEventListener('change',function(e){
+  if(e.target.id!=='cal-detail-batch-date')return;
+  const newDate=e.target.value;if(!newDate)return;
+  const batchId=this._currentBatchId;if(!batchId)return;
+  handleCalendarDrop('batch-due',batchId,newDate);
+  closeEventDetail();
 });
 
 function editEventFromDetail(id){
