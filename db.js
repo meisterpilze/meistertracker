@@ -689,11 +689,26 @@ function runMigrations(db) {
 // ── Open / Init ──────────────────────────────────────────────
 function backfillBarcodes(db) {
   const queries = [
-    { type: 'bag', sql: 'SELECT bag_id AS id FROM bags WHERE bag_id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type=\'bag\') ORDER BY bag_id' },
-    { type: 'culture', sql: 'SELECT id FROM cultures WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type=\'culture\') ORDER BY created, id' },
-    { type: 'asset', sql: 'SELECT asset_id AS id FROM assets WHERE asset_id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type=\'asset\') ORDER BY asset_id' },
-    { type: 'zone', sql: 'SELECT id FROM zones WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type=\'zone\') ORDER BY sort_order, id' },
-    { type: 'rack', sql: 'SELECT id FROM racks WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type=\'rack\') ORDER BY zone_id, sort_order, id' },
+    {
+      type: 'bag',
+      sql: "SELECT bag_id AS id FROM bags WHERE bag_id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='bag') ORDER BY bag_id"
+    },
+    {
+      type: 'culture',
+      sql: "SELECT id FROM cultures WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='culture') ORDER BY created, id"
+    },
+    {
+      type: 'asset',
+      sql: "SELECT asset_id AS id FROM assets WHERE asset_id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='asset') ORDER BY asset_id"
+    },
+    {
+      type: 'zone',
+      sql: "SELECT id FROM zones WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='zone') ORDER BY sort_order, id"
+    },
+    {
+      type: 'rack',
+      sql: "SELECT id FROM racks WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='rack') ORDER BY zone_id, sort_order, id"
+    }
   ];
   const now = new Date().toISOString();
   let count = 0;
