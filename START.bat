@@ -248,6 +248,27 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 
+REM Tag this commit as stable (last known-good deployment)
+where git >nul 2>&1
+if !errorlevel! equ 0 (
+    git tag -f stable HEAD >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo  -^> Tagged current commit as 'stable'.
+    )
+)
+
+REM Start watchdog (health monitor + auto-revert)
+if exist "watchdog.js" (
+    call pm2 describe meisterpilze-watchdog >nul 2>&1
+    if !errorlevel! equ 0 (
+        call pm2 restart meisterpilze-watchdog >nul 2>&1
+    ) else (
+        call pm2 start watchdog.js --name meisterpilze-watchdog >nul 2>&1
+    )
+    call pm2 save >nul 2>&1
+    echo  -^> Watchdog started ^(health check every 30s^).
+)
+
 echo.
 echo  ========================================
 echo    Server started successfully!
