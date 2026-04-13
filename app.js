@@ -10726,44 +10726,63 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
       bcVal = bagId.replace(/-/g, '_');
     }
   }
-  // Fixed barcode/QR size regardless of detail level: ≥5mm top margin (40 dots),
-  // 90-dot barcode fits all 3 text lines below within the 240-dot canvas.
-  const bcY = 40,
-    bcH = 90;
-  // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
-  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: bagId });
+    // QR mode: small QR top-right, text lines top-left.
+    // mag=4 → ~100×100 dots for typical IDs (25 modules × 4 dots).
+    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: bagId });
+    const textW = 280; // left portion, leaves room for QR
+    // Line 1 — bag ID (always shown)
+    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: bagId });
+    if (detail === 'sorte' || detail === 'full') {
+      const species = batch.strainName || batch.species || '';
+      const strainTxt = (batch.strainText || '').trim();
+      const rawNotes = (batch.notes || '').trim();
+      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+      let parts = [species];
+      if (strainTxt) parts.push(strainTxt);
+      if (notes) parts.push(notes);
+      const line2 = parts.join(' \u2013 ');
+      if (line2) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: line2 });
+    }
+    if (detail === 'full' && batch.due) {
+      const due = new Date(batch.due);
+      const dueStr =
+        String(due.getDate()).padStart(2, '0') +
+        '.' +
+        String(due.getMonth() + 1).padStart(2, '0') +
+        '.' +
+        due.getFullYear();
+      items.push({ type: 'text', x: 5, y: 68, blockW: textW, fontH: 24, fontW: 14, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    }
   } else {
+    // Barcode mode: barcode top-center, text lines below.
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-  }
-  // Line 1 — bag ID in monospaced kürzel format (always shown)
-  const line1Y = bcY + bcH + 6;
-  items.push({ type: 'text', y: line1Y, blockW: textW, fontH: 24, text: bagId });
-  if (detail === 'sorte' || detail === 'full') {
-    // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 13 chars on label)
-    const species = batch.strainName || batch.species || '';
-    const strainTxt = (batch.strainText || '').trim();
-    const rawNotes = (batch.notes || '').trim();
-    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-    let parts = [species];
-    if (strainTxt) parts.push(strainTxt);
-    if (notes) parts.push(notes);
-    const line2 = parts.join(' \u2013 ');
-    if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: textW, fontH: 24, text: line2 });
-  }
-  if (detail === 'full' && batch.due) {
-    // Line 3 — Fälligkeit, bold
-    const due = new Date(batch.due);
-    const dueStr =
-      String(due.getDate()).padStart(2, '0') +
-      '.' +
-      String(due.getMonth() + 1).padStart(2, '0') +
-      '.' +
-      due.getFullYear();
-    const line3Y = detail === 'full' ? line1Y + 56 : line1Y + 28;
-    items.push({ type: 'text', y: line3Y, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    const line1Y = bcY + bcH + 6;
+    items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
+    if (detail === 'sorte' || detail === 'full') {
+      const species = batch.strainName || batch.species || '';
+      const strainTxt = (batch.strainText || '').trim();
+      const rawNotes = (batch.notes || '').trim();
+      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+      let parts = [species];
+      if (strainTxt) parts.push(strainTxt);
+      if (notes) parts.push(notes);
+      const line2 = parts.join(' \u2013 ');
+      if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
+    }
+    if (detail === 'full' && batch.due) {
+      const due = new Date(batch.due);
+      const dueStr =
+        String(due.getDate()).padStart(2, '0') +
+        '.' +
+        String(due.getMonth() + 1).padStart(2, '0') +
+        '.' +
+        due.getFullYear();
+      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    }
   }
   return items;
 }
@@ -10778,29 +10797,35 @@ function labLabelItems(id, c, detail, qr) {
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('culture:' + id);
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
-  // Fixed barcode/QR size — same as bag labels: ≥5mm top margin, 90-dot height.
-  const bcY = 40,
-    bcH = 90;
-  // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
-  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: id });
+    // QR mode: small QR top-right, text lines top-left.
+    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: id });
+    const textW = 280;
+    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: line1Text });
+    if (detail === 'sorte' || detail === 'full') {
+      if (sp) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: sp });
+    }
+    if (detail === 'full' && c.created) {
+      const line3Y = sp ? 68 : 40;
+      items.push({ type: 'text', x: 5, y: line3Y, blockW: textW, fontH: 24, fontW: 14, text: ds, bold: true });
+    }
   } else {
+    // Barcode mode: barcode top-center, text lines below.
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-  }
-  // Line 1 — culture ID, with parent if available (always shown)
-  const line1Y = bcY + bcH + 6;
-  const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-  items.push({ type: 'text', x: 0, y: line1Y, blockW: textW, fontH: 24, text: line1Text });
-  if (detail === 'sorte' || detail === 'full') {
-    // Line 2 — species + descriptor
-    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: textW, fontH: 24, text: sp });
-  }
-  if (detail === 'full' && c.created) {
-    // Line 3 — date created, bold
-    const line3Y = line1Y + (sp ? 56 : 28);
-    items.push({ type: 'text', x: 0, y: line3Y, blockW: textW, fontH: 28, text: ds, bold: true });
+    const line1Y = bcY + bcH + 6;
+    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+    items.push({ type: 'text', x: 0, y: line1Y, blockW: 400, fontH: 24, text: line1Text });
+    if (detail === 'sorte' || detail === 'full') {
+      if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: 400, fontH: 24, text: sp });
+    }
+    if (detail === 'full' && c.created) {
+      const line3Y = line1Y + (sp ? 56 : 28);
+      items.push({ type: 'text', x: 0, y: line3Y, blockW: 400, fontH: 28, text: ds, bold: true });
+    }
   }
   return items;
 }
