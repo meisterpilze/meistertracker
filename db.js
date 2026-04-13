@@ -698,6 +698,26 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_maint_zone ON maintenance_log(zone_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_maint_scheduled ON maintenance_log(scheduled_date)');
     }
+  },
+  {
+    version: 28,
+    description: 'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
+    fn(db) {
+      // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so recreate the table
+      db.exec(`
+        CREATE TABLE mushroom_strains_new (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT NOT NULL,
+          kuerzel     TEXT NOT NULL UNIQUE,
+          description TEXT DEFAULT '',
+          created     TEXT NOT NULL,
+          updated     TEXT
+        )
+      `);
+      db.exec('INSERT INTO mushroom_strains_new SELECT * FROM mushroom_strains');
+      db.exec('DROP TABLE mushroom_strains');
+      db.exec('ALTER TABLE mushroom_strains_new RENAME TO mushroom_strains');
+    }
   }
 ];
 
@@ -2927,7 +2947,6 @@ function createMushroomStrain(db, { name, kuerzel, description }) {
     return result.lastInsertRowid;
   } catch (e) {
     if (e.message && e.message.includes('UNIQUE')) {
-      if (e.message.includes('name')) throw new Error('Name already taken');
       if (e.message.includes('kuerzel')) throw new Error('Kürzel already taken');
     }
     throw e;
@@ -2957,7 +2976,6 @@ function updateMushroomStrain(db, id, { name, kuerzel, description }) {
     incrementDataVersion(db);
   } catch (e) {
     if (e.message && e.message.includes('UNIQUE')) {
-      if (e.message.includes('name')) throw new Error('Name already taken');
       if (e.message.includes('kuerzel')) throw new Error('Kürzel already taken');
     }
     throw e;
