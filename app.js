@@ -8868,7 +8868,7 @@ function renderCalMonth(){
       const dot=e.species?spDot(e.species):'';
       return'<div class="'+cls+'" '+drag+' data-type="'+esc(e.type)+'" data-id="'+esc(e.id||'')+'" title="'+esc(e.label)+'" '+bg+'>'+dot+esc(e.label)+assigneeStr+'</div>';
     }).join('');
-    if(de.length>mx)o+='<div class="cal-more">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
+    if(de.length>mx)o+='<div class="cal-more" onclick="event.stopPropagation();calGotoDay(\''+ds+'\')">+'+(de.length-mx)+' '+t('cal.more')+'</div>';
     return o;
   }
 
