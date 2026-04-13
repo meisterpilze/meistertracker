@@ -7179,6 +7179,8 @@ function delBatch(id) {
       }
     }
     batches = batches.filter((x) => x.batchId !== id);
+    scanLog = scanLog.filter((x) => x.batch !== id);
+    harvests = harvests.filter((x) => x.batch !== id);
     apiDelete('/api/batches/' + encodeURIComponent(id));
     renderBatches();
     renderStatus();
