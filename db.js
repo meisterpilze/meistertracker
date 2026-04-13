@@ -1807,6 +1807,12 @@ function renameBatch(db, oldId, newId) {
     db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    // Update barcode registry: rename entity_id for bags that were renamed
+    db.prepare("UPDATE barcodes SET entity_id=REPLACE(entity_id,?,?) WHERE entity_type='bag' AND entity_id LIKE ?").run(
+      oldId,
+      newId,
+      oldId + '%'
+    );
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
