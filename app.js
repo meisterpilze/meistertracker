@@ -10596,7 +10596,7 @@ function itemsToZPL(items) {
           zplText(it.text) +
           '^FS';
     } else if (it.type === 'qr') {
-      z += '^FO' + it.x + ',' + it.y + '^BQN,2,4^FDMM,A' + zplText(it.val) + '^FS';
+      z += '^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMM,A' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
@@ -10733,7 +10733,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
   // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
   const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: bagId });
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: bagId });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
@@ -10784,7 +10784,7 @@ function labLabelItems(id, c, detail, qr) {
   // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
   const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: id });
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: id });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
