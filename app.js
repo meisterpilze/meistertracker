@@ -10730,15 +10730,17 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
   // 90-dot barcode fits all 3 text lines below within the 240-dot canvas.
   const bcY = 40,
     bcH = 90;
+  // QR goes top-right; text narrows to leave room
+  const textW = qr ? 280 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 146, y: bcY, size: 108, val: bagId });
+    items.push({ type: 'qr', x: 284, y: 8, size: 108, val: bagId });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
   }
   // Line 1 — bag ID in monospaced kürzel format (always shown)
   const line1Y = bcY + bcH + 6;
-  items.push({ type: 'text', y: line1Y, fontH: 24, text: bagId });
+  items.push({ type: 'text', y: line1Y, blockW: textW, fontH: 24, text: bagId });
   if (detail === 'sorte' || detail === 'full') {
     // Line 2 — Pilzsorte + free-text strain + notes (notes capped at 13 chars on label)
     const species = batch.strainName || batch.species || '';
@@ -10749,7 +10751,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
     if (strainTxt) parts.push(strainTxt);
     if (notes) parts.push(notes);
     const line2 = parts.join(' \u2013 ');
-    if (line2) items.push({ type: 'text', y: line1Y + 28, fontH: 24, text: line2 });
+    if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: textW, fontH: 24, text: line2 });
   }
   if (detail === 'full' && batch.due) {
     // Line 3 — Fälligkeit, bold
@@ -10779,8 +10781,10 @@ function labLabelItems(id, c, detail, qr) {
   // Fixed barcode/QR size — same as bag labels: ≥5mm top margin, 90-dot height.
   const bcY = 40,
     bcH = 90;
+  // QR goes top-right; text narrows to leave room
+  const textW = qr ? 280 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 146, y: bcY, size: 108, val: id });
+    items.push({ type: 'qr', x: 284, y: 8, size: 108, val: id });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
@@ -10788,15 +10792,15 @@ function labLabelItems(id, c, detail, qr) {
   // Line 1 — culture ID, with parent if available (always shown)
   const line1Y = bcY + bcH + 6;
   const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-  items.push({ type: 'text', x: 0, y: line1Y, fontH: 24, text: line1Text });
+  items.push({ type: 'text', x: 0, y: line1Y, blockW: textW, fontH: 24, text: line1Text });
   if (detail === 'sorte' || detail === 'full') {
     // Line 2 — species + descriptor
-    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, fontH: 24, text: sp });
+    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: textW, fontH: 24, text: sp });
   }
   if (detail === 'full' && c.created) {
     // Line 3 — date created, bold
-    const line3Y = line1Y + (detail === 'full' && sp ? 56 : 28);
-    items.push({ type: 'text', x: 0, y: line3Y, fontH: 28, text: ds, bold: true });
+    const line3Y = line1Y + (sp ? 56 : 28);
+    items.push({ type: 'text', x: 0, y: line3Y, blockW: textW, fontH: 28, text: ds, bold: true });
   }
   return items;
 }
