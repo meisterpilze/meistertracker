@@ -22,3 +22,8 @@ certs/
 
 # Environment
 .env
+
+# Watchdog runtime files
+watchdog.pid
+watchdog.log
+watchdog-error.log
