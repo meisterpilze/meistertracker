@@ -1985,4 +1985,13 @@ function createMcpServer(database, onWrite, printer) {
   return server;
 }
 
-module.exports = { createMcpServer, buildBagLocationMap };
+module.exports = {
+  createMcpServer,
+  buildBagLocationMap,
+  bcParams,
+  zplText,
+  itemsToZPL,
+  bagLabelItems,
+  labLabelItems,
+  fmtDt
+};
