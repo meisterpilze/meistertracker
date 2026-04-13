@@ -116,7 +116,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   if (qr) {
     // QR mode: large QR left, text lines right of QR.
     // mag=7 → ~175×175 dots for version-2 QR (25 modules × 7).
-    items.push({ type: 'qr', x: 5, y: 5, size: 175, mag: 7, val: bagId });
+    items.push({ type: 'qr', x: 0, y: 0, size: 175, mag: 7, val: bagId });
     const tx = 195;
     const tw = 200;
     items.push({ type: 'text', x: tx, y: 40, blockW: tw, fontH: 40, text: bagId, bold: true });
@@ -189,7 +189,7 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
   if (qr) {
     // QR mode: large QR left, text lines right of QR.
-    items.push({ type: 'qr', x: 5, y: 5, size: 175, mag: 7, val: id });
+    items.push({ type: 'qr', x: 0, y: 0, size: 175, mag: 7, val: id });
     const tx = 195;
     const tw = 200;
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
