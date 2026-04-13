@@ -22,6 +22,8 @@ module.exports = [
         clearTimeout: 'readonly',
         clearInterval: 'readonly',
         URL: 'readonly',
+        URLSearchParams: 'readonly',
+        setImmediate: 'readonly',
       }
     },
     rules: {
@@ -46,6 +48,8 @@ module.exports = [
         fetch: 'readonly',
         Response: 'readonly',
         URL: 'readonly',
+        indexedDB: 'readonly',
+        IDBKeyRange: 'readonly',
       }
     }
   },
