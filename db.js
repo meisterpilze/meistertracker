@@ -641,6 +641,63 @@ const MIGRATIONS = [
       db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0');
       db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0');
     }
+  },
+  {
+    version: 24,
+    description: 'Add reason column to scan_log for contamination tracking',
+    fn(db) {
+      db.exec('ALTER TABLE scan_log ADD COLUMN reason TEXT');
+    }
+  },
+  {
+    version: 25,
+    description: 'Add recipes table for reusable substrate mixtures',
+    fn(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS recipes (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          name          TEXT NOT NULL UNIQUE,
+          hardwood_pct  REAL DEFAULT 0,
+          wheatbran_pct REAL DEFAULT 0,
+          gypsum_pct    REAL DEFAULT 0,
+          rh_pct        REAL DEFAULT 0,
+          notes         TEXT,
+          created       TEXT NOT NULL
+        )
+      `);
+    }
+  },
+  {
+    version: 26,
+    description: 'Add quality and notes columns to harvests',
+    fn(db) {
+      db.exec('ALTER TABLE harvests ADD COLUMN quality TEXT');
+      db.exec('ALTER TABLE harvests ADD COLUMN notes TEXT');
+    }
+  },
+  {
+    version: 27,
+    description: 'Add maintenance_log table for equipment/zone maintenance tracking',
+    fn(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS maintenance_log (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          asset_id        TEXT,
+          zone_id         TEXT,
+          type            TEXT NOT NULL,
+          description     TEXT,
+          scheduled_date  TEXT,
+          completed_date  TEXT,
+          completed_by    TEXT,
+          notes           TEXT,
+          FOREIGN KEY (asset_id) REFERENCES assets(asset_id),
+          FOREIGN KEY (zone_id) REFERENCES zones(id)
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_maint_asset ON maintenance_log(asset_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_maint_zone ON maintenance_log(zone_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_maint_scheduled ON maintenance_log(scheduled_date)');
+    }
   }
 ];
 
@@ -1837,7 +1894,7 @@ function computeBatchMaterialDeltas(row) {
 // -- Scan Log --
 function appendScanEntries(db, entries, userId) {
   const ins = db.prepare(
-    'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id) VALUES(?,?,?,?,?,?,?,?,?)'
+    'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id,reason) VALUES(?,?,?,?,?,?,?,?,?,?)'
   );
   const ids = [];
   db.exec('BEGIN');
@@ -1852,7 +1909,8 @@ function appendScanEntries(db, entries, userId) {
         e.to || null,
         e.species || null,
         e.strain || null,
-        userId || null
+        userId || null,
+        e.reason || null
       );
       ids.push(r.lastInsertRowid);
     }
@@ -1885,8 +1943,8 @@ function clearScanLog(db) {
 function insertHarvest(db, h) {
   if (!Number.isFinite(h.grams) || h.grams < 0) throw new Error('grams must be >= 0');
   const r = db
-    .prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush) VALUES(?,?,?,?,?,?,?)')
-    .run(h.time, h.batch || null, h.bag || null, h.species || null, h.strain || null, h.grams, h.flush || 1);
+    .prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush,quality,notes) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run(h.time, h.batch || null, h.bag || null, h.species || null, h.strain || null, h.grams, h.flush || 1, h.quality || null, h.notes || null);
   incrementDataVersion(db);
   return r.lastInsertRowid;
 }
@@ -2959,7 +3017,9 @@ function getAllHarvests(db) {
       species: r.species,
       strain: r.strain,
       grams: r.grams,
-      flush: r.flush
+      flush: r.flush,
+      quality: r.quality || null,
+      notes: r.notes || null
     }));
 }
 function getAllCultures(db) {
@@ -3006,7 +3066,8 @@ function getScanLog(db) {
       from: r.from,
       to: r.to,
       species: r.species,
-      strain: r.strain
+      strain: r.strain,
+      reason: r.reason || null
     }));
 }
 function getCalendarEvents(db) {
@@ -3235,6 +3296,255 @@ function getKpiSnapshots(db, limit) {
   return db.prepare('SELECT * FROM kpi_snapshots ORDER BY date').all();
 }
 
+// ── Contamination Report ─────────────────────────────────
+/** Get contamination stats grouped by species, zone, or month */
+function getContaminationReport(db, groupBy, startDate, endDate) {
+  const zones = db.prepare('SELECT id, role FROM zones').all();
+  const contamZoneIds = zones.filter((z) => z.role === 'contaminated').map((z) => z.id);
+  if (contamZoneIds.length === 0) return { groupBy, groups: {}, totalContam: 0 };
+
+  let rows = db
+    .prepare('SELECT * FROM scan_log WHERE action IN (\'MOVE\',\'REMOVE\') AND reason IS NOT NULL ORDER BY id')
+    .all();
+  if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
+  if (endDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) <= endDate);
+
+  const groups = {};
+  for (const r of rows) {
+    let key;
+    if (groupBy === 'species') key = r.species || 'unknown';
+    else if (groupBy === 'zone') key = r.from || 'unknown';
+    else key = r.time ? r.time.slice(0, 7) : 'unknown'; // month
+    if (!groups[key]) groups[key] = { count: 0, reasons: {} };
+    groups[key].count++;
+    const reason = r.reason || 'unspecified';
+    groups[key].reasons[reason] = (groups[key].reasons[reason] || 0) + 1;
+  }
+
+  return { groupBy: groupBy || 'month', groups, totalContam: rows.length };
+}
+
+// ── Recipes ──────────────────────────────────────────────
+/** Insert a new substrate recipe */
+function insertRecipe(db, r) {
+  const res = db.prepare(
+    'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created) VALUES(?,?,?,?,?,?,?)'
+  ).run(r.name, r.hardwood_pct || 0, r.wheatbran_pct || 0, r.gypsum_pct || 0, r.rh_pct || 0, r.notes || null, r.created || new Date().toISOString());
+  incrementDataVersion(db);
+  return res.lastInsertRowid;
+}
+
+/** Update an existing recipe */
+function updateRecipe(db, id, fields) {
+  const allowed = ['name', 'hardwood_pct', 'wheatbran_pct', 'gypsum_pct', 'rh_pct', 'notes'];
+  const colMap = { name: 'name', hardwood_pct: 'hardwood_pct', wheatbran_pct: 'wheatbran_pct', gypsum_pct: 'gypsum_pct', rh_pct: 'rh_pct', notes: 'notes' };
+  const sets = [];
+  const vals = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k) && v !== undefined) {
+      sets.push(`${colMap[k]}=?`);
+      vals.push(v);
+    }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  db.prepare(`UPDATE recipes SET ${sets.join(',')} WHERE id=?`).run(...vals);
+  incrementDataVersion(db);
+}
+
+/** Delete a recipe by id */
+function deleteRecipe(db, id) {
+  const info = db.prepare('DELETE FROM recipes WHERE id=?').run(id);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
+/** Get all recipes */
+function getAllRecipes(db) {
+  return db.prepare('SELECT * FROM recipes ORDER BY name').all().map((r) => ({
+    id: r.id,
+    name: r.name,
+    hardwoodPct: r.hardwood_pct,
+    wheatbranPct: r.wheatbran_pct,
+    gypsumPct: r.gypsum_pct,
+    rhPct: r.rh_pct,
+    notes: r.notes,
+    created: r.created
+  }));
+}
+
+/** Get a single recipe by id */
+function getRecipeById(db, id) {
+  const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(id);
+  if (!r) return null;
+  return {
+    id: r.id,
+    name: r.name,
+    hardwoodPct: r.hardwood_pct,
+    wheatbranPct: r.wheatbran_pct,
+    gypsumPct: r.gypsum_pct,
+    rhPct: r.rh_pct,
+    notes: r.notes,
+    created: r.created
+  };
+}
+
+// ── Traceability ─────────────────────────────────────────
+/** Trace lineage backwards from a batch or culture to its origin */
+function traceLineageBack(db, entityType, entityId) {
+  const chain = [];
+  if (entityType === 'batch') {
+    const batch = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(entityId);
+    if (!batch) return chain;
+    chain.push({ type: 'batch', id: batch.batch_id, species: batch.species, strain: batch.strain, created: batch.created });
+    if (batch.source_id) {
+      const cultureChain = traceLineageBack(db, 'culture', batch.source_id);
+      chain.push(...cultureChain);
+    }
+  } else if (entityType === 'culture') {
+    let current = db.prepare('SELECT * FROM cultures WHERE id=?').get(entityId);
+    while (current) {
+      chain.push({ type: 'culture', id: current.id, cultureType: current.type, species: current.species, strain: current.strain, status: current.status, created: current.created });
+      if (current.parent_id) {
+        current = db.prepare('SELECT * FROM cultures WHERE id=?').get(current.parent_id);
+      } else {
+        current = null;
+      }
+    }
+  }
+  return chain;
+}
+
+/** Trace lineage forward from a culture to all batches/harvests it produced */
+function traceLineageForward(db, cultureId) {
+  const result = { cultures: [], batches: [], harvests: [] };
+  const visited = new Set();
+  const queue = [cultureId];
+  while (queue.length) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const c = db.prepare('SELECT * FROM cultures WHERE id=?').get(id);
+    if (c) {
+      result.cultures.push({ id: c.id, type: c.type, species: c.species, strain: c.strain, status: c.status, created: c.created });
+      // Find child cultures
+      const children = db.prepare('SELECT id FROM cultures WHERE parent_id=?').all(id);
+      for (const child of children) queue.push(child.id);
+      // Find batches sourced from this culture
+      const batches = db.prepare('SELECT batch_id FROM batches WHERE source_id=?').all(id);
+      for (const b of batches) {
+        const batch = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(b.batch_id);
+        if (batch) {
+          result.batches.push({ batchId: batch.batch_id, species: batch.species, strain: batch.strain, batchType: batch.batch_type, created: batch.created, due: batch.due });
+          const harvests = db.prepare('SELECT * FROM harvests WHERE batch=?').all(batch.batch_id);
+          for (const h of harvests) {
+            result.harvests.push({ id: h.id, batch: h.batch, bag: h.bag, grams: h.grams, flush: h.flush, time: h.time });
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+
+// ── Production Pipeline ──────────────────────────────────
+/** Get aggregated production pipeline overview */
+function getProductionPipeline(db) {
+  // Active cultures by type and status
+  const cultures = db.prepare('SELECT type, status, COUNT(*) AS cnt FROM cultures GROUP BY type, status').all();
+  const cultureSummary = {};
+  for (const c of cultures) {
+    if (!cultureSummary[c.type]) cultureSummary[c.type] = {};
+    cultureSummary[c.type][c.status] = c.cnt;
+  }
+
+  // Batches by type and phase
+  const allBatches = db.prepare('SELECT batch_id, batch_type, due FROM batches').all();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const batchSummary = { grain: { incubating: 0, ready: 0 }, block: { incubating: 0, ready: 0 }, liquid: { incubating: 0, ready: 0 } };
+  for (const b of allBatches) {
+    const type = b.batch_type || 'block';
+    if (!batchSummary[type]) batchSummary[type] = { incubating: 0, ready: 0 };
+    if (b.due && b.due.slice(0, 10) <= todayStr) batchSummary[type].ready++;
+    else batchSummary[type].incubating++;
+  }
+
+  // Bags per zone with capacity
+  const zones = db.prepare('SELECT id, name, role, max_capacity FROM zones ORDER BY sort_order').all();
+  const scanLog = db.prepare('SELECT action, bag, "from", "to" FROM scan_log ORDER BY id').all();
+  const bagZone = {};
+  for (const e of scanLog) {
+    const toZ = e.to ? e.to.split(':')[0] : null;
+    if (e.action === 'ADD' && toZ) bagZone[e.bag] = toZ;
+    else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZ) bagZone[e.bag] = toZ;
+    else if (e.action === 'REMOVE') delete bagZone[e.bag];
+  }
+  const zoneCounts = {};
+  for (const bag of Object.values(bagZone)) {
+    zoneCounts[bag] = (zoneCounts[bag] || 0) + 1;
+  }
+  const zoneOverview = zones.map((z) => ({
+    id: z.id,
+    name: z.name,
+    role: z.role,
+    bagCount: zoneCounts[z.id] || 0,
+    maxCapacity: z.max_capacity,
+    capacityPct: z.max_capacity ? Math.round(((zoneCounts[z.id] || 0) / z.max_capacity) * 100) : null
+  }));
+
+  return { cultures: cultureSummary, batches: batchSummary, zones: zoneOverview };
+}
+
+// ── Maintenance Log ──────────────────────────────────────
+/** Schedule a maintenance task */
+function insertMaintenance(db, m) {
+  const res = db.prepare(
+    'INSERT INTO maintenance_log(asset_id, zone_id, type, description, scheduled_date, notes) VALUES(?,?,?,?,?,?)'
+  ).run(m.assetId || null, m.zoneId || null, m.type, m.description || null, m.scheduledDate || null, m.notes || null);
+  incrementDataVersion(db);
+  return res.lastInsertRowid;
+}
+
+/** Mark a maintenance task as completed */
+function completeMaintenance(db, id, completedBy, notes) {
+  db.prepare(
+    'UPDATE maintenance_log SET completed_date=?, completed_by=?, notes=COALESCE(?,notes) WHERE id=?'
+  ).run(new Date().toISOString(), completedBy || null, notes || null, id);
+  incrementDataVersion(db);
+}
+
+/** Get due/overdue maintenance tasks (not yet completed) */
+function getMaintenanceDue(db) {
+  return db.prepare(
+    'SELECT * FROM maintenance_log WHERE completed_date IS NULL ORDER BY scheduled_date'
+  ).all().map(mapMaintenanceRow);
+}
+
+/** Get maintenance history with optional filters */
+function getMaintenanceHistory(db, assetId, zoneId, limit) {
+  let sql = 'SELECT * FROM maintenance_log WHERE 1=1';
+  const params = [];
+  if (assetId) { sql += ' AND asset_id=?'; params.push(assetId); }
+  if (zoneId) { sql += ' AND zone_id=?'; params.push(zoneId); }
+  sql += ' ORDER BY COALESCE(completed_date, scheduled_date) DESC';
+  if (limit) { sql += ' LIMIT ?'; params.push(limit); }
+  return db.prepare(sql).all(...params).map(mapMaintenanceRow);
+}
+
+function mapMaintenanceRow(r) {
+  return {
+    id: r.id,
+    assetId: r.asset_id,
+    zoneId: r.zone_id,
+    type: r.type,
+    description: r.description,
+    scheduledDate: r.scheduled_date,
+    completedDate: r.completed_date,
+    completedBy: r.completed_by,
+    notes: r.notes
+  };
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -3348,5 +3658,18 @@ module.exports = {
   getBarcodeForEntity,
   getAllBarcodes,
   snapshotDailyKPIs,
-  getKpiSnapshots
+  getKpiSnapshots,
+  getContaminationReport,
+  insertRecipe,
+  updateRecipe,
+  deleteRecipe,
+  getAllRecipes,
+  getRecipeById,
+  traceLineageBack,
+  traceLineageForward,
+  getProductionPipeline,
+  insertMaintenance,
+  completeMaintenance,
+  getMaintenanceDue,
+  getMaintenanceHistory
 };

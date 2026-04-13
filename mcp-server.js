@@ -112,6 +112,15 @@ function createMcpServer(database, onWrite) {
         return start <= target && end >= target;
       });
 
+      // Maintenance due/overdue
+      let maintenanceDue = [];
+      try {
+        const allDue = db.getMaintenanceDue(database);
+        maintenanceDue = allDue.filter((m) => !m.scheduledDate || m.scheduledDate <= target);
+      } catch (_) {
+        // maintenance_log table may not exist yet
+      }
+
       return json({
         date: target,
         batchesDueToday: dueToday,
@@ -119,6 +128,7 @@ function createMcpServer(database, onWrite) {
         openTaskCount: openTasks.length,
         tasksByAssignee,
         lowStockAlerts: lowStock,
+        maintenanceDue,
         calendarEvents: todayEvents.map((e) => ({
           id: e.id,
           title: e.title,
@@ -399,17 +409,27 @@ function createMcpServer(database, onWrite) {
         else if (groupBy === 'species') key = h.species || 'unknown';
         else key = h.time ? h.time.slice(0, 7) : 'unknown'; // month: YYYY-MM
 
-        if (!groups[key]) groups[key] = { totalGrams: 0, count: 0, byFlush: {} };
+        if (!groups[key]) groups[key] = { totalGrams: 0, count: 0, byFlush: {}, byQuality: {} };
         groups[key].totalGrams += h.grams;
         groups[key].count += 1;
         const fKey = 'flush_' + h.flush;
         groups[key].byFlush[fKey] = (groups[key].byFlush[fKey] || 0) + h.grams;
+        const qKey = h.quality || 'ungraded';
+        groups[key].byQuality[qKey] = (groups[key].byQuality[qKey] || 0) + 1;
+      }
+
+      // Overall quality distribution
+      const qualityDist = {};
+      for (const h of harvests) {
+        const q = h.quality || 'ungraded';
+        qualityDist[q] = (qualityDist[q] || 0) + 1;
       }
 
       return json({
         groupBy,
         totalHarvests: harvests.length,
         totalGrams: harvests.reduce((s, h) => s + h.grams, 0),
+        qualityDistribution: qualityDist,
         groups
       });
     }
@@ -422,6 +442,7 @@ function createMcpServer(database, onWrite) {
       batchId: z.string().optional().describe('Filter by batch ID'),
       bagId: z.string().optional().describe('Filter by bag ID'),
       action: z.enum(['ADD', 'MOVE', 'REMOVE']).optional().describe('Filter by action type'),
+      reason: z.string().optional().describe('Filter by reason (e.g. contam_tricho, dried_out)'),
       limit: z.number().optional().describe('Max entries to return (default: 50, max: 500)'),
       startDate: z.string().optional().describe('ISO date — entries after this date'),
       endDate: z.string().optional().describe('ISO date — entries before this date')
@@ -432,6 +453,7 @@ function createMcpServer(database, onWrite) {
       if (params.batchId) log = log.filter((e) => e.batch === params.batchId);
       if (params.bagId) log = log.filter((e) => e.bag === params.bagId);
       if (params.action) log = log.filter((e) => e.action === params.action);
+      if (params.reason) log = log.filter((e) => e.reason === params.reason);
       if (params.startDate) log = log.filter((e) => e.time && e.time.slice(0, 10) >= params.startDate);
       if (params.endDate) log = log.filter((e) => e.time && e.time.slice(0, 10) <= params.endDate);
 
@@ -466,12 +488,26 @@ function createMcpServer(database, onWrite) {
       bagKg: z.number().optional().describe('Bag weight in kg (default: 3)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Batch type (default: block)'),
       sourceId: z.string().optional().describe('Source culture ID'),
+      recipeId: z.number().optional().describe('Recipe ID — auto-fills substrate fields (hardwood%, wheatbran%, gypsum%, rh%) from recipe'),
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
       try {
         if (!params.strainId && !params.species) {
           return errResult('Either strainId or species is required');
+        }
+        // Apply recipe if provided
+        let subHardwood = params.subHardwood || 0;
+        let subWheatbran = params.subWheatbran || 0;
+        let subRh = params.subRh || 0;
+        let subGypsum = params.subGypsum || false;
+        if (params.recipeId) {
+          const recipe = db.getRecipeById(database, params.recipeId);
+          if (!recipe) return errResult('Recipe not found: ' + params.recipeId);
+          subHardwood = params.subHardwood != null ? params.subHardwood : recipe.hardwoodPct;
+          subWheatbran = params.subWheatbran != null ? params.subWheatbran : recipe.wheatbranPct;
+          subRh = params.subRh != null ? params.subRh : recipe.rhPct;
+          subGypsum = params.subGypsum != null ? params.subGypsum : recipe.gypsumPct > 0;
         }
         const created = new Date().toISOString();
         const due = new Date(Date.now() + params.days * 86400000).toISOString();
@@ -487,10 +523,10 @@ function createMcpServer(database, onWrite) {
           qty: params.qty,
           days: params.days,
           substrate: {
-            hardwood: params.subHardwood || 0,
-            wheatbran: params.subWheatbran || 0,
-            rh: params.subRh || 0,
-            gypsum: params.subGypsum || false
+            hardwood: subHardwood,
+            wheatbran: subWheatbran,
+            rh: subRh,
+            gypsum: subGypsum
           },
           bagKg: params.bagKg || 3,
           batchType: params.batchType || 'block',
@@ -668,6 +704,8 @@ function createMcpServer(database, onWrite) {
       grams: z.number().describe('Harvest weight in grams (>= 0)'),
       bag: z.string().optional().describe('Specific bag ID'),
       flush: z.number().optional().describe('Flush number (default: 1)'),
+      quality: z.enum(['A', 'B', 'C']).optional().describe('Quality grade: A (premium), B (standard), C (low)'),
+      notes: z.string().optional().describe('Harvest notes'),
       strainId: z
         .number()
         .optional()
@@ -700,7 +738,9 @@ function createMcpServer(database, onWrite) {
           species: species || null,
           strain: strain || null,
           grams: params.grams,
-          flush: params.flush || 1
+          flush: params.flush || 1,
+          quality: params.quality || null,
+          notes: params.notes || null
         });
         notify();
         return json({
@@ -709,6 +749,7 @@ function createMcpServer(database, onWrite) {
           batch: params.batch,
           grams: params.grams,
           flush: params.flush || 1,
+          quality: params.quality || null,
           species,
           strain
         });
@@ -729,7 +770,13 @@ function createMcpServer(database, onWrite) {
             bag: z.string().describe('Bag ID'),
             action: z.enum(['ADD', 'MOVE', 'REMOVE']).describe('Movement type'),
             from: z.string().optional().describe('Source zone/rack (required for MOVE/REMOVE)'),
-            to: z.string().optional().describe('Destination zone/rack (required for ADD/MOVE)')
+            to: z.string().optional().describe('Destination zone/rack (required for ADD/MOVE)'),
+            reason: z
+              .string()
+              .optional()
+              .describe(
+                'Reason for MOVE/REMOVE (e.g. contam_tricho, contam_cobweb, contam_bacteria, contam_other, dried_out, damaged, other)'
+              )
           })
         )
         .describe('Array of bag movements'),
@@ -754,7 +801,8 @@ function createMcpServer(database, onWrite) {
             from: e.from || null,
             to: e.to || null,
             species: b ? b.species : null,
-            strain: b ? b.strain : null
+            strain: b ? b.strain : null,
+            reason: e.reason || null
           };
         });
         const ids = db.appendScanEntries(database, enriched, null);
@@ -1371,6 +1419,215 @@ function createMcpServer(database, onWrite) {
     {},
     async () => {
       return json(db.listUsers(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // CONTAMINATION REPORT
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_contamination_report({ groupBy: 'species', startDate: '2025-01-01' })
+  server.tool(
+    'get_contamination_report',
+    'Get contamination statistics grouped by species, zone, or month. Shows contamination counts and reason breakdown. READ-ONLY. To log contamination use move_bags with reason.',
+    {
+      groupBy: z.enum(['species', 'zone', 'month']).optional().describe('Aggregation dimension (default: month)'),
+      startDate: z.string().optional().describe('ISO date — start of range'),
+      endDate: z.string().optional().describe('ISO date — end of range')
+    },
+    async (params) => {
+      return json(db.getContaminationReport(database, params.groupBy || 'month', params.startDate, params.endDate));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // RECIPES
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_recipes({ action: 'create', name: 'Standard HK35', hardwoodPct: 80, wheatbranPct: 20, rhPct: 65 })
+  server.tool(
+    'manage_recipes',
+    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, gypsum%, rh% for quick batch creation. Use recipeId in create_batch to auto-fill substrate fields.',
+    {
+      action: z.enum(['create', 'update', 'delete']).describe('Action to perform'),
+      id: z.number().optional().describe('Recipe ID (required for update/delete)'),
+      name: z.string().optional().describe('Recipe name (required for create, unique)'),
+      hardwoodPct: z.number().optional().describe('Hardwood percentage'),
+      wheatbranPct: z.number().optional().describe('Wheat bran percentage'),
+      gypsumPct: z.number().optional().describe('Gypsum percentage'),
+      rhPct: z.number().optional().describe('Relative humidity percentage'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.name) return errResult('name is required for create');
+            const id = db.insertRecipe(database, {
+              name: params.name,
+              hardwood_pct: params.hardwoodPct || 0,
+              wheatbran_pct: params.wheatbranPct || 0,
+              gypsum_pct: params.gypsumPct || 0,
+              rh_pct: params.rhPct || 0,
+              notes: params.notes || null,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: Number(id), name: params.name });
+          }
+          case 'update': {
+            if (params.id == null) return errResult('id is required for update');
+            db.updateRecipe(database, params.id, {
+              name: params.name,
+              hardwood_pct: params.hardwoodPct,
+              wheatbran_pct: params.wheatbranPct,
+              gypsum_pct: params.gypsumPct,
+              rh_pct: params.rhPct,
+              notes: params.notes
+            });
+            notify();
+            return json({ success: true, action: 'update', id: params.id });
+          }
+          case 'delete': {
+            if (params.id == null) return errResult('id is required for delete');
+            const removed = db.deleteRecipe(database, params.id);
+            if (!removed) return errResult('Recipe not found: ' + params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: list_recipes()
+  server.tool(
+    'list_recipes',
+    'List all substrate recipes with their compositions. READ-ONLY. Use manage_recipes to create/update/delete.',
+    {},
+    async () => {
+      return json(db.getAllRecipes(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // TRACEABILITY
+  // ──────────────────────────────────────────────────────────
+
+  // Example: trace_lineage({ entityType: 'batch', entityId: 'FB-2025-042' })
+  server.tool(
+    'trace_lineage',
+    'Trace the origin chain of a batch or culture backwards: batch → source culture → parent culture → ... Shows the full production genealogy. READ-ONLY.',
+    {
+      entityType: z.enum(['batch', 'culture']).describe('Type of entity to trace'),
+      entityId: z.string().describe('Batch ID or Culture ID')
+    },
+    async (params) => {
+      return json({ chain: db.traceLineageBack(database, params.entityType, params.entityId) });
+    }
+  );
+
+  // Example: trace_forward({ cultureId: 'MC-KINGS-250301-01' })
+  server.tool(
+    'trace_forward',
+    'Trace everything produced from a culture forward: child cultures, batches, and harvests. Shows the complete downstream output. READ-ONLY.',
+    {
+      cultureId: z.string().describe('Culture ID to trace from')
+    },
+    async (params) => {
+      return json(db.traceLineageForward(database, params.cultureId));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // PRODUCTION PIPELINE
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_production_pipeline()
+  server.tool(
+    'get_production_pipeline',
+    'Get a full production pipeline overview: active cultures by type/status, batches by type and phase (incubating vs ready), bags per zone with capacity utilization. READ-ONLY snapshot of the entire operation.',
+    {},
+    async () => {
+      return json(db.getProductionPipeline(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // MAINTENANCE
+  // ──────────────────────────────────────────────────────────
+
+  // Example: schedule_maintenance({ type: 'autoclave_cycle', assetId: 'AK-001', scheduledDate: '2025-04-15' })
+  server.tool(
+    'schedule_maintenance',
+    'Schedule a maintenance task for an asset or zone (e.g. autoclave cycle, HEPA filter change, laminar flow cleaning). Creates an open maintenance entry with a due date.',
+    {
+      type: z.string().describe('Maintenance type (e.g. autoclave_cycle, hepa_filter, cleaning, calibration)'),
+      assetId: z.string().optional().describe('Asset ID (for equipment maintenance)'),
+      zoneId: z.string().optional().describe('Zone ID (for room/zone maintenance)'),
+      description: z.string().optional().describe('Detailed description'),
+      scheduledDate: z.string().optional().describe('ISO date when maintenance is due'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        if (!params.assetId && !params.zoneId) {
+          return errResult('Either assetId or zoneId is required');
+        }
+        const id = db.insertMaintenance(database, {
+          assetId: params.assetId || null,
+          zoneId: params.zoneId || null,
+          type: params.type,
+          description: params.description || null,
+          scheduledDate: params.scheduledDate || null,
+          notes: params.notes || null
+        });
+        notify();
+        return json({ success: true, id: Number(id), type: params.type });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: complete_maintenance({ id: 1, completedBy: 'Julian' })
+  server.tool(
+    'complete_maintenance',
+    'Mark a scheduled maintenance task as completed. Records who completed it and when.',
+    {
+      id: z.number().describe('Maintenance log entry ID'),
+      completedBy: z.string().optional().describe('Name of person who completed the maintenance'),
+      notes: z.string().optional().describe('Completion notes')
+    },
+    async (params) => {
+      try {
+        db.completeMaintenance(database, params.id, params.completedBy || null, params.notes || null);
+        notify();
+        return json({ success: true, id: params.id });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: get_maintenance_due()
+  server.tool(
+    'get_maintenance_due',
+    'Get all due/overdue maintenance tasks (not yet completed). READ-ONLY. To schedule new maintenance use schedule_maintenance, to complete use complete_maintenance.',
+    {
+      assetId: z.string().optional().describe('Filter by asset ID'),
+      zoneId: z.string().optional().describe('Filter by zone ID'),
+      limit: z.number().optional().describe('Max entries (for history)')
+    },
+    async (params) => {
+      if (params.assetId || params.zoneId || params.limit) {
+        return json(db.getMaintenanceHistory(database, params.assetId || null, params.zoneId || null, params.limit || 50));
+      }
+      return json(db.getMaintenanceDue(database));
     }
   );
 
