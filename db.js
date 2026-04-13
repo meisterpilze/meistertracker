@@ -1944,7 +1944,17 @@ function insertHarvest(db, h) {
   if (!Number.isFinite(h.grams) || h.grams < 0) throw new Error('grams must be >= 0');
   const r = db
     .prepare('INSERT INTO harvests(time,batch,bag,species,strain,grams,flush,quality,notes) VALUES(?,?,?,?,?,?,?,?,?)')
-    .run(h.time, h.batch || null, h.bag || null, h.species || null, h.strain || null, h.grams, h.flush || 1, h.quality || null, h.notes || null);
+    .run(
+      h.time,
+      h.batch || null,
+      h.bag || null,
+      h.species || null,
+      h.strain || null,
+      h.grams,
+      h.flush || 1,
+      h.quality || null,
+      h.notes || null
+    );
   incrementDataVersion(db);
   return r.lastInsertRowid;
 }
@@ -2027,14 +2037,25 @@ function getCultureById(db, id) {
       strainKuerzel = ms.kuerzel;
     }
   }
-  const parent = r.parent_id ? db.prepare('SELECT id, type, species, strain, status FROM cultures WHERE id=?').get(r.parent_id) : null;
+  const parent = r.parent_id
+    ? db.prepare('SELECT id, type, species, strain, status FROM cultures WHERE id=?').get(r.parent_id)
+    : null;
   const children = db
     .prepare('SELECT id, type, species, strain, status, created FROM cultures WHERE parent_id=? ORDER BY created')
     .all(id);
   const batches = db
-    .prepare('SELECT batch_id, species, strain, batch_type, created, due FROM batches WHERE source_id=? ORDER BY created')
+    .prepare(
+      'SELECT batch_id, species, strain, batch_type, created, due FROM batches WHERE source_id=? ORDER BY created'
+    )
     .all(id)
-    .map((b) => ({ batchId: b.batch_id, species: b.species, strain: b.strain, batchType: b.batch_type, created: b.created, due: b.due }));
+    .map((b) => ({
+      batchId: b.batch_id,
+      species: b.species,
+      strain: b.strain,
+      batchType: b.batch_type,
+      created: b.created,
+      due: b.due
+    }));
   return {
     id: r.id,
     type: r.type,
@@ -3304,7 +3325,7 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   if (contamZoneIds.length === 0) return { groupBy, groups: {}, totalContam: 0 };
 
   let rows = db
-    .prepare('SELECT * FROM scan_log WHERE action IN (\'MOVE\',\'REMOVE\') AND reason IS NOT NULL ORDER BY id')
+    .prepare("SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL ORDER BY id")
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
   if (endDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) <= endDate);
@@ -3327,9 +3348,19 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
 // ── Recipes ──────────────────────────────────────────────
 /** Insert a new substrate recipe */
 function insertRecipe(db, r) {
-  const res = db.prepare(
-    'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created) VALUES(?,?,?,?,?,?,?)'
-  ).run(r.name, r.hardwood_pct || 0, r.wheatbran_pct || 0, r.gypsum_pct || 0, r.rh_pct || 0, r.notes || null, r.created || new Date().toISOString());
+  const res = db
+    .prepare(
+      'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created) VALUES(?,?,?,?,?,?,?)'
+    )
+    .run(
+      r.name,
+      r.hardwood_pct || 0,
+      r.wheatbran_pct || 0,
+      r.gypsum_pct || 0,
+      r.rh_pct || 0,
+      r.notes || null,
+      r.created || new Date().toISOString()
+    );
   incrementDataVersion(db);
   return res.lastInsertRowid;
 }
@@ -3337,7 +3368,14 @@ function insertRecipe(db, r) {
 /** Update an existing recipe */
 function updateRecipe(db, id, fields) {
   const allowed = ['name', 'hardwood_pct', 'wheatbran_pct', 'gypsum_pct', 'rh_pct', 'notes'];
-  const colMap = { name: 'name', hardwood_pct: 'hardwood_pct', wheatbran_pct: 'wheatbran_pct', gypsum_pct: 'gypsum_pct', rh_pct: 'rh_pct', notes: 'notes' };
+  const colMap = {
+    name: 'name',
+    hardwood_pct: 'hardwood_pct',
+    wheatbran_pct: 'wheatbran_pct',
+    gypsum_pct: 'gypsum_pct',
+    rh_pct: 'rh_pct',
+    notes: 'notes'
+  };
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -3361,16 +3399,19 @@ function deleteRecipe(db, id) {
 
 /** Get all recipes */
 function getAllRecipes(db) {
-  return db.prepare('SELECT * FROM recipes ORDER BY name').all().map((r) => ({
-    id: r.id,
-    name: r.name,
-    hardwoodPct: r.hardwood_pct,
-    wheatbranPct: r.wheatbran_pct,
-    gypsumPct: r.gypsum_pct,
-    rhPct: r.rh_pct,
-    notes: r.notes,
-    created: r.created
-  }));
+  return db
+    .prepare('SELECT * FROM recipes ORDER BY name')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      hardwoodPct: r.hardwood_pct,
+      wheatbranPct: r.wheatbran_pct,
+      gypsumPct: r.gypsum_pct,
+      rhPct: r.rh_pct,
+      notes: r.notes,
+      created: r.created
+    }));
 }
 
 /** Get a single recipe by id */
@@ -3396,7 +3437,13 @@ function traceLineageBack(db, entityType, entityId) {
   if (entityType === 'batch') {
     const batch = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(entityId);
     if (!batch) return chain;
-    chain.push({ type: 'batch', id: batch.batch_id, species: batch.species, strain: batch.strain, created: batch.created });
+    chain.push({
+      type: 'batch',
+      id: batch.batch_id,
+      species: batch.species,
+      strain: batch.strain,
+      created: batch.created
+    });
     if (batch.source_id) {
       const cultureChain = traceLineageBack(db, 'culture', batch.source_id);
       chain.push(...cultureChain);
@@ -3404,7 +3451,15 @@ function traceLineageBack(db, entityType, entityId) {
   } else if (entityType === 'culture') {
     let current = db.prepare('SELECT * FROM cultures WHERE id=?').get(entityId);
     while (current) {
-      chain.push({ type: 'culture', id: current.id, cultureType: current.type, species: current.species, strain: current.strain, status: current.status, created: current.created });
+      chain.push({
+        type: 'culture',
+        id: current.id,
+        cultureType: current.type,
+        species: current.species,
+        strain: current.strain,
+        status: current.status,
+        created: current.created
+      });
       if (current.parent_id) {
         current = db.prepare('SELECT * FROM cultures WHERE id=?').get(current.parent_id);
       } else {
@@ -3426,7 +3481,14 @@ function traceLineageForward(db, cultureId) {
     visited.add(id);
     const c = db.prepare('SELECT * FROM cultures WHERE id=?').get(id);
     if (c) {
-      result.cultures.push({ id: c.id, type: c.type, species: c.species, strain: c.strain, status: c.status, created: c.created });
+      result.cultures.push({
+        id: c.id,
+        type: c.type,
+        species: c.species,
+        strain: c.strain,
+        status: c.status,
+        created: c.created
+      });
       // Find child cultures
       const children = db.prepare('SELECT id FROM cultures WHERE parent_id=?').all(id);
       for (const child of children) queue.push(child.id);
@@ -3435,10 +3497,24 @@ function traceLineageForward(db, cultureId) {
       for (const b of batches) {
         const batch = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(b.batch_id);
         if (batch) {
-          result.batches.push({ batchId: batch.batch_id, species: batch.species, strain: batch.strain, batchType: batch.batch_type, created: batch.created, due: batch.due });
+          result.batches.push({
+            batchId: batch.batch_id,
+            species: batch.species,
+            strain: batch.strain,
+            batchType: batch.batch_type,
+            created: batch.created,
+            due: batch.due
+          });
           const harvests = db.prepare('SELECT * FROM harvests WHERE batch=?').all(batch.batch_id);
           for (const h of harvests) {
-            result.harvests.push({ id: h.id, batch: h.batch, bag: h.bag, grams: h.grams, flush: h.flush, time: h.time });
+            result.harvests.push({
+              id: h.id,
+              batch: h.batch,
+              bag: h.bag,
+              grams: h.grams,
+              flush: h.flush,
+              time: h.time
+            });
           }
         }
       }
@@ -3461,7 +3537,11 @@ function getProductionPipeline(db) {
   // Batches by type and phase
   const allBatches = db.prepare('SELECT batch_id, batch_type, due FROM batches').all();
   const todayStr = new Date().toISOString().slice(0, 10);
-  const batchSummary = { grain: { incubating: 0, ready: 0 }, block: { incubating: 0, ready: 0 }, liquid: { incubating: 0, ready: 0 } };
+  const batchSummary = {
+    grain: { incubating: 0, ready: 0 },
+    block: { incubating: 0, ready: 0 },
+    liquid: { incubating: 0, ready: 0 }
+  };
   for (const b of allBatches) {
     const type = b.batch_type || 'block';
     if (!batchSummary[type]) batchSummary[type] = { incubating: 0, ready: 0 };
@@ -3498,37 +3578,55 @@ function getProductionPipeline(db) {
 // ── Maintenance Log ──────────────────────────────────────
 /** Schedule a maintenance task */
 function insertMaintenance(db, m) {
-  const res = db.prepare(
-    'INSERT INTO maintenance_log(asset_id, zone_id, type, description, scheduled_date, notes) VALUES(?,?,?,?,?,?)'
-  ).run(m.assetId || null, m.zoneId || null, m.type, m.description || null, m.scheduledDate || null, m.notes || null);
+  const res = db
+    .prepare(
+      'INSERT INTO maintenance_log(asset_id, zone_id, type, description, scheduled_date, notes) VALUES(?,?,?,?,?,?)'
+    )
+    .run(m.assetId || null, m.zoneId || null, m.type, m.description || null, m.scheduledDate || null, m.notes || null);
   incrementDataVersion(db);
   return res.lastInsertRowid;
 }
 
 /** Mark a maintenance task as completed */
 function completeMaintenance(db, id, completedBy, notes) {
-  db.prepare(
-    'UPDATE maintenance_log SET completed_date=?, completed_by=?, notes=COALESCE(?,notes) WHERE id=?'
-  ).run(new Date().toISOString(), completedBy || null, notes || null, id);
+  db.prepare('UPDATE maintenance_log SET completed_date=?, completed_by=?, notes=COALESCE(?,notes) WHERE id=?').run(
+    new Date().toISOString(),
+    completedBy || null,
+    notes || null,
+    id
+  );
   incrementDataVersion(db);
 }
 
 /** Get due/overdue maintenance tasks (not yet completed) */
 function getMaintenanceDue(db) {
-  return db.prepare(
-    'SELECT * FROM maintenance_log WHERE completed_date IS NULL ORDER BY scheduled_date'
-  ).all().map(mapMaintenanceRow);
+  return db
+    .prepare('SELECT * FROM maintenance_log WHERE completed_date IS NULL ORDER BY scheduled_date')
+    .all()
+    .map(mapMaintenanceRow);
 }
 
 /** Get maintenance history with optional filters */
 function getMaintenanceHistory(db, assetId, zoneId, limit) {
   let sql = 'SELECT * FROM maintenance_log WHERE 1=1';
   const params = [];
-  if (assetId) { sql += ' AND asset_id=?'; params.push(assetId); }
-  if (zoneId) { sql += ' AND zone_id=?'; params.push(zoneId); }
+  if (assetId) {
+    sql += ' AND asset_id=?';
+    params.push(assetId);
+  }
+  if (zoneId) {
+    sql += ' AND zone_id=?';
+    params.push(zoneId);
+  }
   sql += ' ORDER BY COALESCE(completed_date, scheduled_date) DESC';
-  if (limit) { sql += ' LIMIT ?'; params.push(limit); }
-  return db.prepare(sql).all(...params).map(mapMaintenanceRow);
+  if (limit) {
+    sql += ' LIMIT ?';
+    params.push(limit);
+  }
+  return db
+    .prepare(sql)
+    .all(...params)
+    .map(mapMaintenanceRow);
 }
 
 function mapMaintenanceRow(r) {

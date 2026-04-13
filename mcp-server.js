@@ -488,7 +488,10 @@ function createMcpServer(database, onWrite) {
       bagKg: z.number().optional().describe('Bag weight in kg (default: 3)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Batch type (default: block)'),
       sourceId: z.string().optional().describe('Source culture ID'),
-      recipeId: z.number().optional().describe('Recipe ID — auto-fills substrate fields (hardwood%, wheatbran%, gypsum%, rh%) from recipe'),
+      recipeId: z
+        .number()
+        .optional()
+        .describe('Recipe ID — auto-fills substrate fields (hardwood%, wheatbran%, gypsum%, rh%) from recipe'),
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
@@ -780,7 +783,10 @@ function createMcpServer(database, onWrite) {
           })
         )
         .describe('Array of bag movements'),
-      confirm: z.boolean().optional().describe('Required true for REMOVE actions. Safety confirmation for destructive operations.')
+      confirm: z
+        .boolean()
+        .optional()
+        .describe('Required true for REMOVE actions. Safety confirmation for destructive operations.')
     },
     async ({ entries, confirm }) => {
       try {
@@ -1011,7 +1017,10 @@ function createMcpServer(database, onWrite) {
       action: z.enum(['create', 'rename', 'delete', 'reorder']).describe('Action to perform'),
       id: z.string().optional().describe('Zone ID (required for create/rename/delete)'),
       name: z.string().optional().describe('Zone name (required for create/rename)'),
-      role: z.string().optional().describe('Zone role: spawn, incubation, fruiting, contaminated, storage (for create)'),
+      role: z
+        .string()
+        .optional()
+        .describe('Zone role: spawn, incubation, fruiting, contaminated, storage (for create)'),
       color: z.string().optional().describe('Hex color e.g. #4CAF50 (for create)'),
       maxCapacity: z.number().optional().describe('Max bag capacity (for create)'),
       order: z.array(z.string()).optional().describe('Array of zone IDs in desired order (for reorder)')
@@ -1258,14 +1267,9 @@ function createMcpServer(database, onWrite) {
   );
 
   // Example: list_barcodes()
-  server.tool(
-    'list_barcodes',
-    'List all assigned barcodes with their entity type and ID. READ-ONLY.',
-    {},
-    async () => {
-      return json(db.getAllBarcodes(database));
-    }
-  );
+  server.tool('list_barcodes', 'List all assigned barcodes with their entity type and ID. READ-ONLY.', {}, async () => {
+    return json(db.getAllBarcodes(database));
+  });
 
   // ──────────────────────────────────────────────────────────
   // ASSETS
@@ -1300,7 +1304,10 @@ function createMcpServer(database, onWrite) {
           case 'create':
           case 'update': {
             if (!params.assetId) return errResult('assetId is required');
-            if (params.action === 'create' && (!params.name || !params.category || params.purchasePrice == null || params.usefulLife == null)) {
+            if (
+              params.action === 'create' &&
+              (!params.name || !params.category || params.purchasePrice == null || params.usefulLife == null)
+            ) {
               return errResult('name, category, purchasePrice, and usefulLife are required for create');
             }
             const result = db.upsertAsset(database, {
@@ -1350,7 +1357,10 @@ function createMcpServer(database, onWrite) {
     {
       action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
       id: z.number().optional().describe('Supplier ID (required for update/delete)'),
-      mat: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain']).optional().describe('Material type (required for create)'),
+      mat: z
+        .enum(['hardwood', 'wheatbran', 'gypsum', 'grain'])
+        .optional()
+        .describe('Material type (required for create)'),
       name: z.string().optional().describe('Supplier name (required for create)'),
       url: z.string().optional().describe('Website URL'),
       phone: z.string().optional().describe('Phone number'),
@@ -1625,7 +1635,9 @@ function createMcpServer(database, onWrite) {
     },
     async (params) => {
       if (params.assetId || params.zoneId || params.limit) {
-        return json(db.getMaintenanceHistory(database, params.assetId || null, params.zoneId || null, params.limit || 50));
+        return json(
+          db.getMaintenanceHistory(database, params.assetId || null, params.zoneId || null, params.limit || 50)
+        );
       }
       return json(db.getMaintenanceDue(database));
     }
