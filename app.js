@@ -10730,10 +10730,10 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
   // 90-dot barcode fits all 3 text lines below within the 240-dot canvas.
   const bcY = 40,
     bcH = 90;
-  // QR goes top-right; text narrows to leave room
-  const textW = qr ? 280 : 400;
+  // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
+  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 284, y: 8, size: 108, val: bagId });
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: bagId });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
@@ -10781,10 +10781,10 @@ function labLabelItems(id, c, detail, qr) {
   // Fixed barcode/QR size — same as bag labels: ≥5mm top margin, 90-dot height.
   const bcY = 40,
     bcH = 90;
-  // QR goes top-right; text narrows to leave room
-  const textW = qr ? 280 : 400;
+  // QR goes top-right (200×200 dots, 10-dot padding from edges); text stays left
+  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 284, y: 8, size: 108, val: id });
+    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: id });
   } else {
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
