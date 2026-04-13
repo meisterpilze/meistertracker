@@ -136,10 +136,20 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
         String(due.getMonth() + 1).padStart(2, '0') +
         '.' +
         due.getFullYear();
-      items.push({ type: 'text', x: 5, y: 68, blockW: textW, fontH: 24, fontW: 14, text: 'F\u00e4llig: ' + dueStr, bold: true });
+      items.push({
+        type: 'text',
+        x: 5,
+        y: 68,
+        blockW: textW,
+        fontH: 24,
+        fontW: 14,
+        text: 'F\u00e4llig: ' + dueStr,
+        bold: true
+      });
     }
   } else {
-    const bcY = 40, bcH = 90;
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
@@ -185,10 +195,20 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
     }
     if (detail === 'full' && c.created) {
       const line3Y = sp ? 68 : 40;
-      items.push({ type: 'text', x: 5, y: line3Y, blockW: textW, fontH: 24, fontW: 14, text: fmtDt(c.created), bold: true });
+      items.push({
+        type: 'text',
+        x: 5,
+        y: line3Y,
+        blockW: textW,
+        fontH: 24,
+        fontW: 14,
+        text: fmtDt(c.created),
+        bold: true
+      });
     }
   } else {
-    const bcY = 40, bcH = 90;
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
