@@ -1114,6 +1114,10 @@ function writeAll(db, incoming) {
         for (const bagId of b.bags || []) {
           insertBag.run(bagId, b.batchId);
         }
+        // Ensure all bags have barcode assignments
+        if (b.bags && b.bags.length) {
+          assignBarcodes(db, 'bag', b.bags);
+        }
       }
     }
 
@@ -1173,6 +1177,7 @@ function writeAll(db, incoming) {
           parent_id=excluded.parent_id, source=excluded.source, status=excluded.status,
           notes=excluded.notes, created=excluded.created
       `);
+      const cultureIds = [];
       for (const c of incoming.cultures) {
         upsert.run(
           c.id,
@@ -1185,6 +1190,11 @@ function writeAll(db, incoming) {
           c.notes || '',
           c.created
         );
+        cultureIds.push(c.id);
+      }
+      // Ensure all cultures have barcode assignments
+      if (cultureIds.length) {
+        assignBarcodes(db, 'culture', cultureIds);
       }
     }
 
@@ -1283,6 +1293,7 @@ function writeAll(db, incoming) {
           serial_number=excluded.serial_number, location=excluded.location,
           status=excluded.status, notes=excluded.notes, created=excluded.created
       `);
+      const assetIds = [];
       for (const a of incoming.assets) {
         upsert.run(
           a.assetId,
@@ -1301,6 +1312,11 @@ function writeAll(db, incoming) {
           a.notes || '',
           a.created
         );
+        assetIds.push(a.assetId);
+      }
+      // Ensure all assets have barcode assignments
+      if (assetIds.length) {
+        assignBarcodes(db, 'asset', assetIds);
       }
     }
 
@@ -1400,8 +1416,11 @@ function writeAll(db, incoming) {
           name=excluded.name, role=excluded.role, color=excluded.color,
           sort_order=excluded.sort_order, created=excluded.created
       `);
+      const zoneIds = [];
+      const rackIds = [];
       for (const z of incoming.zones) {
         upsertZone.run(z.id, z.name, z.role, z.color, z.sortOrder || 0, z.created || new Date().toISOString());
+        zoneIds.push(z.id);
       }
 
       const upsertRack = db.prepare(`
@@ -1413,8 +1432,12 @@ function writeAll(db, incoming) {
       for (const z of incoming.zones) {
         for (const r of z.racks || []) {
           upsertRack.run(r.id, z.id, r.sortOrder || 0, r.created || new Date().toISOString());
+          rackIds.push(r.id);
         }
       }
+      // Ensure all zones and racks have barcode assignments
+      if (zoneIds.length) assignBarcodes(db, 'zone', zoneIds);
+      if (rackIds.length) assignBarcodes(db, 'rack', rackIds);
     }
 
     // ── CalDAV Config ──
