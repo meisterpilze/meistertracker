@@ -7401,6 +7401,7 @@ function buildAutoTasks() {
       detail = '',
       taskAction = null;
     if (status === 'INCUBATING' || status === 'SPAWN RUN') {
+      if (dl > 7) return; // only show tasks due this week
       if (dl < 0) {
         urgent = true;
         text = `${b.batchId} \u2014 ${action}`;
