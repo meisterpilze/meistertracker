@@ -904,7 +904,7 @@ describe('MCP label printing', () => {
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'FB-2025-001-01');
       assert.equal(items[0].mag, 7);
-      assert.equal(items[0].x, 10);
+      assert.equal(items[0].x, 5);
     });
 
     it('with QR: text positioned right of QR', () => {
@@ -989,7 +989,7 @@ describe('MCP label printing', () => {
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'PD-001');
       assert.equal(items[0].mag, 7);
-      assert.equal(items[0].x, 10);
+      assert.equal(items[0].x, 5);
     });
 
     it('falls back to underscore-encoded ID when no barcodeNum', () => {
