@@ -704,6 +704,8 @@ const MIGRATIONS = [
     description: 'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
     fn(db) {
       // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so recreate the table
+      // Temporarily disable FK checks — batches/cultures reference this table
+      db.exec('PRAGMA foreign_keys = OFF');
       db.exec(`
         CREATE TABLE mushroom_strains_new (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -717,6 +719,7 @@ const MIGRATIONS = [
       db.exec('INSERT INTO mushroom_strains_new SELECT * FROM mushroom_strains');
       db.exec('DROP TABLE mushroom_strains');
       db.exec('ALTER TABLE mushroom_strains_new RENAME TO mushroom_strains');
+      db.exec('PRAGMA foreign_keys = ON');
     }
   }
 ];
