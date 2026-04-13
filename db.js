@@ -702,10 +702,10 @@ const MIGRATIONS = [
   {
     version: 28,
     description: 'Remove UNIQUE constraint on mushroom_strains.name so multiple strains of the same species are allowed',
+    disableForeignKeys: true,
     fn(db) {
       // SQLite doesn't support ALTER TABLE DROP CONSTRAINT, so recreate the table.
-      // Use defer_foreign_keys (not foreign_keys=OFF which is a no-op inside a transaction).
-      db.exec('PRAGMA defer_foreign_keys = ON');
+      // disableForeignKeys flag ensures PRAGMA foreign_keys=OFF runs before BEGIN.
       db.exec(`
         CREATE TABLE mushroom_strains_new (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -736,6 +736,9 @@ function runMigrations(db) {
   for (const m of MIGRATIONS) {
     if (applied.has(m.version)) continue;
     try {
+      // Migrations that drop/recreate tables with FK references need foreign_keys OFF
+      // BEFORE the transaction (the pragma is a no-op inside a transaction).
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = OFF');
       db.exec('BEGIN');
       if (m.fn) m.fn(db);
       else db.exec(m.sql);
@@ -745,9 +748,11 @@ function runMigrations(db) {
         m.description || ''
       );
       db.exec('COMMIT');
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = ON');
       console.log(`  Migration v${m.version} applied: ${m.description || ''}`);
     } catch (e) {
       db.exec('ROLLBACK');
+      if (m.disableForeignKeys) db.exec('PRAGMA foreign_keys = ON');
       // Tolerate "duplicate column" errors — column may already exist from initial schema
       if (e.message && e.message.includes('duplicate column')) {
         db.exec('BEGIN');
