@@ -5002,24 +5002,66 @@ function getLabStockCounts(){
   });
   return counts;
 }
+function getLabStrainBreakdown(){
+  const breakdown={MC:{},PD:{},LC:{},G2G:{},GS:{}};
+  cultures.filter(c=>c.status==='active').forEach(c=>{
+    if(!breakdown[c.type])return;
+    const name=c.strainName||c.species||'Unknown';
+    const kz=c.strainKuerzel||c.strain||'';
+    const key=name+'|'+kz;
+    if(!breakdown[c.type][key])breakdown[c.type][key]={name,kz,count:0,color:spColor(name)};
+    breakdown[c.type][key].count++;
+  });
+  batches.filter(b=>b.batchType==='grain').forEach(b=>{
+    const{status}=getStatus(b.batchId);
+    if(['DONE','EMPTY','CONTAM'].includes(status))return;
+    const name=b.strainName||b.species||'Unknown';
+    const kz=b.strainKuerzel||b.strain||'';
+    const key=name+'|'+kz;
+    if(!breakdown.GS[key])breakdown.GS[key]={name,kz,count:0,color:spColor(name)};
+    breakdown.GS[key].count++;
+  });
+  return breakdown;
+}
+const LAB_TYPE_COLORS={MC:{bg:'#f3e8ff',fg:'#6b21a8',accent:'#a855f7'},PD:{bg:'#dbeafe',fg:'#1e40af',accent:'#3b82f6'},LC:{bg:'#dcfce7',fg:'#166534',accent:'#22c55e'},G2G:{bg:'#fef3c7',fg:'#92400e',accent:'#f59e0b'},GS:{bg:'#fce4ec',fg:'#880e4f',accent:'#e91e63'}};
 function renderDashLabStock(){
   const el=document.getElementById('dash-lab-stock');
   if(!el)return;
   if(!inventory.labThresholds)inventory.labThresholds={MC:0,PD:0,LC:0,G2G:0,GS:0};
   const counts=getLabStockCounts();
-  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px">'+LAB_TYPES.map(type=>{
+  const breakdown=getLabStrainBreakdown();
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">'+LAB_TYPES.map(type=>{
     const count=counts[type]||0;
     const min=inventory.labThresholds[type]||0;
     const low=min>0&&count<min;
     const label=getLabLabel(type);
-    return`<div style="background:var(--c-bg);border:1px solid ${low?'var(--c-red)':'var(--c-border)'};border-radius:10px;padding:12px 14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="font-size:11px;font-weight:600;color:var(--c-text-sec)">${esc(label)}</div>
+    const tc=LAB_TYPE_COLORS[type];
+    const strains=Object.values(breakdown[type]||{}).sort((a,b)=>b.count-a.count);
+    const strainRows=strains.map(s=>{
+      const pct=count>0?Math.round(s.count/count*100):0;
+      return`<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+        <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.name)}${s.kz?' ('+esc(s.kz)+')':''}">${esc(s.name)}${s.kz?' <span style="color:var(--c-text-muted);font-size:10px">('+esc(s.kz)+')</span>':''}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--c-text);min-width:18px;text-align:right">${s.count}</span>
+        <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px"></div></div>
+      </div>`;
+    }).join('');
+    const emptyMsg=count===0?`<div style="font-size:11px;color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`:'';
+    return`<div style="background:var(--c-bg);border:1px solid ${low?'var(--c-red)':'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low?'var(--c-red)':tc.accent}"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;margin-top:2px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
+          <span style="font-size:11px;color:var(--c-text-sec)">${esc(label)}</span>
+        </div>
         ${low?'<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">'+t('lab.lowStock')+'</span>':''}
       </div>
-      <div style="font-size:24px;font-weight:700;color:${low?'var(--c-red-dark)':'var(--c-text)'};margin-bottom:2px">${count}</div>
-      <div style="font-size:11px;color:var(--c-text-muted)">${min>0?'min '+min:'\u2014'}</div>
-      <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:6px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length?'8':'2'}px">
+        <span style="font-size:28px;font-weight:800;color:${low?'var(--c-red-dark)':'var(--c-text)'};line-height:1">${count}</span>
+        <span style="font-size:11px;color:var(--c-text-muted)">${min>0?'/ min '+min:''}</span>
+      </div>
+      ${strains.length?'<div style="border-top:1px solid var(--c-border);padding-top:6px">'+strainRows+'</div>':emptyMsg}
+      <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:8px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
     </div>`;
   }).join('')+'</div>';
 }
