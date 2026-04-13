@@ -425,7 +425,9 @@ const MIGRATIONS = [
     description: 'Add recurrence + team_assignees to calendar_events',
     fn(db) {
       const addCol = (col, def) => {
-        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='${col}'`).get();
+        const has = db
+          .prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='${col}'`)
+          .get();
         if (!has.c) db.exec(`ALTER TABLE calendar_events ADD COLUMN ${col} ${def}`);
       };
       addCol('recurrence', 'TEXT');
@@ -472,16 +474,24 @@ const MIGRATIONS = [
         updated     TEXT
       )`);
 
-      const hasBatch = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('batches') WHERE name='strain_id'").get();
+      const hasBatch = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('batches') WHERE name='strain_id'")
+        .get();
       if (!hasBatch.c) db.exec('ALTER TABLE batches ADD COLUMN strain_id INTEGER REFERENCES mushroom_strains(id)');
 
-      const hasCulture = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='strain_id'").get();
+      const hasCulture = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='strain_id'")
+        .get();
       if (!hasCulture.c) db.exec('ALTER TABLE cultures ADD COLUMN strain_id INTEGER REFERENCES mushroom_strains(id)');
 
       // Collect unique (species, strain) pairs from existing batches + cultures
       const pairs = new Map();
-      const batchRows = db.prepare("SELECT DISTINCT species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''").all();
-      const cultureRows = db.prepare("SELECT DISTINCT species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''").all();
+      const batchRows = db
+        .prepare("SELECT DISTINCT species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''")
+        .all();
+      const cultureRows = db
+        .prepare("SELECT DISTINCT species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''")
+        .all();
       for (const row of [...batchRows, ...cultureRows]) {
         const key = (row.species || '').toLowerCase() + '|' + row.strain.toLowerCase();
         if (!pairs.has(key)) pairs.set(key, { species: (row.species || '').trim(), strain: row.strain.trim() });
@@ -499,14 +509,24 @@ const MIGRATIONS = [
         if (nameUsed.has(name.toLowerCase())) name = (species ? species + ' ' : '') + strain;
         let nameSuffix = 2;
         let finalName = name;
-        while (nameUsed.has(finalName.toLowerCase())) { finalName = name + ' ' + nameSuffix; nameSuffix++; }
+        while (nameUsed.has(finalName.toLowerCase())) {
+          finalName = name + ' ' + nameSuffix;
+          nameSuffix++;
+        }
         nameUsed.add(finalName.toLowerCase());
 
         // Kuerzel: up to 6 chars from strain, alphanumeric+hyphen, deduplicated
-        let kuerzel = strain.slice(0, 6).toUpperCase().replace(/[^A-Z0-9\-]/g, '') || 'UNK';
+        let kuerzel =
+          strain
+            .slice(0, 6)
+            .toUpperCase()
+            .replace(/[^A-Z0-9\-]/g, '') || 'UNK';
         const kuerzelBase = kuerzel.slice(0, 5);
         let kuerzelSuffix = 1;
-        while (kuerzelUsed.has(kuerzel)) { kuerzel = kuerzelBase + kuerzelSuffix; kuerzelSuffix++; }
+        while (kuerzelUsed.has(kuerzel)) {
+          kuerzel = kuerzelBase + kuerzelSuffix;
+          kuerzelSuffix++;
+        }
         kuerzelUsed.add(kuerzel);
 
         const result = insMS.run(finalName, kuerzel, '', now);
@@ -515,7 +535,9 @@ const MIGRATIONS = [
 
       // Link existing batches to their mushroom_strain
       const updateBatch = db.prepare('UPDATE batches SET strain_id=? WHERE batch_id=?');
-      for (const b of db.prepare("SELECT batch_id, species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''").all()) {
+      for (const b of db
+        .prepare("SELECT batch_id, species, strain FROM batches WHERE strain IS NOT NULL AND TRIM(strain) != ''")
+        .all()) {
         const key = (b.species || '').toLowerCase() + '|' + b.strain.toLowerCase();
         const id = pairToId.get(key);
         if (id) updateBatch.run(id, b.batch_id);
@@ -523,7 +545,9 @@ const MIGRATIONS = [
 
       // Link existing cultures to their mushroom_strain
       const updateCulture = db.prepare('UPDATE cultures SET strain_id=? WHERE id=?');
-      for (const c of db.prepare("SELECT id, species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''").all()) {
+      for (const c of db
+        .prepare("SELECT id, species, strain FROM cultures WHERE strain IS NOT NULL AND TRIM(strain) != ''")
+        .all()) {
         const key = (c.species || '').toLowerCase() + '|' + c.strain.toLowerCase();
         const id = pairToId.get(key);
         if (id) updateCulture.run(id, c.id);
@@ -611,11 +635,11 @@ const MIGRATIONS = [
     version: 23,
     description: 'Add lab threshold columns to inventory table',
     fn(db) {
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_pd INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_lc INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0");
-      db.exec("ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0");
+      db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_mc INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_pd INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_lc INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_g2g INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_gs INTEGER DEFAULT 0');
     }
   }
 ];
@@ -683,25 +707,36 @@ function openDb(dbPath) {
 // ── Barcode Registry ────────────────────────────────────────
 function nextBarcodeNumber(db) {
   const row = db.prepare('SELECT MAX(barcode) as m FROM barcodes').get();
-  return (row && row.m != null) ? row.m + 1 : 1000000;
+  return row && row.m != null ? row.m + 1 : 1000000;
 }
 
 function assignBarcode(db, entityType, entityId) {
   // Return existing barcode if already assigned
-  const existing = db.prepare('SELECT barcode FROM barcodes WHERE entity_type=? AND entity_id=?').get(entityType, entityId);
+  const existing = db
+    .prepare('SELECT barcode FROM barcodes WHERE entity_type=? AND entity_id=?')
+    .get(entityType, entityId);
   if (existing) return existing.barcode;
   const num = nextBarcodeNumber(db);
   db.prepare('INSERT INTO barcodes(barcode, entity_type, entity_id, created) VALUES(?,?,?,?)').run(
-    num, entityType, entityId, new Date().toISOString()
+    num,
+    entityType,
+    entityId,
+    new Date().toISOString()
   );
   return num;
 }
 
 function assignBarcodes(db, entityType, entityIds) {
   const result = {};
-  const existing = db.prepare('SELECT barcode, entity_id FROM barcodes WHERE entity_type=? AND entity_id IN (' + entityIds.map(() => '?').join(',') + ')').all(entityType, ...entityIds);
+  const existing = db
+    .prepare(
+      'SELECT barcode, entity_id FROM barcodes WHERE entity_type=? AND entity_id IN (' +
+        entityIds.map(() => '?').join(',') +
+        ')'
+    )
+    .all(entityType, ...entityIds);
   for (const r of existing) result[r.entity_id] = r.barcode;
-  const missing = entityIds.filter(id => !(id in result));
+  const missing = entityIds.filter((id) => !(id in result));
   if (missing.length) {
     let num = nextBarcodeNumber(db);
     const ins = db.prepare('INSERT INTO barcodes(barcode, entity_type, entity_id, created) VALUES(?,?,?,?)');
@@ -745,7 +780,7 @@ function readAll(db, opts = {}) {
       strainId: r.strain_id || null,
       strainName: ms ? ms.name : null,
       strainKuerzel: ms ? ms.kuerzel : null,
-      strainDescriptor: ms ? (ms.description || null) : null,
+      strainDescriptor: ms ? ms.description || null : null,
       qty: r.qty,
       days: r.days,
       substrate: {
@@ -812,7 +847,7 @@ function readAll(db, opts = {}) {
         strainId: r.strain_id || null,
         strainName: ms ? ms.name : null,
         strainKuerzel: ms ? ms.kuerzel : null,
-        strainDescriptor: ms ? (ms.description || null) : null,
+        strainDescriptor: ms ? ms.description || null : null,
         parentId: r.parent_id,
         source: r.source,
         status: r.status,
@@ -1212,7 +1247,11 @@ function writeAll(db, incoming) {
         avg.rhPct ?? 63,
         avg.bagKg ?? 3,
         avg.grainBagKg ?? 1,
-        lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0
+        lt.MC ?? 0,
+        lt.PD ?? 0,
+        lt.LC ?? 0,
+        lt.G2G ?? 0,
+        lt.GS ?? 0
       );
     }
 
@@ -1608,7 +1647,12 @@ function updateBatchField(db, batchId, fields) {
     if (fields.strainId != null) {
       const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
       if (!ms) throw new Error('Pilzsorte nicht gefunden');
-      db.prepare('UPDATE batches SET strain_id=?,species=?,strain=? WHERE batch_id=?').run(fields.strainId, ms.name, ms.kuerzel, batchId);
+      db.prepare('UPDATE batches SET strain_id=?,species=?,strain=? WHERE batch_id=?').run(
+        fields.strainId,
+        ms.name,
+        ms.kuerzel,
+        batchId
+      );
     }
     const allowed = ['notes', 'species', 'strain', 'days', 'due'];
     const cols = Object.keys(fields).filter((k) => allowed.includes(k));
@@ -1671,7 +1715,11 @@ function deleteBatchById(db, batchId) {
   db.exec('BEGIN');
   try {
     // Read batch before deleting so we can reverse inventory deductions
-    const row = db.prepare('SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum FROM batches WHERE batch_id=?').get(batchId);
+    const row = db
+      .prepare(
+        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum FROM batches WHERE batch_id=?'
+      )
+      .get(batchId);
     if (row) {
       const deltas = computeBatchMaterialDeltas(row);
       // Reverse each delta (add materials back)
@@ -1680,7 +1728,12 @@ function deleteBatchById(db, batchId) {
         db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(d.deltaKg);
         const cur = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
         db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
-          new Date().toISOString(), d.mat, d.deltaKg, cur.val, 'batch-delete', batchId
+          new Date().toISOString(),
+          d.mat,
+          d.deltaKg,
+          cur.val,
+          'batch-delete',
+          batchId
         );
       }
     }
@@ -1789,12 +1842,30 @@ function insertCultures(db, cultures) {
     let strain = c.strain || null;
     if (strainId) {
       const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
-      if (ms) { species = ms.name; strain = ms.kuerzel; }
+      if (ms) {
+        species = ms.name;
+        strain = ms.kuerzel;
+      }
     }
-    ins.run(c.id, c.type, species, strain, strainId, c.parentId || null, c.source || null, c.status || 'active', c.notes || '', c.created);
+    ins.run(
+      c.id,
+      c.type,
+      species,
+      strain,
+      strainId,
+      c.parentId || null,
+      c.source || null,
+      c.status || 'active',
+      c.notes || '',
+      c.created
+    );
   }
   // Assign numeric barcodes to all new cultures
-  const cultureBarcodes = assignBarcodes(db, 'culture', cultures.map(c => c.id));
+  const cultureBarcodes = assignBarcodes(
+    db,
+    'culture',
+    cultures.map((c) => c.id)
+  );
   incrementDataVersion(db);
   return { cultureBarcodes };
 }
@@ -1804,7 +1875,12 @@ function updateCulture(db, id, fields) {
   if (fields.strainId != null) {
     const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
     if (!ms) throw new Error('Pilzsorte nicht gefunden');
-    db.prepare('UPDATE cultures SET strain_id=?,species=?,strain=? WHERE id=?').run(fields.strainId, ms.name, ms.kuerzel, id);
+    db.prepare('UPDATE cultures SET strain_id=?,species=?,strain=? WHERE id=?').run(
+      fields.strainId,
+      ms.name,
+      ms.kuerzel,
+      id
+    );
   }
   const allowed = ['status', 'notes', 'species', 'strain', 'source'];
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
@@ -1903,7 +1979,10 @@ function canUserModifyTask(db, username, taskId, isAdmin) {
   const r = db.prepare('SELECT assignee FROM manual_tasks WHERE id=?').get(taskId);
   if (!r) return false;
   if (!r.assignee || !String(r.assignee).trim()) return true;
-  const assignees = String(r.assignee).split(',').map((s) => s.trim()).filter(Boolean);
+  const assignees = String(r.assignee)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   return assignees.includes(username);
 }
 
@@ -2125,11 +2204,20 @@ function upsertSupplier(db, s) {
   if (!s.mat || !s.name) throw new Error('mat and name are required');
   if (!VALID_MATS.includes(s.mat)) throw new Error('invalid material: ' + s.mat);
   if (s.id) {
-    db.prepare('UPDATE suppliers SET mat=?,name=?,url=?,phone=?,notes=? WHERE id=?').run(s.mat, s.name, s.url || null, s.phone || null, s.notes || null, s.id);
+    db.prepare('UPDATE suppliers SET mat=?,name=?,url=?,phone=?,notes=? WHERE id=?').run(
+      s.mat,
+      s.name,
+      s.url || null,
+      s.phone || null,
+      s.notes || null,
+      s.id
+    );
     incrementDataVersion(db);
     return s.id;
   }
-  const info = db.prepare('INSERT INTO suppliers(mat,name,url,phone,notes) VALUES(?,?,?,?,?)').run(s.mat, s.name, s.url || null, s.phone || null, s.notes || null);
+  const info = db
+    .prepare('INSERT INTO suppliers(mat,name,url,phone,notes) VALUES(?,?,?,?,?)')
+    .run(s.mat, s.name, s.url || null, s.phone || null, s.notes || null);
   incrementDataVersion(db);
   return Number(info.lastInsertRowid);
 }
@@ -2143,11 +2231,20 @@ function deleteSupplier(db, id) {
 function serializeTeamAssignees(v) {
   if (v == null) return null;
   if (typeof v === 'string') return v;
-  try { return JSON.stringify(Array.isArray(v) ? v : []); } catch { return null; }
+  try {
+    return JSON.stringify(Array.isArray(v) ? v : []);
+  } catch {
+    return null;
+  }
 }
 function parseTeamAssignees(v) {
   if (!v) return [];
-  try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; }
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
 }
 
 function insertCalendarEvent(db, ev, assigneeIds) {
@@ -2340,8 +2437,10 @@ function zoneBagCount(db, zoneId) {
     .all(...allLocs, ...allLocs);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && allLocs.includes(r.to)) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && allLocs.includes(r.from)) bags.delete(r.bag);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && allLocs.includes(r.to))
+      bags.add(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && allLocs.includes(r.from))
+      bags.delete(r.bag);
   }
   return bags.size;
 }
@@ -2355,7 +2454,12 @@ function deleteZone(db, id) {
 
 function reorderZones(db, order) {
   if (!Array.isArray(order)) throw new Error('order must be an array');
-  const existing = new Set(db.prepare('SELECT id FROM zones').all().map((r) => r.id));
+  const existing = new Set(
+    db
+      .prepare('SELECT id FROM zones')
+      .all()
+      .map((r) => r.id)
+  );
   for (const id of order) {
     if (!existing.has(id)) throw new Error('Unknown zone: ' + id);
   }
@@ -2391,7 +2495,8 @@ function rackBagCount(db, rackId) {
   const bags = new Set();
   for (const r of rows) {
     if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && r.to === rackId) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && r.from === rackId) bags.delete(r.bag);
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && r.from === rackId)
+      bags.delete(r.bag);
   }
   return bags.size;
 }
@@ -2440,11 +2545,18 @@ function generateMcpToken(db) {
 function registerOAuthClient(db, { clientId, clientName, redirectUris }) {
   const existing = db.prepare('SELECT client_id FROM oauth_clients WHERE client_id = ?').get(clientId);
   if (existing) {
-    db.prepare('UPDATE oauth_clients SET client_name = ?, redirect_uris = ? WHERE client_id = ?')
-      .run(clientName || '', JSON.stringify(redirectUris), clientId);
+    db.prepare('UPDATE oauth_clients SET client_name = ?, redirect_uris = ? WHERE client_id = ?').run(
+      clientName || '',
+      JSON.stringify(redirectUris),
+      clientId
+    );
   } else {
-    db.prepare('INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created) VALUES (?, ?, ?, ?)')
-      .run(clientId, clientName || '', JSON.stringify(redirectUris), new Date().toISOString());
+    db.prepare('INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created) VALUES (?, ?, ?, ?)').run(
+      clientId,
+      clientName || '',
+      JSON.stringify(redirectUris),
+      new Date().toISOString()
+    );
   }
   return db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId);
 }
@@ -2453,19 +2565,28 @@ function getOAuthClient(db, clientId) {
   const row = db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId);
   if (!row) return null;
   if (row.revoked === 1) return null;
-  return { clientId: row.client_id, clientName: row.client_name, redirectUris: JSON.parse(row.redirect_uris || '[]'), created: row.created, hasSecret: !!row.client_secret_hash, secretHash: row.client_secret_hash };
+  return {
+    clientId: row.client_id,
+    clientName: row.client_name,
+    redirectUris: JSON.parse(row.redirect_uris || '[]'),
+    created: row.created,
+    hasSecret: !!row.client_secret_hash,
+    secretHash: row.client_secret_hash
+  };
 }
 
 function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod, resource }) {
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
   try {
-    db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires, resource || '');
+    db.prepare(
+      'INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires, resource || '');
   } catch (e) {
     // Fallback if resource column doesn't exist yet (migration v15 not run)
     if (e.message && e.message.includes('resource')) {
-      db.prepare('INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires);
+      db.prepare(
+        'INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, expires) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod || 'S256', expires);
     } else {
       throw e;
     }
@@ -2473,11 +2594,18 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
 }
 
 function getOAuthCode(db, code) {
-  const row = db.prepare('SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > datetime(\'now\')').get(code);
+  const row = db
+    .prepare("SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > datetime('now')")
+    .get(code);
   if (!row) return null;
   return {
-    code: row.code, clientId: row.client_id, userId: row.user_id, redirectUri: row.redirect_uri,
-    codeChallenge: row.code_challenge, codeChallengeMethod: row.code_challenge_method, expires: row.expires,
+    code: row.code,
+    clientId: row.client_id,
+    userId: row.user_id,
+    redirectUri: row.redirect_uri,
+    codeChallenge: row.code_challenge,
+    codeChallengeMethod: row.code_challenge_method,
+    expires: row.expires,
     resource: row.resource || ''
   };
 }
@@ -2488,24 +2616,36 @@ function markOAuthCodeUsed(db, code) {
 
 function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSeconds, refreshTokenRef }) {
   const expires = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
-  db.prepare('INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires, created, refresh_token_ref) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(token, tokenType, clientId, userId, expires, new Date().toISOString(), refreshTokenRef || null);
+  db.prepare(
+    'INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires, created, refresh_token_ref) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(token, tokenType, clientId, userId, expires, new Date().toISOString(), refreshTokenRef || null);
 }
 
 function getOAuthAccessToken(db, tokenHash) {
-  const row = db.prepare("SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > datetime('now')").get(tokenHash);
+  const row = db
+    .prepare(
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > datetime('now')"
+    )
+    .get(tokenHash);
   if (!row) return null;
   return { token: row.token, clientId: row.client_id, userId: row.user_id, expires: row.expires };
 }
 
 function getOAuthRefreshToken(db, tokenHash) {
-  const row = db.prepare("SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > datetime('now')").get(tokenHash);
+  const row = db
+    .prepare(
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > datetime('now')"
+    )
+    .get(tokenHash);
   if (!row) return null;
   return { token: row.token, clientId: row.client_id, userId: row.user_id, expires: row.expires };
 }
 
 function revokeOAuthTokensByRefresh(db, refreshHash) {
-  db.prepare("UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token_ref = ? OR token = ?").run(refreshHash, refreshHash);
+  db.prepare('UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token_ref = ? OR token = ?').run(
+    refreshHash,
+    refreshHash
+  );
 }
 
 function deleteExpiredOAuthData(db) {
@@ -2514,12 +2654,20 @@ function deleteExpiredOAuthData(db) {
 }
 
 function listOAuthClients(db) {
-  const rows = db.prepare(`SELECT c.client_id, c.client_name, c.redirect_uris, c.client_secret_hash, c.created,
+  const rows = db
+    .prepare(
+      `SELECT c.client_id, c.client_name, c.redirect_uris, c.client_secret_hash, c.created,
     (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > datetime('now')) as active_sessions
-    FROM oauth_clients c WHERE c.revoked = 0 ORDER BY c.created DESC`).all();
-  return rows.map(r => ({
-    clientId: r.client_id, clientName: r.client_name, redirectUris: JSON.parse(r.redirect_uris || '[]'),
-    created: r.created, activeSessions: r.active_sessions, autoRegistered: !r.client_secret_hash
+    FROM oauth_clients c WHERE c.revoked = 0 ORDER BY c.created DESC`
+    )
+    .all();
+  return rows.map((r) => ({
+    clientId: r.client_id,
+    clientName: r.client_name,
+    redirectUris: JSON.parse(r.redirect_uris || '[]'),
+    created: r.created,
+    activeSessions: r.active_sessions,
+    autoRegistered: !r.client_secret_hash
   }));
 }
 
@@ -2531,7 +2679,9 @@ function deleteOAuthClient(db, clientId) {
 }
 
 function verifyOAuthClientSecret(db, clientId, secret) {
-  const row = db.prepare('SELECT client_secret_hash FROM oauth_clients WHERE client_id = ? AND revoked = 0').get(clientId);
+  const row = db
+    .prepare('SELECT client_secret_hash FROM oauth_clients WHERE client_id = ? AND revoked = 0')
+    .get(clientId);
   if (!row || !row.client_secret_hash) return false;
   const hash = crypto.createHash('sha256').update(secret).digest('hex');
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(row.client_secret_hash));
@@ -2539,10 +2689,17 @@ function verifyOAuthClientSecret(db, clientId, secret) {
 
 // ── Mushroom Strains CRUD ────────────────────────────────────
 function listMushroomStrains(db) {
-  return db.prepare('SELECT * FROM mushroom_strains ORDER BY name').all().map((r) => ({
-    id: r.id, name: r.name, kuerzel: r.kuerzel, description: r.description || '',
-    created: r.created, updated: r.updated || null
-  }));
+  return db
+    .prepare('SELECT * FROM mushroom_strains ORDER BY name')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      kuerzel: r.kuerzel,
+      description: r.description || '',
+      created: r.created,
+      updated: r.updated || null
+    }));
 }
 
 function createMushroomStrain(db, { name, kuerzel, description }) {
@@ -2550,9 +2707,9 @@ function createMushroomStrain(db, { name, kuerzel, description }) {
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
   try {
-    const result = db.prepare(
-      'INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)'
-    ).run(name.trim(), kuerzel.trim(), description || '', now);
+    const result = db
+      .prepare('INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)')
+      .run(name.trim(), kuerzel.trim(), description || '', now);
     incrementDataVersion(db);
     return result.lastInsertRowid;
   } catch (e) {
@@ -2607,70 +2764,144 @@ function deleteMushroomStrain(db, id) {
 
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
 function mapBatchRow(r, bagStmt, db) {
-  let strainName = null, strainKuerzel = null;
+  let strainName = null,
+    strainKuerzel = null;
   if (r.strain_id && db) {
     const ms = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?').get(r.strain_id);
-    if (ms) { strainName = ms.name; strainKuerzel = ms.kuerzel; }
+    if (ms) {
+      strainName = ms.name;
+      strainKuerzel = ms.kuerzel;
+    }
   }
   return {
-    batchId: r.batch_id, species: r.species, strain: r.strain, strainId: r.strain_id || null,
-    strainName, strainKuerzel,
-    qty: r.qty, days: r.days,
+    batchId: r.batch_id,
+    species: r.species,
+    strain: r.strain,
+    strainId: r.strain_id || null,
+    strainName,
+    strainKuerzel,
+    qty: r.qty,
+    days: r.days,
     substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
-    bagKg: r.bag_kg, batchType: r.batch_type, sourceId: r.source_id, notes: r.notes,
+    bagKg: r.bag_kg,
+    batchType: r.batch_type,
+    sourceId: r.source_id,
+    notes: r.notes,
     strainText: r.strain_text || '',
-    created: r.created, due: r.due, bags: bagStmt.all(r.batch_id).map(b => b.bag_id)
+    created: r.created,
+    due: r.due,
+    bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
   };
 }
 function getAllBatches(db) {
   const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
-  return db.prepare('SELECT * FROM batches ORDER BY created').all().map(r => mapBatchRow(r, bagStmt, db));
+  return db
+    .prepare('SELECT * FROM batches ORDER BY created')
+    .all()
+    .map((r) => mapBatchRow(r, bagStmt, db));
 }
 function getAllTasks(db) {
-  return db.prepare('SELECT * FROM manual_tasks ORDER BY id').all().map(r => ({
-    id: r.id, text: r.text, priority: r.priority, done: r.done === 1, created: r.created,
-    assignee: r.assignee, dueDate: r.due_date, dueTime: r.due_time, dueEndTime: r.due_end_time,
-    description: r.description,
-    recurrence: r.recurrence || null, recurrenceUntil: r.recurrence_until || null
-  }));
+  return db
+    .prepare('SELECT * FROM manual_tasks ORDER BY id')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      text: r.text,
+      priority: r.priority,
+      done: r.done === 1,
+      created: r.created,
+      assignee: r.assignee,
+      dueDate: r.due_date,
+      dueTime: r.due_time,
+      dueEndTime: r.due_end_time,
+      description: r.description,
+      recurrence: r.recurrence || null,
+      recurrenceUntil: r.recurrence_until || null
+    }));
 }
 function getAllHarvests(db) {
-  return db.prepare('SELECT * FROM harvests ORDER BY id').all().map(r => ({
-    id: r.id, time: r.time, batch: r.batch, bag: r.bag,
-    species: r.species, strain: r.strain, grams: r.grams, flush: r.flush
-  }));
+  return db
+    .prepare('SELECT * FROM harvests ORDER BY id')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      time: r.time,
+      batch: r.batch,
+      bag: r.bag,
+      species: r.species,
+      strain: r.strain,
+      grams: r.grams,
+      flush: r.flush
+    }));
 }
 function getAllCultures(db) {
   const msStmt = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?');
-  return db.prepare('SELECT * FROM cultures ORDER BY created').all().map(r => {
-    let strainName = null, strainKuerzel = null;
-    if (r.strain_id) {
-      const ms = msStmt.get(r.strain_id);
-      if (ms) { strainName = ms.name; strainKuerzel = ms.kuerzel; }
-    }
-    return {
-      id: r.id, type: r.type, species: r.species, strain: r.strain,
-      strainId: r.strain_id || null, strainName, strainKuerzel,
-      parentId: r.parent_id, source: r.source, status: r.status, notes: r.notes, created: r.created
-    };
-  });
+  return db
+    .prepare('SELECT * FROM cultures ORDER BY created')
+    .all()
+    .map((r) => {
+      let strainName = null,
+        strainKuerzel = null;
+      if (r.strain_id) {
+        const ms = msStmt.get(r.strain_id);
+        if (ms) {
+          strainName = ms.name;
+          strainKuerzel = ms.kuerzel;
+        }
+      }
+      return {
+        id: r.id,
+        type: r.type,
+        species: r.species,
+        strain: r.strain,
+        strainId: r.strain_id || null,
+        strainName,
+        strainKuerzel,
+        parentId: r.parent_id,
+        source: r.source,
+        status: r.status,
+        notes: r.notes,
+        created: r.created
+      };
+    });
 }
 function getScanLog(db) {
-  return db.prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id').all().map(r => ({
-    id: r.id, time: r.time, action: r.action, batch: r.batch, bag: r.bag,
-    from: r.from, to: r.to, species: r.species, strain: r.strain
-  }));
+  return db
+    .prepare('SELECT s.*, u.username FROM scan_log s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.id')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      time: r.time,
+      action: r.action,
+      batch: r.batch,
+      bag: r.bag,
+      from: r.from,
+      to: r.to,
+      species: r.species,
+      strain: r.strain
+    }));
 }
 function getCalendarEvents(db) {
   const assigneeMap = getAllCalendarEventAssignees(db);
-  return db.prepare('SELECT * FROM calendar_events ORDER BY start_date').all().map(r => ({
-    id: r.id, title: r.title, description: r.description, startDate: r.start_date,
-    endDate: r.end_date, allDay: r.all_day === 1, startTime: r.start_time, endTime: r.end_time,
-    category: r.category, color: r.color,
-    recurrence: r.recurrence || null, recurrenceUntil: r.recurrence_until || null,
-    teamAssignees: parseTeamAssignees(r.team_assignees),
-    assignees: assigneeMap.get(r.id) || []
-  }));
+  return db
+    .prepare('SELECT * FROM calendar_events ORDER BY start_date')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      allDay: r.all_day === 1,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      category: r.category,
+      color: r.color,
+      recurrence: r.recurrence || null,
+      recurrenceUntil: r.recurrence_until || null,
+      teamAssignees: parseTeamAssignees(r.team_assignees),
+      assignees: assigneeMap.get(r.id) || []
+    }));
 }
 function getInventory(db, logLimit) {
   const inv = db.prepare('SELECT * FROM inventory WHERE id = 1').get();
@@ -2678,20 +2909,59 @@ function getInventory(db, logLimit) {
     ? db.prepare('SELECT * FROM inventory_log ORDER BY id DESC LIMIT ?').all(logLimit).reverse()
     : db.prepare('SELECT * FROM inventory_log ORDER BY id').all();
   return {
-    stock: { hardwood: inv.stock_hardwood, wheatbran: inv.stock_wheatbran, gypsum: inv.stock_gypsum, grain: inv.stock_grain },
-    thresholds: { hardwood: { minKg: inv.thresh_hardwood }, wheatbran: { minKg: inv.thresh_wheatbran }, gypsum: { minKg: inv.thresh_gypsum }, grain: { minKg: inv.thresh_grain } },
-    avgComposition: { hwPct: inv.avg_hw_pct, wbPct: inv.avg_wb_pct, rhPct: inv.avg_rh_pct, bagKg: inv.avg_bag_kg, grainBagKg: inv.avg_grain_bag_kg },
-    labThresholds: { MC: inv.lab_thresh_mc || 0, PD: inv.lab_thresh_pd || 0, LC: inv.lab_thresh_lc || 0, G2G: inv.lab_thresh_g2g || 0, GS: inv.lab_thresh_gs || 0 },
-    log: logRows.map(r => ({ time: r.time, mat: r.mat, deltaKg: r.delta_kg, running: r.running, type: r.type, ref: r.ref }))
+    stock: {
+      hardwood: inv.stock_hardwood,
+      wheatbran: inv.stock_wheatbran,
+      gypsum: inv.stock_gypsum,
+      grain: inv.stock_grain
+    },
+    thresholds: {
+      hardwood: { minKg: inv.thresh_hardwood },
+      wheatbran: { minKg: inv.thresh_wheatbran },
+      gypsum: { minKg: inv.thresh_gypsum },
+      grain: { minKg: inv.thresh_grain }
+    },
+    avgComposition: {
+      hwPct: inv.avg_hw_pct,
+      wbPct: inv.avg_wb_pct,
+      rhPct: inv.avg_rh_pct,
+      bagKg: inv.avg_bag_kg,
+      grainBagKg: inv.avg_grain_bag_kg
+    },
+    labThresholds: {
+      MC: inv.lab_thresh_mc || 0,
+      PD: inv.lab_thresh_pd || 0,
+      LC: inv.lab_thresh_lc || 0,
+      G2G: inv.lab_thresh_g2g || 0,
+      GS: inv.lab_thresh_gs || 0
+    },
+    log: logRows.map((r) => ({
+      time: r.time,
+      mat: r.mat,
+      deltaKg: r.delta_kg,
+      running: r.running,
+      type: r.type,
+      ref: r.ref
+    }))
   };
 }
 function getZonesWithRacks(db) {
-  const rackStmt = db.prepare('SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id');
-  return db.prepare('SELECT * FROM zones ORDER BY sort_order, id').all().map(z => ({
-    id: z.id, name: z.name, role: z.role, color: z.color, sortOrder: z.sort_order,
-    maxCapacity: z.max_capacity || null, created: z.created,
-    racks: rackStmt.all(z.id).map(r => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
-  }));
+  const rackStmt = db.prepare(
+    'SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id'
+  );
+  return db
+    .prepare('SELECT * FROM zones ORDER BY sort_order, id')
+    .all()
+    .map((z) => ({
+      id: z.id,
+      name: z.name,
+      role: z.role,
+      color: z.color,
+      sortOrder: z.sort_order,
+      maxCapacity: z.max_capacity || null,
+      created: z.created,
+      racks: rackStmt.all(z.id).map((r) => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
+    }));
 }
 
 // ── Daily KPI Snapshot ──────────────────────────────────────
@@ -2706,71 +2976,80 @@ function snapshotDailyKPIs(db) {
   const dayEnd = today + 'T23:59:59';
 
   // 1. Bags created today
-  const bagsCreated = db.prepare(
-    "SELECT COALESCE(SUM(qty), 0) AS v FROM batches WHERE created >= ? AND created <= ?"
-  ).get(dayStart, dayEnd).v;
+  const bagsCreated = db
+    .prepare('SELECT COALESCE(SUM(qty), 0) AS v FROM batches WHERE created >= ? AND created <= ?')
+    .get(dayStart, dayEnd).v;
 
   // 2-4. Materials used today (from inventory_log, type='batch')
-  const matRows = db.prepare(
-    "SELECT mat, COALESCE(SUM(ABS(delta_kg)), 0) AS v FROM inventory_log WHERE type = 'batch' AND time >= ? AND time <= ? GROUP BY mat"
-  ).all(dayStart, dayEnd);
+  const matRows = db
+    .prepare(
+      "SELECT mat, COALESCE(SUM(ABS(delta_kg)), 0) AS v FROM inventory_log WHERE type = 'batch' AND time >= ? AND time <= ? GROUP BY mat"
+    )
+    .all(dayStart, dayEnd);
   const matUsed = {};
-  matRows.forEach(r => { matUsed[r.mat] = r.v; });
+  matRows.forEach((r) => {
+    matUsed[r.mat] = r.v;
+  });
 
   // 5. Harvest today (kg)
-  const harvestKg = db.prepare(
-    "SELECT COALESCE(SUM(grams), 0) AS v FROM harvests WHERE time >= ? AND time <= ?"
-  ).get(dayStart, dayEnd).v / 1000;
+  const harvestKg =
+    db.prepare('SELECT COALESCE(SUM(grams), 0) AS v FROM harvests WHERE time >= ? AND time <= ?').get(dayStart, dayEnd)
+      .v / 1000;
 
   // 6. Avg yield per bag (all-time) — total grams / unique bags harvested
-  const yieldData = db.prepare(
-    "SELECT COALESCE(SUM(grams), 0) AS totalG, COUNT(DISTINCT bag) AS uniqueBags FROM harvests"
-  ).get();
+  const yieldData = db
+    .prepare('SELECT COALESCE(SUM(grams), 0) AS totalG, COUNT(DISTINCT bag) AS uniqueBags FROM harvests')
+    .get();
   const avgYield = yieldData.uniqueBags > 0 ? Math.round(yieldData.totalG / yieldData.uniqueBags) : 0;
 
   // 7. Contamination rate (all-time) — contaminated bags / all bags placed
   const zones = db.prepare('SELECT id, role FROM zones').all();
-  const contamZoneIds = zones.filter(z => z.role === 'contaminated').map(z => z.id);
-  const allBagsPlaced = db.prepare(
-    "SELECT COUNT(DISTINCT bag) AS v FROM scan_log WHERE action = 'ADD' AND bag IS NOT NULL"
-  ).get().v;
+  const contamZoneIds = zones.filter((z) => z.role === 'contaminated').map((z) => z.id);
+  const allBagsPlaced = db
+    .prepare("SELECT COUNT(DISTINCT bag) AS v FROM scan_log WHERE action = 'ADD' AND bag IS NOT NULL")
+    .get().v;
 
   let contamBags = 0;
   if (contamZoneIds.length > 0) {
     // A bag is contaminated if it was ever moved TO a contaminated zone (or zone:rack)
     const placeholders = contamZoneIds.map(() => '?').join(',');
     // scan_log.to can be "zone" or "zone:rack", so we match zone prefix
-    const contamRows = db.prepare(
-      `SELECT DISTINCT bag FROM scan_log WHERE bag IS NOT NULL AND (` +
-      contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ') + `)`
-    ).all(...contamZoneIds.flatMap(id => [id, id]));
+    const contamRows = db
+      .prepare(
+        `SELECT DISTINCT bag FROM scan_log WHERE bag IS NOT NULL AND (` +
+          contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ') +
+          `)`
+      )
+      .all(...contamZoneIds.flatMap((id) => [id, id]));
     contamBags = contamRows.length;
   }
-  const contamRate = allBagsPlaced > 0 ? +(contamBags / allBagsPlaced * 100).toFixed(1) : 0;
+  const contamRate = allBagsPlaced > 0 ? +((contamBags / allBagsPlaced) * 100).toFixed(1) : 0;
 
   // 8. Days since last contamination
   let daysSinceContam = null;
   if (contamZoneIds.length > 0) {
     const lastContamCondition = contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ');
-    const lastContam = db.prepare(
-      `SELECT MAX(time) AS t FROM scan_log WHERE bag IS NOT NULL AND (${lastContamCondition})`
-    ).get(...contamZoneIds.flatMap(id => [id, id]));
+    const lastContam = db
+      .prepare(`SELECT MAX(time) AS t FROM scan_log WHERE bag IS NOT NULL AND (${lastContamCondition})`)
+      .get(...contamZoneIds.flatMap((id) => [id, id]));
     if (lastContam && lastContam.t) {
       daysSinceContam = Math.floor((Date.now() - new Date(lastContam.t).getTime()) / 864e5);
     }
   }
 
   // 9. Flush 2+ bags
-  const flush2Plus = db.prepare(
-    "SELECT COUNT(*) AS v FROM (SELECT bag, MAX(flush) AS mf FROM harvests GROUP BY bag HAVING mf >= 2)"
-  ).get().v;
+  const flush2Plus = db
+    .prepare('SELECT COUNT(*) AS v FROM (SELECT bag, MAX(flush) AS mf FROM harvests GROUP BY bag HAVING mf >= 2)')
+    .get().v;
 
   // 10. Pipeline counts — compute current bag locations from scan_log
   const zoneRoleMap = {};
-  zones.forEach(z => { zoneRoleMap[z.id] = z.role; });
+  zones.forEach((z) => {
+    zoneRoleMap[z.id] = z.role;
+  });
   const allScans = db.prepare('SELECT action, bag, "from", "to" FROM scan_log ORDER BY id').all();
   const bagZone = {}; // bag -> zone_id (current)
-  allScans.forEach(e => {
+  allScans.forEach((e) => {
     const toZone = e.to ? e.to.split(':')[0] : null;
     const fromZone = e.from ? e.from.split(':')[0] : null;
     if (e.action === 'ADD' && toZone) bagZone[e.bag] = toZone;
@@ -2778,7 +3057,7 @@ function snapshotDailyKPIs(db) {
     if (e.action === 'REMOVE' && fromZone && bagZone[e.bag] === fromZone) delete bagZone[e.bag];
   });
   const roleCounts = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
-  Object.values(bagZone).forEach(zId => {
+  Object.values(bagZone).forEach((zId) => {
     const role = zoneRoleMap[zId];
     if (role && roleCounts[role] !== undefined) roleCounts[role]++;
   });
@@ -2788,16 +3067,34 @@ function snapshotDailyKPIs(db) {
   const inv = db.prepare('SELECT stock_hardwood, stock_wheatbran, stock_grain FROM inventory WHERE id = 1').get();
 
   // Insert snapshot
-  db.prepare(`INSERT INTO kpi_snapshots (
+  db.prepare(
+    `INSERT INTO kpi_snapshots (
     date, bags_created, grain_used_kg, harvest_kg, hardwood_used_kg, wheatbran_used_kg,
     avg_yield_g, contam_rate_pct, contam_bags, total_bags_placed, days_since_contam,
     flush_2plus, bags_spawn, bags_incubation, bags_fruiting, bags_contaminated,
     total_batches, stock_hardwood_kg, stock_wheatbran_kg, stock_grain_kg
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    today, bagsCreated, matUsed.grain || 0, harvestKg, matUsed.hardwood || 0, matUsed.wheatbran || 0,
-    avgYield, contamRate, contamBags, allBagsPlaced, daysSinceContam,
-    flush2Plus, roleCounts.spawn, roleCounts.incubation, roleCounts.fruiting, roleCounts.contaminated,
-    totalBatches, inv ? inv.stock_hardwood : 0, inv ? inv.stock_wheatbran : 0, inv ? inv.stock_grain : 0
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    today,
+    bagsCreated,
+    matUsed.grain || 0,
+    harvestKg,
+    matUsed.hardwood || 0,
+    matUsed.wheatbran || 0,
+    avgYield,
+    contamRate,
+    contamBags,
+    allBagsPlaced,
+    daysSinceContam,
+    flush2Plus,
+    roleCounts.spawn,
+    roleCounts.incubation,
+    roleCounts.fruiting,
+    roleCounts.contaminated,
+    totalBatches,
+    inv ? inv.stock_hardwood : 0,
+    inv ? inv.stock_wheatbran : 0,
+    inv ? inv.stock_grain : 0
   );
 
   return { saved: true, date: today };

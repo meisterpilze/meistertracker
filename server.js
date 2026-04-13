@@ -85,19 +85,29 @@ if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
 const MCP_SESSION_TTL = 30 * 60 * 1000; // 30 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [sid, s] of mcpSessions) {
-    if (now - s.lastActive > MCP_SESSION_TTL) {
-      s.server.close().catch(() => {});
-      mcpSessions.delete(sid);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [sid, s] of mcpSessions) {
+      if (now - s.lastActive > MCP_SESSION_TTL) {
+        s.server.close().catch(() => {});
+        mcpSessions.delete(sid);
+      }
     }
-  }
-}, 5 * 60 * 1000); // check every 5 minutes
+  },
+  5 * 60 * 1000
+); // check every 5 minutes
 // Clean up expired OAuth codes and revoked tokens every hour
-setInterval(() => {
-  try { db.deleteExpiredOAuthData(database); } catch (e) { log('error', 'OAuth cleanup failed', { error: e.message }); }
-}, 60 * 60 * 1000);
+setInterval(
+  () => {
+    try {
+      db.deleteExpiredOAuthData(database);
+    } catch (e) {
+      log('error', 'OAuth cleanup failed', { error: e.message });
+    }
+  },
+  60 * 60 * 1000
+);
 
 function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
@@ -125,21 +135,31 @@ function checkRate(req, limit) {
   const ip = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
   let bucket = rateLimits.get(ip);
-  if (!bucket) { bucket = { timestamps: [] }; rateLimits.set(ip, bucket); }
-  bucket.timestamps = bucket.timestamps.filter(ts => now - ts < MCP_RATE_WINDOW);
+  if (!bucket) {
+    bucket = { timestamps: [] };
+    rateLimits.set(ip, bucket);
+  }
+  bucket.timestamps = bucket.timestamps.filter((ts) => now - ts < MCP_RATE_WINDOW);
   if (bucket.timestamps.length >= limit) return false;
   bucket.timestamps.push(now);
   return true;
 }
-function checkMcpRate(req) { return checkRate(req, 60); }   // 60 req/min for MCP
-function checkOAuthRate(req) { return checkRate(req, 20); } // 20 req/min for OAuth endpoints
+function checkMcpRate(req) {
+  return checkRate(req, 60);
+} // 60 req/min for MCP
+function checkOAuthRate(req) {
+  return checkRate(req, 20);
+} // 20 req/min for OAuth endpoints
 // Evict stale IPs every 10 minutes
-setInterval(() => {
-  const cutoff = Date.now() - MCP_RATE_WINDOW;
-  for (const [ip, bucket] of rateLimits) {
-    if (bucket.timestamps.every(ts => ts < cutoff)) rateLimits.delete(ip);
-  }
-}, 10 * 60 * 1000);
+setInterval(
+  () => {
+    const cutoff = Date.now() - MCP_RATE_WINDOW;
+    for (const [ip, bucket] of rateLimits) {
+      if (bucket.timestamps.every((ts) => ts < cutoff)) rateLimits.delete(ip);
+    }
+  },
+  10 * 60 * 1000
+);
 
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
 // Uses a Set for O(1) add/delete instead of array splice.
@@ -382,10 +402,13 @@ function clearSessionCookie(res) {
 // Clean expired sessions + OAuth data on startup and hourly
 db.deleteExpiredSessions(database);
 db.deleteExpiredOAuthData(database);
-setInterval(() => {
-  db.deleteExpiredSessions(database);
-  db.deleteExpiredOAuthData(database);
-}, 60 * 60 * 1000);
+setInterval(
+  () => {
+    db.deleteExpiredSessions(database);
+    db.deleteExpiredOAuthData(database);
+  },
+  60 * 60 * 1000
+);
 
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
@@ -479,7 +502,9 @@ function runDailyBackup() {
     db.backupDb(database, dest)
       .then(() => {
         let sizeBytes = 0;
-        try { sizeBytes = fs.statSync(dest).size; } catch {}
+        try {
+          sizeBytes = fs.statSync(dest).size;
+        } catch {}
         const durationMs = Date.now() - startedAt;
         log('info', 'Auto-backup saved', { path: dest, sizeBytes, durationMs });
         // Keep last 30 daily backups
@@ -1034,12 +1059,16 @@ let _printerStatusCacheTime = 0;
 
 function checkPrinterAvailable(callback) {
   const now = Date.now();
-  if (_printerStatusCache !== null && (now - _printerStatusCacheTime) < 5000) {
+  if (_printerStatusCache !== null && now - _printerStatusCacheTime < 5000) {
     return callback(null, _printerStatusCache);
   }
   execFile(
     'powershell',
-    ['-NoProfile', '-Command', `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`],
+    [
+      '-NoProfile',
+      '-Command',
+      `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
+    ],
     (err, stdout) => {
       const found = !err && stdout.includes(PRINTER_NAME);
       _printerStatusCache = found;
@@ -1119,20 +1148,28 @@ public class DOCINFO {
       }
 
       const cleanup = () => {
-        fs.unlink(tmp, (e) => { if (e) log('warn', 'Failed to delete temp ZPL file', { error: e.message }); });
-        fs.unlink(psTmp, (e) => { if (e) log('warn', 'Failed to delete temp PS1 file', { error: e.message }); });
+        fs.unlink(tmp, (e) => {
+          if (e) log('warn', 'Failed to delete temp ZPL file', { error: e.message });
+        });
+        fs.unlink(psTmp, (e) => {
+          if (e) log('warn', 'Failed to delete temp PS1 file', { error: e.message });
+        });
       };
 
-      const child = execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psTmp], (e, stdout, stderr) => {
-        cleanup();
-        if (e) {
-          log('error', 'PowerShell print error', { error: stderr || e.message });
-          callback('Print failed: ' + (stderr || e.message).trim());
-        } else {
-          log('info', 'Print OK', { output: stdout.trim() });
-          callback(null);
+      const child = execFile(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psTmp],
+        (e, stdout, stderr) => {
+          cleanup();
+          if (e) {
+            log('error', 'PowerShell print error', { error: stderr || e.message });
+            callback('Print failed: ' + (stderr || e.message).trim());
+          } else {
+            log('info', 'Print OK', { output: stdout.trim() });
+            callback(null);
+          }
         }
-      });
+      );
 
       const timeout = setTimeout(() => {
         child.kill();
@@ -1241,8 +1278,7 @@ function checkCaldavAuth(req) {
     const pass = decoded.slice(idx + 1);
 
     // Try exact username match, then case-insensitive fallback
-    const account = db.getUserByUsername(database, user)
-      || db.getUserByUsernameCaseInsensitive(database, user);
+    const account = db.getUserByUsername(database, user) || db.getUserByUsernameCaseInsensitive(database, user);
     if (!account) continue;
     if (db.verifyPassword(account.hash, account.salt, pass)) return account;
   }
@@ -2319,7 +2355,9 @@ function handlePropfind(parts, body, req, res) {
         const etag = getEtag(calName, f);
         if (!etag) continue;
         let fileSize = 0;
-        try { fileSize = fs.statSync(path.join(CAL_DIR, calName, f)).size; } catch {}
+        try {
+          fileSize = fs.statSync(path.join(CAL_DIR, calName, f)).size;
+        } catch {}
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
     <d:propstat>
@@ -2358,7 +2396,9 @@ function handlePropfind(parts, body, req, res) {
       return;
     }
     let fileSize = 0;
-    try { fileSize = fs.statSync(filePath).size; } catch {}
+    try {
+      fileSize = fs.statSync(filePath).size;
+    } catch {}
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -2632,10 +2672,16 @@ function handlePut(parts, body, req, res) {
               } else if (dueMatch) {
                 const d = dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3];
                 if (d !== (task.dueDate || '').slice(0, 10)) fields.dueDate = d;
-                if (task.dueTime) { fields.dueTime = null; fields.dueEndTime = null; }
+                if (task.dueTime) {
+                  fields.dueTime = null;
+                  fields.dueEndTime = null;
+                }
               } else if (!unfolded.includes('DUE') && task.dueDate) {
                 fields.dueDate = null;
-                if (task.dueTime) { fields.dueTime = null; fields.dueEndTime = null; }
+                if (task.dueTime) {
+                  fields.dueTime = null;
+                  fields.dueEndTime = null;
+                }
               }
               const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
               if (descMatch) {
@@ -2920,7 +2966,7 @@ function handleDelete(parts, req, res) {
     const userSlug = req.caldavUserSlug;
     if (calName !== userSlug && calName !== 'meisterpilze' && req.caldavUser.role !== 'admin') {
       res.writeHead(403);
-      res.end('Forbidden: cannot delete from other users\' calendars');
+      res.end("Forbidden: cannot delete from other users' calendars");
       return;
     }
     if (calName === 'meisterpilze' && req.caldavUser.role !== 'admin') {
@@ -3182,17 +3228,22 @@ function handleRequest(req, res) {
   }
   // RFC 9728: serve protected resource metadata at both path-aware and root URLs
   const MCP_SCOPE = 'mcp:full';
-  if (req.method === 'GET' && (req.url === '/.well-known/oauth-protected-resource/mcp' || req.url === '/.well-known/oauth-protected-resource')) {
+  if (
+    req.method === 'GET' &&
+    (req.url === '/.well-known/oauth-protected-resource/mcp' || req.url === '/.well-known/oauth-protected-resource')
+  ) {
     const base = getBaseUrl(req);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version');
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      resource: base + '/mcp',
-      authorization_servers: [base],
-      bearer_methods_supported: ['header'],
-      scopes_supported: [MCP_SCOPE]
-    }));
+    res.end(
+      JSON.stringify({
+        resource: base + '/mcp',
+        authorization_servers: [base],
+        bearer_methods_supported: ['header'],
+        scopes_supported: [MCP_SCOPE]
+      })
+    );
     return;
   }
   if (req.method === 'GET' && req.url === '/.well-known/oauth-authorization-server') {
@@ -3200,17 +3251,19 @@ function handleRequest(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version');
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      issuer: base,
-      authorization_endpoint: base + '/oauth/authorize',
-      token_endpoint: base + '/oauth/token',
-      registration_endpoint: base + '/oauth/register',
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: [MCP_SCOPE]
-    }));
+    res.end(
+      JSON.stringify({
+        issuer: base,
+        authorization_endpoint: base + '/oauth/authorize',
+        token_endpoint: base + '/oauth/token',
+        registration_endpoint: base + '/oauth/register',
+        response_types_supported: ['code'],
+        grant_types_supported: ['authorization_code', 'refresh_token'],
+        token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+        code_challenge_methods_supported: ['S256'],
+        scopes_supported: [MCP_SCOPE]
+      })
+    );
     return;
   }
 
@@ -3221,7 +3274,11 @@ function handleRequest(req, res) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, MCP-Protocol-Version');
-      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
     }
 
     // Dynamic Client Registration (RFC 7591) — required by MCP OAuth spec
@@ -3246,7 +3303,9 @@ function handleRequest(req, res) {
               const u = new URL(uri);
               if (u.protocol !== 'https:' && u.protocol !== 'http:') {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris must be http or https URLs"}');
+                res.end(
+                  '{"error":"invalid_client_metadata","error_description":"redirect_uris must be http or https URLs"}'
+                );
                 return;
               }
             } catch {
@@ -3260,14 +3319,16 @@ function handleRequest(req, res) {
           db.registerOAuthClient(database, { clientId, clientName, redirectUris });
           log('info', 'OAuth client registered via DCR', { clientId, clientName });
           res.writeHead(201, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            client_id: clientId,
-            client_name: clientName,
-            redirect_uris: redirectUris,
-            grant_types: data.grant_types || ['authorization_code', 'refresh_token'],
-            response_types: data.response_types || ['code'],
-            token_endpoint_auth_method: 'none'
-          }));
+          res.end(
+            JSON.stringify({
+              client_id: clientId,
+              client_name: clientName,
+              redirect_uris: redirectUris,
+              grant_types: data.grant_types || ['authorization_code', 'refresh_token'],
+              response_types: data.response_types || ['code'],
+              token_endpoint_auth_method: 'none'
+            })
+          );
         } catch (err) {
           safeErr(res, err);
         }
@@ -3289,10 +3350,22 @@ function handleRequest(req, res) {
         try {
           // Validate client_secret if client has one
           const tokenClient = db.getOAuthClient(database, data.client_id);
-          if (!tokenClient) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client"}'); return; }
+          if (!tokenClient) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client"}');
+            return;
+          }
           if (tokenClient.hasSecret) {
-            if (!data.client_secret) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client","error_description":"client_secret required"}'); return; }
-            if (!db.verifyOAuthClientSecret(database, data.client_id, data.client_secret)) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"invalid_client"}'); return; }
+            if (!data.client_secret) {
+              res.writeHead(401, { 'Content-Type': 'application/json' });
+              res.end('{"error":"invalid_client","error_description":"client_secret required"}');
+              return;
+            }
+            if (!db.verifyOAuthClientSecret(database, data.client_id, data.client_secret)) {
+              res.writeHead(401, { 'Content-Type': 'application/json' });
+              res.end('{"error":"invalid_client"}');
+              return;
+            }
           }
 
           if (data.grant_type === 'authorization_code') {
@@ -3301,12 +3374,31 @@ function handleRequest(req, res) {
             }
             const codeHash = crypto.createHash('sha256').update(data.code).digest('hex');
             const codeRow = db.getOAuthCode(database, codeHash);
-            if (!codeRow) { log('warn', 'OAuth token failed: invalid code', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
-            if (codeRow.clientId !== data.client_id) { log('warn', 'OAuth token failed: client mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
-            if (codeRow.redirectUri !== data.redirect_uri) { log('warn', 'OAuth token failed: redirect mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
-            if (!verifyPkce(data.code_verifier, codeRow.codeChallenge)) { log('warn', 'OAuth token failed: PKCE mismatch', { clientId: data.client_id }); return jsonErr(res, 400, 'invalid_grant'); }
+            if (!codeRow) {
+              log('warn', 'OAuth token failed: invalid code', { clientId: data.client_id });
+              return jsonErr(res, 400, 'invalid_grant');
+            }
+            if (codeRow.clientId !== data.client_id) {
+              log('warn', 'OAuth token failed: client mismatch', { clientId: data.client_id });
+              return jsonErr(res, 400, 'invalid_grant');
+            }
+            if (codeRow.redirectUri !== data.redirect_uri) {
+              log('warn', 'OAuth token failed: redirect mismatch', { clientId: data.client_id });
+              return jsonErr(res, 400, 'invalid_grant');
+            }
+            if (!verifyPkce(data.code_verifier, codeRow.codeChallenge)) {
+              log('warn', 'OAuth token failed: PKCE mismatch', { clientId: data.client_id });
+              return jsonErr(res, 400, 'invalid_grant');
+            }
             // RFC 8707: validate resource indicator if both sides provided one
-            if (data.resource && codeRow.resource && data.resource !== codeRow.resource) { log('warn', 'OAuth token failed: resource mismatch', { clientId: data.client_id, expected: codeRow.resource, got: data.resource }); return jsonErr(res, 400, 'invalid_grant'); }
+            if (data.resource && codeRow.resource && data.resource !== codeRow.resource) {
+              log('warn', 'OAuth token failed: resource mismatch', {
+                clientId: data.client_id,
+                expected: codeRow.resource,
+                got: data.resource
+              });
+              return jsonErr(res, 400, 'invalid_grant');
+            }
 
             db.markOAuthCodeUsed(database, codeHash);
 
@@ -3315,12 +3407,32 @@ function handleRequest(req, res) {
             const accessHash = crypto.createHash('sha256').update(accessToken).digest('hex');
             const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
-            db.createOAuthToken(database, { token: accessHash, tokenType: 'access', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 3600, refreshTokenRef: refreshHash });
-            db.createOAuthToken(database, { token: refreshHash, tokenType: 'refresh', clientId: data.client_id, userId: codeRow.userId, expiresInSeconds: 30 * 24 * 3600 });
+            db.createOAuthToken(database, {
+              token: accessHash,
+              tokenType: 'access',
+              clientId: data.client_id,
+              userId: codeRow.userId,
+              expiresInSeconds: 3600,
+              refreshTokenRef: refreshHash
+            });
+            db.createOAuthToken(database, {
+              token: refreshHash,
+              tokenType: 'refresh',
+              clientId: data.client_id,
+              userId: codeRow.userId,
+              expiresInSeconds: 30 * 24 * 3600
+            });
 
             log('info', 'OAuth token issued', { clientId: data.client_id });
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ access_token: accessToken, token_type: 'bearer', expires_in: 3600, refresh_token: refreshToken }));
+            res.end(
+              JSON.stringify({
+                access_token: accessToken,
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: refreshToken
+              })
+            );
           } else if (data.grant_type === 'refresh_token') {
             if (!data.refresh_token || !data.client_id) return jsonErr(res, 400, 'missing required parameters');
             const refreshHash = crypto.createHash('sha256').update(data.refresh_token).digest('hex');
@@ -3336,15 +3448,37 @@ function handleRequest(req, res) {
             const newAccessHash = crypto.createHash('sha256').update(newAccessToken).digest('hex');
             const newRefreshHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 
-            db.createOAuthToken(database, { token: newAccessHash, tokenType: 'access', clientId: data.client_id, userId: refreshRow.userId, expiresInSeconds: 3600, refreshTokenRef: newRefreshHash });
-            db.createOAuthToken(database, { token: newRefreshHash, tokenType: 'refresh', clientId: data.client_id, userId: refreshRow.userId, expiresInSeconds: 30 * 24 * 3600 });
+            db.createOAuthToken(database, {
+              token: newAccessHash,
+              tokenType: 'access',
+              clientId: data.client_id,
+              userId: refreshRow.userId,
+              expiresInSeconds: 3600,
+              refreshTokenRef: newRefreshHash
+            });
+            db.createOAuthToken(database, {
+              token: newRefreshHash,
+              tokenType: 'refresh',
+              clientId: data.client_id,
+              userId: refreshRow.userId,
+              expiresInSeconds: 30 * 24 * 3600
+            });
 
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ access_token: newAccessToken, token_type: 'bearer', expires_in: 3600, refresh_token: newRefreshToken }));
+            res.end(
+              JSON.stringify({
+                access_token: newAccessToken,
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: newRefreshToken
+              })
+            );
           } else {
             jsonErr(res, 400, 'unsupported_grant_type');
           }
-        } catch (err) { safeErr(res, err); }
+        } catch (err) {
+          safeErr(res, err);
+        }
       });
       return;
     }
@@ -3367,13 +3501,28 @@ function handleRequest(req, res) {
         const responseType = parsedUrl.searchParams.get('response_type') || '';
         const resource = parsedUrl.searchParams.get('resource') || '';
 
-        if (responseType !== 'code') { jsonErr(res, 400, 'unsupported_response_type'); return; }
-        if (codeChallengeMethod !== 'S256') { jsonErr(res, 400, 'invalid code_challenge_method'); return; }
-        if (!codeChallenge) { jsonErr(res, 400, 'code_challenge required'); return; }
+        if (responseType !== 'code') {
+          jsonErr(res, 400, 'unsupported_response_type');
+          return;
+        }
+        if (codeChallengeMethod !== 'S256') {
+          jsonErr(res, 400, 'invalid code_challenge_method');
+          return;
+        }
+        if (!codeChallenge) {
+          jsonErr(res, 400, 'code_challenge required');
+          return;
+        }
 
         const client = db.getOAuthClient(database, clientId);
-        if (!client) { jsonErr(res, 400, 'invalid client_id'); return; }
-        if (!client.redirectUris.includes(redirectUri)) { jsonErr(res, 400, 'invalid redirect_uri'); return; }
+        if (!client) {
+          jsonErr(res, 400, 'invalid client_id');
+          return;
+        }
+        if (!client.redirectUris.includes(redirectUri)) {
+          jsonErr(res, 400, 'invalid redirect_uri');
+          return;
+        }
 
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const clientName = client.clientName || clientId;
@@ -3425,44 +3574,57 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
       if (req.method === 'POST') {
         const authUser = checkAuth(req);
-        if (!authUser) { jsonErr(res, 401, 'unauthorized'); return; }
+        if (!authUser) {
+          jsonErr(res, 401, 'unauthorized');
+          return;
+        }
         formBody(req, res, (e, data) => {
           if (e) return;
           try {
-          const redirectUri = data.redirect_uri || '';
-          const state = data.state || '';
-          const clientId = data.client_id || '';
+            const redirectUri = data.redirect_uri || '';
+            const state = data.state || '';
+            const clientId = data.client_id || '';
 
-          // Validate client and redirect_uri BEFORE any redirect (prevents open redirect)
-          const client = db.getOAuthClient(database, clientId);
-          if (!client || !client.redirectUris.includes(redirectUri)) {
-            jsonErr(res, 400, 'invalid client or redirect_uri');
-            return;
-          }
+            // Validate client and redirect_uri BEFORE any redirect (prevents open redirect)
+            const client = db.getOAuthClient(database, clientId);
+            if (!client || !client.redirectUris.includes(redirectUri)) {
+              jsonErr(res, 400, 'invalid client or redirect_uri');
+              return;
+            }
 
-          if (data.action === 'deny') {
+            if (data.action === 'deny') {
+              const sep = redirectUri.includes('?') ? '&' : '?';
+              res.writeHead(302, {
+                Location:
+                  redirectUri + sep + 'error=access_denied' + (state ? '&state=' + encodeURIComponent(state) : '')
+              });
+              res.end();
+              return;
+            }
+
+            log('info', 'OAuth authorization granted', { clientId, user: authUser.username });
+            const code = crypto.randomBytes(32).toString('hex');
+            const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+            db.createOAuthCode(database, {
+              code: codeHash,
+              clientId,
+              userId: authUser.user_id,
+              redirectUri,
+              codeChallenge: data.code_challenge || '',
+              codeChallengeMethod: data.code_challenge_method || 'S256',
+              resource: data.resource || ''
+            });
+
             const sep = redirectUri.includes('?') ? '&' : '?';
-            res.writeHead(302, { Location: redirectUri + sep + 'error=access_denied' + (state ? '&state=' + encodeURIComponent(state) : '') });
+            res.writeHead(302, {
+              Location:
+                redirectUri +
+                sep +
+                'code=' +
+                encodeURIComponent(code) +
+                (state ? '&state=' + encodeURIComponent(state) : '')
+            });
             res.end();
-            return;
-          }
-
-          log('info', 'OAuth authorization granted', { clientId, user: authUser.username });
-          const code = crypto.randomBytes(32).toString('hex');
-          const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-          db.createOAuthCode(database, {
-            code: codeHash,
-            clientId,
-            userId: authUser.user_id,
-            redirectUri,
-            codeChallenge: data.code_challenge || '',
-            codeChallengeMethod: data.code_challenge_method || 'S256',
-            resource: data.resource || ''
-          });
-
-          const sep = redirectUri.includes('?') ? '&' : '?';
-          res.writeHead(302, { Location: redirectUri + sep + 'code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '') });
-          res.end();
           } catch (err) {
             log('error', 'OAuth authorize POST failed', { error: err.message });
             safeErr(res, err);
@@ -3498,7 +3660,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const base = getBaseUrl(req);
       res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp", scope="mcp:full"'
+        'WWW-Authenticate':
+          'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp", scope="mcp:full"'
       });
       res.end('{"error":"unauthorized"}');
       return;
@@ -3721,7 +3884,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
       try {
         const { username, password, role } = data;
         if (!username || !password || password.length < 8) {
@@ -3735,7 +3901,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const user = db.createUser(database, username, password, role || 'user');
         log('info', 'User created', { actor: req.authUser.username, newUser: username, role: role || 'user' });
         jsonOk(res, user);
-      } catch (e) { safeErr(res, e); }
+      } catch (e) {
+        safeErr(res, e);
+      }
     });
     return;
   }
@@ -4061,19 +4229,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && url === '/api/mushroom-strains') {
     try {
       jsonOk(res, db.listMushroomStrains(database));
-    } catch (err) { safeErr(res, err); }
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
   if (req.method === 'POST' && url === '/api/mushroom-strains') {
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
       const vr = validateRequired(data, ['name', 'kuerzel']);
-      if (vr) { jsonErr(res, 400, vr); return; }
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
       try {
         const id = db.createMushroomStrain(database, data);
         broadcastSSE(res);
         jsonOk(res, { id });
-      } catch (err) { safeErr(res, err); }
+      } catch (err) {
+        safeErr(res, err);
+      }
     });
     return;
   }
@@ -4081,12 +4259,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'PATCH' && msMatch) {
     const id = parseInt(msMatch[1], 10);
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
       try {
         db.updateMushroomStrain(database, id, data);
         broadcastSSE(res);
         jsonOk(res);
-      } catch (err) { safeErr(res, err); }
+      } catch (err) {
+        safeErr(res, err);
+      }
     });
     return;
   }
@@ -4097,7 +4280,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       db.deleteMushroomStrain(database, id);
       broadcastSSE(res);
       jsonOk(res);
-    } catch (err) { safeErr(res, err); }
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
 
@@ -4109,13 +4294,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       // strainId replaces species+strain; species still required when no strainId
-      const requiredFields = data.strainId ? ['batchId', 'qty', 'days', 'created', 'due'] : ['batchId', 'species', 'qty', 'days', 'created', 'due'];
+      const requiredFields = data.strainId
+        ? ['batchId', 'qty', 'days', 'created', 'due']
+        : ['batchId', 'species', 'qty', 'days', 'created', 'due'];
       const vr = validateRequired(data, requiredFields);
       if (vr) {
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { qty: 'number', days: 'number', batchId: 'string', ...(data.species ? { species: 'string' } : {}) });
+      const vt = validateTypes(data, {
+        qty: 'number',
+        days: 'number',
+        batchId: 'string',
+        ...(data.species ? { species: 'string' } : {})
+      });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
@@ -4218,9 +4410,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     const oldId = decodeURIComponent(batchRenameMatch[1]);
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
       const newId = (data.newId || '').trim();
-      if (!newId) { jsonErr(res, 400, 'newId is required'); return; }
+      if (!newId) {
+        jsonErr(res, 400, 'newId is required');
+        return;
+      }
       if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(newId)) {
         jsonErr(res, 400, 'newId must be alphanumeric with - _ @ . : (max 100 chars)');
         return;
@@ -4341,7 +4539,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const arr = data.cultures || [];
         for (const c of arr) {
           const vr = validateRequired(c, ['id', 'type', 'created']);
-          if (vr) { jsonErr(res, 400, vr); return; }
+          if (vr) {
+            jsonErr(res, 400, vr);
+            return;
+          }
           if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
             jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
             return;
@@ -4398,7 +4599,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { text: 'string', priority: 'string', assignee: 'string', description: 'string', recurrence: 'string' });
+      const vt = validateTypes(data, {
+        text: 'string',
+        priority: 'string',
+        assignee: 'string',
+        description: 'string',
+        recurrence: 'string'
+      });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
@@ -4732,14 +4939,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(zoneNameMatch[1]);
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
-      if (!data.name || !data.name.trim()) { jsonErr(res, 400, 'name is required'); return; }
-      if (data.name.length > 50) { jsonErr(res, 400, 'Zone name too long (max 50 chars)'); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data.name || !data.name.trim()) {
+        jsonErr(res, 400, 'name is required');
+        return;
+      }
+      if (data.name.length > 50) {
+        jsonErr(res, 400, 'Zone name too long (max 50 chars)');
+        return;
+      }
       try {
         db.renameZoneName(database, id, data.name);
         broadcastSSE(res);
         jsonOk(res);
-      } catch (err) { safeErr(res, err); }
+      } catch (err) {
+        safeErr(res, err);
+      }
     });
     return;
   }
@@ -4848,7 +5066,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       const cfg = db.getDuckdnsCfg(database);
-      cfg.hasToken = !!(cfg.token);
+      cfg.hasToken = !!cfg.token;
       delete cfg.token;
       jsonOk(res, cfg);
     } catch (err) {
@@ -4968,15 +5186,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const cfg = db.getMcpCfg(database);
       const base = getBaseUrl(req);
       const clients = db.listOAuthClients(database);
-      const autoClients = clients.filter(c => c.autoRegistered);
-      const manualClients = clients.filter(c => !c.autoRegistered);
+      const autoClients = clients.filter((c) => c.autoRegistered);
+      const manualClients = clients.filter((c) => !c.autoRegistered);
 
       // Check TLS
       const hasTls = protocol === 'https';
 
       // Check discovery endpoints return correct data
-      const prm = { resource: base + '/mcp', authorization_servers: [base], bearer_methods_supported: ['header'], scopes_supported: ['mcp:full'] };
-      const asm = { issuer: base, authorization_endpoint: base + '/oauth/authorize', token_endpoint: base + '/oauth/token', registration_endpoint: base + '/oauth/register' };
+      const prm = {
+        resource: base + '/mcp',
+        authorization_servers: [base],
+        bearer_methods_supported: ['header'],
+        scopes_supported: ['mcp:full']
+      };
+      const asm = {
+        issuer: base,
+        authorization_endpoint: base + '/oauth/authorize',
+        token_endpoint: base + '/oauth/token',
+        registration_endpoint: base + '/oauth/register'
+      };
 
       const diag = {
         mcpEnabled: cfg.enabled,
@@ -4994,10 +5222,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           mcpEnabled: cfg.enabled ? 'PASS' : 'FAIL — enable MCP in settings',
           httpsActive: hasTls ? 'PASS' : 'FAIL — no TLS certificates found, OAuth requires HTTPS',
           registrationEndpoint: 'PASS — /oauth/register available',
-          discoveryEndpoints: 'PASS — /.well-known/oauth-protected-resource/mcp and /.well-known/oauth-authorization-server available'
+          discoveryEndpoints:
+            'PASS — /.well-known/oauth-protected-resource/mcp and /.well-known/oauth-authorization-server available'
         },
         hint: !hasTls
-          ? 'Claude Desktop requires HTTPS. Configure Let\'s Encrypt via DuckDNS or add TLS certificates.'
+          ? "Claude Desktop requires HTTPS. Configure Let's Encrypt via DuckDNS or add TLS certificates."
           : autoClients.length === 0
             ? 'No auto-registered clients yet. Claude Desktop will auto-register when it connects. Make sure the connector URL is reachable from your machine.'
             : 'Server looks configured correctly. If Claude still fails, check: 1) DuckDNS domain resolves to this server, 2) Port is reachable, 3) No firewall blocking.'
@@ -5025,7 +5254,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     try {
       const clientId = decodeURIComponent(req.url.split('/').pop());
       const deleted = db.deleteOAuthClient(database, clientId);
-      if (deleted === 0) { jsonErr(res, 404, 'client not found'); return; }
+      if (deleted === 0) {
+        jsonErr(res, 404, 'client not found');
+        return;
+      }
       log('info', 'OAuth client deleted', { actor: req.authUser.username, clientId });
       jsonOk(res);
     } catch (err) {
@@ -5102,7 +5334,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       if (data.recurrenceUntil) {
         const vd = validateDate(data.recurrenceUntil, 'recurrenceUntil');
-        if (vd) { jsonErr(res, 400, vd); return; }
+        if (vd) {
+          jsonErr(res, 400, vd);
+          return;
+        }
       }
       if (data.teamAssignees != null && !Array.isArray(data.teamAssignees)) {
         jsonErr(res, 400, 'teamAssignees must be an array of names');
@@ -5267,18 +5502,28 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/suppliers') {
     try {
       jsonOk(res, db.listSuppliers(database));
-    } catch (err) { safeErr(res, err); }
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
   if (req.method === 'POST' && req.url === '/api/suppliers') {
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
-      if (!data.mat || !data.name) { jsonErr(res, 400, 'mat and name required'); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data.mat || !data.name) {
+        jsonErr(res, 400, 'mat and name required');
+        return;
+      }
       try {
         const id = db.upsertSupplier(database, data);
         broadcastSSE(res);
         jsonOk(res, { id });
-      } catch (err) { safeErr(res, err); }
+      } catch (err) {
+        safeErr(res, err);
+      }
     });
     return;
   }
@@ -5289,7 +5534,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       db.deleteSupplier(database, parseInt(supDelMatch[1]));
       broadcastSSE(res);
       jsonOk(res, { ok: true });
-    } catch (err) { safeErr(res, err); }
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
 
@@ -5510,7 +5757,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         checkPrinterAvailable((_, found) => {
           if (!found) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Printer not found. Please check that the Zebra printer is connected and powered on.' }));
+            res.end(
+              JSON.stringify({
+                error: 'Printer not found. Please check that the Zebra printer is connected and powered on.'
+              })
+            );
             return;
           }
           printZPL(zpl, (err) => {
@@ -5668,7 +5919,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // slug is always visible, and admins see everything.
       const isAdmin = req.authUser && req.authUser.role === 'admin';
       const callerSlug = req.authUser
-        ? String(req.authUser.username).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        ? String(req.authUser.username)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
         : null;
       const canSeeDir = (dir) => {
         if (CALDAV_CATEGORY_CALS[dir]) return true;
@@ -5676,7 +5929,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return dir === callerSlug;
       };
       if (fs.existsSync(CAL_DIR)) {
-        const dirs = fs.readdirSync(CAL_DIR)
+        const dirs = fs
+          .readdirSync(CAL_DIR)
           .filter((d) => fs.statSync(path.join(CAL_DIR, d)).isDirectory())
           .filter(canSeeDir);
         for (const dir of dirs) {

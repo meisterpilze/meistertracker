@@ -138,7 +138,10 @@ function createMcpServer(database, onWrite) {
     'list_batches',
     'List production batches with optional filters for Pilzsorte (strainId), species, strain, batch type, or date range',
     {
-      strainId: z.number().optional().describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
+      strainId: z
+        .number()
+        .optional()
+        .describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
       species: z.string().optional().describe('Filter by species (partial match, case-insensitive)'),
       strain: z.string().optional().describe('Filter by strain kuerzel (partial match, case-insensitive)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Filter by batch type'),
@@ -345,7 +348,10 @@ function createMcpServer(database, onWrite) {
     'List mushroom cultures with optional filters for type, Pilzsorte (strainId), species, or status',
     {
       type: z.string().optional().describe('Culture type (MC, PD, or LC)'),
-      strainId: z.number().optional().describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
+      strainId: z
+        .number()
+        .optional()
+        .describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
       species: z.string().optional().describe('Filter by species (partial match)'),
       status: z.string().optional().describe('Filter by status (e.g. active, stored, used, contam)')
     },
@@ -445,7 +451,10 @@ function createMcpServer(database, onWrite) {
     'Create a new production batch with auto-generated bags. Prefer passing strainId (use list_mushroom_strains to find ids); when omitted, species is required and strain/species are stored as free-text fallback.',
     {
       batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
-      strainId: z.number().optional().describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
+      strainId: z
+        .number()
+        .optional()
+        .describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
       species: z.string().optional().describe('Mushroom species (required when strainId is omitted)'),
       qty: z.number().describe('Number of bags (>= 1)'),
       days: z.number().describe('Incubation days (>= 1)'),
@@ -659,7 +668,10 @@ function createMcpServer(database, onWrite) {
       grams: z.number().describe('Harvest weight in grams (>= 0)'),
       bag: z.string().optional().describe('Specific bag ID'),
       flush: z.number().optional().describe('Flush number (default: 1)'),
-      strainId: z.number().optional().describe('Pilzsorte id — when set, species/strain are resolved from mushroom_strains'),
+      strainId: z
+        .number()
+        .optional()
+        .describe('Pilzsorte id — when set, species/strain are resolved from mushroom_strains'),
       species: z.string().optional().describe('Auto-filled from batch if omitted'),
       strain: z.string().optional().describe('Auto-filled from batch if omitted')
     },
@@ -812,7 +824,10 @@ function createMcpServer(database, onWrite) {
     {
       id: z.string().describe('Culture ID (e.g. MC-KINGS-250301-01)'),
       type: z.enum(['MC', 'PD', 'LC', 'G2G']).describe('Culture type'),
-      strainId: z.number().optional().describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
+      strainId: z
+        .number()
+        .optional()
+        .describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
       species: z.string().optional().describe('Species (required when strainId is omitted)'),
       strain: z.string().optional().describe('Strain kuerzel (free-text fallback)'),
       parentId: z.string().optional().describe('Parent culture ID for lineage'),

@@ -601,7 +601,11 @@ describe('db – mushroom strains CRUD', () => {
   });
 
   it('createMushroomStrain returns new id and stores the row', () => {
-    const id = db.createMushroomStrain(d, { name: 'Pleurotus ostreatus HK35', kuerzel: 'HK35', description: 'Classic oyster' });
+    const id = db.createMushroomStrain(d, {
+      name: 'Pleurotus ostreatus HK35',
+      kuerzel: 'HK35',
+      description: 'Classic oyster'
+    });
     assert.ok(Number(id) > 0);
     const list = db.listMushroomStrains(d);
     assert.equal(list.length, 1);
@@ -626,10 +630,7 @@ describe('db – mushroom strains CRUD', () => {
   });
 
   it('createMushroomStrain rejects duplicate kuerzel', () => {
-    assert.throws(
-      () => db.createMushroomStrain(d, { name: 'Different name', kuerzel: 'HK35' }),
-      /already taken/
-    );
+    assert.throws(() => db.createMushroomStrain(d, { name: 'Different name', kuerzel: 'HK35' }), /already taken/);
   });
 
   it('insertBatch with strainId resolves species/strain from mushroom_strains', () => {
