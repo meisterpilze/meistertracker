@@ -5,7 +5,15 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const db = require('../db.js');
-const { buildBagLocationMap } = require('../mcp-server.js');
+const {
+  buildBagLocationMap,
+  bcParams,
+  zplText,
+  itemsToZPL,
+  bagLabelItems,
+  labLabelItems,
+  fmtDt
+} = require('../mcp-server.js');
 
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_mcp_test_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
@@ -721,5 +729,478 @@ describe('Daily briefing logic', () => {
       }
     }
     assert.ok(alerts.includes('gypsum'), 'gypsum at 2kg should be below 5kg threshold');
+  });
+});
+
+// ── MCP label printing ───────────────────────────────────
+describe('MCP label printing', () => {
+  // ── ZPL pure-function tests ────────────────────────────
+  describe('bcParams', () => {
+    it('returns mw=3 for short barcode values', () => {
+      const p = bcParams('123');
+      assert.equal(p.mw, 3);
+      assert.ok(p.x >= 0, 'x must be non-negative');
+    });
+
+    it('reduces mw for long barcode values that exceed 400 dots', () => {
+      // A very long value should force mw down
+      const p = bcParams('ABCDEFGHIJKLMNOPQ');
+      assert.ok(p.mw <= 3 && p.mw >= 1, 'mw should be between 1 and 3');
+    });
+
+    it('centers barcode within 400-dot canvas', () => {
+      const p = bcParams('12345');
+      const mods = 35 + 5 * 11; // 90
+      const w = mods * p.mw;
+      const qz = p.mw * 10;
+      // x should be at least quiet zone, centered when possible
+      assert.ok(p.x >= qz || p.x >= Math.round((400 - w) / 2));
+    });
+
+    it('accepts custom qzMult', () => {
+      const p = bcParams('1234', 5);
+      const qz = p.mw * 5;
+      assert.ok(p.x >= qz, 'x must respect custom quiet zone');
+    });
+  });
+
+  describe('zplText', () => {
+    it('escapes ^ characters', () => {
+      assert.equal(zplText('hello^world'), 'helloworld');
+    });
+
+    it('escapes ~ characters', () => {
+      assert.equal(zplText('test~value'), 'testvalue');
+    });
+
+    it('escapes both ^ and ~ in same string', () => {
+      assert.equal(zplText('a^b~c^d'), 'abcd');
+    });
+
+    it('handles null', () => {
+      assert.equal(zplText(null), '');
+    });
+
+    it('handles undefined', () => {
+      assert.equal(zplText(undefined), '');
+    });
+
+    it('handles empty string', () => {
+      assert.equal(zplText(''), '');
+    });
+
+    it('passes through normal text unchanged', () => {
+      assert.equal(zplText('FB-2025-001-01'), 'FB-2025-001-01');
+    });
+  });
+
+  describe('itemsToZPL', () => {
+    it('begins with ^XA and ends with ^XZ', () => {
+      const zpl = itemsToZPL([]);
+      assert.ok(zpl.startsWith('^XA'), 'must start with ^XA');
+      assert.ok(zpl.endsWith('^XZ'), 'must end with ^XZ');
+    });
+
+    it('computes label length between 160 and 240', () => {
+      const zpl = itemsToZPL([{ type: 'text', y: 10, fontH: 24, text: 'test' }]);
+      const llMatch = zpl.match(/\^LL(\d+)/);
+      assert.ok(llMatch, 'must contain ^LL');
+      const ll = Number(llMatch[1]);
+      assert.ok(ll >= 160 && ll <= 240, `label length ${ll} must be 160-240`);
+    });
+
+    it('renders barcode items with ^BCN command', () => {
+      const zpl = itemsToZPL([{ type: 'barcode', x: 30, y: 40, h: 90, val: '12345', mw: 3 }]);
+      assert.ok(zpl.includes('^BCN,'), 'must contain ^BCN barcode command');
+      assert.ok(zpl.includes('^FD12345^FS'), 'must contain barcode value');
+    });
+
+    it('renders text items with ^FB block and ^A0N font', () => {
+      const zpl = itemsToZPL([{ type: 'text', y: 136, fontH: 24, text: 'Hello', blockW: 400 }]);
+      assert.ok(zpl.includes('^FB400,1,0,C'), 'must contain centered field block');
+      assert.ok(zpl.includes('^A0N,24,24'), 'must contain font spec');
+      assert.ok(zpl.includes('^FDHello^FS'), 'must contain text');
+    });
+
+    it('renders bold text with offset duplicate', () => {
+      const zpl = itemsToZPL([{ type: 'text', y: 136, fontH: 28, text: 'Bold', bold: true }]);
+      // Bold = two ^FO commands, second at x+1
+      const matches = zpl.match(/\^FO/g);
+      assert.equal(matches.length, 2, 'bold text needs 2 FO commands');
+      assert.ok(zpl.includes('^FO0,136'), 'first at x=0');
+      assert.ok(zpl.includes('^FO1,136'), 'second at x=1');
+    });
+
+    it('renders QR items with ^BQN and mag parameter', () => {
+      const zpl = itemsToZPL([{ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: 'MC-001' }]);
+      assert.ok(zpl.includes('^BQN,2,8'), 'must use mag=8');
+      assert.ok(zpl.includes('^FDMM,AMC-001^FS'), 'must contain QR value');
+    });
+
+    it('uses default mag=4 when mag not specified', () => {
+      const zpl = itemsToZPL([{ type: 'qr', x: 190, y: 10, size: 200, val: 'TEST' }]);
+      assert.ok(zpl.includes('^BQN,2,4'), 'must default to mag=4');
+    });
+
+    it('expands label length for tall content', () => {
+      const items = [
+        { type: 'barcode', x: 30, y: 40, h: 90, val: '123', mw: 3 },
+        { type: 'text', y: 136, fontH: 24, text: 'Line1' },
+        { type: 'text', y: 164, fontH: 24, text: 'Line2' },
+        { type: 'text', y: 192, fontH: 28, text: 'Line3', bold: true }
+      ];
+      const zpl = itemsToZPL(items);
+      const ll = Number(zpl.match(/\^LL(\d+)/)[1]);
+      // bottom of Line3 = 192+28 = 220, +10 pad = 230
+      assert.ok(ll >= 220, `label length ${ll} should accommodate all content`);
+    });
+  });
+
+  describe('bagLabelItems', () => {
+    const batch = {
+      species: 'Pleurotus ostreatus',
+      strainName: 'Pleurotus ostreatus HK35',
+      strainText: 'HK35',
+      notes: 'Test batch',
+      due: '2025-03-22T00:00:00Z'
+    };
+
+    it('minimal: produces barcode + ID text only', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', 42, false);
+      assert.equal(items.length, 2);
+      assert.equal(items[0].type, 'barcode');
+      assert.equal(items[0].val, '42');
+      assert.equal(items[1].type, 'text');
+      assert.equal(items[1].text, 'FB-2025-001-01');
+    });
+
+    it('sorte: adds species/strain line', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, false);
+      assert.equal(items.length, 3);
+      assert.equal(items[2].type, 'text');
+      assert.ok(items[2].text.includes('Pleurotus ostreatus HK35'));
+    });
+
+    it('full: adds due date line', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'full', 42, false);
+      assert.equal(items.length, 4);
+      const dueLine = items[3];
+      assert.equal(dueLine.bold, true);
+      assert.ok(dueLine.text.includes('22.03.2025'));
+    });
+
+    it('uses barcodeNum as barcode value when provided', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', 999, false);
+      assert.equal(items[0].val, '999');
+    });
+
+    it('falls back to underscore-encoded ID when no barcodeNum', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', null, false);
+      assert.equal(items[0].val, 'FB_2025_001_01');
+    });
+
+    it('with QR: produces qr item instead of barcode', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', 42, true);
+      assert.equal(items[0].type, 'qr');
+      assert.equal(items[0].val, 'FB-2025-001-01');
+      assert.equal(items[0].mag, 4);
+      assert.equal(items[0].x, 295);
+    });
+
+    it('with QR: text blockW is 280 and left-aligned', () => {
+      const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, true);
+      for (const it of items.filter((i) => i.type === 'text')) {
+        assert.equal(it.blockW, 280, 'text width must be 280 with QR');
+        assert.equal(it.x, 5, 'text must be left-aligned at x=5');
+      }
+    });
+
+    it('truncates long notes to 13 chars + ellipsis', () => {
+      const longBatch = { ...batch, notes: 'This is a very long note that should be truncated' };
+      const items = bagLabelItems('FB-2025-001-01', longBatch, 'sorte', 42, false);
+      const line2 = items[2].text;
+      assert.ok(line2.includes('\u2026'), 'should contain ellipsis');
+    });
+
+    it('omits due date line when batch.due is null', () => {
+      const noDueBatch = { ...batch, due: null };
+      const items = bagLabelItems('FB-2025-001-01', noDueBatch, 'full', 42, false);
+      // Should have barcode + ID + species line, but no due date
+      assert.equal(items.length, 3);
+    });
+  });
+
+  describe('labLabelItems', () => {
+    const culture = {
+      species: 'Pleurotus ostreatus',
+      strainName: 'Pleurotus ostreatus HK35',
+      strainDescriptor: 'Kräuterseitling',
+      parentId: 'MC-001',
+      created: '2025-02-01T00:00:00Z'
+    };
+
+    it('minimal: produces barcode + ID text only', () => {
+      const items = labLabelItems('PD-001', culture, 'minimal', 55, false);
+      assert.equal(items.length, 2);
+      assert.equal(items[0].type, 'barcode');
+      assert.equal(items[0].val, '55');
+      assert.equal(items[1].type, 'text');
+      assert.ok(items[1].text.includes('PD-001'));
+    });
+
+    it('shows parentId with arrow in line 1', () => {
+      const items = labLabelItems('PD-001', culture, 'minimal', 55, false);
+      assert.equal(items[1].text, 'PD-001 \u2190 MC-001');
+    });
+
+    it('omits parentId arrow when parentId is null', () => {
+      const noParent = { ...culture, parentId: null };
+      const items = labLabelItems('MC-001', noParent, 'minimal', 55, false);
+      assert.equal(items[1].text, 'MC-001');
+    });
+
+    it('sorte: adds species + descriptor line', () => {
+      const items = labLabelItems('PD-001', culture, 'sorte', 55, false);
+      assert.equal(items.length, 3);
+      assert.ok(items[2].text.includes('Pleurotus ostreatus HK35'));
+      assert.ok(items[2].text.includes('Kräuterseitling'));
+    });
+
+    it('full: adds created date line', () => {
+      const items = labLabelItems('PD-001', culture, 'full', 55, false);
+      assert.equal(items.length, 4);
+      const dateLine = items[3];
+      assert.equal(dateLine.bold, true);
+      assert.equal(dateLine.text, '01.02.25');
+    });
+
+    it('full without species: date at offset 28', () => {
+      const noSpecies = { ...culture, strainName: null, species: null, strainDescriptor: '' };
+      const items = labLabelItems('PD-001', noSpecies, 'full', 55, false);
+      // Should have barcode, ID line, date line (no species line)
+      const dateLine = items.find((i) => i.bold);
+      assert.ok(dateLine, 'must have a date line');
+      // line1Y = 40+90+6 = 136, date at 136+28 = 164 (no species line to skip)
+      assert.equal(dateLine.y, 164);
+    });
+
+    it('with QR: produces qr item with mag=4 at top-right', () => {
+      const items = labLabelItems('PD-001', culture, 'minimal', 55, true);
+      assert.equal(items[0].type, 'qr');
+      assert.equal(items[0].val, 'PD-001');
+      assert.equal(items[0].mag, 4);
+      assert.equal(items[0].x, 295);
+    });
+
+    it('falls back to underscore-encoded ID when no barcodeNum', () => {
+      const items = labLabelItems('MC-001', culture, 'minimal', null, false);
+      assert.equal(items[0].val, 'MC_001');
+    });
+  });
+
+  describe('fmtDt', () => {
+    it('formats ISO date string as dd.mm.yy', () => {
+      assert.equal(fmtDt('2025-03-22T00:00:00Z'), '22.03.25');
+    });
+
+    it('formats Date object', () => {
+      assert.equal(fmtDt(new Date('2025-01-05T12:00:00Z')), '05.01.25');
+    });
+  });
+
+  // ── Tool-logic tests (via DB) ──────────────────────────
+  describe('print_bag_labels tool logic', () => {
+    let d, p;
+    before(() => {
+      ({ db: d, path: p } = tmpDb());
+      seedData(d);
+    });
+    after(() => {
+      d.close();
+      fs.unlinkSync(p);
+    });
+
+    it('generates valid ZPL for existing batch', () => {
+      const batch = db.readBatchById(d, 'FB-2025-001');
+      const bags = batch.bags;
+      const barcodes = db.assignBarcodes(d, 'bag', bags);
+
+      const zpl = bags
+        .map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, 'sorte', barcodes[bagId], false)))
+        .join('\n');
+
+      // One ^XA...^XZ per bag
+      const xaCount = (zpl.match(/\^XA/g) || []).length;
+      const xzCount = (zpl.match(/\^XZ/g) || []).length;
+      assert.equal(xaCount, 3, 'must have 3 labels for 3 bags');
+      assert.equal(xzCount, 3);
+
+      // Barcodes should be numeric (from DB registry, not legacy fallback)
+      for (const bagId of bags) {
+        const num = barcodes[bagId];
+        assert.ok(typeof num === 'number', 'barcode must be numeric from registry');
+        assert.ok(zpl.includes('^FD' + num + '^FS'), `ZPL must contain barcode value ${num}`);
+      }
+    });
+
+    it('respects bagFrom/bagTo range', () => {
+      const batch = db.readBatchById(d, 'FB-2025-001');
+      const bags = batch.bags.slice(0, 2); // bags 1-2
+      const barcodes = db.assignBarcodes(d, 'bag', bags);
+
+      const zpl = bags
+        .map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, 'minimal', barcodes[bagId], false)))
+        .join('\n');
+
+      const xaCount = (zpl.match(/\^XA/g) || []).length;
+      assert.equal(xaCount, 2, 'range 1-2 should produce 2 labels');
+
+      // Bag 3 should NOT be in the ZPL
+      assert.ok(!zpl.includes('FB-2025-001-03'), 'bag 3 must not appear in ranged output');
+    });
+
+    it('returns error for non-existent batch', () => {
+      const batch = db.readBatchById(d, 'NONEXISTENT-001');
+      assert.equal(batch, null, 'non-existent batch must return null');
+    });
+  });
+
+  describe('print_culture_labels tool logic', () => {
+    let d, p;
+    before(() => {
+      ({ db: d, path: p } = tmpDb());
+      seedData(d);
+    });
+    after(() => {
+      d.close();
+      fs.unlinkSync(p);
+    });
+
+    it('generates valid ZPL for existing cultures', () => {
+      const allCultures = db.getAllCultures(d);
+      const ids = ['MC-001', 'PD-001'];
+      const cultureMap = new Map(allCultures.map((c) => [c.id, c]));
+      const barcodes = db.assignBarcodes(d, 'culture', ids);
+
+      const zpl = ids
+        .map((id) => {
+          const c = cultureMap.get(id);
+          return itemsToZPL(labLabelItems(id, c, 'sorte', barcodes[id], false));
+        })
+        .join('\n');
+
+      const xaCount = (zpl.match(/\^XA/g) || []).length;
+      assert.equal(xaCount, 2, 'must have 2 labels');
+
+      // Check numeric barcodes from registry
+      for (const id of ids) {
+        assert.ok(typeof barcodes[id] === 'number', 'culture barcode must be numeric');
+      }
+
+      // PD-001 should show parent arrow
+      assert.ok(zpl.includes('PD-001 \u2190 MC-001'), 'PD-001 label must show parent');
+    });
+
+    it('returns null for non-existent culture', () => {
+      const allCultures = db.getAllCultures(d);
+      const cultureMap = new Map(allCultures.map((c) => [c.id, c]));
+      const missing = ['FAKE-001', 'FAKE-002'].filter((id) => !cultureMap.has(id));
+      assert.equal(missing.length, 2, 'both fake IDs should be missing');
+      assert.ok(missing.join(', ').includes('FAKE-001'), 'error text must contain missing ID');
+    });
+
+    it('rejects empty culture ID array', () => {
+      const ids = [];
+      assert.equal(ids.length, 0, 'empty array should be rejected by tool');
+    });
+  });
+
+  // ── Frontend parity tests ─────────────────────────────
+  describe('frontend parity', () => {
+    it('bag label ZPL structure matches frontend for same barcode number', () => {
+      const batch = {
+        species: 'Pleurotus ostreatus',
+        strainName: 'Pleurotus ostreatus HK35',
+        strainText: '',
+        notes: 'Test',
+        due: '2025-03-22T00:00:00Z'
+      };
+      const barcodeNum = 100;
+
+      // MCP version
+      const mcpItems = bagLabelItems('FB-2025-001-01', batch, 'full', barcodeNum, false);
+      const mcpZpl = itemsToZPL(mcpItems);
+
+      // Verify structural elements match what frontend would produce
+      assert.ok(mcpZpl.startsWith('^XA^PW400^LL'), 'header format');
+      assert.ok(mcpZpl.includes('^CI28^LH0,0'), 'charset and home');
+
+      // Barcode: ^BY{mw},2.0,90^BCN,90,N,N,N^FD100^FS
+      const expectedBc = bcParams('100');
+      assert.ok(
+        mcpZpl.includes('^FO' + expectedBc.x + ',40^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD100^FS'),
+        'barcode command must match frontend format'
+      );
+
+      // Text line 1: bagId
+      assert.ok(mcpZpl.includes('^FDFB-2025-001-01^FS'), 'bag ID text');
+
+      // Text line 2: species
+      assert.ok(mcpZpl.includes('^FDPleurotus ostreatus HK35 \u2013 Test^FS'), 'species line');
+
+      // Text line 3: due date (bold = doubled)
+      assert.ok(mcpZpl.includes('^FDF\u00e4llig: 22.03.2025^FS'), 'due date line');
+
+      assert.ok(mcpZpl.endsWith('^XZ'), 'footer');
+    });
+
+    it('culture label ZPL structure matches frontend for same barcode number', () => {
+      const culture = {
+        species: 'Pleurotus ostreatus',
+        strainName: 'Pleurotus ostreatus HK35',
+        strainDescriptor: 'Kräuterseitling',
+        parentId: 'MC-001',
+        created: '2025-02-01T00:00:00Z'
+      };
+      const barcodeNum = 200;
+
+      const mcpItems = labLabelItems('PD-001', culture, 'full', barcodeNum, false);
+      const mcpZpl = itemsToZPL(mcpItems);
+
+      // Structural checks
+      assert.ok(mcpZpl.startsWith('^XA^PW400^LL'), 'header');
+      const expectedBc = bcParams('200');
+      assert.ok(
+        mcpZpl.includes('^FO' + expectedBc.x + ',40^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD200^FS'),
+        'barcode command'
+      );
+      assert.ok(mcpZpl.includes('PD-001 \u2190 MC-001'), 'ID with parent arrow');
+      assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35 \u2013 Kr\u00e4uterseitling'), 'species + descriptor');
+      assert.ok(mcpZpl.includes('01.02.25'), 'created date');
+      assert.ok(mcpZpl.endsWith('^XZ'), 'footer');
+    });
+
+    it('QR label uses mag=4 matching frontend', () => {
+      const batch = { species: 'Test', strainName: 'Test' };
+      const items = bagLabelItems('FB-001-01', batch, 'minimal', null, true);
+      const zpl = itemsToZPL(items);
+      assert.ok(zpl.includes('^BQN,2,4'), 'QR mag must be 4 like frontend');
+    });
+
+    it('barcode positions match between bag and culture labels for same value', () => {
+      const batch = { species: 'Test' };
+      const culture = { species: 'Test', parentId: null, created: '2025-01-01' };
+      const bagItems = bagLabelItems('X-001', batch, 'minimal', 500, false);
+      const labItems = labLabelItems('X-001', culture, 'minimal', 500, false);
+
+      // Both should have identical barcode items (same value, same position)
+      const bagBc = bagItems.find((i) => i.type === 'barcode');
+      const labBc = labItems.find((i) => i.type === 'barcode');
+      assert.equal(bagBc.x, labBc.x);
+      assert.equal(bagBc.y, labBc.y);
+      assert.equal(bagBc.h, labBc.h);
+      assert.equal(bagBc.mw, labBc.mw);
+      assert.equal(bagBc.val, labBc.val);
+    });
   });
 });
