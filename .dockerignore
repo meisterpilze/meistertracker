@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+certs
+*.db
+backups
+calendars
+test
+scripts
+.claude
+data.json
+DASHBOARD_REDESIGN_PROMPT.md
+README.md
+START.bat
+gen-cert.ps1
+gen-cert.sh
+eslint.config.js
