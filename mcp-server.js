@@ -951,6 +951,429 @@ function createMcpServer(database, onWrite) {
     }
   );
 
+  // ──────────────────────────────────────────────────────────
+  // ZONE & RACK MANAGEMENT
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_zones({ action: 'create', id: 'fruiting-2', name: 'Fruiting Room 2', role: 'fruiting' })
+  server.tool(
+    'manage_zones',
+    'Create, rename, delete, or reorder zones. Actions: create (new zone), rename (change name), delete (remove empty zone), reorder (set sort order). READ zones with get_zone_overview. NOT for racks (→ manage_racks).',
+    {
+      action: z.enum(['create', 'rename', 'delete', 'reorder']).describe('Action to perform'),
+      id: z.string().optional().describe('Zone ID (required for create/rename/delete)'),
+      name: z.string().optional().describe('Zone name (required for create/rename)'),
+      role: z.string().optional().describe('Zone role: spawn, incubation, fruiting, contaminated, storage (for create)'),
+      color: z.string().optional().describe('Hex color e.g. #4CAF50 (for create)'),
+      maxCapacity: z.number().optional().describe('Max bag capacity (for create)'),
+      order: z.array(z.string()).optional().describe('Array of zone IDs in desired order (for reorder)')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.id || !params.name) return errResult('id and name are required for create');
+            db.insertZone(database, {
+              id: params.id,
+              name: params.name,
+              role: params.role || null,
+              color: params.color || null,
+              maxCapacity: params.maxCapacity || null,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: params.id, name: params.name });
+          }
+          case 'rename': {
+            if (!params.id || !params.name) return errResult('id and name are required for rename');
+            db.renameZoneName(database, params.id, params.name);
+            notify();
+            return json({ success: true, action: 'rename', id: params.id, newName: params.name });
+          }
+          case 'delete': {
+            if (!params.id) return errResult('id is required for delete');
+            db.deleteZone(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          case 'reorder': {
+            if (!params.order || !params.order.length) return errResult('order array is required for reorder');
+            db.reorderZones(database, params.order);
+            notify();
+            return json({ success: true, action: 'reorder', order: params.order });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: manage_racks({ action: 'create', id: 'R-FRUIT2-01', zoneId: 'fruiting-2' })
+  server.tool(
+    'manage_racks',
+    'Create or delete racks within zones. Actions: create (new rack in zone), delete (remove empty rack). View racks via get_zone_overview. NOT for zones (→ manage_zones).',
+    {
+      action: z.enum(['create', 'delete']).describe('Action to perform'),
+      id: z.string().optional().describe('Rack ID (required for create/delete)'),
+      zoneId: z.string().optional().describe('Zone ID (required for create)')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'create': {
+            if (!params.id || !params.zoneId) return errResult('id and zoneId are required for create');
+            db.insertRack(database, {
+              id: params.id,
+              zoneId: params.zoneId,
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: 'create', id: params.id, zoneId: params.zoneId });
+          }
+          case 'delete': {
+            if (!params.id) return errResult('id is required for delete');
+            db.deleteRack(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // BATCH EXTENSIONS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: add_bags_to_batch({ batchId: 'FB-2025-042', count: 5 })
+  server.tool(
+    'add_bags_to_batch',
+    'Add more bags to an existing batch. Generates new bag IDs sequentially. Use this instead of update_batch when you need more bags — it keeps inventory log consistent.',
+    {
+      batchId: z.string().describe('Batch ID'),
+      count: z.number().describe('Number of bags to add (>= 1)')
+    },
+    async (params) => {
+      try {
+        const batch = db.readBatchById(database, params.batchId);
+        if (!batch) return errResult('Batch not found: ' + params.batchId);
+        const existingCount = batch.bags.length;
+        const newBags = [];
+        for (let i = 1; i <= params.count; i++) {
+          newBags.push(params.batchId + '-' + String(existingCount + i).padStart(2, '0'));
+        }
+        const result = db.addBagsToBatch(database, params.batchId, newBags, existingCount + params.count);
+        notify();
+        return json({
+          success: true,
+          batchId: params.batchId,
+          newBags,
+          totalBags: existingCount + params.count,
+          bagBarcodes: result.bagBarcodes
+        });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: delete_batch({ batchId: 'FB-2025-042', confirm: true })
+  server.tool(
+    'delete_batch',
+    'Delete a batch with ALL its bags, scan entries, and harvests. DESTRUCTIVE — cannot be undone. Reverses inventory deltas. Requires confirm: true.',
+    {
+      batchId: z.string().describe('Batch ID to delete'),
+      confirm: z.boolean().optional().describe('Must be true to confirm deletion')
+    },
+    async (params) => {
+      try {
+        if (params.confirm !== true) {
+          return errResult(
+            'delete_batch löscht den Batch mit ALLEN Bags, Scan-Einträgen und Ernten unwiderruflich. Bitte mit confirm: true bestätigen.'
+          );
+        }
+        const batch = db.readBatchById(database, params.batchId);
+        if (!batch) return errResult('Batch not found: ' + params.batchId);
+        db.deleteBatchById(database, params.batchId);
+        notify();
+        return json({ success: true, batchId: params.batchId, deletedBags: batch.bags.length });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: rename_batch({ oldId: 'FB-2025-042', newId: 'FB-2025-043' })
+  server.tool(
+    'rename_batch',
+    'Rename a batch ID. Updates all references in bags, scan_log, harvests, and inventory_log. NOT for metadata changes (→ update_batch).',
+    {
+      oldId: z.string().describe('Current batch ID'),
+      newId: z.string().describe('New batch ID')
+    },
+    async (params) => {
+      try {
+        db.renameBatch(database, params.oldId, params.newId);
+        notify();
+        return json({ success: true, oldId: params.oldId, newId: params.newId });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // CULTURE EXTENSIONS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: delete_culture({ id: 'MC-KINGS-250301-01', confirm: true })
+  server.tool(
+    'delete_culture',
+    'Delete a mushroom culture. DESTRUCTIVE — cannot be undone. Requires confirm: true. Consider setting status to "contam" or "used" via update_culture instead.',
+    {
+      id: z.string().describe('Culture ID to delete'),
+      confirm: z.boolean().optional().describe('Must be true to confirm deletion')
+    },
+    async (params) => {
+      try {
+        if (params.confirm !== true) {
+          return errResult(
+            'delete_culture löscht die Kultur unwiderruflich. Bitte mit confirm: true bestätigen. Alternativ: update_culture mit status "contam" oder "used".'
+          );
+        }
+        const removed = db.deleteCulture(database, params.id);
+        if (!removed) return errResult('Culture not found: ' + params.id);
+        notify();
+        return json({ success: true, id: params.id });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: get_culture_details({ id: 'MC-KINGS-250301-01' })
+  server.tool(
+    'get_culture_details',
+    'Get full details for a single culture including strain info, lineage (parent + children), and batches created from it. READ-ONLY. To modify use update_culture.',
+    {
+      id: z.string().describe('Culture ID')
+    },
+    async (params) => {
+      const culture = db.getCultureById(database, params.id);
+      if (!culture) return errResult('Culture not found: ' + params.id);
+      return json(culture);
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // BARCODES
+  // ──────────────────────────────────────────────────────────
+
+  // Example: lookup_barcode({ barcode: 1000042 })
+  server.tool(
+    'lookup_barcode',
+    'Resolve a numeric barcode to its entity (bag, culture, asset, zone, rack). Returns entity_type and entity_id. READ-ONLY.',
+    {
+      barcode: z.number().describe('Numeric barcode to look up')
+    },
+    async (params) => {
+      const result = db.lookupBarcode(database, params.barcode);
+      if (!result) return errResult('Barcode not found: ' + params.barcode);
+      return json(result);
+    }
+  );
+
+  // Example: assign_barcode({ entityType: 'bag', entityId: 'FB-2025-042-01' })
+  server.tool(
+    'assign_barcode',
+    'Assign a numeric barcode to an entity (bag, culture, asset, zone, rack). Returns existing barcode if already assigned (idempotent).',
+    {
+      entityType: z.enum(['bag', 'culture', 'asset', 'zone', 'rack']).describe('Entity type'),
+      entityId: z.string().describe('Entity ID')
+    },
+    async (params) => {
+      try {
+        const barcode = db.assignBarcode(database, params.entityType, params.entityId);
+        notify();
+        return json({ success: true, barcode, entityType: params.entityType, entityId: params.entityId });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // Example: list_barcodes()
+  server.tool(
+    'list_barcodes',
+    'List all assigned barcodes with their entity type and ID. READ-ONLY.',
+    {},
+    async () => {
+      return json(db.getAllBarcodes(database));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // ASSETS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_assets({ action: 'create', assetId: 'AK-001', name: 'Autoklav', category: 'Sterilisation', purchasePrice: 2500 })
+  server.tool(
+    'manage_assets',
+    'Create, update, delete, or list equipment/assets. Actions: list (all assets), create/update (upsert by assetId), delete (remove asset). NOT for inventory/substrate (→ update_inventory).',
+    {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
+      assetId: z.string().optional().describe('Asset ID (required for create/update/delete)'),
+      name: z.string().optional().describe('Asset name (required for create)'),
+      category: z.string().optional().describe('Category (required for create)'),
+      entryDate: z.string().optional().describe('Entry date ISO (default: today)'),
+      exitDate: z.string().optional().describe('Exit/disposal date ISO'),
+      purchasePrice: z.number().optional().describe('Purchase price (required for create)'),
+      usefulLife: z.number().optional().describe('Useful life in years (required for create)'),
+      depreciationMethod: z.string().optional().describe('Depreciation method (default: linear)'),
+      supplier: z.string().optional().describe('Supplier name'),
+      invoiceNumber: z.string().optional().describe('Invoice number'),
+      serialNumber: z.string().optional().describe('Serial number'),
+      location: z.string().optional().describe('Current location'),
+      status: z.string().optional().describe('Status (default: aktiv)'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'list':
+            return json(db.listAssets(database));
+          case 'create':
+          case 'update': {
+            if (!params.assetId) return errResult('assetId is required');
+            if (params.action === 'create' && (!params.name || !params.category || params.purchasePrice == null || params.usefulLife == null)) {
+              return errResult('name, category, purchasePrice, and usefulLife are required for create');
+            }
+            const result = db.upsertAsset(database, {
+              assetId: params.assetId,
+              name: params.name || '',
+              category: params.category || '',
+              entryDate: params.entryDate || today(),
+              exitDate: params.exitDate || null,
+              purchasePrice: params.purchasePrice || 0,
+              usefulLife: params.usefulLife || 0,
+              depreciationMethod: params.depreciationMethod || 'linear',
+              supplier: params.supplier || null,
+              invoiceNumber: params.invoiceNumber || null,
+              serialNumber: params.serialNumber || null,
+              location: params.location || null,
+              status: params.status || 'aktiv',
+              notes: params.notes || '',
+              created: new Date().toISOString()
+            });
+            notify();
+            return json({ success: true, action: params.action, assetId: params.assetId, barcode: result.barcode });
+          }
+          case 'delete': {
+            if (!params.assetId) return errResult('assetId is required for delete');
+            db.deleteAssetById(database, params.assetId);
+            notify();
+            return json({ success: true, action: 'delete', assetId: params.assetId });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // SUPPLIERS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: manage_suppliers({ action: 'list' })
+  // Example: manage_suppliers({ action: 'create', mat: 'hardwood', name: 'Holz GmbH', url: 'https://holz.de' })
+  server.tool(
+    'manage_suppliers',
+    'Create, update, delete, or list substrate suppliers. Actions: list, create/update (upsert), delete. Suppliers are linked to materials: hardwood, wheatbran, gypsum, grain.',
+    {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
+      id: z.number().optional().describe('Supplier ID (required for update/delete)'),
+      mat: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain']).optional().describe('Material type (required for create)'),
+      name: z.string().optional().describe('Supplier name (required for create)'),
+      url: z.string().optional().describe('Website URL'),
+      phone: z.string().optional().describe('Phone number'),
+      notes: z.string().optional().describe('Notes')
+    },
+    async (params) => {
+      try {
+        switch (params.action) {
+          case 'list':
+            return json(db.listSuppliers(database));
+          case 'create':
+          case 'update': {
+            if (params.action === 'create' && (!params.mat || !params.name)) {
+              return errResult('mat and name are required for create');
+            }
+            const id = db.upsertSupplier(database, {
+              id: params.id || undefined,
+              mat: params.mat,
+              name: params.name,
+              url: params.url || null,
+              phone: params.phone || null,
+              notes: params.notes || null
+            });
+            notify();
+            return json({ success: true, action: params.action, id: Number(id) });
+          }
+          case 'delete': {
+            if (params.id == null) return errResult('id is required for delete');
+            db.deleteSupplier(database, params.id);
+            notify();
+            return json({ success: true, action: 'delete', id: params.id });
+          }
+          default:
+            return errResult('Unknown action: ' + params.action);
+        }
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // KPI
+  // ──────────────────────────────────────────────────────────
+
+  // Example: get_kpi_history({ limit: 30 })
+  server.tool(
+    'get_kpi_history',
+    'Get KPI snapshots: yield/bag, contamination rate, bags created, stock levels, pipeline counts over time. READ-ONLY historical data.',
+    {
+      limit: z.number().optional().describe('Max snapshots to return (default: all, most recent first)')
+    },
+    async (params) => {
+      return json(db.getKpiSnapshots(database, params.limit || undefined));
+    }
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // USERS
+  // ──────────────────────────────────────────────────────────
+
+  // Example: list_users()
+  server.tool(
+    'list_users',
+    'List all users with their IDs, usernames, roles, and creation dates. READ-ONLY. Useful for assigneeIds in calendar events.',
+    {},
+    async () => {
+      return json(db.listUsers(database));
+    }
+  );
+
   return server;
 }
 

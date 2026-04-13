@@ -1956,6 +1956,46 @@ function updateCulture(db, id, fields) {
   incrementDataVersion(db);
 }
 
+/** Get a single culture by ID with strain info and lineage (parent + children) */
+function getCultureById(db, id) {
+  const r = db.prepare('SELECT * FROM cultures WHERE id=?').get(id);
+  if (!r) return null;
+  let strainName = null,
+    strainKuerzel = null;
+  if (r.strain_id) {
+    const ms = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?').get(r.strain_id);
+    if (ms) {
+      strainName = ms.name;
+      strainKuerzel = ms.kuerzel;
+    }
+  }
+  const parent = r.parent_id ? db.prepare('SELECT id, type, species, strain, status FROM cultures WHERE id=?').get(r.parent_id) : null;
+  const children = db
+    .prepare('SELECT id, type, species, strain, status, created FROM cultures WHERE parent_id=? ORDER BY created')
+    .all(id);
+  const batches = db
+    .prepare('SELECT batch_id, species, strain, batch_type, created, due FROM batches WHERE source_id=? ORDER BY created')
+    .all(id)
+    .map((b) => ({ batchId: b.batch_id, species: b.species, strain: b.strain, batchType: b.batch_type, created: b.created, due: b.due }));
+  return {
+    id: r.id,
+    type: r.type,
+    species: r.species,
+    strain: r.strain,
+    strainId: r.strain_id || null,
+    strainName,
+    strainKuerzel,
+    parentId: r.parent_id,
+    parent: parent || null,
+    source: r.source,
+    status: r.status,
+    notes: r.notes,
+    created: r.created,
+    children,
+    batches
+  };
+}
+
 function deleteCulture(db, id) {
   const info = db.prepare('DELETE FROM cultures WHERE id=?').run(id);
   if (info.changes > 0) incrementDataVersion(db);
@@ -2120,6 +2160,30 @@ function upsertAsset(db, a) {
   const barcode = assignBarcode(db, 'asset', a.assetId);
   incrementDataVersion(db);
   return { barcode };
+}
+
+/** List all assets ordered by asset_id */
+function listAssets(db) {
+  return db
+    .prepare('SELECT * FROM assets ORDER BY asset_id')
+    .all()
+    .map((r) => ({
+      assetId: r.asset_id,
+      name: r.name,
+      category: r.category,
+      entryDate: r.entry_date,
+      exitDate: r.exit_date,
+      purchasePrice: r.purchase_price,
+      usefulLife: r.useful_life,
+      depreciationMethod: r.depreciation_method,
+      supplier: r.supplier,
+      invoiceNumber: r.invoice_number,
+      serialNumber: r.serial_number,
+      location: r.location,
+      status: r.status,
+      notes: r.notes,
+      created: r.created
+    }));
 }
 
 function deleteAssetById(db, id) {
@@ -3208,6 +3272,7 @@ module.exports = {
   insertHarvest,
   insertCultures,
   updateCulture,
+  getCultureById,
   deleteCulture,
   insertTask,
   updateTaskById,
@@ -3219,6 +3284,7 @@ module.exports = {
   insertMember,
   deleteMember,
   upsertAsset,
+  listAssets,
   deleteAssetById,
   updateCaldavCfg,
   getDuckdnsCfg,
