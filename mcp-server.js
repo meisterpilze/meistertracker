@@ -114,9 +114,9 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   const items = [];
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
   if (qr) {
-    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: bagId });
-    const textW = 280;
-    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: bagId });
+    // QR top-left corner, text centered full-width below.
+    items.push({ type: 'qr', x: 5, y: 5, size: 100, mag: 4, val: bagId });
+    items.push({ type: 'text', y: 115, blockW: 400, fontH: 40, text: bagId, bold: true });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
       const strainTxt = (batch.strainText || '').trim();
@@ -126,7 +126,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: line2 });
+      if (line2) items.push({ type: 'text', y: 162, blockW: 400, fontH: 32, text: line2 });
     }
     if (detail === 'full' && batch.due) {
       const due = new Date(batch.due);
@@ -138,11 +138,9 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
         due.getFullYear();
       items.push({
         type: 'text',
-        x: 5,
-        y: 68,
-        blockW: textW,
-        fontH: 24,
-        fontW: 14,
+        y: 200,
+        blockW: 400,
+        fontH: 32,
         text: 'F\u00e4llig: ' + dueStr,
         bold: true
       });
@@ -186,22 +184,20 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const sp = name + (kz ? ' \u2013 ' + kz : '');
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
   if (qr) {
-    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: id });
-    const textW = 280;
+    // QR top-left corner, text centered full-width below.
+    items.push({ type: 'qr', x: 5, y: 5, size: 100, mag: 4, val: id });
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: line1Text });
+    items.push({ type: 'text', y: 115, blockW: 400, fontH: 40, text: line1Text, bold: true });
     if (detail === 'sorte' || detail === 'full') {
-      if (sp) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: sp });
+      if (sp) items.push({ type: 'text', y: 162, blockW: 400, fontH: 32, text: sp });
     }
     if (detail === 'full' && c.created) {
-      const line3Y = sp ? 68 : 40;
+      const line3Y = sp ? 200 : 162;
       items.push({
         type: 'text',
-        x: 5,
         y: line3Y,
-        blockW: textW,
-        fontH: 24,
-        fontW: 14,
+        blockW: 400,
+        fontH: 32,
         text: fmtDt(c.created),
         bold: true
       });

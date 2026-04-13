@@ -904,14 +904,13 @@ describe('MCP label printing', () => {
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'FB-2025-001-01');
       assert.equal(items[0].mag, 4);
-      assert.equal(items[0].x, 295);
+      assert.equal(items[0].x, 5);
     });
 
-    it('with QR: text blockW is 280 and left-aligned', () => {
+    it('with QR: text blockW is 400 and centered', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, true);
       for (const it of items.filter((i) => i.type === 'text')) {
-        assert.equal(it.blockW, 280, 'text width must be 280 with QR');
-        assert.equal(it.x, 5, 'text must be left-aligned at x=5');
+        assert.equal(it.blockW, 400, 'text width must be 400 with QR');
       }
     });
 
@@ -984,12 +983,12 @@ describe('MCP label printing', () => {
       assert.equal(dateLine.y, 164);
     });
 
-    it('with QR: produces qr item with mag=4 at top-right', () => {
+    it('with QR: produces qr item with mag=4 at top-left', () => {
       const items = labLabelItems('PD-001', culture, 'minimal', 55, true);
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, 'PD-001');
       assert.equal(items[0].mag, 4);
-      assert.equal(items[0].x, 295);
+      assert.equal(items[0].x, 5);
     });
 
     it('falls back to underscore-encoded ID when no barcodeNum', () => {

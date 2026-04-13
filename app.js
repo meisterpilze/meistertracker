@@ -10755,11 +10755,9 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
     }
   }
   if (qr) {
-    // QR mode: small QR top-right, text lines top-left.
-    // mag=4 → ~100×100 dots for typical IDs (25 modules × 4 dots).
-    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: bagId });
-    const textW = 280;
-    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: bagId });
+    // QR mode: QR top-left corner, text centered full-width below.
+    items.push({ type: 'qr', x: 5, y: 5, size: 100, mag: 4, val: bagId });
+    items.push({ type: 'text', y: 115, blockW: 400, fontH: 40, text: bagId, bold: true });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
       const strainTxt = (batch.strainText || '').trim();
@@ -10769,7 +10767,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: line2 });
+      if (line2) items.push({ type: 'text', y: 162, blockW: 400, fontH: 32, text: line2 });
     }
     if (detail === 'full' && batch.due) {
       const due = new Date(batch.due);
@@ -10779,11 +10777,12 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
         String(due.getMonth() + 1).padStart(2, '0') +
         '.' +
         due.getFullYear();
-      items.push({ type: 'text', x: 5, y: 68, blockW: textW, fontH: 24, fontW: 14, text: 'F\u00e4llig: ' + dueStr, bold: true });
+      items.push({ type: 'text', y: 200, blockW: 400, fontH: 32, text: 'F\u00e4llig: ' + dueStr, bold: true });
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
-    const bcY = 40, bcH = 90;
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
@@ -10824,21 +10823,21 @@ function labLabelItems(id, c, detail, qr) {
   const numBc = barcodeByEntity.get('culture:' + id);
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
   if (qr) {
-    // QR mode: small QR top-right, text lines top-left.
-    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: id });
-    const textW = 280;
+    // QR mode: QR top-left corner, text centered full-width below.
+    items.push({ type: 'qr', x: 5, y: 5, size: 100, mag: 4, val: id });
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: line1Text });
+    items.push({ type: 'text', y: 115, blockW: 400, fontH: 40, text: line1Text, bold: true });
     if (detail === 'sorte' || detail === 'full') {
-      if (sp) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: sp });
+      if (sp) items.push({ type: 'text', y: 162, blockW: 400, fontH: 32, text: sp });
     }
     if (detail === 'full' && c.created) {
-      const line3Y = sp ? 68 : 40;
-      items.push({ type: 'text', x: 5, y: line3Y, blockW: textW, fontH: 24, fontW: 14, text: ds, bold: true });
+      const line3Y = sp ? 200 : 162;
+      items.push({ type: 'text', y: line3Y, blockW: 400, fontH: 32, text: ds, bold: true });
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
-    const bcY = 40, bcH = 90;
+    const bcY = 40,
+      bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
