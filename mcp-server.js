@@ -104,7 +104,7 @@ function itemsToZPL(items) {
           '^FS';
       }
     } else if (it.type === 'qr') {
-      z += '^FO' + it.x + ',' + it.y + '^BQN,2,4^FDMM,A' + zplText(it.val) + '^FS';
+      z += '^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMM,A' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
@@ -113,38 +113,58 @@ function itemsToZPL(items) {
 function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   const items = [];
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
-  const bcY = 40,
-    bcH = 90;
-  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: bagId });
+    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: bagId });
+    const textW = 280;
+    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: bagId });
+    if (detail === 'sorte' || detail === 'full') {
+      const species = batch.strainName || batch.species || '';
+      const strainTxt = (batch.strainText || '').trim();
+      const rawNotes = (batch.notes || '').trim();
+      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+      const parts = [species];
+      if (strainTxt) parts.push(strainTxt);
+      if (notes) parts.push(notes);
+      const line2 = parts.join(' \u2013 ');
+      if (line2) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: line2 });
+    }
+    if (detail === 'full' && batch.due) {
+      const due = new Date(batch.due);
+      const dueStr =
+        String(due.getDate()).padStart(2, '0') +
+        '.' +
+        String(due.getMonth() + 1).padStart(2, '0') +
+        '.' +
+        due.getFullYear();
+      items.push({ type: 'text', x: 5, y: 68, blockW: textW, fontH: 24, fontW: 14, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    }
   } else {
+    const bcY = 40, bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-  }
-  const line1Y = bcY + bcH + 6;
-  items.push({ type: 'text', y: line1Y, blockW: textW, fontH: 24, text: bagId });
-  if (detail === 'sorte' || detail === 'full') {
-    const species = batch.strainName || batch.species || '';
-    const strainTxt = (batch.strainText || '').trim();
-    const rawNotes = (batch.notes || '').trim();
-    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-    const parts = [species];
-    if (strainTxt) parts.push(strainTxt);
-    if (notes) parts.push(notes);
-    const line2 = parts.join(' \u2013 ');
-    if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: textW, fontH: 24, text: line2 });
-  }
-  if (detail === 'full' && batch.due) {
-    const due = new Date(batch.due);
-    const dueStr =
-      String(due.getDate()).padStart(2, '0') +
-      '.' +
-      String(due.getMonth() + 1).padStart(2, '0') +
-      '.' +
-      due.getFullYear();
-    const line3Y = line1Y + 56;
-    items.push({ type: 'text', y: line3Y, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    const line1Y = bcY + bcH + 6;
+    items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
+    if (detail === 'sorte' || detail === 'full') {
+      const species = batch.strainName || batch.species || '';
+      const strainTxt = (batch.strainText || '').trim();
+      const rawNotes = (batch.notes || '').trim();
+      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+      const parts = [species];
+      if (strainTxt) parts.push(strainTxt);
+      if (notes) parts.push(notes);
+      const line2 = parts.join(' \u2013 ');
+      if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
+    }
+    if (detail === 'full' && batch.due) {
+      const due = new Date(batch.due);
+      const dueStr =
+        String(due.getDate()).padStart(2, '0') +
+        '.' +
+        String(due.getMonth() + 1).padStart(2, '0') +
+        '.' +
+        due.getFullYear();
+      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    }
   }
   return items;
 }
@@ -155,24 +175,32 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const kz = c.strainDescriptor || '';
   const sp = name + (kz ? ' \u2013 ' + kz : '');
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
-  const bcY = 40,
-    bcH = 90;
-  const textW = qr ? 180 : 400;
   if (qr) {
-    items.push({ type: 'qr', x: 190, y: 10, size: 200, val: id });
+    items.push({ type: 'qr', x: 295, y: 5, size: 100, mag: 4, val: id });
+    const textW = 280;
+    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+    items.push({ type: 'text', x: 5, y: 10, blockW: textW, fontH: 24, fontW: 14, text: line1Text });
+    if (detail === 'sorte' || detail === 'full') {
+      if (sp) items.push({ type: 'text', x: 5, y: 40, blockW: textW, fontH: 22, fontW: 12, text: sp });
+    }
+    if (detail === 'full' && c.created) {
+      const line3Y = sp ? 68 : 40;
+      items.push({ type: 'text', x: 5, y: line3Y, blockW: textW, fontH: 24, fontW: 14, text: fmtDt(c.created), bold: true });
+    }
   } else {
+    const bcY = 40, bcH = 90;
     const bc = bcParams(bcVal);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-  }
-  const line1Y = bcY + bcH + 6;
-  const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-  items.push({ type: 'text', x: 0, y: line1Y, blockW: textW, fontH: 24, text: line1Text });
-  if (detail === 'sorte' || detail === 'full') {
-    if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: textW, fontH: 24, text: sp });
-  }
-  if (detail === 'full' && c.created) {
-    const line3Y = line1Y + (sp ? 56 : 28);
-    items.push({ type: 'text', x: 0, y: line3Y, blockW: textW, fontH: 28, text: fmtDt(c.created), bold: true });
+    const line1Y = bcY + bcH + 6;
+    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
+    items.push({ type: 'text', x: 0, y: line1Y, blockW: 400, fontH: 24, text: line1Text });
+    if (detail === 'sorte' || detail === 'full') {
+      if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: 400, fontH: 24, text: sp });
+    }
+    if (detail === 'full' && c.created) {
+      const line3Y = line1Y + (sp ? 56 : 28);
+      items.push({ type: 'text', x: 0, y: line3Y, blockW: 400, fontH: 28, text: fmtDt(c.created), bold: true });
+    }
   }
   return items;
 }
