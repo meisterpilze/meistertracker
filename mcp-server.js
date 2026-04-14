@@ -107,12 +107,10 @@ function itemsToZPL(items) {
   return z + '^XZ';
 }
 
-function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
+function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
   const items = [];
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
   if (qr) {
-    // QR mode: QR top-left, text centered full-width below.
-    // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
@@ -121,6 +119,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
+      if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -156,6 +155,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
+      if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -410,6 +410,7 @@ function createMcpServer(database, onWrite, printer) {
 
       const bags = batch.bags.map((id) => ({
         bagId: id,
+        bagKg: batch.bagWeights ? batch.bagWeights[id] || batch.bagKg || 3 : batch.bagKg || 3,
         currentLocation: bagLoc.get(id) || null,
         harvests: harvests.filter((h) => h.bag === id).map((h) => ({ grams: h.grams, flush: h.flush, time: h.time }))
       }));
@@ -1888,8 +1889,14 @@ function createMcpServer(database, onWrite, printer) {
         const detail = params.detail || 'sorte';
         const useQr = params.qr || false;
 
+        // Pass per-bag weight when batch has mixed weights
+        const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
+        const mixed = wVals.size > 1;
         const zpl = bags
-          .map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, detail, barcodes[bagId], useQr)))
+          .map((bagId) => {
+            const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
+            return itemsToZPL(bagLabelItems(bagId, batch, detail, barcodes[bagId], useQr, bk));
+          })
           .join('\n');
 
         if (params.preview) {
