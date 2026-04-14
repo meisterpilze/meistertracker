@@ -573,8 +573,8 @@ describe('MCP write operations', () => {
     });
     const b = db.readBatchById(d, 'HE-001');
     assert.equal(b.strainId, strainId);
-    assert.equal(b.species, 'Hericium erinaceus LH1');
-    assert.equal(b.strain, 'LH1');
+    assert.equal(b.species, 'Hericium erinaceus LH1 (LH1)');
+    assert.equal(b.strain, 'ignored');
     assert.equal(b.strainName, 'Hericium erinaceus LH1');
     assert.equal(b.strainKuerzel, 'LH1');
   });
@@ -584,8 +584,8 @@ describe('MCP write operations', () => {
     db.updateBatchField(d, 'HE-001', { strainId: newId });
     const b = db.readBatchById(d, 'HE-001');
     assert.equal(b.strainId, newId);
-    assert.equal(b.species, 'Hericium erinaceus LH2');
-    assert.equal(b.strain, 'LH2');
+    assert.equal(b.species, 'Hericium erinaceus LH2 (LH2)');
+    assert.equal(b.strain, 'ignored');
   });
 
   it('updates a culture strainId — new species/strain cascade', () => {
