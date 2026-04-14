@@ -933,7 +933,8 @@ describe('MCP label printing', () => {
     const culture = {
       species: 'Pleurotus ostreatus',
       strainName: 'Pleurotus ostreatus HK35',
-      strainDescriptor: 'Kräuterseitling',
+      strainText: 'BHA-1',
+      notes: 'Test note',
       parentId: 'MC-001',
       created: '2025-02-01T00:00:00Z'
     };
@@ -958,11 +959,12 @@ describe('MCP label printing', () => {
       assert.equal(items[1].text, 'MC-001');
     });
 
-    it('sorte: adds species + descriptor line', () => {
+    it('sorte: adds species + strainText + notes line', () => {
       const items = labLabelItems('PD-001', culture, 'sorte', 55, false);
       assert.equal(items.length, 3);
       assert.ok(items[2].text.includes('Pleurotus ostreatus HK35'));
-      assert.ok(items[2].text.includes('Kräuterseitling'));
+      assert.ok(items[2].text.includes('BHA-1'));
+      assert.ok(items[2].text.includes('Test note'));
     });
 
     it('full: adds created date line', () => {
@@ -974,7 +976,7 @@ describe('MCP label printing', () => {
     });
 
     it('full without species: date at offset 28', () => {
-      const noSpecies = { ...culture, strainName: null, species: null, strainDescriptor: '' };
+      const noSpecies = { ...culture, strainName: null, species: null, strainText: '', notes: '' };
       const items = labLabelItems('PD-001', noSpecies, 'full', 55, false);
       // Should have barcode, ID line, date line (no species line)
       const dateLine = items.find((i) => i.bold);
@@ -1157,7 +1159,8 @@ describe('MCP label printing', () => {
       const culture = {
         species: 'Pleurotus ostreatus',
         strainName: 'Pleurotus ostreatus HK35',
-        strainDescriptor: 'Kräuterseitling',
+        strainText: 'BHA-1',
+        notes: 'Test note',
         parentId: 'MC-001',
         created: '2025-02-01T00:00:00Z'
       };
@@ -1174,7 +1177,9 @@ describe('MCP label printing', () => {
         'barcode command'
       );
       assert.ok(mcpZpl.includes('PD-001 \u2190 MC-001'), 'ID with parent arrow');
-      assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35 \u2013 Kr\u00e4uterseitling'), 'species + descriptor');
+      assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35'), 'species name');
+      assert.ok(mcpZpl.includes('BHA-1'), 'strainText');
+      assert.ok(mcpZpl.includes('Test note'), 'notes');
       assert.ok(mcpZpl.includes('01.02.25'), 'created date');
       assert.ok(mcpZpl.endsWith('^XZ'), 'footer');
     });
