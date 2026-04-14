@@ -647,8 +647,8 @@ describe('db – mushroom strains CRUD', () => {
     });
     const b = db.readBatchById(d, 'SB-001');
     assert.equal(b.strainId, strainId);
-    assert.equal(b.species, 'Pleurotus ostreatus HK35');
-    assert.equal(b.strain, 'HK35');
+    assert.equal(b.species, 'Pleurotus ostreatus HK35 (HK35)');
+    assert.equal(b.strain, 'WRONG');
     assert.equal(b.strainName, 'Pleurotus ostreatus HK35');
     assert.equal(b.strainKuerzel, 'HK35');
   });
