@@ -114,7 +114,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
-    items.push({ type: 'qr', x: 0, y: 0, size: 125, mag: 5, val: bagId });
+    items.push({ type: 'qr', x: 0, y: 8, size: 125, mag: 5, val: bcVal });
     items.push({ type: 'text', y: 130, blockW: 400, fontH: 38, text: bagId, bold: true });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
@@ -184,7 +184,7 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
-    items.push({ type: 'qr', x: 0, y: 0, size: 125, mag: 5, val: id });
+    items.push({ type: 'qr', x: 0, y: 8, size: 125, mag: 5, val: bcVal });
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
     items.push({ type: 'text', y: 130, blockW: 400, fontH: 38, text: line1Text, bold: true });
     if (detail === 'sorte' || detail === 'full') {
