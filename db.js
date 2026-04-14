@@ -729,6 +729,14 @@ const MIGRATIONS = [
       db.exec('DELETE FROM scan_log WHERE batch IS NOT NULL AND batch NOT IN (SELECT batch_id FROM batches)');
       db.exec('DELETE FROM harvests WHERE batch IS NOT NULL AND batch NOT IN (SELECT batch_id FROM batches)');
     }
+  },
+  {
+    version: 30,
+    description: 'Add strain_text column to cultures for free-text strain annotation',
+    fn(db) {
+      const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='strain_text'").get();
+      if (!has.c) db.exec("ALTER TABLE cultures ADD COLUMN strain_text TEXT DEFAULT ''");
+    }
   }
 ];
 
@@ -982,6 +990,7 @@ function readAll(db, opts = {}) {
         strainName: ms ? ms.name : null,
         strainKuerzel: ms ? ms.kuerzel : null,
         strainDescriptor: ms ? ms.description || null : null,
+        strainText: r.strain_text || '',
         parentId: r.parent_id,
         source: r.source,
         status: r.status,
@@ -2007,9 +2016,9 @@ function insertHarvest(db, h) {
 function insertCultures(db, cultures) {
   if (!cultures.length) return;
   const ins = db.prepare(
-    `INSERT INTO cultures(id,type,species,strain,strain_id,parent_id,source,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO cultures(id,type,species,strain,strain_id,parent_id,source,status,notes,created,strain_text) VALUES(?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain, strain_id=excluded.strain_id,
-       parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created`
+       parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text`
   );
   for (const c of cultures) {
     // Resolve strainId if provided
@@ -2033,7 +2042,8 @@ function insertCultures(db, cultures) {
       c.source || null,
       c.status || 'active',
       c.notes || '',
-      c.created
+      c.created,
+      c.strainText || ''
     );
   }
   // Assign numeric barcodes to all new cultures
@@ -2058,7 +2068,11 @@ function updateCulture(db, id, fields) {
       id
     );
   }
-  const allowed = ['status', 'notes', 'species', 'strain', 'source'];
+  const allowed = ['status', 'notes', 'species', 'strain', 'source', 'strain_text'];
+  // Map camelCase to snake_case for DB
+  if (fields.strainText != null && fields.strain_text == null) {
+    fields.strain_text = fields.strainText;
+  }
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
   if (!cols.length && fields.strainId == null) return;
   if (cols.length) {
@@ -2108,6 +2122,7 @@ function getCultureById(db, id) {
     strainId: r.strain_id || null,
     strainName,
     strainKuerzel,
+    strainText: r.strain_text || '',
     parentId: r.parent_id,
     parent: parent || null,
     source: r.source,
@@ -3108,6 +3123,7 @@ function getAllCultures(db) {
         strainId: r.strain_id || null,
         strainName,
         strainKuerzel,
+        strainText: r.strain_text || '',
         parentId: r.parent_id,
         source: r.source,
         status: r.status,
