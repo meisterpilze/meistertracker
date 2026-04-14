@@ -10581,8 +10581,8 @@ function zplText(s) {
 
 function itemsToZPL(items) {
   // Fixed label size: 400×240 dots (50×30mm @ 203dpi).
-  // ^LT0 resets any stored vertical offset on the printer.
-  let z = '^XA^PW400^LL240^CI28^LH0,0^LT0';
+  // ^LT0/^LS0 reset stored offsets, ^PON/^FWN force normal orientation.
+  let z = '^XA^PW400^LL240^CI28^LH0,0^LT0^LS0^PON^FWN';
   for (const it of items) {
     if (it.type === 'barcode') {
       z +=
@@ -10622,7 +10622,9 @@ function itemsToZPL(items) {
           zplText(it.text) +
           '^FS';
     } else if (it.type === 'qr') {
-      z += '^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMM,A' + zplText(it.val) + '^FS';
+      // ^FT = absolute field typeset (not relative to ^LH like ^FO).
+      // ^FDMA, = error correction M, auto data input A.
+      z += '^FT' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
