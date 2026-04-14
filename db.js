@@ -737,6 +737,16 @@ const MIGRATIONS = [
       const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='strain_text'").get();
       if (!has.c) db.exec("ALTER TABLE cultures ADD COLUMN strain_text TEXT DEFAULT ''");
     }
+  },
+  {
+    version: 31,
+    description: 'Add per-bag weight column to bags table and backfill from batch',
+    fn(db) {
+      db.exec('ALTER TABLE bags ADD COLUMN bag_kg REAL');
+      db.exec(
+        'UPDATE bags SET bag_kg = (SELECT bag_kg FROM batches WHERE batches.batch_id = bags.batch_id)'
+      );
+    }
   }
 ];
 
@@ -912,9 +922,12 @@ function readAll(db, opts = {}) {
 
   // Batches + bags
   const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
-  const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
   const batches = batchRows.map((r) => {
     const ms = r.strain_id ? msById.get(r.strain_id) : null;
+    const bagRows = bagStmt.all(r.batch_id);
+    const bagWeights = {};
+    for (const b of bagRows) bagWeights[b.bag_id] = b.bag_kg != null ? b.bag_kg : r.bag_kg || 3;
     return {
       batchId: r.batch_id,
       species: r.species,
@@ -938,7 +951,8 @@ function readAll(db, opts = {}) {
       strainText: r.strain_text || '',
       created: r.created,
       due: r.due,
-      bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
+      bags: bagRows.map((b) => b.bag_id),
+      bagWeights
     };
   });
 
@@ -1232,7 +1246,7 @@ function writeAll(db, incoming) {
           created=excluded.created, due=excluded.due
       `);
       const deleteBags = db.prepare('DELETE FROM bags WHERE batch_id = ?');
-      const insertBag = db.prepare('INSERT INTO bags(bag_id, batch_id) VALUES(?, ?)');
+      const insertBag = db.prepare('INSERT INTO bags(bag_id, batch_id, bag_kg) VALUES(?, ?, ?)');
 
       for (const b of incoming.batches) {
         const sub = b.substrate || {};
@@ -1254,12 +1268,19 @@ function writeAll(db, incoming) {
           b.due
         );
         deleteBags.run(b.batchId);
-        for (const bagId of b.bags || []) {
-          insertBag.run(bagId, b.batchId);
+        const bagIds = [];
+        for (const item of b.bags || []) {
+          if (typeof item === 'string') {
+            insertBag.run(item, b.batchId, (b.bagWeights && b.bagWeights[item]) || b.bagKg || 3);
+            bagIds.push(item);
+          } else {
+            insertBag.run(item.id, b.batchId, item.bagKg || b.bagKg || 3);
+            bagIds.push(item.id);
+          }
         }
         // Ensure all bags have barcode assignments
-        if (b.bags && b.bags.length) {
-          assignBarcodes(db, 'bag', b.bags);
+        if (bagIds.length) {
+          assignBarcodes(db, 'bag', bagIds);
         }
       }
     }
@@ -1790,10 +1811,17 @@ function insertBatch(db, b) {
       b.created,
       b.due
     );
-    const ins = db.prepare('INSERT INTO bags(bag_id,batch_id) VALUES(?,?)');
-    for (const bagId of b.bags || []) ins.run(bagId, b.batchId);
+    const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
+    for (const item of b.bags || []) {
+      if (typeof item === 'string') {
+        ins.run(item, b.batchId, b.bagKg || 3);
+      } else {
+        ins.run(item.id, b.batchId, item.bagKg || b.bagKg || 3);
+      }
+    }
+    const bagIds = (b.bags || []).map((x) => (typeof x === 'string' ? x : x.id));
     // Assign numeric barcodes to all new bags
-    const bagBarcodes = assignBarcodes(db, 'bag', b.bags || []);
+    const bagBarcodes = assignBarcodes(db, 'bag', bagIds);
     incrementDataVersion(db);
     db.exec('COMMIT');
     return { bagBarcodes };
@@ -1865,11 +1893,17 @@ function renameBatch(db, oldId, newId) {
   }
 }
 
-function addBagsToBatch(db, batchId, newBags, newQty) {
+function addBagsToBatch(db, batchId, newBags, newQty, bagKg) {
   db.exec('BEGIN');
   try {
-    const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id) VALUES(?,?)');
-    for (const id of newBags) ins.run(id, batchId);
+    // Resolve bag weight: explicit param > batch's existing weight
+    let weight = bagKg;
+    if (weight == null) {
+      const row = db.prepare('SELECT bag_kg FROM batches WHERE batch_id=?').get(batchId);
+      weight = row ? row.bag_kg || 3 : 3;
+    }
+    const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
+    for (const id of newBags) ins.run(id, batchId, weight);
     if (newQty != null) db.prepare('UPDATE batches SET qty=? WHERE batch_id=?').run(newQty, batchId);
     // Assign numeric barcodes to new bags
     const bagBarcodes = assignBarcodes(db, 'bag', newBags);
@@ -1892,7 +1926,8 @@ function deleteBatchById(db, batchId) {
       )
       .get(batchId);
     if (row) {
-      const deltas = computeBatchMaterialDeltas(row);
+      row.batch_id = batchId;
+      const deltas = computeBatchMaterialDeltas(db, row);
       // Reverse each delta (add materials back)
       for (const d of deltas) {
         const col = 'stock_' + d.mat;
@@ -1920,24 +1955,39 @@ function deleteBatchById(db, batchId) {
 }
 
 /** Compute material kg used by a batch row (positive values = what was consumed) */
-function computeBatchMaterialDeltas(row) {
+function computeBatchMaterialDeltas(db, row) {
   const deltas = [];
-  const qty = row.qty;
-  const bagKg = row.bag_kg || 3;
+  // Read actual per-bag weights from the bags table
+  const bagWeightRows = db
+    .prepare('SELECT bag_kg FROM bags WHERE batch_id = ?')
+    .all(row.batch_id);
+  const fallbackKg = row.bag_kg || 3;
   if (row.batch_type === 'grain') {
-    deltas.push({ mat: 'grain', deltaKg: qty * bagKg });
+    const totalGrain = bagWeightRows.length
+      ? bagWeightRows.reduce((s, b) => s + (b.bag_kg != null ? b.bag_kg : fallbackKg), 0)
+      : row.qty * fallbackKg;
+    deltas.push({ mat: 'grain', deltaKg: totalGrain });
   } else {
     const hw = row.sub_hardwood || 0;
     const wb = row.sub_wheatbran || 0;
     const rh = row.sub_rh || 0;
     const gyp = row.sub_gypsum;
     if (hw || wb) {
-      const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
-      const hwUsed = qty * dryKgPerBag * (hw / 100);
-      const wbUsed = qty * dryKgPerBag * (wb / 100);
+      let totalDryKg = 0;
+      if (bagWeightRows.length) {
+        for (const b of bagWeightRows) {
+          const kg = b.bag_kg != null ? b.bag_kg : fallbackKg;
+          totalDryKg += rh > 0 ? kg * (1 - rh / 100) : kg;
+        }
+      } else {
+        const dryKgPerBag = rh > 0 ? fallbackKg * (1 - rh / 100) : fallbackKg;
+        totalDryKg = row.qty * dryKgPerBag;
+      }
+      const hwUsed = totalDryKg * (hw / 100);
+      const wbUsed = totalDryKg * (wb / 100);
       if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
       if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
-      if (gyp) deltas.push({ mat: 'gypsum', deltaKg: qty * dryKgPerBag * 0.01 });
+      if (gyp) deltas.push({ mat: 'gypsum', deltaKg: totalDryKg * 0.01 });
     }
   }
   return deltas;
@@ -2252,7 +2302,7 @@ function readTaskByCaldavUid(db, caldavUid) {
 function readBatchById(db, batchId) {
   const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
   if (!r) return null;
-  const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
   return mapBatchRow(r, bagStmt, db);
 }
 
@@ -3036,6 +3086,9 @@ function mapBatchRow(r, bagStmt, db) {
       strainKuerzel = ms.kuerzel;
     }
   }
+  const bagRows = bagStmt.all(r.batch_id);
+  const bagWeights = {};
+  for (const b of bagRows) bagWeights[b.bag_id] = b.bag_kg != null ? b.bag_kg : r.bag_kg || 3;
   return {
     batchId: r.batch_id,
     species: r.species,
@@ -3053,11 +3106,12 @@ function mapBatchRow(r, bagStmt, db) {
     strainText: r.strain_text || '',
     created: r.created,
     due: r.due,
-    bags: bagStmt.all(r.batch_id).map((b) => b.bag_id)
+    bags: bagRows.map((b) => b.bag_id),
+    bagWeights
   };
 }
 function getAllBatches(db) {
-  const bagStmt = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
   return db
     .prepare('SELECT * FROM batches ORDER BY created')
     .all()
