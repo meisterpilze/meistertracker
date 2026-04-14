@@ -1891,6 +1891,30 @@ function renameBatch(db, oldId, newId) {
   }
 }
 
+function renameCulture(db, oldId, newId) {
+  db.exec('BEGIN');
+  db.exec('PRAGMA defer_foreign_keys = ON');
+  try {
+    const existing = db.prepare('SELECT id FROM cultures WHERE id=?').get(oldId);
+    if (!existing) throw new Error('Culture not found: ' + oldId);
+    const conflict = db.prepare('SELECT id FROM cultures WHERE id=?').get(newId);
+    if (conflict) throw new Error('A culture with ID "' + newId + '" already exists');
+    // Update parent_id references in child cultures
+    db.prepare('UPDATE cultures SET parent_id=? WHERE parent_id=?').run(newId, oldId);
+    // Update source_id references in batches
+    db.prepare('UPDATE batches SET source_id=? WHERE source_id=?').run(newId, oldId);
+    // Rename the culture itself
+    db.prepare('UPDATE cultures SET id=? WHERE id=?').run(newId, oldId);
+    // Update barcode registry
+    db.prepare("UPDATE barcodes SET entity_id=? WHERE entity_type='culture' AND entity_id=?").run(newId, oldId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
 function addBagsToBatch(db, batchId, newBags, newQty, bagKg) {
   db.exec('BEGIN');
   try {
@@ -3778,6 +3802,7 @@ module.exports = {
   insertBatch,
   updateBatchField,
   renameBatch,
+  renameCulture,
   addBagsToBatch,
   deleteBatchById,
   appendScanEntries,
