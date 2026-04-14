@@ -421,6 +421,8 @@ const LANG = {
     'lab.selectPilzsorte': 'Please select a Pilzsorte',
     'lab.g2gNote': 'G2G is recorded via the scan bar \u2014 use ADD to move grain bags.',
     'lab.printNow': 'Print labels now?',
+    'lab.createdIds': 'Created culture IDs',
+    'lab.printLabelsNow': 'Print labels for these cultures',
     'lab.qtyDishes': 'Number of dishes',
     'lab.qtyFlasks': 'Number of flasks',
     'lab.qtyBags': 'Number of bags',
@@ -456,6 +458,7 @@ const LANG = {
     'print.labLabels': 'Lab labels',
     'print.refBarcodes': 'Reference barcodes',
     'print.selectBatch': 'Select batch',
+    'print.searchBatch': 'Search batches\u2026',
     'print.chooseBatch': '\u2014 choose batch \u2014',
     'print.labelContent': 'Label content',
     'print.barcodeIdOnly': 'Barcode + ID only',
@@ -1686,6 +1689,8 @@ const LANG = {
     'lab.selectPilzsorte': 'Bitte eine Pilzsorte auswählen',
     'lab.g2gNote': 'G2G wird \u00fcber die Scan-Leiste erfasst \u2014 verwende ADD.',
     'lab.printNow': 'Etiketten jetzt drucken?',
+    'lab.createdIds': 'Erstellte Kultur-IDs',
+    'lab.printLabelsNow': 'Etiketten f\u00fcr diese Kulturen drucken',
     'lab.qtyDishes': 'Anzahl Schalen',
     'lab.qtyFlasks': 'Anzahl Kolben',
     'lab.qtyBags': 'Anzahl Beutel',
@@ -1721,6 +1726,7 @@ const LANG = {
     'print.labLabels': 'Labor-Etiketten',
     'print.refBarcodes': 'Referenz-Barcodes',
     'print.selectBatch': 'Charge w\u00e4hlen',
+    'print.searchBatch': 'Chargen suchen\u2026',
     'print.chooseBatch': '\u2014 Charge w\u00e4hlen \u2014',
     'print.labelContent': 'Etiketteninhalt',
     'print.barcodeIdOnly': 'Barcode + nur ID',
@@ -2964,6 +2970,8 @@ const LANG = {
     'lab.selectPilzsorte': 'Selecione uma Pilzsorte',
     'lab.g2gNote': 'G2G \u00e9 registrado pela barra de scan \u2014 use ADD.',
     'lab.printNow': 'Imprimir etiquetas agora?',
+    'lab.createdIds': 'IDs de cultura criados',
+    'lab.printLabelsNow': 'Imprimir etiquetas para estas culturas',
     'lab.qtyDishes': 'N\u00famero de placas',
     'lab.qtyFlasks': 'N\u00famero de frascos',
     'lab.qtyBags': 'N\u00famero de sacos',
@@ -2999,6 +3007,7 @@ const LANG = {
     'print.labLabels': 'Etiquetas de lab',
     'print.refBarcodes': 'C\u00f3digos de refer\u00eancia',
     'print.selectBatch': 'Selecionar lote',
+    'print.searchBatch': 'Pesquisar lotes\u2026',
     'print.chooseBatch': '\u2014 escolher lote \u2014',
     'print.labelContent': 'Conte\u00fado da etiqueta',
     'print.barcodeIdOnly': 'C\u00f3digo + apenas ID',
@@ -6707,7 +6716,8 @@ function goToPrintBatch() {
   go('print', 'n-print');
   setTimeout(() => {
     openStab('print', 'bags');
-    fillBatchSelect();
+    document.getElementById('print-batch-search').value = '';
+    fillBatchSelect('');
     const s = document.getElementById('print-batch'),
       last = batches[batches.length - 1];
     if (last) {
@@ -10133,8 +10143,10 @@ function lwUpdate() {
     qtyRow = document.getElementById('lw-qty-row');
   const strainTextRow = document.getElementById('lw-strain-text-row');
   const gsResult = document.getElementById('gs-result');
-  // Hide KB result when switching away from KB
+  const lwResult = document.getElementById('lw-result');
+  // Hide result cards when switching work type
   if (type !== 'KB' && gsResult) gsResult.style.display = 'none';
+  if (lwResult) lwResult.style.display = 'none';
   if (type === 'KB') {
     pr.style.display = 'none';
     sr.style.display = 'none';
@@ -10264,16 +10276,15 @@ function logLabWork() {
   fillCultureSelect('nb-culture', ['PD', 'LC']);
   fillCultureSelect('gs-culture', ['PD', 'LC']);
   lwPreview();
-  const ids = newC.map((c) => c.id).join(', ');
-  if (confirm(t('lab.logged', { n: newC.length, type: type }) + '\n' + ids + '\n\n' + t('lab.printNow'))) {
-    selectedLabIds = new Set(newC.map((c) => c.id));
-    go('print', 'n-print');
-    setTimeout(() => {
-      openStab('print', 'lab');
-      renderLabList();
-      renderLabPreview();
-    }, 150);
-  }
+  // Show result card with created IDs and print button
+  lastCreatedCultureIds = newC.map((c) => c.id);
+  document.getElementById('lw-ids').innerHTML = lastCreatedCultureIds
+    .map(
+      (id) =>
+        `<span style="font-size:10px;font-family:monospace;background:var(--c-card);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
+    )
+    .join('');
+  document.getElementById('lw-result').style.display = 'block';
 }
 function renderLabLog() {
   const body = document.getElementById('lab-log-body');
@@ -10484,7 +10495,8 @@ function goToPrintGrainBatch() {
   go('print', 'n-print');
   setTimeout(() => {
     openStab('print', 'bags');
-    fillBatchSelect();
+    document.getElementById('print-batch-search').value = '';
+    fillBatchSelect('');
     const last = batches[batches.length - 1];
     if (last) {
       const s = document.getElementById('print-batch');
@@ -11171,19 +11183,28 @@ async function sendToPrinter(zpl) {
   }
 }
 
-function fillBatchSelect() {
+function batchOptionLabel(b) {
+  const kz = b.strainKuerzel || b.strain || '';
+  const name = b.strainName || b.species || '';
+  const st = (b.strainText || '').trim();
+  return (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+}
+function fillBatchSelect(filter) {
   const s = document.getElementById('print-batch');
   const cur = s.value;
+  const searchInput = document.getElementById('print-batch-search');
+  const q = (filter != null ? filter : (searchInput ? searchInput.value : '')).toLowerCase().trim();
+  // Newest first; when no search, limit to 50 most recent
+  let list = [...batches].reverse();
+  if (q) {
+    list = list.filter((b) => batchOptionLabel(b).toLowerCase().includes(q));
+  } else {
+    list = list.slice(0, 50);
+  }
   s.innerHTML =
-    '<option value="">— choose batch —</option>' +
-    batches
-      .map((b) => {
-        const kz = b.strainKuerzel || b.strain || '';
-        const name = b.strainName || b.species || '';
-        const st = (b.strainText || '').trim();
-        const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
-        return `<option value="${esc(b.batchId)}">${label}</option>`;
-      })
+    '<option value="">— ' + t('print.chooseBatch') + ' —</option>' +
+    list
+      .map((b) => `<option value="${esc(b.batchId)}">${batchOptionLabel(b)}</option>`)
       .join('');
   if (cur) s.value = cur;
 }
@@ -11216,6 +11237,16 @@ function renderBagPreview() {
 }
 
 let selectedLabIds = new Set();
+let lastCreatedCultureIds = [];
+function goToPrintLabCulture() {
+  selectedLabIds = new Set(lastCreatedCultureIds);
+  go('print', 'n-print');
+  setTimeout(() => {
+    openStab('print', 'lab');
+    renderLabList();
+    renderLabPreview();
+  }, 150);
+}
 function renderLabList() {
   const filter = document.getElementById('lab-filter').value,
     el = document.getElementById('lab-list'),
@@ -14996,6 +15027,7 @@ function initEventListeners() {
   $('gs-weight-lines').addEventListener('input', gsPreview);
   $('gs-add-line').addEventListener('click', gsAddLine);
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
+  $('prt-lw').addEventListener('click', goToPrintLabCulture);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
   $('cultures-body')
@@ -15047,6 +15079,7 @@ function initEventListeners() {
   $('st-print-ref').addEventListener('click', () => {
     openStab('print', 'ref');
   });
+  $('print-batch-search').addEventListener('input', () => fillBatchSelect());
   $('print-batch').addEventListener('change', renderBagPreview);
   $('print-mode').addEventListener('change', renderBagPreview);
   $('bag-qr').addEventListener('change', renderBagPreview);
