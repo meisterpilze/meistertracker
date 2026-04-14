@@ -10174,10 +10174,11 @@ function renderLabLog() {
 }
 
 // ─── GRAIN SPAWN (Lab tab) ──────────────────────────────────
-const genGrainBatchId = (sp) => {
+const genGrainBatchId = (sp, strainText) => {
   const ab = abbrev(sp),
     dt = todayStr(),
-    prefix = 'G-' + ab + '-' + dt;
+    st = (strainText || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const prefix = 'G-' + ab + (st ? '-' + st : '') + '-' + dt;
   const n = batches.filter((b) => b.batchId.startsWith(prefix + '-')).length;
   return prefix + '-' + String(n + 1).padStart(2, '0');
 };
@@ -10198,7 +10199,8 @@ function gsPreview() {
   const sp = ms ? ms.name : '';
   const qty = parseInt(document.getElementById('gs-qty').value) || 0;
   const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
-  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp) + ' (' + qty + ' bags)' : '\u2014';
+  const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
+  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp, lwStrainText) + ' (' + qty + ' bags)' : '\u2014';
   const el = document.getElementById('gs-mat-preview');
   if (!qty || !bagKg) {
     el.style.display = 'none';
@@ -10232,7 +10234,7 @@ function createGrainBatch() {
     return;
   }
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
-  const batchId = genGrainBatchId(sp);
+  const batchId = genGrainBatchId(sp, lwStrainText);
   spColor(sp);
   const due = new Date();
   due.setDate(due.getDate() + days);
@@ -14819,6 +14821,10 @@ function initEventListeners() {
     else lwPreview();
   });
   $('lw-qty').addEventListener('input', lwPreview);
+  $('lw-strain-text').addEventListener('input', () => {
+    const type = document.getElementById('lw-type').value;
+    if (type === 'KB') gsPreview();
+  });
   $('lw-parent').addEventListener('change', () => {
     const parentId = document.getElementById('lw-parent').value;
     if (!parentId) return;
