@@ -7959,6 +7959,115 @@ async function runBatchIdMigration() {
   }
 }
 
+async function runStrainTextMigration() {
+  // ── Batch renames ──
+  const batchRenames = [];
+  batches.forEach((b) => {
+    const st = (b.strainText || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!st) return;
+    const kuerzel = b.strainKuerzel || b.strain || '';
+    if (!kuerzel) return;
+    const isGrain = b.batchType === 'grain';
+    const parts = b.batchId.split('-');
+    if (b.batchId.toUpperCase().includes('-' + st + '-')) return;
+    let newId;
+    if (isGrain && parts[0] === 'G' && parts.length >= 4) {
+      newId = parts[0] + '-' + parts[1] + '-' + st + '-' + parts.slice(2).join('-');
+    } else if (!isGrain && parts.length >= 3) {
+      newId = parts[0] + '-' + st + '-' + parts.slice(1).join('-');
+    } else {
+      return;
+    }
+    batchRenames.push({ oldId: b.batchId, newId });
+  });
+
+  // ── Culture renames ──
+  const cultureRenames = [];
+  cultures.forEach((c) => {
+    const st = (c.strainText || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!st) return;
+    const parts = c.id.split('-');
+    // Format: TYPE-ABBREV-DDMMYY-NN (4 parts)
+    if (parts.length < 4) return;
+    if (c.id.toUpperCase().includes('-' + st + '-')) return;
+    // TYPE-ABBREV-STRAIN-DDMMYY-NN
+    const newId = parts[0] + '-' + parts[1] + '-' + st + '-' + parts.slice(2).join('-');
+    cultureRenames.push({ oldId: c.id, newId });
+  });
+
+  if (!batchRenames.length && !cultureRenames.length) {
+    alert('All IDs are already up to date — nothing to migrate.');
+    return;
+  }
+  let preview = '';
+  if (batchRenames.length) preview += '── Batches (' + batchRenames.length + ') ──\n' + batchRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n') + '\n\n';
+  if (cultureRenames.length) preview += '── Cultures (' + cultureRenames.length + ') ──\n' + cultureRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n');
+  const total = batchRenames.length + cultureRenames.length;
+  if (!confirm(total + ' IDs will be renamed.\nBarcodes will NOT be changed.\n\n' + preview)) return;
+
+  let done = 0, failed = 0, failedList = [];
+  _mutating++;
+  try {
+    // Rename batches
+    for (const { oldId, newId } of batchRenames) {
+      try {
+        const r = await apiPost('/api/batches/' + encodeURIComponent(oldId) + '/rename', { newId });
+        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        batches.forEach((b) => {
+          if (b.batchId === oldId) {
+            const oldBags = b.bags || [];
+            b.batchId = newId;
+            b.bags = oldBags.map((bag) => bag.replace(oldId, newId));
+            oldBags.forEach((oldBag, i) => {
+              const newBag = b.bags[i];
+              const bc = barcodeByEntity.get('bag:' + oldBag);
+              if (bc != null) {
+                barcodeByEntity.delete('bag:' + oldBag);
+                barcodeByEntity.set('bag:' + newBag, bc);
+                barcodeRegistry.set(bc, { type: 'bag', id: newBag });
+              }
+            });
+          }
+        });
+        scanLog.forEach((e) => { if (e.batch === oldId) { e.batch = newId; if (e.bag) e.bag = e.bag.replace(oldId, newId); } });
+        movements.forEach((e) => { if (e.batch === oldId) { e.batch = newId; if (e.bag) e.bag = e.bag.replace(oldId, newId); } });
+        harvests.forEach((h) => { if (h.batch === oldId) { h.batch = newId; if (h.bag) h.bag = h.bag.replace(oldId, newId); } });
+        done++;
+      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+    }
+    // Rename cultures
+    for (const { oldId, newId } of cultureRenames) {
+      try {
+        const r = await apiPost('/api/cultures/' + encodeURIComponent(oldId) + '/rename', { newId });
+        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        cultures.forEach((c) => {
+          if (c.id === oldId) c.id = newId;
+          if (c.parentId === oldId) c.parentId = newId;
+        });
+        batches.forEach((b) => { if (b.sourceId === oldId) b.sourceId = newId; });
+        // Update barcode registry for the culture
+        const bc = barcodeByEntity.get('culture:' + oldId);
+        if (bc != null) {
+          barcodeByEntity.delete('culture:' + oldId);
+          barcodeByEntity.set('culture:' + newId, bc);
+          barcodeRegistry.set(bc, { type: 'culture', id: newId });
+        }
+        done++;
+      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+    }
+  } finally {
+    _mutating--;
+  }
+  renderBatches();
+  renderCultures();
+  renderStatus();
+  if (failed) {
+    alert('Done: ' + done + ' renamed, ' + failed + ' errors:\n\n' + failedList.join('\n'));
+  } else {
+    alert('Done: ' + done + ' IDs updated with strain text.');
+  }
+}
+
 function restartServer() {
   confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
     const btn = document.getElementById('btn-server-restart');
@@ -10104,7 +10213,8 @@ function lwPreview() {
     box.style.display = 'none';
     return;
   }
-  const prefix = type + '-' + abbrev(sp) + '-' + todayStr() + '-';
+  const stRaw = (document.getElementById('lw-strain-text')?.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const prefix = type + '-' + abbrev(sp) + (stRaw ? '-' + stRaw : '') + '-' + todayStr() + '-';
   const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
   prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(existing + i + 1).padStart(2, '0')).join(
     '\n'
@@ -10129,9 +10239,10 @@ function logLabWork() {
     alert(t('lab.g2gNote'));
     return;
   }
-  const prefix = type + '-' + abbrev(sp) + '-' + todayStr() + '-';
-  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
+  const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr() + '-';
+  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
   const newC = Array.from({ length: qty }, (_, i) => ({
     id: prefix + String(existing + i + 1).padStart(2, '0'),
     type,
@@ -14915,6 +15026,7 @@ function initEventListeners() {
   $('lw-strain-text').addEventListener('input', () => {
     const type = document.getElementById('lw-type').value;
     if (type === 'KB') gsPreview();
+    else lwPreview();
   });
   $('lw-parent').addEventListener('change', () => {
     const parentId = document.getElementById('lw-parent').value;
@@ -15027,6 +15139,7 @@ function initEventListeners() {
   });
   $('btn-server-restart').addEventListener('click', restartServer);
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
+  $('btn-migrate-strain-text').addEventListener('click', runStrainTextMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
