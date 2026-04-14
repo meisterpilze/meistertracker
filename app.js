@@ -7959,6 +7959,98 @@ async function runBatchIdMigration() {
   }
 }
 
+async function runStrainTextMigration() {
+  const renames = [];
+  batches.forEach((b) => {
+    const st = (b.strainText || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!st) return; // no strain text to embed
+    const kuerzel = b.strainKuerzel || b.strain || '';
+    if (!kuerzel) return;
+    const isGrain = b.batchType === 'grain';
+    const parts = b.batchId.split('-');
+    // Check if strain text is already embedded in the ID
+    if (b.batchId.toUpperCase().includes('-' + st + '-')) return;
+    let newId;
+    if (isGrain && parts[0] === 'G' && parts.length >= 4) {
+      // G-KUERZEL-DDMMYY-NN → G-KUERZEL-STRAIN-DDMMYY-NN
+      newId = parts[0] + '-' + parts[1] + '-' + st + '-' + parts.slice(2).join('-');
+    } else if (!isGrain && parts.length >= 3) {
+      // KUERZEL-DDMMYY-NN → KUERZEL-STRAIN-DDMMYY-NN
+      newId = parts[0] + '-' + st + '-' + parts.slice(1).join('-');
+    } else {
+      return; // unknown format, skip
+    }
+    renames.push({ oldId: b.batchId, newId });
+  });
+  if (!renames.length) {
+    alert('All batch IDs are already up to date — nothing to migrate.');
+    return;
+  }
+  const preview = renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  if (!confirm('The following ' + renames.length + ' batch IDs will be renamed.\nBarcodes will NOT be changed.\n\n' + preview)) return;
+  let done = 0, failed = 0, failedList = [];
+  _mutating++;
+  try {
+    for (const { oldId, newId } of renames) {
+      try {
+        const r = await apiPost('/api/batches/' + encodeURIComponent(oldId) + '/rename', { newId });
+        if (!r || r.error) {
+          failed++;
+          failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error'));
+          continue;
+        }
+        batches.forEach((b) => {
+          if (b.batchId === oldId) {
+            const oldBags = b.bags || [];
+            b.batchId = newId;
+            b.bags = oldBags.map((bag) => bag.replace(oldId, newId));
+            oldBags.forEach((oldBag, i) => {
+              const newBag = b.bags[i];
+              const bc = barcodeByEntity.get('bag:' + oldBag);
+              if (bc != null) {
+                barcodeByEntity.delete('bag:' + oldBag);
+                barcodeByEntity.set('bag:' + newBag, bc);
+                barcodeRegistry.set(bc, { type: 'bag', id: newBag });
+              }
+            });
+          }
+        });
+        scanLog.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        movements.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        harvests.forEach((h) => {
+          if (h.batch === oldId) {
+            h.batch = newId;
+            if (h.bag) h.bag = h.bag.replace(oldId, newId);
+          }
+        });
+        done++;
+      } catch (e) {
+        failed++;
+        failedList.push(oldId + ': ' + e.message);
+      }
+    }
+  } finally {
+    _mutating--;
+  }
+  renderBatches();
+  renderStatus();
+  if (failed) {
+    alert('Done: ' + done + ' renamed, ' + failed + ' errors:\n\n' + failedList.join('\n'));
+  } else {
+    alert('Done: ' + done + ' batch IDs updated with strain text.');
+  }
+}
+
 function restartServer() {
   confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
     const btn = document.getElementById('btn-server-restart');
@@ -15027,6 +15119,7 @@ function initEventListeners() {
   });
   $('btn-server-restart').addEventListener('click', restartServer);
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
+  $('btn-migrate-strain-text').addEventListener('click', runStrainTextMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
