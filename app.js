@@ -6582,8 +6582,9 @@ function createBatch() {
     alert(t('strains.noStrainsHint'));
     return;
   }
-  const sp = ms.name,
-    st = ms.kuerzel;
+  const sp = ms.name + ' (' + ms.kuerzel + ')';
+  const strainText = (document.getElementById('nb-strain-text') || {}).value?.trim() || '';
+  const st = strainText || 'XXX';
   const qty = parseInt(document.getElementById('nb-qty').value) || 0,
     days = parseInt(document.getElementById('nb-days').value) || 14;
   const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
@@ -6606,9 +6607,8 @@ function createBatch() {
           gypsum: document.getElementById('nb-gyp').checked
         }
       : null;
-  const strainText = (document.getElementById('nb-strain-text') || {}).value?.trim() || '';
-  const batchId = genBatchId(sp);
-  spColor(sp);
+  const batchId = genBatchId(ms.name);
+  spColor(ms.name);
   const due = new Date();
   due.setDate(due.getDate() + days);
   const bags = Array.from({ length: qty }, (_, i) => batchId + '-' + String(i + 1).padStart(2, '0'));
