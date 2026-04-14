@@ -1848,6 +1848,27 @@
                       Etiketten für diese Charge drucken
                     </button>
                   </div>
+                  <!-- Culture result (shown after MC/PD/LC creation) -->
+                  <div
+                    id="lw-result"
+                    style="display: none; background: var(--c-bg); border-radius: 8px; padding: 10px 12px"
+                  >
+                    <div class="sec" style="margin-bottom: 6px" data-i18n="lab.createdIds">
+                      Created culture IDs
+                    </div>
+                    <div
+                      id="lw-ids"
+                      style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 200px; overflow-y: auto"
+                    ></div>
+                    <button
+                      id="prt-lw"
+                      class="btn btn-p"
+                      style="width: 100%; margin-top: 10px"
+                      data-i18n="lab.printLabelsNow"
+                    >
+                      Print labels for these cultures
+                    </button>
+                  </div>
                   <button id="btn-26" class="btn btn-p" data-i18n="lab.logWorkBtn">Log work</button>
                 </div>
               </div>
@@ -1913,8 +1934,16 @@
             <div class="card">
               <div class="g2" style="margin-bottom: 12px">
                 <div>
-                  <label data-i18n="print.selectBatch">Select batch</label
-                  ><select id="print-batch">
+                  <label data-i18n="print.selectBatch">Select batch</label>
+                  <input
+                    type="text"
+                    id="print-batch-search"
+                    data-i18n-placeholder="print.searchBatch"
+                    placeholder="Search batches…"
+                    autocomplete="off"
+                    style="margin-bottom: 4px; font-size: 12px"
+                  />
+                  <select id="print-batch">
                     <option value="" data-i18n="print.chooseBatch">— choose batch —</option>
                   </select>
                 </div>
