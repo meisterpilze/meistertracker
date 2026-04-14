@@ -10198,7 +10198,8 @@ function gsPreview() {
   const sp = ms ? ms.name : '';
   const qty = parseInt(document.getElementById('gs-qty').value) || 0;
   const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
-  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp) + ' (' + qty + ' bags)' : '\u2014';
+  const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
+  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp) + (lwStrainText ? ' — ' + lwStrainText : '') + ' (' + qty + ' bags)' : '\u2014';
   const el = document.getElementById('gs-mat-preview');
   if (!qty || !bagKg) {
     el.style.display = 'none';
@@ -14819,6 +14820,10 @@ function initEventListeners() {
     else lwPreview();
   });
   $('lw-qty').addEventListener('input', lwPreview);
+  $('lw-strain-text').addEventListener('input', () => {
+    const type = document.getElementById('lw-type').value;
+    if (type === 'KB') gsPreview();
+  });
   $('lw-parent').addEventListener('change', () => {
     const parentId = document.getElementById('lw-parent').value;
     if (!parentId) return;
