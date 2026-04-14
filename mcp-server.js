@@ -58,13 +58,9 @@ function fmtDt(d) {
 }
 
 function itemsToZPL(items) {
-  let maxY = 140;
-  for (const it of items) {
-    const bottom = it.type === 'barcode' ? it.y + it.h : it.type === 'text' ? it.y + it.fontH : it.y + (it.size || 80);
-    if (bottom > maxY) maxY = bottom;
-  }
-  const ll = Math.min(240, Math.max(160, maxY + 10));
-  let z = '^XA^PW400^LL' + ll + '^CI28^LH0,0';
+  // Fixed label size: 400×240 dots (50×30mm @ 203dpi).
+  // ^LT0 resets any stored vertical offset on the printer.
+  let z = '^XA^PW400^LL240^CI28^LH0,0^LT0';
   for (const it of items) {
     if (it.type === 'barcode') {
       z +=
