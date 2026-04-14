@@ -10641,9 +10641,8 @@ function itemsToZPL(items) {
           zplText(it.text) +
           '^FS';
     } else if (it.type === 'qr') {
-      // ^FT for QR: absolute positioning, ignores printer's stored ^LH offset.
-      // ^FO doesn't work — printer has a stored label home that shifts QR down.
-      z += '^FT' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
+      // Reset label home immediately before QR to ensure ^FO works from true origin.
+      z += '^LH0,0^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
@@ -10776,7 +10775,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
-    items.push({ type: 'qr', x: 0, y: 41, size: 125, mag: 5, val: bcVal });
+    items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
@@ -10849,7 +10848,7 @@ function labLabelItems(id, c, detail, qr) {
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
-    items.push({ type: 'qr', x: 0, y: 41, size: 125, mag: 5, val: bcVal });
+    items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: line1Text });
     if (detail === 'sorte' || detail === 'full') {
