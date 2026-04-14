@@ -834,7 +834,7 @@ describe('MCP label printing', () => {
     it('renders QR items with ^BQN and mag parameter', () => {
       const zpl = itemsToZPL([{ type: 'qr', x: 190, y: 10, size: 200, mag: 8, val: 'MC-001' }]);
       assert.ok(zpl.includes('^BQN,2,8'), 'must use mag=8');
-      assert.ok(zpl.includes('^FDMM,AMC-001^FS'), 'must contain QR value');
+      assert.ok(zpl.includes('^FDMA,MC-001^FS'), 'must contain QR value');
     });
 
     it('uses default mag=4 when mag not specified', () => {
