@@ -1763,8 +1763,8 @@ function insertBatch(db, b) {
   if (strainId) {
     const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
     if (!ms) throw new Error('Pilzsorte nicht gefunden');
-    species = ms.name;
-    strain = ms.kuerzel;
+    species = ms.name + ' (' + ms.kuerzel + ')';
+    if (!strain) strain = 'XXX';
   }
   db.exec('BEGIN');
   try {
@@ -1813,10 +1813,9 @@ function updateBatchField(db, batchId, fields) {
     if (fields.strainId != null) {
       const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
       if (!ms) throw new Error('Pilzsorte nicht gefunden');
-      db.prepare('UPDATE batches SET strain_id=?,species=?,strain=? WHERE batch_id=?').run(
+      db.prepare('UPDATE batches SET strain_id=?,species=? WHERE batch_id=?').run(
         fields.strainId,
-        ms.name,
-        ms.kuerzel,
+        ms.name + ' (' + ms.kuerzel + ')',
         batchId
       );
     }
