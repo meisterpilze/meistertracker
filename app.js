@@ -4473,7 +4473,13 @@ function openBatchAdd() {
   const bs = document.getElementById('ba-batch');
   bs.innerHTML =
     '<option value="">— choose batch —</option>' +
-    batches.map((b) => `<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)})</option>`).join('');
+    batches.map((b) => {
+      const kz = b.strainKuerzel || b.strain || '';
+      const name = b.strainName || b.species || '';
+      const st = (b.strainText || '').trim();
+      const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+      return `<option value="${esc(b.batchId)}">${label}</option>`;
+    }).join('');
   const ls = document.getElementById('ba-loc');
   ls.innerHTML = [...ZONES, ...ALL_RACKS].map((l) => `<option value="${l}">${l}</option>`).join('');
   bs.onchange = baPreview;
@@ -9920,15 +9926,18 @@ const csBadge = (s) => {
 // Culture strain display: prefer strainName (kuerzel) from mushroom_strains lookup,
 // fall back to legacy free-text strain field for historical rows without strain_id.
 function cultureStrainDisplay(c) {
+  let display = '';
   if (c.strainName) {
-    return (
-      esc(c.strainName) +
+    display = esc(c.strainName) +
       (c.strainKuerzel
         ? ' <span style="font-size:10px;color:var(--c-text-muted)">(' + esc(c.strainKuerzel) + ')</span>'
-        : '')
-    );
+        : '');
+  } else {
+    display = esc(c.strain) || '\u2014';
   }
-  return esc(c.strain) || '\u2014';
+  const st = (c.strainText || '').trim();
+  if (st) display += ' <span style="font-size:10px;color:var(--c-text-sec)">' + esc(st) + '</span>';
+  return display;
 }
 function fillCultureSelect(id, types) {
   const s = document.getElementById(id);
@@ -9938,10 +9947,13 @@ function fillCultureSelect(id, types) {
     '<option value="">— none —</option>' +
     cultures
       .filter((c) => (c.status === 'active' || c.status === 'stored') && (!types || types.includes(c.type)))
-      .map(
-        (c) =>
-          `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName || c.species)}/${esc(c.strainKuerzel || c.strain)} (${esc(c.type)})</option>`
-      )
+      .map((c) => {
+        const kz = c.strainKuerzel || c.strain || '';
+        const name = c.strainName || c.species || '';
+        const st = (c.strainText || '').trim();
+        const label = (kz ? '[' + kz + '] ' : '') + esc(c.id) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '') + ' (' + esc(c.type) + ')';
+        return `<option value="${esc(c.id)}">${label}</option>`;
+      })
       .join('');
   if (cur) s.value = cur;
 }
@@ -10020,7 +10032,7 @@ function lwUpdate() {
     gsPreview();
   } else {
     if (kbRows) kbRows.style.display = 'none';
-    if (strainTextRow) strainTextRow.style.display = 'none';
+    if (strainTextRow) strainTextRow.style.display = type === 'G2G' ? 'none' : 'block';
     if (qtyRow) qtyRow.style.display = 'block';
     if (type === 'MC') {
       pr.style.display = 'none';
@@ -10055,10 +10067,13 @@ function fillParentSelect(types) {
     '</option>' +
     cultures
       .filter((c) => (c.status === 'active' || c.status === 'stored') && types.includes(c.type))
-      .map(
-        (c) =>
-          `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.strainName || c.species)}/${esc(c.strainKuerzel || c.strain)}</option>`
-      )
+      .map((c) => {
+        const kz = c.strainKuerzel || c.strain || '';
+        const name = c.strainName || c.species || '';
+        const st = (c.strainText || '').trim();
+        const label = (kz ? '[' + kz + '] ' : '') + esc(c.id) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+        return `<option value="${esc(c.id)}">${label}</option>`;
+      })
       .join('');
   if (cur) s.value = cur;
 }
@@ -10101,6 +10116,7 @@ function logLabWork() {
   }
   const prefix = type + '-' + abbrev(sp) + '-' + todayStr() + '-';
   const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
+  const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   const newC = Array.from({ length: qty }, (_, i) => ({
     id: prefix + String(existing + i + 1).padStart(2, '0'),
     type,
@@ -10109,6 +10125,7 @@ function logLabWork() {
     strainId,
     strainName: sp,
     strainKuerzel: st || null,
+    strainText: lwStrainText,
     parentId: parentId || null,
     source: document.getElementById('lw-source')?.value.trim() || null,
     status: 'active',
@@ -10813,10 +10830,15 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
 
 function labLabelItems(id, c, detail, qr) {
   const items = [];
-  // Prefer mushroom_strains lookup fields; fall back to legacy species/strain.
-  const name = c.strainName || c.species || '';
-  const kz = c.strainDescriptor || '';
-  const sp = name + (kz ? ' \u2013 ' + kz : '');
+  // Build info line matching batch label pattern: strainName – strainText – notes(13)
+  const species = c.strainName || c.species || '';
+  const strainTxt = (c.strainText || '').trim();
+  const rawNotes = (c.notes || '').trim();
+  const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+  let spParts = [species];
+  if (strainTxt) spParts.push(strainTxt);
+  if (notes) spParts.push(notes);
+  const sp = spParts.join(' \u2013 ');
   const ds = fmtDt(c.created);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('culture:' + id);
@@ -10962,7 +10984,13 @@ function fillBatchSelect() {
   s.innerHTML =
     '<option value="">— choose batch —</option>' +
     batches
-      .map((b) => `<option value="${esc(b.batchId)}">${esc(b.batchId)} (${esc(b.species)} / ${esc(b.strain)})</option>`)
+      .map((b) => {
+        const kz = b.strainKuerzel || b.strain || '';
+        const name = b.strainName || b.species || '';
+        const st = (b.strainText || '').trim();
+        const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+        return `<option value="${esc(b.batchId)}">${label}</option>`;
+      })
       .join('');
   if (cur) s.value = cur;
 }
@@ -11912,11 +11940,24 @@ function processScan(raw) {
     setFb('err', t('scanFb.setAction'));
     return;
   }
-  // Culture ID scan → open lineage
+  // Culture ID scan → auto-fill parent if lab work form is open, else open lineage
   if (/^(MC|PD|LC)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
     const c = cultures.find((x) => x.id.toUpperCase() === val);
     if (c) {
       closeCamScan();
+      // If lab work form is visible, auto-fill parent instead of opening lineage
+      const lwPanel = document.getElementById('sp-lab-work');
+      const parentSel = document.getElementById('lw-parent');
+      const parentRow = document.getElementById('lw-parent-row');
+      if (lwPanel && lwPanel.classList.contains('active') && parentRow && parentRow.style.display !== 'none') {
+        parentSel.value = c.id;
+        if (c.strainId) document.getElementById('lw-st').value = String(c.strainId);
+        const stInput = document.getElementById('lw-strain-text');
+        if (stInput && c.strainText) stInput.value = c.strainText;
+        lwPreview();
+        setFb('ok', 'Parent gesetzt: ' + c.id);
+        return;
+      }
       go('lab', 'n-lab');
       openStab('lab', 'lineage');
       setTimeout(() => {
@@ -14776,6 +14817,18 @@ function initEventListeners() {
     else lwPreview();
   });
   $('lw-qty').addEventListener('input', lwPreview);
+  $('lw-parent').addEventListener('change', () => {
+    const parentId = document.getElementById('lw-parent').value;
+    if (!parentId) return;
+    const parent = cultures.find((c) => c.id === parentId);
+    if (!parent) return;
+    if (parent.strainId) {
+      document.getElementById('lw-st').value = String(parent.strainId);
+    }
+    const stInput = document.getElementById('lw-strain-text');
+    if (stInput && parent.strainText) stInput.value = parent.strainText;
+    lwPreview();
+  });
   $('btn-26').addEventListener('click', () => {
     const type = document.getElementById('lw-type').value;
     if (type === 'KB') createGrainBatch();

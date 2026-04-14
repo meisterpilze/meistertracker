@@ -176,9 +176,15 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
 
 function labLabelItems(id, c, detail, barcodeNum, qr) {
   const items = [];
-  const name = c.strainName || c.species || '';
-  const kz = c.strainDescriptor || '';
-  const sp = name + (kz ? ' \u2013 ' + kz : '');
+  // Build info line matching batch label pattern: strainName – strainText – notes(13)
+  const species = c.strainName || c.species || '';
+  const strainTxt = (c.strainText || '').trim();
+  const rawNotes = (c.notes || '').trim();
+  const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+  const spParts = [species];
+  if (strainTxt) spParts.push(strainTxt);
+  if (notes) spParts.push(notes);
+  const sp = spParts.join(' \u2013 ');
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
