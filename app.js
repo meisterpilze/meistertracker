@@ -344,6 +344,7 @@ const LANG = {
     'batch.inStock': 'In stock:',
     'batch.sufficient': 'sufficient',
     'batch.onlyEnoughFor': 'only enough for {n} bags',
+    'batch.notEnough': 'not enough stock',
     'batch.bag': 'Bag:',
     'batch.dryMatterPerBag': 'Total dry matter per bag:',
     'batch.needed': 'needed',
@@ -1608,6 +1609,7 @@ const LANG = {
     'batch.inStock': 'Auf Lager:',
     'batch.sufficient': 'ausreichend',
     'batch.onlyEnoughFor': 'reicht nur f\u00fcr {n} Beutel',
+    'batch.notEnough': 'nicht genug Vorrat',
     'batch.bag': 'Beutel:',
     'batch.dryMatterPerBag': 'Trockenmasse pro Beutel:',
     'batch.needed': 'ben\u00f6tigt',
@@ -2885,6 +2887,7 @@ const LANG = {
     'batch.inStock': 'Em estoque:',
     'batch.sufficient': 'suficiente',
     'batch.onlyEnoughFor': 'suficiente apenas para {n} sacos',
+    'batch.notEnough': 'estoque insuficiente',
     'batch.bag': 'Saco:',
     'batch.dryMatterPerBag': 'Mat\u00e9ria seca por saco:',
     'batch.needed': 'necess\u00e1rio',
@@ -6213,7 +6216,11 @@ function getLabStrainBreakdown() {
       const desc = b.strainDescriptor || '';
       const key = name + '|' + kz;
       if (!breakdown.GS[key]) breakdown.GS[key] = { name, kz, desc, count: 0, color: spColor(name) };
-      breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
+      if (b.bagWeights && Object.keys(b.bagWeights).length) {
+        breakdown.GS[key].count += Object.values(b.bagWeights).reduce((s, w) => s + (w || 1), 0);
+      } else {
+        breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
+      }
     });
   return breakdown;
 }
@@ -7085,8 +7092,13 @@ function toggleBatchBags(batchId) {
           }
         }
         const num = bag.split('-').pop();
+        // Show per-bag weight if batch has mixed weights
+        const bw = b.bagWeights ? b.bagWeights[bag] : null;
+        const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
+        const showW = bw != null && wVals.size > 1;
+        const wTag = showW ? `<span style="font-size:8px;color:#888;margin-left:1px">${bw}kg</span>` : '';
         return `<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
-      ${num} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
+      ${num}${wTag} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
     </span>`;
       })
       .join('') +
@@ -7178,19 +7190,22 @@ function delBatch(id) {
     const b = batches.find((x) => x.batchId === id);
     // Reverse inventory deductions locally
     if (b && inventory.stock) {
+      // Sum per-bag weights from bagWeights map, or fall back to qty * bagKg
+      const totalBagKg = b.bagWeights && Object.keys(b.bagWeights).length
+        ? Object.values(b.bagWeights).reduce((s, w) => s + (w || (b.bagKg || 3)), 0)
+        : b.qty * (b.bagKg || 3);
       if (b.batchType === 'grain') {
-        inventory.stock.grain = (inventory.stock.grain || 0) + b.qty * (b.bagKg || 3);
+        inventory.stock.grain = (inventory.stock.grain || 0) + totalBagKg;
       } else if (b.substrate) {
-        const rh = b.substrate.rh || 0,
-          bagKg = b.bagKg || 3;
-        const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+        const rh = b.substrate.rh || 0;
+        const totalDryKg = rh > 0 ? totalBagKg * (1 - rh / 100) : totalBagKg;
         if (b.substrate.hardwood)
           inventory.stock.hardwood =
-            (inventory.stock.hardwood || 0) + b.qty * dryKgPerBag * (b.substrate.hardwood / 100);
+            (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
         if (b.substrate.wheatbran)
           inventory.stock.wheatbran =
-            (inventory.stock.wheatbran || 0) + b.qty * dryKgPerBag * (b.substrate.wheatbran / 100);
-        if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + b.qty * dryKgPerBag * 0.01;
+            (inventory.stock.wheatbran || 0) + totalDryKg * (b.substrate.wheatbran / 100);
+        if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + totalDryKg * 0.01;
       }
     }
     batches = batches.filter((x) => x.batchId !== id);
@@ -10182,34 +10197,84 @@ const genGrainBatchId = (sp, strainText) => {
   const n = batches.filter((b) => b.batchId.startsWith(prefix + '-')).length;
   return prefix + '-' + String(n + 1).padStart(2, '0');
 };
-function gsSetWeight(kg) {
-  document.getElementById('gs-weight').value = kg;
-  ['gs-wbtn-07', 'gs-wbtn-1', 'gs-wbtn-2', 'gs-wbtn-5'].forEach((id) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    const btnKg = parseFloat(btn.textContent);
-    btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
+/** Read all weight-line rows from the grain spawn form */
+function gsReadLines() {
+  const lines = [];
+  for (const row of document.querySelectorAll('.gs-wline')) {
+    const kg = parseFloat(row.querySelector('.gs-line-kg').value) || 0;
+    const qty = parseInt(row.querySelector('.gs-line-qty').value) || 0;
+    if (kg > 0 && qty > 0) lines.push({ kg, qty });
+  }
+  return lines;
+}
+/** Set weight for a specific weight-line row and highlight its preset button */
+function gsLineSetWeight(row, kg) {
+  row.querySelector('.gs-line-kg').value = kg;
+  row.querySelectorAll('.gs-wbtn').forEach((btn) => {
+    btn.className = 'btn btn-sm gs-wbtn' + (parseFloat(btn.dataset.kg) === kg ? ' btn-p' : '');
   });
   gsPreview();
+}
+/** Add a new weight line to the grain spawn form */
+function gsAddLine() {
+  const container = document.getElementById('gs-weight-lines');
+  const first = container.querySelector('.gs-wline');
+  const clone = first.cloneNode(true);
+  clone.querySelector('.gs-line-kg').value = '1';
+  clone.querySelector('.gs-line-qty').value = '10';
+  clone.querySelectorAll('.gs-wbtn').forEach((btn) => {
+    btn.className = 'btn btn-sm gs-wbtn' + (parseFloat(btn.dataset.kg) === 1 ? ' btn-p' : '');
+  });
+  container.appendChild(clone);
+  gsUpdateRemoveButtons();
+  gsPreview();
+}
+/** Remove a weight line */
+function gsRemoveLine(row) {
+  row.remove();
+  gsUpdateRemoveButtons();
+  gsPreview();
+}
+/** Show/hide remove buttons based on line count */
+function gsUpdateRemoveButtons() {
+  const rows = document.querySelectorAll('.gs-wline');
+  const multi = rows.length > 1;
+  rows.forEach((r) => {
+    r.querySelector('.gs-line-rm').style.display = multi ? '' : 'none';
+  });
+}
+/** Reset grain spawn form to single default line */
+function gsResetLines() {
+  const container = document.getElementById('gs-weight-lines');
+  const rows = container.querySelectorAll('.gs-wline');
+  for (let i = rows.length - 1; i > 0; i--) rows[i].remove();
+  const first = container.querySelector('.gs-wline');
+  first.querySelector('.gs-line-kg').value = '1';
+  first.querySelector('.gs-line-qty').value = '10';
+  first.querySelectorAll('.gs-wbtn').forEach((btn) => {
+    btn.className = 'btn btn-sm gs-wbtn' + (parseFloat(btn.dataset.kg) === 1 ? ' btn-p' : '');
+  });
+  gsUpdateRemoveButtons();
 }
 function gsPreview() {
   const strainSel = document.getElementById('lw-st');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   const sp = ms ? ms.name : '';
-  const qty = parseInt(document.getElementById('gs-qty').value) || 0;
-  const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
+  const lines = gsReadLines();
+  const totalQty = lines.reduce((s, l) => s + l.qty, 0);
+  const totalGrain = lines.reduce((s, l) => s + l.kg * l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
-  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp, lwStrainText) + ' (' + qty + ' bags)' : '\u2014';
+  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp, lwStrainText) + ' (' + totalQty + ' bags)' : '\u2014';
   const el = document.getElementById('gs-mat-preview');
-  if (!qty || !bagKg) {
+  if (!totalQty || !totalGrain) {
     el.style.display = 'none';
     return;
   }
-  const totalGrain = qty * bagKg;
+  const breakdown = lines.map((l) => l.qty + ' \u00d7 ' + l.kg + ' kg').join(' + ');
   const avail = inventory.stock?.grain || 0;
   const enough = avail >= totalGrain;
-  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${qty} \u00d7 ${bagKg} kg)<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.onlyEnoughFor', { n: Math.floor(avail / bagKg) })}`;
+  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
   el.style.display = 'block';
 }
 function createGrainBatch() {
@@ -10222,23 +10287,34 @@ function createGrainBatch() {
   }
   const sp = ms.name,
     st = ms.kuerzel;
-  const qty = parseInt(document.getElementById('gs-qty').value) || 0;
-  const days = parseInt(document.getElementById('gs-days').value) || 14;
-  const bagKg = parseFloat(document.getElementById('gs-weight').value) || 0;
-  if (qty < 1) {
+  const lines = gsReadLines();
+  if (!lines.length) {
     alert(t('batch.fillQty'));
     return;
   }
-  if (!bagKg) {
-    alert(t('batch.enterWeight'));
-    return;
-  }
+  const days = parseInt(document.getElementById('gs-days').value) || 14;
+  const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
   const batchId = genGrainBatchId(sp, lwStrainText);
   spColor(sp);
   const due = new Date();
   due.setDate(due.getDate() + days);
-  const bags = Array.from({ length: qty }, (_, i) => batchId + '-' + String(i + 1).padStart(2, '0'));
+  // Generate bags with per-bag weight
+  const bags = [];
+  const bagWeights = {};
+  let idx = 1;
+  for (const line of lines) {
+    for (let i = 0; i < line.qty; i++) {
+      const bagId = batchId + '-' + String(idx).padStart(2, '0');
+      bags.push({ id: bagId, bagKg: line.kg });
+      bagWeights[bagId] = line.kg;
+      idx++;
+    }
+  }
+  const bagIds = bags.map((b) => b.id);
+  // Determine batch-level bagKg: single weight if uniform, null if mixed
+  const uniqueWeights = new Set(lines.map((l) => l.kg));
+  const batchBagKg = uniqueWeights.size === 1 ? lines[0].kg : null;
   batches.push({
     batchId,
     species: sp,
@@ -10246,20 +10322,23 @@ function createGrainBatch() {
     strainId,
     strainName: ms.name,
     strainKuerzel: ms.kuerzel,
-    qty,
+    qty: totalQty,
     days,
     substrate: null,
-    bagKg,
+    bagKg: batchBagKg,
     batchType: 'grain',
     sourceId: document.getElementById('gs-culture').value || null,
     notes: document.getElementById('lw-notes').value.trim(),
     strainText: lwStrainText,
     created: new Date().toISOString(),
     due: due.toISOString(),
-    bags
+    bags: bagIds,
+    bagWeights
   });
   const batchObj = batches[batches.length - 1];
-  apiPost('/api/batches', batchObj).then((r) => {
+  // Send bags as [{id, bagKg}] to the server
+  const apiPayload = Object.assign({}, batchObj, { bags });
+  apiPost('/api/batches', apiPayload).then((r) => {
     if (r && r.error) {
       const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
       if (i >= 0) batches.splice(i, 1);
@@ -10276,13 +10355,13 @@ function createGrainBatch() {
   });
   // Deduct grain from inventory
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  const grainUsed = qty * bagKg;
+  const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty, 0);
   inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
   invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
   if (strainSel) strainSel.value = '';
   const lwStrainEl = document.getElementById('lw-strain-text');
   if (lwStrainEl) lwStrainEl.value = '';
-  document.getElementById('gs-qty').value = '10';
+  gsResetLines();
   document.getElementById('gs-days').value = '14';
   document.getElementById('lw-notes').value = '';
   document.getElementById('gs-mat-preview').style.display = 'none';
@@ -10290,8 +10369,8 @@ function createGrainBatch() {
   updateTodoBadge();
   renderBatches();
   // Show zone picker — required before print
-  openZonePickModal(batchObj, bags, function () {
-    document.getElementById('gs-bags').innerHTML = bags
+  openZonePickModal(batchObj, bagIds, function () {
+    document.getElementById('gs-bags').innerHTML = bagIds
       .map(
         (b) =>
           `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
@@ -10751,7 +10830,7 @@ function renderPreviewDeferred(deferred, baseDelay) {
 //   'minimal' — barcode + Line 1 (bag ID) only
 //   'sorte'   — + Line 2 (Pilzsorte written out + notes)
 //   'full'    — + Line 3 (Fälligkeit)
-function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
+function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = [];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('bag:' + bagId);
@@ -10783,6 +10862,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       let parts = [species];
+      if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -10812,6 +10892,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       let parts = [species];
+      if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -10880,7 +10961,15 @@ function labLabelItems(id, c, detail, qr) {
 
 function makeBagZPL(bags, batch, detail, qr) {
   const legacyFallbackIds = [];
-  const zpl = bags.map((bagId) => itemsToZPL(bagLabelItems(bagId, batch, detail, legacyFallbackIds, qr))).join('\n');
+  // Pass per-bag weight to label items when batch has mixed weights
+  const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
+  const mixed = wVals.size > 1;
+  const zpl = bags
+    .map((bagId) => {
+      const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
+      return itemsToZPL(bagLabelItems(bagId, batch, detail, legacyFallbackIds, qr, bk));
+    })
+    .join('\n');
   if (legacyFallbackIds.length) {
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
     alert(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }));
@@ -11012,8 +11101,11 @@ function renderBagPreview() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
   const allDeferred = [];
+  const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
+  const mixed = wVals.size > 1;
   batch.bags.forEach((bagId) => {
-    const { cell, deferred } = buildPreviewCell(bagLabelItems(bagId, batch, mode, null, qr));
+    const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
+    const { cell, deferred } = buildPreviewCell(bagLabelItems(bagId, batch, mode, null, qr, bk));
     wrap.appendChild(cell);
     allDeferred.push(...deferred);
   });
@@ -14787,21 +14879,21 @@ function initEventListeners() {
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
   });
-  // Grain spawn form (now embedded in Log Work tab)
-  $('gs-wbtn-07').addEventListener('click', () => {
-    gsSetWeight(0.7);
+  // Grain spawn weight-lines: event delegation
+  $('gs-weight-lines').addEventListener('click', (e) => {
+    const btn = e.target.closest('.gs-wbtn');
+    if (btn) {
+      gsLineSetWeight(btn.closest('.gs-wline'), parseFloat(btn.dataset.kg));
+      return;
+    }
+    const rm = e.target.closest('.gs-line-rm');
+    if (rm) {
+      gsRemoveLine(rm.closest('.gs-wline'));
+      return;
+    }
   });
-  $('gs-wbtn-1').addEventListener('click', () => {
-    gsSetWeight(1);
-  });
-  $('gs-wbtn-2').addEventListener('click', () => {
-    gsSetWeight(2);
-  });
-  $('gs-wbtn-5').addEventListener('click', () => {
-    gsSetWeight(5);
-  });
-  $('gs-weight').addEventListener('input', gsPreview);
-  $('gs-qty').addEventListener('input', gsPreview);
+  $('gs-weight-lines').addEventListener('input', gsPreview);
+  $('gs-add-line').addEventListener('click', gsAddLine);
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
