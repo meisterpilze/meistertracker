@@ -112,8 +112,8 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
-    items.push({ type: 'qr', x: 0, y: 48, size: 125, mag: 5, val: bcVal });
-    items.push({ type: 'text', y: 170, blockW: 400, fontH: 28, text: bagId });
+    items.push({ type: 'qr', x: 0, y: 5, size: 125, mag: 5, val: bcVal });
+    items.push({ type: 'text', y: 135, blockW: 400, fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
       const strainTxt = (batch.strainText || '').trim();
@@ -123,7 +123,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', y: 202, blockW: 400, fontH: 24, text: line2 });
+      if (line2) items.push({ type: 'text', y: 168, blockW: 400, fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
       const due = new Date(batch.due);
@@ -135,7 +135,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr) {
         due.getFullYear();
       items.push({
         type: 'text',
-        y: 230,
+        y: 198,
         blockW: 400,
         fontH: 24,
         text: 'F\u00e4llig: ' + dueStr,
@@ -182,14 +182,14 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
-    items.push({ type: 'qr', x: 0, y: 48, size: 125, mag: 5, val: bcVal });
+    items.push({ type: 'qr', x: 0, y: 5, size: 125, mag: 5, val: bcVal });
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-    items.push({ type: 'text', y: 170, blockW: 400, fontH: 28, text: line1Text });
+    items.push({ type: 'text', y: 135, blockW: 400, fontH: 28, text: line1Text });
     if (detail === 'sorte' || detail === 'full') {
-      if (sp) items.push({ type: 'text', y: 202, blockW: 400, fontH: 24, text: sp });
+      if (sp) items.push({ type: 'text', y: 168, blockW: 400, fontH: 24, text: sp });
     }
     if (detail === 'full' && c.created) {
-      const line3Y = sp ? 230 : 202;
+      const line3Y = sp ? 198 : 168;
       items.push({
         type: 'text',
         y: line3Y,
