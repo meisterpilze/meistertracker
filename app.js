@@ -1207,7 +1207,7 @@ const LANG = {
     // Strains
     'strains.saveChanges': 'Save changes',
     'strains.required': 'Name and abbreviation are required fields.',
-    'strains.kuerzelLength': 'Abbreviation must be exactly 4 characters (e.g. LIMA, SHII, AUSP).',
+    'strains.kuerzelLength': 'Abbreviation must be 2-4 characters (e.g. LI, LIMA, SHII).',
     // Sync
     'sync.syncedAt': 'Synced \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -2489,7 +2489,7 @@ const LANG = {
     // Strains
     'strains.saveChanges': '\u00c4nderungen speichern',
     'strains.required': 'Name und K\u00fcrzel sind Pflichtfelder.',
-    'strains.kuerzelLength': 'K\u00fcrzel muss genau 4 Zeichen haben (z.B. LIMA, SHII, AUSP).',
+    'strains.kuerzelLength': 'K\u00fcrzel muss 2-4 Zeichen haben (z.B. LI, LIMA, SHII).',
     // Sync
     'sync.syncedAt': 'Synchronisiert \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -3771,7 +3771,7 @@ const LANG = {
     // Strains
     'strains.saveChanges': 'Guardar altera\u00e7\u00f5es',
     'strains.required': 'Nome e abrevia\u00e7\u00f5es s\u00e3o campos obrigat\u00f3rios.',
-    'strains.kuerzelLength': 'A abrevia\u00e7\u00e3o deve ter exatamente 4 caracteres (ex. LIMA, SHII, AUSP).',
+    'strains.kuerzelLength': 'A abrevia\u00e7\u00e3o deve ter 2-4 caracteres (ex. LI, LIMA, SHII).',
     // Sync
     'sync.syncedAt': 'Sincronizado \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -7893,11 +7893,28 @@ async function runBatchIdMigration() {
     const newId = isGrain ? 'G-' + kuerzel + '-' + datePart : kuerzel + '-' + datePart;
     renames.push({ oldId: b.batchId, newId });
   });
-  if (!renames.length) {
+  // ── Culture kuerzel renames ──
+  const cultureRenames = [];
+  cultures.forEach((c) => {
+    const kuerzel = c.strainKuerzel || (mushroomStrains.find((s) => s.id === c.strainId) || {}).kuerzel;
+    if (!kuerzel) return;
+    const parts = c.id.split('-');
+    // Format: TYPE-KUERZEL-[STRAINTEXT-]DDMMYY-NN → parts[1] is always kuerzel
+    if (parts.length < 3) return;
+    const currentKuerzel = parts[1];
+    if (currentKuerzel === kuerzel) return; // already correct
+    const newId = parts[0] + '-' + kuerzel + '-' + parts.slice(2).join('-');
+    cultureRenames.push({ oldId: c.id, newId });
+  });
+
+  if (!renames.length && !cultureRenames.length) {
     alert(t('migrate.alreadyCurrent'));
     return;
   }
-  const preview = renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  let preview = '';
+  if (renames.length) preview += '── Batches (' + renames.length + ') ──\n' + renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  if (renames.length && cultureRenames.length) preview += '\n\n';
+  if (cultureRenames.length) preview += '── Cultures (' + cultureRenames.length + ') ──\n' + cultureRenames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
   if (!confirm(t('migrate.confirm') + '\n\n' + preview)) return;
   let done = 0,
     failed = 0,
@@ -7956,15 +7973,36 @@ async function runBatchIdMigration() {
         failedList.push(oldId + ': ' + e.message);
       }
     }
+    // Rename cultures
+    for (const { oldId, newId } of cultureRenames) {
+      try {
+        const r = await apiPost('/api/cultures/' + encodeURIComponent(oldId) + '/rename', { newId });
+        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        cultures.forEach((c) => {
+          if (c.id === oldId) c.id = newId;
+          if (c.parentId === oldId) c.parentId = newId;
+        });
+        batches.forEach((b) => { if (b.sourceId === oldId) b.sourceId = newId; });
+        const bc = barcodeByEntity.get('culture:' + oldId);
+        if (bc != null) {
+          barcodeByEntity.delete('culture:' + oldId);
+          barcodeByEntity.set('culture:' + newId, bc);
+          barcodeRegistry.set(bc, { type: 'culture', id: newId });
+        }
+        done++;
+      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+    }
   } finally {
     _mutating--;
   }
   renderBatches();
+  renderCultures();
   renderStatus();
   if (failed) {
     alert(t('migrate.complete') + done + ' renamed, ' + failed + ' errors:\n\n' + failedList.join('\n'));
   } else {
-    alert(t('migrate.success') + done + ' batches renamed.');
+    const total = renames.length + cultureRenames.length;
+    alert(t('migrate.success') + total + ' IDs renamed.');
   }
 }
 
@@ -9977,7 +10015,7 @@ function saveMStrain() {
     alert(t('strains.required'));
     return;
   }
-  if (kuerzel.length !== 4) {
+  if (kuerzel.length < 2 || kuerzel.length > 4) {
     alert(t('strains.kuerzelLength'));
     return;
   }
