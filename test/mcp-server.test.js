@@ -899,10 +899,10 @@ describe('MCP label printing', () => {
       assert.equal(items[0].val, 'FB_2025_001_01');
     });
 
-    it('with QR: produces qr item at origin with mag=5', () => {
+    it('with QR: encodes numeric barcode value, not bag ID', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'minimal', 42, true);
       assert.equal(items[0].type, 'qr');
-      assert.equal(items[0].val, 'FB-2025-001-01');
+      assert.equal(items[0].val, '42');
       assert.equal(items[0].mag, 5);
       assert.equal(items[0].x, 0);
     });
@@ -983,10 +983,10 @@ describe('MCP label printing', () => {
       assert.equal(dateLine.y, 164);
     });
 
-    it('with QR: produces qr item at origin with mag=5', () => {
+    it('with QR: encodes numeric barcode value, not culture ID', () => {
       const items = labLabelItems('PD-001', culture, 'minimal', 55, true);
       assert.equal(items[0].type, 'qr');
-      assert.equal(items[0].val, 'PD-001');
+      assert.equal(items[0].val, '55');
       assert.equal(items[0].mag, 5);
       assert.equal(items[0].x, 0);
     });
