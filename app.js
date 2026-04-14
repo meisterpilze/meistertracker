@@ -7019,7 +7019,7 @@ function renderBatches() {
       (b.strainName || '').toLowerCase().includes(q)
   );
   const sorted = applyTableSort(filtered, tableSort.batches, (b, k) => {
-    if (k === 'strain') return b.strainName || b.strain || '';
+    if (k === 'strain') return (b.strainText || '').trim() || (!b.strainId && b.strain ? b.strain : '');
     if (k === 'status') return getStatus(b.batchId).status;
     if (k === 'qty' || k === 'days') return Number(b[k]) || 0;
     return b[k];
@@ -7043,12 +7043,10 @@ function renderBatches() {
         const note = b.notes
           ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
           : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-        const strainDisplay = b.strainName
-          ? esc(b.strainName) +
-            (b.strainKuerzel
-              ? ' <span style="font-size:10px;color:var(--c-text-muted)">(' + esc(b.strainKuerzel) + ')</span>'
-              : '')
-          : esc(b.strain || '—');
+        const bst = (b.strainText || '').trim();
+        const strainDisplay = bst
+          ? esc(bst)
+          : (!b.strainId && b.strain ? esc(b.strain) : '—');
         const canMove = status !== 'DONE';
         const moveBtn = canMove
           ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
@@ -10047,21 +10045,13 @@ const csBadge = (s) => {
   const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', contam: 'badge-contam' };
   return `<span class="badge ${m[s] || ''}">${s}</span>`;
 };
-// Culture strain display: prefer strainName (kuerzel) from mushroom_strains lookup,
+// Culture strain display: show only explicit strainText,
 // fall back to legacy free-text strain field for historical rows without strain_id.
 function cultureStrainDisplay(c) {
-  let display = '';
-  if (c.strainName) {
-    display = esc(c.strainName) +
-      (c.strainKuerzel
-        ? ' <span style="font-size:10px;color:var(--c-text-muted)">(' + esc(c.strainKuerzel) + ')</span>'
-        : '');
-  } else {
-    display = esc(c.strain) || '\u2014';
-  }
   const st = (c.strainText || '').trim();
-  if (st) display += ' <span style="font-size:10px;color:var(--c-text-sec)">' + esc(st) + '</span>';
-  return display;
+  if (st) return esc(st);
+  if (!c.strainId && c.strain) return esc(c.strain);
+  return '\u2014';
 }
 function fillCultureSelect(id, types) {
   const s = document.getElementById(id);
@@ -10089,7 +10079,7 @@ function renderCultures() {
   updateSortIndicators('cultures', activeState);
   const filtered = cultures.filter((c) => (type === 'all' || c.type === type) && (stat === 'all' || c.status === stat));
   const rows = applyTableSort(filtered, activeState, (c, k) => {
-    if (k === 'strain') return c.strainName || c.strain || '';
+    if (k === 'strain') return (c.strainText || '').trim() || (!c.strainId && c.strain ? c.strain : '');
     return c[k];
   });
   if (!rows.length) {
@@ -10669,7 +10659,7 @@ function openBagInfo(bagId, batchId, batch) {
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${b.strainName ? esc(b.strainName) + ' <span style="font-size:12px;color:var(--c-text-muted)">(' + esc(b.strainKuerzel || b.strain || '') + ')</span>' : esc(b.strain) || '\u2014'}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${(b.strainText || '').trim() ? esc(b.strainText.trim()) : (!b.strainId && b.strain ? esc(b.strain) : '\u2014')}</div></div>
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
