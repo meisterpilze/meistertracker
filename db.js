@@ -743,9 +743,7 @@ const MIGRATIONS = [
     description: 'Add per-bag weight column to bags table and backfill from batch',
     fn(db) {
       db.exec('ALTER TABLE bags ADD COLUMN bag_kg REAL');
-      db.exec(
-        'UPDATE bags SET bag_kg = (SELECT bag_kg FROM batches WHERE batches.batch_id = bags.batch_id)'
-      );
+      db.exec('UPDATE bags SET bag_kg = (SELECT bag_kg FROM batches WHERE batches.batch_id = bags.batch_id)');
     }
   }
 ];
@@ -1958,9 +1956,7 @@ function deleteBatchById(db, batchId) {
 function computeBatchMaterialDeltas(db, row) {
   const deltas = [];
   // Read actual per-bag weights from the bags table
-  const bagWeightRows = db
-    .prepare('SELECT bag_kg FROM bags WHERE batch_id = ?')
-    .all(row.batch_id);
+  const bagWeightRows = db.prepare('SELECT bag_kg FROM bags WHERE batch_id = ?').all(row.batch_id);
   const fallbackKg = row.bag_kg || 3;
   if (row.batch_type === 'grain') {
     const totalGrain = bagWeightRows.length
