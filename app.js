@@ -10622,9 +10622,7 @@ function itemsToZPL(items) {
           zplText(it.text) +
           '^FS';
     } else if (it.type === 'qr') {
-      // ^FT = absolute field typeset (not relative to ^LH like ^FO).
-      // ^FDMA, = error correction M, auto data input A.
-      z += '^FT' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
+      z += '^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
