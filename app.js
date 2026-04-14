@@ -6701,6 +6701,7 @@ function createBatch() {
       )
       .join('');
     document.getElementById('nb-result').style.display = 'block';
+    goToPrintBatch();
   });
 }
 function goToPrintBatch() {
@@ -6857,7 +6858,7 @@ function openZonePickModal(batch, bags, onDone) {
         const dest = rackSel && rackSel.value ? rackSel.value : z.id;
         m.style.display = 'none';
         addBagsToLocation(batch, bags, dest, function (added) {
-          setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest));
+          setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest), { noModal: true });
           updateSD();
           renderBatches();
           renderStatus();
@@ -10478,6 +10479,7 @@ function createGrainBatch() {
       )
       .join('');
     document.getElementById('gs-result').style.display = 'block';
+    goToPrintGrainBatch();
   });
 }
 function goToPrintGrainBatch() {
