@@ -4561,9 +4561,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'POST' && cultureRenameMatch) {
     const oldId = decodeURIComponent(cultureRenameMatch[1]);
     jsonBody(req, res, (e, data) => {
-      if (e) { jsonErr(res, 400, e.message); return; }
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
       const newId = (data.newId || '').trim();
-      if (!newId) { jsonErr(res, 400, 'newId is required'); return; }
+      if (!newId) {
+        jsonErr(res, 400, 'newId is required');
+        return;
+      }
       if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(newId)) {
         jsonErr(res, 400, 'newId must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
@@ -4572,7 +4578,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         db.renameCulture(database, oldId, newId);
         broadcastSSE(res);
         jsonOk(res, { ok: true, oldId, newId });
-      } catch (err) { safeErr(res, err); }
+      } catch (err) {
+        safeErr(res, err);
+      }
     });
     return;
   }
