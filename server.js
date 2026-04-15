@@ -483,9 +483,10 @@ function runDailyBackup() {
   const startedAt = Date.now();
   const startedIso = new Date(startedAt).toISOString();
   try {
-    // Snapshot KPIs before backup so the data is included
+    // Snapshot KPIs before backup — always overwrite today's snapshot
+    // so it captures the latest state (bags created after server start, etc.)
     try {
-      const snapResult = db.snapshotDailyKPIs(database);
+      const snapResult = db.snapshotDailyKPIs(database, { force: true });
       log('info', 'KPI snapshot', snapResult);
     } catch (e) {
       log('warn', 'KPI snapshot failed (backup continues)', { error: e.message });
@@ -572,6 +573,12 @@ function scheduleDailyBackup() {
     runDailyBackup();
     setInterval(runDailyBackup, 24 * 60 * 60 * 1000); // then every 24h
   }, msUntil);
+  // Refresh KPI snapshot every 4 hours so data stays current throughout the day
+  setInterval(() => {
+    try {
+      db.snapshotDailyKPIs(database, { force: true });
+    } catch (e) { /* ignore */ }
+  }, 4 * 60 * 60 * 1000);
 }
 scheduleDailyBackup();
 
