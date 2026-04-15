@@ -574,11 +574,16 @@ function scheduleDailyBackup() {
     setInterval(runDailyBackup, 24 * 60 * 60 * 1000); // then every 24h
   }, msUntil);
   // Refresh KPI snapshot every 4 hours so data stays current throughout the day
-  setInterval(() => {
-    try {
-      db.snapshotDailyKPIs(database, { force: true });
-    } catch (e) { /* ignore */ }
-  }, 4 * 60 * 60 * 1000);
+  setInterval(
+    () => {
+      try {
+        db.snapshotDailyKPIs(database, { force: true });
+      } catch (e) {
+        /* ignore */
+      }
+    },
+    4 * 60 * 60 * 1000
+  );
 }
 scheduleDailyBackup();
 
