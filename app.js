@@ -4870,23 +4870,23 @@ function renderOverviewKPIs() {
   if (periodLabel) periodLabel.textContent = periodSub;
 
   weekEl.innerHTML = [
-    card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#8b5cf6', '#ede9fe'),
+    card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#2d6a4f', '#e6f2ec'),
     card(
       iconHarvest,
       periodHarvestKg > 0 ? fmtKg(periodHarvestKg) : '—',
       t('dash.ov.harvestThisWeek'),
       periodHarvests.length + ' ' + t('dash.ov.harvests'),
-      '#f97316',
-      '#fff7ed'
+      '#c2703e',
+      '#faf0e6'
     ),
-    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#3b82f6', '#dbeafe'),
+    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#3a7d7b', '#e6f2f1'),
     card(
       iconYield,
       avgYield > 0 ? avgYield + 'g' : '—',
       t('dash.ov.avgYield'),
       yieldSub,
-      '#10b981',
-      '#d1fae5'
+      '#5a8a32',
+      '#eef4e5'
     )
   ].join('');
 
@@ -4896,24 +4896,24 @@ function renderOverviewKPIs() {
       grainUsed > 0 ? fmtKg(grainUsed) : '—',
       t('dash.ov.grainUsed'),
       t('dash.ov.fromBatches'),
-      '#8b5cf6',
-      '#ede9fe'
+      '#6b7c3f',
+      '#f0f2e6'
     ),
     card(
       iconSubstrate,
       hardwoodUsed > 0 ? fmtKg(hardwoodUsed) : '—',
       t('dash.ov.hardwoodUsed'),
       t('dash.ov.fromBatches'),
-      '#06b6d4',
-      '#cffafe'
+      '#8b5e3c',
+      '#f5ede6'
     ),
     card(
       iconSubstrate,
       wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
       t('dash.ov.wheatbranUsed'),
       t('dash.ov.fromBatches'),
-      '#f59e0b',
-      '#fef3c7'
+      '#c9a227',
+      '#faf5e0'
     )
   ].join('');
 
@@ -4998,8 +4998,8 @@ function renderOverviewCharts(periodStart) {
     if (ovChartHarvestInst) { ovChartHarvestInst.destroy(); ovChartHarvestInst = null; }
     const ctx = c1.getContext('2d');
     const grad = ctx.createLinearGradient(0, 0, 0, 180);
-    grad.addColorStop(0, 'rgba(249,115,22,0.30)');
-    grad.addColorStop(1, 'rgba(249,115,22,0.02)');
+    grad.addColorStop(0, 'rgba(194,112,62,0.25)');
+    grad.addColorStop(1, 'rgba(194,112,62,0.02)');
     const useBar = ovPeriod === 'year';
     ovChartHarvestInst = new Chart(c1, {
       type: useBar ? 'bar' : 'line',
@@ -5009,12 +5009,12 @@ function renderOverviewCharts(periodStart) {
           data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
           fill: !useBar,
           backgroundColor: useBar
-            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#f97316' : 'rgba(249,115,22,0.55)')
+            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#c2703e' : 'rgba(194,112,62,0.55)')
             : grad,
-          borderColor: '#f97316',
+          borderColor: '#c2703e',
           borderWidth: 2,
           pointRadius: keys.length > 20 ? 0 : 3,
-          pointBackgroundColor: '#f97316',
+          pointBackgroundColor: '#c2703e',
           borderRadius: useBar ? 6 : 0,
           tension: 0.35
         }]
@@ -5082,10 +5082,10 @@ function renderOverviewCharts(periodStart) {
   // ── 3. Substrate usage ───────────────────────────────────
   const c3 = document.getElementById('ov-chart-substrate');
   if (c3) {
-    const hwMap = {}, wbMap = {};
+    const hwMap = {}, wbMap = {}, grMap = {};
     (inventory.log || []).forEach((e) => {
       if (e.type !== 'batch') return;
-      if (e.mat !== 'hardwood' && e.mat !== 'wheatbran') return;
+      if (e.mat !== 'hardwood' && e.mat !== 'wheatbran' && e.mat !== 'grain') return;
       const d = new Date(e.time);
       if (d < periodStart) return;
       let k;
@@ -5098,14 +5098,15 @@ function renderOverviewCharts(periodStart) {
         k = localDateStr(mon);
       }
       if (e.mat === 'hardwood') hwMap[k] = (hwMap[k] || 0) + Math.abs(e.deltaKg || 0);
-      else wbMap[k] = (wbMap[k] || 0) + Math.abs(e.deltaKg || 0);
+      else if (e.mat === 'wheatbran') wbMap[k] = (wbMap[k] || 0) + Math.abs(e.deltaKg || 0);
+      else if (e.mat === 'grain') grMap[k] = (grMap[k] || 0) + Math.abs(e.deltaKg || 0);
     });
     let subKeys, subLabels;
     if (ovPeriod === 'year') {
       subKeys = keys;
       subLabels = keys.map((k, i) => label(k, i));
     } else {
-      subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap)])].sort();
+      subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap), ...Object.keys(grMap)])].sort();
       subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
     }
     if (ovChartSubstrateInst) { ovChartSubstrateInst.destroy(); ovChartSubstrateInst = null; }
@@ -5120,8 +5121,9 @@ function renderOverviewCharts(periodStart) {
         data: {
           labels: subLabels,
           datasets: [
-            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#06b6d4', borderRadius: 5 },
-            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#f59e0b', borderRadius: 5 }
+            { label: t('dash.ov.grain'), data: subKeys.map((k) => +(grMap[k] || 0).toFixed(1)), backgroundColor: '#6b7c3f', borderRadius: 5 },
+            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#8b5e3c', borderRadius: 5 },
+            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#c9a227', borderRadius: 5 }
           ]
         },
         options: {
@@ -5151,7 +5153,7 @@ function renderOverviewCharts(periodStart) {
         labels: keys.map((k, i) => label(k, i)),
         datasets: [{
           data: keys.map((k) => bagMap[k] || 0),
-          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#8b5cf6' : 'rgba(139,92,246,0.55)'),
+          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#2d6a4f' : 'rgba(45,106,79,0.55)'),
           borderRadius: 6
         }]
       },
@@ -5303,7 +5305,7 @@ function renderKpiHistory() {
           lineDs(
             t('dash.ov.harvestThisWeek'),
             histKeys.map((k) => { const v = snapVal(k, 'harvest_kg'); return v !== null ? +v.toFixed(2) : null; }),
-            '#f97316', 'rgba(249,115,22,0.10)'
+            '#c2703e', 'rgba(194,112,62,0.10)'
           )
         ]
       },
@@ -5322,50 +5324,82 @@ function renderKpiHistory() {
         datasets: [{
           label: t('dash.ov.bagsCreated'),
           data: histKeys.map((k) => snapVal(k, 'bags_created')),
-          backgroundColor: 'rgba(139,92,246,0.6)', borderRadius: 5
+          backgroundColor: 'rgba(45,106,79,0.6)', borderRadius: 5
         }]
       },
       options: chartOpts('', (c) => c.parsed.y + ' ' + t('dash.ov.bags'))
     });
   }
 
-  // 3. Pipeline chart — stacked bar showing distribution %
+  // 3. Pipeline chart — stacked area showing bag counts through stages
   const c3 = document.getElementById('ov-history-pipeline-chart');
   if (c3) {
     if (ovHistPipelineInst) { ovHistPipelineInst.destroy(); ovHistPipelineInst = null; }
     const pipeStages = ['bags_spawn', 'bags_incubation', 'bags_fruiting', 'bags_contaminated'];
-    const pipeColors = ['#8b5cf6', '#3b82f6', '#10b981', '#ef4444'];
+    const pipeFills = ['rgba(124,82,149,0.45)', 'rgba(74,127,165,0.45)', 'rgba(61,122,74,0.45)', 'rgba(176,80,64,0.25)'];
+    const pipeBorders = ['#7c5295', '#4a7fa5', '#3d7a4a', '#b05040'];
     const pipeNames = [t('dash.ov.spawn'), t('dash.ov.incubation'), t('dash.ov.fruiting'), t('dash.ov.contaminated')];
-    // Compute percentage per stage for each date
-    const pipePctData = pipeStages.map((stage) =>
-      histKeys.map((k) => {
-        const s = snapshotMap[k];
-        if (!s) return null;
-        const total = (s.bags_spawn || 0) + (s.bags_incubation || 0) + (s.bags_fruiting || 0) + (s.bags_contaminated || 0);
-        return total > 0 ? +((s[stage] || 0) / total * 100).toFixed(1) : 0;
-      })
+    // Compute absolute bag counts + total line
+    const pipeAbsData = pipeStages.map((stage) =>
+      histKeys.map((k) => { const s = snapshotMap[k]; return s ? (s[stage] || 0) : null; })
     );
+    const totalData = histKeys.map((k) => {
+      const s = snapshotMap[k];
+      if (!s) return null;
+      return (s.bags_spawn || 0) + (s.bags_incubation || 0) + (s.bags_fruiting || 0) + (s.bags_contaminated || 0);
+    });
     ovHistPipelineInst = new Chart(c3, {
-      type: 'bar',
+      type: 'line',
       data: {
         labels: histLabels,
-        datasets: pipeStages.map((_, i) => ({
-          label: pipeNames[i],
-          data: pipePctData[i],
-          backgroundColor: pipeColors[i],
-          borderRadius: i === 0 ? { bottomLeft: 4, bottomRight: 4 } : i === pipeStages.length - 1 ? { topLeft: 4, topRight: 4 } : 0,
-          borderSkipped: false
-        }))
+        datasets: [
+          ...pipeStages.map((_, i) => ({
+            label: pipeNames[i],
+            data: pipeAbsData[i],
+            borderColor: pipeBorders[i],
+            backgroundColor: pipeFills[i],
+            borderWidth: 1.5,
+            fill: 'origin',
+            tension: 0.35,
+            pointRadius: 0,
+            spanGaps: true,
+            order: pipeStages.length - i
+          })),
+          {
+            label: 'Total',
+            data: totalData,
+            borderColor: '#555',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 3],
+            tension: 0.35,
+            pointRadius: 2,
+            pointBackgroundColor: '#555',
+            fill: false,
+            spanGaps: true,
+            order: 0
+          }
+        ]
       },
       options: {
         responsive: true,
         plugins: {
           legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + '%' } }
+          tooltip: {
+            mode: 'index',
+            callbacks: {
+              label: (c) => c.dataset.label + ': ' + c.parsed.y + ' ' + t('dash.ov.bags'),
+              footer: (items) => {
+                const total = items.find((i) => i.dataset.label === 'Total');
+                return total ? '─── Total: ' + total.parsed.y + ' bags' : '';
+              }
+            }
+          }
         },
+        interaction: { mode: 'index', intersect: false },
         scales: {
-          x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } },
-          y: { stacked: true, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' }, grid: { color: '#e2e8f0' }, beginAtZero: true }
+          y: { stacked: false, ticks: { color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+          x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
         }
       }
     });
@@ -5383,7 +5417,7 @@ function renderKpiHistory() {
           lineDs(
             t('dash.ov.contamRate'),
             histKeys.map((k) => { const v = snapVal(k, 'contam_rate_pct'); return v !== null ? +v.toFixed(1) : null; }),
-            '#ef4444', 'rgba(239,68,68,0.08)'
+            '#b05040', 'rgba(176,80,64,0.08)'
           )
         ]
       },
@@ -5403,17 +5437,17 @@ function renderKpiHistory() {
           lineDs(
             t('dash.ov.hardwoodUsed').replace(/ .*/, ''),
             histKeys.map((k) => { const v = snapVal(k, 'stock_hardwood_kg'); return v !== null ? +v.toFixed(1) : null; }),
-            '#06b6d4'
+            '#8b5e3c'
           ),
           lineDs(
             t('dash.ov.wheatbranUsed').replace(/ .*/, ''),
             histKeys.map((k) => { const v = snapVal(k, 'stock_wheatbran_kg'); return v !== null ? +v.toFixed(1) : null; }),
-            '#f59e0b'
+            '#c9a227'
           ),
           lineDs(
             t('dash.ov.grain'),
             histKeys.map((k) => { const v = snapVal(k, 'stock_grain_kg'); return v !== null ? +v.toFixed(1) : null; }),
-            '#8b5cf6'
+            '#6b7c3f'
           )
         ]
       },
