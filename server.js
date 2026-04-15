@@ -4190,7 +4190,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'POST' && url === '/api/kpi-snapshots/now') {
     if (requireAdmin(req, res)) return;
     try {
-      const result = db.snapshotDailyKPIs(database);
+      const result = db.snapshotDailyKPIs(database, { force: true });
       jsonOk(res, result);
     } catch (e) {
       jsonErr(res, 500, e.message);
