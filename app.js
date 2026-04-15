@@ -23,6 +23,13 @@ function fmtDtShort(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
 }
+function isoWeekNumber(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  return Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
+}
 function t(key, params) {
   const str = (LANG[currentLang] && LANG[currentLang][key]) || (LANG['en'] && LANG['en'][key]) || key;
   if (!params) return str;
@@ -4729,8 +4736,12 @@ function renderOverviewKPIs() {
 
   // Period start based on selected period
   let periodStart;
-  if (ovPeriod === 'week') periodStart = new Date(now - 7 * 864e5);
-  else if (ovPeriod === 'month') periodStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+  if (ovPeriod === 'week') {
+    // Monday of the current week (Mon–Sun)
+    periodStart = new Date(nowDate);
+    periodStart.setDate(periodStart.getDate() - ((periodStart.getDay() + 6) % 7));
+    periodStart.setHours(0, 0, 0, 0);
+  } else if (ovPeriod === 'month') periodStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
   else periodStart = new Date(nowDate.getFullYear(), 0, 1);
 
   // ── PRODUCTION ─────────────────────────────────────────────
@@ -5003,7 +5014,7 @@ function renderWeeklyHarvestChart() {
   harvests.forEach((h) => {
     const d = new Date(h.time);
     const mon = new Date(d);
-    mon.setDate(d.getDate() - d.getDay() + 1);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday of that week
     const key = mon.toISOString().slice(0, 10);
     byWeek[key] = (byWeek[key] || 0) + (h.grams || 0);
   });
@@ -5036,7 +5047,7 @@ function renderWeeklyHarvestChart() {
   }
   // Check which key is the current (potentially incomplete) week
   const nowMon = new Date();
-  nowMon.setDate(nowMon.getDate() - nowMon.getDay() + 1);
+  nowMon.setDate(nowMon.getDate() - ((nowMon.getDay() + 6) % 7));
   nowMon.setHours(0, 0, 0, 0);
   const thisWeekKey = nowMon.toISOString().slice(0, 10);
   const values = weekKeys.map((k) => byWeek[k] / 1000);
@@ -5050,8 +5061,7 @@ function renderWeeklyHarvestChart() {
     type: 'line',
     data: {
       labels: weekKeys.map((k) => {
-        const d = new Date(k);
-        return fmtDtShort(d) + (k === thisWeekKey ? ' *' : '');
+        return 'KW ' + isoWeekNumber(k) + (k === thisWeekKey ? ' *' : '');
       }),
       datasets: [
         {
@@ -5153,7 +5163,7 @@ function renderMonthCharts(monthStart) {
       const d = new Date(e.time);
       if (d < monthStart) return;
       const mon = new Date(d);
-      mon.setDate(d.getDate() - d.getDay() + 1);
+      mon.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday of that week
       const key = mon.toISOString().slice(0, 10);
       if (e.mat === 'hardwood') weekHw[key] = (weekHw[key] || 0) + Math.abs(e.deltaKg || 0);
       else weekWb[key] = (weekWb[key] || 0) + Math.abs(e.deltaKg || 0);
@@ -5174,7 +5184,7 @@ function renderMonthCharts(monthStart) {
       ovMonthSubstrateInst = new Chart(canvas2, {
         type: 'bar',
         data: {
-          labels: weekKeys.map((k) => 'w/' + k.slice(5, 10)),
+          labels: weekKeys.map((k) => 'KW ' + isoWeekNumber(k)),
           datasets: [
             {
               label: t('dash.ov.hardwood'),
@@ -5334,7 +5344,27 @@ function renderKpiHistory() {
   if (emptyEl) emptyEl.style.display = 'none';
   if (chartsEl) chartsEl.style.display = '';
 
-  const labels = kpiHistoryData.map((s) => s.date.slice(5)); // MM-DD
+  // Filter snapshots by the selected overview period
+  const nowDate = new Date();
+  let periodStart;
+  if (ovPeriod === 'week') {
+    periodStart = new Date(nowDate);
+    periodStart.setDate(periodStart.getDate() - ((periodStart.getDay() + 6) % 7));
+    periodStart.setHours(0, 0, 0, 0);
+  } else if (ovPeriod === 'month') {
+    periodStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+  } else {
+    periodStart = new Date(nowDate.getFullYear(), 0, 1);
+  }
+  const periodKey = periodStart.toISOString().slice(0, 10);
+  const filtered = kpiHistoryData.filter((s) => s.date >= periodKey);
+  if (!filtered.length) {
+    if (emptyEl) emptyEl.style.display = '';
+    if (chartsEl) chartsEl.style.display = 'none';
+    return;
+  }
+
+  const labels = filtered.map((s) => fmtDtShort(s.date)); // DD.MM
   const chartOpts = (yLabel, cb) => ({
     responsive: true,
     plugins: {
@@ -5370,7 +5400,7 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.harvestThisWeek'),
-            kpiHistoryData.map((s) => +(s.harvest_kg || 0).toFixed(2)),
+            filtered.map((s) => +(s.harvest_kg || 0).toFixed(2)),
             '#d97706',
             '#fef3c733'
           )
@@ -5394,7 +5424,7 @@ function renderKpiHistory() {
         datasets: [
           {
             label: t('dash.ov.bagsCreated'),
-            data: kpiHistoryData.map((s) => s.bags_created || 0),
+            data: filtered.map((s) => s.bags_created || 0),
             backgroundColor: 'rgba(14,165,233,0.6)',
             borderRadius: 3
           }
@@ -5418,31 +5448,31 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.spawn'),
-            kpiHistoryData.map((s) => s.bags_spawn || 0),
+            filtered.map((s) => s.bags_spawn || 0),
             '#a855f7',
             '#a855f733'
           ),
           lineDs(
             t('dash.ov.incubation'),
-            kpiHistoryData.map((s) => s.bags_incubation || 0),
+            filtered.map((s) => s.bags_incubation || 0),
             '#0ea5e9',
             '#0ea5e933'
           ),
           lineDs(
             t('dash.ov.fruiting'),
-            kpiHistoryData.map((s) => s.bags_fruiting || 0),
+            filtered.map((s) => s.bags_fruiting || 0),
             '#10b981',
             '#10b98133'
           ),
           lineDs(
             t('dash.ov.contaminated'),
-            kpiHistoryData.map((s) => s.bags_contaminated || 0),
+            filtered.map((s) => s.bags_contaminated || 0),
             '#ef4444',
             '#ef444433'
           )
         ]
       },
-      options: chartOpts('')
+      options: chartOpts('', (c) => c.dataset.label + ': ' + c.parsed.y + ' ' + t('dash.ov.bags'))
     });
   }
 
@@ -5460,7 +5490,7 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.contamRate'),
-            kpiHistoryData.map((s) => +(s.contam_rate_pct || 0).toFixed(1)),
+            filtered.map((s) => +(s.contam_rate_pct || 0).toFixed(1)),
             '#ef4444',
             '#ef444422'
           )
@@ -5484,17 +5514,17 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.hardwoodUsed').replace(/ .*/, ''),
-            kpiHistoryData.map((s) => +(s.stock_hardwood_kg || 0).toFixed(1)),
+            filtered.map((s) => +(s.stock_hardwood_kg || 0).toFixed(1)),
             '#0d9488'
           ),
           lineDs(
             t('dash.ov.wheatbranUsed').replace(/ .*/, ''),
-            kpiHistoryData.map((s) => +(s.stock_wheatbran_kg || 0).toFixed(1)),
+            filtered.map((s) => +(s.stock_wheatbran_kg || 0).toFixed(1)),
             '#059669'
           ),
           lineDs(
             t('dash.ov.grain'),
-            kpiHistoryData.map((s) => +(s.stock_grain_kg || 0).toFixed(1)),
+            filtered.map((s) => +(s.stock_grain_kg || 0).toFixed(1)),
             '#a855f7'
           )
         ]
@@ -5650,6 +5680,110 @@ async function exportKpiCSV() {
   } catch (e) {
     console.error('KPI CSV export failed', e);
   }
+}
+
+function exportOverviewCSV() {
+  const nowDate = new Date();
+  const now = Date.now();
+  let periodStart, periodLabel;
+  if (ovPeriod === 'week') {
+    periodStart = new Date(nowDate);
+    periodStart.setDate(periodStart.getDate() - ((periodStart.getDay() + 6) % 7));
+    periodStart.setHours(0, 0, 0, 0);
+    periodLabel = 'KW ' + isoWeekNumber(nowDate);
+  } else if (ovPeriod === 'month') {
+    periodStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+    periodLabel = String(nowDate.getMonth() + 1).padStart(2, '0') + '.' + nowDate.getFullYear();
+  } else {
+    periodStart = new Date(nowDate.getFullYear(), 0, 1);
+    periodLabel = String(nowDate.getFullYear());
+  }
+
+  // Bags created
+  const bagsCreated = batches.filter((b) => new Date(b.created) >= periodStart).reduce((s, b) => s + (b.qty || 0), 0);
+
+  // Materials
+  let grainUsed = 0, hardwoodUsed = 0, wheatbranUsed = 0;
+  (inventory.log || []).forEach((e) => {
+    if (e.type !== 'batch' || new Date(e.time) < periodStart) return;
+    if (e.mat === 'grain') grainUsed += Math.abs(e.deltaKg || 0);
+    else if (e.mat === 'hardwood') hardwoodUsed += Math.abs(e.deltaKg || 0);
+    else if (e.mat === 'wheatbran') wheatbranUsed += Math.abs(e.deltaKg || 0);
+  });
+
+  // Harvests
+  const periodHarvests = harvests.filter((h) => new Date(h.time) >= periodStart);
+  const harvestKg = periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / 1000;
+
+  // Harvest by species
+  const bySpecies = {};
+  periodHarvests.forEach((h) => {
+    bySpecies[h.species] = (bySpecies[h.species] || 0) + (h.grams || 0);
+  });
+
+  // Harvest by day
+  const byDay = {};
+  periodHarvests.forEach((h) => {
+    const key = new Date(h.time).toISOString().slice(0, 10);
+    byDay[key] = (byDay[key] || 0) + (h.grams || 0);
+  });
+
+  // Build CSV rows
+  const rows = [];
+  rows.push(['Overview Export — ' + periodLabel]);
+  rows.push([]);
+  rows.push(['KPI', 'Value']);
+  rows.push(['Bags created', bagsCreated]);
+  rows.push(['Grain used (kg)', +(grainUsed).toFixed(2)]);
+  rows.push(['Harvest (kg)', +(harvestKg).toFixed(2)]);
+  rows.push(['Hardwood used (kg)', +(hardwoodUsed).toFixed(2)]);
+  rows.push(['Wheat bran used (kg)', +(wheatbranUsed).toFixed(2)]);
+  rows.push(['Harvests logged', periodHarvests.length]);
+  rows.push([]);
+
+  // Harvest by species
+  rows.push(['Harvest by species', 'kg']);
+  Object.keys(bySpecies).sort().forEach((sp) => {
+    rows.push([sp, +(bySpecies[sp] / 1000).toFixed(2)]);
+  });
+  rows.push([]);
+
+  // Harvest by day
+  const dayKeys = Object.keys(byDay).sort();
+  if (dayKeys.length) {
+    rows.push(['Date', 'Harvest (kg)']);
+    dayKeys.forEach((k) => {
+      rows.push([fmtDtShort(k) + '.' + new Date(k).getFullYear(), +(byDay[k] / 1000).toFixed(2)]);
+    });
+  }
+
+  // KPI History snapshots for this period
+  if (kpiHistoryData && kpiHistoryData.length) {
+    const periodKey = periodStart.toISOString().slice(0, 10);
+    const snaps = kpiHistoryData.filter((s) => s.date >= periodKey);
+    if (snaps.length) {
+      rows.push([]);
+      rows.push(['KPI History (daily snapshots)']);
+      rows.push(['Date', 'Bags created', 'Harvest (kg)', 'Grain (kg)', 'Hardwood (kg)', 'Wheat bran (kg)', 'Contam rate (%)', 'Spawn', 'Incubation', 'Fruiting', 'Contaminated', 'Stock HW (kg)', 'Stock WB (kg)', 'Stock Grain (kg)']);
+      snaps.forEach((s) => {
+        rows.push([
+          fmtDtShort(s.date) + '.' + s.date.slice(0, 4),
+          s.bags_created || 0, +(s.harvest_kg || 0).toFixed(2), +(s.grain_used_kg || 0).toFixed(2),
+          +(s.hardwood_used_kg || 0).toFixed(2), +(s.wheatbran_used_kg || 0).toFixed(2),
+          +(s.contam_rate_pct || 0).toFixed(1),
+          s.bags_spawn || 0, s.bags_incubation || 0, s.bags_fruiting || 0, s.bags_contaminated || 0,
+          +(s.stock_hardwood_kg || 0).toFixed(1), +(s.stock_wheatbran_kg || 0).toFixed(1), +(s.stock_grain_kg || 0).toFixed(1)
+        ]);
+      });
+    }
+  }
+
+  const csv = '\uFEFF' + rows.map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'overview_' + ovPeriod + '_' + nowDate.toISOString().slice(0, 10) + '.csv';
+  a.click();
 }
 
 const CHEVRON_SVG =
@@ -6065,6 +6199,7 @@ function setOvPeriod(p) {
     renderHarvestChart();
     renderWeeklyHarvestChart();
   }
+  renderKpiHistory();
 }
 function applyOvPeriod() {
   ['week', 'month', 'year'].forEach((p) => {

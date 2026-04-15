@@ -1187,26 +1187,32 @@
 
           <!-- Charts section — visible in Overview mode only -->
           <div id="dash-charts-section" style="display: none">
-            <!-- Period toggle: Week / Month / Year -->
-            <div class="ov-period-toggle">
-              <button
-                class="ov-period-btn active"
-                id="ov-p-week"
-                onclick="setOvPeriod('week')"
-                data-i18n="dash.ov.periodWeek"
-              >
-                This week
-              </button>
-              <button
-                class="ov-period-btn"
-                id="ov-p-month"
-                onclick="setOvPeriod('month')"
-                data-i18n="dash.ov.periodMonth"
-              >
-                This month
-              </button>
-              <button class="ov-period-btn" id="ov-p-year" onclick="setOvPeriod('year')" data-i18n="dash.ov.periodYear">
-                This year
+            <!-- Top bar: Period toggle + CSV download -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div class="ov-period-toggle" style="margin-bottom:0">
+                <button
+                  class="ov-period-btn active"
+                  id="ov-p-week"
+                  onclick="setOvPeriod('week')"
+                  data-i18n="dash.ov.periodWeek"
+                >
+                  This week
+                </button>
+                <button
+                  class="ov-period-btn"
+                  id="ov-p-month"
+                  onclick="setOvPeriod('month')"
+                  data-i18n="dash.ov.periodMonth"
+                >
+                  This month
+                </button>
+                <button class="ov-period-btn" id="ov-p-year" onclick="setOvPeriod('year')" data-i18n="dash.ov.periodYear">
+                  This year
+                </button>
+              </div>
+              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV" style="padding:4px 10px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
               </button>
             </div>
 
@@ -1263,21 +1269,7 @@
 
             <!-- KPI History (trend charts from daily snapshots) -->
             <div id="ov-kpi-history" style="display: none">
-              <div style="display: flex; align-items: center; justify-content: space-between">
-                <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
-                <div style="display: flex; gap: 6px; align-items: center">
-                  <select
-                    id="kpi-csv-period"
-                    class="inp"
-                    style="padding: 4px 8px; font-size: 12px; min-width: 0; width: auto"
-                  >
-                    <option value="weekly" data-i18n="dash.ov.csvWeekly">Weekly</option>
-                    <option value="monthly" data-i18n="dash.ov.csvMonthly">Monthly</option>
-                    <option value="daily" data-i18n="dash.ov.csvDaily">Daily</option>
-                  </select>
-                  <button class="btn btn-sm" onclick="exportKpiCSV()" data-i18n="dash.ov.exportCsv">Export CSV</button>
-                </div>
-              </div>
+              <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
               <div
                 id="ov-history-empty"
                 class="card"
