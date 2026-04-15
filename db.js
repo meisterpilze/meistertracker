@@ -3306,12 +3306,13 @@ function getZonesWithRacks(db) {
 }
 
 // ── Daily KPI Snapshot ──────────────────────────────────────
-function snapshotDailyKPIs(db) {
+function snapshotDailyKPIs(db, { force } = {}) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // Skip if already snapshotted today
+  // Skip if already snapshotted today (unless force=true for manual retake)
   const existing = db.prepare('SELECT date FROM kpi_snapshots WHERE date = ?').get(today);
-  if (existing) return { skipped: true, date: today };
+  if (existing && !force) return { skipped: true, date: today };
+  if (existing && force) db.prepare('DELETE FROM kpi_snapshots WHERE date = ?').run(today);
 
   const dayStart = today + 'T00:00:00';
   const dayEnd = today + 'T23:59:59';

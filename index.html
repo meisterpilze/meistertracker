@@ -1252,7 +1252,13 @@
 
             <!-- KPI History (trend charts from daily snapshots) -->
             <div id="ov-kpi-history" style="display: none">
-              <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
+                <button class="btn btn-sm" onclick="takeKpiSnapshot()" title="Update today's snapshot" style="padding:3px 8px;font-size:11px">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  Snapshot
+                </button>
+              </div>
               <div
                 id="ov-history-empty"
                 class="card"

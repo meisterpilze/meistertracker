@@ -4766,10 +4766,20 @@ function renderOverviewKPIs() {
   });
 
   // ── QUALITY & EFFICIENCY ──────────────────────────────────
-  // 5. Avg yield per bag (g) — total grams / unique bags ever harvested
+  // 5. Avg yield per bag (g) — all-time + period comparison
   const uniqueHarvestedBags = new Set(harvests.map((h) => h.bag)).size;
   const avgYield =
     uniqueHarvestedBags > 0 ? Math.round(harvests.reduce((s, h) => s + (h.grams || 0), 0) / uniqueHarvestedBags) : 0;
+  // Period yield: avg grams per unique bag harvested in selected period
+  const periodBags = new Set(periodHarvests.map((h) => h.bag));
+  const periodYield = periodBags.size > 0 ? Math.round(periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / periodBags.size) : 0;
+  const yieldDelta = avgYield > 0 && periodYield > 0 ? periodYield - avgYield : null;
+  let yieldSub = t('dash.ov.perBag');
+  if (periodYield > 0) {
+    const arrow = yieldDelta > 0 ? '↑' : yieldDelta < 0 ? '↓' : '=';
+    const color = yieldDelta > 0 ? 'var(--c-green-dark)' : yieldDelta < 0 ? 'var(--c-red-dark)' : '';
+    yieldSub = periodSub + ': ' + periodYield + 'g <span style="color:' + color + '">' + arrow + '</span>';
+  }
 
   // 6. Contamination rate (%)
   const allBagsPlaced = new Set(scanLog.filter((e) => e.action === 'ADD' && e.bag).map((e) => e.bag)).size;
@@ -4892,7 +4902,7 @@ function renderOverviewKPIs() {
       iconYield,
       avgYield > 0 ? avgYield + 'g' : '—',
       t('dash.ov.avgYield'),
-      t('dash.ov.perBag'),
+      yieldSub,
       '#16a34a',
       '#dcfce7'
     ),
@@ -4928,11 +4938,12 @@ function renderOverviewCharts(periodStart) {
   // ── Helpers: build time buckets depending on period ──────
   function buildTimeBuckets() {
     if (ovPeriod === 'week') {
-      // Daily buckets Mon–Sun (or up to today)
+      // Always show full Mon–Sun (7 days)
       const days = [];
       const cur = new Date(periodStart);
-      while (cur <= nowDate) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
-      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
+      for (let i = 0; i < 7; i++) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+      const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+      return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
     }
     if (ovPeriod === 'month') {
       const days = [];
@@ -4980,7 +4991,7 @@ function renderOverviewCharts(periodStart) {
     ovChartHarvestInst = new Chart(c1, {
       type: useBar ? 'bar' : 'line',
       data: {
-        labels: keys.map(label),
+        labels: keys.map((k, i) => label(k, i)),
         datasets: [{
           data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
           fill: !useBar,
@@ -5078,7 +5089,7 @@ function renderOverviewCharts(periodStart) {
     let subKeys, subLabels;
     if (ovPeriod === 'year') {
       subKeys = keys;
-      subLabels = keys.map(label);
+      subLabels = keys.map((k, i) => label(k, i));
     } else {
       subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap)])].sort();
       subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
@@ -5123,7 +5134,7 @@ function renderOverviewCharts(periodStart) {
     ovChartBagsInst = new Chart(c4, {
       type: 'bar',
       data: {
-        labels: keys.map(label),
+        labels: keys.map((k, i) => label(k, i)),
         datasets: [{
           data: keys.map((k) => bagMap[k] || 0),
           backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? 'rgba(14,165,233,0.9)' : 'rgba(14,165,233,0.5)'),
@@ -5379,12 +5390,6 @@ async function takeKpiSnapshot() {
       return;
     }
     if (!r.ok) throw new Error('Failed');
-    const j = await r.json();
-    if (j.skipped) {
-      alert(t('dash.ov.snapshotSkipped') || 'Snapshot already taken today');
-    } else {
-      alert(t('dash.ov.snapshotOk') || 'Snapshot saved!');
-    }
     await loadKpiHistory();
   } catch (e) {
     console.error('Snapshot failed', e);
