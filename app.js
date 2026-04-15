@@ -4639,8 +4639,7 @@ function getStatus(id) {
 const getHarvested = (id) => harvests.filter((h) => h.batch === id).reduce((s, h) => s + (h.grams || 0), 0);
 
 // ─── DASHBOARD ───────────────────────────────────────────────
-let harvestChartInst = null,
-  batchYieldInst = null,
+let batchYieldInst = null,
   timelineInst = null;
 
 function buildSparkSvg(data, color) {
@@ -4916,389 +4915,227 @@ function renderOverviewKPIs() {
     card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1', '#e0e7ff')
   ].join('');
 
-  // Show the right chart container for the period
-  ['week', 'month', 'year'].forEach((p) => {
-    const el = document.getElementById('ov-charts-' + p);
-    if (el) el.style.display = ovPeriod === p ? '' : 'none';
-  });
-  if (ovPeriod === 'month') renderMonthCharts(periodStart);
-  else if (ovPeriod === 'year') renderYearCharts(periodStart);
+  renderOverviewCharts(periodStart);
 }
 
-function renderHarvestChart() {
-  const canvas = document.getElementById('harvest-chart');
-  if (!canvas) return;
-  const bySpecies = {};
-  harvests.forEach((h) => {
-    if (!bySpecies[h.species]) bySpecies[h.species] = 0;
-    bySpecies[h.species] += h.grams || 0;
-  });
-  const labels = Object.keys(bySpecies);
-  const data = labels.map((s) => bySpecies[s] / 1000);
-  if (harvestChartInst) {
-    harvestChartInst.destroy();
-    harvestChartInst = null;
-  }
-  if (!labels.length) {
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#aaa';
-    ctx.font = '12px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText(t('harvest.noData'), canvas.width / 2, 80);
-    return;
-  }
-  const fmtKg = (v) => Math.round(v * 100) / 100 + 'kg';
-  const ctx = canvas.getContext('2d');
-  const bgColors = labels.map((s) => {
-    const base = spColor(s);
-    const g = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 180);
-    g.addColorStop(0, base + 'ee');
-    g.addColorStop(1, base + '55');
-    return g;
-  });
-  const dataLabelPlugin = {
-    id: 'harvestDataLabels',
-    afterDatasetsDraw(chart) {
-      const { ctx: c, data } = chart;
-      chart.getDatasetMeta(0).data.forEach((bar, i) => {
-        const val = data.datasets[0].data[i];
-        if (!val) return;
-        c.save();
-        c.fillStyle = '#475569';
-        c.font = 'bold 11px system-ui';
-        c.textAlign = 'center';
-        c.textBaseline = 'bottom';
-        c.fillText(fmtKg(val), bar.x, bar.y - 4);
-        c.restore();
-      });
-    }
-  };
-  harvestChartInst = new Chart(canvas, {
-    type: 'bar',
-    plugins: [dataLabelPlugin],
-    data: {
-      labels,
-      datasets: [
-        {
-          data,
-          backgroundColor: bgColors,
-          borderColor: labels.map((s) => spColor(s)),
-          borderWidth: 1.5,
-          borderRadius: 8,
-          borderSkipped: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      layout: { padding: { top: 22 } },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtKg(c.parsed.y) } } },
-      scales: {
-        y: { ticks: { callback: (v) => fmtKg(v), color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-        x: { grid: { display: false }, ticks: { color: '#64748b' } }
-      }
-    }
-  });
-}
+let ovChartHarvestInst = null, ovChartSpeciesInst = null, ovChartSubstrateInst = null, ovChartBagsInst = null;
 
-let weeklyHarvestInst = null;
-let ovMonthHarvestInst = null,
-  ovMonthSubstrateInst = null,
-  ovYearHarvestInst = null,
-  ovYearBagsInst = null;
-function renderWeeklyHarvestChart() {
-  const canvas = document.getElementById('weekly-harvest-chart');
-  if (!canvas) return;
-  const byWeek = {};
-  harvests.forEach((h) => {
-    const d = new Date(h.time);
-    const mon = new Date(d);
-    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday of that week
-    const key = mon.toISOString().slice(0, 10);
-    byWeek[key] = (byWeek[key] || 0) + (h.grams || 0);
-  });
-  const weekKeys = Object.keys(byWeek).sort().slice(-10);
-  if (weeklyHarvestInst) {
-    weeklyHarvestInst.destroy();
-    weeklyHarvestInst = null;
-  }
-  const badge = document.getElementById('dash-weekly-trend-badge');
-  if (!weekKeys.length) {
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#aaa';
-    ctx.font = '12px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText(t('dash.noHarvestData'), canvas.width / 2, 60);
-    if (badge) badge.innerHTML = '';
-    return;
-  }
-  // Trend badge: compare last completed week vs previous
-  if (badge && weekKeys.length >= 2) {
-    const lastVal = byWeek[weekKeys[weekKeys.length - 1]] / 1000;
-    const prevVal = byWeek[weekKeys[weekKeys.length - 2]] / 1000;
-    const delta = lastVal - prevVal;
-    const pct = prevVal > 0 ? Math.abs(Math.round((delta / prevVal) * 100)) : null;
-    const up = delta >= 0;
-    badge.innerHTML = `<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${up ? 'var(--c-green-light)' : 'var(--c-red-light)'};color:${up ? 'var(--c-green-dark)' : 'var(--c-red-dark)'}">${up ? '↑' : '↓'}${pct !== null ? pct + '%' : ''} vs prev</span>`;
-  } else if (badge) {
-    badge.innerHTML = '';
-  }
-  // Check which key is the current (potentially incomplete) week
-  const nowMon = new Date();
-  nowMon.setDate(nowMon.getDate() - ((nowMon.getDay() + 6) % 7));
-  nowMon.setHours(0, 0, 0, 0);
-  const thisWeekKey = nowMon.toISOString().slice(0, 10);
-  const values = weekKeys.map((k) => byWeek[k] / 1000);
-  const ctx = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 180);
-  grad.addColorStop(0, 'rgba(245,158,11,0.35)');
-  grad.addColorStop(1, 'rgba(245,158,11,0.01)');
-  const pointColors = weekKeys.map((k) => (k === thisWeekKey ? 'rgba(245,158,11,0.45)' : 'rgba(245,158,11,1)'));
-  const pointBorderColors = weekKeys.map((k) => (k === thisWeekKey ? 'rgba(245,158,11,0.6)' : 'rgba(245,158,11,1)'));
-  weeklyHarvestInst = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: weekKeys.map((k) => {
-        return 'KW ' + isoWeekNumber(k) + (k === thisWeekKey ? ' *' : '');
-      }),
-      datasets: [
-        {
-          data: values,
-          fill: true,
-          backgroundColor: grad,
-          borderColor: 'rgba(245,158,11,0.9)',
-          borderWidth: 2.5,
-          pointBackgroundColor: pointColors,
-          pointBorderColor: pointBorderColors,
-          pointRadius: 4,
-          pointHoverRadius: 7,
-          tension: 0.35
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (c) => Math.round(c.parsed.y * 100) / 100 + 'kg',
-            title: (items) => {
-              const lbl = items[0].label;
-              return lbl.endsWith(' *') ? lbl.slice(0, -2) + ' (this week)' : lbl;
-            }
-          }
-        }
-      },
-      scales: {
-        y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-        x: { ticks: { font: { size: 10 }, color: '#64748b' }, grid: { display: false } }
-      }
-    }
-  });
-}
-
-function renderMonthCharts(monthStart) {
+function renderOverviewCharts(periodStart) {
   const nowDate = new Date();
+  const periodHarvests = harvests.filter((h) => new Date(h.time) >= periodStart);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  const canvas1 = document.getElementById('ov-month-harvest-chart');
-  if (canvas1) {
-    const dayMap = {};
-    harvests.forEach((h) => {
-      const d = new Date(h.time);
-      if (d < monthStart) return;
-      const key = d.toISOString().slice(0, 10);
-      dayMap[key] = (dayMap[key] || 0) + (h.grams || 0);
-    });
-    const days = [];
-    const cur = new Date(monthStart);
-    while (cur <= nowDate) {
-      days.push(cur.toISOString().slice(0, 10));
-      cur.setDate(cur.getDate() + 1);
+  // ── Helpers: build time buckets depending on period ──────
+  function buildTimeBuckets() {
+    if (ovPeriod === 'week') {
+      // Daily buckets Mon–Sun (or up to today)
+      const days = [];
+      const cur = new Date(periodStart);
+      while (cur <= nowDate) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
     }
-    if (ovMonthHarvestInst) {
-      ovMonthHarvestInst.destroy();
-      ovMonthHarvestInst = null;
+    if (ovPeriod === 'month') {
+      const days = [];
+      const cur = new Date(periodStart);
+      while (cur <= nowDate) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
     }
-    const ctx1 = canvas1.getContext('2d');
-    const grad1 = ctx1.createLinearGradient(0, 0, 0, 180);
-    grad1.addColorStop(0, 'rgba(245,158,11,0.35)');
-    grad1.addColorStop(1, 'rgba(245,158,11,0.01)');
-    ovMonthHarvestInst = new Chart(canvas1, {
-      type: 'line',
+    // year — monthly buckets
+    const mKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
+    return { keys: mKeys, label: (k) => monthNames[parseInt(k.split('-')[1]) - 1], groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` };
+  }
+  const { keys, label, groupKey } = buildTimeBuckets();
+
+  // ── Chart titles ─────────────────────────────────────────
+  const harvestLabel = document.getElementById('ov-chart-harvest-label');
+  const speciesLabel = document.getElementById('ov-chart-species-label');
+  const substrateLabel = document.getElementById('ov-chart-substrate-label');
+  const bagsLabel = document.getElementById('ov-chart-bags-label');
+  if (ovPeriod === 'week') {
+    if (harvestLabel) harvestLabel.textContent = t('dash.ov.dailyHarvest') || 'Daily harvest';
+    if (substrateLabel) substrateLabel.textContent = t('dash.ov.weeklySubstrate') || 'Substrate usage';
+    if (bagsLabel) bagsLabel.textContent = t('dash.ov.bagsCreated') || 'Bags created';
+  } else if (ovPeriod === 'month') {
+    if (harvestLabel) harvestLabel.textContent = t('dash.ov.dailyHarvest') || 'Daily harvest';
+    if (substrateLabel) substrateLabel.textContent = t('dash.ov.weeklySubstrate') || 'Substrate by week';
+    if (bagsLabel) bagsLabel.textContent = t('dash.ov.bagsCreated') || 'Bags created';
+  } else {
+    if (harvestLabel) harvestLabel.textContent = t('dash.ov.monthlyHarvest') || 'Monthly harvest';
+    if (substrateLabel) substrateLabel.textContent = t('dash.ov.weeklySubstrate') || 'Substrate by month';
+    if (bagsLabel) bagsLabel.textContent = t('dash.ov.monthlyBags') || 'Bags created by month';
+  }
+  if (speciesLabel) speciesLabel.textContent = t('dash.harvestBySpecies') || 'Harvest by species (kg)';
+
+  // ── 1. Harvest over time ─────────────────────────────────
+  const c1 = document.getElementById('ov-chart-harvest');
+  if (c1) {
+    const harvestMap = {};
+    periodHarvests.forEach((h) => { const k = groupKey(new Date(h.time)); harvestMap[k] = (harvestMap[k] || 0) + (h.grams || 0); });
+    if (ovChartHarvestInst) { ovChartHarvestInst.destroy(); ovChartHarvestInst = null; }
+    const ctx = c1.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 180);
+    grad.addColorStop(0, 'rgba(245,158,11,0.35)');
+    grad.addColorStop(1, 'rgba(245,158,11,0.01)');
+    const useBar = ovPeriod === 'year';
+    ovChartHarvestInst = new Chart(c1, {
+      type: useBar ? 'bar' : 'line',
       data: {
-        labels: days.map((k) => fmtDtShort(new Date(k))),
-        datasets: [
-          {
-            data: days.map((k) => (dayMap[k] || 0) / 1000),
-            fill: true,
-            backgroundColor: grad1,
-            borderColor: 'rgba(245,158,11,0.9)',
-            borderWidth: 2,
-            pointRadius: days.length > 20 ? 0 : 3,
-            tension: 0.3
-          }
-        ]
+        labels: keys.map(label),
+        datasets: [{
+          data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
+          fill: !useBar,
+          backgroundColor: useBar
+            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? 'rgba(245,158,11,0.9)' : 'rgba(245,158,11,0.5)')
+            : grad,
+          borderColor: 'rgba(245,158,11,0.9)',
+          borderWidth: 2,
+          pointRadius: keys.length > 20 ? 0 : 3,
+          borderRadius: useBar ? 4 : 0,
+          tension: 0.3
+        }]
       },
       options: {
         responsive: true,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + 'kg' } } },
         scales: {
           y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 12 }, grid: { display: false } }
+          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 14 }, grid: { display: false } }
         }
       }
     });
   }
 
-  const canvas2 = document.getElementById('ov-month-substrate-chart');
-  if (canvas2) {
-    const weekHw = {},
-      weekWb = {};
+  // ── 2. Harvest by species ────────────────────────────────
+  const c2 = document.getElementById('ov-chart-species');
+  if (c2) {
+    const bySpecies = {};
+    periodHarvests.forEach((h) => { bySpecies[h.species] = (bySpecies[h.species] || 0) + (h.grams || 0); });
+    const spLabels = Object.keys(bySpecies);
+    const spData = spLabels.map((s) => bySpecies[s] / 1000);
+    if (ovChartSpeciesInst) { ovChartSpeciesInst.destroy(); ovChartSpeciesInst = null; }
+    if (!spLabels.length) {
+      const ctx = c2.getContext('2d');
+      ctx.clearRect(0, 0, c2.width, c2.height);
+      ctx.fillStyle = '#aaa'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText(t('harvest.noData'), c2.width / 2, 80);
+    } else {
+      const fmtKg = (v) => Math.round(v * 100) / 100 + 'kg';
+      const ctx = c2.getContext('2d');
+      const bgColors = spLabels.map((s) => {
+        const g = ctx.createLinearGradient(0, 0, 0, c2.clientHeight || 180);
+        g.addColorStop(0, spColor(s) + 'ee'); g.addColorStop(1, spColor(s) + '55');
+        return g;
+      });
+      const dataLabelPlugin = {
+        id: 'harvestDataLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx: cc, data } = chart;
+          chart.getDatasetMeta(0).data.forEach((bar, i) => {
+            const val = data.datasets[0].data[i];
+            if (!val) return;
+            cc.save(); cc.fillStyle = '#475569'; cc.font = 'bold 11px system-ui';
+            cc.textAlign = 'center'; cc.textBaseline = 'bottom';
+            cc.fillText(fmtKg(val), bar.x, bar.y - 4); cc.restore();
+          });
+        }
+      };
+      ovChartSpeciesInst = new Chart(c2, {
+        type: 'bar', plugins: [dataLabelPlugin],
+        data: { labels: spLabels, datasets: [{ data: spData, backgroundColor: bgColors, borderColor: spLabels.map((s) => spColor(s)), borderWidth: 1.5, borderRadius: 8, borderSkipped: false }] },
+        options: {
+          responsive: true, layout: { padding: { top: 22 } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtKg(c.parsed.y) } } },
+          scales: {
+            y: { ticks: { callback: (v) => fmtKg(v), color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
+            x: { grid: { display: false }, ticks: { color: '#64748b' } }
+          }
+        }
+      });
+    }
+  }
+
+  // ── 3. Substrate usage ───────────────────────────────────
+  const c3 = document.getElementById('ov-chart-substrate');
+  if (c3) {
+    const hwMap = {}, wbMap = {};
     (inventory.log || []).forEach((e) => {
       if (e.type !== 'batch') return;
       if (e.mat !== 'hardwood' && e.mat !== 'wheatbran') return;
       const d = new Date(e.time);
-      if (d < monthStart) return;
-      const mon = new Date(d);
-      mon.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday of that week
-      const key = mon.toISOString().slice(0, 10);
-      if (e.mat === 'hardwood') weekHw[key] = (weekHw[key] || 0) + Math.abs(e.deltaKg || 0);
-      else weekWb[key] = (weekWb[key] || 0) + Math.abs(e.deltaKg || 0);
+      if (d < periodStart) return;
+      let k;
+      if (ovPeriod === 'year') {
+        k = groupKey(d);
+      } else {
+        // group by week (Monday)
+        const mon = new Date(d);
+        mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        k = mon.toISOString().slice(0, 10);
+      }
+      if (e.mat === 'hardwood') hwMap[k] = (hwMap[k] || 0) + Math.abs(e.deltaKg || 0);
+      else wbMap[k] = (wbMap[k] || 0) + Math.abs(e.deltaKg || 0);
     });
-    const weekKeys = [...new Set([...Object.keys(weekHw), ...Object.keys(weekWb)])].sort();
-    if (ovMonthSubstrateInst) {
-      ovMonthSubstrateInst.destroy();
-      ovMonthSubstrateInst = null;
-    }
-    if (!weekKeys.length) {
-      const ctx = canvas2.getContext('2d');
-      ctx.clearRect(0, 0, canvas2.width, canvas2.height);
-      ctx.fillStyle = '#aaa';
-      ctx.font = '12px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(t('dash.noHarvestData'), canvas2.width / 2, 60);
+    let subKeys, subLabels;
+    if (ovPeriod === 'year') {
+      subKeys = keys;
+      subLabels = keys.map(label);
     } else {
-      ovMonthSubstrateInst = new Chart(canvas2, {
+      subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap)])].sort();
+      subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
+    }
+    if (ovChartSubstrateInst) { ovChartSubstrateInst.destroy(); ovChartSubstrateInst = null; }
+    if (!subKeys.length) {
+      const ctx = c3.getContext('2d');
+      ctx.clearRect(0, 0, c3.width, c3.height);
+      ctx.fillStyle = '#aaa'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText(t('dash.noHarvestData'), c3.width / 2, 60);
+    } else {
+      ovChartSubstrateInst = new Chart(c3, {
         type: 'bar',
         data: {
-          labels: weekKeys.map((k) => 'KW ' + isoWeekNumber(k)),
+          labels: subLabels,
           datasets: [
-            {
-              label: t('dash.ov.hardwood'),
-              data: weekKeys.map((k) => +(weekHw[k] || 0).toFixed(1)),
-              backgroundColor: '#0d9488',
-              borderRadius: 3
-            },
-            {
-              label: t('dash.ov.wheatbran'),
-              data: weekKeys.map((k) => +(weekWb[k] || 0).toFixed(1)),
-              backgroundColor: '#059669',
-              borderRadius: 3
-            }
+            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#0d9488', borderRadius: 3 },
+            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#059669', borderRadius: 3 }
           ]
         },
         options: {
           responsive: true,
-          plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-            tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } }
-          },
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } } },
           scales: {
-            y: {
-              ticks: { callback: (v) => v + 'kg', color: '#64748b' },
-              grid: { color: '#f1f5f9' },
-              beginAtZero: true
-            },
+            y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
             x: { ticks: { color: '#64748b' }, grid: { display: false } }
           }
         }
       });
     }
   }
-}
 
-function renderYearCharts(yearStart) {
-  const nowDate = new Date();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
-
-  const canvas1 = document.getElementById('ov-year-harvest-chart');
-  if (canvas1) {
-    const monthMap = {};
-    harvests.forEach((h) => {
-      const d = new Date(h.time);
-      if (d < yearStart) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthMap[key] = (monthMap[key] || 0) + (h.grams || 0);
-    });
-    if (ovYearHarvestInst) {
-      ovYearHarvestInst.destroy();
-      ovYearHarvestInst = null;
-    }
-    ovYearHarvestInst = new Chart(canvas1, {
-      type: 'bar',
-      data: {
-        labels: monthNames,
-        datasets: [
-          {
-            data: monthKeys.map((k) => +((monthMap[k] || 0) / 1000).toFixed(2)),
-            backgroundColor: monthKeys.map((_, i) =>
-              i === nowDate.getMonth() ? 'rgba(245,158,11,0.9)' : 'rgba(245,158,11,0.45)'
-            ),
-            borderRadius: 4
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + 'kg' } } },
-        scales: {
-          y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-          x: { ticks: { color: '#64748b' }, grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  const canvas2 = document.getElementById('ov-year-bags-chart');
-  if (canvas2) {
+  // ── 4. Bags created ──────────────────────────────────────
+  const c4 = document.getElementById('ov-chart-bags');
+  if (c4) {
     const bagMap = {};
-    batches.forEach((b) => {
-      const d = new Date(b.created);
-      if (d < yearStart) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      bagMap[key] = (bagMap[key] || 0) + (b.qty || 0);
+    batches.filter((b) => new Date(b.created) >= periodStart).forEach((b) => {
+      const k = groupKey(new Date(b.created));
+      bagMap[k] = (bagMap[k] || 0) + (b.qty || 0);
     });
-    if (ovYearBagsInst) {
-      ovYearBagsInst.destroy();
-      ovYearBagsInst = null;
-    }
-    ovYearBagsInst = new Chart(canvas2, {
+    if (ovChartBagsInst) { ovChartBagsInst.destroy(); ovChartBagsInst = null; }
+    ovChartBagsInst = new Chart(c4, {
       type: 'bar',
       data: {
-        labels: monthNames,
-        datasets: [
-          {
-            data: monthKeys.map((k) => bagMap[k] || 0),
-            backgroundColor: monthKeys.map((_, i) =>
-              i === nowDate.getMonth() ? 'rgba(14,165,233,0.9)' : 'rgba(14,165,233,0.45)'
-            ),
-            borderRadius: 4
-          }
-        ]
+        labels: keys.map(label),
+        datasets: [{
+          data: keys.map((k) => bagMap[k] || 0),
+          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? 'rgba(14,165,233,0.9)' : 'rgba(14,165,233,0.5)'),
+          borderRadius: 4
+        }]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } }
-        },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } } },
         scales: {
           y: { ticks: { color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-          x: { ticks: { color: '#64748b' }, grid: { display: false } }
+          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 14 }, grid: { display: false } }
         }
       }
     });
@@ -5803,10 +5640,7 @@ function renderStatus() {
     el.innerHTML = '<div class="empty">' + t('dash.noZones') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview' && ovPeriod === 'week') {
-      renderHarvestChart();
-      renderWeeklyHarvestChart();
-    }
+    if (dashMode === 'overview') renderOverviewKPIs();
     applyDashMode();
     return;
   }
@@ -5814,10 +5648,7 @@ function renderStatus() {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview' && ovPeriod === 'week') {
-      renderHarvestChart();
-      renderWeeklyHarvestChart();
-    }
+    if (dashMode === 'overview') renderOverviewKPIs();
     applyDashMode();
     return;
   }
@@ -5877,10 +5708,6 @@ function renderStatus() {
   const tdone = batchData.filter((d) => d.status === 'DONE').length;
   renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
   renderOverviewKPIs();
-  if (dashMode === 'overview' && ovPeriod === 'week') {
-    renderHarvestChart();
-    renderWeeklyHarvestChart();
-  }
   applyDashMode();
   updateActionBar();
 }
@@ -6195,10 +6022,6 @@ function setOvPeriod(p) {
   ovPeriod = p;
   localStorage.setItem('mp-ov-period', p);
   renderOverviewKPIs();
-  if (p === 'week') {
-    renderHarvestChart();
-    renderWeeklyHarvestChart();
-  }
   renderKpiHistory();
 }
 function applyOvPeriod() {

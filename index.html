@@ -1228,42 +1228,25 @@
               <div class="g4" id="ov-kpi-quality"></div>
             </div>
 
-            <!-- Week charts -->
-            <div id="ov-charts-week" class="g2" style="margin-bottom: 10px">
+            <!-- Unified charts (adapt to selected period) -->
+            <div class="g2" style="margin-bottom: 10px">
               <div class="card">
-                <div class="sec" data-i18n="dash.harvestBySpecies">Harvest by species (kg)</div>
-                <canvas id="harvest-chart" height="180"></canvas>
+                <div class="sec" id="ov-chart-harvest-label">Harvest</div>
+                <canvas id="ov-chart-harvest" height="180"></canvas>
               </div>
               <div class="card">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px">
-                  <div class="sec" style="margin: 0" data-i18n="dash.weeklyHarvest">Weekly harvest trend</div>
-                  <div id="dash-weekly-trend-badge"></div>
-                </div>
-                <canvas id="weekly-harvest-chart" height="180"></canvas>
+                <div class="sec" id="ov-chart-species-label">Harvest by species (kg)</div>
+                <canvas id="ov-chart-species" height="180"></canvas>
               </div>
             </div>
-
-            <!-- Month charts -->
-            <div id="ov-charts-month" class="g2" style="margin-bottom: 10px; display: none">
+            <div class="g2" style="margin-bottom: 10px">
               <div class="card">
-                <div class="sec" data-i18n="dash.ov.dailyHarvest">Daily harvest (this month)</div>
-                <canvas id="ov-month-harvest-chart" height="180"></canvas>
+                <div class="sec" id="ov-chart-substrate-label">Substrate usage</div>
+                <canvas id="ov-chart-substrate" height="180"></canvas>
               </div>
               <div class="card">
-                <div class="sec" data-i18n="dash.ov.weeklySubstrate">Substrate by week</div>
-                <canvas id="ov-month-substrate-chart" height="180"></canvas>
-              </div>
-            </div>
-
-            <!-- Year charts -->
-            <div id="ov-charts-year" class="g2" style="margin-bottom: 10px; display: none">
-              <div class="card">
-                <div class="sec" data-i18n="dash.ov.monthlyHarvest">Monthly harvest</div>
-                <canvas id="ov-year-harvest-chart" height="180"></canvas>
-              </div>
-              <div class="card">
-                <div class="sec" data-i18n="dash.ov.monthlyBags">Bags created by month</div>
-                <canvas id="ov-year-bags-chart" height="180"></canvas>
+                <div class="sec" id="ov-chart-bags-label">Bags created</div>
+                <canvas id="ov-chart-bags" height="180"></canvas>
               </div>
             </div>
 
