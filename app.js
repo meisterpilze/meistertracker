@@ -162,6 +162,7 @@ const LANG = {
     'dash.weeklyHarvest': 'Weekly harvest trend',
     'dash.ov.thisWeek': 'This week',
     'dash.ov.qualityEff': 'Quality & efficiency',
+    'dash.ov.substrates': 'Substrates',
     'dash.ov.bagsCreated': 'Bags created',
     'dash.ov.grainUsed': 'Grain used',
     'dash.ov.harvestThisWeek': 'Harvest',
@@ -1426,6 +1427,7 @@ const LANG = {
     'dash.weeklyHarvest': 'Wöchentliche Ernte',
     'dash.ov.thisWeek': 'Diese Woche',
     'dash.ov.qualityEff': 'Qualität & Effizienz',
+    'dash.ov.substrates': 'Substrate',
     'dash.ov.bagsCreated': 'Erstellte Beutel',
     'dash.ov.grainUsed': 'Verbrauchtes Korn',
     'dash.ov.harvestThisWeek': 'Ernte',
@@ -2708,6 +2710,7 @@ const LANG = {
     'dash.weeklyHarvest': 'Tendência semanal de colheita',
     'dash.ov.thisWeek': 'Esta semana',
     'dash.ov.qualityEff': 'Qualidade & eficiência',
+    'dash.ov.substrates': 'Substratos',
     'dash.ov.bagsCreated': 'Sacos criados',
     'dash.ov.grainUsed': 'Grão utilizado',
     'dash.ov.harvestThisWeek': 'Colheita',
@@ -4725,6 +4728,7 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
 function renderOverviewKPIs() {
   if (dashMode !== 'overview') return;
   const weekEl = document.getElementById('ov-kpi-week');
+  const substratesEl = document.getElementById('ov-kpi-substrates');
   const qualEl = document.getElementById('ov-kpi-quality');
   if (!weekEl || !qualEl) return;
 
@@ -4864,20 +4868,32 @@ function renderOverviewKPIs() {
   weekEl.innerHTML = [
     card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#0ea5e9', '#dbeafe'),
     card(
-      iconGrain,
-      grainUsed > 0 ? fmtKg(grainUsed) : '—',
-      t('dash.ov.grainUsed'),
-      t('dash.ov.fromBatches'),
-      '#a855f7',
-      '#f3e8ff'
-    ),
-    card(
       iconHarvest,
       periodHarvestKg > 0 ? fmtKg(periodHarvestKg) : '—',
       t('dash.ov.harvestThisWeek'),
       periodHarvests.length + ' ' + t('dash.ov.harvests'),
       '#d97706',
       '#fef3c7'
+    ),
+    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1', '#e0e7ff'),
+    card(
+      iconYield,
+      avgYield > 0 ? avgYield + 'g' : '—',
+      t('dash.ov.avgYield'),
+      yieldSub,
+      '#16a34a',
+      '#dcfce7'
+    )
+  ].join('');
+
+  if (substratesEl) substratesEl.innerHTML = [
+    card(
+      iconGrain,
+      grainUsed > 0 ? fmtKg(grainUsed) : '—',
+      t('dash.ov.grainUsed'),
+      t('dash.ov.fromBatches'),
+      '#a855f7',
+      '#f3e8ff'
     ),
     card(
       iconSubstrate,
@@ -4899,14 +4915,6 @@ function renderOverviewKPIs() {
 
   qualEl.innerHTML = [
     card(
-      iconYield,
-      avgYield > 0 ? avgYield + 'g' : '—',
-      t('dash.ov.avgYield'),
-      yieldSub,
-      '#16a34a',
-      '#dcfce7'
-    ),
-    card(
       iconContam,
       contamRate + '%',
       t('dash.ov.contamRate'),
@@ -4921,8 +4929,7 @@ function renderOverviewKPIs() {
       daysSinceLabel,
       streakColor,
       streakBg
-    ),
-    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1', '#e0e7ff')
+    )
   ].join('');
 
   renderOverviewCharts(periodStart);
@@ -4946,9 +4953,11 @@ function renderOverviewCharts(periodStart) {
       return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
     }
     if (ovPeriod === 'month') {
+      // Always show full month (1st to last day)
       const days = [];
       const cur = new Date(periodStart);
-      while (cur <= nowDate) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+      const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
+      while (cur <= lastDay) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
       return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
     }
     // year — monthly buckets
