@@ -23,6 +23,10 @@ function fmtDtShort(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
 }
+function localDateStr(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 function isoWeekNumber(d) {
   if (!(d instanceof Date)) d = new Date(d);
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -4866,23 +4870,23 @@ function renderOverviewKPIs() {
   if (periodLabel) periodLabel.textContent = periodSub;
 
   weekEl.innerHTML = [
-    card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#0ea5e9', '#dbeafe'),
+    card(iconBag, bagsCreated || '0', t('dash.ov.bagsCreated'), periodSub, '#8b5cf6', '#ede9fe'),
     card(
       iconHarvest,
       periodHarvestKg > 0 ? fmtKg(periodHarvestKg) : '—',
       t('dash.ov.harvestThisWeek'),
       periodHarvests.length + ' ' + t('dash.ov.harvests'),
-      '#d97706',
-      '#fef3c7'
+      '#f97316',
+      '#fff7ed'
     ),
-    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#6366f1', '#e0e7ff'),
+    card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#3b82f6', '#dbeafe'),
     card(
       iconYield,
       avgYield > 0 ? avgYield + 'g' : '—',
       t('dash.ov.avgYield'),
       yieldSub,
-      '#16a34a',
-      '#dcfce7'
+      '#10b981',
+      '#d1fae5'
     )
   ].join('');
 
@@ -4892,24 +4896,24 @@ function renderOverviewKPIs() {
       grainUsed > 0 ? fmtKg(grainUsed) : '—',
       t('dash.ov.grainUsed'),
       t('dash.ov.fromBatches'),
-      '#a855f7',
-      '#f3e8ff'
+      '#8b5cf6',
+      '#ede9fe'
     ),
     card(
       iconSubstrate,
       hardwoodUsed > 0 ? fmtKg(hardwoodUsed) : '—',
       t('dash.ov.hardwoodUsed'),
       t('dash.ov.fromBatches'),
-      '#0d9488',
-      '#ccfbf1'
+      '#06b6d4',
+      '#cffafe'
     ),
     card(
       iconSubstrate,
       wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
       t('dash.ov.wheatbranUsed'),
       t('dash.ov.fromBatches'),
-      '#059669',
-      '#d1fae5'
+      '#f59e0b',
+      '#fef3c7'
     )
   ].join('');
 
@@ -4945,22 +4949,22 @@ function renderOverviewCharts(periodStart) {
   // ── Helpers: build time buckets depending on period ──────
   function buildTimeBuckets() {
     if (ovPeriod === 'week') {
-      // Always show full Mon–Sun (7 days)
+      // Full week Mon–Sun (7 days)
       const days = [];
       const cur = new Date(periodStart);
-      for (let i = 0; i < 7; i++) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+      for (let i = 0; i < 7; i++) { days.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
       const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-      return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
+      return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => localDateStr(d) };
     }
     if (ovPeriod === 'month') {
-      // Always show full month (1st to last day)
+      // Full month 1st to last day
       const days = [];
       const cur = new Date(periodStart);
       const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
-      while (cur <= lastDay) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
-      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => d.toISOString().slice(0, 10) };
+      while (cur <= lastDay) { days.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => localDateStr(d) };
     }
-    // year — monthly buckets
+    // year — monthly buckets Jan–Dec
     const mKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
     return { keys: mKeys, label: (k) => monthNames[parseInt(k.split('-')[1]) - 1], groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` };
   }
@@ -4994,8 +4998,8 @@ function renderOverviewCharts(periodStart) {
     if (ovChartHarvestInst) { ovChartHarvestInst.destroy(); ovChartHarvestInst = null; }
     const ctx = c1.getContext('2d');
     const grad = ctx.createLinearGradient(0, 0, 0, 180);
-    grad.addColorStop(0, 'rgba(245,158,11,0.35)');
-    grad.addColorStop(1, 'rgba(245,158,11,0.01)');
+    grad.addColorStop(0, 'rgba(249,115,22,0.30)');
+    grad.addColorStop(1, 'rgba(249,115,22,0.02)');
     const useBar = ovPeriod === 'year';
     ovChartHarvestInst = new Chart(c1, {
       type: useBar ? 'bar' : 'line',
@@ -5005,21 +5009,22 @@ function renderOverviewCharts(periodStart) {
           data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
           fill: !useBar,
           backgroundColor: useBar
-            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? 'rgba(245,158,11,0.9)' : 'rgba(245,158,11,0.5)')
+            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#f97316' : 'rgba(249,115,22,0.55)')
             : grad,
-          borderColor: 'rgba(245,158,11,0.9)',
+          borderColor: '#f97316',
           borderWidth: 2,
           pointRadius: keys.length > 20 ? 0 : 3,
-          borderRadius: useBar ? 4 : 0,
-          tension: 0.3
+          pointBackgroundColor: '#f97316',
+          borderRadius: useBar ? 6 : 0,
+          tension: 0.35
         }]
       },
       options: {
         responsive: true,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y.toFixed(2) + 'kg' } } },
         scales: {
-          y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 14 }, grid: { display: false } }
+          y: { ticks: { callback: (v) => v + 'kg', color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+          x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 14 }, grid: { display: false } }
         }
       }
     });
@@ -5036,7 +5041,7 @@ function renderOverviewCharts(periodStart) {
     if (!spLabels.length) {
       const ctx = c2.getContext('2d');
       ctx.clearRect(0, 0, c2.width, c2.height);
-      ctx.fillStyle = '#aaa'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
       ctx.fillText(t('harvest.noData'), c2.width / 2, 80);
     } else {
       const fmtKg = (v) => Math.round(v * 100) / 100 + 'kg';
@@ -5066,8 +5071,8 @@ function renderOverviewCharts(periodStart) {
           responsive: true, layout: { padding: { top: 22 } },
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtKg(c.parsed.y) } } },
           scales: {
-            y: { ticks: { callback: (v) => fmtKg(v), color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-            x: { grid: { display: false }, ticks: { color: '#64748b' } }
+            y: { ticks: { callback: (v) => fmtKg(v), color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
           }
         }
       });
@@ -5090,7 +5095,7 @@ function renderOverviewCharts(periodStart) {
         // group by week (Monday)
         const mon = new Date(d);
         mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-        k = mon.toISOString().slice(0, 10);
+        k = localDateStr(mon);
       }
       if (e.mat === 'hardwood') hwMap[k] = (hwMap[k] || 0) + Math.abs(e.deltaKg || 0);
       else wbMap[k] = (wbMap[k] || 0) + Math.abs(e.deltaKg || 0);
@@ -5107,7 +5112,7 @@ function renderOverviewCharts(periodStart) {
     if (!subKeys.length) {
       const ctx = c3.getContext('2d');
       ctx.clearRect(0, 0, c3.width, c3.height);
-      ctx.fillStyle = '#aaa'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
       ctx.fillText(t('dash.noHarvestData'), c3.width / 2, 60);
     } else {
       ovChartSubstrateInst = new Chart(c3, {
@@ -5115,16 +5120,16 @@ function renderOverviewCharts(periodStart) {
         data: {
           labels: subLabels,
           datasets: [
-            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#0d9488', borderRadius: 3 },
-            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#059669', borderRadius: 3 }
+            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#06b6d4', borderRadius: 5 },
+            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#f59e0b', borderRadius: 5 }
           ]
         },
         options: {
           responsive: true,
           plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } } },
           scales: {
-            y: { ticks: { callback: (v) => v + 'kg', color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-            x: { ticks: { color: '#64748b' }, grid: { display: false } }
+            y: { ticks: { callback: (v) => v + 'kg', color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+            x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
           }
         }
       });
@@ -5146,16 +5151,16 @@ function renderOverviewCharts(periodStart) {
         labels: keys.map((k, i) => label(k, i)),
         datasets: [{
           data: keys.map((k) => bagMap[k] || 0),
-          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? 'rgba(14,165,233,0.9)' : 'rgba(14,165,233,0.5)'),
-          borderRadius: 4
+          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#8b5cf6' : 'rgba(139,92,246,0.55)'),
+          borderRadius: 6
         }]
       },
       options: {
         responsive: true,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } } },
         scales: {
-          y: { ticks: { color: '#64748b' }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-          x: { ticks: { font: { size: 9 }, color: '#64748b', maxTicksLimit: 14 }, grid: { display: false } }
+          y: { ticks: { color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+          x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 14 }, grid: { display: false } }
         }
       }
     });
@@ -5201,8 +5206,9 @@ function renderKpiHistory() {
   if (emptyEl) emptyEl.style.display = 'none';
   if (chartsEl) chartsEl.style.display = '';
 
-  // Filter snapshots by the selected overview period
+  // Filter snapshots by the selected overview period + build fixed date range
   const nowDate = new Date();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   let periodStart;
   if (ovPeriod === 'week') {
     periodStart = new Date(nowDate);
@@ -5213,7 +5219,7 @@ function renderKpiHistory() {
   } else {
     periodStart = new Date(nowDate.getFullYear(), 0, 1);
   }
-  const periodKey = periodStart.toISOString().slice(0, 10);
+  const periodKey = localDateStr(periodStart);
   const filtered = kpiHistoryData.filter((s) => s.date >= periodKey);
   if (!filtered.length) {
     if (emptyEl) emptyEl.style.display = '';
@@ -5221,45 +5227,83 @@ function renderKpiHistory() {
     return;
   }
 
-  const labels = filtered.map((s) => fmtDtShort(s.date)); // DD.MM
-  const chartOpts = (yLabel, cb) => ({
+  // Build lookup + fixed date keys so x-axis always covers the full period
+  const snapshotMap = {};
+  filtered.forEach((s) => { snapshotMap[s.date] = s; });
+
+  let histKeys = [];  // date keys for x-axis
+  let histLabels = []; // display labels
+  if (ovPeriod === 'week') {
+    // Mon–Sun (7 days)
+    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const cur = new Date(periodStart);
+    for (let i = 0; i < 7; i++) {
+      histKeys.push(localDateStr(cur));
+      histLabels.push(dayNames[i] + ' ' + fmtDtShort(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else if (ovPeriod === 'month') {
+    // 1st to last day of month
+    const cur = new Date(periodStart);
+    const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
+    while (cur <= lastDay) {
+      histKeys.push(localDateStr(cur));
+      histLabels.push(fmtDtShort(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else {
+    // Year — Jan to Dec monthly buckets, use last snapshot per month
+    for (let m = 0; m < 12; m++) {
+      histKeys.push(`${nowDate.getFullYear()}-${String(m + 1).padStart(2, '0')}`);
+      histLabels.push(monthNames[m]);
+    }
+    // Build monthly lookup: last snapshot of each month
+    const monthSnap = {};
+    filtered.forEach((s) => { const mk = s.date.slice(0, 7); monthSnap[mk] = s; });
+    // Override snapshotMap for monthly access
+    histKeys.forEach((mk) => { if (monthSnap[mk]) snapshotMap[mk] = monthSnap[mk]; });
+  }
+
+  const snapVal = (key, field) => {
+    const s = snapshotMap[key];
+    return s ? (s[field] || 0) : null;
+  };
+
+  const chartOpts = (yLabel, cb, extraOpts) => ({
     responsive: true,
     plugins: {
       legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
-      tooltip: { callbacks: { label: cb || undefined } }
+      tooltip: { callbacks: { label: cb || undefined } },
+      ...(extraOpts && extraOpts.plugins || {})
     },
     scales: {
-      y: { ticks: { color: '#64748b', callback: (v) => v + yLabel }, grid: { color: '#f1f5f9' }, beginAtZero: true },
-      x: { ticks: { color: '#64748b', maxRotation: 45 }, grid: { display: false } }
+      y: { ticks: { color: '#94a3b8', callback: (v) => v + yLabel }, grid: { color: '#e2e8f0' }, beginAtZero: true,
+        ...(extraOpts && extraOpts.yMax ? { max: extraOpts.yMax } : {}) },
+      x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 9 } }, grid: { display: false },
+        ...(extraOpts && extraOpts.xStacked ? { stacked: true } : {}) }
     }
   });
   const lineDs = (label, data, color, fill) => ({
-    label,
-    data,
+    label, data,
     borderColor: color,
     backgroundColor: fill || color + '33',
-    tension: 0.3,
-    pointRadius: 2,
-    fill: !!fill
+    tension: 0.35, pointRadius: 2, pointBackgroundColor: color,
+    fill: !!fill, spanGaps: true
   });
 
   // 1. Harvest chart
   const c1 = document.getElementById('ov-history-harvest-chart');
   if (c1) {
-    if (ovHistHarvestInst) {
-      ovHistHarvestInst.destroy();
-      ovHistHarvestInst = null;
-    }
+    if (ovHistHarvestInst) { ovHistHarvestInst.destroy(); ovHistHarvestInst = null; }
     ovHistHarvestInst = new Chart(c1, {
       type: 'line',
       data: {
-        labels,
+        labels: histLabels,
         datasets: [
           lineDs(
             t('dash.ov.harvestThisWeek'),
-            filtered.map((s) => +(s.harvest_kg || 0).toFixed(2)),
-            '#d97706',
-            '#fef3c733'
+            histKeys.map((k) => { const v = snapVal(k, 'harvest_kg'); return v !== null ? +v.toFixed(2) : null; }),
+            '#f97316', 'rgba(249,115,22,0.10)'
           )
         ]
       },
@@ -5270,86 +5314,76 @@ function renderKpiHistory() {
   // 2. Bags created chart
   const c2 = document.getElementById('ov-history-bags-chart');
   if (c2) {
-    if (ovHistBagsInst) {
-      ovHistBagsInst.destroy();
-      ovHistBagsInst = null;
-    }
+    if (ovHistBagsInst) { ovHistBagsInst.destroy(); ovHistBagsInst = null; }
     ovHistBagsInst = new Chart(c2, {
       type: 'bar',
       data: {
-        labels,
-        datasets: [
-          {
-            label: t('dash.ov.bagsCreated'),
-            data: filtered.map((s) => s.bags_created || 0),
-            backgroundColor: 'rgba(14,165,233,0.6)',
-            borderRadius: 3
-          }
-        ]
+        labels: histLabels,
+        datasets: [{
+          label: t('dash.ov.bagsCreated'),
+          data: histKeys.map((k) => snapVal(k, 'bags_created')),
+          backgroundColor: 'rgba(139,92,246,0.6)', borderRadius: 5
+        }]
       },
       options: chartOpts('', (c) => c.parsed.y + ' ' + t('dash.ov.bags'))
     });
   }
 
-  // 3. Pipeline chart (stacked area)
+  // 3. Pipeline chart — stacked bar showing distribution %
   const c3 = document.getElementById('ov-history-pipeline-chart');
   if (c3) {
-    if (ovHistPipelineInst) {
-      ovHistPipelineInst.destroy();
-      ovHistPipelineInst = null;
-    }
+    if (ovHistPipelineInst) { ovHistPipelineInst.destroy(); ovHistPipelineInst = null; }
+    const pipeStages = ['bags_spawn', 'bags_incubation', 'bags_fruiting', 'bags_contaminated'];
+    const pipeColors = ['#8b5cf6', '#3b82f6', '#10b981', '#ef4444'];
+    const pipeNames = [t('dash.ov.spawn'), t('dash.ov.incubation'), t('dash.ov.fruiting'), t('dash.ov.contaminated')];
+    // Compute percentage per stage for each date
+    const pipePctData = pipeStages.map((stage) =>
+      histKeys.map((k) => {
+        const s = snapshotMap[k];
+        if (!s) return null;
+        const total = (s.bags_spawn || 0) + (s.bags_incubation || 0) + (s.bags_fruiting || 0) + (s.bags_contaminated || 0);
+        return total > 0 ? +((s[stage] || 0) / total * 100).toFixed(1) : 0;
+      })
+    );
     ovHistPipelineInst = new Chart(c3, {
-      type: 'line',
+      type: 'bar',
       data: {
-        labels,
-        datasets: [
-          lineDs(
-            t('dash.ov.spawn'),
-            filtered.map((s) => s.bags_spawn || 0),
-            '#a855f7',
-            '#a855f733'
-          ),
-          lineDs(
-            t('dash.ov.incubation'),
-            filtered.map((s) => s.bags_incubation || 0),
-            '#0ea5e9',
-            '#0ea5e933'
-          ),
-          lineDs(
-            t('dash.ov.fruiting'),
-            filtered.map((s) => s.bags_fruiting || 0),
-            '#10b981',
-            '#10b98133'
-          ),
-          lineDs(
-            t('dash.ov.contaminated'),
-            filtered.map((s) => s.bags_contaminated || 0),
-            '#ef4444',
-            '#ef444433'
-          )
-        ]
+        labels: histLabels,
+        datasets: pipeStages.map((_, i) => ({
+          label: pipeNames[i],
+          data: pipePctData[i],
+          backgroundColor: pipeColors[i],
+          borderRadius: i === 0 ? { bottomLeft: 4, bottomRight: 4 } : i === pipeStages.length - 1 ? { topLeft: 4, topRight: 4 } : 0,
+          borderSkipped: false
+        }))
       },
-      options: chartOpts('', (c) => c.dataset.label + ': ' + c.parsed.y + ' ' + t('dash.ov.bags'))
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + '%' } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } },
+          y: { stacked: true, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' }, grid: { color: '#e2e8f0' }, beginAtZero: true }
+        }
+      }
     });
   }
 
   // 4. Contamination rate chart
   const c4 = document.getElementById('ov-history-contam-chart');
   if (c4) {
-    if (ovHistContamInst) {
-      ovHistContamInst.destroy();
-      ovHistContamInst = null;
-    }
+    if (ovHistContamInst) { ovHistContamInst.destroy(); ovHistContamInst = null; }
     ovHistContamInst = new Chart(c4, {
       type: 'line',
       data: {
-        labels,
+        labels: histLabels,
         datasets: [
           lineDs(
             t('dash.ov.contamRate'),
-            filtered.map((s) => +(s.contam_rate_pct || 0).toFixed(1)),
-            '#ef4444',
-            '#ef444422'
+            histKeys.map((k) => { const v = snapVal(k, 'contam_rate_pct'); return v !== null ? +v.toFixed(1) : null; }),
+            '#ef4444', 'rgba(239,68,68,0.08)'
           )
         ]
       },
@@ -5360,29 +5394,26 @@ function renderKpiHistory() {
   // 5. Stock levels chart
   const c5 = document.getElementById('ov-history-stock-chart');
   if (c5) {
-    if (ovHistStockInst) {
-      ovHistStockInst.destroy();
-      ovHistStockInst = null;
-    }
+    if (ovHistStockInst) { ovHistStockInst.destroy(); ovHistStockInst = null; }
     ovHistStockInst = new Chart(c5, {
       type: 'line',
       data: {
-        labels,
+        labels: histLabels,
         datasets: [
           lineDs(
             t('dash.ov.hardwoodUsed').replace(/ .*/, ''),
-            filtered.map((s) => +(s.stock_hardwood_kg || 0).toFixed(1)),
-            '#0d9488'
+            histKeys.map((k) => { const v = snapVal(k, 'stock_hardwood_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            '#06b6d4'
           ),
           lineDs(
             t('dash.ov.wheatbranUsed').replace(/ .*/, ''),
-            filtered.map((s) => +(s.stock_wheatbran_kg || 0).toFixed(1)),
-            '#059669'
+            histKeys.map((k) => { const v = snapVal(k, 'stock_wheatbran_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            '#f59e0b'
           ),
           lineDs(
             t('dash.ov.grain'),
-            filtered.map((s) => +(s.stock_grain_kg || 0).toFixed(1)),
-            '#a855f7'
+            histKeys.map((k) => { const v = snapVal(k, 'stock_grain_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            '#8b5cf6'
           )
         ]
       },
