@@ -1349,10 +1349,6 @@ tr:nth-child(even) td {
 tr:hover td {
   background: #f1f5f9;
 }
-.alert-tr td {
-  background: #fffbeb !important;
-  border-left: 3px solid #f59e0b;
-}
 
 /* ═══ MISC ══════════════════════════════════════════════════════ */
 .empty {
