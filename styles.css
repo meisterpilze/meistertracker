@@ -3296,13 +3296,33 @@ tr:hover td {
 }
 
 /* ═══ NOTIFICATIONS BELL ═════════════════════════════════════════ */
-.sb-bell {
+.sb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sb-header-bell {
   position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--c-text-sec);
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.sb-header-bell:hover {
+  background: var(--c-border-light);
+  color: var(--c-text);
 }
 .bell-badge {
   position: absolute;
-  top: 4px;
-  right: 8px;
+  top: -2px;
+  right: -2px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -3318,9 +3338,10 @@ tr:hover td {
 .bell-badge[hidden] {
   display: none;
 }
-.sidebar.sb-collapsed .bell-badge {
-  top: 2px;
-  right: 2px;
+/* When sidebar is collapsed, the logo text hides — bell + toggle stack */
+.sidebar.sb-collapsed .sb-header-actions {
+  flex-direction: column;
+  gap: 2px;
 }
 
 .mobile-bell {
@@ -3350,7 +3371,7 @@ tr:hover td {
 
 .notif-dropdown {
   position: fixed;
-  bottom: 70px;
+  top: 58px;
   left: calc(var(--sidebar-width, 240px) + 8px);
   width: 360px;
   max-width: calc(100vw - 24px);
