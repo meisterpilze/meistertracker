@@ -1808,14 +1808,16 @@ function autoSyncCalendarEvent(ev) {
   }
 }
 
-// Resolve a list of usernames to user_ids. Unknown names are dropped silently.
+// Resolve a list of usernames to user IDs. Unknown names are dropped silently.
+// Note: the users table column is `id`, not `user_id` (sessions/authUser use
+// `user_id` because they JOIN through sessions).
 function resolveUsernamesToIds(names) {
   if (!Array.isArray(names) || !names.length) return [];
   const ids = [];
   for (const name of names) {
     if (!name || typeof name !== 'string') continue;
     const u = db.getUserByUsernameCaseInsensitive(database, name.trim());
-    if (u && typeof u.user_id === 'number' && !ids.includes(u.user_id)) ids.push(u.user_id);
+    if (u && typeof u.id === 'number' && !ids.includes(u.id)) ids.push(u.id);
   }
   return ids;
 }
