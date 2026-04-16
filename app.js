@@ -4918,6 +4918,18 @@ const getHarvested = (id) => harvests.filter((h) => h.batch === id).reduce((s, h
 let batchYieldInst = null,
   timelineInst = null;
 
+// True iff the batch's due date is strictly before today (local-midnight comparison).
+// Both sides are normalized to local midnight so the answer doesn't flip partway
+// through the day in non-UTC timezones — b.due is stored as toISOString() (UTC),
+// so comparing it against "now" would otherwise drift by the local offset.
+function isBatchOverdue(b, now) {
+  const today = now ? new Date(now) : new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(b.due);
+  due.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
 function countDueToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -5996,7 +6008,8 @@ function renderStatus() {
     const harv = getHarvested(b.batchId);
     const due = new Date(b.due);
     const ov =
-      due < new Date() && zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
+      isBatchOverdue(b) &&
+      zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
     return { b, c, total, status, harv, due, ov };
   });
 
@@ -6361,12 +6374,10 @@ function applyOvPeriod() {
 function renderDashAlerts() {
   const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
   // Overdue batches
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const overdueCount = batches.filter((b) => {
     const { status } = getStatus(b.batchId);
     if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
-    return new Date(b.due) < today;
+    return isBatchOverdue(b);
   }).length;
   const overdueAlerts = overdueCount
     ? [
@@ -6498,9 +6509,7 @@ const BATCH_ATTENTION_PRESETS = {
     pred: (b) => {
       const { status } = getStatus(b.batchId);
       if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return new Date(b.due) < today;
+      return isBatchOverdue(b);
     }
   }
 };
