@@ -2590,6 +2590,17 @@ tr:hover td {
   color: var(--c-primary);
   border-bottom-color: var(--c-primary);
 }
+.batch-row-flash > td {
+  animation: batch-row-flash 1.5s ease;
+}
+@keyframes batch-row-flash {
+  0% {
+    background: var(--c-amber-light);
+  }
+  100% {
+    background: transparent;
+  }
+}
 
 /* ═══ OVERVIEW KPI CARDS ════════════════════════════════════════ */
 .ov-kpi-group-label {

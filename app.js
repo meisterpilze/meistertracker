@@ -144,6 +144,10 @@ const LANG = {
     'scan.audioToggle': 'Audio on/off',
     // Harvest panel
     'harvest.logHarvest': 'Log harvest',
+    'harvest.readyToHarvest': 'Ready to harvest',
+    'harvest.noFruiting': 'No batches ready to harvest.',
+    'harvest.daysFruiting.one': '{n} day fruiting',
+    'harvest.daysFruiting.other': '{n} days fruiting',
     'harvest.grams': 'Grams',
     'harvest.flush': 'Flush #',
     'harvest.cancel': 'Cancel',
@@ -1425,6 +1429,10 @@ const LANG = {
     'scan.audioToggle': 'Audio an/aus',
     // Harvest panel
     'harvest.logHarvest': 'Ernte erfassen',
+    'harvest.readyToHarvest': 'Erntebereit',
+    'harvest.noFruiting': 'Keine Chargen zur Ernte bereit.',
+    'harvest.daysFruiting.one': '{n} Tag im Fruchtzelt',
+    'harvest.daysFruiting.other': '{n} Tage im Fruchtzelt',
     'harvest.grams': 'Gramm',
     'harvest.flush': 'Flush #',
     'harvest.cancel': 'Abbrechen',
@@ -2724,6 +2732,10 @@ const LANG = {
     'scan.audioToggle': '\u00c1udio lig./desl.',
     // Harvest panel
     'harvest.logHarvest': 'Registrar colheita',
+    'harvest.readyToHarvest': 'Prontos para colheita',
+    'harvest.noFruiting': 'Nenhum lote pronto para colheita.',
+    'harvest.daysFruiting.one': '{n} dia em frutifica\u00e7\u00e3o',
+    'harvest.daysFruiting.other': '{n} dias em frutifica\u00e7\u00e3o',
     'harvest.grams': 'Gramas',
     'harvest.flush': 'Flush #',
     'harvest.cancel': 'Cancelar',
@@ -4546,6 +4558,7 @@ function go(page, btnId) {
     renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
+    renderDashHarvestTasks();
     renderDashLabStock();
   }
   if (page === 'batch') renderBatches();
@@ -4615,6 +4628,7 @@ function refresh() {
     renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
+    renderDashHarvestTasks();
     renderDashLabStock();
   }
   if (id === 'batch') renderBatches();
@@ -6413,12 +6427,10 @@ function renderDashBatchTasks() {
   function taskBtn(tk) {
     const id = esc(tk.batchId);
     if (tk.taskAction === 'move')
-      return `<button class="btn btn-sm btn-p" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
-    if (tk.taskAction === 'harvest')
-      return `<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>`;
+      return `<button class="btn btn-sm btn-p" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
     if (tk.taskAction === 'discard')
-      return `<button class="btn btn-sm btn-r" onclick="openMoveBatchModal('${id}')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
-    return `<button class="btn btn-sm" onclick="go('batch','n-batch')" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+      return `<button class="btn btn-sm btn-r" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
+    return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
   }
   el.innerHTML = shown.length
     ? shown
@@ -6426,7 +6438,7 @@ function renderDashBatchTasks() {
           const parts = tk.text.split(tk.batchId);
           const textWithLink =
             esc(parts[0] || '') +
-            `<span class="dash-task-batch-id" onclick="go('batch','n-batch')" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
+            `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
             esc(parts.slice(1).join(tk.batchId) || '');
           return (
             '<div class="todo-row ' +
@@ -6449,6 +6461,112 @@ function renderDashBatchTasks() {
     : '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
       t('dash.noUrgent') +
       '</div>';
+}
+
+// Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
+function goToBatch(batchId) {
+  const input = document.getElementById('batch-q');
+  if (input) input.value = batchId;
+  go('batch', 'n-batch');
+  openStab('batch', 'list');
+  setTimeout(() => {
+    if (!document.getElementById('brow-' + batchId)) {
+      const togBefore = document.getElementById('btog-' + batchId);
+      if (togBefore) toggleBatchBags(batchId);
+    }
+    const row = document.getElementById('btog-' + batchId)?.closest('tr');
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('batch-row-flash');
+      setTimeout(() => row.classList.remove('batch-row-flash'), 1500);
+    }
+  }, 80);
+}
+
+// ─── DASHBOARD READY-TO-HARVEST ─────────────────────────────
+// Fruiting batches live here (not in Batch tasks) so they don't crowd out
+// Move/Discard urgency — fruiting can stretch over weeks/flushes.
+function buildHarvestTasks() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return batches
+    .filter((b) => getStatus(b.batchId).status === 'FRUITING')
+    .map((b) => {
+      const due = new Date(b.due);
+      due.setHours(0, 0, 0, 0);
+      const daysFruiting = Math.max(0, Math.round((today - due) / 864e5));
+      // Count active bags and pick a representative zone to display.
+      const zoneCounts = {};
+      let activeBags = 0;
+      b.bags.forEach((bag) => {
+        const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+        if (!last || last.action === 'REMOVE' || !last.to) return;
+        activeBags++;
+        const z = toZone(last.to);
+        zoneCounts[z] = (zoneCounts[z] || 0) + 1;
+      });
+      const zoneIds = Object.keys(zoneCounts).sort((a, z) => zoneCounts[z] - zoneCounts[a]);
+      const zoneLabel = zoneIds.length
+        ? zoneIds.map((z) => zoneDisplayName(z)).join(', ')
+        : '\u2014';
+      const harvTotal = harvests.filter((h) => h.batch === b.batchId).reduce((s, h) => s + (h.grams || 0), 0);
+      return {
+        batchId: b.batchId,
+        species: b.species,
+        strain: b.strain,
+        activeBags,
+        zoneLabel,
+        daysFruiting,
+        harvTotal
+      };
+    })
+    .filter((t) => t.activeBags > 0)
+    .sort((a, z) => z.daysFruiting - a.daysFruiting);
+}
+
+function renderDashHarvestTasks() {
+  const card = document.getElementById('dash-harvest-tasks-card');
+  const el = document.getElementById('dash-harvest-tasks');
+  const countEl = document.getElementById('dash-harvest-count');
+  if (!el || !card) return;
+  const tasks = buildHarvestTasks();
+  if (!tasks.length) {
+    card.style.display = 'none';
+    if (countEl) countEl.textContent = '';
+    el.innerHTML = '';
+    return;
+  }
+  card.style.display = '';
+  if (countEl) countEl.textContent = tp('dash.bags', tasks.reduce((s, t) => s + t.activeBags, 0));
+  el.innerHTML = tasks
+    .map((tk) => {
+      const id = esc(tk.batchId);
+      const harvested = tk.harvTotal > 0
+        ? ` \u00b7 <span style="color:var(--c-amber-dark);font-weight:500">${tk.harvTotal}g</span>`
+        : '';
+      return (
+        '<div class="todo-row" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+        spColor(tk.species) +
+        '">' +
+        '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:13px;font-weight:500">' +
+        `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${id}" title="${id}">${id}</span>` +
+        ' \u2014 ' +
+        esc(tk.species) +
+        '/' +
+        esc(tk.strain) +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
+        esc(tk.zoneLabel) +
+        ' \u00b7 ' +
+        tp('harvest.daysFruiting', tk.daysFruiting) +
+        harvested +
+        '</div></div>' +
+        `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>` +
+        '</div>'
+      );
+    })
+    .join('');
 }
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
@@ -7731,11 +7849,6 @@ function buildAutoTasks() {
         text = `${b.batchId} \u2014 ${action}`;
         detail = t('todo.dueIn', { n: dl });
       }
-    } else if (status === 'FRUITING') {
-      text = `${b.batchId} \u2014 ${t('status.action.harvest')}`;
-      detail = `${b.species}/${b.strain} ${t('todo.fruiting')}`;
-      warn = true;
-      taskAction = 'harvest';
     } else if (status === 'CONTAM') {
       text = `${b.batchId} \u2014 ${t('status.action.discard')}`;
       detail = `${b.species}/${b.strain}`;
@@ -15355,6 +15468,23 @@ function initEventListeners() {
   // Dashboard
   $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
+  // Delegated clicks for Batch tasks + Ready-to-harvest cards
+  function dashTaskCardClick(e) {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const batch = el.dataset.batch;
+    if (!batch) return;
+    switch (el.dataset.action) {
+      case 'go-to-batch':
+        goToBatch(batch);
+        break;
+      case 'open-move-modal':
+        openMoveBatchModal(batch);
+        break;
+    }
+  }
+  $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
+  $('dash-harvest-tasks').addEventListener('click', dashTaskCardClick);
   applyDashMode();
 
   // Batches — delegated actions for dynamically rendered rows (CSP-safe)
