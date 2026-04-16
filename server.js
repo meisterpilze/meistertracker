@@ -1808,19 +1808,63 @@ function autoSyncCalendarEvent(ev) {
   }
 }
 
+// Resolve a list of usernames to user_ids. Unknown names are dropped silently.
+function resolveUsernamesToIds(names) {
+  if (!Array.isArray(names) || !names.length) return [];
+  const ids = [];
+  for (const name of names) {
+    if (!name || typeof name !== 'string') continue;
+    const u = db.getUserByUsernameCaseInsensitive(database, name.trim());
+    if (u && typeof u.user_id === 'number' && !ids.includes(u.user_id)) ids.push(u.user_id);
+  }
+  return ids;
+}
+
+// Best-effort notifications when a task gains new assignees. Notifies the
+// actor too — self-assignments still produce an inbox entry.
+function notifyTaskAssignees(task, userIds, actor) {
+  if (!Array.isArray(userIds) || !userIds.length) return;
+  const actorName = (actor && actor.username) || 'Jemand';
+  const title = task.text || 'Aufgabe';
+  const dateStr = task.dueDate || task.due_date || '';
+  const body = actorName + (dateStr ? ' · ' + dateStr : '');
+  for (const uid of userIds) {
+    if (typeof uid !== 'number') continue;
+    try {
+      db.createNotification(database, {
+        userId: uid,
+        type: 'task_assignment',
+        title,
+        body,
+        linkType: 'task',
+        linkId: String(task.id)
+      });
+    } catch (e) {
+      log('warn', 'notifyTaskAssignees failed', { userId: uid, taskId: task.id, error: e.message });
+    }
+  }
+}
+
+// Parse a task.assignee CSV ("Jonas,Julian") into an array of trimmed names.
+function parseTaskAssigneeCsv(s) {
+  if (!s || typeof s !== 'string') return [];
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 // Create notification rows for each assignee who was added to a calendar event.
-// Skips the actor (the user performing the action) — no need to notify yourself.
 // Best-effort: failures are logged but do not block the primary request.
 function notifyCalendarAssignees(ev, assigneeIds, actor) {
   if (!Array.isArray(assigneeIds) || !assigneeIds.length) return;
-  const actorId = actor && actor.user_id;
   const actorName = (actor && actor.username) || 'Jemand';
   const title = ev.title || 'Termin';
   // Body: creator + date range for quick context in the dropdown
   const dateStr = ev.startDate || ev.start_date || '';
   const body = actorName + (dateStr ? ' · ' + dateStr : '');
   for (const uid of assigneeIds) {
-    if (typeof uid !== 'number' || uid === actorId) continue;
+    if (typeof uid !== 'number') continue;
     try {
       db.createNotification(database, {
         userId: uid,
@@ -4738,6 +4782,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           const t = db.readTaskById(database, id);
           if (t) autoPushTaskCaldav(t);
         }
+        const assigneeIds = resolveUsernamesToIds(parseTaskAssigneeCsv(data.assignee));
+        if (assigneeIds.length) {
+          notifyTaskAssignees({ id, text: data.text, dueDate: data.dueDate }, assigneeIds, req.authUser);
+        }
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -4760,9 +4808,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        const prevTask = db.readTaskById(database, id);
+        const prevAssigneeIds = prevTask ? resolveUsernamesToIds(parseTaskAssigneeCsv(prevTask.assignee)) : [];
         db.updateTaskById(database, id, data);
         const t = db.readTaskById(database, id);
         if (t) autoPushTaskCaldav(t);
+        if (Object.prototype.hasOwnProperty.call(data, 'assignee') && t) {
+          const newIds = resolveUsernamesToIds(parseTaskAssigneeCsv(t.assignee));
+          const prevSet = new Set(prevAssigneeIds);
+          const added = newIds.filter((uid) => !prevSet.has(uid));
+          if (added.length) notifyTaskAssignees(t, added, req.authUser);
+        }
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
@@ -5540,7 +5596,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const assignees = Array.isArray(data.assignees) ? data.assignees : null;
+        // Accept either explicit assignees (user IDs) or derive them from
+        // teamAssignees (names the UI actually sends).
+        let assignees = Array.isArray(data.assignees) ? data.assignees : null;
+        if (!assignees && Array.isArray(data.teamAssignees)) {
+          assignees = resolveUsernamesToIds(data.teamAssignees);
+        }
         db.insertCalendarEvent(database, data, assignees);
         autoSyncCalendarEvent(data);
         if (assignees && assignees.length) {
@@ -5567,10 +5628,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const prevAssignees = db.getCalendarEventAssignees(database, id);
         db.updateCalendarEvent(database, id, data);
         let newlyAdded = null;
+        let effectiveAssignees = null;
         if (data.assignees !== undefined && Array.isArray(data.assignees)) {
+          effectiveAssignees = data.assignees;
+        } else if (Array.isArray(data.teamAssignees)) {
+          effectiveAssignees = resolveUsernamesToIds(data.teamAssignees);
+        }
+        if (effectiveAssignees) {
           const prevSet = new Set(prevAssignees);
-          newlyAdded = data.assignees.filter((uid) => !prevSet.has(uid));
-          db.setCalendarEventAssignees(database, id, data.assignees);
+          newlyAdded = effectiveAssignees.filter((uid) => !prevSet.has(uid));
+          db.setCalendarEventAssignees(database, id, effectiveAssignees);
         }
         const fullEv = db.getCalendarEventById(database, id);
         if (fullEv) autoSyncCalendarEvent(fullEv);
