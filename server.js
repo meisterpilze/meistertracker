@@ -1820,16 +1820,16 @@ function resolveUsernamesToIds(names) {
   return ids;
 }
 
-// Best-effort notifications when a task gains new assignees.
+// Best-effort notifications when a task gains new assignees. Notifies the
+// actor too — self-assignments still produce an inbox entry.
 function notifyTaskAssignees(task, userIds, actor) {
   if (!Array.isArray(userIds) || !userIds.length) return;
-  const actorId = actor && actor.user_id;
   const actorName = (actor && actor.username) || 'Jemand';
   const title = task.text || 'Aufgabe';
   const dateStr = task.dueDate || task.due_date || '';
   const body = actorName + (dateStr ? ' · ' + dateStr : '');
   for (const uid of userIds) {
-    if (typeof uid !== 'number' || uid === actorId) continue;
+    if (typeof uid !== 'number') continue;
     try {
       db.createNotification(database, {
         userId: uid,
@@ -1855,18 +1855,16 @@ function parseTaskAssigneeCsv(s) {
 }
 
 // Create notification rows for each assignee who was added to a calendar event.
-// Skips the actor (the user performing the action) — no need to notify yourself.
 // Best-effort: failures are logged but do not block the primary request.
 function notifyCalendarAssignees(ev, assigneeIds, actor) {
   if (!Array.isArray(assigneeIds) || !assigneeIds.length) return;
-  const actorId = actor && actor.user_id;
   const actorName = (actor && actor.username) || 'Jemand';
   const title = ev.title || 'Termin';
   // Body: creator + date range for quick context in the dropdown
   const dateStr = ev.startDate || ev.start_date || '';
   const body = actorName + (dateStr ? ' · ' + dateStr : '');
   for (const uid of assigneeIds) {
-    if (typeof uid !== 'number' || uid === actorId) continue;
+    if (typeof uid !== 'number') continue;
     try {
       db.createNotification(database, {
         userId: uid,
