@@ -4744,7 +4744,7 @@ function openBatchAdd() {
       return `<option value="${esc(b.batchId)}">${label}</option>`;
     }).join('');
   const ls = document.getElementById('ba-loc');
-  ls.innerHTML = [...ZONES, ...ALL_RACKS].map((l) => `<option value="${l}">${l}</option>`).join('');
+  ls.innerHTML = [...ZONES, ...ALL_RACKS].map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   bs.onchange = baPreview;
   ls.onchange = baPreview;
   document.getElementById('m-batchadd').classList.add('open');
@@ -12804,13 +12804,21 @@ async function loadUsersTab() {
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" onclick="deleteUser(${u.id})">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
+    tbl.onclick = onUsersTableClick;
   } catch (e) {
     console.error('Failed to load users:', e);
   }
+}
+
+function onUsersTableClick(e) {
+  const btn = e.target.closest('button[data-action="delete-user"]');
+  if (!btn) return;
+  const id = parseInt(btn.dataset.userId, 10);
+  if (Number.isFinite(id)) deleteUser(id);
 }
 
 async function addUser() {
