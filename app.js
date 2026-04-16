@@ -1111,6 +1111,11 @@ const LANG = {
     'calEntry.deleteOccurrence': 'This occurrence',
     'calEntry.deleteSeries': 'Entire series',
     'calEntry.deleteSeriesMsg': 'The entire recurring series will be permanently removed.',
+    'calEntry.deleteDupTitle': 'Other events with same title',
+    'calEntry.deleteDupMsg':
+      'There are {n} other non-recurring events with the same title. Delete only this one or all of them?',
+    'calEntry.deleteOnlyThis': 'Only this one',
+    'calEntry.deleteAllSameTitle': 'All ({n})',
     // Calendar views
     'cal.allDay': 'All day',
     'cal.allDayShort': 'All-d.',
@@ -2396,6 +2401,11 @@ const LANG = {
     'calEntry.deleteOccurrence': 'Nur diesen Termin',
     'calEntry.deleteSeries': 'Gesamte Serie',
     'calEntry.deleteSeriesMsg': 'Die gesamte wiederkehrende Serie wird unwiderruflich gelöscht.',
+    'calEntry.deleteDupTitle': 'Weitere Events mit gleichem Titel',
+    'calEntry.deleteDupMsg':
+      'Es gibt {n} weitere nicht wiederkehrende Events mit dem gleichen Titel. Nur dieses oder alle löschen?',
+    'calEntry.deleteOnlyThis': 'Nur dieses',
+    'calEntry.deleteAllSameTitle': 'Alle ({n})',
     // Calendar views
     'cal.allDay': 'Ganztägig',
     'cal.allDayShort': 'Ganzt.',
@@ -3690,6 +3700,11 @@ const LANG = {
     'calEntry.deleteOccurrence': 'Esta ocorrência',
     'calEntry.deleteSeries': 'Série inteira',
     'calEntry.deleteSeriesMsg': 'A série recorrente inteira será permanentemente removida.',
+    'calEntry.deleteDupTitle': 'Outros eventos com o mesmo título',
+    'calEntry.deleteDupMsg':
+      'Existem {n} outros eventos não recorrentes com o mesmo título. Excluir apenas este ou todos?',
+    'calEntry.deleteOnlyThis': 'Apenas este',
+    'calEntry.deleteAllSameTitle': 'Todos ({n})',
     // Calendar views
     'cal.allDay': 'Dia inteiro',
     'cal.allDayShort': 'Dia int.',
@@ -14226,6 +14241,18 @@ function saveBatchDueFromDetail(id) {
   closeEventDetail();
 }
 
+function findSameTitleEvents(ce) {
+  if (!ce || !ce.title) return [];
+  return calendarEvents.filter((x) => x.id !== ce.id && !x.recurrence && x.title === ce.title);
+}
+
+function deleteAllSameTitle(ids) {
+  const idSet = new Set(ids);
+  calendarEvents = calendarEvents.filter((x) => !idSet.has(x.id));
+  renderCalendar();
+  ids.forEach((eid) => apiDelete('/api/calendar-events/' + encodeURIComponent(eid)));
+}
+
 function deleteCalEventFromDetail(id, date) {
   closeEventDetail();
   const ce = calendarEvents.find((x) => x.id === id);
@@ -14249,6 +14276,24 @@ function deleteCalEventFromDetail(id, date) {
       }
     );
     return;
+  }
+  if (!isRecurring) {
+    const dups = findSameTitleEvents(ce);
+    if (dups.length) {
+      confirm3(
+        t('calEntry.deleteDupTitle'),
+        t('calEntry.deleteDupMsg', { n: dups.length }),
+        t('calEntry.deleteOnlyThis'),
+        t('calEntry.deleteAllSameTitle', { n: dups.length + 1 }),
+        () => {
+          calendarEvents = calendarEvents.filter((x) => x.id !== id);
+          renderCalendar();
+          apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+        },
+        () => deleteAllSameTitle([id, ...dups.map((d) => d.id)])
+      );
+      return;
+    }
   }
   confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
     calendarEvents = calendarEvents.filter((x) => x.id !== id);
@@ -14626,6 +14671,24 @@ function deleteEntry() {
     const ce = calendarEvents.find((x) => x.id === id);
     const isRecurring = !!(ce && ce.recurrence);
     closeEntryModal();
+    if (!isRecurring) {
+      const dups = findSameTitleEvents(ce);
+      if (dups.length) {
+        confirm3(
+          t('calEntry.deleteDupTitle'),
+          t('calEntry.deleteDupMsg', { n: dups.length }),
+          t('calEntry.deleteOnlyThis'),
+          t('calEntry.deleteAllSameTitle', { n: dups.length + 1 }),
+          () => {
+            calendarEvents = calendarEvents.filter((x) => x.id !== id);
+            apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+            renderCalendar();
+          },
+          () => deleteAllSameTitle([id, ...dups.map((d) => d.id)])
+        );
+        return;
+      }
+    }
     const title = isRecurring ? t('calEntry.deleteRecurTitle') : t('calEntry.deleteEvent');
     const body = isRecurring ? t('calEntry.deleteSeriesMsg') : t('calEntry.deleteEventMsg');
     confirm2(title, body, t('calEntry.delete'), () => {
