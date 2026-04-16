@@ -1106,6 +1106,11 @@ const LANG = {
     'calEntry.deleteEvent': 'Delete event?',
     'calEntry.deleteTaskMsg': 'This task will be permanently removed.',
     'calEntry.deleteEventMsg': 'This event will be permanently removed.',
+    'calEntry.deleteRecurTitle': 'Delete recurring event?',
+    'calEntry.deleteRecurMsg': 'Delete only this occurrence or the entire series?',
+    'calEntry.deleteOccurrence': 'This occurrence',
+    'calEntry.deleteSeries': 'Entire series',
+    'calEntry.deleteSeriesMsg': 'The entire recurring series will be permanently removed.',
     // Calendar views
     'cal.allDay': 'All day',
     'cal.allDayShort': 'All-d.',
@@ -2380,6 +2385,11 @@ const LANG = {
     'calEntry.deleteEvent': 'Event löschen?',
     'calEntry.deleteTaskMsg': 'Diese Aufgabe wird unwiderruflich gelöscht.',
     'calEntry.deleteEventMsg': 'Dieses Event wird unwiderruflich gelöscht.',
+    'calEntry.deleteRecurTitle': 'Wiederkehrendes Event löschen?',
+    'calEntry.deleteRecurMsg': 'Nur diesen Termin oder die gesamte Serie löschen?',
+    'calEntry.deleteOccurrence': 'Nur diesen Termin',
+    'calEntry.deleteSeries': 'Gesamte Serie',
+    'calEntry.deleteSeriesMsg': 'Die gesamte wiederkehrende Serie wird unwiderruflich gelöscht.',
     // Calendar views
     'cal.allDay': 'Ganztägig',
     'cal.allDayShort': 'Ganzt.',
@@ -3663,6 +3673,11 @@ const LANG = {
     'calEntry.deleteEvent': 'Excluir evento?',
     'calEntry.deleteTaskMsg': 'Esta tarefa será permanentemente removida.',
     'calEntry.deleteEventMsg': 'Este evento será permanentemente removido.',
+    'calEntry.deleteRecurTitle': 'Excluir evento recorrente?',
+    'calEntry.deleteRecurMsg': 'Excluir apenas esta ocorrência ou a série inteira?',
+    'calEntry.deleteOccurrence': 'Esta ocorrência',
+    'calEntry.deleteSeries': 'Série inteira',
+    'calEntry.deleteSeriesMsg': 'A série recorrente inteira será permanentemente removida.',
     // Calendar views
     'cal.allDay': 'Dia inteiro',
     'cal.allDayShort': 'Dia int.',
@@ -4439,6 +4454,37 @@ document.getElementById('m-ok').onclick = () => {
 };
 document.getElementById('m-confirm').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm') closeConfirm();
+});
+
+let confirm3CbA = null;
+let confirm3CbB = null;
+function confirm3(title, body, labelA, labelB, cbA, cbB) {
+  document.getElementById('m-title3').textContent = title;
+  document.getElementById('m-body3').textContent = body;
+  document.getElementById('m-ok3a').textContent = labelA;
+  document.getElementById('m-ok3b').textContent = labelB;
+  confirm3CbA = cbA;
+  confirm3CbB = cbB;
+  document.getElementById('m-confirm3').classList.add('open');
+}
+function closeConfirm3() {
+  document.getElementById('m-confirm3').classList.remove('open');
+  confirm3CbA = null;
+  confirm3CbB = null;
+}
+document.getElementById('m-ok3a').onclick = () => {
+  const cb = confirm3CbA;
+  closeConfirm3();
+  if (cb) cb();
+};
+document.getElementById('m-ok3b').onclick = () => {
+  const cb = confirm3CbB;
+  closeConfirm3();
+  if (cb) cb();
+};
+document.getElementById('m-cancel3').onclick = closeConfirm3;
+document.getElementById('m-confirm3').addEventListener('click', (e) => {
+  if (e.target.id === 'm-confirm3') closeConfirm3();
 });
 let promptCb = null;
 function prompt2(title, placeholder, cb) {
@@ -12742,6 +12788,7 @@ function expandRecurringEvent(ev) {
     out.push(ev.startDate);
     return out;
   }
+  const exceptions = new Set(Array.isArray(ev.exceptionDates) ? ev.exceptionDates : []);
   const { start: winStart, end: winEnd } = getCalendarRange();
   const base = parseDateStr(ev.startDate);
   const hardEnd = ev.recurrenceUntil ? parseDateStr(ev.recurrenceUntil) : null;
@@ -12751,7 +12798,8 @@ function expandRecurringEvent(ev) {
     if (hardEnd && cur > hardEnd) break;
     if (cur > winEnd) break;
     if (cur >= winStart || cur.getTime() === base.getTime()) {
-      out.push(localDateStr(cur));
+      const ds = localDateStr(cur);
+      if (!exceptions.has(ds)) out.push(ds);
     }
     if (ev.recurrence === 'daily') cur = addDays(cur, 1);
     else if (ev.recurrence === 'weekly') cur = addDays(cur, 7);
@@ -13830,6 +13878,8 @@ function openEventDetail(ev) {
     btnsEl.innerHTML =
       '<button class="btn btn-r" data-cal-action="delete-event" data-cal-id="' +
       esc(ce.id) +
+      '" data-cal-date="' +
+      esc(occDate || '') +
       '">' +
       esc(t('calEntry.delete')) +
       '</button><span style="flex:1"></span><button class="btn" data-cal-action="close">' +
@@ -13966,8 +14016,9 @@ document.getElementById('cal-detail-btns').addEventListener('click', function (e
   if (!btn) return;
   const action = btn.dataset.calAction;
   const id = btn.dataset.calId;
+  const date = btn.dataset.calDate || '';
   if (action === 'close') return closeEventDetail();
-  if (action === 'delete-event') return deleteCalEventFromDetail(id);
+  if (action === 'delete-event') return deleteCalEventFromDetail(id, date);
   if (action === 'edit-event') return editEventFromDetail(id);
   if (action === 'delete-task') return deleteTaskFromCalendar(id);
   if (action === 'toggle-task') return toggleTaskFromCalendar(id);
@@ -14007,8 +14058,30 @@ function saveBatchDueFromDetail(id) {
   closeEventDetail();
 }
 
-function deleteCalEventFromDetail(id) {
+function deleteCalEventFromDetail(id, date) {
   closeEventDetail();
+  const ce = calendarEvents.find((x) => x.id === id);
+  const isRecurring = !!(ce && ce.recurrence);
+  if (isRecurring && date) {
+    confirm3(
+      t('calEntry.deleteRecurTitle'),
+      t('calEntry.deleteRecurMsg'),
+      t('calEntry.deleteOccurrence'),
+      t('calEntry.deleteSeries'),
+      () => {
+        if (!Array.isArray(ce.exceptionDates)) ce.exceptionDates = [];
+        if (!ce.exceptionDates.includes(date)) ce.exceptionDates.push(date);
+        renderCalendar();
+        apiDelete('/api/calendar-events/' + encodeURIComponent(id) + '?occurrence=' + encodeURIComponent(date));
+      },
+      () => {
+        calendarEvents = calendarEvents.filter((x) => x.id !== id);
+        renderCalendar();
+        apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+      }
+    );
+    return;
+  }
   confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
     calendarEvents = calendarEvents.filter((x) => x.id !== id);
     renderCalendar();
@@ -14382,8 +14455,12 @@ function deleteEntry() {
   } else {
     const id = document.getElementById('cal-entry-id').value;
     if (!id) return;
+    const ce = calendarEvents.find((x) => x.id === id);
+    const isRecurring = !!(ce && ce.recurrence);
     closeEntryModal();
-    confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
+    const title = isRecurring ? t('calEntry.deleteRecurTitle') : t('calEntry.deleteEvent');
+    const body = isRecurring ? t('calEntry.deleteSeriesMsg') : t('calEntry.deleteEventMsg');
+    confirm2(title, body, t('calEntry.delete'), () => {
       calendarEvents = calendarEvents.filter((x) => x.id !== id);
       apiDelete('/api/calendar-events/' + encodeURIComponent(id));
       renderCalendar();

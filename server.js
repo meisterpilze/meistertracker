@@ -5475,7 +5475,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
-  const calEvMatch = req.url.match(/^\/api\/calendar-events\/([^/]+)$/);
+  const calEvMatch = req.url.split('?')[0].match(/^\/api\/calendar-events\/([^/]+)$/);
   if (req.method === 'PATCH' && calEvMatch) {
     const id = decodeURIComponent(calEvMatch[1]);
     jsonBody(req, res, (e, data) => {
@@ -5503,6 +5503,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const id = decodeURIComponent(calEvMatch[1]);
     try {
       const ev = db.getCalendarEventById(database, id);
+      if (!ev) {
+        jsonErr(res, 404, 'event not found');
+        return;
+      }
+      // Optional ?occurrence=YYYY-MM-DD — when present and the event is recurring,
+      // add an exception for just that date instead of deleting the series.
+      const urlObj = new URL(req.url, 'http://x');
+      const occurrence = urlObj.searchParams.get('occurrence');
+      if (occurrence) {
+        const vd = validateDate(occurrence, 'occurrence');
+        if (vd) {
+          jsonErr(res, 400, vd);
+          return;
+        }
+        if (ev.recurrence) {
+          db.addCalendarEventException(database, id, occurrence);
+          broadcastSSE(res);
+          jsonOk(res);
+          return;
+        }
+      }
       db.deleteCalendarEvent(database, id);
       try {
         autoDeleteCalendarEventCaldav(id, ev && ev.caldav_uid);
