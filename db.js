@@ -192,6 +192,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires);
 
+CREATE TABLE IF NOT EXISTS notifications (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT,
+  link_type  TEXT,
+  link_id    TEXT,
+  created    TEXT NOT NULL,
+  read       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created DESC);
+
 CREATE TABLE IF NOT EXISTS assets (
   asset_id            TEXT PRIMARY KEY,
   name                TEXT NOT NULL,
@@ -755,6 +768,26 @@ const MIGRATIONS = [
         .prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='exception_dates'`)
         .get();
       if (!has.c) db.exec(`ALTER TABLE calendar_events ADD COLUMN exception_dates TEXT`);
+    }
+  },
+  {
+    version: 33,
+    description: 'Add notifications table for per-user in-app alerts',
+    fn(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          type       TEXT NOT NULL,
+          title      TEXT NOT NULL,
+          body       TEXT,
+          link_type  TEXT,
+          link_id    TEXT,
+          created    TEXT NOT NULL,
+          read       INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created DESC);
+      `);
     }
   }
 ];
@@ -1757,6 +1790,50 @@ function deleteExpiredSessions(db) {
   db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
 }
 
+// ── Notifications ──
+function createNotification(db, { userId, type, title, body, linkType, linkId }) {
+  if (!userId || !type || !title) throw new Error('createNotification: userId, type, title required');
+  const info = db
+    .prepare(
+      `INSERT INTO notifications(user_id, type, title, body, link_type, link_id, created, read)
+       VALUES(?, ?, ?, ?, ?, ?, ?, 0)`
+    )
+    .run(userId, type, title, body || null, linkType || null, linkId || null, new Date().toISOString());
+  return info.lastInsertRowid;
+}
+
+function listNotifications(db, userId, limit = 20) {
+  const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  return db
+    .prepare(
+      `SELECT id, user_id AS userId, type, title, body, link_type AS linkType, link_id AS linkId, created, read
+       FROM notifications
+       WHERE user_id = ?
+       ORDER BY created DESC
+       LIMIT ?`
+    )
+    .all(userId, lim);
+}
+
+function countUnreadNotifications(db, userId) {
+  const row = db.prepare('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0').get(userId);
+  return row ? row.c : 0;
+}
+
+function markNotificationsRead(db, userId, ids) {
+  if (ids == null) {
+    // Mark all unread as read
+    const info = db.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0').run(userId);
+    return info.changes;
+  }
+  if (!Array.isArray(ids) || !ids.length) return 0;
+  const placeholders = ids.map(() => '?').join(',');
+  const info = db
+    .prepare(`UPDATE notifications SET read = 1 WHERE user_id = ? AND id IN (${placeholders})`)
+    .run(userId, ...ids);
+  return info.changes;
+}
+
 function countUsers(db) {
   return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 }
@@ -2743,6 +2820,13 @@ function setCalendarEventAssignees(db, eventId, userIds) {
   const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
   for (const uid of userIds) ins.run(eventId, uid);
   incrementDataVersion(db);
+}
+
+function getCalendarEventAssignees(db, eventId) {
+  return db
+    .prepare('SELECT user_id FROM calendar_event_assignees WHERE event_id = ?')
+    .all(eventId)
+    .map((r) => r.user_id);
 }
 
 function getAllCalendarEventAssignees(db) {
@@ -3837,6 +3921,10 @@ module.exports = {
   deleteSession,
   deleteSessionsByUserId,
   deleteExpiredSessions,
+  createNotification,
+  listNotifications,
+  countUnreadNotifications,
+  markNotificationsRead,
   countUsers,
   listUsers,
   deleteUser,
@@ -3888,6 +3976,7 @@ module.exports = {
   addCalendarEventException,
   readCalendarEventByCaldavUid,
   setCalendarEventAssignees,
+  getCalendarEventAssignees,
   getAllCalendarEventAssignees,
   insertZone,
   deleteZone,
