@@ -14869,10 +14869,6 @@ function getSelectedAssigneeIds() {
   const dd = document.getElementById('cal-ev-assignee-dropdown');
   if (dd) {
     dd.addEventListener('click', function (e) {
-      if (e.target.matches('[data-assignee-checkbox]')) {
-        e.stopPropagation();
-        return;
-      }
       const lbl = e.target.closest('[data-assignee-toggle]');
       if (!lbl) return;
       e.stopPropagation();
