@@ -1306,6 +1306,9 @@ const LANG = {
     'alert.batchOverdue.other': '{n} batches overdue — ready to move',
     'alert.dueToday.one': '1 batch due today or needs attention',
     'alert.dueToday.other': '{n} batches due today or need attention',
+    'alert.filterDueToday': 'Due today or needs attention',
+    'alert.filterOverdue': 'Overdue',
+    'alert.filterShowAll': 'Show all',
     // Scan log
     'log.entries': '{n} entries',
     'log.entriesFiltered': '{n} of {total} entries',
@@ -2612,6 +2615,9 @@ const LANG = {
     'alert.batchOverdue.other': '{n} Chargen \u00fcberf\u00e4llig \u2014 bereit zum Umzug',
     'alert.dueToday.one': '1 Charge heute f\u00e4llig oder braucht Aufmerksamkeit',
     'alert.dueToday.other': '{n} Chargen heute f\u00e4llig oder brauchen Aufmerksamkeit',
+    'alert.filterDueToday': 'Heute f\u00e4llig oder braucht Aufmerksamkeit',
+    'alert.filterOverdue': '\u00dcberf\u00e4llig',
+    'alert.filterShowAll': 'Alle anzeigen',
     // Scan log
     'log.entries': '{n} Eintr\u00e4ge',
     'log.entriesFiltered': '{n} von {total} Eintr\u00e4gen',
@@ -3919,6 +3925,9 @@ const LANG = {
     'alert.batchOverdue.other': '{n} lotes atrasados \u2014 prontos para mover',
     'alert.dueToday.one': '1 lote vence hoje ou precisa de aten\u00e7\u00e3o',
     'alert.dueToday.other': '{n} lotes vencem hoje ou precisam de aten\u00e7\u00e3o',
+    'alert.filterDueToday': 'Vencem hoje ou precisam de aten\u00e7\u00e3o',
+    'alert.filterOverdue': 'Atrasados',
+    'alert.filterShowAll': 'Mostrar todos',
     // Scan log
     'log.entries': '{n} entradas',
     'log.entriesFiltered': '{n} de {total} entradas',
@@ -6381,7 +6390,13 @@ function renderDashAlerts() {
     return new Date(b.due) < today;
   }).length;
   const overdueAlerts = overdueCount
-    ? [{ text: tp('alert.batchOverdue', overdueCount), urgent: overdueCount >= 3, goPage: 'batch', goBtn: 'n-batch' }]
+    ? [
+        {
+          text: tp('alert.batchOverdue', overdueCount),
+          urgent: overdueCount >= 3,
+          attentionKey: 'overdue'
+        }
+      ]
     : [];
   // Zone capacity warnings (≥90%)
   const capAlerts = [];
@@ -6402,7 +6417,13 @@ function renderDashAlerts() {
   const dueToday = countDueToday();
   const dueTodayAlerts =
     dueToday > 0
-      ? [{ text: tp('alert.dueToday', dueToday), urgent: dueToday >= 3, goPage: 'batch', goBtn: 'n-batch' }]
+      ? [
+          {
+            text: tp('alert.dueToday', dueToday),
+            urgent: dueToday >= 3,
+            attentionKey: 'dueToday'
+          }
+        ]
       : [];
   const labAlerts = getLabAlerts().map((a) => ({ ...a, goPage: 'lab', goBtn: 'n-lab' }));
   const allAlerts = [...dueTodayAlerts, ...overdueAlerts, ...invAlerts, ...labAlerts, ...capAlerts];
@@ -6414,10 +6435,12 @@ function renderDashAlerts() {
   }
   card.style.display = '';
   el.innerHTML = allAlerts
-    .map(
-      (a) =>
-        `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div><button class="btn btn-sm" onclick="go('${a.goPage}','${a.goBtn}')" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button></div>`
-    )
+    .map((a) => {
+      const btn = a.attentionKey
+        ? `<button class="btn btn-sm" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
+        : `<button class="btn btn-sm" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
+    })
     .join('');
 }
 function renderDashBatchTasks() {
@@ -6472,8 +6495,74 @@ function renderDashBatchTasks() {
       '</div>';
 }
 
+// Attention filter: temporarily restrict the batches list to a subset (due today, overdue, ...)
+// Set by dashboard View buttons; cleared by a banner in the batches list.
+let batchAttentionFilter = null; // { pred: (batch) => boolean, label: string } | null
+
+const BATCH_ATTENTION_PRESETS = {
+  dueToday: {
+    labelKey: 'alert.filterDueToday',
+    pred: (b) => {
+      const { status } = getStatus(b.batchId);
+      if (status === 'DONE' || status === 'EMPTY') return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const due = new Date(b.due);
+      due.setHours(0, 0, 0, 0);
+      const dl = Math.round((due - today) / 864e5);
+      return dl <= 0 || status === 'FRUITING' || status === 'CONTAM';
+    }
+  },
+  overdue: {
+    labelKey: 'alert.filterOverdue',
+    pred: (b) => {
+      const { status } = getStatus(b.batchId);
+      if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return new Date(b.due) < today;
+    }
+  }
+};
+
+function goToBatchesAttention(key) {
+  const preset = BATCH_ATTENTION_PRESETS[key];
+  if (!preset) return;
+  batchAttentionFilter = { pred: preset.pred, label: t(preset.labelKey) };
+  const input = document.getElementById('batch-q');
+  if (input) input.value = '';
+  go('batch', 'n-batch');
+  openStab('batch', 'list');
+}
+
+function clearBatchAttentionFilter() {
+  batchAttentionFilter = null;
+  renderBatches();
+}
+
+function renderBatchAttentionBanner() {
+  const card = document.getElementById('sp-batch-list')?.querySelector('.card');
+  if (!card) return;
+  let banner = document.getElementById('batch-attention-banner');
+  if (!batchAttentionFilter) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'batch-attention-banner';
+    banner.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:8px;background:#fed7aa;border-left:4px solid #ea580c;border-radius:6px;font-size:12px;color:#7c2d12;font-weight:500';
+    card.insertBefore(banner, card.firstChild);
+  }
+  banner.innerHTML =
+    `<div style="flex:1">${esc(batchAttentionFilter.label)}</div>` +
+    `<button class="btn btn-sm" data-action="clear-attention" style="font-size:11px;padding:2px 8px;background:#ea580c;color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
+}
+
 // Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
 function goToBatch(batchId) {
+  batchAttentionFilter = null;
   const input = document.getElementById('batch-q');
   if (input) input.value = batchId;
   go('batch', 'n-batch');
@@ -7418,17 +7507,19 @@ function renderBatches() {
   const q = (document.getElementById('batch-q').value || '').toLowerCase(),
     body = document.getElementById('batches-body');
   updateSortIndicators('batches', tableSort.batches);
+  renderBatchAttentionBanner();
   if (!batches.length) {
     body.innerHTML = '<tr><td colspan="12" class="empty">' + t('dash.noBatches') + '</td></tr>';
     return;
   }
   const filtered = batches.filter(
     (b) =>
-      !q ||
-      b.batchId.toLowerCase().includes(q) ||
-      (b.species || '').toLowerCase().includes(q) ||
-      (b.strain || '').toLowerCase().includes(q) ||
-      (b.strainName || '').toLowerCase().includes(q)
+      (!q ||
+        b.batchId.toLowerCase().includes(q) ||
+        (b.species || '').toLowerCase().includes(q) ||
+        (b.strain || '').toLowerCase().includes(q) ||
+        (b.strainName || '').toLowerCase().includes(q)) &&
+      (!batchAttentionFilter || batchAttentionFilter.pred(b))
   );
   const sorted = applyTableSort(filtered, tableSort.batches, (b, k) => {
     if (k === 'strain') return (b.strainText || '').trim() || (!b.strainId && b.strain ? b.strain : '');
@@ -15411,6 +15502,7 @@ function initEventListeners() {
     });
   }
   $('n-batch').addEventListener('click', () => {
+    batchAttentionFilter = null;
     go('batch', 'n-batch');
   });
   $('n-lab').addEventListener('click', () => {
@@ -15519,10 +15611,22 @@ function initEventListeners() {
   }
   $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
   $('dash-harvest-tasks').addEventListener('click', dashTaskCardClick);
+  $('dash-alerts').addEventListener('click', function (e) {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    switch (el.dataset.action) {
+      case 'go-attention':
+        goToBatchesAttention(el.dataset.key);
+        break;
+      case 'go-page':
+        go(el.dataset.page, el.dataset.btn);
+        break;
+    }
+  });
   applyDashMode();
 
-  // Batches — delegated actions for dynamically rendered rows (CSP-safe)
-  $('batches-body').addEventListener('click', function (e) {
+  // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
+  $('sp-batch-list').addEventListener('click', function (e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const batch = el.dataset.batch;
@@ -15541,6 +15645,9 @@ function initEventListeners() {
         break;
       case 'open-move-modal':
         openMoveBatchModal(batch);
+        break;
+      case 'clear-attention':
+        clearBatchAttentionFilter();
         break;
     }
   });
