@@ -4390,6 +4390,11 @@ function onNotifItemClick(e) {
       // openEventDetail accepts a simplified occurrence object; match its shape
       openEventDetail({ type: 'custom', id: ce.id, date: ce.startDate });
     }
+  } else if (linkType === 'task' && linkId) {
+    go('cal', 'n-cal');
+    const tid = parseInt(linkId, 10);
+    const tk = manualTasks.find((x) => x.id === tid);
+    if (tk) openEntryModal('task', tk.dueDate, null, tk);
   }
 }
 
