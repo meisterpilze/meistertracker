@@ -1226,6 +1226,15 @@
                 </details>
               </div>
 
+              <!-- Ready to harvest (fruiting batches — separated from Batch tasks to keep it uncluttered) -->
+              <div class="card" id="dash-harvest-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0; display: none">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+                  <div class="sec" style="margin: 0" data-i18n="harvest.readyToHarvest">Ready to harvest</div>
+                  <span id="dash-harvest-count" style="font-size: 11px; color: var(--c-text-muted)"></span>
+                </div>
+                <div id="dash-harvest-tasks"></div>
+              </div>
+
               <!-- Alerts (inventory + overdue batches + capacity) -->
               <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
                 <div style="margin-bottom: 6px">
