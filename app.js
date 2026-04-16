@@ -1279,6 +1279,12 @@ const LANG = {
     'time.secsAgo': '{n}s ago',
     'time.minsAgo': '{n} min ago',
     'time.hoursAgo': '{n}h ago',
+    'time.daysAgo': '{n}d ago',
+    // Notifications
+    'notifications.title': 'Notifications',
+    'notifications.empty': 'No notifications',
+    'notifications.markAllRead': 'Mark all as read',
+    'notifications.assignedCalendarEvent': 'You were assigned an event: {title}',
     // Alerts
     'alert.batchOverdue.one': '1 batch overdue — ready to move',
     'alert.batchOverdue.other': '{n} batches overdue — ready to move',
@@ -2562,6 +2568,12 @@ const LANG = {
     'time.secsAgo': 'vor {n}s',
     'time.minsAgo': 'vor {n} Min.',
     'time.hoursAgo': 'vor {n} Std.',
+    'time.daysAgo': 'vor {n} Tagen',
+    // Benachrichtigungen
+    'notifications.title': 'Benachrichtigungen',
+    'notifications.empty': 'Keine Benachrichtigungen',
+    'notifications.markAllRead': 'Alle als gelesen markieren',
+    'notifications.assignedCalendarEvent': 'Du wurdest einem Termin zugewiesen: {title}',
     // Alerts
     'alert.batchOverdue.one': '1 Charge \u00fcberf\u00e4llig \u2014 bereit zum Umzug',
     'alert.batchOverdue.other': '{n} Chargen \u00fcberf\u00e4llig \u2014 bereit zum Umzug',
@@ -3846,6 +3858,12 @@ const LANG = {
     'time.secsAgo': 'h\u00e1 {n}s',
     'time.minsAgo': 'h\u00e1 {n} min',
     'time.hoursAgo': 'h\u00e1 {n}h',
+    'time.daysAgo': 'h\u00e1 {n} dias',
+    // Notifica\u00e7\u00f5es
+    'notifications.title': 'Notifica\u00e7\u00f5es',
+    'notifications.empty': 'Sem notifica\u00e7\u00f5es',
+    'notifications.markAllRead': 'Marcar todas como lidas',
+    'notifications.assignedCalendarEvent': 'Foi-lhe atribu\u00eddo um evento: {title}',
     // Alerts
     'alert.batchOverdue.one': '1 lote atrasado \u2014 pronto para mover',
     'alert.batchOverdue.other': '{n} lotes atrasados \u2014 prontos para mover',
@@ -4184,6 +4202,9 @@ function applyData(d) {
   fillCultureSelect('gs-culture', ['PD', 'LC']);
   updateTodoBadge();
   if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
+  if (d.notifications && typeof d.notifications.unread === 'number') {
+    renderNotifBadge(d.notifications.unread);
+  }
 }
 function defaultInventory() {
   return {
@@ -4205,8 +4226,155 @@ function formatRelativeTime(ts) {
   if (sec < 60) return t('time.secsAgo', { n: sec });
   const min = Math.floor(sec / 60);
   if (min < 60) return t('time.minsAgo', { n: min });
-  return t('time.hoursAgo', { n: Math.floor(min / 60) });
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return t('time.hoursAgo', { n: hr });
+  return t('time.daysAgo', { n: Math.floor(hr / 24) });
 }
+// ─── NOTIFICATIONS ──────────────────────────────────────────
+let _notifOpen = false;
+let _notifItems = [];
+let _notifOutsideHandler = null;
+
+function renderNotifBadge(count) {
+  const n = typeof count === 'number' && count > 0 ? count : 0;
+  const text = n > 99 ? '99+' : String(n);
+  for (const id of ['bell-badge', 'bell-badge-m']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (n > 0) {
+      el.textContent = text;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  }
+}
+
+async function openNotifDropdown(anchorEl) {
+  if (_notifOpen) return closeNotifDropdown();
+  const dd = document.getElementById('notif-dropdown');
+  if (!dd) return;
+  // Load items
+  try {
+    const r = await authFetch('/api/notifications');
+    const data = await r.json();
+    _notifItems = Array.isArray(data.items) ? data.items : [];
+    if (typeof data.unread === 'number') renderNotifBadge(data.unread);
+  } catch (e) {
+    _notifItems = [];
+  }
+  renderNotifList(_notifItems);
+  positionNotifDropdown(dd, anchorEl);
+  dd.hidden = false;
+  _notifOpen = true;
+  // Outside-click to close (captured on next tick so the opening click doesn't fire it)
+  setTimeout(() => {
+    _notifOutsideHandler = (e) => {
+      if (!dd.contains(e.target) && !e.target.closest('#n-notif') && !e.target.closest('#n-notif-m')) {
+        closeNotifDropdown();
+      }
+    };
+    document.addEventListener('click', _notifOutsideHandler);
+  }, 0);
+}
+
+function positionNotifDropdown(dd, anchorEl) {
+  // On mobile the CSS already pins it to the top-right of the viewport.
+  // On desktop, anchor it to the sidebar bell: the CSS default covers this.
+  // If the user clicks the mobile bell we let CSS handle positioning.
+  if (!anchorEl) return;
+  // No JS positioning needed; CSS handles both the sidebar and mobile cases.
+}
+
+function closeNotifDropdown() {
+  const dd = document.getElementById('notif-dropdown');
+  if (dd) dd.hidden = true;
+  _notifOpen = false;
+  if (_notifOutsideHandler) {
+    document.removeEventListener('click', _notifOutsideHandler);
+    _notifOutsideHandler = null;
+  }
+}
+
+function renderNotifList(items) {
+  const list = document.getElementById('notif-list');
+  const empty = document.getElementById('notif-empty');
+  if (!list || !empty) return;
+  if (!items.length) {
+    list.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  list.innerHTML = items
+    .map((it) => {
+      const ts = it.created ? new Date(it.created).getTime() : Date.now();
+      const rel = formatRelativeTime(ts);
+      const unreadCls = it.read ? '' : 'unread';
+      // esc() is the existing HTML-escape helper used throughout app.js
+      return (
+        '<button type="button" class="notif-item ' +
+        unreadCls +
+        '" data-nid="' +
+        it.id +
+        '" data-link-type="' +
+        esc(it.linkType || '') +
+        '" data-link-id="' +
+        esc(it.linkId || '') +
+        '">' +
+        '<div class="notif-item-title">' +
+        esc(it.title || '') +
+        '</div>' +
+        (it.body ? '<div class="notif-item-body">' + esc(it.body) + '</div>' : '') +
+        '<div class="notif-item-time">' +
+        esc(rel) +
+        '</div>' +
+        '</button>'
+      );
+    })
+    .join('');
+  // Wire click handlers on each item
+  for (const el of list.querySelectorAll('.notif-item')) {
+    el.addEventListener('click', onNotifItemClick);
+  }
+}
+
+function onNotifItemClick(e) {
+  const el = e.currentTarget;
+  const id = parseInt(el.getAttribute('data-nid'), 10);
+  const linkType = el.getAttribute('data-link-type');
+  const linkId = el.getAttribute('data-link-id');
+  // Optimistic: mark this single item as read so the badge drops instantly
+  if (!Number.isNaN(id)) {
+    apiPost('/api/notifications/read', { ids: [id] }).catch(() => {});
+    const badge = document.getElementById('bell-badge');
+    const n = badge && !badge.hidden ? Math.max(0, parseInt(badge.textContent, 10) - 1) : 0;
+    renderNotifBadge(n);
+  }
+  closeNotifDropdown();
+  if (linkType === 'calendar_event' && linkId) {
+    // Navigate to the calendar tab, then open the event detail modal
+    go('cal', 'n-cal');
+    const ce = calendarEvents.find((x) => x.id === linkId);
+    if (ce) {
+      // openEventDetail accepts a simplified occurrence object; match its shape
+      openEventDetail({ type: 'custom', id: ce.id, date: ce.startDate });
+    }
+  }
+}
+
+async function markAllNotifRead() {
+  try {
+    await apiPost('/api/notifications/read', { all: true });
+  } catch (e) {
+    /* ignore */
+  }
+  renderNotifBadge(0);
+  // Update local list to reflect read state
+  _notifItems = _notifItems.map((it) => ({ ...it, read: 1 }));
+  renderNotifList(_notifItems);
+}
+
 function setSyncStatus(cls, msg) {
   document.getElementById('sync-dot').className = 'sync-dot ' + cls;
   document.getElementById('sync-label').textContent = msg;
@@ -14925,6 +15093,28 @@ function initEventListeners() {
   $('n-cal').addEventListener('click', () => {
     go('cal', 'n-cal');
   });
+  // Notifications bell (desktop + mobile share the same dropdown)
+  const notifBtn = $('n-notif');
+  if (notifBtn) {
+    notifBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openNotifDropdown(notifBtn);
+    });
+  }
+  const notifBtnM = $('n-notif-m');
+  if (notifBtnM) {
+    notifBtnM.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openNotifDropdown(notifBtnM);
+    });
+  }
+  const notifMarkRead = $('notif-mark-read');
+  if (notifMarkRead) {
+    notifMarkRead.addEventListener('click', (e) => {
+      e.stopPropagation();
+      markAllNotifRead();
+    });
+  }
   $('n-batch').addEventListener('click', () => {
     go('batch', 'n-batch');
   });
