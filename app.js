@@ -4391,10 +4391,13 @@ function onNotifItemClick(e) {
       openEventDetail({ type: 'custom', id: ce.id, date: ce.startDate });
     }
   } else if (linkType === 'task' && linkId) {
+    // Tasks in the calendar are keyed by their `created` timestamp, so look
+    // the task up by its numeric DB id first, then dispatch to the detail
+    // modal using the timestamp — same shape clicking the task tile produces.
     go('cal', 'n-cal');
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
-    if (tk) openEntryModal('task', tk.dueDate, null, tk);
+    if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
   }
 }
 
