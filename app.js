@@ -14948,10 +14948,6 @@ function toggleTaskAssignee(name) {
   const dd = document.getElementById('cal-task-assignee-dropdown');
   if (dd) {
     dd.addEventListener('click', function (e) {
-      if (e.target.matches('[data-assignee-checkbox]')) {
-        e.stopPropagation();
-        return;
-      }
       const lbl = e.target.closest('[data-task-assignee-toggle]');
       if (!lbl) return;
       e.stopPropagation();
