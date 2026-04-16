@@ -4945,11 +4945,12 @@ function countDueToday() {
   today.setHours(0, 0, 0, 0);
   return batches.filter((b) => {
     const { status } = getStatus(b.batchId);
-    if (status === 'DONE' || status === 'EMPTY') return false;
+    // FRUITING is surfaced via its own "Ready to harvest" card — don't double-count it here.
+    if (status === 'DONE' || status === 'EMPTY' || status === 'FRUITING') return false;
     const due = new Date(b.due);
     due.setHours(0, 0, 0, 0);
     const dl = Math.round((due - today) / 864e5);
-    return dl <= 0 || status === 'FRUITING' || status === 'CONTAM';
+    return dl <= 0 || status === 'CONTAM';
   }).length;
 }
 function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
@@ -6504,13 +6505,14 @@ const BATCH_ATTENTION_PRESETS = {
     labelKey: 'alert.filterDueToday',
     pred: (b) => {
       const { status } = getStatus(b.batchId);
-      if (status === 'DONE' || status === 'EMPTY') return false;
+      // Must match countDueToday — fruiting is handled by Ready-to-harvest.
+      if (status === 'DONE' || status === 'EMPTY' || status === 'FRUITING') return false;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const due = new Date(b.due);
       due.setHours(0, 0, 0, 0);
       const dl = Math.round((due - today) / 864e5);
-      return dl <= 0 || status === 'FRUITING' || status === 'CONTAM';
+      return dl <= 0 || status === 'CONTAM';
     }
   },
   overdue: {
