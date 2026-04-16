@@ -713,3 +713,109 @@ describe('db – mushroom strains CRUD', () => {
     assert.ok(!list.some((s) => s.id === Number(freshId)));
   });
 });
+
+describe('db – notifications', () => {
+  let d, p, userA, userB;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.createUser(d, 'notif-a', 'password123', 'admin');
+    db.createUser(d, 'notif-b', 'password123', 'user');
+    userA = db.getUserByUsername(d, 'notif-a');
+    userB = db.getUserByUsername(d, 'notif-b');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('createNotification inserts a row and returns its id', () => {
+    const id = db.createNotification(d, {
+      userId: userB.id,
+      type: 'calendar_assignment',
+      title: 'New event: Pasteurize grain',
+      body: 'From notif-a · 2026-04-17',
+      linkType: 'calendar_event',
+      linkId: 'cev-test-1'
+    });
+    assert.ok(typeof id === 'number' || typeof id === 'bigint');
+  });
+
+  it('createNotification requires userId, type, and title', () => {
+    assert.throws(() => db.createNotification(d, { type: 't', title: 'x' }));
+    assert.throws(() => db.createNotification(d, { userId: userB.id, title: 'x' }));
+    assert.throws(() => db.createNotification(d, { userId: userB.id, type: 't' }));
+  });
+
+  it('countUnreadNotifications counts only unread rows for the user', () => {
+    assert.equal(db.countUnreadNotifications(d, userB.id), 1);
+    assert.equal(db.countUnreadNotifications(d, userA.id), 0);
+  });
+
+  it('listNotifications returns newest first', () => {
+    db.createNotification(d, {
+      userId: userB.id,
+      type: 'calendar_assignment',
+      title: 'Second event',
+      linkType: 'calendar_event',
+      linkId: 'cev-test-2'
+    });
+    const items = db.listNotifications(d, userB.id);
+    assert.equal(items.length, 2);
+    assert.equal(items[0].title, 'Second event');
+    assert.equal(items[0].read, 0);
+    assert.equal(items[0].linkId, 'cev-test-2');
+    assert.equal(items[0].linkType, 'calendar_event');
+  });
+
+  it('markNotificationsRead with null ids marks all unread as read', () => {
+    const changed = db.markNotificationsRead(d, userB.id, null);
+    assert.equal(changed, 2);
+    assert.equal(db.countUnreadNotifications(d, userB.id), 0);
+  });
+
+  it('markNotificationsRead with null ids is idempotent when nothing unread', () => {
+    const changed = db.markNotificationsRead(d, userB.id, null);
+    assert.equal(changed, 0);
+  });
+
+  it('markNotificationsRead with specific ids only marks those', () => {
+    const id1 = db.createNotification(d, {
+      userId: userB.id,
+      type: 'calendar_assignment',
+      title: 'Third'
+    });
+    const id2 = db.createNotification(d, {
+      userId: userB.id,
+      type: 'calendar_assignment',
+      title: 'Fourth'
+    });
+    assert.equal(db.countUnreadNotifications(d, userB.id), 2);
+    const changed = db.markNotificationsRead(d, userB.id, [Number(id1)]);
+    assert.equal(changed, 1);
+    assert.equal(db.countUnreadNotifications(d, userB.id), 1);
+    // Cleanup: mark remaining
+    db.markNotificationsRead(d, userB.id, [Number(id2)]);
+  });
+
+  it('markNotificationsRead is scoped to the user (no cross-user writes)', () => {
+    const idA = db.createNotification(d, {
+      userId: userA.id,
+      type: 'calendar_assignment',
+      title: 'For A'
+    });
+    assert.equal(db.countUnreadNotifications(d, userA.id), 1);
+    // userB tries to mark userA's notification as read — should be a no-op
+    const changed = db.markNotificationsRead(d, userB.id, [Number(idA)]);
+    assert.equal(changed, 0);
+    assert.equal(db.countUnreadNotifications(d, userA.id), 1);
+  });
+
+  it('deleting a user cascades and removes their notifications', () => {
+    db.createUser(d, 'notif-temp', 'password123', 'user');
+    const temp = db.getUserByUsername(d, 'notif-temp');
+    db.createNotification(d, { userId: temp.id, type: 'test', title: 'bye' });
+    assert.equal(db.countUnreadNotifications(d, temp.id), 1);
+    db.deleteUser(d, temp.id);
+    assert.equal(db.countUnreadNotifications(d, temp.id), 0);
+  });
+});
