@@ -1165,6 +1165,8 @@ const LANG = {
     'aria.cameraScanner': 'Camera scanner',
     'aria.switchCamera': 'Switch camera',
     'aria.closeCamera': 'Close camera',
+    'aria.clearLastScan': 'Undo last scan',
+    'aria.doneScanning': 'Done scanning',
     'aria.toggleSidebar': 'Toggle sidebar',
     'aria.mainNav': 'Main navigation',
     'aria.openMenu': 'Open menu',
@@ -1336,6 +1338,7 @@ const LANG = {
     'cam.notFound': 'No camera found.',
     'cam.inUse': 'Camera is in use by another application.',
     'cam.unknownError': 'Camera error: {err}',
+    'cam.nothingToUndo': 'Nothing to undo',
     // Offline
     'offline.queued': '{n} queued',
     // Task delete
@@ -2456,6 +2459,8 @@ const LANG = {
     'aria.cameraScanner': 'Kamera-Scanner',
     'aria.switchCamera': 'Kamera wechseln',
     'aria.closeCamera': 'Kamera schlie\u00dfen',
+    'aria.clearLastScan': 'Letzten Scan zur\u00fccknehmen',
+    'aria.doneScanning': 'Scannen fertig',
     'aria.toggleSidebar': 'Seitenleiste umschalten',
     'aria.mainNav': 'Hauptnavigation',
     'aria.openMenu': 'Men\u00fc \u00f6ffnen',
@@ -2635,6 +2640,7 @@ const LANG = {
     'cam.notFound': 'Keine Kamera gefunden.',
     'cam.inUse': 'Kamera wird von einer anderen Anwendung verwendet.',
     'cam.unknownError': 'Kamerafehler: {err}',
+    'cam.nothingToUndo': 'Nichts zum R\u00fcckg\u00e4ngig machen',
     // Offline
     'offline.queued': '{n} in Warteschlange',
     // Task delete
@@ -3755,6 +3761,8 @@ const LANG = {
     'aria.cameraScanner': 'Scanner de c\u00e2mera',
     'aria.switchCamera': 'Mudar c\u00e2mera',
     'aria.closeCamera': 'Fechar c\u00e2mera',
+    'aria.clearLastScan': 'Desfazer \u00faltimo scan',
+    'aria.doneScanning': 'Scan conclu\u00eddo',
     'aria.toggleSidebar': 'Alternar barra lateral',
     'aria.mainNav': 'Navega\u00e7\u00e3o principal',
     'aria.openMenu': 'Abrir menu',
@@ -3936,6 +3944,7 @@ const LANG = {
     'cam.notFound': 'Nenhuma c\u00e2mera encontrada.',
     'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
     'cam.unknownError': 'Erro de c\u00e2mera: {err}',
+    'cam.nothingToUndo': 'Nada para desfazer',
     // Offline
     'offline.queued': '{n} na fila',
     // Task delete
@@ -15082,8 +15091,11 @@ function openCamScan() {
       {
         fps: 10,
         qrbox: function (vw, vh) {
-          var s = Math.min(250, Math.floor(Math.min(vw, vh) * 0.7));
-          return { width: s, height: s };
+          // Wide-short rectangle — fits 1D barcodes (EAN/Code128) without clipping,
+          // and QR codes still sit comfortably inside the width.
+          var w = Math.floor(Math.min(vw, vh) * 0.88);
+          var h = Math.max(80, Math.floor(w * 0.38));
+          return { width: w, height: h };
         },
         aspectRatio: 1.0
       },
@@ -15151,6 +15163,27 @@ function flipCamera() {
     closeCamScan();
     setTimeout(openCamScan, 300);
   }
+}
+// Undo the most recent non-HARVEST scan from inside the camera HUD.
+// Reuses undoScanEntry via the hidden scan-log row (created on every successful scan).
+function camUndoLastScan() {
+  if (!sessionEntries || sessionEntries.length === 0) {
+    _showCamHudToast('info', t('cam.nothingToUndo'));
+    return;
+  }
+  var last = null;
+  for (var i = sessionEntries.length - 1; i >= 0; i--) {
+    if (sessionEntries[i].action !== 'HARVEST') {
+      last = sessionEntries[i];
+      break;
+    }
+  }
+  if (!last) {
+    _showCamHudToast('info', t('cam.nothingToUndo'));
+    return;
+  }
+  var btn = document.querySelector('[data-scan-id="' + last._tempId + '"] .sle-undo');
+  if (btn) undoScanEntry(btn);
 }
 function copyCalDavUrl() {
   const url = document.getElementById('caldav-url-display').textContent;
@@ -15232,6 +15265,7 @@ function initEventListeners() {
   });
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
+  $('btn-cam-undo').addEventListener('click', camUndoLastScan);
 
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
