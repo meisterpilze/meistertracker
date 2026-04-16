@@ -1822,6 +1822,17 @@ function resolveUsernamesToIds(names) {
   return ids;
 }
 
+// Single source of truth: given a calendar-event request body, return the
+// user IDs that should be written to calendar_event_assignees. Prefer explicit
+// `assignees` (already-resolved IDs); fall back to deriving them from
+// `teamAssignees` names. Returns null if neither field is present so callers
+// can distinguish "not provided" from "empty array".
+function deriveEffectiveAssignees(data) {
+  if (Array.isArray(data.assignees)) return data.assignees;
+  if (Array.isArray(data.teamAssignees)) return resolveUsernamesToIds(data.teamAssignees);
+  return null;
+}
+
 // Best-effort notifications when a task gains new assignees. Notifies the
 // actor too — self-assignments still produce an inbox entry.
 function notifyTaskAssignees(task, userIds, actor) {
@@ -5598,12 +5609,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        // Accept either explicit assignees (user IDs) or derive them from
-        // teamAssignees (names the UI actually sends).
-        let assignees = Array.isArray(data.assignees) ? data.assignees : null;
-        if (!assignees && Array.isArray(data.teamAssignees)) {
-          assignees = resolveUsernamesToIds(data.teamAssignees);
-        }
+        const assignees = deriveEffectiveAssignees(data);
         db.insertCalendarEvent(database, data, assignees);
         autoSyncCalendarEvent(data);
         if (assignees && assignees.length) {
@@ -5626,20 +5632,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        // Capture existing assignees BEFORE mutating so we can diff
+        // Atomically update the event row + refresh the assignees junction
+        // table so the two can't drift apart on a mid-operation crash.
+        const effectiveAssignees = deriveEffectiveAssignees(data);
         const prevAssignees = db.getCalendarEventAssignees(database, id);
-        db.updateCalendarEvent(database, id, data);
+        const applyUpdate = database.transaction(() => {
+          db.updateCalendarEvent(database, id, data);
+          if (effectiveAssignees) {
+            db.setCalendarEventAssignees(database, id, effectiveAssignees);
+          }
+        });
+        applyUpdate();
         let newlyAdded = null;
-        let effectiveAssignees = null;
-        if (data.assignees !== undefined && Array.isArray(data.assignees)) {
-          effectiveAssignees = data.assignees;
-        } else if (Array.isArray(data.teamAssignees)) {
-          effectiveAssignees = resolveUsernamesToIds(data.teamAssignees);
-        }
         if (effectiveAssignees) {
           const prevSet = new Set(prevAssignees);
           newlyAdded = effectiveAssignees.filter((uid) => !prevSet.has(uid));
-          db.setCalendarEventAssignees(database, id, effectiveAssignees);
         }
         const fullEv = db.getCalendarEventById(database, id);
         if (fullEv) autoSyncCalendarEvent(fullEv);
