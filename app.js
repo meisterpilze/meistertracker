@@ -203,7 +203,6 @@ const LANG = {
     'dash.ov.na': '—',
     'dash.ov.history': 'KPI History',
     'dash.ov.historyHarvest': 'Daily harvest (kg)',
-    'dash.ov.historyBags': 'Daily bags created',
     'dash.ov.historyPipeline': 'Pipeline (bags by stage)',
     'dash.ov.historyContam': 'Contamination rate (%)',
     'dash.ov.historyStock': 'Stock levels (kg)',
@@ -1494,7 +1493,6 @@ const LANG = {
     'dash.ov.na': '—',
     'dash.ov.history': 'KPI-Verlauf',
     'dash.ov.historyHarvest': 'Tägliche Ernte (kg)',
-    'dash.ov.historyBags': 'Tägliche Beutel erstellt',
     'dash.ov.historyPipeline': 'Pipeline (Beutel nach Phase)',
     'dash.ov.historyContam': 'Kontaminationsrate (%)',
     'dash.ov.historyStock': 'Lagerbestände (kg)',
@@ -2803,7 +2801,6 @@ const LANG = {
     'dash.ov.na': '—',
     'dash.ov.history': 'Histórico de KPIs',
     'dash.ov.historyHarvest': 'Colheita diária (kg)',
-    'dash.ov.historyBags': 'Sacos criados por dia',
     'dash.ov.historyPipeline': 'Pipeline (sacos por fase)',
     'dash.ov.historyContam': 'Taxa de contaminação (%)',
     'dash.ov.historyStock': 'Níveis de estoque (kg)',
@@ -5432,7 +5429,6 @@ function renderOverviewCharts(periodStart) {
 // ── KPI History (daily snapshot trend charts) ───────────────
 let kpiHistoryData = null;
 let ovHistHarvestInst = null,
-  ovHistBagsInst = null,
   ovHistPipelineInst = null,
   ovHistContamInst = null,
   ovHistStockInst = null;
@@ -5573,25 +5569,7 @@ function renderKpiHistory() {
     });
   }
 
-  // 2. Bags created chart
-  const c2 = document.getElementById('ov-history-bags-chart');
-  if (c2) {
-    if (ovHistBagsInst) { ovHistBagsInst.destroy(); ovHistBagsInst = null; }
-    ovHistBagsInst = new Chart(c2, {
-      type: 'bar',
-      data: {
-        labels: histLabels,
-        datasets: [{
-          label: t('dash.ov.bagsCreated'),
-          data: histKeys.map((k) => snapVal(k, 'bags_created')),
-          backgroundColor: 'rgba(45,106,79,0.6)', borderRadius: 5
-        }]
-      },
-      options: chartOpts('', (c) => c.parsed.y + ' ' + t('dash.ov.bags'))
-    });
-  }
-
-  // 3. Pipeline chart — stacked area showing bag counts through stages
+  // 2. Pipeline chart — stacked area showing bag counts through stages
   const c3 = document.getElementById('ov-history-pipeline-chart');
   if (c3) {
     if (ovHistPipelineInst) { ovHistPipelineInst.destroy(); ovHistPipelineInst = null; }
