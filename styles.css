@@ -937,6 +937,12 @@ body {
   font-weight: 300;
   line-height: 1;
 }
+.cam-hud-done {
+  background: #16a34a;
+}
+.cam-hud-done:active {
+  background: #15803d;
+}
 
 /* Camera button in scan modal */
 .btn-scan-cam {
