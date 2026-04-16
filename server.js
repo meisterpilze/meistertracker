@@ -1808,6 +1808,34 @@ function autoSyncCalendarEvent(ev) {
   }
 }
 
+// Create notification rows for each assignee who was added to a calendar event.
+// Skips the actor (the user performing the action) — no need to notify yourself.
+// Best-effort: failures are logged but do not block the primary request.
+function notifyCalendarAssignees(ev, assigneeIds, actor) {
+  if (!Array.isArray(assigneeIds) || !assigneeIds.length) return;
+  const actorId = actor && actor.user_id;
+  const actorName = (actor && actor.username) || 'Jemand';
+  const title = ev.title || 'Termin';
+  // Body: creator + date range for quick context in the dropdown
+  const dateStr = ev.startDate || ev.start_date || '';
+  const body = actorName + (dateStr ? ' · ' + dateStr : '');
+  for (const uid of assigneeIds) {
+    if (typeof uid !== 'number' || uid === actorId) continue;
+    try {
+      db.createNotification(database, {
+        userId: uid,
+        type: 'calendar_assignment',
+        title,
+        body,
+        linkType: 'calendar_event',
+        linkId: ev.id
+      });
+    } catch (e) {
+      log('warn', 'notifyCalendarAssignees failed', { userId: uid, eventId: ev.id, error: e.message });
+    }
+  }
+}
+
 // Remove a custom calendar event's CalDAV file (search all category calendars)
 function autoDeleteCalendarEventCaldav(eventId, caldavUid) {
   try {
@@ -3842,7 +3870,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ username: session.username, role: session.role }));
+    res.end(JSON.stringify({ userId: session.user_id, username: session.username, role: session.role }));
     return;
   }
 
@@ -4104,8 +4132,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/data
   if (req.method === 'GET' && url === '/api/data') {
+    const payload = readData();
+    // Per-user unread notification count so the bell badge can update
+    // on every sync without a separate request.
+    try {
+      payload.notifications = {
+        unread: db.countUnreadNotifications(database, req.authUser.user_id)
+      };
+    } catch {
+      payload.notifications = { unread: 0 };
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(readData()));
+    res.end(JSON.stringify(payload));
     return;
   }
 
@@ -5403,6 +5441,43 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Notifications (per-user) --
+  if (req.method === 'GET' && url === '/api/notifications') {
+    try {
+      const items = db.listNotifications(database, req.authUser.user_id);
+      const unread = db.countUnreadNotifications(database, req.authUser.user_id);
+      jsonOk(res, { items, unread });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/notifications/read') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        let changed;
+        if (data && data.all === true) {
+          changed = db.markNotificationsRead(database, req.authUser.user_id, null);
+        } else if (data && Array.isArray(data.ids)) {
+          const ids = data.ids.filter((n) => typeof n === 'number' && Number.isInteger(n));
+          changed = db.markNotificationsRead(database, req.authUser.user_id, ids);
+        } else {
+          jsonErr(res, 400, 'body must be { all: true } or { ids: [int, ...] }');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, { changed });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Calendar Events --
   if (req.method === 'POST' && req.url === '/api/calendar-events') {
     jsonBody(req, res, (e, data) => {
@@ -5465,8 +5540,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.insertCalendarEvent(database, data, Array.isArray(data.assignees) ? data.assignees : null);
+        const assignees = Array.isArray(data.assignees) ? data.assignees : null;
+        db.insertCalendarEvent(database, data, assignees);
         autoSyncCalendarEvent(data);
+        if (assignees && assignees.length) {
+          notifyCalendarAssignees(data, assignees, req.authUser);
+        }
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
@@ -5484,12 +5563,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        // Capture existing assignees BEFORE mutating so we can diff
+        const prevAssignees = db.getCalendarEventAssignees(database, id);
         db.updateCalendarEvent(database, id, data);
+        let newlyAdded = null;
         if (data.assignees !== undefined && Array.isArray(data.assignees)) {
+          const prevSet = new Set(prevAssignees);
+          newlyAdded = data.assignees.filter((uid) => !prevSet.has(uid));
           db.setCalendarEventAssignees(database, id, data.assignees);
         }
         const fullEv = db.getCalendarEventById(database, id);
         if (fullEv) autoSyncCalendarEvent(fullEv);
+        if (newlyAdded && newlyAdded.length && fullEv) {
+          notifyCalendarAssignees(fullEv, newlyAdded, req.authUser);
+        }
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
