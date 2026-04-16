@@ -165,7 +165,8 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   created     TEXT NOT NULL,
   recurrence       TEXT,
   recurrence_until TEXT,
-  team_assignees   TEXT
+  team_assignees   TEXT,
+  exception_dates  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS calendar_event_assignees (
@@ -744,6 +745,16 @@ const MIGRATIONS = [
     fn(db) {
       db.exec('ALTER TABLE bags ADD COLUMN bag_kg REAL');
       db.exec('UPDATE bags SET bag_kg = (SELECT bag_kg FROM batches WHERE batches.batch_id = bags.batch_id)');
+    }
+  },
+  {
+    version: 32,
+    description: 'Add exception_dates to calendar_events for per-occurrence recurring deletes',
+    fn(db) {
+      const has = db
+        .prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='exception_dates'`)
+        .get();
+      if (!has.c) db.exec(`ALTER TABLE calendar_events ADD COLUMN exception_dates TEXT`);
     }
   }
 ];
@@ -2582,14 +2593,29 @@ function parseTeamAssignees(v) {
   }
 }
 
+function serializeExceptionDates(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') return v || null;
+  if (!Array.isArray(v)) return null;
+  const clean = [...new Set(v.map((d) => String(d || '').trim()).filter(Boolean))];
+  return clean.length ? clean.join(',') : null;
+}
+function parseExceptionDates(v) {
+  if (!v) return [];
+  return String(v)
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean);
+}
+
 function insertCalendarEvent(db, ev, assigneeIds) {
   db.exec('BEGIN');
   try {
     db.prepare(
       `INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
       start_time, end_time, category, color, caldav_uid, caldav_synced, created,
-      recurrence, recurrence_until, team_assignees)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      recurrence, recurrence_until, team_assignees, exception_dates)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       ev.id,
       ev.title,
@@ -2606,7 +2632,8 @@ function insertCalendarEvent(db, ev, assigneeIds) {
       ev.created || new Date().toISOString(),
       ev.recurrence || null,
       ev.recurrenceUntil || null,
-      serializeTeamAssignees(ev.teamAssignees)
+      serializeTeamAssignees(ev.teamAssignees),
+      serializeExceptionDates(ev.exceptionDates)
     );
     if (assigneeIds && assigneeIds.length) {
       const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
@@ -2635,7 +2662,8 @@ function updateCalendarEvent(db, id, fields) {
     'caldav_synced',
     'recurrence',
     'recurrence_until',
-    'team_assignees'
+    'team_assignees',
+    'exception_dates'
   ];
   const map = {
     startDate: 'start_date',
@@ -2646,7 +2674,8 @@ function updateCalendarEvent(db, id, fields) {
     caldavUid: 'caldav_uid',
     caldavSynced: 'caldav_synced',
     recurrenceUntil: 'recurrence_until',
-    teamAssignees: 'team_assignees'
+    teamAssignees: 'team_assignees',
+    exceptionDates: 'exception_dates'
   };
   const sets = [];
   const vals = [];
@@ -2656,12 +2685,24 @@ function updateCalendarEvent(db, id, fields) {
     sets.push(col + '=?');
     if (col === 'all_day') vals.push(v ? 1 : 0);
     else if (col === 'team_assignees') vals.push(serializeTeamAssignees(v));
+    else if (col === 'exception_dates') vals.push(serializeExceptionDates(v));
     else vals.push(v ?? null);
   }
   if (!sets.length) return;
   vals.push(id);
   db.prepare('UPDATE calendar_events SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
   incrementDataVersion(db);
+}
+
+function addCalendarEventException(db, id, dateStr) {
+  const row = db.prepare('SELECT exception_dates FROM calendar_events WHERE id=?').get(id);
+  if (!row) return false;
+  const current = parseExceptionDates(row.exception_dates);
+  if (current.includes(dateStr)) return true;
+  current.push(dateStr);
+  db.prepare('UPDATE calendar_events SET exception_dates=? WHERE id=?').run(serializeExceptionDates(current), id);
+  incrementDataVersion(db);
+  return true;
 }
 
 function getCalendarEventById(db, id) {
@@ -2692,7 +2733,8 @@ function readCalendarEventByCaldavUid(db, caldavUid) {
     created: r.created,
     recurrence: r.recurrence || null,
     recurrenceUntil: r.recurrence_until || null,
-    teamAssignees: parseTeamAssignees(r.team_assignees)
+    teamAssignees: parseTeamAssignees(r.team_assignees),
+    exceptionDates: parseExceptionDates(r.exception_dates)
   };
 }
 
@@ -3241,6 +3283,7 @@ function getCalendarEvents(db) {
       recurrence: r.recurrence || null,
       recurrenceUntil: r.recurrence_until || null,
       teamAssignees: parseTeamAssignees(r.team_assignees),
+      exceptionDates: parseExceptionDates(r.exception_dates),
       assignees: assigneeMap.get(r.id) || []
     }));
 }
@@ -3842,6 +3885,7 @@ module.exports = {
   updateCalendarEvent,
   getCalendarEventById,
   deleteCalendarEvent,
+  addCalendarEventException,
   readCalendarEventByCaldavUid,
   setCalendarEventAssignees,
   getAllCalendarEventAssignees,

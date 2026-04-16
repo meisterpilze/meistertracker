@@ -865,7 +865,9 @@ function createMcpServer(database, onWrite, printer) {
       category: z.string().optional().describe('Event category (default: custom)'),
       color: z.string().optional().describe('Hex color (e.g. #4CAF50)'),
       description: z.string().optional(),
-      assigneeIds: z.array(z.number()).optional().describe('Array of user IDs to assign')
+      assigneeIds: z.array(z.number()).optional().describe('Array of user IDs to assign'),
+      recurrence: z.enum(['daily', 'weekly', 'monthly']).optional().describe('Recurrence pattern'),
+      recurrenceUntil: z.string().optional().describe('ISO date — last allowed recurrence (inclusive)')
     },
     async (params) => {
       try {
@@ -882,12 +884,42 @@ function createMcpServer(database, onWrite, printer) {
             startTime: params.startTime || null,
             endTime: params.endTime || null,
             category: params.category || 'custom',
-            color: params.color || null
+            color: params.color || null,
+            recurrence: params.recurrence || null,
+            recurrenceUntil: params.recurrenceUntil || null
           },
           params.assigneeIds || []
         );
         notify();
         return json({ success: true, id, title: params.title, startDate: params.startDate });
+      } catch (e) {
+        return errResult(e.message);
+      }
+    }
+  );
+
+  server.tool(
+    'delete_calendar_event',
+    'Delete a calendar event. For recurring events, pass occurrence=YYYY-MM-DD to skip only a single date (adds an exception); omit occurrence to delete the entire series.',
+    {
+      id: z.string().describe('Calendar event ID'),
+      occurrence: z
+        .string()
+        .optional()
+        .describe('ISO date (YYYY-MM-DD) — delete only this occurrence of a recurring event')
+    },
+    async (params) => {
+      try {
+        const ev = db.getCalendarEventById(database, params.id);
+        if (!ev) return errResult('event not found: ' + params.id);
+        if (params.occurrence && ev.recurrence) {
+          db.addCalendarEventException(database, params.id, params.occurrence);
+          notify();
+          return json({ success: true, id: params.id, mode: 'occurrence', occurrence: params.occurrence });
+        }
+        db.deleteCalendarEvent(database, params.id);
+        notify();
+        return json({ success: true, id: params.id, mode: 'series' });
       } catch (e) {
         return errResult(e.message);
       }
