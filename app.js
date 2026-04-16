@@ -4918,28 +4918,6 @@ const getHarvested = (id) => harvests.filter((h) => h.batch === id).reduce((s, h
 let batchYieldInst = null,
   timelineInst = null;
 
-function buildSparkSvg(data, color) {
-  if (!data || data.length < 2) return '';
-  const w = 80,
-    h = 22,
-    max = Math.max(...data, 1);
-  const pts = data.map((v, i) => [Math.round((i / (data.length - 1)) * w), Math.round(h - (v / max) * (h - 2))]);
-  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
-  const area = line + ` L${w},${h} L0,${h} Z`;
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="met-spark"><path d="${area}" fill="${color}" opacity=".12"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-}
-function harvestSparkData() {
-  const days = [];
-  const now = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
-  }
-  return days.map((day) =>
-    harvests.filter((h) => (h.time || '').slice(0, 10) === day).reduce((s, h) => s + (h.grams || 0), 0)
-  );
-}
 function countDueToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -6868,7 +6846,7 @@ function openLocMovePopup() {
     '</div>' +
     ZONES.map((z) => {
       const zObj = zones.find((x) => x.id === z);
-      return `<button class="btn btn-sm" onclick="locPreConfirm('${z}')" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color || '#888'}">${esc(zoneDisplayName(z))}</button>`;
+      return `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(z)}" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color || '#888'}">${esc(zoneDisplayName(z))}</button>`;
     }).join('') +
     (ALL_RACKS.length
       ? '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">' +
@@ -6877,7 +6855,7 @@ function openLocMovePopup() {
       : '') +
     ALL_RACKS.map(
       (r) =>
-        `<button class="btn btn-sm" onclick="locPreConfirm('${r}')" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`
+        `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(r)}" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`
     ).join('');
   m.classList.add('open');
 }
@@ -6905,8 +6883,8 @@ function locPreConfirm(toLoc) {
     <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px;font-family:monospace">${preview}</div>
     <div style="font-size:20px;margin-bottom:16px">${esc(fromLabel)} \u2192 <strong>${esc(toLoc)}</strong></div>
     <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn" onclick="openLocMovePopup()" style="min-width:100px">${t('nav.cancel')}</button>
-      <button class="btn btn-p" onclick="locMoveTo('${toLoc}')" style="min-width:100px">${t('confirm.confirm')}</button>
+      <button class="btn" data-action="loc-back-to-grid" style="min-width:100px">${t('nav.cancel')}</button>
+      <button class="btn btn-p" data-action="loc-move-to" data-loc="${esc(toLoc)}" style="min-width:100px">${t('confirm.confirm')}</button>
     </div>
   </div>`;
 }
@@ -15445,10 +15423,24 @@ function initEventListeners() {
   $('m-move-batch').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
   });
-  document.getElementById('lm-grid').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="bulk-rack-target"]');
+  // Delegated actions for the location-move modal (grid + confirmation panel).
+  document.getElementById('m-locmove').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
     if (!btn) return;
-    executeBulkMoveToRack(btn.dataset.zone, btn.dataset.rack);
+    switch (btn.dataset.action) {
+      case 'bulk-rack-target':
+        executeBulkMoveToRack(btn.dataset.zone, btn.dataset.rack);
+        break;
+      case 'loc-pre-confirm':
+        locPreConfirm(btn.dataset.loc);
+        break;
+      case 'loc-back-to-grid':
+        openLocMovePopup();
+        break;
+      case 'loc-move-to':
+        locMoveTo(btn.dataset.loc);
+        break;
+    }
   });
   $('btn-10').addEventListener('click', locRemoveSelected);
   $('cls-11').addEventListener('click', () => {
