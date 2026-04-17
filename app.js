@@ -1308,6 +1308,8 @@ const LANG = {
     'alert.filterDueToday': 'Due today or needs attention',
     'alert.filterOverdue': 'Overdue',
     'alert.filterShowAll': 'Show all',
+    'dash.splitBatches.title': 'Split batches — bags left behind',
+    'dash.splitBatches.in': 'in',
     // Scan log
     'log.entries': '{n} entries',
     'log.entriesFiltered': '{n} of {total} entries',
@@ -2616,6 +2618,8 @@ const LANG = {
     'alert.filterDueToday': 'Heute f\u00e4llig oder braucht Aufmerksamkeit',
     'alert.filterOverdue': '\u00dcberf\u00e4llig',
     'alert.filterShowAll': 'Alle anzeigen',
+    'dash.splitBatches.title': 'Geteilte Chargen \u2014 Beutel zur\u00fcckgelassen',
+    'dash.splitBatches.in': 'in',
     // Scan log
     'log.entries': '{n} Eintr\u00e4ge',
     'log.entriesFiltered': '{n} von {total} Eintr\u00e4gen',
@@ -3925,6 +3929,8 @@ const LANG = {
     'alert.filterDueToday': 'Vencem hoje ou precisam de aten\u00e7\u00e3o',
     'alert.filterOverdue': 'Atrasados',
     'alert.filterShowAll': 'Mostrar todos',
+    'dash.splitBatches.title': 'Lotes divididos \u2014 sacos deixados para tr\u00e1s',
+    'dash.splitBatches.in': 'em',
     // Scan log
     'log.entries': '{n} entradas',
     'log.entriesFiltered': '{n} de {total} entradas',
@@ -4572,6 +4578,7 @@ function go(page, btnId) {
   if (page === 'dash') {
     renderStatus();
     renderDashAlerts();
+    renderDashSplitBatches();
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
@@ -4642,6 +4649,7 @@ function refresh() {
   if (id === 'dash') {
     renderStatus();
     renderDashAlerts();
+    renderDashSplitBatches();
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
@@ -6408,6 +6416,101 @@ function renderDashAlerts() {
         ? `<button class="btn btn-sm" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
         : `<button class="btn btn-sm" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
+    })
+    .join('');
+}
+// Split-batch detection: flag batches whose active bags straddle multiple
+// production stages ({spawn, incubation, fruiting}). Harvested, removed, and
+// contaminated bags are excluded so deliberate placements don't trigger alerts.
+function getSplitBatches() {
+  const STAGE_ORDER = { spawn: 1, incubation: 2, fruiting: 3 };
+  const zoneRole = {};
+  zones.forEach((z) => (zoneRole[z.id] = z.role));
+  const harvestedBags = new Set();
+  harvests.forEach((h) => h && h.bag && harvestedBags.add(String(h.bag).toUpperCase()));
+  const lastByBag = {};
+  const lastMoveTimeByBatch = {};
+  scanLog.forEach((e) => {
+    if (e.bag) lastByBag[String(e.bag).toUpperCase()] = e;
+    if (e.batch && (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'MOVE_BATCH')) {
+      const cur = lastMoveTimeByBatch[e.batch];
+      if (!cur || (e.time && e.time > cur)) lastMoveTimeByBatch[e.batch] = e.time;
+    }
+  });
+  const now = Date.now();
+  const STALE_HOURS = 24;
+  const out = [];
+  batches.forEach((b) => {
+    const bags = b.bags || [];
+    if (!bags.length) return;
+    const zoneCounts = {};
+    const stageCounts = {};
+    bags.forEach((bag) => {
+      const key = String(bag).toUpperCase();
+      if (harvestedBags.has(key)) return;
+      const last = lastByBag[key];
+      if (!last || last.action === 'REMOVE' || !last.to) return;
+      const z = toZone(last.to);
+      const role = zoneRole[z];
+      if (!role || role === 'contaminated') return;
+      if (!STAGE_ORDER[role]) return;
+      zoneCounts[z] = (zoneCounts[z] || 0) + 1;
+      stageCounts[role] = (stageCounts[role] || 0) + 1;
+    });
+    const stages = Object.keys(stageCounts);
+    if (stages.length < 2) return;
+    const behindStage = stages.reduce((a, c) => (STAGE_ORDER[c] < STAGE_ORDER[a] ? c : a));
+    const behindCount = stageCounts[behindStage];
+    const entries = Object.keys(zoneCounts).map((z) => ({
+      zone: z,
+      role: zoneRole[z],
+      count: zoneCounts[z],
+      behind: zoneRole[z] === behindStage
+    }));
+    entries.sort((a, c) => (STAGE_ORDER[a.role] || 99) - (STAGE_ORDER[c.role] || 99));
+    const lastTime = lastMoveTimeByBatch[b.batchId];
+    const ageHours = lastTime ? (now - new Date(lastTime).getTime()) / 3600000 : STALE_HOURS + 1;
+    const urgent = ageHours > STALE_HOURS;
+    out.push({
+      batchId: b.batchId,
+      strain: b.strain || b.species || '',
+      behindStage,
+      behindCount,
+      entries,
+      urgent
+    });
+  });
+  out.sort((a, c) => {
+    if (a.urgent !== c.urgent) return a.urgent ? -1 : 1;
+    return (c.behindCount || 0) - (a.behindCount || 0);
+  });
+  return out;
+}
+function renderDashSplitBatches() {
+  const card = document.getElementById('dash-split-batches-card');
+  const el = document.getElementById('dash-split-batches');
+  if (!card || !el) return;
+  const splits = getSplitBatches();
+  if (!splits.length) {
+    card.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  card.style.display = '';
+  el.innerHTML = splits
+    .map((s) => {
+      const distribution = s.entries
+        .map((z) => {
+          const color = locColor[z.zone] || '#888';
+          const name = esc(zoneDisplayName(z.zone));
+          const chip = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:3px;vertical-align:middle"></span>`;
+          const part = `${chip}${z.count} ${esc(t('dash.splitBatches.in'))} ${name}`;
+          return z.behind ? `<strong>${part}</strong>` : part;
+        })
+        .join(' &middot; ');
+      const head = `<strong>${esc(s.batchId)}</strong>${s.strain ? ' (' + esc(s.strain) + ')' : ''}`;
+      const btn = `<button class="btn btn-sm" data-action="go-split-batch" data-batch="${esc(s.batchId)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${s.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${s.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${s.urgent ? '#dc2626' : '#ea580c'};color:${s.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${head} &mdash; ${distribution}</div>${btn}</div>`;
     })
     .join('');
 }
@@ -15603,6 +15706,11 @@ function initEventListeners() {
         go(el.dataset.page, el.dataset.btn);
         break;
     }
+  });
+  $('dash-split-batches').addEventListener('click', function (e) {
+    const el = e.target.closest('[data-action="go-split-batch"]');
+    if (!el) return;
+    goToBatch(el.dataset.batch);
   });
   applyDashMode();
 
