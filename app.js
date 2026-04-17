@@ -393,7 +393,7 @@ const LANG = {
     'th.notes': 'Notes',
     // Lab
     'lab.cultures': 'Cultures',
-    'lab.logWork': 'Log work',
+    'lab.logWork': 'Lab work',
     'lab.lineage': 'Lineage',
     'lab.cultureLibrary': 'Culture library',
     'lab.allTypes': 'All types',
@@ -1313,6 +1313,10 @@ const LANG = {
     'alert.filterShowAll': 'Show all',
     'dash.splitBatches.title': 'Split batches — bags left behind',
     'dash.splitBatches.in': 'in',
+    'dash.actionNewBatch': '+ New batch',
+    'dash.actionLabWork': '+ Lab work',
+    'dash.actionHarvest': '+ Log harvest',
+    'dash.harvestNoFruiting': 'No batches are ready to harvest right now.',
     // Scan log
     'log.entries': '{n} entries',
     'log.entriesFiltered': '{n} of {total} entries',
@@ -1692,7 +1696,7 @@ const LANG = {
     'th.notes': 'Notizen',
     // Lab
     'lab.cultures': 'Kulturen',
-    'lab.logWork': 'Arbeit erfassen',
+    'lab.logWork': 'Laborarbeit',
     'lab.lineage': 'Abstammung',
     'lab.cultureLibrary': 'Kulturbibliothek',
     'lab.allTypes': 'Alle Typen',
@@ -2626,6 +2630,10 @@ const LANG = {
     'alert.filterShowAll': 'Alle anzeigen',
     'dash.splitBatches.title': 'Geteilte Chargen \u2014 Beutel zur\u00fcckgelassen',
     'dash.splitBatches.in': 'in',
+    'dash.actionNewBatch': '+ Neue Charge',
+    'dash.actionLabWork': '+ Laborarbeit',
+    'dash.actionHarvest': '+ Ernte erfassen',
+    'dash.harvestNoFruiting': 'Aktuell sind keine Chargen erntereif.',
     // Scan log
     'log.entries': '{n} Eintr\u00e4ge',
     'log.entriesFiltered': '{n} von {total} Eintr\u00e4gen',
@@ -3004,7 +3012,7 @@ const LANG = {
     'th.notes': 'Notas',
     // Lab
     'lab.cultures': 'Culturas',
-    'lab.logWork': 'Registrar trabalho',
+    'lab.logWork': 'Trabalho de laborat\u00f3rio',
     'lab.lineage': 'Linhagem',
     'lab.cultureLibrary': 'Biblioteca de culturas',
     'lab.allTypes': 'Todos os tipos',
@@ -3940,6 +3948,10 @@ const LANG = {
     'alert.filterShowAll': 'Mostrar todos',
     'dash.splitBatches.title': 'Lotes divididos \u2014 sacos deixados para tr\u00e1s',
     'dash.splitBatches.in': 'em',
+    'dash.actionNewBatch': '+ Novo lote',
+    'dash.actionLabWork': '+ Trabalho de laborat\u00f3rio',
+    'dash.actionHarvest': '+ Registrar colheita',
+    'dash.harvestNoFruiting': 'Nenhum lote pronto para colheita no momento.',
     // Scan log
     'log.entries': '{n} entradas',
     'log.entriesFiltered': '{n} de {total} entradas',
@@ -15768,6 +15780,28 @@ function initEventListeners() {
     const el = e.target.closest('[data-action="go-split-batch"]');
     if (!el) return;
     goToBatch(el.dataset.batch);
+  });
+  $('dash-act-newbatch').addEventListener('click', () => {
+    go('batch', 'n-batch');
+    openStab('batch', 'new');
+  });
+  $('dash-act-labwork').addEventListener('click', () => {
+    go('lab', 'n-lab');
+    openStab('lab', 'work');
+  });
+  $('dash-act-harvest').addEventListener('click', () => {
+    const card = document.getElementById('dash-harvest-tasks-card');
+    if (!card || card.style.display === 'none') {
+      setFb('info', t('dash.harvestNoFruiting'));
+      return;
+    }
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const prev = card.style.boxShadow;
+    card.style.transition = 'box-shadow 0.3s ease';
+    card.style.boxShadow = '0 0 0 3px var(--c-amber, #f59e0b)';
+    setTimeout(() => {
+      card.style.boxShadow = prev || '';
+    }, 1500);
   });
   applyDashMode();
 
