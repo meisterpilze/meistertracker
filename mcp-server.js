@@ -854,7 +854,7 @@ function createMcpServer(database, onWrite, printer) {
 
   server.tool(
     'create_calendar_event',
-    'Create a calendar event (e.g. inoculation day, harvest window, team meeting)',
+    'Create a calendar event (e.g. inoculation day, harvest window, team meeting). To assign to specific users pass assigneeNames (case-insensitive usernames) or assigneeIds. If BOTH are omitted or empty the event is shown to EVERYONE — so when the user asks to assign to specific people you MUST provide one of these fields.',
     {
       title: z.string().describe('Event title'),
       startDate: z.string().describe('ISO date (YYYY-MM-DD)'),
@@ -865,13 +865,40 @@ function createMcpServer(database, onWrite, printer) {
       category: z.string().optional().describe('Event category (default: custom)'),
       color: z.string().optional().describe('Hex color (e.g. #4CAF50)'),
       description: z.string().optional(),
-      assigneeIds: z.array(z.number()).optional().describe('Array of user IDs to assign'),
+      assigneeIds: z
+        .array(z.number())
+        .optional()
+        .describe('User IDs to assign. Prefer assigneeNames unless you already have the IDs.'),
+      assigneeNames: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Usernames to assign (case-insensitive). Unknown names are skipped and returned in unknownAssigneeNames — check the response.'
+        ),
       recurrence: z.enum(['daily', 'weekly', 'monthly']).optional().describe('Recurrence pattern'),
       recurrenceUntil: z.string().optional().describe('ISO date — last allowed recurrence (inclusive)')
     },
     async (params) => {
       try {
         const id = 'ev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const unknownAssigneeNames = [];
+        const resolvedFromNames = [];
+        if (Array.isArray(params.assigneeNames)) {
+          for (const name of params.assigneeNames) {
+            if (!name || typeof name !== 'string') continue;
+            const u = db.getUserByUsernameCaseInsensitive(database, name.trim());
+            if (u && typeof u.id === 'number') resolvedFromNames.push(u.id);
+            else unknownAssigneeNames.push(name);
+          }
+        }
+        const seen = new Set();
+        const assigneeIds = [];
+        for (const uid of [...(params.assigneeIds || []), ...resolvedFromNames]) {
+          if (typeof uid === 'number' && !seen.has(uid)) {
+            seen.add(uid);
+            assigneeIds.push(uid);
+          }
+        }
         db.insertCalendarEvent(
           database,
           {
@@ -888,10 +915,12 @@ function createMcpServer(database, onWrite, printer) {
             recurrence: params.recurrence || null,
             recurrenceUntil: params.recurrenceUntil || null
           },
-          params.assigneeIds || []
+          assigneeIds
         );
         notify();
-        return json({ success: true, id, title: params.title, startDate: params.startDate });
+        const result = { success: true, id, title: params.title, startDate: params.startDate, assigneeIds };
+        if (unknownAssigneeNames.length) result.unknownAssigneeNames = unknownAssigneeNames;
+        return json(result);
       } catch (e) {
         return errResult(e.message);
       }
