@@ -6503,14 +6503,14 @@ function renderDashSplitBatches() {
         .map((z) => {
           const color = locColor[z.zone] || '#888';
           const name = esc(zoneDisplayName(z.zone));
-          const chip = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:3px;vertical-align:middle"></span>`;
-          const part = `${chip}${z.count} ${esc(t('dash.splitBatches.in'))} ${name}`;
-          return z.behind ? `<strong>${part}</strong>` : part;
+          const chip = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:6px;vertical-align:middle"></span>`;
+          const line = `${chip}${z.count} ${esc(t('dash.splitBatches.in'))} ${name}`;
+          return `<div style="padding-left:4px;line-height:1.6${z.behind ? ';font-weight:700' : ''}">${line}</div>`;
         })
-        .join(' &middot; ');
-      const head = `<strong>${esc(s.batchId)}</strong>${s.strain ? ' (' + esc(s.strain) + ')' : ''}`;
+        .join('');
+      const head = `<div style="margin-bottom:3px"><strong>${esc(s.batchId)}</strong>${s.strain ? ' (' + esc(s.strain) + ')' : ''}</div>`;
       const btn = `<button class="btn btn-sm" data-action="go-split-batch" data-batch="${esc(s.batchId)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${s.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${s.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${s.urgent ? '#dc2626' : '#ea580c'};color:${s.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${head} &mdash; ${distribution}</div>${btn}</div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${s.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${s.urgent ? '#dc2626' : '#ea580c'};color:${s.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;min-width:0">${head}${distribution}</div>${btn}</div>`;
     })
     .join('');
 }
