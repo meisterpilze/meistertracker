@@ -328,6 +328,7 @@ const LANG = {
     'batch.fieldCapacity': 'Field capacity %RH',
     'batch.gypsumAdded': 'Gypsum added',
     'batch.sourceCulture': 'Source culture (optional)',
+    'batch.willMarkUsed': 'will be marked used when batch is created',
     'batch.sourceCultureHint': 'Link to the PD or LC used to inoculate this batch',
     'batch.none': '\u2014 none \u2014',
     'batch.notes': 'Notes (optional)',
@@ -853,6 +854,8 @@ const LANG = {
     'scanFb.actionReady': '{action} ready \u2014 now scan a location, then scan more bags',
     'scanFb.bagInfo': 'Bag info: {bag} \u2014 choose an action below or close',
     'scanFb.cultureScanned': 'Culture scanned: {val} \u2192 lineage view',
+    'scanFb.cultureAutofilled': 'Autofilled from {id}',
+    'scanFb.cultureNotUsable': 'Culture {id} is {status} and cannot be used',
     'scanFb.moved': 'Moved {n} \u2192 {loc}',
     'scanFb.removed': 'Removed {n}',
     'scanFb.confirmRemove': 'Remove {n}?',
@@ -1624,6 +1627,7 @@ const LANG = {
     'batch.fieldCapacity': 'Feldkapazit\u00e4t %RH',
     'batch.gypsumAdded': 'Gips hinzugef\u00fcgt',
     'batch.sourceCulture': 'Quellkultur (optional)',
+    'batch.willMarkUsed': 'wird beim Anlegen der Charge als verbraucht markiert',
     'batch.sourceCultureHint': 'Verkn\u00fcpfung zur PD oder LC f\u00fcr die Beimpfung dieser Charge',
     'batch.none': '\u2014 keine \u2014',
     'batch.notes': 'Notizen (optional)',
@@ -2151,6 +2155,8 @@ const LANG = {
     'scanFb.actionReady': '{action} bereit \u2014 Standort scannen, dann weitere Beutel',
     'scanFb.bagInfo': 'Beutel-Info: {bag} \u2014 Aktion unten w\u00e4hlen oder schlie\u00dfen',
     'scanFb.cultureScanned': 'Kultur gescannt: {val} \u2192 Abstammungsansicht',
+    'scanFb.cultureAutofilled': 'Autom. ausgef\u00fcllt aus {id}',
+    'scanFb.cultureNotUsable': 'Kultur {id} ist {status} und kann nicht verwendet werden',
     'scanFb.moved': '{n} verschoben \u2192 {loc}',
     'scanFb.removed': '{n} entfernt',
     'scanFb.confirmRemove': '{n} entfernen?',
@@ -2933,6 +2939,7 @@ const LANG = {
     'batch.fieldCapacity': 'Capacidade de campo %RH',
     'batch.gypsumAdded': 'Gesso adicionado',
     'batch.sourceCulture': 'Cultura de origem (opcional)',
+    'batch.willMarkUsed': 'ser\u00e1 marcada como usada ao criar o lote',
     'batch.sourceCultureHint': 'Vincular \u00e0 PD ou LC usada para inocular este lote',
     'batch.none': '\u2014 nenhum \u2014',
     'batch.notes': 'Notas (opcional)',
@@ -3461,6 +3468,8 @@ const LANG = {
     'scanFb.actionReady': '{action} pronto \u2014 escaneie um local, depois mais sacos',
     'scanFb.bagInfo': 'Info do saco: {bag} \u2014 escolha uma a\u00e7\u00e3o abaixo ou feche',
     'scanFb.cultureScanned': 'Cultura escaneada: {val} \u2192 visualiza\u00e7\u00e3o de linhagem',
+    'scanFb.cultureAutofilled': 'Preenchido de {id}',
+    'scanFb.cultureNotUsable': 'Cultura {id} est\u00e1 {status} e n\u00e3o pode ser usada',
     'scanFb.moved': '{n} movido(s) \u2192 {loc}',
     'scanFb.removed': '{n} removido(s)',
     'scanFb.confirmRemove': 'Remover {n}?',
@@ -4261,7 +4270,7 @@ function applyData(d) {
   batches.forEach((b) => spColor(b.species));
   cultures.forEach((c) => spColor(c.species));
   fillStrainSelects();
-  fillCultureSelect('nb-culture', ['PD', 'LC']);
+  fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   fillCultureSelect('gs-culture', ['PD', 'LC']);
   updateTodoBadge();
   if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
@@ -7219,12 +7228,20 @@ function createBatch() {
       alert(t('batch.saveFailed') + r.error);
       renderBatches();
       renderStatus();
+      return;
     }
     // Register new barcode numbers from server response
     if (r && r.bagBarcodes) {
       for (const [id, bc] of Object.entries(r.bagBarcodes)) {
         barcodeRegistry.set(bc, { type: 'bag', id });
         barcodeByEntity.set('bag:' + id, bc);
+      }
+    }
+    // Grain bag (G2G/GS) is fully consumed by one inoculation — mark it used
+    if (batchObj.sourceId) {
+      const src = cultures.find((c) => c.id === batchObj.sourceId);
+      if (src && (src.type === 'G2G' || src.type === 'GS') && src.status !== 'used') {
+        setCultureStatus(src.id, 'used');
       }
     }
   });
@@ -7255,6 +7272,9 @@ function createBatch() {
   if (document.getElementById('nb-strain-sel')) document.getElementById('nb-strain-sel').value = '';
   const nbStrainTextEl = document.getElementById('nb-strain-text');
   if (nbStrainTextEl) nbStrainTextEl.value = '';
+  const nbCultureEl = document.getElementById('nb-culture');
+  if (nbCultureEl) nbCultureEl.value = '';
+  renderNbGrainBanner();
   document.getElementById('nb-qty').value = '10';
   document.getElementById('nb-days').value = '14';
   document.getElementById('nb-notes').value = '';
@@ -10641,6 +10661,27 @@ function deleteMStrain(id) {
 function nbStrainChanged() {
   nbPreview();
 }
+function renderNbGrainBanner() {
+  const banner = document.getElementById('nb-source-banner');
+  if (!banner) return;
+  const sel = document.getElementById('nb-culture');
+  const id = sel ? sel.value : '';
+  if (!id) {
+    banner.style.display = 'none';
+    banner.textContent = '';
+    return;
+  }
+  const c = cultures.find((x) => x.id === id);
+  if (!c) {
+    banner.style.display = 'none';
+    return;
+  }
+  const isGrain = c.type === 'G2G' || c.type === 'GS';
+  const base = t('scanFb.cultureAutofilled', { id: c.id });
+  const suffix = isGrain ? ' \u2014 ' + t('batch.willMarkUsed') : '';
+  banner.textContent = base + suffix;
+  banner.style.display = '';
+}
 
 // ─── CULTURES ────────────────────────────────────────────────
 const ctBadge = (t) => {
@@ -10724,7 +10765,7 @@ function deleteCulture(id) {
     apiDelete('/api/cultures/' + encodeURIComponent(id));
     renderCultures();
     renderLabLog();
-    fillCultureSelect('nb-culture', ['PD', 'LC']);
+    fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
     fillCultureSelect('gs-culture', ['PD', 'LC']);
   });
 }
@@ -10869,7 +10910,7 @@ function logLabWork() {
   document.getElementById('lw-qty').value = '1';
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
   renderLabLog();
-  fillCultureSelect('nb-culture', ['PD', 'LC']);
+  fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   fillCultureSelect('gs-culture', ['PD', 'LC']);
   lwPreview();
   // Show result card with created IDs and print button
@@ -12764,11 +12805,27 @@ function processScan(raw) {
     setFb('err', t('scanFb.setAction'));
     return;
   }
-  // Culture ID scan → auto-fill parent if lab work form is open, else open lineage
-  if (/^(MC|PD|LC)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
+  // Culture ID scan → auto-fill parent (lab work) or source (new batch), else open lineage
+  if (/^(MC|PD|LC|G2G|GS)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
     const c = cultures.find((x) => x.id.toUpperCase() === val);
     if (c) {
+      if (c.status === 'used' || c.status === 'contam') {
+        setFb('err', t('scanFb.cultureNotUsable', { id: c.id, status: c.status }));
+        return;
+      }
       closeCamScan();
+      // If new-batch form is visible, auto-fill source + strain
+      const nbPanel = document.getElementById('sp-batch-new');
+      if (nbPanel && nbPanel.classList.contains('active')) {
+        const cultureSel = document.getElementById('nb-culture');
+        if (cultureSel) cultureSel.value = c.id;
+        if (c.strainId) document.getElementById('nb-strain-sel').value = String(c.strainId);
+        const nbStInput = document.getElementById('nb-strain-text');
+        if (nbStInput && c.strainText) nbStInput.value = c.strainText;
+        renderNbGrainBanner();
+        setFb('ok', t('scanFb.cultureAutofilled', { id: c.id }));
+        return;
+      }
       // If lab work form is visible, auto-fill parent instead of opening lineage
       const lwPanel = document.getElementById('sp-lab-work');
       const parentSel = document.getElementById('lw-parent');
@@ -15836,6 +15893,19 @@ function initEventListeners() {
     const stInput = document.getElementById('lw-strain-text');
     if (stInput && parent.strainText) stInput.value = parent.strainText;
     lwPreview();
+  });
+  $('nb-culture').addEventListener('change', () => {
+    const id = document.getElementById('nb-culture').value;
+    if (id) {
+      const c = cultures.find((x) => x.id === id);
+      if (c) {
+        if (c.strainId) document.getElementById('nb-strain-sel').value = String(c.strainId);
+        const stInput = document.getElementById('nb-strain-text');
+        if (stInput && c.strainText) stInput.value = c.strainText;
+        nbPreview();
+      }
+    }
+    renderNbGrainBanner();
   });
   $('btn-26').addEventListener('click', () => {
     const type = document.getElementById('lw-type').value;
