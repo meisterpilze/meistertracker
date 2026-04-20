@@ -1380,6 +1380,7 @@ const LANG = {
     'task.deleteMsg': 'This task will be permanently removed.',
     // No bags to move
     'batch.noBagsToMove': 'No bags to move',
+    'batch.allAlreadyAt': 'All {n} bags are already at {loc}',
     // Server restart
     'server.restartTitle': 'Restart server?',
     'server.restartMsg':
@@ -2716,6 +2717,7 @@ const LANG = {
     'task.deleteMsg': 'Diese Aufgabe wird unwiderruflich entfernt.',
     // No bags to move
     'batch.noBagsToMove': 'Keine Bags zu verschieben',
+    'batch.allAlreadyAt': 'Alle {n} Beutel sind bereits in {loc}',
     // Server restart
     'server.restartTitle': 'Server neustarten?',
     'server.restartMsg':
@@ -4054,6 +4056,7 @@ const LANG = {
     'task.deleteMsg': 'Esta tarefa ser\u00e1 permanentemente removida.',
     // No bags to move
     'batch.noBagsToMove': 'Sem sacos para mover',
+    'batch.allAlreadyAt': 'Todos os {n} sacos j\u00e1 est\u00e3o em {loc}',
     // Server restart
     'server.restartTitle': 'Reiniciar servidor?',
     'server.restartMsg':
@@ -7600,10 +7603,11 @@ function openMoveBatchModal(batchId) {
   _openZonePicker(t('batch.moveMenuTitle', { id: batchId }), function (dest) {
     moveBatchTo(b, dest, function (moved, skipped) {
       if (!moved) {
-        setFb(
-          'err',
-          t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(dest) + ')' : '')
-        );
+        if (skipped > 0) {
+          setFb('ok', t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }));
+        } else {
+          setFb('err', t('batch.noBagsToMove'));
+        }
         return;
       }
       setFb(
@@ -11411,6 +11415,7 @@ function biOpenHarvest() {
 // Log a REMOVE entry after the confirmation dialog was accepted.
 function biPerformRemove() {
   if (!biBagId) return;
+  document.getElementById('m-baginfo').classList.remove('open');
   const bagLast = [...scanLog]
     .reverse()
     .find(
@@ -11457,7 +11462,6 @@ function biConfirmRemove() {
   const body = fromLoc
     ? t('bagInfo.confirmRemoveBody', { bag: biBagId, loc: zoneDisplayName(fromLoc) })
     : t('bagInfo.confirmRemoveBodyNoLoc', { bag: biBagId });
-  document.getElementById('m-baginfo').classList.remove('open');
   confirm2(t('bagInfo.confirmRemoveTitle'), body, t('bagInfo.confirmRemoveOk'), biPerformRemove);
 }
 document.getElementById('m-baginfo').addEventListener('click', (e) => {
@@ -11591,14 +11595,15 @@ function bsConfirm() {
     return;
   }
   const selected = Array.from(bsSelected);
-  document.getElementById('m-bagselect').classList.remove('open');
+  bsClose();
   _openZonePicker(t('bagSelect.moveMenuTitle', { n: selected.length }), function (dest) {
     moveBagsTo(b, selected, dest, function (moved, skipped) {
       if (!moved) {
-        setFb(
-          'err',
-          t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(dest) + ')' : '')
-        );
+        if (skipped > 0) {
+          setFb('ok', t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }));
+        } else {
+          setFb('err', t('batch.noBagsToMove'));
+        }
         return;
       }
       setFb(
@@ -11617,8 +11622,16 @@ function bsConfirm() {
   });
 }
 
+// Close the bag-select modal AND reset its module-level state so future scans
+// don't get misrouted by stale bsBatchId / bsSelected values.
+function bsClose() {
+  document.getElementById('m-bagselect').classList.remove('open');
+  bsBatchId = null;
+  bsSelected = new Set();
+}
+
 document.getElementById('m-bagselect').addEventListener('click', (e) => {
-  if (e.target.id === 'm-bagselect') document.getElementById('m-bagselect').classList.remove('open');
+  if (e.target.id === 'm-bagselect') bsClose();
 });
 
 // ─── PRINT — BAG LABELS ──────────────────────────────────────
@@ -15605,27 +15618,31 @@ if (typeof pushBatchCaldav === 'undefined') {
   };
 }
 
-// Escape key closes the topmost open modal
+// Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
+// m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
+// so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
+// modal underneath.
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
   const modals = [
+    'm-confirm',
     'm-camscan',
     'm-cal-entry',
     'm-cal-detail',
     'm-locmove',
-    'm-baginfo',
     'm-bagselect',
+    'm-baginfo',
     'm-addbags',
     'm-batchadd',
     'm-note',
     'm-prompt',
-    'm-confirm',
     'm-move-batch'
   ];
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) {
-      el.classList.remove('open');
+      if (id === 'm-bagselect') bsClose();
+      else el.classList.remove('open');
       return;
     }
   }
@@ -15873,9 +15890,7 @@ function initEventListeners() {
     document.getElementById('m-baginfo').classList.remove('open');
     openMoveBatchModal(b.batchId);
   });
-  $('bs-cancel').addEventListener('click', () => {
-    document.getElementById('m-bagselect').classList.remove('open');
-  });
+  $('bs-cancel').addEventListener('click', bsClose);
   $('bs-continue').addEventListener('click', () => {
     bsConfirm();
   });
