@@ -119,6 +119,7 @@ const LANG = {
     'strains.pilzsorte': 'Pilzsorte',
     'strains.selectPlaceholder': '— select Pilzsorte —',
     'strains.noStrainsHint': 'No Pilzsorten defined. Please create one first.',
+    'strains.createNow': 'Create Pilzsorte now \u2192',
     'strains.deleteProtected': 'Cannot delete: still in use.',
     'strains.batches': 'batches',
     'strains.cultures': 'cultures',
@@ -355,6 +356,7 @@ const LANG = {
     'batch.deleteBtn': 'Delete batch',
     'batch.fillFields': 'Please fill in species, strain and quantity',
     'batch.enterWeight': 'Please enter a bag weight',
+    'batch.substrateExceeds': 'Substrate composition exceeds 100% (hardwood + wheat bran = {sum}%). Please adjust.',
     'batch.addBagsTo': 'Add bags to batch',
     'batch.grainNeeded': 'Grain needed:',
     'batch.inStock': 'In stock:',
@@ -1256,6 +1258,9 @@ const LANG = {
     'strains.saveChanges': 'Save changes',
     'strains.required': 'Name and abbreviation are required fields.',
     'strains.kuerzelLength': 'Abbreviation must be 2-4 characters (e.g. LI, LIMA, SHII).',
+    'strains.deleteTitle': 'Delete Pilzsorte?',
+    'strains.deleteMsg': 'Really delete Pilzsorte "{name}"?',
+    'strains.delete': 'Delete',
     // Sync
     'sync.syncedAt': 'Synced \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -1438,6 +1443,7 @@ const LANG = {
     'strains.pilzsorte': 'Pilzsorte',
     'strains.selectPlaceholder': '— Pilzsorte wählen —',
     'strains.noStrainsHint': 'Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.',
+    'strains.createNow': 'Jetzt Pilzsorte anlegen \u2192',
     'strains.deleteProtected': 'Löschen nicht möglich: noch in Verwendung.',
     'strains.batches': 'Chargen',
     'strains.cultures': 'Kulturen',
@@ -1678,6 +1684,7 @@ const LANG = {
     'batch.deleteBtn': 'Charge l\u00f6schen',
     'batch.fillFields': 'Bitte Art, Stamm und Menge ausf\u00fcllen',
     'batch.enterWeight': 'Bitte ein Beutelgewicht eingeben',
+    'batch.substrateExceeds': 'Substratzusammensetzung \u00fcber 100% (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
     'batch.addBagsTo': 'Beutel zur Charge hinzuf\u00fcgen',
     'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
     'batch.inStock': 'Auf Lager:',
@@ -2593,6 +2600,9 @@ const LANG = {
     'strains.saveChanges': '\u00c4nderungen speichern',
     'strains.required': 'Name und K\u00fcrzel sind Pflichtfelder.',
     'strains.kuerzelLength': 'K\u00fcrzel muss 2-4 Zeichen haben (z.B. LI, LIMA, SHII).',
+    'strains.deleteTitle': 'Pilzsorte l\u00f6schen?',
+    'strains.deleteMsg': 'Pilzsorte "{name}" wirklich l\u00f6schen?',
+    'strains.delete': 'L\u00f6schen',
     // Sync
     'sync.syncedAt': 'Synchronisiert \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -2775,6 +2785,7 @@ const LANG = {
     'strains.pilzsorte': 'Pilzsorte',
     'strains.selectPlaceholder': '— seleccionar Pilzsorte —',
     'strains.noStrainsHint': 'Nenhuma Pilzsorte definida. Crie uma primeiro.',
+    'strains.createNow': 'Criar Pilzsorte agora \u2192',
     'strains.deleteProtected': 'Não é possível apagar: ainda em uso.',
     'strains.batches': 'lotes',
     'strains.cultures': 'culturas',
@@ -3014,6 +3025,7 @@ const LANG = {
     'batch.deleteBtn': 'Excluir lote',
     'batch.fillFields': 'Preencha esp\u00e9cie, cepa e quantidade',
     'batch.enterWeight': 'Insira o peso do saco',
+    'batch.substrateExceeds': 'A composi\u00e7\u00e3o do substrato excede 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
     'batch.addBagsTo': 'Adicionar sacos ao lote',
     'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
     'batch.inStock': 'Em estoque:',
@@ -3930,6 +3942,9 @@ const LANG = {
     'strains.saveChanges': 'Guardar altera\u00e7\u00f5es',
     'strains.required': 'Nome e abrevia\u00e7\u00f5es s\u00e3o campos obrigat\u00f3rios.',
     'strains.kuerzelLength': 'A abrevia\u00e7\u00e3o deve ter 2-4 caracteres (ex. LI, LIMA, SHII).',
+    'strains.deleteTitle': 'Excluir Pilzsorte?',
+    'strains.deleteMsg': 'Excluir mesmo a Pilzsorte "{name}"?',
+    'strains.delete': 'Excluir',
     // Sync
     'sync.syncedAt': 'Sincronizado \u00b7 {time}',
     // DuckDNS / Let\'s Encrypt / Server
@@ -7236,7 +7251,11 @@ function createBatch() {
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   if (!strainId || !ms) {
-    alert(t('strains.noStrainsHint'));
+    if (!mushroomStrains.length) {
+      confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
+    } else {
+      alert(t('strains.noStrainsHint'));
+    }
     return;
   }
   const sp = ms.name + ' (' + ms.kuerzel + ')';
@@ -7255,6 +7274,10 @@ function createBatch() {
   }
   const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
     wb = parseFloat(document.getElementById('nb-wb').value) || 0;
+  if (hw + wb > 100) {
+    alert(t('batch.substrateExceeds', { sum: hw + wb }));
+    return;
+  }
   const substrate =
     hw || wb
       ? {
@@ -7292,31 +7315,37 @@ function createBatch() {
 
   // Save batch to server
   const batchObj = batches[batches.length - 1];
-  apiPost('/api/batches', batchObj).then((r) => {
-    if (r && r.error) {
-      // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
-      const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
-      if (i >= 0) batches.splice(i, 1);
-      alert(t('batch.saveFailed') + r.error);
-      renderBatches();
-      renderStatus();
-      return;
-    }
-    // Register new barcode numbers from server response
-    if (r && r.bagBarcodes) {
-      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
-        barcodeRegistry.set(bc, { type: 'bag', id });
-        barcodeByEntity.set('bag:' + id, bc);
+  const createBtn = document.getElementById('btn-24');
+  if (createBtn) createBtn.disabled = true;
+  apiPost('/api/batches', batchObj)
+    .then((r) => {
+      if (r && r.error) {
+        // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
+        const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
+        if (i >= 0) batches.splice(i, 1);
+        alert(t('batch.saveFailed') + r.error);
+        renderBatches();
+        renderStatus();
+        return;
       }
-    }
-    // Grain bag (G2G/GS) is fully consumed by one inoculation — mark it used
-    if (batchObj.sourceId) {
-      const src = cultures.find((c) => c.id === batchObj.sourceId);
-      if (src && (src.type === 'G2G' || src.type === 'GS') && src.status !== 'used') {
-        setCultureStatus(src.id, 'used');
+      // Register new barcode numbers from server response
+      if (r && r.bagBarcodes) {
+        for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+          barcodeRegistry.set(bc, { type: 'bag', id });
+          barcodeByEntity.set('bag:' + id, bc);
+        }
       }
-    }
-  });
+      // Grain bag (G2G/GS) is fully consumed by one inoculation — mark it used
+      if (batchObj.sourceId) {
+        const src = cultures.find((c) => c.id === batchObj.sourceId);
+        if (src && (src.type === 'G2G' || src.type === 'GS') && src.status !== 'used') {
+          setCultureStatus(src.id, 'used');
+        }
+      }
+    })
+    .finally(() => {
+      if (createBtn) createBtn.disabled = false;
+    });
 
   // Auto-deduct materials from inventory via server-side deltas
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
@@ -7791,19 +7820,35 @@ function confirmAddBags() {
     alert(t('addBags.enterQty'));
     return;
   }
+  const confirmBtn = document.getElementById('addbags-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = true;
+  const prevBags = b.bags.slice();
+  const prevQty = b.qty;
   const lastNum = parseInt(b.bags[b.bags.length - 1].split('-').pop()) || b.bags.length;
   const newBags = Array.from({ length: qty }, (_, i) => b.batchId + '-' + String(lastNum + 1 + i).padStart(2, '0'));
   b.bags = [...b.bags, ...newBags];
   b.qty = b.bags.length;
   _lastNewBags = newBags;
-  apiPatch('/api/batches/' + encodeURIComponent(b.batchId) + '/bags', { add: newBags, newQty: b.qty }).then((r) => {
-    if (r && r.bagBarcodes) {
-      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
-        barcodeRegistry.set(bc, { type: 'bag', id });
-        barcodeByEntity.set('bag:' + id, bc);
+  apiPatch('/api/batches/' + encodeURIComponent(b.batchId) + '/bags', { add: newBags, newQty: b.qty })
+    .then((r) => {
+      if (r && r.error) {
+        b.bags = prevBags;
+        b.qty = prevQty;
+        setFb('err', t('common.error') + ': ' + r.error);
+        document.getElementById('ab-phase-input').style.display = '';
+        document.getElementById('ab-phase-result').style.display = 'none';
+        return;
       }
-    }
-  });
+      if (r && r.bagBarcodes) {
+        for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+          barcodeRegistry.set(bc, { type: 'bag', id });
+          barcodeByEntity.set('bag:' + id, bc);
+        }
+      }
+    })
+    .finally(() => {
+      if (confirmBtn) confirmBtn.disabled = false;
+    });
   // Switch to result phase
   document.getElementById('ab-phase-input').style.display = 'none';
   document.getElementById('m-addbags-title').textContent = t('addBags.addedTitle');
@@ -7844,7 +7889,14 @@ document.getElementById('m-addbags').addEventListener('click', (e) => {
 });
 
 function delBatch(id) {
-  confirm2(t('batch.deleteBatch', { id: id }), t('batch.deleteMsg'), t('batch.deleteBtn'), () => {
+  confirm2(t('batch.deleteBatch', { id: id }), t('batch.deleteMsg'), t('batch.deleteBtn'), async () => {
+    // Server-first: only apply local changes after the server confirms the delete.
+    // Prevents a silent divergence where the batch reappears on next page load.
+    const r = await apiDelete('/api/batches/' + encodeURIComponent(id));
+    if (r && r.error) {
+      setFb('err', t('common.error') + ': ' + r.error);
+      return;
+    }
     const b = batches.find((x) => x.batchId === id);
     // Reverse inventory deductions locally
     if (b && inventory.stock) {
@@ -7869,7 +7921,6 @@ function delBatch(id) {
     batches = batches.filter((x) => x.batchId !== id);
     scanLog = scanLog.filter((x) => x.batch !== id);
     harvests = harvests.filter((x) => x.batch !== id);
-    apiDelete('/api/batches/' + encodeURIComponent(id));
     renderBatches();
     renderStatus();
   });
@@ -7907,7 +7958,16 @@ function confirmHarvest() {
     flush: f
   };
   harvests.push(hEntry);
-  apiPost('/api/harvests', hEntry);
+  apiPost('/api/harvests', hEntry).then((r) => {
+    if (r && r.error) {
+      // Roll back local state so user sees accurate harvest totals
+      const i = harvests.lastIndexOf(hEntry);
+      if (i >= 0) harvests.splice(i, 1);
+      setFb('err', t('common.error') + ': ' + r.error);
+      renderHarvests();
+      updateSD();
+    }
+  });
   // Track in sessionEntries so session summary counts HARVEST and it appears in the log
   const sEntry = {
     time: hEntry.time,
@@ -9597,7 +9657,11 @@ async function removeSupplier(id) {
     'Remove ' + s.name + ' (' + MAT_LABELS[s.mat] + ')?',
     t('inv.deleteSupplier'),
     async () => {
-      await apiDelete('/api/suppliers/' + id);
+      const r = await apiDelete('/api/suppliers/' + id);
+      if (r && r.error) {
+        setFb('err', t('common.error') + ': ' + r.error);
+        return;
+      }
       suppliers = suppliers.filter((x) => x.id !== id);
       renderSuppliers();
       renderInvStock();
@@ -10380,21 +10444,37 @@ function saveAsset() {
       ? (assets.find((a) => a.assetId === editingAssetId) || {}).created || new Date().toISOString()
       : new Date().toISOString()
   };
+  const wasEditing = !!editingAssetId;
+  const prevAssets = assets.slice();
   if (editingAssetId) {
     const i = assets.findIndex((a) => a.assetId === editingAssetId);
     if (i >= 0) assets[i] = obj;
     else assets.push(obj);
   } else assets.push(obj);
-  apiPost('/api/assets', obj);
+  apiPost('/api/assets', obj).then((r) => {
+    if (r && r.error) {
+      assets = prevAssets;
+      renderAssets();
+      alert(t('common.error') + ': ' + r.error);
+      if (wasEditing) editAsset(obj.assetId);
+    }
+  });
   editingAssetId = null;
   openStab('assets', 'list');
 }
 
 function deleteAsset(id) {
-  confirm2('Anlage löschen?', 'Die Anlage ' + id + ' wird unwiderruflich gelöscht.', 'Ja, löschen', () => {
+  confirm2(t('assets.deleteAsset'), t('assets.deleteMsg', { id: id }), t('assets.deleteBtn'), () => {
+    const prev = assets;
     assets = assets.filter((a) => a.assetId !== id);
-    apiDelete('/api/assets/' + encodeURIComponent(id));
     renderAssets();
+    apiDelete('/api/assets/' + encodeURIComponent(id)).then((r) => {
+      if (r && r.error) {
+        assets = prev;
+        renderAssets();
+        setFb('err', t('common.error') + ': ' + r.error);
+      }
+    });
   });
 }
 
@@ -10617,6 +10697,18 @@ function fillStrainSelects() {
   if (nbHint) nbHint.style.display = hint ? 'block' : 'none';
 }
 
+// Navigate to the Pilzsorten page and focus the name input so the user can
+// create a strain without hunting for it. Called from the "Create now →"
+// shortcut in the new-batch form and from createBatch / createGrainBatch
+// when no strains are defined yet.
+function goCreateStrain() {
+  go('strains', 'n-strains');
+  setTimeout(() => {
+    const el = document.getElementById('ms-name');
+    if (el) el.focus();
+  }, 60);
+}
+
 function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
@@ -10712,7 +10804,7 @@ function cancelMStrain() {
 function deleteMStrain(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
-  confirm2('Pilzsorte löschen?', 'Pilzsorte "' + ms.name + '" wirklich löschen?', 'Löschen', () => {
+  confirm2(t('strains.deleteTitle'), t('strains.deleteMsg', { name: ms.name }), t('strains.delete'), () => {
     apiDelete('/api/mushroom-strains/' + id).then((r) => {
       if (r && r.error) {
         alert(t('common.error') + ': ' + r.error);
@@ -10809,11 +10901,17 @@ function renderCultures() {
 }
 function setCultureStatus(id, status) {
   const c = cultures.find((x) => x.id === id);
-  if (c) {
-    c.status = status;
-    apiPatch('/api/cultures/' + encodeURIComponent(id), { status });
-    renderCultures();
-  }
+  if (!c) return;
+  const prev = c.status;
+  c.status = status;
+  renderCultures();
+  apiPatch('/api/cultures/' + encodeURIComponent(id), { status }).then((r) => {
+    if (r && r.error) {
+      c.status = prev;
+      renderCultures();
+      setFb('err', t('common.error') + ': ' + r.error);
+    }
+  });
 }
 function deleteCulture(id) {
   const c = cultures.find((x) => x.id === id);
@@ -10827,9 +10925,13 @@ function deleteCulture(id) {
     if (batchCount) parts.push(t('lab.deleteBatches', { n: batchCount }));
     warning = ' \u26A0 ' + parts.join(' ') + ' ' + t('lab.deleteRefWarn');
   }
-  confirm2(t('lab.deleteCultureTitle'), t('lab.deleteCultureMsg', { id: id }) + warning, t('lab.deleteCulture'), () => {
+  confirm2(t('lab.deleteCultureTitle'), t('lab.deleteCultureMsg', { id: id }) + warning, t('lab.deleteCulture'), async () => {
+    const r = await apiDelete('/api/cultures/' + encodeURIComponent(id));
+    if (r && r.error) {
+      setFb('err', t('common.error') + ': ' + r.error);
+      return;
+    }
     cultures = cultures.filter((x) => x.id !== id);
-    apiDelete('/api/cultures/' + encodeURIComponent(id));
     renderCultures();
     renderLabLog();
     fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
@@ -11098,7 +11200,11 @@ function createGrainBatch() {
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   if (!strainId || !ms) {
-    alert(t('strains.noStrainsHint'));
+    if (!mushroomStrains.length) {
+      confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
+    } else {
+      alert(t('strains.noStrainsHint'));
+    }
     return;
   }
   const sp = ms.name,
@@ -16147,6 +16253,8 @@ function initEventListeners() {
   $('ms-save-btn').addEventListener('click', saveMStrain);
   $('ms-cancel-btn').addEventListener('click', cancelMStrain);
   $('btn-24').addEventListener('click', createBatch);
+  const strainShortcut = document.getElementById('nb-create-strain-btn');
+  if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
   $('prt-25').addEventListener('click', goToPrintBatch);
   $('harvest-q').addEventListener('input', renderHarvests);
 
