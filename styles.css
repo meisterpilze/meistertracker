@@ -1148,6 +1148,15 @@ textarea:focus {
   padding: 5px 10px;
   font-size: 12px;
 }
+/* Bigger tap targets inside bag-info / bag-select modals on mobile — these are
+   the primary post-scan actions on a phone and need to clear ~40px. */
+@media (max-width: 768px) {
+  #m-baginfo .btn-sm,
+  #m-bagselect .btn-sm {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
 
 /* ═══ GRID ══════════════════════════════════════════════════════ */
 .g2 {
