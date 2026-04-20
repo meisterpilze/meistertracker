@@ -456,9 +456,7 @@ const MIGRATIONS = [
     fn(db) {
       const addCol = (col, def) => {
         if (!/^[a-z_][a-z0-9_]*$/i.test(col)) throw new Error('invalid column name: ' + col);
-        const has = db
-          .prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?")
-          .get(col);
+        const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?").get(col);
         if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
       };
       addCol('recurrence', 'TEXT');
@@ -471,9 +469,7 @@ const MIGRATIONS = [
     fn(db) {
       const addCol = (col, def) => {
         if (!/^[a-z_][a-z0-9_]*$/i.test(col)) throw new Error('invalid column name: ' + col);
-        const has = db
-          .prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?")
-          .get(col);
+        const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?").get(col);
         if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
       };
       addCol('due_time', 'TEXT');
