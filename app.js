@@ -1174,6 +1174,7 @@ const LANG = {
     'aria.switchCamera': 'Switch camera',
     'aria.closeCamera': 'Close camera',
     'aria.clearLastScan': 'Undo last scan',
+    'aria.clearScan': 'Clear scan (reset action)',
     'aria.doneScanning': 'Done scanning',
     'aria.toggleSidebar': 'Toggle sidebar',
     'aria.mainNav': 'Main navigation',
@@ -1356,6 +1357,7 @@ const LANG = {
     'cam.inUse': 'Camera is in use by another application.',
     'cam.unknownError': 'Camera error: {err}',
     'cam.nothingToUndo': 'Nothing to undo',
+    'cam.scanCleared': 'Scan cleared',
     // Offline
     'offline.queued': '{n} queued',
     // Task delete
@@ -2485,6 +2487,7 @@ const LANG = {
     'aria.switchCamera': 'Kamera wechseln',
     'aria.closeCamera': 'Kamera schlie\u00dfen',
     'aria.clearLastScan': 'Letzten Scan zur\u00fccknehmen',
+    'aria.clearScan': 'Scan zur\u00fccksetzen (Aktion l\u00f6schen)',
     'aria.doneScanning': 'Scannen fertig',
     'aria.toggleSidebar': 'Seitenleiste umschalten',
     'aria.mainNav': 'Hauptnavigation',
@@ -2675,6 +2678,7 @@ const LANG = {
     'cam.inUse': 'Kamera wird von einer anderen Anwendung verwendet.',
     'cam.unknownError': 'Kamerafehler: {err}',
     'cam.nothingToUndo': 'Nichts zum R\u00fcckg\u00e4ngig machen',
+    'cam.scanCleared': 'Scan zur\u00fcckgesetzt',
     // Offline
     'offline.queued': '{n} in Warteschlange',
     // Task delete
@@ -3804,6 +3808,7 @@ const LANG = {
     'aria.switchCamera': 'Mudar c\u00e2mera',
     'aria.closeCamera': 'Fechar c\u00e2mera',
     'aria.clearLastScan': 'Desfazer \u00faltimo scan',
+    'aria.clearScan': 'Limpar scan (redefinir a\u00e7\u00e3o)',
     'aria.doneScanning': 'Scan conclu\u00eddo',
     'aria.toggleSidebar': 'Alternar barra lateral',
     'aria.mainNav': 'Navega\u00e7\u00e3o principal',
@@ -3996,6 +4001,7 @@ const LANG = {
     'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
     'cam.unknownError': 'Erro de c\u00e2mera: {err}',
     'cam.nothingToUndo': 'Nada para desfazer',
+    'cam.scanCleared': 'Scan redefinido',
     // Offline
     'offline.queued': '{n} na fila',
     // Task delete
@@ -15692,6 +15698,10 @@ function initEventListeners() {
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-undo').addEventListener('click', camUndoLastScan);
+  $('btn-cam-reset').addEventListener('click', function () {
+    resetScan();
+    _showCamHudToast('info', t('cam.scanCleared'));
+  });
 
   // Sidebar navigation
   $('sb-toggle').addEventListener('click', toggleSidebar);
