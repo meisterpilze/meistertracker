@@ -439,9 +439,10 @@ const MIGRATIONS = [
     description: 'Add recurrence + team_assignees to calendar_events',
     fn(db) {
       const addCol = (col, def) => {
+        if (!/^[a-z_][a-z0-9_]*$/i.test(col)) throw new Error('invalid column name: ' + col);
         const has = db
-          .prepare(`SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name='${col}'`)
-          .get();
+          .prepare("SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name = ?")
+          .get(col);
         if (!has.c) db.exec(`ALTER TABLE calendar_events ADD COLUMN ${col} ${def}`);
       };
       addCol('recurrence', 'TEXT');
@@ -454,7 +455,10 @@ const MIGRATIONS = [
     description: 'Add recurrence columns to manual_tasks',
     fn(db) {
       const addCol = (col, def) => {
-        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='${col}'`).get();
+        if (!/^[a-z_][a-z0-9_]*$/i.test(col)) throw new Error('invalid column name: ' + col);
+        const has = db
+          .prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?")
+          .get(col);
         if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
       };
       addCol('recurrence', 'TEXT');
@@ -466,7 +470,10 @@ const MIGRATIONS = [
     description: 'Add due_time/due_end_time to manual_tasks for time-slot scheduling',
     fn(db) {
       const addCol = (col, def) => {
-        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name='${col}'`).get();
+        if (!/^[a-z_][a-z0-9_]*$/i.test(col)) throw new Error('invalid column name: ' + col);
+        const has = db
+          .prepare("SELECT COUNT(*) as c FROM pragma_table_info('manual_tasks') WHERE name = ?")
+          .get(col);
         if (!has.c) db.exec(`ALTER TABLE manual_tasks ADD COLUMN ${col} ${def}`);
       };
       addCol('due_time', 'TEXT');
