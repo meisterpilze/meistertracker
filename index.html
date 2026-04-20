@@ -492,6 +492,41 @@
       </div>
     </div>
 
+    <!-- Bag-select modal — pick a subset of bags in a batch to move together -->
+    <div class="modal-bg" id="m-bagselect" role="dialog" aria-modal="true" aria-labelledby="bs-title">
+      <div class="modal" style="max-width: 520px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
+          <h3 id="bs-title" data-i18n="bagSelect.title">Select bags to move</h3>
+          <button id="bs-cancel" class="btn btn-sm" data-i18n="common.close">Close</button>
+        </div>
+        <p id="bs-subtitle" style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 4px"></p>
+        <p
+          id="bs-hint"
+          style="font-size: 11px; color: var(--c-text-muted); margin-bottom: 10px; font-style: italic"
+          data-i18n="bagSelect.scanHint"
+        >
+          Tap bags below or scan more QR codes to toggle them.
+        </p>
+        <div
+          id="bs-bags"
+          style="
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 45vh;
+            overflow-y: auto;
+            margin-bottom: 14px;
+          "
+        ></div>
+        <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap">
+          <span id="bs-count" style="font-size: 13px; color: var(--c-text-sec); font-weight: 600"></span>
+          <button id="bs-continue" class="btn btn-p" data-i18n="bagSelect.continueToZone">
+            Continue → pick zone
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Bag info modal — opens when scanning a bag with no action set -->
     <div class="modal-bg" id="m-baginfo" role="dialog" aria-modal="true" aria-labelledby="bi-title">
       <div class="modal" style="max-width: 540px">
@@ -503,6 +538,9 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px">
           <button id="set-12" class="btn btn-sm btn-p" data-i18n="bagInfo.addThisBag">+ ADD this bag</button>
           <button id="set-13" class="btn btn-sm btn-p" data-i18n="bagInfo.moveThisBag">Move MOVE this bag</button>
+          <button id="set-selectmove" class="btn btn-sm btn-p" data-i18n="bagInfo.selectToMove">
+            Move selected…
+          </button>
           <button id="set-movebatch" class="btn btn-sm btn-p" data-i18n="bagInfo.moveEntireBatch">
             Move Batch
           </button>
