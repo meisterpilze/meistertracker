@@ -1437,10 +1437,6 @@ tr:hover td {
   cursor: pointer;
   accent-color: var(--c-primary);
 }
-.done-text {
-  text-decoration: line-through;
-  color: var(--c-text-muted);
-}
 .pdot {
   width: 9px;
   height: 9px;
@@ -2473,49 +2469,6 @@ tr:hover td {
   background: var(--c-surface);
   color: var(--c-text);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* ═══ MINI PIPELINE STRIP ═══════════════════════════════════════ */
-.dmp-card {
-  padding: 14px 18px;
-}
-.dmp-stages {
-  display: flex;
-  gap: 8px;
-}
-.dmp-stage {
-  flex: 1;
-  min-width: 0;
-}
-.dmp-stage-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 5px;
-}
-.dmp-stage-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--c-text-muted);
-}
-.dmp-stage-count {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-}
-.dmp-stage-bar {
-  height: 6px;
-  background: var(--c-border-light);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.dmp-stage-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.45s ease;
-  min-width: 0;
 }
 
 /* ═══ LOCATIONS HEADER + INLINE SEARCH ═════════════════════════ */
