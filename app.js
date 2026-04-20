@@ -791,13 +791,15 @@ const LANG = {
     'bagInfo.removed': 'Removed',
     'bagInfo.noneYet': 'None yet',
     'bagInfo.allBags': 'all bags',
-    'bagInfo.addThisBag': '+ ADD this bag',
-    'bagInfo.moveThisBag': 'Move MOVE this bag',
-    'bagInfo.moveEntireBatch': 'Move Batch',
-    'bagInfo.moveMenuTitle': 'Move bag {bag} to\u2026',
-    'bagInfo.selectToMove': 'Move selected\u2026',
-    'bagInfo.harvestThisBag': 'Harvest HARVEST this bag',
-    'bagInfo.removeThisBag': 'X REMOVE this bag',
+    'bagInfo.moveBags': 'Move bags\u2026',
+    'bagInfo.moveAll': 'Move all',
+    'bagInfo.harvest': 'Harvest',
+    'bagInfo.remove': 'Remove',
+    'bagInfo.confirmRemoveTitle': 'Remove bag?',
+    'bagInfo.confirmRemoveBody': 'Remove {bag} from {loc}? This cannot be scanned away \u2014 only fixed manually.',
+    'bagInfo.confirmRemoveBodyNoLoc': 'Remove {bag}? This cannot be scanned away \u2014 only fixed manually.',
+    'bagInfo.confirmRemoveOk': 'Remove',
+    'scanFb.removeFromLogged': 'REMOVE {bag} from {loc}',
     // Bag-select modal (subset of a batch)
     'bagSelect.title': 'Select bags to move',
     'bagSelect.subtitle': 'Batch {id} \u2014 {n} of {total} bags selected',
@@ -2113,13 +2115,15 @@ const LANG = {
     'bagInfo.removed': 'Entfernt',
     'bagInfo.noneYet': 'Noch keine',
     'bagInfo.allBags': 'Alle Beutel',
-    'bagInfo.addThisBag': '+ HINZUF\u00dcGEN',
-    'bagInfo.moveThisBag': 'VERSCHIEBEN',
-    'bagInfo.moveEntireBatch': 'Charge verschieben',
-    'bagInfo.moveMenuTitle': 'Beutel {bag} verschieben nach\u2026',
-    'bagInfo.selectToMove': 'Auswahl verschieben\u2026',
-    'bagInfo.harvestThisBag': 'ERNTE erfassen',
-    'bagInfo.removeThisBag': 'X ENTFERNEN',
+    'bagInfo.moveBags': 'Beutel verschieben\u2026',
+    'bagInfo.moveAll': 'Alle verschieben',
+    'bagInfo.harvest': 'Ernte',
+    'bagInfo.remove': 'Entfernen',
+    'bagInfo.confirmRemoveTitle': 'Beutel entfernen?',
+    'bagInfo.confirmRemoveBody': '{bag} aus {loc} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
+    'bagInfo.confirmRemoveBodyNoLoc': '{bag} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
+    'bagInfo.confirmRemoveOk': 'Entfernen',
+    'scanFb.removeFromLogged': 'ENTFERNT {bag} aus {loc}',
     // Bag-select modal (subset of a batch)
     'bagSelect.title': 'Beutel zum Verschieben ausw\u00e4hlen',
     'bagSelect.subtitle': 'Charge {id} \u2014 {n} von {total} Beuteln ausgew\u00e4hlt',
@@ -3447,13 +3451,15 @@ const LANG = {
     'bagInfo.removed': 'Removido',
     'bagInfo.noneYet': 'Nenhuma ainda',
     'bagInfo.allBags': 'Todos os sacos',
-    'bagInfo.addThisBag': '+ ADICIONAR este saco',
-    'bagInfo.moveThisBag': 'MOVER este saco',
-    'bagInfo.moveEntireBatch': 'Mover lote',
-    'bagInfo.moveMenuTitle': 'Mover saco {bag} para\u2026',
-    'bagInfo.selectToMove': 'Mover sele\u00e7\u00e3o\u2026',
-    'bagInfo.harvestThisBag': 'COLHER este saco',
-    'bagInfo.removeThisBag': 'X REMOVER este saco',
+    'bagInfo.moveBags': 'Mover sacos\u2026',
+    'bagInfo.moveAll': 'Mover todos',
+    'bagInfo.harvest': 'Colher',
+    'bagInfo.remove': 'Remover',
+    'bagInfo.confirmRemoveTitle': 'Remover saco?',
+    'bagInfo.confirmRemoveBody': 'Remover {bag} de {loc}? S\u00f3 se desfaz manualmente.',
+    'bagInfo.confirmRemoveBodyNoLoc': 'Remover {bag}? S\u00f3 se desfaz manualmente.',
+    'bagInfo.confirmRemoveOk': 'Remover',
+    'scanFb.removeFromLogged': 'REMOVIDO {bag} de {loc}',
     // Bag-select modal (subset of a batch)
     'bagSelect.title': 'Selecionar sacos para mover',
     'bagSelect.subtitle': 'Lote {id} \u2014 {n} de {total} sacos selecionados',
@@ -7569,6 +7575,7 @@ function _openZonePicker(title, onPick) {
         rRow.style.cssText =
           'display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-size:12px;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
         rRow.textContent = r.id.slice(z.id.length + 1) || r.id;
+        rRow.title = r.id;
         rRow.addEventListener('mouseenter', () => {
           rRow.style.background = 'var(--c-bg)';
         });
@@ -7612,73 +7619,6 @@ function openMoveBatchModal(batchId) {
       renderBatches();
     });
   });
-}
-
-// Move-bag modal — pick a destination zone/rack to move a single bag via the picker
-// instead of scanning a location barcode. Used from the bag info modal on mobile.
-function openMoveBagModal(bagId, batchId) {
-  const b = batches.find((x) => x.batchId.toUpperCase() === (batchId || '').toUpperCase());
-  if (!b) return;
-  _openZonePicker(t('bagInfo.moveMenuTitle', { bag: bagId }), function (dest) {
-    moveBagTo(b, bagId, dest);
-  });
-}
-
-// Move a single bag to a destination and log it. Mirrors the per-bag MOVE path
-// in processScan but skips the "scan location first" step.
-function moveBagTo(batch, bagId, dest) {
-  const bagLast = [...scanLog]
-    .reverse()
-    .find(
-      (e) =>
-        (e.bag || '').toUpperCase() === bagId.toUpperCase() &&
-        (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
-    );
-  if (!bagLast) {
-    _scanBeep(300, 150);
-    setFb('err', t('scanFb.bagNotPlaced', { bag: bagId }));
-    return;
-  }
-  if (bagLast.action === 'REMOVE') {
-    _scanBeep(300, 150);
-    setFb('err', t('scanFb.bagRemoved', { bag: bagId }));
-    return;
-  }
-  const curLoc = bagLast.to || null;
-  if (curLoc && curLoc.toUpperCase() === dest.toUpperCase()) {
-    _scanBeep(500, 120);
-    setFb('err', t('scanFb.bagAlreadyAt', { bag: bagId, loc: zoneDisplayName(dest) }));
-    return;
-  }
-  const tempId = 's' + ++_scanTempIdCounter;
-  const entry = {
-    time: new Date().toISOString(),
-    action: 'MOVE',
-    batch: batch.batchId,
-    bag: bagId,
-    from: curLoc,
-    to: dest,
-    species: batch.species,
-    strain: batch.strain,
-    user: currentUser?.username || null,
-    _tempId: tempId
-  };
-  scanLog.push(entry);
-  movements.push(entry);
-  if (!sessionStartTime) sessionStartTime = Date.now();
-  sessionEntries.push(entry);
-  if (scanChannel)
-    scanChannel.postMessage({
-      type: 'scan-entry',
-      entry: { bag: entry.bag, batch: entry.batch, action: entry.action, to: entry.to }
-    });
-  scan.count++;
-  apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
-    if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
-  });
-  const fbTo = curLoc ? ' ' + zoneDisplayName(curLoc) + ' \u2192 ' + zoneDisplayName(dest) : ' \u2192 ' + zoneDisplayName(dest);
-  setFb('ok', t('scanFb.logged', { action: 'MOVE', val: bagId, to: fbTo, n: scan.count }), entry);
-  updateSD();
 }
 
 const tableSort = { batches: null, cultures: null };
@@ -11457,49 +11397,68 @@ function openBagInfo(bagId, batchId, batch) {
   document.getElementById('m-baginfo').classList.add('open');
   setFb('info', t('scanFb.bagInfo', { bag: bagId }), { noModal: true });
 }
-function biSetAction(action) {
+function biOpenHarvest() {
+  if (!biBagId || !biBatchId) return;
   document.getElementById('m-baginfo').classList.remove('open');
-  scan.action = action;
+  scan.action = 'HARVEST';
   scan.from = null;
   scan.to = null;
   scan.harvestBag = null;
   updateSD();
-  if (action === 'HARVEST') {
-    showHarvestPanel(biBagId, biBatchId);
-  } else if (action === 'REMOVE') {
-    const bagLast = [...scanLog]
-      .reverse()
-      .find(
-        (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
-      );
-    const fromLoc = bagLast ? bagLast.to : null;
-    const b = batches.find((x) => x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
-    const tempId = 's' + ++_scanTempIdCounter;
-    const entry = {
-      time: new Date().toISOString(),
-      action: 'REMOVE',
-      batch: biBatchId,
-      bag: biBagId,
-      from: fromLoc,
-      to: null,
-      species: b?.species || null,
-      strain: b?.strain || null,
-      user: currentUser?.username || null,
-      _tempId: tempId
-    };
-    scanLog.push(entry);
-    movements.push(entry);
-    if (!sessionStartTime) sessionStartTime = Date.now();
-    sessionEntries.push(entry);
-    scan.count++;
-    apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
-      if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
-    });
-    updateSD();
-    setFb('ok', t('scanFb.removeLogged', { bag: biBagId }), entry);
-  } else {
-    setFb('ok', t('scanFb.actionReady', { action: action }));
-  }
+  showHarvestPanel(biBagId, biBatchId);
+}
+
+// Log a REMOVE entry after the confirmation dialog was accepted.
+function biPerformRemove() {
+  if (!biBagId) return;
+  const bagLast = [...scanLog]
+    .reverse()
+    .find(
+      (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
+    );
+  const fromLoc = bagLast ? bagLast.to : null;
+  const b = batches.find((x) => x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  const tempId = 's' + ++_scanTempIdCounter;
+  const entry = {
+    time: new Date().toISOString(),
+    action: 'REMOVE',
+    batch: biBatchId,
+    bag: biBagId,
+    from: fromLoc,
+    to: null,
+    species: b?.species || null,
+    strain: b?.strain || null,
+    user: currentUser?.username || null,
+    _tempId: tempId
+  };
+  scanLog.push(entry);
+  movements.push(entry);
+  if (!sessionStartTime) sessionStartTime = Date.now();
+  sessionEntries.push(entry);
+  scan.count++;
+  apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
+    if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
+  });
+  updateSD();
+  const msg = fromLoc
+    ? t('scanFb.removeFromLogged', { bag: biBagId, loc: zoneDisplayName(fromLoc) })
+    : t('scanFb.removeLogged', { bag: biBagId });
+  setFb('ok', msg, entry);
+}
+
+function biConfirmRemove() {
+  if (!biBagId) return;
+  const bagLast = [...scanLog]
+    .reverse()
+    .find(
+      (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
+    );
+  const fromLoc = bagLast ? bagLast.to : null;
+  const body = fromLoc
+    ? t('bagInfo.confirmRemoveBody', { bag: biBagId, loc: zoneDisplayName(fromLoc) })
+    : t('bagInfo.confirmRemoveBodyNoLoc', { bag: biBagId });
+  document.getElementById('m-baginfo').classList.remove('open');
+  confirm2(t('bagInfo.confirmRemoveTitle'), body, t('bagInfo.confirmRemoveOk'), biPerformRemove);
 }
 document.getElementById('m-baginfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-baginfo') document.getElementById('m-baginfo').classList.remove('open');
@@ -11545,6 +11504,12 @@ function renderBagSelect() {
     total: b.bags.length
   });
   document.getElementById('bs-count').textContent = t('bagSelect.countSelected', { n: bsSelected.size });
+  const continueBtn = document.getElementById('bs-continue');
+  if (continueBtn) {
+    continueBtn.disabled = bsSelected.size === 0;
+    continueBtn.style.opacity = bsSelected.size === 0 ? '0.4' : '1';
+    continueBtn.style.cursor = bsSelected.size === 0 ? 'not-allowed' : 'pointer';
+  }
   const container = document.getElementById('bs-bags');
   container.innerHTML = '';
   b.bags.forEach((bag) => {
@@ -15897,13 +15862,9 @@ function initEventListeners() {
   $('cls-11').addEventListener('click', () => {
     document.getElementById('m-baginfo').classList.remove('open');
   });
-  $('set-12').addEventListener('click', () => {
-    biSetAction('ADD');
-  });
-  $('set-13').addEventListener('click', () => {
-    if (!biBagId || !biBatchId) return;
-    document.getElementById('m-baginfo').classList.remove('open');
-    openMoveBagModal(biBagId, biBatchId);
+  $('set-selectmove').addEventListener('click', () => {
+    if (!biBatchId) return;
+    openBagSelectModal(biBagId, biBatchId);
   });
   $('set-movebatch').addEventListener('click', () => {
     if (!biBatchId) return;
@@ -15912,22 +15873,14 @@ function initEventListeners() {
     document.getElementById('m-baginfo').classList.remove('open');
     openMoveBatchModal(b.batchId);
   });
-  $('set-selectmove').addEventListener('click', () => {
-    if (!biBatchId) return;
-    openBagSelectModal(biBagId, biBatchId);
-  });
   $('bs-cancel').addEventListener('click', () => {
     document.getElementById('m-bagselect').classList.remove('open');
   });
   $('bs-continue').addEventListener('click', () => {
     bsConfirm();
   });
-  $('set-14').addEventListener('click', () => {
-    biSetAction('HARVEST');
-  });
-  $('set-15').addEventListener('click', () => {
-    biSetAction('REMOVE');
-  });
+  $('set-14').addEventListener('click', biOpenHarvest);
+  $('set-15').addEventListener('click', biConfirmRemove);
   $('m-camscan').addEventListener('click', function (e) {
     if (e.target === this) closeCamScan();
   });
