@@ -793,6 +793,7 @@ const LANG = {
     'bagInfo.allBags': 'all bags',
     'bagInfo.addThisBag': '+ ADD this bag',
     'bagInfo.moveThisBag': 'Move MOVE this bag',
+    'bagInfo.moveEntireBatch': 'Move ENTIRE BATCH',
     'bagInfo.harvestThisBag': 'Harvest HARVEST this bag',
     'bagInfo.removeThisBag': 'X REMOVE this bag',
     // Confirm modal
@@ -2098,6 +2099,7 @@ const LANG = {
     'bagInfo.allBags': 'Alle Beutel',
     'bagInfo.addThisBag': '+ HINZUF\u00dcGEN',
     'bagInfo.moveThisBag': 'VERSCHIEBEN',
+    'bagInfo.moveEntireBatch': 'GANZE CHARGE VERSCHIEBEN',
     'bagInfo.harvestThisBag': 'ERNTE erfassen',
     'bagInfo.removeThisBag': 'X ENTFERNEN',
     // Confirm modal
@@ -3415,6 +3417,7 @@ const LANG = {
     'bagInfo.allBags': 'Todos os sacos',
     'bagInfo.addThisBag': '+ ADICIONAR este saco',
     'bagInfo.moveThisBag': 'MOVER este saco',
+    'bagInfo.moveEntireBatch': 'MOVER LOTE INTEIRO',
     'bagInfo.harvestThisBag': 'COLHER este saco',
     'bagInfo.removeThisBag': 'X REMOVER este saco',
     // Confirm modal
@@ -15610,6 +15613,13 @@ function initEventListeners() {
   });
   $('set-13').addEventListener('click', () => {
     biSetAction('MOVE');
+  });
+  $('set-movebatch').addEventListener('click', () => {
+    if (!biBatchId) return;
+    const b = batches.find((x) => x.batchId.toUpperCase() === biBatchId.toUpperCase());
+    if (!b) return;
+    document.getElementById('m-baginfo').classList.remove('open');
+    openMoveBatchModal(b.batchId);
   });
   $('set-14').addEventListener('click', () => {
     biSetAction('HARVEST');
