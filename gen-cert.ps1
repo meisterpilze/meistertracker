@@ -1,10 +1,23 @@
 # Generate a self-signed TLS certificate for local/LAN HTTPS.
-# Required for camera access (getUserMedia) on iOS Safari.
+# Required for camera access (getUserMedia) on mobile browsers — Chrome on
+# Android and Safari on iOS both refuse `getUserMedia` on plain HTTP origins.
 #
-# Usage: powershell -ExecutionPolicy Bypass -File gen-cert.ps1
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File gen-cert.ps1
+#   powershell -ExecutionPolicy Bypass -File gen-cert.ps1 -Domain myhost.duckdns.org
+#   powershell -ExecutionPolicy Bypass -File gen-cert.ps1 myhost.duckdns.org
+#
+# The optional domain is added to the certificate's SAN list alongside
+# localhost + detected LAN IP, so the cert is valid for public-DNS access too.
+# Can also be set via the CERT_DOMAIN environment variable.
 #
 # Tries openssl first (ships with Git for Windows), falls back to
 # PowerShell's New-SelfSignedCertificate + PEM export.
+
+param(
+    [Parameter(Position = 0)]
+    [string]$Domain = $env:CERT_DOMAIN
+)
 
 $ErrorActionPreference = 'Stop'
 $certDir = Join-Path $PSScriptRoot 'certs'
@@ -23,8 +36,15 @@ try {
     if ($addr) { $lanIp = $addr.IPAddress }
 } catch {}
 Write-Host "  -> LAN IP: $lanIp"
+if ($Domain) { Write-Host "  -> Domain: $Domain" }
 
 if (-not (Test-Path $certDir)) { New-Item -ItemType Directory -Path $certDir | Out-Null }
+
+# Build SAN list: domain first (if provided), then localhost + LAN IP
+$sanParts = @()
+if ($Domain) { $sanParts += "DNS:$Domain" }
+$sanParts += 'DNS:localhost', 'IP:127.0.0.1', "IP:$lanIp"
+$sanOpenssl = $sanParts -join ','
 
 # --- Method 1: openssl (preferred, ships with Git for Windows) ---
 $opensslPath = Get-Command openssl -ErrorAction SilentlyContinue
@@ -43,7 +63,7 @@ x509_extensions = v3_ext
 CN = Meisterpilze Lab Tracker
 
 [v3_ext]
-subjectAltName = DNS:localhost,IP:127.0.0.1,IP:$lanIp
+subjectAltName = $sanOpenssl
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment
 "@ | Set-Content -Path $cnf -Encoding ASCII
@@ -70,9 +90,15 @@ keyUsage = digitalSignature, keyEncipherment
 # --- Method 2: PowerShell New-SelfSignedCertificate ---
 try {
     Write-Host '  -> Generating with PowerShell...'
+    # Build SAN string for New-SelfSignedCertificate's text-extension syntax
+    $sanTextParts = @()
+    if ($Domain) { $sanTextParts += "DNS=$Domain" }
+    $sanTextParts += 'DNS=localhost', 'IPAddress=127.0.0.1', "IPAddress=$lanIp"
+    $sanText = $sanTextParts -join '&'
+
     $cert = New-SelfSignedCertificate `
         -Subject 'CN=Meisterpilze Lab Tracker' `
-        -TextExtension @("2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1&IPAddress=$lanIp") `
+        -TextExtension @("2.5.29.17={text}$sanText") `
         -CertStoreLocation 'Cert:\CurrentUser\My' `
         -KeyExportPolicy Exportable `
         -KeySpec KeyExchange `
@@ -96,6 +122,6 @@ try {
     exit 0
 } catch {
     Write-Host "  -> WARNING: Certificate generation failed: $($_.Exception.Message)"
-    Write-Host '     Server will start in HTTP-only mode (iOS camera will not work).'
+    Write-Host '     Server will start in HTTP-only mode (mobile camera will not work).'
     exit 1
 }

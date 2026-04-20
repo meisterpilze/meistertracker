@@ -325,7 +325,12 @@ if exist "certs\server.key" if exist "certs\server.crt" (
 )
 if exist "gen-cert.ps1" (
     echo  -^> TLS certificates missing, generating...
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\gen-cert.ps1"
+    if defined CERT_DOMAIN (
+        echo  -^> Including domain in cert: %CERT_DOMAIN%
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\gen-cert.ps1" -Domain "%CERT_DOMAIN%"
+    ) else (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\gen-cert.ps1"
+    )
     if exist "certs\server.key" if exist "certs\server.crt" (
         echo  -^> TLS certificates generated successfully.
         exit /b 0
@@ -344,7 +349,7 @@ if exist "gen-cert.sh" (
     )
 )
 echo  -^> WARNING: Could not generate TLS certificates.
-echo     Server will start in HTTP-only mode ^(iOS camera will not work^).
+echo     Server will start in HTTP-only mode ^(mobile camera will not work^).
 exit /b 0
 
 :refresh_path
