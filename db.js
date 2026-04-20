@@ -1806,10 +1806,12 @@ function listNotifications(db, userId, limit = 20) {
   const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
   return db
     .prepare(
+      // id DESC breaks ties when two rows share a created timestamp
+      // (notifications inserted in the same millisecond).
       `SELECT id, user_id AS userId, type, title, body, link_type AS linkType, link_id AS linkId, created, read
        FROM notifications
        WHERE user_id = ?
-       ORDER BY created DESC
+       ORDER BY created DESC, id DESC
        LIMIT ?`
     )
     .all(userId, lim);
