@@ -793,7 +793,8 @@ const LANG = {
     'bagInfo.allBags': 'all bags',
     'bagInfo.addThisBag': '+ ADD this bag',
     'bagInfo.moveThisBag': 'Move MOVE this bag',
-    'bagInfo.moveEntireBatch': 'Move ENTIRE BATCH',
+    'bagInfo.moveEntireBatch': 'Move Batch',
+    'bagInfo.moveMenuTitle': 'Move bag {bag} to\u2026',
     'bagInfo.harvestThisBag': 'Harvest HARVEST this bag',
     'bagInfo.removeThisBag': 'X REMOVE this bag',
     // Confirm modal
@@ -2099,7 +2100,8 @@ const LANG = {
     'bagInfo.allBags': 'Alle Beutel',
     'bagInfo.addThisBag': '+ HINZUF\u00dcGEN',
     'bagInfo.moveThisBag': 'VERSCHIEBEN',
-    'bagInfo.moveEntireBatch': 'GANZE CHARGE VERSCHIEBEN',
+    'bagInfo.moveEntireBatch': 'Charge verschieben',
+    'bagInfo.moveMenuTitle': 'Beutel {bag} verschieben nach\u2026',
     'bagInfo.harvestThisBag': 'ERNTE erfassen',
     'bagInfo.removeThisBag': 'X ENTFERNEN',
     // Confirm modal
@@ -3417,7 +3419,8 @@ const LANG = {
     'bagInfo.allBags': 'Todos os sacos',
     'bagInfo.addThisBag': '+ ADICIONAR este saco',
     'bagInfo.moveThisBag': 'MOVER este saco',
-    'bagInfo.moveEntireBatch': 'MOVER LOTE INTEIRO',
+    'bagInfo.moveEntireBatch': 'Mover lote',
+    'bagInfo.moveMenuTitle': 'Mover saco {bag} para\u2026',
     'bagInfo.harvestThisBag': 'COLHER este saco',
     'bagInfo.removeThisBag': 'X REMOVER este saco',
     // Confirm modal
@@ -7477,13 +7480,12 @@ function openZonePickModal(batch, bags, onDone) {
   m.style.display = 'flex';
 }
 
-// Move-batch modal — select destination for an entire batch from Alle Chargen.
-function openMoveBatchModal(batchId) {
-  const b = batches.find((x) => x.batchId === batchId);
-  if (!b) return;
+// Render zone/rack picker inside the m-move-batch modal.
+// title: string shown at the top; onPick(destId): called when a zone or rack is chosen.
+function _openZonePicker(title, onPick) {
   const m = document.getElementById('m-move-batch');
   if (!m) return;
-  document.getElementById('mb-title').textContent = t('batch.moveMenuTitle', { id: batchId });
+  document.getElementById('mb-title').textContent = title;
   const container = document.getElementById('mb-zones');
   container.innerHTML = '';
   if (!zones.length) {
@@ -7493,7 +7495,6 @@ function openMoveBatchModal(batchId) {
       '</div>';
   } else {
     zones.forEach((z) => {
-      // Zone row
       const zRow = document.createElement('button');
       zRow.type = 'button';
       zRow.style.cssText =
@@ -7507,30 +7508,10 @@ function openMoveBatchModal(batchId) {
         zRow.style.background = 'none';
       });
       zRow.addEventListener('click', () => {
-        document.getElementById('m-move-batch').classList.remove('open');
-        moveBatchTo(b, z.id, function (moved, skipped) {
-          if (!moved) {
-            setFb(
-              'err',
-              t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(z.id) + ')' : '')
-            );
-            return;
-          }
-          setFb(
-            'ok',
-            b.batchId +
-              ': ' +
-              moved +
-              ' Bags \u2192 ' +
-              zoneDisplayName(z.id) +
-              (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
-          );
-          updateSD();
-          renderBatches();
-        });
+        m.classList.remove('open');
+        onPick(z.id);
       });
       container.appendChild(zRow);
-      // Rack rows
       (z.racks || []).forEach((r) => {
         const rRow = document.createElement('button');
         rRow.type = 'button';
@@ -7544,33 +7525,109 @@ function openMoveBatchModal(batchId) {
           rRow.style.background = 'none';
         });
         rRow.addEventListener('click', () => {
-          document.getElementById('m-move-batch').classList.remove('open');
-          moveBatchTo(b, r.id, function (moved, skipped) {
-            if (!moved) {
-              setFb(
-                'err',
-                t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(r.id) + ')' : '')
-              );
-              return;
-            }
-            setFb(
-              'ok',
-              b.batchId +
-                ': ' +
-                moved +
-                ' Bags \u2192 ' +
-                zoneDisplayName(r.id) +
-                (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
-            );
-            updateSD();
-            renderBatches();
-          });
+          m.classList.remove('open');
+          onPick(r.id);
         });
         container.appendChild(rRow);
       });
     });
   }
-  document.getElementById('m-move-batch').classList.add('open');
+  m.classList.add('open');
+}
+
+// Move-batch modal — select destination for an entire batch from Alle Chargen.
+function openMoveBatchModal(batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return;
+  _openZonePicker(t('batch.moveMenuTitle', { id: batchId }), function (dest) {
+    moveBatchTo(b, dest, function (moved, skipped) {
+      if (!moved) {
+        setFb(
+          'err',
+          t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(dest) + ')' : '')
+        );
+        return;
+      }
+      setFb(
+        'ok',
+        b.batchId +
+          ': ' +
+          moved +
+          ' Bags \u2192 ' +
+          zoneDisplayName(dest) +
+          (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
+      );
+      updateSD();
+      renderBatches();
+    });
+  });
+}
+
+// Move-bag modal — pick a destination zone/rack to move a single bag via the picker
+// instead of scanning a location barcode. Used from the bag info modal on mobile.
+function openMoveBagModal(bagId, batchId) {
+  const b = batches.find((x) => x.batchId.toUpperCase() === (batchId || '').toUpperCase());
+  if (!b) return;
+  _openZonePicker(t('bagInfo.moveMenuTitle', { bag: bagId }), function (dest) {
+    moveBagTo(b, bagId, dest);
+  });
+}
+
+// Move a single bag to a destination and log it. Mirrors the per-bag MOVE path
+// in processScan but skips the "scan location first" step.
+function moveBagTo(batch, bagId, dest) {
+  const bagLast = [...scanLog]
+    .reverse()
+    .find(
+      (e) =>
+        (e.bag || '').toUpperCase() === bagId.toUpperCase() &&
+        (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+    );
+  if (!bagLast) {
+    _scanBeep(300, 150);
+    setFb('err', t('scanFb.bagNotPlaced', { bag: bagId }));
+    return;
+  }
+  if (bagLast.action === 'REMOVE') {
+    _scanBeep(300, 150);
+    setFb('err', t('scanFb.bagRemoved', { bag: bagId }));
+    return;
+  }
+  const curLoc = bagLast.to || null;
+  if (curLoc && curLoc.toUpperCase() === dest.toUpperCase()) {
+    _scanBeep(500, 120);
+    setFb('err', t('scanFb.bagAlreadyAt', { bag: bagId, loc: zoneDisplayName(dest) }));
+    return;
+  }
+  const tempId = 's' + ++_scanTempIdCounter;
+  const entry = {
+    time: new Date().toISOString(),
+    action: 'MOVE',
+    batch: batch.batchId,
+    bag: bagId,
+    from: curLoc,
+    to: dest,
+    species: batch.species,
+    strain: batch.strain,
+    user: currentUser?.username || null,
+    _tempId: tempId
+  };
+  scanLog.push(entry);
+  movements.push(entry);
+  if (!sessionStartTime) sessionStartTime = Date.now();
+  sessionEntries.push(entry);
+  if (scanChannel)
+    scanChannel.postMessage({
+      type: 'scan-entry',
+      entry: { bag: entry.bag, batch: entry.batch, action: entry.action, to: entry.to }
+    });
+  scan.count++;
+  apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
+    if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
+  });
+  const fbTo = curLoc ? ' ' + zoneDisplayName(curLoc) + ' \u2192 ' + zoneDisplayName(dest) : ' \u2192 ' + zoneDisplayName(dest);
+  setFb('ok', t('scanFb.logged', { action: 'MOVE', val: bagId, to: fbTo, n: scan.count }), entry);
+  updateSD();
 }
 
 const tableSort = { batches: null, cultures: null };
@@ -15612,7 +15669,9 @@ function initEventListeners() {
     biSetAction('ADD');
   });
   $('set-13').addEventListener('click', () => {
-    biSetAction('MOVE');
+    if (!biBagId || !biBatchId) return;
+    document.getElementById('m-baginfo').classList.remove('open');
+    openMoveBagModal(biBagId, biBatchId);
   });
   $('set-movebatch').addEventListener('click', () => {
     if (!biBatchId) return;
