@@ -795,8 +795,21 @@ const LANG = {
     'bagInfo.moveThisBag': 'Move MOVE this bag',
     'bagInfo.moveEntireBatch': 'Move Batch',
     'bagInfo.moveMenuTitle': 'Move bag {bag} to\u2026',
+    'bagInfo.selectToMove': 'Move selected\u2026',
     'bagInfo.harvestThisBag': 'Harvest HARVEST this bag',
     'bagInfo.removeThisBag': 'X REMOVE this bag',
+    // Bag-select modal (subset of a batch)
+    'bagSelect.title': 'Select bags to move',
+    'bagSelect.subtitle': 'Batch {id} \u2014 {n} of {total} bags selected',
+    'bagSelect.scanHint': 'Tap bags below or scan more QR codes to toggle them.',
+    'bagSelect.countSelected': '{n} selected',
+    'bagSelect.continueToZone': 'Continue \u2192 pick zone',
+    'bagSelect.moveMenuTitle': 'Move {n} bags to\u2026',
+    'bagSelect.noneSelected': 'Select at least one bag',
+    'bagSelect.notInBatch': '{bag} is not in batch {id}',
+    'bagSelect.toggled': '{bag} {action}',
+    'bagSelect.added': 'added',
+    'bagSelect.removed': 'removed',
     // Confirm modal
     'confirm.confirm': 'Confirm',
     'confirm.cancel': 'Cancel',
@@ -2102,8 +2115,21 @@ const LANG = {
     'bagInfo.moveThisBag': 'VERSCHIEBEN',
     'bagInfo.moveEntireBatch': 'Charge verschieben',
     'bagInfo.moveMenuTitle': 'Beutel {bag} verschieben nach\u2026',
+    'bagInfo.selectToMove': 'Auswahl verschieben\u2026',
     'bagInfo.harvestThisBag': 'ERNTE erfassen',
     'bagInfo.removeThisBag': 'X ENTFERNEN',
+    // Bag-select modal (subset of a batch)
+    'bagSelect.title': 'Beutel zum Verschieben ausw\u00e4hlen',
+    'bagSelect.subtitle': 'Charge {id} \u2014 {n} von {total} Beuteln ausgew\u00e4hlt',
+    'bagSelect.scanHint': 'Beutel unten antippen oder weitere QR-Codes scannen zum Umschalten.',
+    'bagSelect.countSelected': '{n} ausgew\u00e4hlt',
+    'bagSelect.continueToZone': 'Weiter \u2192 Zone w\u00e4hlen',
+    'bagSelect.moveMenuTitle': '{n} Beutel verschieben nach\u2026',
+    'bagSelect.noneSelected': 'Mindestens einen Beutel ausw\u00e4hlen',
+    'bagSelect.notInBatch': '{bag} ist nicht in Charge {id}',
+    'bagSelect.toggled': '{bag} {action}',
+    'bagSelect.added': 'hinzugef\u00fcgt',
+    'bagSelect.removed': 'entfernt',
     // Confirm modal
     'confirm.confirm': 'Best\u00e4tigen',
     'confirm.cancel': 'Abbrechen',
@@ -3421,8 +3447,21 @@ const LANG = {
     'bagInfo.moveThisBag': 'MOVER este saco',
     'bagInfo.moveEntireBatch': 'Mover lote',
     'bagInfo.moveMenuTitle': 'Mover saco {bag} para\u2026',
+    'bagInfo.selectToMove': 'Mover sele\u00e7\u00e3o\u2026',
     'bagInfo.harvestThisBag': 'COLHER este saco',
     'bagInfo.removeThisBag': 'X REMOVER este saco',
+    // Bag-select modal (subset of a batch)
+    'bagSelect.title': 'Selecionar sacos para mover',
+    'bagSelect.subtitle': 'Lote {id} \u2014 {n} de {total} sacos selecionados',
+    'bagSelect.scanHint': 'Toque nos sacos abaixo ou escaneie mais QR codes para alternar.',
+    'bagSelect.countSelected': '{n} selecionados',
+    'bagSelect.continueToZone': 'Continuar \u2192 escolher zona',
+    'bagSelect.moveMenuTitle': 'Mover {n} sacos para\u2026',
+    'bagSelect.noneSelected': 'Selecione pelo menos um saco',
+    'bagSelect.notInBatch': '{bag} n\u00e3o est\u00e1 no lote {id}',
+    'bagSelect.toggled': '{bag} {action}',
+    'bagSelect.added': 'adicionado',
+    'bagSelect.removed': 'removido',
     // Confirm modal
     'confirm.confirm': 'Confirmar',
     'confirm.cancel': 'Cancelar',
@@ -7325,14 +7364,14 @@ function goToPrintBatch() {
     }
   }, 100);
 }
-// Move all active bags in a batch to a destination zone/rack.
-// Shared by the scan engine (MOVE_BATCH action) and the batch list dropdown.
+// Move a specific set of bags in a batch to a destination zone/rack.
+// Skips bags that are unplaced, removed, or already at the destination.
 // Calls back with (movedCount, skippedCount) when done.
-function moveBatchTo(batch, dest, cb) {
+function moveBagsTo(batch, bagIds, dest, cb) {
   const now = new Date().toISOString();
   const entries = [];
   let skipped = 0;
-  batch.bags.forEach((bagId) => {
+  bagIds.forEach((bagId) => {
     const bagLast = [...scanLog]
       .reverse()
       .find(
@@ -7380,6 +7419,12 @@ function moveBatchTo(batch, dest, cb) {
       });
   });
   if (cb) cb(entries.length, skipped);
+}
+
+// Move all active bags in a batch to a destination zone/rack.
+// Shared by the scan engine (MOVE_BATCH action) and the batch list dropdown.
+function moveBatchTo(batch, dest, cb) {
+  moveBagsTo(batch, batch.bags, dest, cb);
 }
 
 // Add all bags in bagIds to a location (initial placement — ADD action, from=null).
@@ -11454,6 +11499,157 @@ document.getElementById('m-baginfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-baginfo') document.getElementById('m-baginfo').classList.remove('open');
 });
 
+// ─── BAG-SELECT MODAL (subset-of-batch move) ─────────────────
+// State: which batch we're selecting from, and which bag IDs are chosen.
+let bsBatchId = null;
+let bsSelected = new Set();
+
+function openBagSelectModal(initialBagId, batchId) {
+  const b = batches.find((x) => x.batchId.toUpperCase() === (batchId || '').toUpperCase());
+  if (!b) return;
+  bsBatchId = b.batchId;
+  bsSelected = new Set();
+  // Pre-select the scanned bag if it's a real bag in this batch and still movable.
+  if (initialBagId) {
+    const canonical = b.bags.find((x) => x.toUpperCase() === initialBagId.toUpperCase());
+    if (canonical) {
+      const last = [...scanLog]
+        .reverse()
+        .find(
+          (e) =>
+            (e.bag || '').toUpperCase() === canonical.toUpperCase() &&
+            (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+        );
+      if (last && last.action !== 'REMOVE') bsSelected.add(canonical);
+    }
+  }
+  renderBagSelect();
+  closeCamScan();
+  closeScanModal();
+  document.getElementById('m-baginfo').classList.remove('open');
+  document.getElementById('m-bagselect').classList.add('open');
+}
+
+function renderBagSelect() {
+  const b = batches.find((x) => x.batchId === bsBatchId);
+  if (!b) return;
+  document.getElementById('bs-subtitle').textContent = t('bagSelect.subtitle', {
+    id: b.batchId,
+    n: bsSelected.size,
+    total: b.bags.length
+  });
+  document.getElementById('bs-count').textContent = t('bagSelect.countSelected', { n: bsSelected.size });
+  const container = document.getElementById('bs-bags');
+  container.innerHTML = '';
+  b.bags.forEach((bag) => {
+    const bagNum = bag.split('-').pop();
+    const last = [...scanLog]
+      .reverse()
+      .find(
+        (e) =>
+          (e.bag || '').toUpperCase() === bag.toUpperCase() &&
+          (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+      );
+    const isRemoved = last && last.action === 'REMOVE';
+    const isUnplaced = !last;
+    const loc = isUnplaced ? '\u2014' : isRemoved ? '\u2717' : last.to || '?';
+    const isSelected = bsSelected.has(bag);
+    const disabled = isRemoved || isUnplaced;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.disabled = disabled;
+    btn.title = disabled ? (isRemoved ? t('bagInfo.removed') : t('bagInfo.notPlaced')) : loc;
+    btn.innerHTML =
+      '<div style="font-size:14px;font-weight:700;font-family:monospace">' +
+      esc(bagNum) +
+      '</div>' +
+      '<div style="font-size:10px;margin-top:2px;opacity:0.85">' +
+      esc(loc) +
+      '</div>';
+    btn.style.cssText =
+      'min-width:56px;padding:8px 10px;border-radius:8px;text-align:center;cursor:' +
+      (disabled ? 'not-allowed' : 'pointer') +
+      ';opacity:' +
+      (disabled ? '0.35' : '1') +
+      ';background:' +
+      (isSelected ? 'var(--c-blue-dark, #1e6dd8)' : 'var(--c-bg)') +
+      ';color:' +
+      (isSelected ? '#fff' : 'var(--c-text)') +
+      ';border:2px solid ' +
+      (isSelected ? 'var(--c-blue-dark, #1e6dd8)' : 'var(--c-border)') +
+      ';';
+    if (!disabled) {
+      btn.addEventListener('click', () => bsToggleBag(bag));
+    }
+    container.appendChild(btn);
+  });
+}
+
+// Toggle a bag in the selection (called from clicks and from scans).
+// Returns {toggled: true, added: boolean} if the bag belongs to the current batch.
+function bsToggleBag(bag) {
+  const b = batches.find((x) => x.batchId === bsBatchId);
+  if (!b) return { toggled: false };
+  const canonical = b.bags.find((x) => x.toUpperCase() === bag.toUpperCase());
+  if (!canonical) return { toggled: false };
+  const last = [...scanLog]
+    .reverse()
+    .find(
+      (e) =>
+        (e.bag || '').toUpperCase() === canonical.toUpperCase() &&
+        (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+    );
+  if (!last || last.action === 'REMOVE') return { toggled: false };
+  let added;
+  if (bsSelected.has(canonical)) {
+    bsSelected.delete(canonical);
+    added = false;
+  } else {
+    bsSelected.add(canonical);
+    added = true;
+  }
+  renderBagSelect();
+  return { toggled: true, added: added, bag: canonical };
+}
+
+function bsConfirm() {
+  const b = batches.find((x) => x.batchId === bsBatchId);
+  if (!b) return;
+  if (bsSelected.size === 0) {
+    setFb('err', t('bagSelect.noneSelected'));
+    return;
+  }
+  const selected = Array.from(bsSelected);
+  document.getElementById('m-bagselect').classList.remove('open');
+  _openZonePicker(t('bagSelect.moveMenuTitle', { n: selected.length }), function (dest) {
+    moveBagsTo(b, selected, dest, function (moved, skipped) {
+      if (!moved) {
+        setFb(
+          'err',
+          t('batch.noBagsToMove') + (skipped ? ' (' + skipped + ' bereits in ' + zoneDisplayName(dest) + ')' : '')
+        );
+        return;
+      }
+      setFb(
+        'ok',
+        b.batchId +
+          ': ' +
+          moved +
+          ' Bags \u2192 ' +
+          zoneDisplayName(dest) +
+          (skipped ? ' (' + skipped + ' \u00fcbersprungen)' : '')
+      );
+      scan.count += moved;
+      updateSD();
+      renderBatches();
+    });
+  });
+}
+
+document.getElementById('m-bagselect').addEventListener('click', (e) => {
+  if (e.target.id === 'm-bagselect') document.getElementById('m-bagselect').classList.remove('open');
+});
+
 // ─── PRINT — BAG LABELS ──────────────────────────────────────
 // ─── PRINT via server → ZPL → Windows spooler → GK420d ──────
 // Correct size/orientation automatically — no browser dialog issues.
@@ -12924,6 +13120,35 @@ function processScan(raw) {
   const isBag = /-\d{2}$/.test(val);
   const batchId = isBag ? val.split('-').slice(0, -1).join('-') : val;
   const batch = batches.find((b) => b.batchId.toUpperCase() === batchId.toUpperCase());
+  // When the bag-select modal is open and we scan a bag, toggle it in the selection
+  // instead of opening a new bag-info modal.
+  if (
+    isBag &&
+    bsBatchId &&
+    document.getElementById('m-bagselect').classList.contains('open') &&
+    batchId.toUpperCase() === bsBatchId.toUpperCase()
+  ) {
+    const res = bsToggleBag(val);
+    if (res.toggled) {
+      _scanBeep(800, 60);
+      setFb('ok', t('bagSelect.toggled', { bag: val, action: res.added ? t('bagSelect.added') : t('bagSelect.removed') }));
+    } else {
+      _scanBeep(300, 150);
+      setFb('err', t('scanFb.bagNotPlaced', { bag: val }));
+    }
+    return;
+  }
+  // Scan belongs to a different batch while the select modal is open: warn.
+  if (
+    isBag &&
+    bsBatchId &&
+    document.getElementById('m-bagselect').classList.contains('open') &&
+    batchId.toUpperCase() !== bsBatchId.toUpperCase()
+  ) {
+    _scanBeep(300, 150);
+    setFb('err', t('bagSelect.notInBatch', { bag: val, id: bsBatchId }));
+    return;
+  }
   if (batch || isBag) {
     if (!scan.action) {
       openBagInfo(val, batchId, batch);
@@ -15418,6 +15643,7 @@ document.addEventListener('keydown', function (e) {
     'm-cal-detail',
     'm-locmove',
     'm-baginfo',
+    'm-bagselect',
     'm-addbags',
     'm-batchadd',
     'm-note',
@@ -15679,6 +15905,16 @@ function initEventListeners() {
     if (!b) return;
     document.getElementById('m-baginfo').classList.remove('open');
     openMoveBatchModal(b.batchId);
+  });
+  $('set-selectmove').addEventListener('click', () => {
+    if (!biBatchId) return;
+    openBagSelectModal(biBagId, biBatchId);
+  });
+  $('bs-cancel').addEventListener('click', () => {
+    document.getElementById('m-bagselect').classList.remove('open');
+  });
+  $('bs-continue').addEventListener('click', () => {
+    bsConfirm();
   });
   $('set-14').addEventListener('click', () => {
     biSetAction('HARVEST');
