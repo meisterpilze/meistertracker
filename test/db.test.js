@@ -240,9 +240,9 @@ describe('db – grain hydration deduction', () => {
     fs.unlinkSync(p);
   });
 
-  it('grain batch with grainRh=62 deducts only dry weight on delete-reversal', () => {
-    // Insert a 10-bag × 1kg grain batch with 62% water content.
-    // Dry grain used = 10 × 1 × (1 - 0.62) = 3.8 kg.
+  it('grain batch with grainRh=52 deducts only dry weight on delete-reversal', () => {
+    // Insert a 10-bag × 1kg grain batch with 52% water content.
+    // Dry grain used = 10 × 1 × (1 - 0.52) = 4.8 kg.
     db.insertBatch(d, {
       batchId: 'G-001',
       species: 'Pleurotus ostreatus',
@@ -251,16 +251,16 @@ describe('db – grain hydration deduction', () => {
       days: 14,
       bagKg: 1,
       batchType: 'grain',
-      grainRh: 62,
+      grainRh: 52,
       notes: '',
       created: '2024-01-01T00:00:00Z',
       due: '2024-01-15T00:00:00Z',
       bags: Array.from({ length: 10 }, (_, i) => 'G-001-' + String(i + 1).padStart(2, '0'))
     });
     // Simulate the client-side deduction (dry weight only)
-    db.applyInventoryDelta(d, 'grain', -3.8, 'batch', 'G-001');
+    db.applyInventoryDelta(d, 'grain', -4.8, 'batch', 'G-001');
     let inv = db.getInventory(d);
-    assert.ok(Math.abs(inv.stock.grain - 96.2) < 1e-6, `after deduct: ${inv.stock.grain}`);
+    assert.ok(Math.abs(inv.stock.grain - 95.2) < 1e-6, `after deduct: ${inv.stock.grain}`);
 
     // Deleting the batch should restore exactly the dry weight.
     db.deleteBatchById(d, 'G-001');
@@ -291,9 +291,9 @@ describe('db – grain hydration deduction', () => {
     assert.ok(Math.abs(inv.stock.grain - 100) < 1e-6, `after legacy delete: ${inv.stock.grain}`);
   });
 
-  it('getInventory exposes avgComposition.grainRhPct with default 62', () => {
+  it('getInventory exposes avgComposition.grainRhPct with default 52', () => {
     const inv = db.getInventory(d);
-    assert.equal(inv.avgComposition.grainRhPct, 62);
+    assert.equal(inv.avgComposition.grainRhPct, 52);
   });
 
   it('updateInventoryConfig persists grainRhPct', () => {
