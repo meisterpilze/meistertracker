@@ -685,7 +685,9 @@ function createMcpServer(database, onWrite, printer) {
       grainRh: z
         .number()
         .optional()
-        .describe('Grain water content % (for batchType=grain only). Wet bag weight × (1 - grainRh/100) = dry grain deducted. Typical wheat = 62.'),
+        .describe(
+          'Grain water content % (for batchType=grain only). Wet bag weight × (1 - grainRh/100) = dry grain deducted. Typical wheat = 62.'
+        ),
       sourceId: z.string().optional().describe('Source culture ID'),
       recipeId: z
         .number()
