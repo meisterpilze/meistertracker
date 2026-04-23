@@ -11978,7 +11978,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (line2) items.push({ type: 'text', y: 185, blockW: 400, fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
-      const line3 = (batch.created ? fmtDt(batch.created) + ' \u2013 ' : '') + fmtDt(batch.due);
+      const line3 = (batch.created ? fmtDt(batch.created) + ' - ' : '') + fmtDt(batch.due);
       items.push({ type: 'text', y: 215, blockW: 400, fontH: 24, text: line3, bold: true });
     }
   } else {
@@ -12002,7 +12002,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
-      const line3 = (batch.created ? fmtDt(batch.created) + ' \u2013 ' : '') + fmtDt(batch.due);
+      const line3 = (batch.created ? fmtDt(batch.created) + ' - ' : '') + fmtDt(batch.due);
       items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: line3, bold: true });
     }
   }
