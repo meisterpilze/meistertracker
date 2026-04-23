@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS batches (
   source_id     TEXT,
   notes         TEXT DEFAULT '',
   created       TEXT NOT NULL,
-  due           TEXT NOT NULL
+  due           TEXT NOT NULL,
+  grain_rh      REAL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS bags (
@@ -108,7 +109,8 @@ CREATE TABLE IF NOT EXISTS inventory (
   avg_wb_pct       REAL DEFAULT 25,
   avg_rh_pct       REAL DEFAULT 63,
   avg_bag_kg       REAL DEFAULT 3,
-  avg_grain_bag_kg REAL DEFAULT 1
+  avg_grain_bag_kg REAL DEFAULT 1,
+  avg_grain_rh_pct REAL DEFAULT 62
 );
 
 CREATE TABLE IF NOT EXISTS inventory_log (
@@ -792,6 +794,20 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created DESC);
       `);
     }
+  },
+  {
+    version: 34,
+    description: 'Add grain hydration fields: batches.grain_rh and inventory.avg_grain_rh_pct',
+    fn(db) {
+      const hasBatchCol = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('batches') WHERE name='grain_rh'")
+        .get();
+      if (!hasBatchCol.c) db.exec('ALTER TABLE batches ADD COLUMN grain_rh REAL DEFAULT 0');
+      const hasInvCol = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('inventory') WHERE name='avg_grain_rh_pct'")
+        .get();
+      if (!hasInvCol.c) db.exec('ALTER TABLE inventory ADD COLUMN avg_grain_rh_pct REAL DEFAULT 62');
+    }
   }
 ];
 
@@ -991,6 +1007,7 @@ function readAll(db, opts = {}) {
       },
       bagKg: r.bag_kg,
       batchType: r.batch_type,
+      grainRh: r.grain_rh || 0,
       sourceId: r.source_id,
       notes: r.notes,
       strainText: r.strain_text || '',
@@ -1123,7 +1140,8 @@ function readAll(db, opts = {}) {
       wbPct: inv.avg_wb_pct,
       rhPct: inv.avg_rh_pct,
       bagKg: inv.avg_bag_kg,
-      grainBagKg: inv.avg_grain_bag_kg
+      grainBagKg: inv.avg_grain_bag_kg,
+      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 62
     },
     labThresholds: {
       MC: inv.lab_thresh_mc || 0,
@@ -1280,15 +1298,16 @@ function writeAll(db, incoming) {
       }
 
       const upsertBatch = db.prepare(`
-        INSERT INTO batches(batch_id, species, strain, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO batches(batch_id, species, strain, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(batch_id) DO UPDATE SET
           species=excluded.species, strain=excluded.strain, qty=excluded.qty, days=excluded.days,
           sub_hardwood=excluded.sub_hardwood, sub_wheatbran=excluded.sub_wheatbran,
           sub_rh=excluded.sub_rh, sub_gypsum=excluded.sub_gypsum,
           bag_kg=excluded.bag_kg, batch_type=excluded.batch_type,
           source_id=excluded.source_id, notes=excluded.notes,
-          created=excluded.created, due=excluded.due
+          created=excluded.created, due=excluded.due,
+          grain_rh=excluded.grain_rh
       `);
       const deleteBags = db.prepare('DELETE FROM bags WHERE batch_id = ?');
       const insertBag = db.prepare('INSERT INTO bags(bag_id, batch_id, bag_kg) VALUES(?, ?, ?)');
@@ -1310,7 +1329,8 @@ function writeAll(db, incoming) {
           b.sourceId || null,
           b.notes || '',
           b.created,
-          b.due
+          b.due,
+          b.batchType === 'grain' && Number.isFinite(b.grainRh) ? b.grainRh : 0
         );
         deleteBags.run(b.batchId);
         const bagIds = [];
@@ -1452,7 +1472,7 @@ function writeAll(db, incoming) {
         `
         UPDATE inventory SET
           thresh_hardwood=?, thresh_wheatbran=?, thresh_gypsum=?, thresh_grain=?,
-          avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?,
+          avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?, avg_grain_rh_pct=?,
           lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?
         WHERE id=1
       `
@@ -1466,6 +1486,7 @@ function writeAll(db, incoming) {
         avg.rhPct ?? 63,
         avg.bagKg ?? 3,
         avg.grainBagKg ?? 1,
+        avg.grainRhPct ?? 62,
         lt.MC ?? 0,
         lt.PD ?? 0,
         lt.LC ?? 0,
@@ -1881,8 +1902,9 @@ function insertBatch(db, b) {
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
+    const grainRh = b.batchType === 'grain' ? (Number.isFinite(b.grainRh) ? b.grainRh : 0) : 0;
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
       species,
@@ -1900,7 +1922,8 @@ function insertBatch(db, b) {
       b.notes || '',
       b.strainText || '',
       b.created,
-      b.due
+      b.due,
+      grainRh
     );
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const item of b.bags || []) {
@@ -2037,7 +2060,7 @@ function deleteBatchById(db, batchId) {
     // Read batch before deleting so we can reverse inventory deductions
     const row = db
       .prepare(
-        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum FROM batches WHERE batch_id=?'
+        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh FROM batches WHERE batch_id=?'
       )
       .get(batchId);
     if (row) {
@@ -2076,10 +2099,21 @@ function computeBatchMaterialDeltas(db, row) {
   const bagWeightRows = db.prepare('SELECT bag_kg FROM bags WHERE batch_id = ?').all(row.batch_id);
   const fallbackKg = row.bag_kg || 3;
   if (row.batch_type === 'grain') {
-    const totalGrain = bagWeightRows.length
-      ? bagWeightRows.reduce((s, b) => s + (b.bag_kg != null ? b.bag_kg : fallbackKg), 0)
-      : row.qty * fallbackKg;
-    deltas.push({ mat: 'grain', deltaKg: totalGrain });
+    // grain_rh = % water added during hydration (e.g. 62 for wheat).
+    // Dry grain used = wet bag weight * (1 - rh/100). rh=0 preserves legacy behaviour
+    // for batches created before the hydration field existed.
+    const rh = row.grain_rh || 0;
+    let totalDryKg = 0;
+    if (bagWeightRows.length) {
+      for (const b of bagWeightRows) {
+        const kg = b.bag_kg != null ? b.bag_kg : fallbackKg;
+        totalDryKg += rh > 0 ? kg * (1 - rh / 100) : kg;
+      }
+    } else {
+      const dryKgPerBag = rh > 0 ? fallbackKg * (1 - rh / 100) : fallbackKg;
+      totalDryKg = row.qty * dryKgPerBag;
+    }
+    deltas.push({ mat: 'grain', deltaKg: totalDryKg });
   } else {
     const hw = row.sub_hardwood || 0;
     const wb = row.sub_wheatbran || 0;
@@ -2600,7 +2634,7 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   const t = thresholds || {};
   const a = avgComposition || {};
   db.prepare(
-    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=? WHERE id=1`
+    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
   ).run(
     (t.hardwood && t.hardwood.minKg) ?? 50,
     (t.wheatbran && t.wheatbran.minKg) ?? 20,
@@ -2610,7 +2644,8 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
     a.wbPct ?? 25,
     a.rhPct ?? 63,
     a.bagKg ?? 3,
-    a.grainBagKg ?? 1
+    a.grainBagKg ?? 1,
+    a.grainRhPct ?? 62
   );
   incrementDataVersion(db);
 }
@@ -3252,6 +3287,7 @@ function mapBatchRow(r, bagStmt, db) {
     substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
     bagKg: r.bag_kg,
     batchType: r.batch_type,
+    grainRh: r.grain_rh || 0,
     sourceId: r.source_id,
     notes: r.notes,
     strainText: r.strain_text || '',
@@ -3399,7 +3435,8 @@ function getInventory(db, logLimit) {
       wbPct: inv.avg_wb_pct,
       rhPct: inv.avg_rh_pct,
       bagKg: inv.avg_bag_kg,
-      grainBagKg: inv.avg_grain_bag_kg
+      grainBagKg: inv.avg_grain_bag_kg,
+      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 62
     },
     labThresholds: {
       MC: inv.lab_thresh_mc || 0,

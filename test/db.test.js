@@ -229,6 +229,80 @@ describe('db – batches CRUD', () => {
   });
 });
 
+describe('db – grain hydration deduction', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.applyInventoryDelta(d, 'grain', 100, 'delivery', 'seed');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('grain batch with grainRh=62 deducts only dry weight on delete-reversal', () => {
+    // Insert a 10-bag × 1kg grain batch with 62% water content.
+    // Dry grain used = 10 × 1 × (1 - 0.62) = 3.8 kg.
+    db.insertBatch(d, {
+      batchId: 'G-001',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 10,
+      days: 14,
+      bagKg: 1,
+      batchType: 'grain',
+      grainRh: 62,
+      notes: '',
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-01-15T00:00:00Z',
+      bags: Array.from({ length: 10 }, (_, i) => 'G-001-' + String(i + 1).padStart(2, '0'))
+    });
+    // Simulate the client-side deduction (dry weight only)
+    db.applyInventoryDelta(d, 'grain', -3.8, 'batch', 'G-001');
+    let inv = db.getInventory(d);
+    assert.ok(Math.abs(inv.stock.grain - 96.2) < 1e-6, `after deduct: ${inv.stock.grain}`);
+
+    // Deleting the batch should restore exactly the dry weight.
+    db.deleteBatchById(d, 'G-001');
+    inv = db.getInventory(d);
+    assert.ok(Math.abs(inv.stock.grain - 100) < 1e-6, `after delete: ${inv.stock.grain}`);
+  });
+
+  it('legacy grain batch with grainRh=0 deducts full wet weight (backward compat)', () => {
+    db.insertBatch(d, {
+      batchId: 'G-LEGACY',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 5,
+      days: 14,
+      bagKg: 1,
+      batchType: 'grain',
+      // grainRh omitted → defaults to 0 (legacy behaviour)
+      notes: '',
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-01-15T00:00:00Z',
+      bags: Array.from({ length: 5 }, (_, i) => 'G-LEGACY-' + String(i + 1).padStart(2, '0'))
+    });
+    // Legacy deduction: full wet weight
+    db.applyInventoryDelta(d, 'grain', -5, 'batch', 'G-LEGACY');
+    // Delete should reverse the full 5 kg (grain_rh=0 preserves old math)
+    db.deleteBatchById(d, 'G-LEGACY');
+    const inv = db.getInventory(d);
+    assert.ok(Math.abs(inv.stock.grain - 100) < 1e-6, `after legacy delete: ${inv.stock.grain}`);
+  });
+
+  it('getInventory exposes avgComposition.grainRhPct with default 62', () => {
+    const inv = db.getInventory(d);
+    assert.equal(inv.avgComposition.grainRhPct, 62);
+  });
+
+  it('updateInventoryConfig persists grainRhPct', () => {
+    db.updateInventoryConfig(d, {}, { grainRhPct: 55 });
+    const inv = db.getInventory(d);
+    assert.equal(inv.avgComposition.grainRhPct, 55);
+  });
+});
+
 describe('db – scan log', () => {
   let d, p;
   before(() => {
