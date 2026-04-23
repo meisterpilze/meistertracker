@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS inventory (
   avg_rh_pct       REAL DEFAULT 63,
   avg_bag_kg       REAL DEFAULT 3,
   avg_grain_bag_kg REAL DEFAULT 1,
-  avg_grain_rh_pct REAL DEFAULT 62
+  avg_grain_rh_pct REAL DEFAULT 52
 );
 
 CREATE TABLE IF NOT EXISTS inventory_log (
@@ -806,7 +806,7 @@ const MIGRATIONS = [
       const hasInvCol = db
         .prepare("SELECT COUNT(*) as c FROM pragma_table_info('inventory') WHERE name='avg_grain_rh_pct'")
         .get();
-      if (!hasInvCol.c) db.exec('ALTER TABLE inventory ADD COLUMN avg_grain_rh_pct REAL DEFAULT 62');
+      if (!hasInvCol.c) db.exec('ALTER TABLE inventory ADD COLUMN avg_grain_rh_pct REAL DEFAULT 52');
     }
   }
 ];
@@ -1141,7 +1141,7 @@ function readAll(db, opts = {}) {
       rhPct: inv.avg_rh_pct,
       bagKg: inv.avg_bag_kg,
       grainBagKg: inv.avg_grain_bag_kg,
-      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 62
+      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 52
     },
     labThresholds: {
       MC: inv.lab_thresh_mc || 0,
@@ -1486,7 +1486,7 @@ function writeAll(db, incoming) {
         avg.rhPct ?? 63,
         avg.bagKg ?? 3,
         avg.grainBagKg ?? 1,
-        avg.grainRhPct ?? 62,
+        avg.grainRhPct ?? 52,
         lt.MC ?? 0,
         lt.PD ?? 0,
         lt.LC ?? 0,
@@ -2099,7 +2099,7 @@ function computeBatchMaterialDeltas(db, row) {
   const bagWeightRows = db.prepare('SELECT bag_kg FROM bags WHERE batch_id = ?').all(row.batch_id);
   const fallbackKg = row.bag_kg || 3;
   if (row.batch_type === 'grain') {
-    // grain_rh = % water added during hydration (e.g. 62 for wheat).
+    // grain_rh = % water added during hydration (e.g. 52 for wheat).
     // Dry grain used = wet bag weight * (1 - rh/100). rh=0 preserves legacy behaviour
     // for batches created before the hydration field existed.
     const rh = row.grain_rh || 0;
@@ -2645,7 +2645,7 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
     a.rhPct ?? 63,
     a.bagKg ?? 3,
     a.grainBagKg ?? 1,
-    a.grainRhPct ?? 62
+    a.grainRhPct ?? 52
   );
   incrementDataVersion(db);
 }
@@ -3436,7 +3436,7 @@ function getInventory(db, logLimit) {
       rhPct: inv.avg_rh_pct,
       bagKg: inv.avg_bag_kg,
       grainBagKg: inv.avg_grain_bag_kg,
-      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 62
+      grainRhPct: inv.avg_grain_rh_pct != null ? inv.avg_grain_rh_pct : 52
     },
     labThresholds: {
       MC: inv.lab_thresh_mc || 0,
