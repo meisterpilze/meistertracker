@@ -11978,14 +11978,8 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (line2) items.push({ type: 'text', y: 185, blockW: 400, fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
-      const due = new Date(batch.due);
-      const dueStr =
-        String(due.getDate()).padStart(2, '0') +
-        '.' +
-        String(due.getMonth() + 1).padStart(2, '0') +
-        '.' +
-        due.getFullYear();
-      items.push({ type: 'text', y: 215, blockW: 400, fontH: 24, text: 'F\u00e4llig: ' + dueStr, bold: true });
+      const line3 = (batch.created ? fmtDt(batch.created) + ' \u2013 ' : '') + fmtDt(batch.due);
+      items.push({ type: 'text', y: 215, blockW: 400, fontH: 24, text: line3, bold: true });
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
@@ -12008,14 +12002,8 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
-      const due = new Date(batch.due);
-      const dueStr =
-        String(due.getDate()).padStart(2, '0') +
-        '.' +
-        String(due.getMonth() + 1).padStart(2, '0') +
-        '.' +
-        due.getFullYear();
-      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+      const line3 = (batch.created ? fmtDt(batch.created) + ' \u2013 ' : '') + fmtDt(batch.due);
+      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: line3, bold: true });
     }
   }
   return items;
