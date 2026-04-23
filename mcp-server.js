@@ -682,6 +682,10 @@ function createMcpServer(database, onWrite, printer) {
       subGypsum: z.boolean().optional().describe('Include gypsum?'),
       bagKg: z.number().optional().describe('Bag weight in kg (default: 3)'),
       batchType: z.enum(['block', 'grain', 'liquid']).optional().describe('Batch type (default: block)'),
+      grainRh: z
+        .number()
+        .optional()
+        .describe('Grain water content % (for batchType=grain only). Wet bag weight × (1 - grainRh/100) = dry grain deducted. Typical wheat = 62.'),
       sourceId: z.string().optional().describe('Source culture ID'),
       recipeId: z
         .number()
@@ -728,6 +732,7 @@ function createMcpServer(database, onWrite, printer) {
           },
           bagKg: params.bagKg || 3,
           batchType: params.batchType || 'block',
+          grainRh: params.grainRh || 0,
           sourceId: params.sourceId || null,
           notes: params.notes || '',
           created,
