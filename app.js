@@ -4380,7 +4380,7 @@ function defaultInventory() {
     thresholds: { hardwood: { minKg: 50 }, wheatbran: { minKg: 20 }, gypsum: { minKg: 5 }, grain: { minKg: 10 } },
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
-    avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 },
+    avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 },
     labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 },
     log: []
   };
@@ -9204,7 +9204,7 @@ function getAvgComp() {
     rhPct: a.rhPct ?? 63,
     bagKg: a.bagKg ?? 3,
     grainBagKg: a.grainBagKg ?? 1,
-    grainRhPct: a.grainRhPct ?? 62
+    grainRhPct: a.grainRhPct ?? 52
   };
 }
 
@@ -9240,7 +9240,7 @@ function renderInvStock() {
       grain: { minKg: 10 }
     };
   if (!inventory.avgComposition)
-    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 };
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 };
 
   const cards = document.getElementById('inv-cards');
   cards.innerHTML = Object.keys(MAT_LABELS)
@@ -9342,7 +9342,7 @@ function renderThresholds() {
 
 function updateAvgComp(key, val) {
   if (!inventory.avgComposition)
-    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 };
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 };
   inventory.avgComposition[key] = parseFloat(val) || 0;
   saveInvConfig();
   renderInvStock();
@@ -11308,7 +11308,7 @@ function createGrainBatch() {
     }
   });
   // Deduct grain from inventory — apply hydration so only dry grain is subtracted
-  // (wet bag weight includes water added during soaking, typically ~62% for wheat)
+  // (wet bag weight includes water added during soaking, typically ~52% for wheat)
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
   const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
   const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
