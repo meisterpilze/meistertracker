@@ -323,6 +323,8 @@ const LANG = {
     'batch.bagWeight': 'Bag weight',
     'batch.qty': 'Qty (bags)',
     'batch.incDays': 'Incubation days',
+    'batch.grainRh': 'Water content (%)',
+    'batch.grainRhHint': 'Water added during hydration — only dry grain is deducted from stock',
     'batch.substrate': 'Substrate (optional)',
     'batch.hardwood': 'Hardwood %',
     'batch.wheatBran': 'Wheat bran %',
@@ -1365,6 +1367,7 @@ const LANG = {
     'inv.waterPct': 'Water % (RH)',
     'inv.blockWeight': 'Block weight (kg)',
     'inv.grainBagWeight': 'Grain bag (kg)',
+    'inv.grainWaterPct': 'Grain water %',
     // Assets
     'assets.total': 'Total',
     'assets.purchaseValue': 'Purchase value',
@@ -1651,6 +1654,8 @@ const LANG = {
     'batch.bagWeight': 'Beutelgewicht',
     'batch.qty': 'Menge (Beutel)',
     'batch.incDays': 'Inkubationstage',
+    'batch.grainRh': 'Wassergehalt (%)',
+    'batch.grainRhHint': 'Wasseranteil nach Hydratation \u2014 nur Trockenmasse wird vom Lagerbestand abgezogen',
     'batch.substrate': 'Substrat (optional)',
     'batch.hardwood': 'Hartholz %',
     'batch.wheatBran': 'Weizenkleie %',
@@ -2707,6 +2712,7 @@ const LANG = {
     'inv.waterPct': 'Wasser % (RH)',
     'inv.blockWeight': 'Blockgewicht (kg)',
     'inv.grainBagWeight': 'Getreidebeutel (kg)',
+    'inv.grainWaterPct': 'Getreide Wasser %',
     // Assets
     'assets.total': 'Gesamt',
     'assets.purchaseValue': 'Anschaffungswert',
@@ -2992,6 +2998,8 @@ const LANG = {
     'batch.bagWeight': 'Peso do saco',
     'batch.qty': 'Qtd (sacos)',
     'batch.incDays': 'Dias de incuba\u00e7\u00e3o',
+    'batch.grainRh': 'Teor de \u00e1gua (%)',
+    'batch.grainRhHint': '\u00c1gua adicionada durante a hidrata\u00e7\u00e3o \u2014 apenas gr\u00e3o seco \u00e9 deduzido do estoque',
     'batch.substrate': 'Substrato (opcional)',
     'batch.hardwood': 'Madeira dura %',
     'batch.wheatBran': 'Farelo de trigo %',
@@ -4050,6 +4058,7 @@ const LANG = {
     'inv.waterPct': '\u00c1gua % (RH)',
     'inv.blockWeight': 'Peso do bloco (kg)',
     'inv.grainBagWeight': 'Saco de gr\u00e3os (kg)',
+    'inv.grainWaterPct': '\u00c1gua gr\u00e3os %',
     // Assets
     'assets.total': 'Total',
     'assets.purchaseValue': 'Valor de compra',
@@ -4371,7 +4380,7 @@ function defaultInventory() {
     thresholds: { hardwood: { minKg: 50 }, wheatbran: { minKg: 20 }, gypsum: { minKg: 5 }, grain: { minKg: 10 } },
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
-    avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 },
+    avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 },
     labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 },
     log: []
   };
@@ -9194,17 +9203,23 @@ function getAvgComp() {
     wbPct: a.wbPct ?? 25,
     rhPct: a.rhPct ?? 63,
     bagKg: a.bagKg ?? 3,
-    grainBagKg: a.grainBagKg ?? 1
+    grainBagKg: a.grainBagKg ?? 1,
+    grainRhPct: a.grainRhPct ?? 62
   };
 }
 
 function estBagsFromMat(mat, stockKg) {
   // Estimate how many fruiting blocks (or grain bags) can be made from this material
   // For HW/WB: dry matter per bag = bagKg × (1 − rh/100), split by avg %
-  // For grain: simply stockKg / grainBagKg
+  // For grain: dry grain per bag = grainBagKg × (1 − grainRhPct/100); stock is dry.
   const c = getAvgComp();
   if (mat === 'grain') {
-    return { bags: c.grainBagKg > 0 ? Math.floor(stockKg / c.grainBagKg) : 0, bagKg: c.grainBagKg, isGrain: true };
+    const dryPerGrainBag = c.grainBagKg * (c.grainRhPct > 0 ? 1 - c.grainRhPct / 100 : 1);
+    return {
+      bags: dryPerGrainBag > 0 ? Math.floor(stockKg / dryPerGrainBag) : 0,
+      bagKg: c.grainBagKg,
+      isGrain: true
+    };
   }
   const dryPerBag = c.bagKg * (1 - c.rhPct / 100); // dry matter per bag
   let matPerBag = 0;
@@ -9225,7 +9240,7 @@ function renderInvStock() {
       grain: { minKg: 10 }
     };
   if (!inventory.avgComposition)
-    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 };
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 };
 
   const cards = document.getElementById('inv-cards');
   cards.innerHTML = Object.keys(MAT_LABELS)
@@ -9303,7 +9318,7 @@ function renderThresholds() {
     <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
       ${t('inv.avgCompDesc')}
     </p>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
       <div><label style="font-size:11px">${t('inv.hwPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
       <div><label style="font-size:11px">${t('inv.wbPct')}</label>
@@ -9314,9 +9329,11 @@ function renderThresholds() {
         <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
       <div><label style="font-size:11px">${t('inv.grainBagWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
+      <div><label style="font-size:11px">${t('inv.grainWaterPct')}</label>
+        <input type="text" inputmode="decimal" value="${esc(c.grainRhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainRhPct',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
-      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg * (1 - c.rhPct / 100) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(c.bagKg * (1 - c.rhPct / 100) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water)
+      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg * (1 - c.rhPct / 100) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(c.bagKg * (1 - c.rhPct / 100) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(c.grainBagKg * (1 - c.grainRhPct / 100)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
     </div>
   </div>`;
 
@@ -9325,7 +9342,7 @@ function renderThresholds() {
 
 function updateAvgComp(key, val) {
   if (!inventory.avgComposition)
-    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1 };
+    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 62 };
   inventory.avgComposition[key] = parseFloat(val) || 0;
   saveInvConfig();
   renderInvStock();
@@ -10961,6 +10978,9 @@ function lwUpdate() {
     if (strainTextRow) strainTextRow.style.display = 'block';
     document.getElementById('lw-prev-box').style.display = 'none';
     fillCultureSelect('gs-culture', ['PD', 'LC']);
+    // Prefill grain hydration % from current inventory default
+    const gsRh = document.getElementById('gs-rh');
+    if (gsRh) gsRh.value = getAvgComp().grainRhPct;
     gsPreview();
   } else {
     if (kbRows) kbRows.style.display = 'none';
@@ -11181,18 +11201,26 @@ function gsPreview() {
   const sp = ms ? ms.name : '';
   const lines = gsReadLines();
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
-  const totalGrain = lines.reduce((s, l) => s + l.kg * l.qty, 0);
+  const totalWet = lines.reduce((s, l) => s + l.kg * l.qty, 0);
+  const grainRhInput = document.getElementById('gs-rh');
+  const defaultGrainRh = getAvgComp().grainRhPct;
+  const grainRh = grainRhInput ? (parseFloat(grainRhInput.value) || 0) : defaultGrainRh;
+  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp, lwStrainText) + ' (' + totalQty + ' bags)' : '\u2014';
   const el = document.getElementById('gs-mat-preview');
-  if (!totalQty || !totalGrain) {
+  if (!totalQty || !totalWet) {
     el.style.display = 'none';
     return;
   }
   const breakdown = lines.map((l) => l.qty + ' \u00d7 ' + l.kg + ' kg').join(' + ');
   const avail = inventory.stock?.grain || 0;
-  const enough = avail >= totalGrain;
-  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalGrain.toFixed(2)} kg (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
+  const enough = avail >= totalDry;
+  const hydrationNote = grainRh > 0
+    ? ` <span style="font-size:11px;color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
+    : '';
+  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
   el.style.display = 'block';
 }
 function createGrainBatch() {
@@ -11215,6 +11243,9 @@ function createGrainBatch() {
     return;
   }
   const days = parseInt(document.getElementById('gs-days').value) || 14;
+  const grainRhInput = document.getElementById('gs-rh');
+  const defaultGrainRh = getAvgComp().grainRhPct;
+  const grainRh = grainRhInput ? (parseFloat(grainRhInput.value) || 0) : defaultGrainRh;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
   const batchId = genGrainBatchId(sp, lwStrainText);
@@ -11249,6 +11280,7 @@ function createGrainBatch() {
     substrate: null,
     bagKg: batchBagKg,
     batchType: 'grain',
+    grainRh,
     sourceId: document.getElementById('gs-culture').value || null,
     notes: document.getElementById('lw-notes').value.trim(),
     strainText: lwStrainText,
@@ -11275,9 +11307,11 @@ function createGrainBatch() {
       }
     }
   });
-  // Deduct grain from inventory
+  // Deduct grain from inventory — apply hydration so only dry grain is subtracted
+  // (wet bag weight includes water added during soaking, typically ~62% for wheat)
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty, 0);
+  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
   inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
   invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
   if (strainSel) strainSel.value = '';
@@ -16271,6 +16305,7 @@ function initEventListeners() {
   });
   $('gs-weight-lines').addEventListener('input', gsPreview);
   $('gs-add-line').addEventListener('click', gsAddLine);
+  if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
   $('prt-gs').addEventListener('click', goToPrintGrainBatch);
   $('prt-lw').addEventListener('click', goToPrintLabCulture);
   $('cult-type').addEventListener('change', renderCultures);
