@@ -1,10 +1,18 @@
 # MeisterTracker Print Bridge for Windows
 #
-# Runs a small HTTP listener on a Windows PC that has the Zebra GK420d
+# Runs a small HTTPS listener on a Windows PC that has the Zebra GK420d
 # attached, accepting ZPL print jobs and printer-status queries from the
 # (Linux) MeisterTracker server. Lets you keep the Linux server stack
 # while still printing labels directly to the Zebra without manual
 # ZPL-download workflows.
+#
+# TLS
+#   The bridge listens on HTTPS only. -Install generates a self-signed
+#   certificate (cert:\LocalMachine\My) and binds it to the listener port
+#   via `netsh http add sslcert`. The MeisterTracker server skips chain
+#   verification on the bridge connection (self-signed is expected) but
+#   the channel is still encrypted, so neither the X-Bridge-Token header
+#   nor the ZPL payload travel in cleartext over the LAN.
 #
 # Endpoints
 #   GET  /health   liveness probe; always responds {"ok":true}
@@ -27,11 +35,13 @@
 #   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1
 #
 # What -Install does:
-#   1. Adds an HTTP URL ACL so the bridge can bind without admin every time
-#   2. Adds an inbound TCP firewall rule for the bridge port
-#   3. Registers a Windows Scheduled Task ("MeisterTracker Print Bridge")
+#   1. Generates a self-signed TLS cert (cert:\LocalMachine\My) and binds
+#      it to the listener port via `netsh http add sslcert`
+#   2. Adds an HTTPS URL ACL so the bridge can bind without admin
+#   3. Adds an inbound TCP firewall rule for the bridge port
+#   4. Registers a Windows Scheduled Task ("MeisterTracker Print Bridge")
 #      that runs this script hidden at every user logon
-#   4. Starts the task immediately
+#   5. Starts the task immediately
 #
 # What -Uninstall does:
 #   Reverses every step from -Install in the right order, then stops the
@@ -51,9 +61,15 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # ── Constants used by the management subcommands ───────────────────────────
-$TaskName     = 'MeisterTracker Print Bridge'
-$FirewallName = 'MeisterTracker Print Bridge'
-$UrlAclPrefix = "http://+:$Port/"
+$TaskName         = 'MeisterTracker Print Bridge'
+$FirewallName     = 'MeisterTracker Print Bridge'
+$UrlAclPrefix     = "https://+:$Port/"
+$LegacyHttpPrefix = "http://+:$Port/"
+$CertFriendlyName = 'MeisterTracker Print Bridge'
+$CertSubject      = 'CN=MeisterTracker Print Bridge'
+# Stable App ID GUID for our SSL certificate binding — lets us locate and
+# replace the binding on re-install without colliding with other apps.
+$SslAppId         = '{8C3DAA13-7BC3-4F37-9B9F-AAA23A52D3F7}'
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -91,6 +107,75 @@ function Remove-UrlAcl {
     }
     & netsh http delete urlacl url=$UrlAclPrefix | Out-Null
     Write-Host "  - URL ACL removed for $UrlAclPrefix"
+}
+
+function Remove-LegacyHttpUrlAcl {
+    # Earlier versions of this script used http:// for the listener. Clean
+    # the old ACL up so re-running -Install on an upgraded host doesn't
+    # leave stale state behind.
+    $output = & netsh http show urlacl url=$LegacyHttpPrefix 2>&1 | Out-String
+    if ($output -match [regex]::Escape($LegacyHttpPrefix)) {
+        & netsh http delete urlacl url=$LegacyHttpPrefix | Out-Null
+        Write-Host "  - Removed legacy HTTP URL ACL ($LegacyHttpPrefix)"
+    }
+}
+
+function Get-BridgeCert {
+    Get-ChildItem -Path 'Cert:\LocalMachine\My' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FriendlyName -eq $CertFriendlyName -or $_.Subject -eq $CertSubject } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
+}
+
+function New-BridgeCert {
+    Write-Host '  Generating self-signed TLS certificate (10y validity)...'
+    $cert = New-SelfSignedCertificate `
+        -DnsName 'localhost', $env:COMPUTERNAME `
+        -CertStoreLocation 'cert:\LocalMachine\My' `
+        -KeyAlgorithm RSA `
+        -KeyLength 2048 `
+        -KeyUsage DigitalSignature, KeyEncipherment `
+        -NotAfter ((Get-Date).AddYears(10)) `
+        -FriendlyName $CertFriendlyName `
+        -Subject $CertSubject `
+        -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.1')
+    Write-Host "  + Cert created: $($cert.Thumbprint)"
+    return $cert
+}
+
+function Get-SslBindingState {
+    $output = & netsh http show sslcert ipport=0.0.0.0:$Port 2>&1 | Out-String
+    return ($output -match 'Certificate Hash')
+}
+
+function Add-SslBinding {
+    param([string] $Thumbprint)
+    if (Get-SslBindingState) {
+        # Replace an existing binding (different thumbprint, or same) to
+        # ensure -Install is idempotent + recovers from partial state.
+        & netsh http delete sslcert ipport=0.0.0.0:$Port | Out-Null
+    }
+    & netsh http add sslcert ipport=0.0.0.0:$Port certhash=$Thumbprint appid=$SslAppId | Out-Null
+    Write-Host "  + SSL cert bound to 0.0.0.0:$Port ($Thumbprint)"
+}
+
+function Remove-SslBinding {
+    if (-not (Get-SslBindingState)) {
+        Write-Host '  SSL binding not present' -ForegroundColor DarkGray
+        return
+    }
+    & netsh http delete sslcert ipport=0.0.0.0:$Port | Out-Null
+    Write-Host "  - SSL binding removed for 0.0.0.0:$Port"
+}
+
+function Remove-BridgeCert {
+    $cert = Get-BridgeCert
+    if (-not $cert) {
+        Write-Host '  No bridge cert found' -ForegroundColor DarkGray
+        return
+    }
+    Remove-Item -Path "Cert:\LocalMachine\My\$($cert.Thumbprint)" -Force
+    Write-Host "  - Bridge cert removed (was $($cert.Thumbprint))"
 }
 
 function Get-FirewallRuleState {
@@ -163,8 +248,12 @@ function Invoke-Install {
     if (-not (Test-IsAdmin)) { Invoke-AsAdmin -ForwardedArgs @('-Install') }
     Write-Host '== Installing MeisterTracker Print Bridge ==' -ForegroundColor Cyan
     Stop-BridgeProcess
+    Remove-LegacyHttpUrlAcl
     Add-UrlAcl
     Add-FirewallRule
+    $cert = Get-BridgeCert
+    if (-not $cert) { $cert = New-BridgeCert } else { Write-Host "  TLS cert already present ($($cert.Thumbprint))" -ForegroundColor DarkGray }
+    Add-SslBinding -Thumbprint $cert.Thumbprint
     Add-BridgeTask
     Write-Host ''
     Write-Host '  Starting task now...'
@@ -172,7 +261,8 @@ function Invoke-Install {
     Start-Sleep -Seconds 1
     Show-Status -BriefHeader $false
     Write-Host ''
-    Write-Host 'Done. The bridge will now start automatically at every logon.' -ForegroundColor Green
+    Write-Host 'Done. The bridge is running with TLS.' -ForegroundColor Green
+    Write-Host "Configure the server with: https://<this-pc-lan-ip>:$Port" -ForegroundColor Green
 }
 
 function Invoke-Uninstall {
@@ -180,8 +270,11 @@ function Invoke-Uninstall {
     Write-Host '== Uninstalling MeisterTracker Print Bridge ==' -ForegroundColor Cyan
     Remove-BridgeTask
     Stop-BridgeProcess
+    Remove-SslBinding
+    Remove-BridgeCert
     Remove-FirewallRule
     Remove-UrlAcl
+    Remove-LegacyHttpUrlAcl
     Write-Host ''
     Write-Host 'Done. The bridge is fully removed.' -ForegroundColor Green
 }
@@ -214,16 +307,19 @@ function Show-Status {
     $task = Get-BridgeTask
     $running = [bool] (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
         Where-Object { $_.CommandLine -like "*$PSCommandPath*" -and $_.ProcessId -ne $PID })
-    Write-Host ('  URL ACL ({0,-22})  : {1}' -f $UrlAclPrefix, $(if (Get-UrlAclState) { 'present' } else { 'missing' }))
-    Write-Host ('  Firewall rule           : {0}' -f $(if (Get-FirewallRuleState) { 'present' } else { 'missing' }))
+    $cert = Get-BridgeCert
+    Write-Host ('  URL ACL ({0,-24}): {1}' -f $UrlAclPrefix, $(if (Get-UrlAclState) { 'present' } else { 'missing' }))
+    Write-Host ('  Firewall rule             : {0}' -f $(if (Get-FirewallRuleState) { 'present' } else { 'missing' }))
+    Write-Host ('  TLS cert                  : {0}' -f $(if ($cert) { "present ($($cert.Thumbprint))" } else { 'missing' }))
+    Write-Host ('  SSL binding (port {0,-5})  : {1}' -f $Port, $(if (Get-SslBindingState) { 'present' } else { 'missing' }))
     if ($task) {
-        Write-Host ('  Scheduled task          : present (state: {0})' -f $task.State)
+        Write-Host ('  Scheduled task            : present (state: {0})' -f $task.State)
     } else {
-        Write-Host '  Scheduled task          : missing'
+        Write-Host '  Scheduled task            : missing'
     }
-    Write-Host ('  Bridge process running  : {0}' -f $(if ($running) { 'yes' } else { 'no' }))
-    Write-Host ('  Printer name            : {0}' -f $PrinterName)
-    Write-Host ('  Token auth              : {0}' -f $(if ($Token) { 'enabled' } else { 'disabled' }))
+    Write-Host ('  Bridge process running    : {0}' -f $(if ($running) { 'yes' } else { 'no' }))
+    Write-Host ('  Printer name              : {0}' -f $PrinterName)
+    Write-Host ('  Token auth                : {0}' -f $(if ($Token) { 'enabled' } else { 'disabled' }))
 }
 
 # Dispatch to the management subcommand if any flag is present, otherwise
@@ -324,21 +420,24 @@ function Test-Auth {
     return $hdr -and ($hdr -eq $Token)
 }
 
-# ── HTTP listener ──────────────────────────────────────────────────────────
+# ── HTTPS listener ─────────────────────────────────────────────────────────
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($UrlAclPrefix)
 try {
     $listener.Start()
 } catch {
     Write-Host "Cannot bind to $UrlAclPrefix" -ForegroundColor Red
-    Write-Host '  Run this once to grant the URL ACL and set up auto-start:' -ForegroundColor Yellow
+    Write-Host '  Likely cause: TLS cert is not installed or bound to the port.' -ForegroundColor Yellow
+    Write-Host '  Run the installer to set up cert + ACL + firewall + scheduled task:' -ForegroundColor Yellow
     Write-Host "    powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Install" -ForegroundColor Yellow
     throw
 }
 
+$cert = Get-BridgeCert
 Write-Host "MeisterTracker Print Bridge listening on $UrlAclPrefix" -ForegroundColor Green
-Write-Host "  Printer: $PrinterName"
-if ($Token) { Write-Host '  Auth:    enabled (X-Bridge-Token required)' } else { Write-Host '  Auth:    disabled — pass -Token or set PRINT_BRIDGE_TOKEN to require a token' -ForegroundColor Yellow }
+Write-Host "  Printer:        $PrinterName"
+if ($cert) { Write-Host "  Cert thumbprint: $($cert.Thumbprint)" }
+if ($Token) { Write-Host '  Auth:           enabled (X-Bridge-Token required)' } else { Write-Host '  Auth:           disabled — pass -Token or set PRINT_BRIDGE_TOKEN to require a token' -ForegroundColor Yellow }
 
 while ($listener.IsListening) {
     $ctx = $listener.GetContext()

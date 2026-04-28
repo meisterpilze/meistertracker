@@ -99,7 +99,7 @@ HTTP_REDIRECT_PORT=80
 # Windows print bridge — see Section 10. When set, the server forwards
 # label prints + status checks to scripts/print-bridge.ps1 running on a
 # Windows PC. Leave unset to use the ZPL-download fallback instead.
-# PRINT_BRIDGE_URL=http://<windows-pc-ip>:9100
+# PRINT_BRIDGE_URL=https://<windows-pc-ip>:9100
 # PRINT_BRIDGE_TOKEN=<long-random-string>
 ```
 
@@ -352,7 +352,7 @@ Cons: extra click per print, no live printer-status indication.
 
 ### Option B — Windows print bridge (recommended for daily lab use)
 
-Run [`scripts/print-bridge.ps1`](scripts/print-bridge.ps1) on a Windows PC that has the Zebra GK420d attached. The Linux server forwards `/api/print` and `/api/printer-status` calls to the bridge over HTTP, so print buttons go straight to the printer like the Windows-native install used to.
+Run [`scripts/print-bridge.ps1`](scripts/print-bridge.ps1) on a Windows PC that has the Zebra GK420d attached. The Linux server forwards `/api/print` and `/api/printer-status` calls to the bridge over **HTTPS** (with a self-signed cert the installer generates automatically), so print buttons go straight to the printer like the Windows-native install used to and the LAN traffic is encrypted.
 
 The Print tab's status banner reflects the bridge state in real time:
 - **Green** "Printer ready" — bridge reachable, printer online
@@ -362,7 +362,7 @@ The Print tab's status banner reflects the bridge state in real time:
 
 #### One-time Windows setup
 
-The script ships with a self-installer that handles URL ACL, firewall rule, scheduled task, and immediate start in one step.
+The script ships with a self-installer that handles the TLS certificate, URL ACL, firewall rule, scheduled task, and immediate start in one step.
 
 1. **Download** `print-bridge.ps1` from the running server's **Settings → Drucker** tab (or directly from `scripts/print-bridge.ps1` in the repo) and save it to e.g. `C:\meistertracker-bridge\print-bridge.ps1`.
 
@@ -371,7 +371,14 @@ The script ships with a self-installer that handles URL ACL, firewall rule, sche
    powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1" -Install
    ```
 
-That's it — the bridge is now running and will start automatically at every logon.
+   The installer:
+   - Generates a self-signed TLS cert (10-year validity) into `cert:\LocalMachine\My`
+   - Binds it to the listener port via `netsh http add sslcert`
+   - Adds the HTTPS URL ACL and the inbound firewall rule
+   - Registers the "MeisterTracker Print Bridge" scheduled task (At Logon)
+   - Starts the task immediately
+
+That's it — the bridge is now serving HTTPS on port 9100 and will start automatically at every logon.
 
 #### Management commands
 
@@ -385,7 +392,8 @@ print-bridge.ps1 -Status
 print-bridge.ps1 -Disable
 print-bridge.ps1 -Enable
 
-# Remove URL ACL, firewall rule, scheduled task, and stop any running instance
+# Remove TLS cert, SSL binding, URL ACL, firewall rule, scheduled task,
+# and stop any running instance
 print-bridge.ps1 -Uninstall
 ```
 
@@ -397,13 +405,13 @@ The Linux server's **Settings → Drucker** tab is the recommended place to ente
 
 For headless deployments or backwards-compatibility, the same values can also be set in `.env` (UI values take precedence when present):
 ```ini
-PRINT_BRIDGE_URL=http://<windows-pc-ip>:9100
+PRINT_BRIDGE_URL=https://<windows-pc-ip>:9100
 PRINT_BRIDGE_TOKEN=<a-long-random-string>
 ```
 
 #### Token auth (optional, recommended)
 
-Without a token, anyone on the LAN can print to your Zebra. To require a token, set the same value on both sides.
+The HTTPS channel encrypts the token in transit, but token auth is still recommended on shared LANs to prevent unauthorized prints. Without a token, anyone who can reach `https://<windows-ip>:9100` can print to your Zebra. To require a token, set the same value on both sides.
 
 On the Linux server: enter the token in **Settings → Drucker** (or `PRINT_BRIDGE_TOKEN` in `.env`).
 
