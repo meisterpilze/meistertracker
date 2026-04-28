@@ -559,6 +559,26 @@
       </div>
     </div>
 
+    <!-- Contamination report drill-down — full-size photos + delete -->
+    <div class="modal-bg" id="m-contam-detail" role="dialog" aria-modal="true" aria-labelledby="cd-title">
+      <div class="modal" style="max-width: 720px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 id="cd-title" data-i18n="contam.detailTitle">Kontaminationsbericht</h3>
+          <button id="cls-cd" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="cd-body"></div>
+        <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap">
+          <button id="cd-delete" type="button" class="btn btn-sm btn-r" data-i18n="contam.delete">Löschen</button>
+          <button id="cd-close" type="button" class="btn btn-sm" data-i18n="common.close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Contamination report modal — capture photo + tag type for a bag/batch -->
     <div class="modal-bg" id="m-contam-report" role="dialog" aria-modal="true" aria-labelledby="cr-title">
       <div class="modal" style="max-width: 540px">
@@ -1927,6 +1947,7 @@
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
             <button class="stab" id="st-lab-work" data-i18n="lab.logWork">Log work</button>
             <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
+            <button class="stab" id="st-lab-contam" data-i18n="lab.contam">Kontaminationen</button>
           </div>
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
@@ -2197,6 +2218,29 @@
                   Select a culture or batch above to trace its lineage.
                 </div>
               </div>
+            </div>
+          </div>
+          <!-- Contamination reports list -->
+          <div class="sp" id="sp-lab-contam">
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                <div class="sec" style="margin:0" data-i18n="contam.listTitle">Kontaminationsberichte</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <select id="cl-type-filter" data-i18n-aria-label="contam.type" aria-label="Type filter">
+                    <option value="" data-i18n="contam.allTypes">Alle Typen</option>
+                  </select>
+                  <select id="cl-sev-filter" data-i18n-aria-label="contam.severity" aria-label="Severity filter">
+                    <option value="" data-i18n="contam.allSev">Alle Schwere</option>
+                    <option value="minor" data-i18n="contam.sevMinor">Klein</option>
+                    <option value="major" data-i18n="contam.sevMajor">Größer</option>
+                    <option value="lost" data-i18n="contam.sevLost">Total</option>
+                  </select>
+                  <input type="date" id="cl-since-filter" data-i18n-aria-label="contam.since" aria-label="Since" />
+                  <button id="cl-reset" type="button" class="btn btn-sm" data-i18n="contam.resetFilters">Zurücksetzen</button>
+                </div>
+              </div>
+              <div id="contam-list-count" style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px"></div>
+              <div id="contam-list"></div>
             </div>
           </div>
         </div>
