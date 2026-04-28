@@ -2347,6 +2347,7 @@
             <button class="stab" id="st-settings-users" data-i18n="settings.tabUsers">Users</button>
             <button class="stab" id="st-settings-caldav" data-i18n="settings.tabCaldav">CalDAV</button>
             <button class="stab" id="st-settings-duckdns" data-i18n="settings.tabDuckdns">DuckDNS</button>
+            <button class="stab" id="st-settings-printer" data-i18n="settings.tabPrinter">Drucker</button>
             <button class="stab" id="st-settings-mcp" style="display: none" data-i18n="settings.tabMcp">MCP</button>
             <button class="stab" id="st-settings-server" style="display: none" data-i18n="settings.tabServer">
               Server
@@ -2779,6 +2780,155 @@
               >
                 No extra software required — works on all operating systems (Linux, macOS, Windows).
               </div>
+            </div>
+          </div>
+          <!-- Drucker -->
+          <div class="sp" id="sp-settings-printer">
+            <div class="card">
+              <div class="sec" data-i18n="printer.title">Drucker &amp; Print-Bridge</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="printer.desc"
+              >
+                Configure where labels are sent. On Windows the server prints directly. On Linux a small bridge
+                service running on a Windows PC forwards print jobs to the Zebra GK420d.
+              </p>
+              <div
+                id="printer-cfg-status"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+              ></div>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: max-content 1fr;
+                  gap: 6px 14px;
+                  font-size: 13px;
+                  margin-bottom: 14px;
+                "
+              >
+                <span style="color: var(--c-text-muted)" data-i18n="printer.platform">Server platform</span>
+                <span id="printer-cfg-platform" style="font-weight: 600">—</span>
+                <span style="color: var(--c-text-muted)" data-i18n="printer.printerName">Printer name</span>
+                <span id="printer-cfg-printername" style="font-weight: 600">—</span>
+                <span style="color: var(--c-text-muted)" data-i18n="printer.effectiveSource">Active source</span>
+                <span id="printer-cfg-source" style="font-weight: 600">—</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="printer-bridge-enabled" style="width: auto" />
+                  <span data-i18n="printer.enable">Enable print bridge</span>
+                </label>
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="printer.bridgeUrl"
+                    >Bridge URL</label
+                  >
+                  <input
+                    type="text"
+                    id="printer-bridge-url"
+                    placeholder="http://192.168.1.50:9100"
+                    style="max-width: 350px; width: 100%"
+                  />
+                  <div style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px" data-i18n="printer.urlHint">
+                    LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).
+                  </div>
+                </div>
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="printer.bridgeToken"
+                    >Bridge token (optional)</label
+                  >
+                  <input
+                    type="password"
+                    id="printer-bridge-token"
+                    placeholder="leave empty to keep current"
+                    data-i18n-placeholder="printer.tokenPlaceholder"
+                    style="max-width: 350px; width: 100%"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="printer.tokenHint"
+                  >
+                    Shared token. Set the same value in PRINT_BRIDGE_TOKEN on the Windows side. Required on shared
+                    LANs.
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="printer-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
+                  <button id="printer-test-btn" class="btn btn-sm" data-i18n="printer.testPrint">
+                    Send test label
+                  </button>
+                  <button id="printer-refresh-btn" class="btn btn-sm" data-i18n="printer.refresh">
+                    Refresh status
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="printer.setupTitle">Bridge setup (Windows PC)</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="printer.setupIntro"
+              >
+                Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background
+                after every login.
+              </p>
+              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0">
+                <li data-i18n="printer.step1">
+                  Open PowerShell <strong>as Administrator</strong> and run:
+                </li>
+              </ol>
+              <pre
+                style="
+                  background: var(--c-bg);
+                  border-radius: 6px;
+                  padding: 10px;
+                  font-size: 11px;
+                  overflow-x: auto;
+                  margin: 6px 0 12px;
+                "
+              ><code id="printer-setup-cmd-1">netsh http add urlacl url=http://+:9100/ user=Everyone
+New-NetFirewallRule -DisplayName "MeisterTracker Print Bridge" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9100</code></pre>
+              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="2">
+                <li data-i18n="printer.step2">
+                  Copy <code>scripts/print-bridge.ps1</code> from the repo to e.g.
+                  <code>C:\meistertracker-bridge\print-bridge.ps1</code>.
+                </li>
+                <li data-i18n="printer.step3">
+                  In Task Scheduler create a Basic Task: trigger <em>At log on</em>, action <em>Start a program</em>:
+                </li>
+              </ol>
+              <pre
+                style="
+                  background: var(--c-bg);
+                  border-radius: 6px;
+                  padding: 10px;
+                  font-size: 11px;
+                  overflow-x: auto;
+                  margin: 6px 0 12px;
+                "
+              ><code id="printer-setup-cmd-2">Program:   powershell.exe
+Arguments: -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1"</code></pre>
+              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="4">
+                <li data-i18n="printer.step4">
+                  Enter the Windows PC's LAN IP and port above (e.g. <code>http://192.168.1.50:9100</code>), tick
+                  <em>Enable</em>, click <strong>Save</strong>, then <strong>Send test label</strong>.
+                </li>
+              </ol>
             </div>
           </div>
           <div class="sp" id="sp-settings-mcp">

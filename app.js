@@ -1225,8 +1225,41 @@ const LANG = {
     'settings.tabUsers': 'Users',
     'settings.tabCaldav': 'CalDAV',
     'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabPrinter': 'Printer',
     'settings.tabMcp': 'MCP',
     'settings.tabServer': 'Server',
+    'printer.title': 'Printer & Print Bridge',
+    'printer.desc':
+      'Configure where labels are sent. On Windows the server prints directly. On Linux a small bridge service running on a Windows PC forwards print jobs to the Zebra GK420d.',
+    'printer.platform': 'Server platform',
+    'printer.printerName': 'Printer name',
+    'printer.effectiveSource': 'Active source',
+    'printer.enable': 'Enable print bridge',
+    'printer.bridgeUrl': 'Bridge URL',
+    'printer.urlHint':
+      'LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).',
+    'printer.bridgeToken': 'Bridge token (optional)',
+    'printer.tokenPlaceholder': 'leave empty to keep current',
+    'printer.tokenHint':
+      'Shared token. Set the same value in PRINT_BRIDGE_TOKEN on the Windows side. Required on shared LANs.',
+    'printer.testPrint': 'Send test label',
+    'printer.refresh': 'Refresh status',
+    'printer.setupTitle': 'Bridge setup (Windows PC)',
+    'printer.setupIntro':
+      'Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background after every login.',
+    'printer.step1': 'Open PowerShell as Administrator and run:',
+    'printer.step2':
+      'Copy scripts/print-bridge.ps1 from the repo to e.g. C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.step3':
+      'In Task Scheduler create a Basic Task: trigger At log on, action Start a program:',
+    'printer.step4':
+      "Enter the Windows PC's LAN IP and port above (e.g. http://192.168.1.50:9100), tick Enable, click Save, then Send test label.",
+    'printer.saved': 'Printer settings saved.',
+    'printer.testOk': 'Test label printed successfully.',
+    'printer.testFail': 'Test print failed: {err}',
+    'printer.sourceDb': 'Settings (UI)',
+    'printer.sourceEnv': '.env file',
+    'printer.sourceNone': 'Not configured (local PowerShell only)',
     'log.allActions': 'All actions',
     'log.dateFromTitle': 'From date',
     'log.dateToTitle': 'To date',
@@ -2574,8 +2607,41 @@ const LANG = {
     'settings.tabUsers': 'Benutzer',
     'settings.tabCaldav': 'CalDAV',
     'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabPrinter': 'Drucker',
     'settings.tabMcp': 'MCP',
     'settings.tabServer': 'Server',
+    'printer.title': 'Drucker & Print-Bridge',
+    'printer.desc':
+      'Steuert wohin Etiketten geschickt werden. Auf Windows druckt der Server direkt. Auf Linux leitet ein kleiner Bridge-Service auf einem Windows-PC die Druckjobs an die Zebra GK420d weiter.',
+    'printer.platform': 'Server-Plattform',
+    'printer.printerName': 'Druckername',
+    'printer.effectiveSource': 'Aktive Quelle',
+    'printer.enable': 'Print-Bridge aktivieren',
+    'printer.bridgeUrl': 'Bridge-URL',
+    'printer.urlHint':
+      'LAN-Adresse des Windows-PCs der scripts/print-bridge.ps1 ausführt, mit Port (Default 9100).',
+    'printer.bridgeToken': 'Bridge-Token (optional)',
+    'printer.tokenPlaceholder': 'leer lassen um aktuellen zu behalten',
+    'printer.tokenHint':
+      'Gemeinsamer Token. Auf der Windows-Seite den gleichen Wert in PRINT_BRIDGE_TOKEN setzen. Empfohlen in geteilten LANs.',
+    'printer.testPrint': 'Test-Etikett senden',
+    'printer.refresh': 'Status aktualisieren',
+    'printer.setupTitle': 'Bridge einrichten (Windows-PC)',
+    'printer.setupIntro':
+      'Einmalig auf dem Windows-PC ausführen, an dem die Zebra hängt. Die Bridge läuft danach im Hintergrund nach jedem Login.',
+    'printer.step1': 'PowerShell als Administrator öffnen und ausführen:',
+    'printer.step2':
+      'scripts/print-bridge.ps1 aus dem Repo kopieren, z.B. nach C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.step3':
+      'In der Aufgabenplanung eine einfache Aufgabe anlegen: Trigger Bei Anmeldung, Aktion Programm starten:',
+    'printer.step4':
+      'LAN-IP + Port des Windows-PCs oben eintragen (z.B. http://192.168.1.50:9100), Aktivieren ankreuzen, Speichern klicken, dann Test-Etikett senden.',
+    'printer.saved': 'Drucker-Einstellungen gespeichert.',
+    'printer.testOk': 'Test-Etikett erfolgreich gedruckt.',
+    'printer.testFail': 'Testdruck fehlgeschlagen: {err}',
+    'printer.sourceDb': 'Einstellungen (UI)',
+    'printer.sourceEnv': '.env-Datei',
+    'printer.sourceNone': 'Nicht konfiguriert (nur lokales PowerShell)',
     // Log
     'log.allActions': 'Alle Aktionen',
     'log.dateFromTitle': 'Von Datum',
@@ -3928,8 +3994,41 @@ const LANG = {
     'settings.tabUsers': 'Utilizadores',
     'settings.tabCaldav': 'CalDAV',
     'settings.tabDuckdns': 'DuckDNS',
+    'settings.tabPrinter': 'Impressora',
     'settings.tabMcp': 'MCP',
     'settings.tabServer': 'Servidor',
+    'printer.title': 'Impressora & Print Bridge',
+    'printer.desc':
+      'Configure para onde as etiquetas s\u00e3o enviadas. No Windows o servidor imprime diretamente. No Linux um pequeno servi\u00e7o bridge num PC Windows encaminha os jobs para a Zebra GK420d.',
+    'printer.platform': 'Plataforma do servidor',
+    'printer.printerName': 'Nome da impressora',
+    'printer.effectiveSource': 'Fonte ativa',
+    'printer.enable': 'Ativar print bridge',
+    'printer.bridgeUrl': 'URL do bridge',
+    'printer.urlHint':
+      'Endere\u00e7o LAN do PC Windows que executa scripts/print-bridge.ps1, com porta (default 9100).',
+    'printer.bridgeToken': 'Token do bridge (opcional)',
+    'printer.tokenPlaceholder': 'deixe vazio para manter o atual',
+    'printer.tokenHint':
+      'Token compartilhado. Defina o mesmo valor em PRINT_BRIDGE_TOKEN no lado Windows. Recomendado em LANs compartilhadas.',
+    'printer.testPrint': 'Enviar etiqueta de teste',
+    'printer.refresh': 'Atualizar status',
+    'printer.setupTitle': 'Configurar bridge (PC Windows)',
+    'printer.setupIntro':
+      'Execute uma vez no PC Windows onde a Zebra est\u00e1 conectada. O bridge ent\u00e3o roda em segundo plano ap\u00f3s cada login.',
+    'printer.step1': 'Abra PowerShell como Administrador e execute:',
+    'printer.step2':
+      'Copie scripts/print-bridge.ps1 do repo para ex. C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.step3':
+      'No Agendador de Tarefas crie uma tarefa b\u00e1sica: gatilho Ao fazer logon, a\u00e7\u00e3o Iniciar um programa:',
+    'printer.step4':
+      'Insira o IP LAN + porta do PC Windows acima (ex. http://192.168.1.50:9100), marque Ativar, clique Salvar, depois Enviar etiqueta de teste.',
+    'printer.saved': 'Configura\u00e7\u00f5es da impressora salvas.',
+    'printer.testOk': 'Etiqueta de teste impressa com sucesso.',
+    'printer.testFail': 'Falha no teste de impress\u00e3o: {err}',
+    'printer.sourceDb': 'Configura\u00e7\u00f5es (UI)',
+    'printer.sourceEnv': 'Arquivo .env',
+    'printer.sourceNone': 'N\u00e3o configurado (apenas PowerShell local)',
     // Log
     'log.allActions': 'Todas as a\u00e7\u00f5es',
     'log.dateFromTitle': 'Data inicial',
@@ -12284,6 +12383,97 @@ async function refreshPrinterStatus() {
   if (detail) detail.textContent = payload.error || '';
 }
 
+// ── Settings → Drucker tab ──────────────────────────────────────────────
+async function renderPrinterSettings() {
+  const platformEl = document.getElementById('printer-cfg-platform');
+  const nameEl = document.getElementById('printer-cfg-printername');
+  const sourceEl = document.getElementById('printer-cfg-source');
+  const enabledEl = document.getElementById('printer-bridge-enabled');
+  const urlEl = document.getElementById('printer-bridge-url');
+  const tokenEl = document.getElementById('printer-bridge-token');
+  if (!platformEl) return;
+  let cfg;
+  try {
+    const r = await authFetch('/api/printer/config');
+    cfg = await r.json();
+  } catch (e) {
+    setPrinterCfgStatus('error', e.message || 'Failed to load printer config');
+    return;
+  }
+  platformEl.textContent = cfg.platform || '—';
+  nameEl.textContent = cfg.printerName || '—';
+  const sourceKey =
+    cfg.bridge.effectiveSource === 'db'
+      ? 'printer.sourceDb'
+      : cfg.bridge.effectiveSource === 'env'
+        ? 'printer.sourceEnv'
+        : 'printer.sourceNone';
+  sourceEl.textContent = t(sourceKey);
+  enabledEl.checked = !!cfg.bridge.enabled;
+  urlEl.value = cfg.bridge.url || '';
+  tokenEl.value = '';
+  tokenEl.placeholder = cfg.bridge.hasToken ? '••••• ' + t('printer.tokenPlaceholder') : t('printer.tokenPlaceholder');
+}
+
+function setPrinterCfgStatus(kind, msg) {
+  const el = document.getElementById('printer-cfg-status');
+  if (!el) return;
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  if (kind === 'ok') {
+    el.style.background = 'var(--c-primary-light)';
+    el.style.color = 'var(--c-green-dark)';
+    el.style.border = '1px solid var(--c-green-border)';
+  } else if (kind === 'error') {
+    el.style.background = '#fee2e2';
+    el.style.color = '#991b1b';
+    el.style.border = '1px solid #fca5a5';
+  }
+}
+
+async function savePrinterSettings() {
+  const enabled = document.getElementById('printer-bridge-enabled').checked;
+  const url = document.getElementById('printer-bridge-url').value.trim();
+  const tokenInput = document.getElementById('printer-bridge-token').value;
+  const body = { enabled, url };
+  // Only send token field if user typed something — otherwise the server
+  // would clear the existing token.
+  if (tokenInput.length > 0) body.token = tokenInput;
+  try {
+    const r = await authFetch('/api/printer/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      setPrinterCfgStatus('error', err.error || 'Save failed');
+      return;
+    }
+    setPrinterCfgStatus('ok', t('printer.saved'));
+    await renderPrinterSettings();
+    refreshPrinterStatus();
+  } catch (e) {
+    setPrinterCfgStatus('error', e.message);
+  }
+}
+
+async function testPrintBridge() {
+  setPrinterCfgStatus('', '');
+  try {
+    const r = await authFetch('/api/printer/test', { method: 'POST' });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      setPrinterCfgStatus('ok', t('printer.testOk'));
+    } else {
+      setPrinterCfgStatus('error', t('printer.testFail', { err: d.error || 'Unknown error' }));
+    }
+    refreshPrinterStatus();
+  } catch (e) {
+    setPrinterCfgStatus('error', t('printer.testFail', { err: e.message }));
+  }
+}
+
 function batchOptionLabel(b) {
   const kz = b.strainKuerzel || b.strain || '';
   const name = b.strainName || b.species || '';
@@ -16529,6 +16719,16 @@ function initEventListeners() {
   });
   $('st-settings-duckdns').addEventListener('click', () => {
     openStab('settings', 'duckdns');
+  });
+  $('st-settings-printer').addEventListener('click', () => {
+    openStab('settings', 'printer');
+    renderPrinterSettings();
+  });
+  $('printer-save-btn').addEventListener('click', savePrinterSettings);
+  $('printer-test-btn').addEventListener('click', testPrintBridge);
+  $('printer-refresh-btn').addEventListener('click', () => {
+    renderPrinterSettings();
+    refreshPrinterStatus();
   });
   $('st-settings-mcp').addEventListener('click', () => {
     openStab('settings', 'mcp');
