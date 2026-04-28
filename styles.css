@@ -345,15 +345,19 @@ body {
 }
 .scan-modal-close {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 4px;
+  right: 4px;
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: 28px;
   cursor: pointer;
   color: var(--c-text-muted);
   line-height: 1;
-  padding: 4px 8px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-sm);
   transition: background 0.15s;
   z-index: 2;
@@ -361,6 +365,32 @@ body {
 .scan-modal-close:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--c-text);
+}
+/* Icon close button used in modal headers (bag-info, etc). 44px touch target,
+   inherits modal text colour, neutral hover. Used in place of the text-pill
+   close that workers struggled to hit one-handed on a phone. */
+.modal-close-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--c-text-muted);
+  padding: 0;
+  margin: -8px -8px -8px 0;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.modal-close-icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--c-text);
+}
+.modal-close-icon:active {
+  background: rgba(0, 0, 0, 0.12);
 }
 .scan-modal-header {
   display: flex;
