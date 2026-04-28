@@ -3838,6 +3838,45 @@
       </svg>
       <span class="bell-badge" id="bell-badge" hidden>0</span>
     </button>
+    <!-- Floating + action speed-dial (mobile/tablet only) — bottom-left FAB
+         that opens a vertical menu with the three primary creation actions
+         (New batch / Lab work / Log harvest). Mirrors what the dashboard
+         quick-actions card offers, but reachable from any page. -->
+    <div class="action-fab-wrap no-print" id="action-fab-wrap">
+      <div class="action-fab-menu" id="action-fab-menu" hidden>
+        <button class="action-fab-item" id="action-fab-newbatch" type="button">
+          <span class="action-fab-item-label" data-i18n="dash.actionNewBatch">+ New batch</span>
+        </button>
+        <button class="action-fab-item" id="action-fab-labwork" type="button">
+          <span class="action-fab-item-label" data-i18n="dash.actionLabWork">+ Lab work</span>
+        </button>
+        <button class="action-fab-item" id="action-fab-harvest" type="button">
+          <span class="action-fab-item-label" data-i18n="dash.actionHarvest">+ Log harvest</span>
+        </button>
+      </div>
+      <button
+        class="action-fab"
+        id="action-fab"
+        type="button"
+        aria-haspopup="true"
+        aria-expanded="false"
+        data-i18n-aria-label="aria.actionSpeedDial"
+        aria-label="Quick actions"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
+
     <!-- Floating camera FAB (mobile/tablet only) -->
     <button
       class="cam-fab no-print"
