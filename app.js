@@ -12201,15 +12201,11 @@ async function renderContamReports() {
     .map((r) => {
       const sevKey = r.severity === 'major' ? 'sevMajor' : r.severity === 'lost' ? 'sevLost' : 'sevMinor';
       const typeName = esc(_clTypeName(r));
-      const photoSrc = (r.photo_count || 0) > 0
-        ? `/api/contamination-reports/${r.id}/photos/${r.id}?thumb=1`
-        : '';
-      // photo_count > 0 doesn't tell us a uuid; we fetch the report on click for actual photos.
-      // For the list, render a placeholder if no photo_count, otherwise a generic camera icon —
-      // proper thumb requires another endpoint. Cheap path: just show the first photo via the
-      // detail endpoint's response, but for now show the camera icon for any report with photos.
-      const thumbHtml = (r.photo_count || 0) > 0
-        ? `<div style="font-size:24px">📷</div>`
+      // first_photo_uuid is included in the list response so we can render a
+      // real thumb without a second round-trip. Fall back to a placeholder
+      // glyph when the report has no photos at all (rare — usually 1+).
+      const thumbHtml = r.first_photo_uuid
+        ? `<img src="/api/contamination-reports/${r.id}/photos/${esc(r.first_photo_uuid)}?thumb=1" alt="" loading="lazy">`
         : `<div style="font-size:18px">—</div>`;
       const target = r.bag_id
         ? `<span class="contam-list-bag">${esc(r.bag_id)}</span><span class="contam-list-batch">${esc(r.batch_id || '')}</span>`
