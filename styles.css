@@ -4014,6 +4014,81 @@ tr:hover td {
   #t-harvest > tbody > tr > td.hv-grams::before {
     display: none;
   }
+
+  /* ── Assets table — mobile card mode ────────────────────────
+     8-column assets table. Less critical than batches/cultures
+     (assets are read more than written) but still gets the same
+     treatment so editing/printing/deleting from a phone works. */
+  #t-assets {
+    border: 0;
+    width: 100%;
+  }
+  #t-assets > thead {
+    display: none;
+  }
+  #t-assets > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  #t-assets > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+  }
+  #t-assets > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  #t-assets > tbody > tr > td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    flex: 0 0 96px;
+    color: var(--c-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Asset ID promoted to card header */
+  #t-assets > tbody > tr > td.as-id {
+    font-size: 14px !important;
+    font-weight: 600;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  #t-assets > tbody > tr > td.as-id::before {
+    display: none;
+  }
+  /* Action row: Edit / Print / × — full width with equal-flex buttons */
+  #t-assets > tbody > tr > td.as-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--c-border-light);
+    white-space: normal !important;
+  }
+  #t-assets > tbody > tr > td.as-actions::before {
+    display: none;
+  }
+  #t-assets > tbody > tr > td.as-actions .btn-sm {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0 !important;
+    text-align: center;
+    padding: 8px 12px !important;
+  }
 }
 
 /* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
