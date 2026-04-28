@@ -907,6 +907,7 @@ const LANG = {
     'scanFb.actionMove': 'Action: MOVE \u2192 scan destination location, then bags',
     'scanFb.actionRemove': 'Action: REMOVE \u2192 scan bags',
     'scanFb.actionHarvest': 'Action: HARVEST \u2192 scan a bag to log its weight',
+    'scanFb.actionContam': 'Action: CONTAM \u2192 scan a bag to report contamination',
     'scanFb.location': 'Location: {loc} \u2192 now scan bags (location stays until you change it)',
     'scanFb.from': 'From: {loc} \u2192 scan the TO location',
     'scanFb.to': 'To: {loc} \u2192 now scan bags',
@@ -2330,6 +2331,7 @@ const LANG = {
     'scanFb.actionMove': 'Aktion: MOVE \u2192 Ziel-Standort scannen, dann Beutel',
     'scanFb.actionRemove': 'Aktion: REMOVE \u2192 Beutel scannen',
     'scanFb.actionHarvest': 'Aktion: HARVEST \u2192 Beutel f\u00fcr Gewichtserfassung scannen',
+    'scanFb.actionContam': 'Aktion: CONTAM \u2192 Beutel scannen, um Kontamination zu melden',
     'scanFb.location': 'Standort: {loc} \u2192 jetzt Beutel scannen',
     'scanFb.from': 'Von: {loc} \u2192 NACH-Standort scannen',
     'scanFb.to': 'Nach: {loc} \u2192 jetzt Beutel scannen',
@@ -3765,6 +3767,7 @@ const LANG = {
     'scanFb.actionMove': 'A\u00e7\u00e3o: MOVE \u2192 escaneie local de destino, depois sacos',
     'scanFb.actionRemove': 'A\u00e7\u00e3o: REMOVE \u2192 escaneie sacos',
     'scanFb.actionHarvest': 'A\u00e7\u00e3o: HARVEST \u2192 escaneie um saco para registrar peso',
+    'scanFb.actionContam': 'A\u00e7\u00e3o: CONTAM \u2192 escaneie um saco para relatar contamina\u00e7\u00e3o',
     'scanFb.location': 'Local: {loc} \u2192 agora escaneie sacos',
     'scanFb.from': 'De: {loc} \u2192 escaneie o local PARA',
     'scanFb.to': 'Para: {loc} \u2192 agora escaneie sacos',
@@ -4360,7 +4363,7 @@ const LANG = {
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST'];
+const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'];
 let ZONES = [],
   ALL_RACKS = [],
   LOCS = [],
@@ -4428,7 +4431,7 @@ function rebuildZoneConstants() {
   locColor = { ...ZONE_COLORS };
   // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
   REF_GROUPS = [
-    { g: 'Actions', items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST'].map((a) => ({ val: a, label: a })) }
+    { g: 'Actions', items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a })) }
   ];
   REF_GROUPS.push({
     g: 'Zones',
@@ -13990,7 +13993,8 @@ function processScan(raw) {
         MOVE: t('scanFb.actionMove'),
         MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
         REMOVE: t('scanFb.actionRemove'),
-        HARVEST: t('scanFb.actionHarvest')
+        HARVEST: t('scanFb.actionHarvest'),
+        CONTAM: t('scanFb.actionContam')
       }[val]
     );
     return;
@@ -14126,6 +14130,12 @@ function processScan(raw) {
     }
     if (scan.action === 'HARVEST') {
       showHarvestPanel(isBag ? val : batchId, batchId);
+      return;
+    }
+    if (scan.action === 'CONTAM') {
+      // Stay in CONTAM mode after the modal opens — workers reporting a row of
+      // contaminated bags can keep scanning without re-arming the action.
+      openContamReport(isBag ? val : null, batchId, null);
       return;
     }
     if (scan.action === 'ADD' && !scan.to) {
