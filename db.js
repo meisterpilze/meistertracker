@@ -4144,13 +4144,17 @@ function listContaminationReports(db, filters) {
     where.push('substr(cr.reported_at, 1, 10) <= ?');
     params.push(filters.endDate);
   }
+  // first_photo_uuid lets the browse-list render an actual thumbnail per row
+  // without a second round-trip. Correlated subquery scans contamination_photos
+  // by (report_id) which already has an index from migration v36.
   const sql = `
     SELECT
       cr.id, cr.reported_at, cr.user_id, cr.bag_id, cr.batch_id, cr.zone_id,
       cr.type_id, cr.severity, cr.notes, cr.resolved_at, cr.resolution,
       ct.key AS type_key, ct.color AS type_color, ct.name_en, ct.name_de, ct.name_pt,
       u.username AS reporter,
-      (SELECT COUNT(*) FROM contamination_photos WHERE report_id = cr.id) AS photo_count
+      (SELECT COUNT(*) FROM contamination_photos WHERE report_id = cr.id) AS photo_count,
+      (SELECT uuid FROM contamination_photos WHERE report_id = cr.id ORDER BY id LIMIT 1) AS first_photo_uuid
     FROM contamination_reports cr
     LEFT JOIN contamination_types ct ON ct.id = cr.type_id
     LEFT JOIN users u ON u.id = cr.user_id
