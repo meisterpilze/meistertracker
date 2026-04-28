@@ -6448,6 +6448,97 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // GET /api/printer/config — admin: full printer + bridge config for the
+  // Settings → Drucker tab. Token is masked; only hasToken is exposed.
+  if (req.method === 'GET' && req.url === '/api/printer/config') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const dbCfg = db.getPrintBridgeCfg(database);
+      const effective = getEffectiveBridgeConfig();
+      jsonOk(res, {
+        platform: process.platform,
+        printerName: PRINTER_NAME,
+        bridge: {
+          enabled: dbCfg.enabled,
+          url: dbCfg.url,
+          hasToken: !!dbCfg.token,
+          envUrl: PRINT_BRIDGE_URL_ENV || null,
+          envHasToken: !!PRINT_BRIDGE_TOKEN_ENV,
+          effectiveUrl: effective ? effective.url : null,
+          effectiveSource: effective ? effective.source : null
+        }
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // POST /api/printer/config — admin: save bridge config to DB.
+  if (req.method === 'POST' && req.url === '/api/printer/config') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const url = (data.url || '').trim();
+        if (data.enabled && !url) {
+          jsonErr(res, 400, 'URL required when enabled');
+          return;
+        }
+        if (url && !/^https?:\/\//i.test(url)) {
+          jsonErr(res, 400, 'URL must start with http:// or https://');
+          return;
+        }
+        db.updatePrintBridgeCfg(database, {
+          enabled: !!data.enabled,
+          url,
+          token: data.token || ''
+        });
+        log('info', 'Print bridge config updated', {
+          actor: req.authUser.username,
+          enabled: !!data.enabled,
+          url,
+          hasToken: !!data.token
+        });
+        // Invalidate the printer-status cache so the UI sees the new state
+        // immediately.
+        _printerStatusCache = null;
+        _printerStatusCacheTime = 0;
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // POST /api/printer/test — admin: send a small test ZPL through the
+  // current effective config. Same code path as a real label print, so a
+  // success here means the next real print will also succeed.
+  if (req.method === 'POST' && req.url === '/api/printer/test') {
+    if (requireAdmin(req, res)) return;
+    const testZpl =
+      '^XA\n' +
+      '^FO50,40^A0N,30,30^FDMeisterTracker^FS\n' +
+      '^FO50,80^A0N,22,22^FDPrint bridge test^FS\n' +
+      '^FO50,120^A0N,18,18^FD' +
+      new Date().toISOString().replace('T', ' ').slice(0, 19) +
+      '^FS\n' +
+      '^XZ';
+    printZPL(testZpl, (err) => {
+      if (err) {
+        log('warn', 'Print bridge test failed', { error: err, actor: req.authUser && req.authUser.username });
+        jsonErr(res, 502, err);
+      } else {
+        jsonOk(res);
+      }
+    });
+    return;
+  }
+
   // Static files
   let filePath;
   if (url === '/' || url === '/index.html') filePath = path.join(DIR, 'index.html');
