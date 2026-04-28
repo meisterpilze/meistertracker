@@ -4934,6 +4934,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           zoneId: u.searchParams.get('zoneId') || undefined,
           startDate: u.searchParams.get('start') || undefined,
           endDate: u.searchParams.get('end') || undefined,
+          status: u.searchParams.get('status') || undefined,
           limit: u.searchParams.get('limit') ? parseInt(u.searchParams.get('limit'), 10) : undefined
         };
         jsonOk(res, db.listContaminationReports(database, filters));
