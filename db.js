@@ -4198,6 +4198,28 @@ function deleteContaminationReport(db, id) {
   return photos;
 }
 
+function resolveContaminationReport(db, id, userId, resolution) {
+  const r = db
+    .prepare(
+      `UPDATE contamination_reports
+       SET resolved_at = ?, resolved_by = ?, resolution = ?
+       WHERE id = ?`
+    )
+    .run(new Date().toISOString(), userId || null, resolution, id);
+  return r.changes > 0;
+}
+
+function unresolveContaminationReport(db, id) {
+  const r = db
+    .prepare(
+      `UPDATE contamination_reports
+       SET resolved_at = NULL, resolved_by = NULL, resolution = NULL
+       WHERE id = ?`
+    )
+    .run(id);
+  return r.changes > 0;
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -4341,5 +4363,7 @@ module.exports = {
   listContaminationReports,
   getContaminationReportById,
   getContaminationPhotoByUuid,
-  deleteContaminationReport
+  deleteContaminationReport,
+  resolveContaminationReport,
+  unresolveContaminationReport
 };

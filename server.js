@@ -4943,6 +4943,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
   }
+  // Resolve / reopen — sets or clears resolved_at, resolved_by, resolution.
+  // Reporter or admin only (mirror delete ACL).
+  const contamResolveMatch = req.url.match(/^\/api\/contamination-reports\/(\d+)\/resolve$/);
+  if (req.method === 'PATCH' && contamResolveMatch) {
+    const reportId = parseInt(contamResolveMatch[1], 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const existing = db.getContaminationReportById(database, reportId);
+        if (!existing) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        const isOwner = req.authUser && existing.user_id === req.authUser.user_id;
+        const isAdmin = req.authUser && req.authUser.role === 'admin';
+        if (!isOwner && !isAdmin) {
+          jsonErr(res, 403, 'forbidden');
+          return;
+        }
+        if (data && data.resolution) {
+          const ve = validateEnum(data.resolution, ['autoclaved', 'discarded', 'recovered', 'other'], 'resolution');
+          if (ve) {
+            jsonErr(res, 400, ve);
+            return;
+          }
+          db.resolveContaminationReport(
+            database,
+            reportId,
+            req.authUser ? req.authUser.user_id : null,
+            data.resolution
+          );
+        } else {
+          // Empty/null resolution = reopen
+          db.unresolveContaminationReport(database, reportId);
+        }
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const contamDeleteMatch = req.url.match(/^\/api\/contamination-reports\/(\d+)$/);
   if (req.method === 'DELETE' && contamDeleteMatch) {
     const reportId = parseInt(contamDeleteMatch[1], 10);

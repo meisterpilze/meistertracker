@@ -3997,6 +3997,42 @@ tr:hover td {
   background: #fee2e2;
   color: #991b1b;
 }
+.contam-resolved-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #14532d;
+}
+.contam-open-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+}
+/* Resolved cards in the browse list — fade slightly so the eye lands on
+   open ones first; still tappable, still readable. */
+.contam-list-card.is-resolved {
+  opacity: 0.65;
+  background: var(--c-bg);
+}
+.contam-list-card.is-resolved:hover {
+  opacity: 0.9;
+  background: rgba(0, 0, 0, 0.02);
+}
+/* Resolve action row in the drill-down modal */
+.cd-resolve-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border-light);
+}
 .contam-list-notes {
   font-size: 12px;
   color: var(--c-text-sec);
