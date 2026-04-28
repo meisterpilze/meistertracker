@@ -6539,6 +6539,31 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // GET /api/printer/bridge-script — admin: download the print-bridge.ps1 file
+  // bundled with this deployment, so the user does not have to fetch it from
+  // GitHub manually. Same source on both platforms (path.join makes it
+  // portable). Always serves the version that ships with the running server,
+  // so the bridge stays in sync with the server's protocol.
+  if (req.method === 'GET' && req.url === '/api/printer/bridge-script') {
+    if (requireAdmin(req, res)) return;
+    const scriptPath = path.join(DIR, 'scripts', 'print-bridge.ps1');
+    fs.readFile(scriptPath, 'utf8', (err, content) => {
+      if (err) {
+        log('error', 'Bridge script read failed', { error: err.message, path: scriptPath });
+        jsonErr(res, 404, 'Bridge script not found in deployment');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="print-bridge.ps1"',
+        'Content-Length': Buffer.byteLength(content, 'utf8'),
+        'Cache-Control': 'no-store'
+      });
+      res.end(content);
+    });
+    return;
+  }
+
   // Static files
   let filePath;
   if (url === '/' || url === '/index.html') filePath = path.join(DIR, 'index.html');

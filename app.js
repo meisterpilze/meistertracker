@@ -1249,7 +1249,11 @@ const LANG = {
       'Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background after every login.',
     'printer.step1': 'Open PowerShell as Administrator and run:',
     'printer.step2':
-      'Copy scripts/print-bridge.ps1 from the repo to e.g. C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'Download print-bridge.ps1 and save it to the Windows PC, e.g. C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.download': 'Download print-bridge.ps1',
+    'printer.copy': 'Copy',
+    'printer.copied': 'Copied',
+    'printer.downloadFailed': 'Download failed: {err}',
     'printer.step3':
       'In Task Scheduler create a Basic Task: trigger At log on, action Start a program:',
     'printer.step4':
@@ -2631,7 +2635,11 @@ const LANG = {
       'Einmalig auf dem Windows-PC ausführen, an dem die Zebra hängt. Die Bridge läuft danach im Hintergrund nach jedem Login.',
     'printer.step1': 'PowerShell als Administrator öffnen und ausführen:',
     'printer.step2':
-      'scripts/print-bridge.ps1 aus dem Repo kopieren, z.B. nach C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'print-bridge.ps1 herunterladen und auf den Windows-PC speichern, z.B. nach C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.download': 'print-bridge.ps1 herunterladen',
+    'printer.copy': 'Kopieren',
+    'printer.copied': 'Kopiert',
+    'printer.downloadFailed': 'Download fehlgeschlagen: {err}',
     'printer.step3':
       'In der Aufgabenplanung eine einfache Aufgabe anlegen: Trigger Bei Anmeldung, Aktion Programm starten:',
     'printer.step4':
@@ -4018,7 +4026,11 @@ const LANG = {
       'Execute uma vez no PC Windows onde a Zebra est\u00e1 conectada. O bridge ent\u00e3o roda em segundo plano ap\u00f3s cada login.',
     'printer.step1': 'Abra PowerShell como Administrador e execute:',
     'printer.step2':
-      'Copie scripts/print-bridge.ps1 do repo para ex. C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'Baixe print-bridge.ps1 e salve no PC Windows, ex. C:\\meistertracker-bridge\\print-bridge.ps1.',
+    'printer.download': 'Baixar print-bridge.ps1',
+    'printer.copy': 'Copiar',
+    'printer.copied': 'Copiado',
+    'printer.downloadFailed': 'Falha no download: {err}',
     'printer.step3':
       'No Agendador de Tarefas crie uma tarefa b\u00e1sica: gatilho Ao fazer logon, a\u00e7\u00e3o Iniciar um programa:',
     'printer.step4':
@@ -12474,6 +12486,44 @@ async function testPrintBridge() {
   }
 }
 
+async function downloadBridgeScript() {
+  try {
+    const r = await authFetch('/api/printer/bridge-script');
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      setPrinterCfgStatus('error', t('printer.downloadFailed', { err: err.error || 'HTTP ' + r.status }));
+      return;
+    }
+    const text = await r.text();
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'print-bridge.ps1';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    setPrinterCfgStatus('error', t('printer.downloadFailed', { err: e.message }));
+  }
+}
+
+function copyToClipboardWithFeedback(text, btn) {
+  const restore = btn.textContent;
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      btn.textContent = t('printer.copied');
+      setTimeout(() => {
+        btn.textContent = restore;
+      }, 1200);
+    })
+    .catch(() => {
+      btn.textContent = '!';
+      setTimeout(() => {
+        btn.textContent = restore;
+      }, 1200);
+    });
+}
+
 function batchOptionLabel(b) {
   const kz = b.strainKuerzel || b.strain || '';
   const name = b.strainName || b.species || '';
@@ -16729,6 +16779,13 @@ function initEventListeners() {
   $('printer-refresh-btn').addEventListener('click', () => {
     renderPrinterSettings();
     refreshPrinterStatus();
+  });
+  $('printer-download-script').addEventListener('click', downloadBridgeScript);
+  $('printer-copy-cmd-1').addEventListener('click', (e) => {
+    copyToClipboardWithFeedback(document.getElementById('printer-setup-cmd-1').textContent, e.currentTarget);
+  });
+  $('printer-copy-cmd-2').addEventListener('click', (e) => {
+    copyToClipboardWithFeedback(document.getElementById('printer-setup-cmd-2').textContent, e.currentTarget);
   });
   $('st-settings-mcp').addEventListener('click', () => {
     openStab('settings', 'mcp');
