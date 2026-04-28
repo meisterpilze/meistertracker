@@ -840,6 +840,30 @@ body {
   animation: count-bump 0.3s ease;
 }
 
+/* ═══ CAMERA SCAN MODAL ══════════════════════════════════════
+   Wrapper inside #m-camscan that holds the cam-reader frame + HUD.
+   Centred on desktop. On phones we anchor to the top so the camera
+   sits in the upper third of the screen — workers can present a bag
+   to the camera with one hand while the other hand reaches the
+   bottom-area HUD buttons (audit Section 1.4 single-handed-reach
+   recommendation). */
+.cam-scan-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+@media (pointer: coarse) {
+  .cam-scan-wrap {
+    justify-content: flex-start;
+    padding-top: 24px;
+  }
+}
+
 /* ═══ CAMERA SCAN HUD (continuous scanning overlay) ══════════ */
 .cam-hud {
   width: 100%;
@@ -2735,8 +2759,12 @@ tr:hover td {
   z-index: 200;
   align-items: center;
   justify-content: center;
+  /* overscroll-behavior:contain still prevents the underlying page from
+     bouncing when the modal scrolls past its limits. The previous
+     `touch-action:none` here disabled scrolling on the modal content too
+     on iOS Safari — workers couldn't scroll a long bag-info modal. The
+     allow-vertical-pan rule lives on .modal itself below. */
   overscroll-behavior: contain;
-  touch-action: none;
 }
 .modal-bg.open {
   display: flex;
@@ -2753,6 +2781,9 @@ tr:hover td {
   max-height: 92vh;
   max-height: min(92vh, calc(100dvh - 32px));
   overflow-y: auto;
+  /* Allow vertical pan inside the modal even when the parent .modal-bg
+     would otherwise suppress touch gestures on iOS. */
+  touch-action: pan-y;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
 }
 .modal h3 {
@@ -2992,6 +3023,13 @@ tr:hover td {
   .card {
     padding: 12px;
     border-radius: var(--radius-sm);
+  }
+  /* Tighten modal padding further on phones — 28 px (default) eats 56 px
+     of horizontal space on a 360 px viewport, and the 768 px override still
+     leaves 20 px which is also too much when bag-info action buttons need
+     to wrap. 14 / 12 px gives the content room to breathe without scroll. */
+  .modal {
+    padding: 14px 12px;
   }
   .g2,
   .g3,
