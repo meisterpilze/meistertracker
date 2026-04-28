@@ -808,6 +808,27 @@ const LANG = {
     'bagInfo.moveAll': 'Move all',
     'bagInfo.harvest': 'Harvest',
     'bagInfo.remove': 'Remove',
+    'bagInfo.reportContam': '⚠ Contamination',
+    'contam.title': 'Report contamination',
+    'contam.targetBag': 'Bag {bag} (batch {batch})',
+    'contam.targetBatch': 'Batch {batch}',
+    'contam.type': 'Type',
+    'contam.severity': 'Severity',
+    'contam.sevMinor': 'Minor',
+    'contam.sevMajor': 'Major',
+    'contam.sevLost': 'Lost',
+    'contam.photos': 'Photo(s)',
+    'contam.notes': 'Notes (optional)',
+    'contam.notesPlaceholder': 'e.g. Lid wet, found next to TENT-3',
+    'contam.submit': 'Submit',
+    'contam.addPhoto': 'Add photo',
+    'contam.photoLimit': 'Maximum {n} photos',
+    'contam.compressing': 'Compressing {name}…',
+    'contam.compressErr': 'Photo compression failed',
+    'contam.errNoType': 'Please select a contamination type',
+    'contam.errSave': 'Save failed: {err}',
+    'contam.reportSaved': 'Report #{id} saved ({photos} photo(s))',
+    'contam.noTypes': 'No contamination types available',
     'bagInfo.confirmRemoveTitle': 'Remove bag?',
     'bagInfo.confirmRemoveBody': 'Remove {bag} from {loc}? This cannot be scanned away \u2014 only fixed manually.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remove {bag}? This cannot be scanned away \u2014 only fixed manually.',
@@ -2189,6 +2210,27 @@ const LANG = {
     'bagInfo.moveAll': 'Alle verschieben',
     'bagInfo.harvest': 'Ernte',
     'bagInfo.remove': 'Entfernen',
+    'bagInfo.reportContam': '⚠ Kontamination',
+    'contam.title': 'Kontamination melden',
+    'contam.targetBag': 'Beutel {bag} (Charge {batch})',
+    'contam.targetBatch': 'Charge {batch}',
+    'contam.type': 'Typ',
+    'contam.severity': 'Schwere',
+    'contam.sevMinor': 'Klein',
+    'contam.sevMajor': 'Größer',
+    'contam.sevLost': 'Total',
+    'contam.photos': 'Foto(s)',
+    'contam.notes': 'Notiz (optional)',
+    'contam.notesPlaceholder': 'z.B. Bag-Lid feucht, neben TENT-3 entdeckt',
+    'contam.submit': 'Senden',
+    'contam.addPhoto': 'Foto hinzufügen',
+    'contam.photoLimit': 'Maximal {n} Fotos',
+    'contam.compressing': 'Komprimiere {name}…',
+    'contam.compressErr': 'Foto-Komprimierung fehlgeschlagen',
+    'contam.errNoType': 'Bitte einen Kontaminationstyp auswählen',
+    'contam.errSave': 'Speichern fehlgeschlagen: {err}',
+    'contam.reportSaved': 'Bericht #{id} gespeichert ({photos} Foto(s))',
+    'contam.noTypes': 'Keine Kontaminationstypen verfügbar',
     'bagInfo.confirmRemoveTitle': 'Beutel entfernen?',
     'bagInfo.confirmRemoveBody': '{bag} aus {loc} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
     'bagInfo.confirmRemoveBodyNoLoc': '{bag} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
@@ -3582,6 +3624,27 @@ const LANG = {
     'bagInfo.moveAll': 'Mover todos',
     'bagInfo.harvest': 'Colher',
     'bagInfo.remove': 'Remover',
+    'bagInfo.reportContam': '⚠ Contaminação',
+    'contam.title': 'Relatar contaminação',
+    'contam.targetBag': 'Saco {bag} (lote {batch})',
+    'contam.targetBatch': 'Lote {batch}',
+    'contam.type': 'Tipo',
+    'contam.severity': 'Gravidade',
+    'contam.sevMinor': 'Pequeno',
+    'contam.sevMajor': 'Maior',
+    'contam.sevLost': 'Total',
+    'contam.photos': 'Foto(s)',
+    'contam.notes': 'Notas (opcional)',
+    'contam.notesPlaceholder': 'ex. tampa molhada, encontrado ao lado da TENT-3',
+    'contam.submit': 'Enviar',
+    'contam.addPhoto': 'Adicionar foto',
+    'contam.photoLimit': 'Máximo {n} fotos',
+    'contam.compressing': 'Comprimindo {name}…',
+    'contam.compressErr': 'Falha na compressão da foto',
+    'contam.errNoType': 'Selecione um tipo de contaminação',
+    'contam.errSave': 'Falha ao salvar: {err}',
+    'contam.reportSaved': 'Relatório #{id} salvo ({photos} foto(s))',
+    'contam.noTypes': 'Nenhum tipo de contaminação disponível',
     'bagInfo.confirmRemoveTitle': 'Remover saco?',
     'bagInfo.confirmRemoveBody': 'Remover {bag} de {loc}? S\u00f3 se desfaz manualmente.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remover {bag}? S\u00f3 se desfaz manualmente.',
@@ -4434,6 +4497,15 @@ function apiPatch(path, body) {
 }
 function apiDelete(path) {
   return _apiCall('DELETE', path);
+}
+// Lightweight GET for reads — doesn't toggle the mutating/sync indicator.
+async function apiGet(path) {
+  const r = await authFetch(path);
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || 'HTTP ' + r.status);
+  }
+  return r.json();
 }
 async function invDelta(mat, deltaKg, type, ref) {
   return apiPost('/api/inventory/delta', { mat, deltaKg, type, ref });
@@ -11788,6 +11860,208 @@ document.getElementById('m-baginfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-baginfo') document.getElementById('m-baginfo').classList.remove('open');
 });
 
+// ─── CONTAMINATION REPORT MODAL ──────────────────────────────
+// MVP from audit Section 2 / PR 7. Captures bag/batch + type + severity +
+// notes + up to 4 photos (compressed client-side to ~200 KB JPEG / ~15 KB
+// thumb), POSTs to /api/contamination-reports.
+let _crBagId = null;
+let _crBatchId = null;
+let _crZoneId = null;
+let _crTypes = null; // lazily loaded from /api/contamination-types
+let _crSelectedTypeId = null;
+let _crSeverity = 'minor';
+let _crPhotos = []; // [{ data_url, thumb_data_url, width, height }]
+const CR_MAX_PHOTOS = 4;
+
+function biReportContam() {
+  if (!biBagId) return;
+  document.getElementById('m-baginfo').classList.remove('open');
+  openContamReport(biBagId, biBatchId, null);
+}
+
+function openContamReport(bagId, batchId, zoneId) {
+  _crBagId = bagId || null;
+  _crBatchId = batchId || null;
+  _crZoneId = zoneId || null;
+  _crSelectedTypeId = null;
+  _crSeverity = 'minor';
+  _crPhotos = [];
+  // Reset form
+  document.getElementById('cr-notes').value = '';
+  document.getElementById('cr-photo-status').textContent = '';
+  document.getElementById('cr-target').textContent = bagId
+    ? t('contam.targetBag', { bag: bagId, batch: batchId || '—' })
+    : t('contam.targetBatch', { batch: batchId || '—' });
+  // Reset severity buttons to 'minor' active
+  document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.sev === 'minor');
+  });
+  _renderCrPhotos();
+  // Lazy-load types on first open; refresh on later opens to pick up admin edits
+  apiGet('/api/contamination-types')
+    .then((types) => {
+      _crTypes = Array.isArray(types) ? types : [];
+      _renderCrTypeGrid();
+    })
+    .catch(() => {
+      _crTypes = [];
+      _renderCrTypeGrid();
+    });
+  document.getElementById('m-contam-report').classList.add('open');
+}
+
+function closeContamReport() {
+  document.getElementById('m-contam-report').classList.remove('open');
+  _crPhotos = [];
+}
+
+function _crLocalizedName(t) {
+  if (currentLang === 'de') return t.name_de;
+  if (currentLang === 'pt') return t.name_pt;
+  return t.name_en;
+}
+
+function _renderCrTypeGrid() {
+  const grid = document.getElementById('cr-type-grid');
+  if (!_crTypes || !_crTypes.length) {
+    grid.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted);grid-column:1/-1">' + t('contam.noTypes') + '</div>';
+    return;
+  }
+  grid.innerHTML = _crTypes
+    .map((tp) => {
+      const isActive = _crSelectedTypeId === tp.id;
+      return `<button type="button" class="contam-type-btn${isActive ? ' active' : ''}" data-type-id="${tp.id}" style="color:${esc(tp.color)}">
+        <span class="contam-type-dot" style="background:${esc(tp.color)}"></span>
+        <span style="color:var(--c-text)">${esc(_crLocalizedName(tp))}</span>
+      </button>`;
+    })
+    .join('');
+}
+
+async function _crCompressFile(file) {
+  // Decode → resize to 1280px long edge / quality 0.8 → also a 200px thumb.
+  // Canvas re-encode strips EXIF (incl. GPS) automatically — privacy win.
+  const img = await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const i = new Image();
+    i.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(i);
+    };
+    i.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(new Error('image decode failed'));
+    };
+    i.src = url;
+  });
+  function draw(maxEdge, quality) {
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    return new Promise((resolve, reject) => {
+      c.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('encode failed'));
+            return;
+          }
+          const fr = new FileReader();
+          fr.onload = () => resolve({ data_url: fr.result, width: w, height: h });
+          fr.onerror = () => reject(new Error('read failed'));
+          fr.readAsDataURL(blob);
+        },
+        'image/jpeg',
+        quality
+      );
+    });
+  }
+  const main = await draw(1280, 0.8);
+  const thumb = await draw(200, 0.7);
+  return {
+    data_url: main.data_url,
+    width: main.width,
+    height: main.height,
+    thumb_data_url: thumb.data_url
+  };
+}
+
+async function _crAddFiles(fileList) {
+  const status = document.getElementById('cr-photo-status');
+  const files = Array.from(fileList || []).filter((f) => f && f.type && f.type.startsWith('image/'));
+  if (!files.length) return;
+  for (const file of files) {
+    if (_crPhotos.length >= CR_MAX_PHOTOS) {
+      status.textContent = t('contam.photoLimit', { n: CR_MAX_PHOTOS });
+      break;
+    }
+    status.textContent = t('contam.compressing', { name: file.name });
+    try {
+      const photo = await _crCompressFile(file);
+      _crPhotos.push(photo);
+      _renderCrPhotos();
+    } catch (e) {
+      console.error('photo compress failed', e);
+      status.textContent = t('contam.compressErr');
+      return;
+    }
+  }
+  status.textContent = '';
+}
+
+function _renderCrPhotos() {
+  const tiles = document.getElementById('cr-photo-tiles');
+  const tilesHtml = _crPhotos
+    .map(
+      (p, i) =>
+        `<div class="contam-photo-tile" data-idx="${i}"><img src="${esc(p.thumb_data_url)}" alt=""><button type="button" class="remove" data-cr-remove="${i}" aria-label="Remove">&times;</button></div>`
+    )
+    .join('');
+  const addTile = _crPhotos.length < CR_MAX_PHOTOS
+    ? `<button type="button" id="cr-add-photo" class="contam-photo-tile add" aria-label="${esc(t('contam.addPhoto'))}">+</button>`
+    : '';
+  tiles.innerHTML = tilesHtml + addTile;
+}
+
+function _crSelectType(typeId) {
+  _crSelectedTypeId = typeId;
+  _renderCrTypeGrid();
+}
+
+async function _crSubmit() {
+  if (!_crSelectedTypeId) {
+    setFb('err', t('contam.errNoType'));
+    return;
+  }
+  const submitBtn = document.getElementById('cr-submit');
+  submitBtn.disabled = true;
+  try {
+    const body = {
+      bag_id: _crBagId,
+      batch_id: _crBatchId,
+      zone_id: _crZoneId,
+      type_id: _crSelectedTypeId,
+      severity: _crSeverity,
+      notes: document.getElementById('cr-notes').value.trim(),
+      photos: _crPhotos
+    };
+    const r = await apiPost('/api/contamination-reports', body);
+    if (r && r.error) {
+      setFb('err', t('contam.errSave', { err: r.error }));
+      return;
+    }
+    closeContamReport();
+    setFb('ok', t('contam.reportSaved', { id: r.id, photos: (r.photoIds || []).length }));
+  } catch (e) {
+    setFb('err', t('contam.errSave', { err: e.message || 'unknown' }));
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
 // ─── BAG-SELECT MODAL (subset-of-batch move) ─────────────────
 // State: which batch we're selecting from, and which bag IDs are chosen.
 let bsBatchId = null;
@@ -16443,6 +16717,49 @@ function initEventListeners() {
   });
   $('set-14').addEventListener('click', biOpenHarvest);
   $('set-15').addEventListener('click', biConfirmRemove);
+  $('set-contam').addEventListener('click', biReportContam);
+
+  // Contamination report modal wiring
+  $('cls-cr').addEventListener('click', closeContamReport);
+  $('cr-cancel').addEventListener('click', closeContamReport);
+  $('cr-submit').addEventListener('click', _crSubmit);
+  document.getElementById('m-contam-report').addEventListener('click', (e) => {
+    if (e.target.id === 'm-contam-report') closeContamReport();
+  });
+  // Type picker — event delegation since the grid is re-rendered on selection
+  $('cr-type-grid').addEventListener('click', (e) => {
+    const btn = e.target.closest('.contam-type-btn');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.typeId, 10);
+    if (!isNaN(id)) _crSelectType(id);
+  });
+  $('cr-severity-row').addEventListener('click', (e) => {
+    const btn = e.target.closest('.contam-sev-btn');
+    if (!btn) return;
+    _crSeverity = btn.dataset.sev;
+    document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+  });
+  // Photo tiles — add tile triggers file input; remove buttons splice the photo
+  $('cr-photo-tiles').addEventListener('click', (e) => {
+    if (e.target.closest('#cr-add-photo')) {
+      $('cr-file-input').click();
+      return;
+    }
+    const rm = e.target.closest('[data-cr-remove]');
+    if (rm) {
+      const idx = parseInt(rm.dataset.crRemove, 10);
+      if (!isNaN(idx)) {
+        _crPhotos.splice(idx, 1);
+        _renderCrPhotos();
+      }
+    }
+  });
+  $('cr-file-input').addEventListener('change', (e) => {
+    _crAddFiles(e.target.files);
+    e.target.value = ''; // allow picking the same file twice
+  });
   $('m-camscan').addEventListener('click', function (e) {
     if (e.target === this) closeCamScan();
   });
