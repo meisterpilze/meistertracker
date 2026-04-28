@@ -828,6 +828,7 @@ const LANG = {
     'contam.errNoType': 'Please select a contamination type',
     'contam.errSave': 'Save failed: {err}',
     'contam.reportSaved': 'Report #{id} saved ({photos} photo(s))',
+    'contam.reportQueued': 'Offline — report queued, will be sent when WiFi returns.',
     'contam.noTypes': 'No contamination types available',
     'lab.contam': 'Contamination',
     'contam.listTitle': 'Contamination reports',
@@ -2252,6 +2253,7 @@ const LANG = {
     'contam.errNoType': 'Bitte einen Kontaminationstyp auswählen',
     'contam.errSave': 'Speichern fehlgeschlagen: {err}',
     'contam.reportSaved': 'Bericht #{id} gespeichert ({photos} Foto(s))',
+    'contam.reportQueued': 'Offline — Bericht in Warteschlange, wird gesendet sobald WLAN da ist.',
     'contam.noTypes': 'Keine Kontaminationstypen verfügbar',
     'lab.contam': 'Kontamination',
     'contam.listTitle': 'Kontaminationsberichte',
@@ -3688,6 +3690,7 @@ const LANG = {
     'contam.errNoType': 'Selecione um tipo de contaminação',
     'contam.errSave': 'Falha ao salvar: {err}',
     'contam.reportSaved': 'Relatório #{id} salvo ({photos} foto(s))',
+    'contam.reportQueued': 'Offline — relatório na fila, será enviado quando o Wi-Fi voltar.',
     'contam.noTypes': 'Nenhum tipo de contaminação disponível',
     'lab.contam': 'Contaminação',
     'contam.listTitle': 'Relatórios de contaminação',
@@ -12121,10 +12124,16 @@ async function _crSubmit() {
       return;
     }
     closeContamReport();
-    setFb('ok', t('contam.reportSaved', { id: r.id, photos: (r.photoIds || []).length }));
-    // Refresh browse view if it's the active sub-tab
-    if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
-      renderContamReports();
+    if (r && r.queued) {
+      // Service worker queued the report because the network was unreachable.
+      // The browse list won't have this entry yet — replayed when WiFi returns.
+      setFb('warn', t('contam.reportQueued'));
+    } else {
+      setFb('ok', t('contam.reportSaved', { id: r.id, photos: (r.photoIds || []).length }));
+      // Refresh browse view if it's the active sub-tab
+      if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
+        renderContamReports();
+      }
     }
   } catch (e) {
     setFb('err', t('contam.errSave', { err: e.message || 'unknown' }));
