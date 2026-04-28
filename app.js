@@ -474,6 +474,15 @@ const LANG = {
     'print.printerInfo': 'Printing directly to ZDesigner GK420d',
     'print.printerInfoDetail':
       'via the server \u2014 no dialog needed. Make sure the server is running and the printer is on.',
+    'print.status.checking': 'Checking printer status\u2026',
+    'print.status.online': 'Printer ready: {name}',
+    'print.status.printerOffline': 'Printer disconnected: {name}',
+    'print.status.bridgeUnreachable':
+      'Print bridge unreachable. Is the Windows PC running and the bridge service started?',
+    'print.status.noBridge':
+      'Direct printing not configured. Print buttons will download a ZPL file you can send to a Windows PC.',
+    'print.status.localUnavailable': 'Printer not found locally: {name}',
+    'print.status.checkFailed': 'Could not check printer status',
     'print.bagLabels': 'Bag labels',
     'print.labLabels': 'Lab labels',
     'print.refBarcodes': 'Reference barcodes',
@@ -1805,6 +1814,15 @@ const LANG = {
     'print.printerInfo': 'Druckt direkt auf ZDesigner GK420d',
     'print.printerInfoDetail':
       '\u00fcber den Server \u2014 kein Dialog n\u00f6tig. Server und Drucker m\u00fcssen eingeschaltet sein.',
+    'print.status.checking': 'Pr\u00fcfe Drucker-Status\u2026',
+    'print.status.online': 'Drucker bereit: {name}',
+    'print.status.printerOffline': 'Drucker getrennt: {name}',
+    'print.status.bridgeUnreachable':
+      'Print-Bridge nicht erreichbar. L\u00e4uft der Windows-PC und der Bridge-Service?',
+    'print.status.noBridge':
+      'Direkter Druck nicht konfiguriert. Beim Drucken wird eine ZPL-Datei heruntergeladen, die du an einem Windows-PC drucken kannst.',
+    'print.status.localUnavailable': 'Drucker lokal nicht gefunden: {name}',
+    'print.status.checkFailed': 'Drucker-Status konnte nicht gepr\u00fcft werden',
     'print.bagLabels': 'Beutel-Etiketten',
     'print.labLabels': 'Labor-Etiketten',
     'print.refBarcodes': 'Referenz-Barcodes',
@@ -3149,6 +3167,15 @@ const LANG = {
     'print.printerInfo': 'Imprimindo diretamente na ZDesigner GK420d',
     'print.printerInfoDetail':
       'via servidor \u2014 sem di\u00e1logo. Certifique-se de que o servidor est\u00e1 rodando e a impressora ligada.',
+    'print.status.checking': 'Verificando impressora\u2026',
+    'print.status.online': 'Impressora pronta: {name}',
+    'print.status.printerOffline': 'Impressora desconectada: {name}',
+    'print.status.bridgeUnreachable':
+      'Bridge de impress\u00e3o n\u00e3o acess\u00edvel. O PC Windows est\u00e1 ligado e o servi\u00e7o bridge iniciado?',
+    'print.status.noBridge':
+      'Impress\u00e3o direta n\u00e3o configurada. Os bot\u00f5es de impress\u00e3o baixar\u00e3o um arquivo ZPL.',
+    'print.status.localUnavailable': 'Impressora n\u00e3o encontrada localmente: {name}',
+    'print.status.checkFailed': 'N\u00e3o foi poss\u00edvel verificar o status da impressora',
     'print.bagLabels': 'Etiquetas de sacos',
     'print.labLabels': 'Etiquetas de lab',
     'print.refBarcodes': 'C\u00f3digos de refer\u00eancia',
@@ -4698,6 +4725,7 @@ function go(page, btnId) {
   if (page === 'print') {
     fillBatchSelect();
     renderLabList();
+    refreshPrinterStatus();
   }
   if (page === 'cal') {
     renderCalendar();
@@ -12216,10 +12244,44 @@ async function sendToPrinter(zpl) {
     });
     const d = await r.json();
     if (d.ok) return null;
+    refreshPrinterStatus();
     return d.error || 'Print failed';
   } catch (e) {
+    refreshPrinterStatus();
     return 'Could not reach server: ' + e.message;
   }
+}
+
+// Reflect /api/printer-status into the Print-tab status banner. Called when
+// the page is opened, when the banner is clicked, and after each print
+// attempt so the user sees if the bridge / printer state changed.
+const PRINTER_STATUS_STYLES = {
+  online: { key: 'print.status.online', bg: 'var(--c-primary-light)', border: 'var(--c-green-border)', color: 'var(--c-green-dark)' },
+  printer_offline: { key: 'print.status.printerOffline', bg: '#fef3c7', border: '#fbbf24', color: '#92400e' },
+  bridge_unreachable: { key: 'print.status.bridgeUnreachable', bg: '#fee2e2', border: '#fca5a5', color: '#991b1b' },
+  no_bridge: { key: 'print.status.noBridge', bg: '#dbeafe', border: '#93c5fd', color: '#1e40af' },
+  local_unavailable: { key: 'print.status.localUnavailable', bg: '#fee2e2', border: '#fca5a5', color: '#991b1b' }
+};
+async function refreshPrinterStatus() {
+  const banner = document.getElementById('printer-status-banner');
+  const text = document.getElementById('printer-status-text');
+  const detail = document.getElementById('printer-status-detail');
+  if (!banner || !text) return;
+  let payload;
+  try {
+    const r = await authFetch('/api/printer-status');
+    payload = await r.json();
+  } catch (e) {
+    text.textContent = t('print.status.checkFailed');
+    if (detail) detail.textContent = e.message || '';
+    return;
+  }
+  const style = PRINTER_STATUS_STYLES[payload.state] || PRINTER_STATUS_STYLES.printer_offline;
+  banner.style.background = style.bg;
+  banner.style.borderColor = style.border;
+  text.style.color = style.color;
+  text.textContent = t(style.key, { name: payload.name || '' });
+  if (detail) detail.textContent = payload.error || '';
 }
 
 function batchOptionLabel(b) {
@@ -16399,6 +16461,7 @@ function initEventListeners() {
   $('bag-qr').addEventListener('change', renderBagPreview);
   $('print-range').addEventListener('change', toggleBagRange);
   $('prt-27').addEventListener('click', printBagLabels);
+  $('printer-status-banner').addEventListener('click', refreshPrinterStatus);
   $('lab-filter').addEventListener('change', renderLabList);
   $('lab-mode').addEventListener('change', renderLabPreview);
   $('lab-qr').addEventListener('change', renderLabPreview);
