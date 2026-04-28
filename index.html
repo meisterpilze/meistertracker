@@ -2889,7 +2889,19 @@
               </p>
               <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0">
                 <li data-i18n="printer.step1">
-                  Open PowerShell <strong>as Administrator</strong> and run:
+                  Download <code>print-bridge.ps1</code> on the Windows PC, e.g. into
+                  <code>C:\meistertracker-bridge\</code>.
+                </li>
+              </ol>
+              <div style="margin: 6px 0 12px">
+                <button id="printer-download-script" class="btn btn-sm btn-p" data-i18n="printer.download">
+                  Download print-bridge.ps1
+                </button>
+              </div>
+              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="2">
+                <li data-i18n="printer.step2">
+                  Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept.
+                  This sets up URL ACL, firewall rule, scheduled task, and starts the bridge.
                 </li>
               </ol>
               <div style="position: relative; margin: 6px 0 12px">
@@ -2903,8 +2915,7 @@
                     overflow-x: auto;
                     margin: 0;
                   "
-                ><code id="printer-setup-cmd-1">netsh http add urlacl url=http://+:9100/ user=Everyone
-New-NetFirewallRule -DisplayName "MeisterTracker Print Bridge" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9100</code></pre>
+                ><code id="printer-setup-cmd-1">powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1" -Install</code></pre>
                 <button
                   id="printer-copy-cmd-1"
                   class="btn btn-sm"
@@ -2914,50 +2925,21 @@ New-NetFirewallRule -DisplayName "MeisterTracker Print Bridge" -Direction Inboun
                   Copy
                 </button>
               </div>
-              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="2">
-                <li data-i18n="printer.step2">
-                  Download <code>print-bridge.ps1</code> and save it to the Windows PC, e.g.
-                  <code>C:\meistertracker-bridge\print-bridge.ps1</code>.
-                </li>
-              </ol>
-              <div style="margin: 6px 0 12px">
-                <button id="printer-download-script" class="btn btn-sm btn-p" data-i18n="printer.download">
-                  Download print-bridge.ps1
-                </button>
-              </div>
               <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="3">
                 <li data-i18n="printer.step3">
-                  In Task Scheduler create a Basic Task: trigger <em>At log on</em>, action <em>Start a program</em>:
-                </li>
-              </ol>
-              <div style="position: relative; margin: 6px 0 12px">
-                <pre
-                  style="
-                    background: var(--c-bg);
-                    border-radius: 6px;
-                    padding: 10px;
-                    padding-right: 70px;
-                    font-size: 11px;
-                    overflow-x: auto;
-                    margin: 0;
-                  "
-                ><code id="printer-setup-cmd-2">Program:   powershell.exe
-Arguments: -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1"</code></pre>
-                <button
-                  id="printer-copy-cmd-2"
-                  class="btn btn-sm"
-                  style="position: absolute; top: 6px; right: 6px"
-                  data-i18n="printer.copy"
-                >
-                  Copy
-                </button>
-              </div>
-              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="4">
-                <li data-i18n="printer.step4">
                   Enter the Windows PC's LAN IP and port above (e.g. <code>http://192.168.1.50:9100</code>), tick
                   <em>Enable</em>, click <strong>Save</strong>, then <strong>Send test label</strong>.
                 </li>
               </ol>
+              <div
+                style="font-size: 11px; color: var(--c-text-muted); margin-top: 14px; line-height: 1.6"
+                data-i18n="printer.manageHint"
+              >
+                Useful management commands on the Windows PC:
+                <code>-Status</code> shows installation state,
+                <code>-Disable</code> / <code>-Enable</code> stops/resumes the bridge without uninstalling,
+                <code>-Uninstall</code> removes everything.
+              </div>
             </div>
           </div>
           <div class="sp" id="sp-settings-mcp">

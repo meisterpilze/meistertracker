@@ -1247,17 +1247,18 @@ const LANG = {
     'printer.setupTitle': 'Bridge setup (Windows PC)',
     'printer.setupIntro':
       'Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background after every login.',
-    'printer.step1': 'Open PowerShell as Administrator and run:',
+    'printer.step1':
+      'Download print-bridge.ps1 on the Windows PC, e.g. into C:\\meistertracker-bridge\\.',
     'printer.step2':
-      'Download print-bridge.ps1 and save it to the Windows PC, e.g. C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept. This sets up URL ACL, firewall rule, scheduled task, and starts the bridge.',
+    'printer.step3':
+      "Enter the Windows PC's LAN IP and port above (e.g. http://192.168.1.50:9100), tick Enable, click Save, then Send test label.",
+    'printer.manageHint':
+      'Useful management commands on the Windows PC: -Status shows installation state, -Disable / -Enable stops/resumes the bridge without uninstalling, -Uninstall removes everything.',
     'printer.download': 'Download print-bridge.ps1',
     'printer.copy': 'Copy',
     'printer.copied': 'Copied',
     'printer.downloadFailed': 'Download failed: {err}',
-    'printer.step3':
-      'In Task Scheduler create a Basic Task: trigger At log on, action Start a program:',
-    'printer.step4':
-      "Enter the Windows PC's LAN IP and port above (e.g. http://192.168.1.50:9100), tick Enable, click Save, then Send test label.",
     'printer.saved': 'Printer settings saved.',
     'printer.testOk': 'Test label printed successfully.',
     'printer.testFail': 'Test print failed: {err}',
@@ -2633,17 +2634,18 @@ const LANG = {
     'printer.setupTitle': 'Bridge einrichten (Windows-PC)',
     'printer.setupIntro':
       'Einmalig auf dem Windows-PC ausführen, an dem die Zebra hängt. Die Bridge läuft danach im Hintergrund nach jedem Login.',
-    'printer.step1': 'PowerShell als Administrator öffnen und ausführen:',
+    'printer.step1':
+      'print-bridge.ps1 auf dem Windows-PC herunterladen, z.B. nach C:\\meistertracker-bridge\\.',
     'printer.step2':
-      'print-bridge.ps1 herunterladen und auf den Windows-PC speichern, z.B. nach C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'PowerShell auf dem Windows-PC öffnen und den Installer ausführen. UAC fragt nach Admin-Rechten — bestätigen. Das richtet URL ACL, Firewall-Regel, Scheduled Task ein und startet die Bridge.',
+    'printer.step3':
+      'LAN-IP + Port des Windows-PCs oben eintragen (z.B. http://192.168.1.50:9100), Aktivieren ankreuzen, Speichern klicken, dann Test-Etikett senden.',
+    'printer.manageHint':
+      'Nützliche Befehle auf dem Windows-PC: -Status zeigt den Installations-Zustand, -Disable / -Enable stoppt/startet die Bridge ohne Deinstallation, -Uninstall entfernt alles.',
     'printer.download': 'print-bridge.ps1 herunterladen',
     'printer.copy': 'Kopieren',
     'printer.copied': 'Kopiert',
     'printer.downloadFailed': 'Download fehlgeschlagen: {err}',
-    'printer.step3':
-      'In der Aufgabenplanung eine einfache Aufgabe anlegen: Trigger Bei Anmeldung, Aktion Programm starten:',
-    'printer.step4':
-      'LAN-IP + Port des Windows-PCs oben eintragen (z.B. http://192.168.1.50:9100), Aktivieren ankreuzen, Speichern klicken, dann Test-Etikett senden.',
     'printer.saved': 'Drucker-Einstellungen gespeichert.',
     'printer.testOk': 'Test-Etikett erfolgreich gedruckt.',
     'printer.testFail': 'Testdruck fehlgeschlagen: {err}',
@@ -4024,17 +4026,18 @@ const LANG = {
     'printer.setupTitle': 'Configurar bridge (PC Windows)',
     'printer.setupIntro':
       'Execute uma vez no PC Windows onde a Zebra est\u00e1 conectada. O bridge ent\u00e3o roda em segundo plano ap\u00f3s cada login.',
-    'printer.step1': 'Abra PowerShell como Administrador e execute:',
+    'printer.step1':
+      'Baixe print-bridge.ps1 no PC Windows, ex. para C:\\meistertracker-bridge\\.',
     'printer.step2':
-      'Baixe print-bridge.ps1 e salve no PC Windows, ex. C:\\meistertracker-bridge\\print-bridge.ps1.',
+      'Abra PowerShell no PC Windows e execute o instalador. UAC pedir\u00e1 direitos admin \u2014 aceite. Configura URL ACL, regra de firewall, tarefa agendada, e inicia o bridge.',
+    'printer.step3':
+      'Insira o IP LAN + porta do PC Windows acima (ex. http://192.168.1.50:9100), marque Ativar, clique Salvar, depois Enviar etiqueta de teste.',
+    'printer.manageHint':
+      'Comandos \u00fateis no PC Windows: -Status mostra estado da instala\u00e7\u00e3o, -Disable / -Enable para/inicia o bridge sem desinstalar, -Uninstall remove tudo.',
     'printer.download': 'Baixar print-bridge.ps1',
     'printer.copy': 'Copiar',
     'printer.copied': 'Copiado',
     'printer.downloadFailed': 'Falha no download: {err}',
-    'printer.step3':
-      'No Agendador de Tarefas crie uma tarefa b\u00e1sica: gatilho Ao fazer logon, a\u00e7\u00e3o Iniciar um programa:',
-    'printer.step4':
-      'Insira o IP LAN + porta do PC Windows acima (ex. http://192.168.1.50:9100), marque Ativar, clique Salvar, depois Enviar etiqueta de teste.',
     'printer.saved': 'Configura\u00e7\u00f5es da impressora salvas.',
     'printer.testOk': 'Etiqueta de teste impressa com sucesso.',
     'printer.testFail': 'Falha no teste de impress\u00e3o: {err}',
@@ -16783,9 +16786,6 @@ function initEventListeners() {
   $('printer-download-script').addEventListener('click', downloadBridgeScript);
   $('printer-copy-cmd-1').addEventListener('click', (e) => {
     copyToClipboardWithFeedback(document.getElementById('printer-setup-cmd-1').textContent, e.currentTarget);
-  });
-  $('printer-copy-cmd-2').addEventListener('click', (e) => {
-    copyToClipboardWithFeedback(document.getElementById('printer-setup-cmd-2').textContent, e.currentTarget);
   });
   $('st-settings-mcp').addEventListener('click', () => {
     openStab('settings', 'mcp');
