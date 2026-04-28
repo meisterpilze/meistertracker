@@ -69,12 +69,16 @@ if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
 }
 const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
 
-// Optional Windows print bridge (scripts/print-bridge.ps1). When set, the
-// server forwards print + status calls to this URL instead of running
+// Optional Windows print bridge (scripts/print-bridge.ps1). When configured,
+// the server forwards print + status calls to this URL instead of running
 // PowerShell locally. Required for label printing when the server runs on
 // Linux while the Zebra is attached to a Windows PC on the LAN.
-const PRINT_BRIDGE_URL = (process.env.PRINT_BRIDGE_URL || '').replace(/\/+$/, '');
-const PRINT_BRIDGE_TOKEN = process.env.PRINT_BRIDGE_TOKEN || '';
+//
+// The env vars are a fallback for the DB-stored config (Settings → Drucker)
+// so existing .env-based setups keep working untouched. UI-saved values
+// take precedence over env values when present.
+const PRINT_BRIDGE_URL_ENV = (process.env.PRINT_BRIDGE_URL || '').replace(/\/+$/, '');
+const PRINT_BRIDGE_TOKEN_ENV = process.env.PRINT_BRIDGE_TOKEN || '';
 
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
@@ -1077,18 +1081,42 @@ setInterval(checkCertRenewal, 12 * 60 * 60 * 1000);
 let _printerStatusCache = null;
 let _printerStatusCacheTime = 0;
 
+// Read the effective bridge configuration. DB values (Settings → Drucker)
+// take precedence over env vars (PRINT_BRIDGE_URL/PRINT_BRIDGE_TOKEN), so a
+// user can configure the bridge from the UI without restarting the server.
+// Returns null if neither is configured — callers should treat that as
+// "no bridge available" and fall back to the local PowerShell path.
+function getEffectiveBridgeConfig() {
+  try {
+    const cfg = db.getPrintBridgeCfg(database);
+    if (cfg.enabled && cfg.url) {
+      return { url: cfg.url.replace(/\/+$/, ''), token: cfg.token || '', source: 'db' };
+    }
+  } catch (e) {
+    log('warn', 'Failed to read print_bridge_config', { error: e.message });
+  }
+  if (PRINT_BRIDGE_URL_ENV) {
+    return { url: PRINT_BRIDGE_URL_ENV, token: PRINT_BRIDGE_TOKEN_ENV, source: 'env' };
+  }
+  return null;
+}
+
 // Make an HTTP/HTTPS request to the print bridge with a 5s timeout.
 // callback(err, { statusCode, body, raw }) — body is parsed JSON or null.
 function _bridgeRequest(method, urlPath, body, callback) {
+  const cfg = getEffectiveBridgeConfig();
+  if (!cfg) {
+    return callback(new Error('No print bridge configured'));
+  }
   let target;
   try {
-    target = new URL(urlPath, PRINT_BRIDGE_URL + '/');
+    target = new URL(urlPath, cfg.url + '/');
   } catch (e) {
-    return callback(new Error('Invalid PRINT_BRIDGE_URL: ' + e.message));
+    return callback(new Error('Invalid bridge URL: ' + e.message));
   }
   const lib = target.protocol === 'https:' ? https : http;
   const headers = {};
-  if (PRINT_BRIDGE_TOKEN) headers['X-Bridge-Token'] = PRINT_BRIDGE_TOKEN;
+  if (cfg.token) headers['X-Bridge-Token'] = cfg.token;
   const bodyBuf = body == null ? null : Buffer.from(body, 'utf8');
   if (bodyBuf) {
     headers['Content-Type'] = 'text/plain; charset=utf-8';
@@ -1120,21 +1148,23 @@ function _bridgeRequest(method, urlPath, body, callback) {
 // possible. State values:
 //   'online'              — printer reachable and ready to receive ZPL
 //   'printer_offline'     — bridge reachable but the printer is not connected
-//   'bridge_unreachable'  — PRINT_BRIDGE_URL configured but the bridge did
-//                           not respond (Windows PC off, network issue)
-//   'no_bridge'           — server is non-Windows and PRINT_BRIDGE_URL is
-//                           unset; clients should use the ZPL-download flow
+//   'bridge_unreachable'  — bridge configured but did not respond (Windows
+//                           PC off, network issue)
+//   'no_bridge'           — server is non-Windows and no bridge is
+//                           configured; clients should use the ZPL-download
+//                           flow
 //   'local_unavailable'   — Windows-local PowerShell path could not find
 //                           the printer
 function getPrinterStatus(callback) {
-  if (PRINT_BRIDGE_URL) {
+  const cfg = getEffectiveBridgeConfig();
+  if (cfg) {
     return _bridgeRequest('GET', 'status', null, (err, resp) => {
       if (err) {
         return callback(null, {
           state: 'bridge_unreachable',
           name: PRINTER_NAME,
           online: false,
-          bridge: PRINT_BRIDGE_URL,
+          bridge: cfg.url,
           error: err.message
         });
       }
@@ -1182,11 +1212,11 @@ function checkPrinterAvailable(callback) {
   });
 }
 
-// Send raw ZPL to the Zebra GK420d. Routes through the print bridge if
-// PRINT_BRIDGE_URL is configured, otherwise prints locally via PowerShell
+// Send raw ZPL to the Zebra GK420d. Routes through the print bridge if one
+// is configured (DB or env), otherwise prints locally via PowerShell
 // (Windows-only — fails on Linux servers without a bridge).
 function printZPL(zplData, callback) {
-  if (PRINT_BRIDGE_URL) return _printViaBridge(zplData, callback);
+  if (getEffectiveBridgeConfig()) return _printViaBridge(zplData, callback);
   return _printViaPowerShell(zplData, callback);
 }
 
@@ -1194,7 +1224,8 @@ function _printViaBridge(zplData, callback) {
   const zplFixed = zplData.replace(/\r?\n/g, '\r\n');
   _bridgeRequest('POST', 'print', zplFixed, (err, resp) => {
     if (err) {
-      log('error', 'Print bridge unreachable', { error: err.message, bridge: PRINT_BRIDGE_URL });
+      const cfg = getEffectiveBridgeConfig();
+      log('error', 'Print bridge unreachable', { error: err.message, bridge: cfg && cfg.url });
       return callback('Print bridge unreachable: ' + err.message);
     }
     if (!resp || resp.statusCode !== 200 || !resp.body || !resp.body.ok) {
