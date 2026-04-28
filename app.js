@@ -853,6 +853,8 @@ const LANG = {
     'contam.errDelete': 'Could not delete report: {err}',
     'contam.statusLabel': 'Status',
     'contam.statusOpen': 'Open',
+    'contam.statusResolved': 'Resolved',
+    'contam.statusAll': 'All statuses',
     'contam.resolveAs': 'Resolve as:',
     'contam.reopen': 'Reopen',
     'contam.resolved': 'Marked as resolved.',
@@ -2289,6 +2291,8 @@ const LANG = {
     'contam.errDelete': 'Bericht konnte nicht gelöscht werden: {err}',
     'contam.statusLabel': 'Status',
     'contam.statusOpen': 'Offen',
+    'contam.statusResolved': 'Aufgelöst',
+    'contam.statusAll': 'Alle Status',
     'contam.resolveAs': 'Auflösen als:',
     'contam.reopen': 'Wieder öffnen',
     'contam.resolved': 'Als aufgelöst markiert.',
@@ -3737,6 +3741,8 @@ const LANG = {
     'contam.errDelete': 'Não foi possível excluir o relatório: {err}',
     'contam.statusLabel': 'Status',
     'contam.statusOpen': 'Aberto',
+    'contam.statusResolved': 'Resolvido',
+    'contam.statusAll': 'Todos os status',
     'contam.resolveAs': 'Resolver como:',
     'contam.reopen': 'Reabrir',
     'contam.resolved': 'Marcado como resolvido.',
@@ -12226,9 +12232,11 @@ async function renderContamReports() {
   const params = new URLSearchParams();
   const typeId = document.getElementById('cl-type-filter')?.value;
   const sev = document.getElementById('cl-sev-filter')?.value;
+  const status = document.getElementById('cl-status-filter')?.value;
   const since = document.getElementById('cl-since-filter')?.value;
   if (typeId) params.set('typeId', typeId);
   if (sev) params.set('severity', sev);
+  if (status) params.set('status', status);
   if (since) params.set('start', since);
   try {
     _clReports = await apiGet('/api/contamination-reports' + (params.toString() ? '?' + params.toString() : ''));
@@ -17377,13 +17385,14 @@ function initEventListeners() {
     openStab('lab', 'contam');
   });
   // Contamination list filters + drill-down + delete
-  ['cl-type-filter', 'cl-sev-filter', 'cl-since-filter'].forEach((id) => {
+  ['cl-type-filter', 'cl-sev-filter', 'cl-status-filter', 'cl-since-filter'].forEach((id) => {
     const el = $(id);
     if (el) el.addEventListener('change', renderContamReports);
   });
   $('cl-reset').addEventListener('click', () => {
     $('cl-type-filter').value = '';
     $('cl-sev-filter').value = '';
+    $('cl-status-filter').value = '';
     $('cl-since-filter').value = '';
     renderContamReports();
   });

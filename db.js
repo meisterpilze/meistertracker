@@ -4144,6 +4144,11 @@ function listContaminationReports(db, filters) {
     where.push('substr(cr.reported_at, 1, 10) <= ?');
     params.push(filters.endDate);
   }
+  if (filters.status === 'open') {
+    where.push('cr.resolved_at IS NULL');
+  } else if (filters.status === 'resolved') {
+    where.push('cr.resolved_at IS NOT NULL');
+  }
   // first_photo_uuid lets the browse-list render an actual thumbnail per row
   // without a second round-trip. Correlated subquery scans contamination_photos
   // by (report_id) which already has an index from migration v36.
