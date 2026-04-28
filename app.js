@@ -14601,6 +14601,10 @@ function showChangePasswordModal() {
     document.getElementById('chpw-current').value = '';
     document.getElementById('chpw-new').value = '';
     document.getElementById('chpw-status').textContent = '';
+    // Populate the hidden username companion so iOS Keychain knows which
+    // credential entry this dialog is updating.
+    const helper = document.getElementById('chpw-username-helper');
+    if (helper && currentUser && currentUser.username) helper.value = currentUser.username;
   }
 }
 function hideChangePasswordModal() {
