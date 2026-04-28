@@ -1237,7 +1237,7 @@ const LANG = {
     'printer.enable': 'Enable print bridge',
     'printer.bridgeUrl': 'Bridge URL',
     'printer.urlHint':
-      'LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).',
+      'HTTPS LAN address of the Windows PC running print-bridge.ps1, with port (default 9100). The -Install command sets up a self-signed TLS cert automatically.',
     'printer.bridgeToken': 'Bridge token (optional)',
     'printer.tokenPlaceholder': 'leave empty to keep current',
     'printer.tokenHint':
@@ -1252,7 +1252,7 @@ const LANG = {
     'printer.step2':
       'Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept. This sets up URL ACL, firewall rule, scheduled task, and starts the bridge.',
     'printer.step3':
-      "Enter the Windows PC's LAN IP and port above (e.g. http://192.168.1.50:9100), tick Enable, click Save, then Send test label.",
+      "Enter the Windows PC's LAN IP and port above (e.g. https://192.168.1.50:9100), tick Enable, click Save, then Send test label.",
     'printer.manageHint':
       'Useful management commands on the Windows PC: -Status shows installation state, -Disable / -Enable stops/resumes the bridge without uninstalling, -Uninstall removes everything.',
     'printer.download': 'Download print-bridge.ps1',
@@ -2624,7 +2624,7 @@ const LANG = {
     'printer.enable': 'Print-Bridge aktivieren',
     'printer.bridgeUrl': 'Bridge-URL',
     'printer.urlHint':
-      'LAN-Adresse des Windows-PCs der scripts/print-bridge.ps1 ausführt, mit Port (Default 9100).',
+      'HTTPS-LAN-Adresse des Windows-PCs der print-bridge.ps1 ausführt, mit Port (Default 9100). -Install richtet automatisch ein self-signed TLS-Cert ein.',
     'printer.bridgeToken': 'Bridge-Token (optional)',
     'printer.tokenPlaceholder': 'leer lassen um aktuellen zu behalten',
     'printer.tokenHint':
@@ -2639,7 +2639,7 @@ const LANG = {
     'printer.step2':
       'PowerShell auf dem Windows-PC öffnen und den Installer ausführen. UAC fragt nach Admin-Rechten — bestätigen. Das richtet URL ACL, Firewall-Regel, Scheduled Task ein und startet die Bridge.',
     'printer.step3':
-      'LAN-IP + Port des Windows-PCs oben eintragen (z.B. http://192.168.1.50:9100), Aktivieren ankreuzen, Speichern klicken, dann Test-Etikett senden.',
+      'LAN-IP + Port des Windows-PCs oben eintragen (z.B. https://192.168.1.50:9100), Aktivieren ankreuzen, Speichern klicken, dann Test-Etikett senden.',
     'printer.manageHint':
       'Nützliche Befehle auf dem Windows-PC: -Status zeigt den Installations-Zustand, -Disable / -Enable stoppt/startet die Bridge ohne Deinstallation, -Uninstall entfernt alles.',
     'printer.download': 'print-bridge.ps1 herunterladen',
@@ -4016,7 +4016,7 @@ const LANG = {
     'printer.enable': 'Ativar print bridge',
     'printer.bridgeUrl': 'URL do bridge',
     'printer.urlHint':
-      'Endere\u00e7o LAN do PC Windows que executa scripts/print-bridge.ps1, com porta (default 9100).',
+      'Endere\u00e7o HTTPS LAN do PC Windows que executa print-bridge.ps1, com porta (default 9100). -Install configura cert TLS self-signed automaticamente.',
     'printer.bridgeToken': 'Token do bridge (opcional)',
     'printer.tokenPlaceholder': 'deixe vazio para manter o atual',
     'printer.tokenHint':
@@ -4031,7 +4031,7 @@ const LANG = {
     'printer.step2':
       'Abra PowerShell no PC Windows e execute o instalador. UAC pedir\u00e1 direitos admin \u2014 aceite. Configura URL ACL, regra de firewall, tarefa agendada, e inicia o bridge.',
     'printer.step3':
-      'Insira o IP LAN + porta do PC Windows acima (ex. http://192.168.1.50:9100), marque Ativar, clique Salvar, depois Enviar etiqueta de teste.',
+      'Insira o IP LAN + porta do PC Windows acima (ex. https://192.168.1.50:9100), marque Ativar, clique Salvar, depois Enviar etiqueta de teste.',
     'printer.manageHint':
       'Comandos \u00fateis no PC Windows: -Status mostra estado da instala\u00e7\u00e3o, -Disable / -Enable para/inicia o bridge sem desinstalar, -Uninstall remove tudo.',
     'printer.download': 'Baixar print-bridge.ps1',
