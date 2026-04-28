@@ -1270,6 +1270,7 @@ const LANG = {
     'aria.searchHarvests': 'Search harvests',
     'aria.searchLog': 'Search log',
     'aria.openCameraScanner': 'Open camera scanner',
+    'aria.actionSpeedDial': 'Quick actions',
     'aria.clickToSync': 'Click to sync',
     'harvest.gramsPlaceholder': 'e.g. 245',
     'batch.notesPlaceholder': 'Any notes...',
@@ -2714,6 +2715,7 @@ const LANG = {
     'aria.searchHarvests': 'Ernten durchsuchen',
     'aria.searchLog': 'Log durchsuchen',
     'aria.openCameraScanner': 'Kamera-Scanner \u00f6ffnen',
+    'aria.actionSpeedDial': 'Schnellaktionen',
     'aria.clickToSync': 'Klicken zum Synchronisieren',
     // Placeholders
     'harvest.gramsPlaceholder': 'z. B. 245',
@@ -4166,6 +4168,7 @@ const LANG = {
     'aria.searchHarvests': 'Pesquisar colheitas',
     'aria.searchLog': 'Pesquisar registo',
     'aria.openCameraScanner': 'Abrir scanner de c\u00e2mera',
+    'aria.actionSpeedDial': 'A\u00e7\u00f5es r\u00e1pidas',
     'aria.clickToSync': 'Clique para sincronizar',
     // Placeholders
     'harvest.gramsPlaceholder': 'ex. 245',
@@ -17745,4 +17748,44 @@ function initEventListeners() {
 document.addEventListener('DOMContentLoaded', function () {
   var fab = document.getElementById('cam-fab');
   if (fab) fab.addEventListener('click', openCamScan);
+
+  // Action speed-dial FAB — toggles a 3-button menu (New batch / Lab work /
+  // Log harvest). Each item delegates to the matching dashboard quick-action
+  // handler (#dash-act-*) that already exists, so behaviour stays in one place.
+  var afab = document.getElementById('action-fab');
+  var afabMenu = document.getElementById('action-fab-menu');
+  var afabWrap = document.getElementById('action-fab-wrap');
+  function setAfabOpen(open) {
+    if (!afab || !afabMenu) return;
+    afab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) afabMenu.removeAttribute('hidden');
+    else afabMenu.setAttribute('hidden', '');
+  }
+  if (afab) {
+    afab.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = afab.getAttribute('aria-expanded') === 'true';
+      setAfabOpen(!open);
+    });
+  }
+  // Each menu item delegates to the existing dashboard quick-action handler.
+  [
+    ['action-fab-newbatch', 'dash-act-newbatch'],
+    ['action-fab-labwork', 'dash-act-labwork'],
+    ['action-fab-harvest', 'dash-act-harvest']
+  ].forEach(function (pair) {
+    var src = document.getElementById(pair[0]);
+    if (!src) return;
+    src.addEventListener('click', function () {
+      var target = document.getElementById(pair[1]);
+      if (target) target.click();
+      setAfabOpen(false);
+    });
+  });
+  // Close on outside tap (backdrop dismiss). Don't close when the user
+  // taps inside the wrap — they may be aiming at a menu item.
+  document.addEventListener('click', function (e) {
+    if (!afabWrap || afab.getAttribute('aria-expanded') !== 'true') return;
+    if (!afabWrap.contains(e.target)) setAfabOpen(false);
+  });
 });

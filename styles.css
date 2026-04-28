@@ -1068,6 +1068,103 @@ body {
   }
 }
 
+/* ═══ ACTION SPEED-DIAL FAB (mobile/tablet only) ═════════════
+   Bottom-left counterpart to the cam-fab. Tapping the round + button
+   reveals a vertical stack of pill buttons above it — primary
+   creation flows reachable from any page in the thumb zone. Sits
+   just above the bottom-nav (z-index 850 vs nav's 100). */
+.action-fab-wrap {
+  display: none;
+  position: fixed;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  left: calc(16px + env(safe-area-inset-left, 0px));
+  z-index: 850;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+@media (pointer: coarse) and (hover: none) {
+  .action-fab-wrap {
+    display: flex;
+  }
+}
+.action-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--c-primary, #16a34a);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  align-self: flex-start;
+}
+.action-fab:active {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.action-fab[aria-expanded='true'] {
+  transform: rotate(45deg);
+  background: var(--c-text, #1a1a1a);
+}
+.action-fab-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  /* Hidden via [hidden] until JS toggles it open */
+}
+.action-fab-menu[hidden] {
+  display: none;
+}
+.action-fab-item {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  -webkit-tap-highlight-color: transparent;
+  /* Slide-up entrance animation when the menu opens */
+  animation: action-fab-pop 0.18s ease-out backwards;
+  min-height: 44px;
+}
+.action-fab-item:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.action-fab-item:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.action-fab-item:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.action-fab-item:active {
+  background: var(--c-bg);
+  transform: translateY(1px);
+}
+@keyframes action-fab-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* -- Harvest panel -- */
 #harvest-panel {
   padding: 12px 24px;
