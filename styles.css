@@ -3791,6 +3791,85 @@ tr:hover td {
     margin: 0 !important;
     text-align: center;
   }
+
+  /* ── Cultures table — mobile card mode ──────────────────────
+     Same pattern as #t-batches: thead hidden, tr -> card, td -> flex
+     row with data-mlabel pseudo-prefix. The status <select> and the
+     Print / ✕ buttons in the action row keep their inline styling. */
+  #t-cultures {
+    border: 0;
+    width: 100%;
+  }
+  #t-cultures > thead {
+    display: none;
+  }
+  #t-cultures > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  #t-cultures > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+  }
+  #t-cultures > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  #t-cultures > tbody > tr > td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    flex: 0 0 84px;
+    color: var(--c-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Promote the culture ID to a card header */
+  #t-cultures > tbody > tr > td.cu-id {
+    font-size: 14px !important;
+    font-weight: 600;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  #t-cultures > tbody > tr > td.cu-id::before {
+    display: none;
+  }
+  /* Action row spans full width with the status <select> + Print + ✕ */
+  #t-cultures > tbody > tr > td.cu-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--c-border-light);
+    white-space: normal !important;
+    align-items: center;
+  }
+  #t-cultures > tbody > tr > td.cu-actions::before {
+    display: none;
+  }
+  #t-cultures > tbody > tr > td.cu-actions select {
+    flex: 1 1 auto;
+    min-height: 40px;
+    padding: 6px 10px !important;
+  }
+  #t-cultures > tbody > tr > td.cu-actions .btn-sm {
+    margin: 0 !important;
+    text-align: center;
+    padding: 8px 12px !important;
+  }
 }
 
 /* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
