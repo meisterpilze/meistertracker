@@ -29,8 +29,10 @@ Open **http://localhost:3000** in your browser. For other devices on the same Wi
 
 ### Prerequisites
 
-- **Node.js** v20+ — [nodejs.org](https://nodejs.org)
+- **Node.js** v22+ — [nodejs.org](https://nodejs.org)
 - **Git** — repo must be cloned (not just copied)
+
+> **Setting up a fresh Linux server?** See [DEPLOYMENT.md](DEPLOYMENT.md) for a step-by-step guide covering Node install, PM2, TLS, DuckDNS + Let's Encrypt, and security hardening.
 
 ## Configuration
 
@@ -151,7 +153,7 @@ For a dedicated always-on server (Pi 4/5 recommended):
 1. Flash **Raspberry Pi OS Lite (64-bit)** with SSH enabled
 2. Install Node.js:
    ```bash
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
    sudo apt install -y nodejs
    ```
 3. Clone and start:
