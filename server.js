@@ -1198,7 +1198,7 @@ function _printViaBridge(zplData, callback) {
       return callback('Print bridge unreachable: ' + err.message);
     }
     if (!resp || resp.statusCode !== 200 || !resp.body || !resp.body.ok) {
-      const reason = (resp && resp.body && resp.body.error) || ('HTTP ' + (resp && resp.statusCode));
+      const reason = (resp && resp.body && resp.body.error) || 'HTTP ' + (resp && resp.statusCode);
       log('error', 'Bridge print failed', { reason });
       return callback('Bridge print failed: ' + reason);
     }
