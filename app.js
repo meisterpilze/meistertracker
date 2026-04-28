@@ -851,6 +851,17 @@ const LANG = {
     'contam.confirmDeleteBody': 'This will permanently delete the report and all attached photos.',
     'contam.deleted': 'Report deleted.',
     'contam.errDelete': 'Could not delete report: {err}',
+    'contam.statusLabel': 'Status',
+    'contam.statusOpen': 'Open',
+    'contam.resolveAs': 'Resolve as:',
+    'contam.reopen': 'Reopen',
+    'contam.resolved': 'Marked as resolved.',
+    'contam.reopened': 'Reopened.',
+    'contam.errResolve': 'Resolve failed: {err}',
+    'contam.res.autoclaved': 'Autoclaved',
+    'contam.res.discarded': 'Discarded',
+    'contam.res.recovered': 'Recovered',
+    'contam.res.other': 'Other',
     'bagInfo.confirmRemoveTitle': 'Remove bag?',
     'bagInfo.confirmRemoveBody': 'Remove {bag} from {loc}? This cannot be scanned away \u2014 only fixed manually.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remove {bag}? This cannot be scanned away \u2014 only fixed manually.',
@@ -2276,6 +2287,17 @@ const LANG = {
     'contam.confirmDeleteBody': 'Bericht und alle angehängten Fotos werden unwiderruflich gelöscht.',
     'contam.deleted': 'Bericht gelöscht.',
     'contam.errDelete': 'Bericht konnte nicht gelöscht werden: {err}',
+    'contam.statusLabel': 'Status',
+    'contam.statusOpen': 'Offen',
+    'contam.resolveAs': 'Auflösen als:',
+    'contam.reopen': 'Wieder öffnen',
+    'contam.resolved': 'Als aufgelöst markiert.',
+    'contam.reopened': 'Wieder geöffnet.',
+    'contam.errResolve': 'Auflösen fehlgeschlagen: {err}',
+    'contam.res.autoclaved': 'Autoklaviert',
+    'contam.res.discarded': 'Entsorgt',
+    'contam.res.recovered': 'Gerettet',
+    'contam.res.other': 'Sonstiges',
     'bagInfo.confirmRemoveTitle': 'Beutel entfernen?',
     'bagInfo.confirmRemoveBody': '{bag} aus {loc} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
     'bagInfo.confirmRemoveBodyNoLoc': '{bag} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
@@ -3713,6 +3735,17 @@ const LANG = {
     'contam.confirmDeleteBody': 'O relatório e todas as fotos anexadas serão excluídos permanentemente.',
     'contam.deleted': 'Relatório excluído.',
     'contam.errDelete': 'Não foi possível excluir o relatório: {err}',
+    'contam.statusLabel': 'Status',
+    'contam.statusOpen': 'Aberto',
+    'contam.resolveAs': 'Resolver como:',
+    'contam.reopen': 'Reabrir',
+    'contam.resolved': 'Marcado como resolvido.',
+    'contam.reopened': 'Reaberto.',
+    'contam.errResolve': 'Falha ao resolver: {err}',
+    'contam.res.autoclaved': 'Autoclavado',
+    'contam.res.discarded': 'Descartado',
+    'contam.res.recovered': 'Recuperado',
+    'contam.res.other': 'Outro',
     'bagInfo.confirmRemoveTitle': 'Remover saco?',
     'bagInfo.confirmRemoveBody': 'Remover {bag} de {loc}? S\u00f3 se desfaz manualmente.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remover {bag}? S\u00f3 se desfaz manualmente.',
@@ -12223,13 +12256,18 @@ async function renderContamReports() {
         ? `<span class="contam-list-bag">${esc(r.bag_id)}</span><span class="contam-list-batch">${esc(r.batch_id || '')}</span>`
         : `<span class="contam-list-bag">${esc(r.batch_id || '—')}</span>`;
       const notes = r.notes ? `<div class="contam-list-notes">${esc(r.notes)}</div>` : '';
-      return `<div class="contam-list-card" data-cl-id="${r.id}">
+      const resolvedClass = r.resolved_at ? ' is-resolved' : '';
+      const resolvedBadge = r.resolved_at
+        ? `<span class="contam-resolved-badge">✓ ${esc(t('contam.res.' + r.resolution) || '')}</span>`
+        : '';
+      return `<div class="contam-list-card${resolvedClass}" data-cl-id="${r.id}">
         <div class="contam-list-thumb">${thumbHtml}</div>
         <div class="contam-list-meta">
           <div class="contam-list-row">${target}<span class="contam-list-when">${esc(_clRelTime(r.reported_at))}</span></div>
           <div class="contam-list-row">
             <span class="contam-type-badge"><span class="dot" style="background:${esc(r.type_color || '#888')}"></span>${typeName}</span>
             <span class="contam-sev-badge sev-${esc(r.severity)}">${esc(t('contam.' + sevKey))}</span>
+            ${resolvedBadge}
             ${(r.photo_count || 0) > 0 ? `<span style="font-size:11px;color:var(--c-text-muted)">${r.photo_count} 📷</span>` : ''}
           </div>
           ${notes}
@@ -12263,6 +12301,25 @@ async function openContamDetail(id) {
         .join('')}</div>`
     : `<div class="empty" style="margin:8px 0 14px">${t('contam.noPhotos')}</div>`;
   const notesHtml = r.notes ? `<div class="cd-notes">${esc(r.notes)}</div>` : '';
+  // Resolution status — when set, show the resolution + when in the metadata
+  // grid and offer a Reopen action. When unset, render four resolve-action
+  // buttons (Autoclaved / Discarded / Recovered / Other) below the metadata.
+  const isResolved = !!r.resolved_at;
+  const resolutionLabel = r.resolution
+    ? esc(t('contam.res.' + r.resolution))
+    : '';
+  const statusCell = isResolved
+    ? `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-resolved-badge">✓ ${resolutionLabel}</span><div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">${esc(fmtDtTime(r.resolved_at))}</div></div></div>`
+    : `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-open-badge">${esc(t('contam.statusOpen'))}</span></div></div>`;
+  const resolveActions = isResolved
+    ? `<div class="cd-resolve-row"><button id="cd-reopen" type="button" class="btn btn-sm" data-i18n="contam.reopen">Wieder öffnen</button></div>`
+    : `<div class="cd-resolve-row">
+        <span class="cr-label" style="margin:0 8px 0 0">${esc(t('contam.resolveAs'))}</span>
+        <button type="button" class="btn btn-sm" data-cd-resolve="autoclaved" data-i18n="contam.res.autoclaved">Autoklaviert</button>
+        <button type="button" class="btn btn-sm" data-cd-resolve="discarded" data-i18n="contam.res.discarded">Entsorgt</button>
+        <button type="button" class="btn btn-sm" data-cd-resolve="recovered" data-i18n="contam.res.recovered">Gerettet</button>
+        <button type="button" class="btn btn-sm" data-cd-resolve="other" data-i18n="contam.res.other">Sonstiges</button>
+      </div>`;
   body.innerHTML = `
     ${photosHtml}
     <div class="cd-meta-grid">
@@ -12272,9 +12329,45 @@ async function openContamDetail(id) {
       <div><div class="label">${esc(t('contam.batch'))}</div><div style="font-family:monospace">${esc(r.batch_id || '—')}</div></div>
       <div><div class="label">${esc(t('contam.reportedBy'))}</div><div>${esc(r.reporter || '—')}</div></div>
       <div><div class="label">${esc(t('contam.reportedAt'))}</div><div>${esc(fmtDtTime(r.reported_at))}</div></div>
+      ${statusCell}
     </div>
     ${notesHtml}
+    ${resolveActions}
   `;
+}
+
+async function _cdResolve(resolution) {
+  if (!_cdReportId) return;
+  const id = _cdReportId;
+  try {
+    const r = await apiPatch('/api/contamination-reports/' + id + '/resolve', { resolution });
+    if (r && r.error) {
+      setFb('err', t('contam.errResolve', { err: r.error }));
+      return;
+    }
+    setFb('ok', t('contam.resolved'));
+    await openContamDetail(id); // re-render with resolved state
+    renderContamReports();
+  } catch (e) {
+    setFb('err', t('contam.errResolve', { err: e.message || 'unknown' }));
+  }
+}
+
+async function _cdReopen() {
+  if (!_cdReportId) return;
+  const id = _cdReportId;
+  try {
+    const r = await apiPatch('/api/contamination-reports/' + id + '/resolve', {});
+    if (r && r.error) {
+      setFb('err', t('contam.errResolve', { err: r.error }));
+      return;
+    }
+    setFb('ok', t('contam.reopened'));
+    await openContamDetail(id);
+    renderContamReports();
+  } catch (e) {
+    setFb('err', t('contam.errResolve', { err: e.message || 'unknown' }));
+  }
 }
 
 function closeContamDetail() {
@@ -17303,6 +17396,16 @@ function initEventListeners() {
   $('cls-cd').addEventListener('click', closeContamDetail);
   $('cd-close').addEventListener('click', closeContamDetail);
   $('cd-delete').addEventListener('click', _cdDelete);
+  // Resolve buttons + Reopen are rendered inside cd-body so they're delegated
+  // off the body container — refreshes after each action keep wiring intact.
+  $('cd-body').addEventListener('click', (e) => {
+    const resolveBtn = e.target.closest('[data-cd-resolve]');
+    if (resolveBtn) {
+      _cdResolve(resolveBtn.dataset.cdResolve);
+      return;
+    }
+    if (e.target.closest('#cd-reopen')) _cdReopen();
+  });
   document.getElementById('m-contam-detail').addEventListener('click', (e) => {
     if (e.target.id === 'm-contam-detail') closeContamDetail();
   });
