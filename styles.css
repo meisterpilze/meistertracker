@@ -3870,6 +3870,77 @@ tr:hover td {
     text-align: center;
     padding: 8px 12px !important;
   }
+
+  /* ── Scan log table — mobile card mode ──────────────────────
+     9-column scan log forces 700+px scroll on phone. Same pattern
+     as #t-batches: thead off, tr -> card, td -> flex row. The Time
+     cell is promoted to a header; the delete (✕) action right-aligns
+     and disappears for older entries that don't get the button. */
+  #t-log {
+    border: 0;
+    width: 100%;
+  }
+  #t-log > thead {
+    display: none;
+  }
+  #t-log > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  #t-log > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+  }
+  #t-log > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  #t-log > tbody > tr > td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    flex: 0 0 64px;
+    color: var(--c-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Time row promoted to card header */
+  #t-log > tbody > tr > td.lg-time {
+    font-size: 12px !important;
+    color: var(--c-text-sec) !important;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  #t-log > tbody > tr > td.lg-time::before {
+    display: none;
+  }
+  /* Action delete (✕) — bottom-right, only present on entries <24h */
+  #t-log > tbody > tr > td.lg-actions {
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  #t-log > tbody > tr > td.lg-actions:empty {
+    display: none;
+  }
+  #t-log > tbody > tr > td.lg-actions::before {
+    display: none;
+  }
+  #t-log > tbody > tr > td.lg-actions .btn-xs {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
 }
 
 /* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
