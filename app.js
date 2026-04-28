@@ -10715,15 +10715,18 @@ function renderAssets() {
     .map((a) => {
       const d = computeDepreciation(a);
       const gwg = d.isGwg ? '<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>' : '';
+      // data-mlabel attrs become ::before labels in the mobile card layout
+      // (#t-assets block in styles.css). as-id and as-actions are positioning
+      // hooks for header promotion + action-row styling.
       return `<tr>
-      <td style="font-family:monospace;font-size:11px;font-weight:500">${esc(a.assetId)}</td>
-      <td>${esc(a.name)}${gwg}</td>
-      <td>${esc(a.category)}</td>
-      <td style="text-align:right">${formatEur(a.purchasePrice)}</td>
-      <td style="text-align:right">${formatEur(d.bookValue)}</td>
-      <td>${assetStatusBadge(a.status)}</td>
-      <td style="font-size:11px;color:var(--c-text-sec)">${esc(a.location) || '—'}</td>
-      <td style="white-space:nowrap">
+      <td data-mlabel="${esc(t('asset.nr'))}" class="as-id" style="font-family:monospace;font-size:11px;font-weight:500">${esc(a.assetId)}</td>
+      <td data-mlabel="${esc(t('asset.name'))}">${esc(a.name)}${gwg}</td>
+      <td data-mlabel="${esc(t('asset.category'))}">${esc(a.category)}</td>
+      <td data-mlabel="${esc(t('asset.purchasePrice'))}" style="text-align:right">${formatEur(a.purchasePrice)}</td>
+      <td data-mlabel="${esc(t('asset.bookValue'))}" style="text-align:right">${formatEur(d.bookValue)}</td>
+      <td data-mlabel="${esc(t('asset.status'))}">${assetStatusBadge(a.status)}</td>
+      <td data-mlabel="${esc(t('asset.location'))}" style="font-size:11px;color:var(--c-text-sec)">${esc(a.location) || '—'}</td>
+      <td class="as-actions" style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.editBtn')}</button>
         <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.printBtn')}</button>
         <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:var(--c-red-dark)">×</button>
