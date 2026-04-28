@@ -3762,3 +3762,135 @@ tr:hover td {
     text-align: center;
   }
 }
+
+/* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
+   Capture flow: type chips, severity row, 80x80 photo tiles. Photos
+   are compressed to ~200KB JPEG client-side before submit (canvas
+   resize at 1280px / quality 0.8). */
+.cr-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.contam-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+.contam-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.contam-type-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.contam-type-btn.active {
+  border-color: currentColor;
+  background: rgba(0, 0, 0, 0.04);
+}
+.contam-type-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.contam-severity-row {
+  display: flex;
+  gap: 6px;
+}
+.contam-sev-btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s;
+}
+.contam-sev-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.contam-sev-btn.active {
+  background: var(--c-primary);
+  color: #fff;
+  border-color: var(--c-primary);
+}
+.contam-sev-btn[data-sev='major'].active {
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+.contam-sev-btn[data-sev='lost'].active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.contam-photo-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.contam-photo-tile {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.contam-photo-tile.add {
+  border-style: dashed;
+  font-size: 22px;
+}
+.contam-photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.contam-photo-tile .remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -827,6 +827,78 @@ const MIGRATIONS = [
         token   TEXT DEFAULT ''
       )`);
     }
+  },
+  {
+    version: 36,
+    description: 'Contamination reports + types + photos (audit Section 2 MVP)',
+    fn(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS contamination_types (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          key         TEXT NOT NULL UNIQUE,
+          name_de     TEXT NOT NULL,
+          name_en     TEXT NOT NULL,
+          name_pt     TEXT NOT NULL,
+          color       TEXT NOT NULL,
+          sort_order  INTEGER DEFAULT 0,
+          active      INTEGER NOT NULL DEFAULT 1,
+          created     TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS contamination_reports (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          reported_at  TEXT NOT NULL,
+          user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          bag_id       TEXT,
+          batch_id     TEXT,
+          zone_id      TEXT,
+          type_id      INTEGER NOT NULL REFERENCES contamination_types(id),
+          severity     TEXT NOT NULL DEFAULT 'minor',
+          notes        TEXT DEFAULT '',
+          scan_log_id  INTEGER REFERENCES scan_log(id) ON DELETE SET NULL,
+          resolved_at  TEXT,
+          resolved_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          resolution   TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_contam_batch ON contamination_reports(batch_id);
+        CREATE INDEX IF NOT EXISTS idx_contam_zone  ON contamination_reports(zone_id);
+        CREATE INDEX IF NOT EXISTS idx_contam_type  ON contamination_reports(type_id);
+        CREATE INDEX IF NOT EXISTS idx_contam_time  ON contamination_reports(reported_at);
+        CREATE TABLE IF NOT EXISTS contamination_photos (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          report_id   INTEGER NOT NULL REFERENCES contamination_reports(id) ON DELETE CASCADE,
+          uuid        TEXT NOT NULL UNIQUE,
+          rel_path    TEXT NOT NULL,
+          thumb_path  TEXT NOT NULL,
+          width       INTEGER,
+          height      INTEGER,
+          bytes       INTEGER NOT NULL,
+          sha256      TEXT NOT NULL,
+          uploaded_at TEXT NOT NULL,
+          uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_contam_photos_report ON contamination_photos(report_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_contam_photos_sha ON contamination_photos(sha256);
+      `);
+      // Seed the default contamination type list. Admins can extend via a future
+      // Settings UI; soft-deletes (active=0) preserve historical references.
+      const now = new Date().toISOString();
+      const seed = db.prepare(`INSERT OR IGNORE INTO contamination_types
+        (key, name_de, name_en, name_pt, color, sort_order, active, created)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)`);
+      const types = [
+        ['tricho',            'Trichoderma (Grünschimmel)',   'Trichoderma (green mold)',  'Trichoderma (mofo verde)',     '#16a34a', 10],
+        ['cobweb',            'Spinnweben (Dactylium)',       'Cobweb (Dactylium)',        'Teia de aranha (Dactylium)',   '#94a3b8', 20],
+        ['bacterial_wet_rot', 'Bakterielle Nassfäule',        'Bacterial wet rot',         'Podridão úmida bacteriana',    '#0891b2', 30],
+        ['aspergillus',       'Aspergillus',                  'Aspergillus',               'Aspergillus',                  '#facc15', 40],
+        ['penicillium',       'Penicillium (Blauschimmel)',   'Penicillium (blue mold)',   'Penicillium (mofo azul)',      '#3b82f6', 50],
+        ['wet_spot',          'Nassflecken',                  'Wet spot',                  'Mancha úmida',                 '#92400e', 60],
+        ['pin_set_defect',    'Pin-Set-Defekt',               'Pin-set defect / aborts',   'Defeito de pin-set',           '#a855f7', 70],
+        ['mites',             'Milben',                       'Mites',                     'Ácaros',                       '#dc2626', 80],
+        ['verticillium',      'Verticillium',                 'Verticillium',              'Verticillium',                 '#f97316', 90],
+        ['unknown_other',     'Unbekannt / Sonstiges',        'Unknown / other',           'Desconhecido / outro',         '#64748b', 999]
+      ];
+      for (const t of types) seed.run(...t, now);
+    }
   }
 ];
 
@@ -3983,6 +4055,132 @@ function mapMaintenanceRow(r) {
   };
 }
 
+// ── Contamination reports (audit Section 2 MVP) ─────────────
+function listContaminationTypes(db, includeInactive) {
+  const where = includeInactive ? '' : ' WHERE active = 1';
+  return db
+    .prepare(`SELECT id, key, name_de, name_en, name_pt, color, sort_order, active FROM contamination_types${where} ORDER BY sort_order, name_en`)
+    .all();
+}
+
+function createContaminationReport(db, data) {
+  const stmt = db.prepare(`INSERT INTO contamination_reports
+    (reported_at, user_id, bag_id, batch_id, zone_id, type_id, severity, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const r = stmt.run(
+    data.reported_at || new Date().toISOString(),
+    data.user_id || null,
+    data.bag_id || null,
+    data.batch_id || null,
+    data.zone_id || null,
+    data.type_id,
+    data.severity || 'minor',
+    data.notes || ''
+  );
+  return r.lastInsertRowid;
+}
+
+function addContaminationPhoto(db, reportId, photo) {
+  const stmt = db.prepare(`INSERT INTO contamination_photos
+    (report_id, uuid, rel_path, thumb_path, width, height, bytes, sha256, uploaded_at, uploaded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const r = stmt.run(
+    reportId,
+    photo.uuid,
+    photo.rel_path,
+    photo.thumb_path,
+    photo.width || null,
+    photo.height || null,
+    photo.bytes,
+    photo.sha256,
+    photo.uploaded_at || new Date().toISOString(),
+    photo.uploaded_by || null
+  );
+  return r.lastInsertRowid;
+}
+
+function findContaminationPhotoBySha(db, sha256) {
+  return db.prepare('SELECT id, report_id, uuid, rel_path FROM contamination_photos WHERE sha256 = ?').get(sha256);
+}
+
+function listContaminationReports(db, filters) {
+  filters = filters || {};
+  const where = [];
+  const params = [];
+  if (filters.batchId) {
+    where.push('cr.batch_id = ?');
+    params.push(filters.batchId);
+  }
+  if (filters.bagId) {
+    where.push('UPPER(cr.bag_id) = UPPER(?)');
+    params.push(filters.bagId);
+  }
+  if (filters.typeId) {
+    where.push('cr.type_id = ?');
+    params.push(filters.typeId);
+  }
+  if (filters.severity) {
+    where.push('cr.severity = ?');
+    params.push(filters.severity);
+  }
+  if (filters.zoneId) {
+    where.push('cr.zone_id = ?');
+    params.push(filters.zoneId);
+  }
+  if (filters.startDate) {
+    where.push("substr(cr.reported_at, 1, 10) >= ?");
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    where.push("substr(cr.reported_at, 1, 10) <= ?");
+    params.push(filters.endDate);
+  }
+  const sql = `
+    SELECT
+      cr.id, cr.reported_at, cr.user_id, cr.bag_id, cr.batch_id, cr.zone_id,
+      cr.type_id, cr.severity, cr.notes, cr.resolved_at, cr.resolution,
+      ct.key AS type_key, ct.color AS type_color, ct.name_en, ct.name_de, ct.name_pt,
+      u.username AS reporter,
+      (SELECT COUNT(*) FROM contamination_photos WHERE report_id = cr.id) AS photo_count
+    FROM contamination_reports cr
+    LEFT JOIN contamination_types ct ON ct.id = cr.type_id
+    LEFT JOIN users u ON u.id = cr.user_id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY cr.reported_at DESC
+    LIMIT ?
+  `;
+  params.push(Math.min(filters.limit || 200, 500));
+  return db.prepare(sql).all(...params);
+}
+
+function getContaminationReportById(db, id) {
+  const report = db
+    .prepare(`SELECT cr.*, ct.key AS type_key, ct.color AS type_color, ct.name_en, ct.name_de, ct.name_pt, u.username AS reporter
+              FROM contamination_reports cr
+              LEFT JOIN contamination_types ct ON ct.id = cr.type_id
+              LEFT JOIN users u ON u.id = cr.user_id
+              WHERE cr.id = ?`)
+    .get(id);
+  if (!report) return null;
+  report.photos = db
+    .prepare('SELECT id, uuid, rel_path, thumb_path, width, height, bytes, uploaded_at FROM contamination_photos WHERE report_id = ? ORDER BY id')
+    .all(id);
+  return report;
+}
+
+function getContaminationPhotoByUuid(db, uuid) {
+  return db
+    .prepare('SELECT id, report_id, uuid, rel_path, thumb_path, bytes FROM contamination_photos WHERE uuid = ?')
+    .get(uuid);
+}
+
+function deleteContaminationReport(db, id) {
+  // Photos cascade-delete via FK; caller is responsible for unlinking files on disk.
+  const photos = db.prepare('SELECT rel_path, thumb_path FROM contamination_photos WHERE report_id = ?').all(id);
+  db.prepare('DELETE FROM contamination_reports WHERE id = ?').run(id);
+  return photos;
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -4118,5 +4316,13 @@ module.exports = {
   insertMaintenance,
   completeMaintenance,
   getMaintenanceDue,
-  getMaintenanceHistory
+  getMaintenanceHistory,
+  listContaminationTypes,
+  createContaminationReport,
+  addContaminationPhoto,
+  findContaminationPhotoBySha,
+  listContaminationReports,
+  getContaminationReportById,
+  getContaminationPhotoByUuid,
+  deleteContaminationReport
 };
