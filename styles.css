@@ -2749,6 +2749,13 @@ tr:hover td {
   color: var(--c-text-muted);
 }
 
+/* The shared confirm dialog (#m-confirm) uses textContent for body, so \n
+   in the i18n string would otherwise collapse. pre-line keeps newlines while
+   still wrapping long single lines. */
+#m-body {
+  white-space: pre-line;
+}
+
 /* ═══ MODALS ════════════════════════════════════════════════════ */
 .modal-bg {
   display: none;

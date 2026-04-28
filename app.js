@@ -1481,6 +1481,8 @@ const LANG = {
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     // Camera
     'cam.permDenied': 'Camera permission denied. Please allow camera access in your browser settings.',
+    'cam.permDeniedTitle': 'Camera permission needed',
+    'cam.permDeniedHelp': 'The camera is blocked, so scanning is disabled. To enable it:\n\nOn iPhone: Settings → Safari → Camera → Allow\n\nOn Android Chrome: tap the lock icon next to the address bar → Permissions → Camera → Allow\n\nThen reload this page.',
     'cam.notFound': 'No camera found.',
     'cam.inUse': 'Camera is in use by another application.',
     'cam.unknownError': 'Camera error: {err}',
@@ -2931,6 +2933,8 @@ const LANG = {
     // Camera
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     'cam.permDenied': 'Kamera-Berechtigung verweigert. Bitte Kamerazugriff in den Browsereinstellungen erlauben.',
+    'cam.permDeniedTitle': 'Kamera-Berechtigung erforderlich',
+    'cam.permDeniedHelp': 'Die Kamera ist blockiert, daher ist das Scannen deaktiviert. So aktivierst du sie:\n\nAuf dem iPhone: Einstellungen → Safari → Kamera → Erlauben\n\nAuf Android Chrome: Tippe auf das Schloss-Symbol neben der Adressleiste → Berechtigungen → Kamera → Zulassen\n\nDanach Seite neu laden.',
     'cam.notFound': 'Keine Kamera gefunden.',
     'cam.inUse': 'Kamera wird von einer anderen Anwendung verwendet.',
     'cam.unknownError': 'Kamerafehler: {err}',
@@ -4383,6 +4387,8 @@ const LANG = {
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     'cam.permDenied':
       'Permiss\u00e3o de c\u00e2mera negada. Permita o acesso \u00e0 c\u00e2mera nas configura\u00e7\u00f5es do navegador.',
+    'cam.permDeniedTitle': 'Permiss\u00e3o da c\u00e2mera necess\u00e1ria',
+    'cam.permDeniedHelp': 'A c\u00e2mera est\u00e1 bloqueada, ent\u00e3o o scanner n\u00e3o funciona. Para habilit\u00e1-la:\n\nNo iPhone: Ajustes \u2192 Safari \u2192 C\u00e2mera \u2192 Permitir\n\nNo Android Chrome: toque no \u00edcone de cadeado ao lado da barra de endere\u00e7os \u2192 Permiss\u00f5es \u2192 C\u00e2mera \u2192 Permitir\n\nDepois recarregue a p\u00e1gina.',
     'cam.notFound': 'Nenhuma c\u00e2mera encontrada.',
     'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
     'cam.unknownError': 'Erro de c\u00e2mera: {err}',
@@ -16814,7 +16820,17 @@ function updateOfflineBadge(count) {
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
 let _camScanner = null;
 let _camClosing = false;
-let _camFacingMode = 'environment';
+// Persisted between sessions so workers who flipped to the front camera once
+// (e.g. to scan a label they were holding up to themselves) don't have to flip
+// every time. Falls back to 'environment' (rear) for first-time / desktop use.
+let _camFacingMode = (function () {
+  try {
+    const v = localStorage.getItem('mp-cam-facing');
+    return v === 'user' || v === 'environment' ? v : 'environment';
+  } catch {
+    return 'environment';
+  }
+})();
 let _camTorchOn = false;
 // Returns the active video MediaStreamTrack from the html5-qrcode reader, or
 // null if the camera hasn't attached one yet.
@@ -16875,9 +16891,12 @@ function openCamScan() {
         fps: 10,
         qrbox: function (vw, vh) {
           // Wide-short rectangle — fits 1D barcodes (EAN/Code128) without clipping,
-          // and QR codes still sit comfortably inside the width.
-          var w = Math.floor(Math.min(vw, vh) * 0.88);
-          var h = Math.max(80, Math.floor(w * 0.38));
+          // and QR codes still sit comfortably inside the width. Bumped from
+          // 0.88×0.38 to 0.95×0.45 so 1D barcodes printed at 50×30 mm aren't a
+          // hit-or-miss target on phones held at typical reading distance
+          // (audit Section 1.5 — scan target was <44 mm wide on screen).
+          var w = Math.floor(Math.min(vw, vh) * 0.95);
+          var h = Math.max(80, Math.floor(w * 0.45));
           return { width: w, height: h };
         },
         aspectRatio: 1.0
@@ -16901,10 +16920,18 @@ function openCamScan() {
     })
     .catch(function (err) {
       console.error('Camera start failed:', err);
-      var msg;
       var s = String(err);
-      if (/NotAllowedError|Permission/.test(s)) msg = t('cam.permDenied');
-      else if (/NotFoundError/.test(s)) msg = t('cam.notFound');
+      // Permission-denied is its own path because workers on a brand-new phone
+      // see only a one-shot toast and have no idea how to recover. Show the
+      // platform-specific recovery steps as a confirm-style modal that stays
+      // on screen until they tap OK.
+      if (/NotAllowedError|Permission/.test(s)) {
+        closeCamScan();
+        confirm2(t('cam.permDeniedTitle'), t('cam.permDeniedHelp'), t('common.ok'), function () {});
+        return;
+      }
+      var msg;
+      if (/NotFoundError/.test(s)) msg = t('cam.notFound');
       else if (/NotReadableError|TrackStartError/.test(s)) msg = t('cam.inUse');
       else msg = t('cam.unknownError', { err: err });
       setFb('err', msg);
@@ -16954,6 +16981,11 @@ document.addEventListener('visibilitychange', function () {
 });
 function flipCamera() {
   _camFacingMode = _camFacingMode === 'environment' ? 'user' : 'environment';
+  try {
+    localStorage.setItem('mp-cam-facing', _camFacingMode);
+  } catch {
+    /* ignore — quota or private mode */
+  }
   if (_camScanner) {
     closeCamScan();
     setTimeout(openCamScan, 300);
