@@ -260,30 +260,6 @@ if !errorlevel! equ 0 (
     )
 )
 
-REM Start watchdog (health monitor + auto-revert) as fully hidden process
-if exist "watchdog.js" if exist "watchdog-launcher.vbs" (
-    REM Kill previous watchdog if running
-    if exist "watchdog.pid" (
-        set /p OLD_WD_PID=<watchdog.pid
-        taskkill /PID !OLD_WD_PID! /F >nul 2>&1
-        del watchdog.pid >nul 2>&1
-    )
-    REM Clean up legacy PM2-managed watchdog if it exists
-    call pm2 delete meisterpilze-watchdog >nul 2>&1
-    REM Also kill any orphaned watchdog node processes
-    for /f "tokens=2" %%P in ('wmic process where "commandline like '%%watchdog.js%%' and name='node.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
-        taskkill /PID %%P /F >nul 2>&1
-    )
-    REM Launch via VBScript — completely invisible, no CMD flash
-    start "" /B wscript //nologo watchdog-launcher.vbs
-    REM Brief pause then grab the PID
-    ping -n 2 127.0.0.1 >nul 2>&1
-    for /f "tokens=2" %%P in ('wmic process where "commandline like '%%watchdog.js%%' and name='node.exe'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
-        echo %%P> watchdog.pid
-    )
-    echo  -^> Watchdog started ^(health check every 30s^).
-)
-
 echo.
 echo  ========================================
 echo    Server started successfully!
