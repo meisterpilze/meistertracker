@@ -1,7 +1,7 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meisterpilze-v18';
+const CACHE = 'meisterpilze-v19';
 const ASSETS = [
   '/',
   '/styles.css',
@@ -228,17 +228,28 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request));
     return;
   }
-  // Everything else — network first, fall back to cache for offline
+  // Everything else — stale-while-revalidate. Serve cache instantly (so
+  // navigation never waits for the network on flaky lab WiFi), then refresh
+  // the cache in the background. The CACHE version bump on activate purges
+  // stale caches across deploys, so users still see new builds within one
+  // page reload after deploy.
   e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, clone));
-        // Opportunistically replay queued scans + contam reports when network
-        // comes back. Cheap when the queues are empty.
-        replayAll();
-        return res;
-      })
-      .catch(() => caches.match(e.request))
+    caches.match(e.request).then((cached) => {
+      const networked = fetch(e.request)
+        .then((res) => {
+          if (res && res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, clone));
+          }
+          // Opportunistically replay queued scans + contam reports when network
+          // comes back. Cheap when the queues are empty.
+          replayAll();
+          return res;
+        })
+        .catch(() => null);
+      // If we have a cached copy, serve it immediately and let the network
+      // refresh happen in the background. Otherwise wait for the network.
+      return cached || networked;
+    })
   );
 });

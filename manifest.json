@@ -4,6 +4,7 @@
   "description": "Lab tracker for mushroom cultivation — batches, cultures, harvests and scan workflow",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f5f4f0",
   "theme_color": "#1a1a1a",
   "orientation": "any",
@@ -19,6 +20,29 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Scan barcode",
+      "short_name": "Scan",
+      "description": "Open the camera scanner directly",
+      "url": "/?action=scan",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "New batch",
+      "short_name": "New batch",
+      "description": "Create a new batch",
+      "url": "/?action=newbatch",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's tasks",
+      "short_name": "Tasks",
+      "description": "Open dashboard with today's tasks",
+      "url": "/?action=dash",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

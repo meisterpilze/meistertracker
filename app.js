@@ -17745,4 +17745,31 @@ function initEventListeners() {
 document.addEventListener('DOMContentLoaded', function () {
   var fab = document.getElementById('cam-fab');
   if (fab) fab.addEventListener('click', openCamScan);
+
+  // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
+  // Wait until the rest of the app has had a chance to fetch data + render
+  // before dispatching, so go() / openCamScan find the elements they need.
+  try {
+    var actionParam = new URLSearchParams(window.location.search).get('action');
+    if (actionParam) {
+      window.setTimeout(function () {
+        if (actionParam === 'scan') {
+          if (typeof openCamScan === 'function') openCamScan();
+        } else if (actionParam === 'newbatch') {
+          if (typeof go === 'function') go('batch', 'n-batch');
+          if (typeof openStab === 'function') openStab('batch', 'new');
+        } else if (actionParam === 'dash') {
+          if (typeof go === 'function') go('dash', 'n-dash');
+        }
+        // Clean up the URL so a refresh doesn't re-trigger the action.
+        try {
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (e) {
+          /* ignore */
+        }
+      }, 400);
+    }
+  } catch (e) {
+    /* ignore — bad URL or no URLSearchParams */
+  }
 });
