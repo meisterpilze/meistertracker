@@ -16,29 +16,223 @@
 #   If $Token is set (or PRINT_BRIDGE_TOKEN env var), every request must
 #   include header "X-Bridge-Token: <token>" or the bridge returns 401.
 #
-# One-time setup (admin)
-#   # Allow the listener to bind without admin every time:
-#   netsh http add urlacl url=http://+:9100/ user=Everyone
-#   # Open the firewall:
-#   New-NetFirewallRule -DisplayName "MeisterTracker Print Bridge" `
-#     -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9100
+# Quick install (recommended) — auto-elevates if needed:
+#   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1 -Install
+#   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1 -Uninstall
+#   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1 -Status
+#   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1 -Disable
+#   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1 -Enable
 #
-# Run on logon (no admin needed after the setup above)
-#   Open Task Scheduler -> Create Basic Task
-#     Trigger: At log on
-#     Action:  powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass `
-#                -File "C:\meistertracker-bridge\print-bridge.ps1"
-#
-# Manual run (for testing)
+# Manual run (foreground, for testing):
 #   powershell -ExecutionPolicy Bypass -File .\print-bridge.ps1
+#
+# What -Install does:
+#   1. Adds an HTTP URL ACL so the bridge can bind without admin every time
+#   2. Adds an inbound TCP firewall rule for the bridge port
+#   3. Registers a Windows Scheduled Task ("MeisterTracker Print Bridge")
+#      that runs this script hidden at every user logon
+#   4. Starts the task immediately
+#
+# What -Uninstall does:
+#   Reverses every step from -Install in the right order, then stops the
+#   running listener if any.
 
 param(
     [int]    $Port        = 9100,
     [string] $PrinterName = $(if ($env:PRINT_BRIDGE_PRINTER_NAME) { $env:PRINT_BRIDGE_PRINTER_NAME } else { 'ZDesigner GK420d' }),
-    [string] $Token       = $env:PRINT_BRIDGE_TOKEN
+    [string] $Token       = $env:PRINT_BRIDGE_TOKEN,
+    [switch] $Install,
+    [switch] $Uninstall,
+    [switch] $Enable,
+    [switch] $Disable,
+    [switch] $Status
 )
 
 $ErrorActionPreference = 'Stop'
+
+# ── Constants used by the management subcommands ───────────────────────────
+$TaskName     = 'MeisterTracker Print Bridge'
+$FirewallName = 'MeisterTracker Print Bridge'
+$UrlAclPrefix = "http://+:$Port/"
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+function Test-IsAdmin {
+    $current = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return ([Security.Principal.WindowsPrincipal]$current).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Invoke-AsAdmin {
+    param([string[]] $ForwardedArgs)
+    Write-Host 'Re-launching with administrator privileges...' -ForegroundColor Yellow
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $ForwardedArgs
+    Start-Process powershell -ArgumentList $argList -Verb RunAs
+    exit 0
+}
+
+function Get-UrlAclState {
+    $output = & netsh http show urlacl url=$UrlAclPrefix 2>&1 | Out-String
+    return ($output -match [regex]::Escape($UrlAclPrefix))
+}
+
+function Add-UrlAcl {
+    if (Get-UrlAclState) {
+        Write-Host "  URL ACL already present for $UrlAclPrefix" -ForegroundColor DarkGray
+        return
+    }
+    & netsh http add urlacl url=$UrlAclPrefix user=Everyone | Out-Null
+    Write-Host "  + URL ACL added for $UrlAclPrefix"
+}
+
+function Remove-UrlAcl {
+    if (-not (Get-UrlAclState)) {
+        Write-Host '  URL ACL not present' -ForegroundColor DarkGray
+        return
+    }
+    & netsh http delete urlacl url=$UrlAclPrefix | Out-Null
+    Write-Host "  - URL ACL removed for $UrlAclPrefix"
+}
+
+function Get-FirewallRuleState {
+    return [bool] (Get-NetFirewallRule -DisplayName $FirewallName -ErrorAction SilentlyContinue)
+}
+
+function Add-FirewallRule {
+    if (Get-FirewallRuleState) {
+        Write-Host "  Firewall rule '$FirewallName' already present" -ForegroundColor DarkGray
+        return
+    }
+    New-NetFirewallRule -DisplayName $FirewallName -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port | Out-Null
+    Write-Host "  + Firewall rule '$FirewallName' added (TCP $Port inbound)"
+}
+
+function Remove-FirewallRule {
+    if (-not (Get-FirewallRuleState)) {
+        Write-Host '  Firewall rule not present' -ForegroundColor DarkGray
+        return
+    }
+    Remove-NetFirewallRule -DisplayName $FirewallName | Out-Null
+    Write-Host "  - Firewall rule '$FirewallName' removed"
+}
+
+function Get-BridgeTask {
+    return Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+}
+
+function Add-BridgeTask {
+    if (Get-BridgeTask) {
+        Write-Host "  Scheduled task '$TaskName' already present — re-creating to pick up latest path" -ForegroundColor DarkGray
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+    }
+    $argParts = @('-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+    if ($Port -ne 9100)                { $argParts += @('-Port', $Port) }
+    if ($PrinterName -ne 'ZDesigner GK420d') { $argParts += @('-PrinterName', "`"$PrinterName`"") }
+    if ($Token)                        { $argParts += @('-Token', "`"$Token`"") }
+    $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ($argParts -join ' ')
+    $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 0)
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Write-Host "  + Scheduled task '$TaskName' registered (At Logon, hidden)"
+}
+
+function Remove-BridgeTask {
+    $task = Get-BridgeTask
+    if (-not $task) {
+        Write-Host '  Scheduled task not present' -ForegroundColor DarkGray
+        return
+    }
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+    Write-Host "  - Scheduled task '$TaskName' removed"
+}
+
+function Stop-BridgeProcess {
+    # Kill any powershell process that is currently running this script — used
+    # before reinstalling and during -Uninstall.
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+        Where-Object { $_.CommandLine -like "*$PSCommandPath*" -and $_.ProcessId -ne $PID } |
+        ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            Write-Host "  - Stopped running bridge process (PID $($_.ProcessId))"
+        }
+}
+
+# ── Management subcommands ────────────────────────────────────────────────
+
+function Invoke-Install {
+    if (-not (Test-IsAdmin)) { Invoke-AsAdmin -ForwardedArgs @('-Install') }
+    Write-Host '== Installing MeisterTracker Print Bridge ==' -ForegroundColor Cyan
+    Stop-BridgeProcess
+    Add-UrlAcl
+    Add-FirewallRule
+    Add-BridgeTask
+    Write-Host ''
+    Write-Host '  Starting task now...'
+    Start-ScheduledTask -TaskName $TaskName
+    Start-Sleep -Seconds 1
+    Show-Status -BriefHeader $false
+    Write-Host ''
+    Write-Host 'Done. The bridge will now start automatically at every logon.' -ForegroundColor Green
+}
+
+function Invoke-Uninstall {
+    if (-not (Test-IsAdmin)) { Invoke-AsAdmin -ForwardedArgs @('-Uninstall') }
+    Write-Host '== Uninstalling MeisterTracker Print Bridge ==' -ForegroundColor Cyan
+    Remove-BridgeTask
+    Stop-BridgeProcess
+    Remove-FirewallRule
+    Remove-UrlAcl
+    Write-Host ''
+    Write-Host 'Done. The bridge is fully removed.' -ForegroundColor Green
+}
+
+function Invoke-Enable {
+    if (-not (Test-IsAdmin)) { Invoke-AsAdmin -ForwardedArgs @('-Enable') }
+    if (-not (Get-BridgeTask)) {
+        Write-Host "Scheduled task '$TaskName' not installed. Run with -Install first." -ForegroundColor Red
+        exit 1
+    }
+    Enable-ScheduledTask -TaskName $TaskName | Out-Null
+    Start-ScheduledTask -TaskName $TaskName
+    Write-Host "Bridge enabled and started." -ForegroundColor Green
+}
+
+function Invoke-Disable {
+    if (-not (Test-IsAdmin)) { Invoke-AsAdmin -ForwardedArgs @('-Disable') }
+    if (-not (Get-BridgeTask)) {
+        Write-Host "Scheduled task '$TaskName' not installed." -ForegroundColor Yellow
+        exit 0
+    }
+    Disable-ScheduledTask -TaskName $TaskName | Out-Null
+    Stop-BridgeProcess
+    Write-Host "Bridge disabled and any running instance stopped." -ForegroundColor Green
+}
+
+function Show-Status {
+    param([bool] $BriefHeader = $true)
+    if ($BriefHeader) { Write-Host '== MeisterTracker Print Bridge status ==' -ForegroundColor Cyan }
+    $task = Get-BridgeTask
+    $running = [bool] (Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+        Where-Object { $_.CommandLine -like "*$PSCommandPath*" -and $_.ProcessId -ne $PID })
+    Write-Host ('  URL ACL ({0,-22})  : {1}' -f $UrlAclPrefix, $(if (Get-UrlAclState) { 'present' } else { 'missing' }))
+    Write-Host ('  Firewall rule           : {0}' -f $(if (Get-FirewallRuleState) { 'present' } else { 'missing' }))
+    if ($task) {
+        Write-Host ('  Scheduled task          : present (state: {0})' -f $task.State)
+    } else {
+        Write-Host '  Scheduled task          : missing'
+    }
+    Write-Host ('  Bridge process running  : {0}' -f $(if ($running) { 'yes' } else { 'no' }))
+    Write-Host ('  Printer name            : {0}' -f $PrinterName)
+    Write-Host ('  Token auth              : {0}' -f $(if ($Token) { 'enabled' } else { 'disabled' }))
+}
+
+# Dispatch to the management subcommand if any flag is present, otherwise
+# fall through to the listener loop.
+if ($Install)   { Invoke-Install;   exit 0 }
+if ($Uninstall) { Invoke-Uninstall; exit 0 }
+if ($Enable)    { Invoke-Enable;    exit 0 }
+if ($Disable)   { Invoke-Disable;   exit 0 }
+if ($Status)    { Show-Status;      exit 0 }
 
 # ── Win32 raw-printing wrapper ─────────────────────────────────────────────
 # Same approach the MeisterTracker server uses on Windows: open the printer
@@ -131,21 +325,20 @@ function Test-Auth {
 }
 
 # ── HTTP listener ──────────────────────────────────────────────────────────
-$prefix = "http://+:$Port/"
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add($prefix)
+$listener.Prefixes.Add($UrlAclPrefix)
 try {
     $listener.Start()
 } catch {
-    Write-Host "Cannot bind to $prefix" -ForegroundColor Red
-    Write-Host "  Run this once as Administrator to grant the URL ACL:" -ForegroundColor Yellow
-    Write-Host "    netsh http add urlacl url=$prefix user=Everyone" -ForegroundColor Yellow
+    Write-Host "Cannot bind to $UrlAclPrefix" -ForegroundColor Red
+    Write-Host '  Run this once to grant the URL ACL and set up auto-start:' -ForegroundColor Yellow
+    Write-Host "    powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Install" -ForegroundColor Yellow
     throw
 }
 
-Write-Host "MeisterTracker Print Bridge listening on $prefix" -ForegroundColor Green
+Write-Host "MeisterTracker Print Bridge listening on $UrlAclPrefix" -ForegroundColor Green
 Write-Host "  Printer: $PrinterName"
-if ($Token) { Write-Host "  Auth:    enabled (X-Bridge-Token required)" } else { Write-Host "  Auth:    disabled — set PRINT_BRIDGE_TOKEN to require a token" -ForegroundColor Yellow }
+if ($Token) { Write-Host '  Auth:    enabled (X-Bridge-Token required)' } else { Write-Host '  Auth:    disabled — pass -Token or set PRINT_BRIDGE_TOKEN to require a token' -ForegroundColor Yellow }
 
 while ($listener.IsListening) {
     $ctx = $listener.GetContext()
