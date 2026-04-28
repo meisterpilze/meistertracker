@@ -45,6 +45,8 @@ PRINTER_NAME=ZDesigner GK420d
 
 ## Server Management
 
+### Linux / macOS
+
 ```bash
 bash update_server.sh            # Update code, back up data, restart
 bash update_server.sh start      # Start (without pulling updates)
@@ -52,7 +54,41 @@ bash update_server.sh stop       # Stop the server
 bash update_server.sh status     # Show PM2 process status
 ```
 
-The script uses [PM2](https://pm2.keymetrics.io/) for process management and auto-restart.
+Both scripts use [PM2](https://pm2.keymetrics.io/) for process management and auto-restart, so commands like `pm2 logs meisterpilze`, `pm2 monit`, and `pm2 list` work identically on either platform.
+
+### Windows
+
+`START.bat` does the same job as `update_server.sh`: it pulls the latest code, installs deps, backs up the DB (using `sqlite3 .backup` if available, otherwise a file copy), generates a TLS cert if missing, and (re-)starts the PM2 process. Double-click it or run it from a terminal.
+
+### Auto-start on boot
+
+**Linux** — `pm2 startup systemd` generates a systemd unit, then `pm2 save` freezes the current process list:
+```bash
+pm2 startup
+# copy and run the printed `sudo env PATH=...` line
+pm2 save
+```
+
+**Windows** — two equally valid options:
+
+1. **Startup folder shortcut** (per-user, runs at logon)
+   - `Win + R` → `shell:startup` → Enter
+   - Right-click in the folder → New → Shortcut → point at `C:\path\to\meistertracker\START.bat`
+   - Optional: in the shortcut Properties, set "Run" to **Minimized** so the console window doesn't pop into focus.
+
+2. **Task Scheduler** (more robust — works even without an interactive logon)
+   - Open Task Scheduler → Create Basic Task
+   - Trigger: At log on (or At startup, if you want it before login)
+   - Action: Start a program
+     - Program: `C:\path\to\meistertracker\START.bat`
+     - "Start in": `C:\path\to\meistertracker`
+   - Optional: in the task's Settings tab, enable "Run task as soon as possible after a scheduled start is missed".
+
+After either setup, PM2 needs to know the process list to restore. Run once after starting the server normally:
+```cmd
+pm2 save
+```
+PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the next launch to restore the meisterpilze process.
 
 ## Scanning Workflow
 
