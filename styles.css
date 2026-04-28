@@ -1388,13 +1388,22 @@ th.sortable {
   cursor: pointer;
   user-select: none;
 }
-th.sortable:hover {
-  color: var(--c-text-sec);
+@media (hover: hover) {
+  th.sortable:hover {
+    color: var(--c-text-sec);
+  }
 }
 th.sortable .arrow {
   font-size: 9px;
   opacity: 0.35;
   margin-left: 3px;
+}
+/* Touch devices have no hover, so workers can't tease out which columns are
+   sortable. Bump the arrow opacity so all sort indicators are always visible. */
+@media (pointer: coarse) {
+  th.sortable .arrow {
+    opacity: 0.7;
+  }
 }
 th.sortable.active .arrow {
   opacity: 1;
@@ -1469,8 +1478,10 @@ tr:hover td {
   background: var(--c-surface);
   transition: box-shadow 0.15s;
 }
-.todo-row:hover {
-  box-shadow: var(--shadow);
+@media (hover: hover) {
+  .todo-row:hover {
+    box-shadow: var(--shadow);
+  }
 }
 .todo-row.urgent {
   border-color: #fecaca;
@@ -1521,9 +1532,11 @@ tr:hover td {
   background: var(--c-surface);
   transition: all 0.15s;
 }
-.rack-card:hover {
-  background: var(--c-bg);
-  box-shadow: var(--shadow);
+@media (hover: hover) {
+  .rack-card:hover {
+    background: var(--c-bg);
+    box-shadow: var(--shadow);
+  }
 }
 .tag {
   display: inline-block;
@@ -1870,17 +1883,30 @@ tr:hover td {
     opacity 0.15s,
     transform 0.15s;
 }
-.cal-event:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+/* Touch devices: HTML5 drag-and-drop doesn't work on iOS Safari without a
+   pointer-event polyfill, and `cursor:grab` triggers iOS text-selection on
+   long-press, which competes with the tap-to-open. Make the event read as
+   tappable on touch — drag is desktop-only. */
+@media (pointer: coarse) {
+  .cal-event {
+    cursor: pointer;
+  }
+}
+@media (hover: hover) {
+  .cal-event:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
 }
 .cal-event.no-drag {
   cursor: default;
   opacity: 0.8;
 }
-.cal-event.no-drag:hover {
-  transform: none;
-  opacity: 0.85;
+@media (hover: hover) {
+  .cal-event.no-drag:hover {
+    transform: none;
+    opacity: 0.85;
+  }
 }
 .cal-ev-assignees {
   font-size: 10px;
@@ -2294,9 +2320,11 @@ tr:hover td {
   background: var(--c-surface);
   transition: all 0.15s;
 }
-.rack-card-new:hover {
-  background: var(--c-bg);
-  box-shadow: var(--shadow);
+@media (hover: hover) {
+  .rack-card-new:hover {
+    background: var(--c-bg);
+    box-shadow: var(--shadow);
+  }
 }
 .rack-card-header {
   display: flex;
@@ -2340,9 +2368,11 @@ tr:hover td {
   cursor: pointer;
   transition: all 0.15s;
 }
-.batch-card:hover {
-  border-color: var(--c-border);
-  box-shadow: var(--shadow);
+@media (hover: hover) {
+  .batch-card:hover {
+    border-color: var(--c-border);
+    box-shadow: var(--shadow);
+  }
 }
 .batch-card.batch-overdue {
   border-color: #fecaca;
