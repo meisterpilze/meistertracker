@@ -946,6 +946,16 @@ body {
 .cam-hud-btn:active {
   background: rgba(255, 255, 255, 0.3);
 }
+/* Torch toggle — visible glow when the flashlight is on so the worker doesn't
+   leave the camera flash burning unintentionally after a scan. */
+.cam-hud-btn.torch-on {
+  background: rgba(250, 204, 21, 0.45);
+  color: #fef9c3;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.5);
+}
+.cam-hud-btn.torch-on:active {
+  background: rgba(250, 204, 21, 0.6);
+}
 .cam-hud-close {
   font-size: 24px;
   font-weight: 300;

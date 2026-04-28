@@ -1200,6 +1200,7 @@ const LANG = {
     'cal.printMonth': 'Month — task list for the current month',
     'aria.cameraScanner': 'Camera scanner',
     'aria.switchCamera': 'Switch camera',
+    'aria.torchToggle': 'Toggle flashlight',
     'aria.closeCamera': 'Close camera',
     'aria.clearLastScan': 'Undo last scan',
     'aria.clearScan': 'Clear scan (reset action)',
@@ -2584,6 +2585,7 @@ const LANG = {
     // Aria labels
     'aria.cameraScanner': 'Kamera-Scanner',
     'aria.switchCamera': 'Kamera wechseln',
+    'aria.torchToggle': 'Taschenlampe ein/aus',
     'aria.closeCamera': 'Kamera schlie\u00dfen',
     'aria.clearLastScan': 'Letzten Scan zur\u00fccknehmen',
     'aria.clearScan': 'Scan zur\u00fccksetzen (Aktion l\u00f6schen)',
@@ -3976,6 +3978,7 @@ const LANG = {
     // Aria labels
     'aria.cameraScanner': 'Scanner de c\u00e2mera',
     'aria.switchCamera': 'Mudar c\u00e2mera',
+    'aria.torchToggle': 'Alternar lanterna',
     'aria.closeCamera': 'Fechar c\u00e2mera',
     'aria.clearLastScan': 'Desfazer \u00faltimo scan',
     'aria.clearScan': 'Limpar scan (redefinir a\u00e7\u00e3o)',
@@ -16149,6 +16152,52 @@ function updateOfflineBadge(count) {
 let _camScanner = null;
 let _camClosing = false;
 let _camFacingMode = 'environment';
+let _camTorchOn = false;
+// Returns the active video MediaStreamTrack from the html5-qrcode reader, or
+// null if the camera hasn't attached one yet.
+function _camActiveTrack() {
+  var video = document.querySelector('#cam-reader video');
+  if (!video || !video.srcObject) return null;
+  var tracks = video.srcObject.getVideoTracks();
+  return tracks && tracks.length ? tracks[0] : null;
+}
+// After scanner.start resolves, html5-qrcode may take a moment to attach the
+// <video> element. Poll briefly, then show the torch button if the track
+// reports torch capability. Most desktop webcams and the front camera do not.
+function _detectTorchSupport() {
+  var attempts = 0;
+  function check() {
+    var track = _camActiveTrack();
+    if (!track || !track.getCapabilities) {
+      if (attempts++ < 10) setTimeout(check, 100);
+      return;
+    }
+    var caps;
+    try {
+      caps = track.getCapabilities();
+    } catch (e) {
+      return;
+    }
+    var btn = document.getElementById('btn-cam-torch');
+    if (btn) btn.hidden = !caps || !caps.torch;
+  }
+  check();
+}
+function toggleTorch() {
+  var track = _camActiveTrack();
+  if (!track || !track.applyConstraints) return;
+  var newState = !_camTorchOn;
+  track
+    .applyConstraints({ advanced: [{ torch: newState }] })
+    .then(function () {
+      _camTorchOn = newState;
+      var btn = document.getElementById('btn-cam-torch');
+      if (btn) btn.classList.toggle('torch-on', _camTorchOn);
+    })
+    .catch(function (err) {
+      console.error('Torch toggle failed:', err);
+    });
+}
 function openCamScan() {
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
@@ -16184,6 +16233,9 @@ function openCamScan() {
       },
       function () {}
     )
+    .then(function () {
+      _detectTorchSupport();
+    })
     .catch(function (err) {
       console.error('Camera start failed:', err);
       var msg;
@@ -16198,6 +16250,15 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
+  // Reset torch state and visual: the next openCamScan call will re-detect
+  // capability on a fresh track. Keeping torch-on style across closes would
+  // lie about the actual hardware state.
+  _camTorchOn = false;
+  var torchBtn = document.getElementById('btn-cam-torch');
+  if (torchBtn) {
+    torchBtn.classList.remove('torch-on');
+    torchBtn.hidden = true;
+  }
   if (!_camScanner) return;
   var scanner = _camScanner;
   _camScanner = null;
@@ -16355,6 +16416,7 @@ function initEventListeners() {
   });
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
+  $('btn-cam-torch').addEventListener('click', toggleTorch);
   $('btn-cam-undo').addEventListener('click', camUndoLastScan);
   $('btn-cam-reset').addEventListener('click', function () {
     resetScan();

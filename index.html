@@ -11,10 +11,10 @@
     <meta name="apple-mobile-web-app-title" content="Meisterpilze" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="stylesheet" href="/styles.css" />
-    <script src="/lib/jsbarcode.min.js"></script>
-    <script src="/lib/qrcode.min.js"></script>
-    <script src="/lib/chart.min.js"></script>
-    <script src="/lib/html5-qrcode.min.js"></script>
+    <script src="/lib/jsbarcode.min.js" defer></script>
+    <script src="/lib/qrcode.min.js" defer></script>
+    <script src="/lib/chart.min.js" defer></script>
+    <script src="/lib/html5-qrcode.min.js" defer></script>
   </head>
   <body>
     <!-- Add bags modal -->
@@ -586,6 +586,26 @@
             <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
           </div>
           <div class="cam-hud-btns">
+            <button
+              id="btn-cam-torch"
+              class="cam-hud-btn"
+              data-i18n-aria-label="aria.torchToggle"
+              aria-label="Taschenlampe ein/aus"
+              hidden
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </button>
             <button
               id="btn-flip-cam"
               class="cam-hud-btn"
@@ -3685,6 +3705,6 @@
       </svg>
     </button>
 
-    <script src="/app.js"></script>
+    <script src="/app.js" defer></script>
   </body>
 </html>
