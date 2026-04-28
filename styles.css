@@ -1525,6 +1525,17 @@ tr:hover td {
   cursor: pointer;
   accent-color: var(--c-primary);
 }
+/* Bigger checkboxes on touch — 16px is unreachable for gloved fingers and
+   even bare-handed it's a precision tap. The .todo-row already has 12px
+   padding so the combined hit area lands above the 44px minimum once the
+   checkbox itself bumps to 24px. */
+@media (pointer: coarse) {
+  .todo-row input[type='checkbox'] {
+    width: 24px;
+    height: 24px;
+    margin-top: 0;
+  }
+}
 .pdot {
   width: 9px;
   height: 9px;
@@ -2955,10 +2966,14 @@ tr:hover td {
     font-size: 16px;
     margin-left: 4px;
   }
+  /* Bigger day cells on phone (audit Section 1.14: gloved hands can't
+     reliably hit 24x24 — adjacent dates get fat-fingered). 36x36 keeps the
+     7-column grid usable on 360px (7×36 = 252px) while leaving 100+px for
+     padding/events. */
   .cal-day {
-    width: 24px;
-    height: 24px;
-    font-size: 11px;
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
   }
   .cal-event {
     font-size: 10px;
