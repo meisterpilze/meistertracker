@@ -3941,6 +3941,79 @@ tr:hover td {
     padding: 6px 12px !important;
     font-size: 12px !important;
   }
+
+  /* ── Harvests table — mobile card mode ──────────────────────
+     7-column harvest log. The audit notes "Date / Bag / Grams trio
+     is the only thing a phone user wants" — so we promote Date to
+     header, push Grams to a prominent right-aligned big number, and
+     keep the rest as plain label/value rows. */
+  #t-harvest {
+    border: 0;
+    width: 100%;
+  }
+  #t-harvest > thead {
+    display: none;
+  }
+  #t-harvest > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    position: relative;
+  }
+  #t-harvest > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+  }
+  #t-harvest > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  #t-harvest > tbody > tr > td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    flex: 0 0 64px;
+    color: var(--c-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Date promoted to small muted card header */
+  #t-harvest > tbody > tr > td.hv-date {
+    font-size: 12px !important;
+    color: var(--c-text-sec) !important;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--c-border-light);
+    /* Reserve room for the absolute-positioned grams badge */
+    padding-right: 96px;
+  }
+  #t-harvest > tbody > tr > td.hv-date::before {
+    display: none;
+  }
+  /* Grams pinned to the top-right of the card as a big amber number —
+     the most-scanned value when reviewing a harvest log on phone. */
+  #t-harvest > tbody > tr > td.hv-grams {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    line-height: 1.1;
+    padding: 0 !important;
+  }
+  #t-harvest > tbody > tr > td.hv-grams::before {
+    display: none;
+  }
 }
 
 /* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
