@@ -1,6 +1,8 @@
 # MeisterTracker Deployment Guide
 
-This guide details the steps to set up MeisterTracker on a fresh Debian server.
+This guide walks through setting up MeisterTracker on a fresh Debian server. It has been verified end-to-end on Debian Trixie.
+
+> **TL;DR:** SSH-clone the repo, install Node 22 + PM2, generate a self-signed cert, start. Optionally configure DuckDNS + Let's Encrypt via the admin UI for a real cert and public access.
 
 ## 1. System Requirements & Dependencies
 
@@ -13,33 +15,55 @@ sudo apt update && sudo apt upgrade -y
 
 ### Install Core Dependencies
 MeisterTracker requires **Node.js 22+** and uses SQLite via the built-in `node:sqlite` module (no external SQLite installation needed).
+
 ```bash
-sudo apt install -y curl git openssl nginx
+sudo apt install -y curl ca-certificates git openssl
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
 Verify the Node.js version:
 ```bash
-node --version   # Must be v22.0.0 or higher
+node --version   # must be v22.0.0 or higher
 ```
 
+> **Nginx is NOT installed by default.** Only install it if you choose Path B (Section 7) — the app has its own HTTPS and Let's Encrypt integration that does not need a reverse proxy.
+
 ### Install Process Manager
-Install PM2 to keep the server running and auto-restart on crashes.
+PM2 keeps the server running and auto-restarts on crashes. Global npm installs require `sudo` — without it you'll get `EACCES` errors trying to write to `/usr/lib/node_modules`.
 ```bash
 sudo npm install -g pm2
 ```
 
 ## 2. Project Setup
 
+### Option A — Clone via SSH (recommended)
+
+If you already have an SSH key registered with GitHub, skip the keygen. Otherwise:
+
 ```bash
-# Clone to /var/www/meistertracker
-sudo git clone https://github.com/Meisterpilze/meistertracker.git /var/www/meistertracker
+ssh-keygen -t ed25519 -C "your-email@example.com"
+cat ~/.ssh/id_ed25519.pub
+# Copy the printed key, then add it at https://github.com/settings/keys
+ssh -T git@github.com   # should greet you by username
+```
 
-# Fix permissions so your user owns it
-sudo chown -R $USER:$USER /var/www/meistertracker
+Prepare the directory and clone:
+```bash
+sudo mkdir -p /var/www
+sudo chown $USER:$USER /var/www
+git clone git@github.com:loewenmaehne/meistertracker.git /var/www/meistertracker
+cd /var/www/meistertracker
+```
 
-# Enter directory
+### Option B — Clone via HTTPS
+
+GitHub no longer accepts password authentication for git operations. You'll need a **Personal Access Token** (https://github.com/settings/tokens) — paste the token when git prompts for a password.
+
+```bash
+sudo mkdir -p /var/www
+sudo chown $USER:$USER /var/www
+git clone https://github.com/loewenmaehne/meistertracker.git /var/www/meistertracker
 cd /var/www/meistertracker
 ```
 
@@ -50,46 +74,49 @@ npm install --production
 
 ## 3. Environment Configuration (Optional)
 
-Create a `.env` file in the project root (`nano .env`):
+Create a `.env` file in the project root (`nano .env`) — every variable has a sensible default, so an empty file is fine:
+
 ```ini
 # Server port (default: 3000)
 PORT=3000
 
-# Set to true when behind a reverse proxy (Nginx) to trust X-Forwarded-For headers
-TRUST_PROXY=true
-
 # Log format: "json" (default) or "text"
 LOG_FORMAT=json
 
-# Port for HTTP -> HTTPS redirect (only used when TLS certs are present)
+# Port for HTTP -> HTTPS redirect. Default: 80.
+# Binding port 80 needs root; if it fails the server logs a warning and
+# stays in HTTPS-only mode. The same-port redirect on PORT keeps working.
 HTTP_REDIRECT_PORT=80
 
-# Windows-only: printer name for label printing
+# Set to true ONLY when behind a reverse proxy (e.g. Nginx, Section 7).
+# DO NOT set to true without a proxy — it allows clients to spoof their
+# IP via X-Forwarded-For headers.
+# TRUST_PROXY=false
+
+# Windows-only: printer name for label printing (no effect on Linux)
 # PRINTER_NAME=ZDesigner GK420d
 ```
 
-All variables are optional. The server runs with sensible defaults without a `.env` file.
-
 ## 4. TLS Certificate Setup
 
-HTTPS is required for camera-based QR code scanning (iOS Safari enforces this). The included script generates a self-signed certificate:
+HTTPS is required for camera-based QR scanning (iOS Safari enforces this). Generate a self-signed certificate:
 
 ```bash
 bash gen-cert.sh
 ```
 
-This creates `certs/server.key` and `certs/server.crt`, valid for 365 days, covering `localhost`, your LAN IP, and an optional domain.
+This creates `certs/server.key` and `certs/server.crt`, valid for 365 days, covering `localhost`, your LAN IP, and `127.0.0.1`. That's enough for LAN access.
 
-To include a custom domain:
+To include a custom domain in the cert, pass it as an argument — replace the placeholder with your real domain:
 ```bash
-bash gen-cert.sh your-domain.com
+bash gen-cert.sh <your-domain>
 ```
 
-> **Note:** When using Nginx as a reverse proxy with its own SSL (see Section 6), the self-signed cert is still useful for direct LAN access (e.g. tablets on the shop floor).
+> **Note:** If you'll use Path A below (DuckDNS + Let's Encrypt), skip the domain argument here. The app will obtain a real Let's Encrypt cert that overrides this self-signed one.
 
 ## 5. Start the Server
 
-The recommended way to manage the server is via the included `update_server.sh` script:
+The recommended way to manage the server is the `update_server.sh` script:
 
 ```bash
 # First start
@@ -111,31 +138,80 @@ bash update_server.sh gen-cert
 This starts the server as a PM2 process named `meisterpilze`.
 
 ### Enable PM2 Startup on Boot
+
+`pm2 startup` only **prints** the command — you have to run it as root yourself:
+
 ```bash
 pm2 startup
-# Follow the instructions PM2 outputs, then:
+# Copy the printed `sudo env PATH=...` command and run it. Example output
+# (yours will differ — use what your machine prints):
+#   sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u julian --hp /home/julian
 pm2 save
 ```
 
 ### Verify
 ```bash
-pm2 logs meisterpilze    # View server logs
-curl http://localhost:3000/api/health   # Should return OK
+pm2 logs meisterpilze    # view server logs (Ctrl+C to exit)
+curl -k https://localhost:3000/api/health
 ```
 
-## 6. Nginx Configuration
+The first health check returns `{"error":"setup_required"}` because no admin exists yet. Open the app in a browser and the login screen will switch to setup mode automatically:
 
-Create a new configuration file:
+```
+https://<server-ip>:3000
+```
+
+Accept the self-signed cert warning, create the first admin, log in.
+
+---
+
+# Public Access — Choose ONE
+
+To reach the server from outside your LAN with a real (browser-trusted) TLS cert, pick **one** of the two paths below. They don't combine — Path B replaces Path A.
+
+## 6. Path A — Built-in DuckDNS + Let's Encrypt (recommended)
+
+The app has built-in DuckDNS dynamic DNS and Let's Encrypt certificate management. No extra software is needed on the server.
+
+**What you get:**
+- Public hostname like `<your-name>.duckdns.org`
+- Real Let's Encrypt cert, auto-renewed
+- DNS-01 challenge — port 80 is **not** required to be reachable
+- URL: `https://<your-name>.duckdns.org:3000` (port stays in URL)
+
+### Setup steps
+
+1. **Register a DuckDNS subdomain** at https://www.duckdns.org/ and copy your token.
+2. **Forward port 3000** from your router/firewall to the server.
+3. **In the MeisterTracker admin UI** (Settings → DuckDNS):
+   - Subdomain prefix only (without `.duckdns.org`)
+   - Token from DuckDNS
+   - Enable
+   - Wait a few minutes for DNS propagation
+4. **Enable Let's Encrypt** in the same admin section. The server obtains the cert via DNS-01 (using DuckDNS TXT records) and renews automatically.
+
+That's it — no Nginx, no Certbot, no system-level services beyond what you've already set up.
+
+## 7. Path B — Nginx Reverse Proxy + Certbot (alternative)
+
+Use this path **only if** you need:
+- Clean URLs without `:3000` (port 443)
+- Multiple services on the same server
+- Advanced HTTP features (rate limiting, caching, header manipulation)
+
+> **Important:** With Nginx in front, **disable** the app's built-in DuckDNS/Let's Encrypt (Path A) — they conflict on cert handling.
+
+Install Nginx and Certbot:
 ```bash
-sudo nano /etc/nginx/sites-available/meistertracker
+sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Paste the following configuration (replace `your-domain.com`):
+Create a configuration file at `/etc/nginx/sites-available/meistertracker` — replace `<your-domain>` with your actual domain:
 
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name <your-domain>;
 
     # Deny access to hidden files (except .well-known for SSL challenges)
     location ~ /\.(?!well-known) {
@@ -183,60 +259,59 @@ server {
 }
 ```
 
-> **Important:** When using Nginx as a reverse proxy, set `TRUST_PROXY=true` in your `.env` so the server correctly reads client IPs from `X-Forwarded-For` headers.
-
-Enable the site and restart Nginx:
+Enable site, fetch SSL cert, restart:
 ```bash
 sudo ln -s /etc/nginx/sites-available/meistertracker /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
+sudo certbot --nginx -d <your-domain>
 ```
 
-## 7. SSL Setup (Recommended)
-
-Install Certbot for free Let's Encrypt certificates:
+Set `TRUST_PROXY=true` in your `.env` so the server reads client IPs from `X-Forwarded-For` headers, then restart:
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
+bash update_server.sh
 ```
 
-Certbot automatically configures Nginx for HTTPS and sets up auto-renewal.
+---
 
-## 8. Firewall Setup (UFW)
-
-```bash
-# Install UFW
-sudo apt install ufw
-
-# ALLOW SSH FIRST (critical — otherwise you lock yourself out!)
-sudo ufw allow ssh
-
-# Allow web traffic (HTTP & HTTPS)
-sudo ufw allow "Nginx Full"
-
-# Enable firewall
-sudo ufw enable
-
-# Verify
-sudo ufw status
-```
-
-## 9. Security Hardening (Recommended)
+## 8. Security Hardening (Recommended)
 
 ### Prevent Brute Force Attacks (Fail2Ban)
 ```bash
-sudo apt install fail2ban
+sudo apt install -y fail2ban
 sudo systemctl enable fail2ban
 sudo systemctl start fail2ban
 ```
 Works automatically out of the box for SSH.
 
-### Use SSH Keys (Best Practice)
-1. Generate a key on your local machine: `ssh-keygen -t ed25519`
-2. Copy it to the server: `ssh-copy-id user@your-server-ip`
-3. Once verified, disable `PasswordAuthentication` in `/etc/ssh/sshd_config`
+### Use SSH Keys
+On your **local** machine (laptop/desktop, not the server):
+```bash
+ssh-keygen -t ed25519
+ssh-copy-id -p <ssh-port> <user>@<server-ip>
+```
 
-## 10. Backups
+Verify key-based login works (`ssh -p <ssh-port> <user>@<server-ip>` should not prompt for a password). Then optionally disable password auth on the server:
+```bash
+sudo nano /etc/ssh/sshd_config
+# Set: PasswordAuthentication no
+sudo systemctl restart ssh
+```
+
+> ⚠️ Verify key-based login works **before** disabling password auth, or you'll lock yourself out.
+
+### Firewall
+If your server isn't already firewalled at the network/hypervisor level (e.g. Proxmox host iptables), install UFW:
+```bash
+sudo apt install -y ufw
+sudo ufw allow ssh
+sudo ufw allow 3000/tcp     # Path A: app's HTTPS
+# OR for Path B:
+# sudo ufw allow "Nginx Full"
+sudo ufw enable
+```
+
+## 9. Backups
 
 MeisterTracker automatically creates daily SQLite backups at midnight:
 - Stored in the `backups/` directory
@@ -245,40 +320,31 @@ MeisterTracker automatically creates daily SQLite backups at midnight:
 
 ### Verify Backup Health
 ```bash
-node scripts/check-backup-health.js    # Quick check
-node scripts/verify-backup.js          # Full restore test
+node scripts/check-backup-health.js    # quick check, exits 0 if OK
+node scripts/verify-backup.js          # full restore test
 ```
 
-### Off-Site Backups (Recommended)
-Add a cron job to copy backups to a remote location:
+### Off-Site Backups (recommended)
+Backups on the same server are not enough — if the server fails, the backups go with it. Add a cron job to copy them off-site:
 ```bash
 crontab -e
 ```
 ```
-0 2 * * * rsync -a /var/www/meistertracker/backups/ user@backup-server:/backups/meistertracker/
+0 2 * * * rsync -a /var/www/meistertracker/backups/ <user>@<backup-server>:/backups/meistertracker/
 ```
 
-## 11. Docker Deployment (Alternative)
+## 10. Label Printing on Linux
 
-MeisterTracker includes a Dockerfile for containerized deployment:
+The label-printing endpoint (`/api/print`) sends ZPL to a Zebra GK420d **via the Windows print spooler** (PowerShell). On Linux there is no spooler integration — direct printing from the server is **not supported**.
 
-```bash
-# Build image
-docker build -t meistertracker .
+Workarounds:
+- **"Download ZPL" fallback** in the UI — the app generates a ZPL file you save and print manually from a Windows PC that has the printer driver. Works out of the box.
+- **Print bridge** — run a small service on a Windows PC that receives ZPL files over HTTP and forwards them to the local printer. Requires a custom integration.
+- **CUPS + USB passthrough** — pass the printer through to the Linux server (e.g. Proxmox USB passthrough) and configure CUPS with a Zebra driver. Advanced.
 
-# Run container
-docker run -d \
-  --name meistertracker \
-  -p 3000:3000 \
-  -v meistertracker-data:/app/meistertracker.db \
-  -v meistertracker-backups:/app/backups \
-  -v meistertracker-calendars:/app/calendars \
-  meistertracker
-```
+The "Download ZPL" fallback is the recommended path on Linux.
 
-The container uses Node.js 22 Alpine, runs as a non-root user, and includes a health check on `/api/health`.
-
-## 12. Updating
+## 11. Updating
 
 To update a running installation:
 ```bash
@@ -293,6 +359,23 @@ This will:
 4. Ensure TLS certificates are present
 5. Restart the server via PM2
 
+## 12. Docker Deployment (Alternative)
+
+MeisterTracker includes a Dockerfile for containerized deployment:
+
+```bash
+docker build -t meistertracker .
+docker run -d \
+  --name meistertracker \
+  -p 3000:3000 \
+  -v meistertracker-data:/app/meistertracker.db \
+  -v meistertracker-backups:/app/backups \
+  -v meistertracker-calendars:/app/calendars \
+  meistertracker
+```
+
+The container uses Node.js 22 Alpine, runs as a non-root user, and includes a health check on `/api/health`.
+
 ## Quick Reference
 
 | Command | Description |
@@ -303,4 +386,4 @@ This will:
 | `bash update_server.sh status` | PM2 process status |
 | `pm2 logs meisterpilze` | View server logs |
 | `pm2 monit` | Real-time monitoring dashboard |
-| `curl localhost:3000/api/health` | Health check |
+| `curl -k https://localhost:3000/api/health` | Health check |
