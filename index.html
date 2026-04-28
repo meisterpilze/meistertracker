@@ -2081,18 +2081,21 @@
 
         <!-- ══ PRINT ══ -->
         <div class="page" id="p-print">
-          <!-- Printer status — always shown at top -->
+          <!-- Printer status — refreshed when this page is opened and after each print attempt -->
           <div
+            id="printer-status-banner"
             class="card"
-            style="background: var(--c-primary-light); border-color: var(--c-green-border); margin-bottom: 10px"
+            style="margin-bottom: 10px; cursor: pointer; transition: background-color 0.2s, border-color 0.2s"
+            title="Click to re-check"
           >
-            <div style="font-size: 12px; color: var(--c-green-dark); line-height: 1.7">
-              <strong data-i18n="print.printerInfo">Printing directly to ZDesigner GK420d</strong>
-              <span data-i18n="print.printerInfoDetail"
-                >via the server — no dialog needed. Make sure the server is running and the printer is on.</span
-              >
-              <br /><br />
+            <div
+              id="printer-status-text"
+              style="font-size: 13px; line-height: 1.5"
+              data-i18n="print.status.checking"
+            >
+              Checking printer status…
             </div>
+            <div id="printer-status-detail" style="font-size: 11px; opacity: 0.8; margin-top: 4px"></div>
           </div>
           <div class="stabs">
             <button class="stab active" id="st-print-bags" data-i18n="print.bagLabels">Bag labels</button>
