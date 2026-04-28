@@ -1,8 +1,22 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meisterpilze-v16';
-const ASSETS = ['/', '/styles.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'meisterpilze-v17';
+const ASSETS = [
+  '/',
+  '/styles.css',
+  '/app.js',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  // Vendor libs — pre-cached so the scanner and dashboard chart work on first
+  // offline navigation (sw fetch handler is network-first, so without explicit
+  // pre-caching these wouldn't be in the cache until they'd been fetched once).
+  '/lib/jsbarcode.min.js',
+  '/lib/qrcode.min.js',
+  '/lib/chart.min.js',
+  '/lib/html5-qrcode.min.js'
+];
 
 // ── IndexedDB helpers for offline scan queue ────────────────
 const IDB_NAME = 'meister-offline';
