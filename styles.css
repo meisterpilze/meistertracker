@@ -3619,3 +3619,62 @@ tr:hover td {
     max-height: calc(100dvh - 80px);
   }
 }
+
+/* ═══ MOBILE BOTTOM NAVIGATION ════════════════════════════════
+   Fixed tab bar with the four most-used pages — Dashboard, Batches,
+   Lab, Calendar. Hidden on desktop; shown on phones via the media
+   query below. Sidebar remains accessible via the hamburger for the
+   less-frequent pages (Inventory, Zones, Print, Strains, Assets). */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+}
+.bottom-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  color: var(--c-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.bottom-nav-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.bottom-nav-btn.active {
+  color: var(--c-primary);
+}
+.bottom-nav-btn svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+  }
+  /* Reserve space so page content isn't hidden behind the fixed bar.
+     56px nav + safe-area inset for devices with home indicators. */
+  .content-wrap {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+  }
+}

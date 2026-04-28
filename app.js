@@ -4822,8 +4822,12 @@ const PAGES = {
 function go(page, btnId) {
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
   document.getElementById('p-' + page).classList.add('active');
   document.getElementById(btnId).classList.add('active');
+  // Mirror active state onto the mobile bottom nav for the four pages it covers.
+  const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
+  if (bnBtn) bnBtn.classList.add('active');
   if (page === 'dash') {
     renderStatus();
     renderDashAlerts();
@@ -16459,6 +16463,13 @@ function initEventListeners() {
   });
   $('n-lab').addEventListener('click', () => {
     go('lab', 'n-lab');
+  });
+  // Mobile bottom-nav buttons delegate to their sidebar counterparts so any
+  // side effects (e.g. n-batch resetting batchAttentionFilter) stay in one place.
+  ['bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
+    const sidebarId = 'n-' + bnId.slice(3);
+    const btn = $(bnId);
+    if (btn) btn.addEventListener('click', () => $(sidebarId).click());
   });
   $('n-inv').addEventListener('click', () => {
     go('inv', 'n-inv');
