@@ -731,6 +731,16 @@ body {
   color: #991b1b;
   border-color: #fca5a5;
 }
+/* Touch devices have no :hover — always show the undo button and bump it to a
+   real tap target so workers can undo a mis-scan from the phone. */
+@media (pointer: coarse) {
+  .scan-log-entry .sle-undo {
+    display: inline-flex;
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
 
 /* -- Scan session summary -- */
 .scan-session-summary {
@@ -1148,13 +1158,16 @@ textarea:focus {
   padding: 5px 10px;
   font-size: 12px;
 }
-/* Bigger tap targets inside bag-info / bag-select modals on mobile — these are
-   the primary post-scan actions on a phone and need to clear ~40px. */
-@media (max-width: 768px) {
-  #m-baginfo .btn-sm,
-  #m-bagselect .btn-sm {
+/* Touch-device tap targets — covers phones AND tablets in landscape, which the
+   old (max-width:768px) breakpoint missed. Applies to every .btn-xs / .btn-sm
+   site-wide so post-scan actions, scan-modal controls, and table action columns
+   all clear the 44px minimum. */
+@media (pointer: coarse) {
+  .btn-xs,
+  .btn-sm {
+    min-height: 44px;
     padding: 10px 14px;
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 
@@ -2731,11 +2744,13 @@ tr:hover td {
   .sb-is-collapsed .content-wrap {
     margin-left: 0;
   }
-  /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px) */
+  /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px).
+     !important is required to override inline style="font-size:12px" that several
+     compact filter/search inputs still carry from desktop layout work. */
   input,
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
   /* Constrain inline-sized inputs so they can't overflow narrow viewports */
   input[style*='width:'],
@@ -2766,7 +2781,9 @@ tr:hover td {
     width: 95vw;
     max-width: 95vw;
     max-height: 90vh;
+    max-height: 90dvh;
     height: 90vh;
+    height: 90dvh;
     border-radius: 12px;
     padding: 0;
   }
@@ -2775,6 +2792,7 @@ tr:hover td {
   }
   .scan-modal-log {
     max-height: 40vh;
+    max-height: 40dvh;
   }
   .scan-tab {
     padding: 10px 10px;
@@ -2869,7 +2887,9 @@ tr:hover td {
   .scan-modal {
     width: 95vw;
     height: 90vh;
+    height: 90dvh;
     max-height: 90vh;
+    max-height: 90dvh;
     max-width: 95vw;
     border-radius: 12px;
     margin: 0;
@@ -3556,5 +3576,6 @@ tr:hover td {
     width: auto;
     max-width: none;
     max-height: calc(100vh - 80px);
+    max-height: calc(100dvh - 80px);
   }
 }
