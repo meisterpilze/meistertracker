@@ -554,9 +554,58 @@
           <button id="set-movebatch" class="btn btn-sm btn-p" data-i18n="bagInfo.moveAll">Move all</button>
           <button id="set-14" class="btn btn-sm btn-p" data-i18n="bagInfo.harvest">Harvest</button>
           <button id="set-15" class="btn btn-sm btn-r" data-i18n="bagInfo.remove">Remove</button>
+          <button id="set-contam" class="btn btn-sm btn-r" data-i18n="bagInfo.reportContam">⚠ Kontamination</button>
         </div>
       </div>
     </div>
+
+    <!-- Contamination report modal — capture photo + tag type for a bag/batch -->
+    <div class="modal-bg" id="m-contam-report" role="dialog" aria-modal="true" aria-labelledby="cr-title">
+      <div class="modal" style="max-width: 540px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 id="cr-title" data-i18n="contam.title">Kontamination melden</h3>
+          <button id="cls-cr" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="cr-target" style="font-family:monospace;font-size:13px;color:var(--c-text-sec);margin-bottom:14px;padding:8px 10px;background:var(--c-bg);border-radius:6px"></div>
+
+        <div style="margin-bottom:14px">
+          <label class="cr-label" data-i18n="contam.type">Typ</label>
+          <div id="cr-type-grid" class="contam-type-grid"></div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label class="cr-label" data-i18n="contam.severity">Schwere</label>
+          <div class="contam-severity-row" id="cr-severity-row">
+            <button type="button" class="contam-sev-btn active" data-sev="minor" data-i18n="contam.sevMinor">Klein</button>
+            <button type="button" class="contam-sev-btn" data-sev="major" data-i18n="contam.sevMajor">Größer</button>
+            <button type="button" class="contam-sev-btn" data-sev="lost" data-i18n="contam.sevLost">Total</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label class="cr-label" data-i18n="contam.photos">Foto(s)</label>
+          <div id="cr-photo-tiles" class="contam-photo-tiles"></div>
+          <input type="file" id="cr-file-input" accept="image/*" capture="environment" multiple hidden />
+          <div id="cr-photo-status" style="font-size:11px;color:var(--c-text-muted);margin-top:4px"></div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label class="cr-label" data-i18n="contam.notes">Notiz (optional)</label>
+          <textarea id="cr-notes" rows="2" maxlength="2000" data-i18n-placeholder="contam.notesPlaceholder" placeholder="z.B. Bag-Lid feucht, neben TENT-3 entdeckt"></textarea>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+          <button id="cr-cancel" type="button" class="btn btn-sm" data-i18n="common.cancel">Abbrechen</button>
+          <button id="cr-submit" type="button" class="btn btn-sm btn-p" data-i18n="contam.submit">Senden</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Camera scan modal -->
     <div
       class="modal-bg"

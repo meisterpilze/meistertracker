@@ -376,6 +376,62 @@ function requireAdmin(req, res) {
   return false;
 }
 
+// ── Contamination-photo storage ─────────────────────────────
+// The client compresses photos to ~200 KB JPEGs (canvas re-encode at 1280 px /
+// quality 0.8) plus a ~15 KB thumbnail and sends both as base64 data URLs in
+// the report POST body. Server validates magic bytes, sha256s, and writes to
+// data/photos/{YYYY}/{MM}/{report_id}/{uuid}{,_thumb}.jpg.
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const PHOTO_THUMB_MAX_BYTES = 200 * 1024;
+function _parseImageDataUrl(s) {
+  if (typeof s !== 'string') return null;
+  const m = s.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return null;
+  try {
+    return Buffer.from(m[1], 'base64');
+  } catch {
+    return null;
+  }
+}
+function _isJpegMagic(buf) {
+  return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+}
+function savePhotoToDisk(reportId, photo, authUser) {
+  if (!photo || typeof photo !== 'object') return null;
+  const main = _parseImageDataUrl(photo.data_url);
+  if (!main) throw new Error('photo: invalid data_url (must be data:image/jpeg;base64,...)');
+  if (!_isJpegMagic(main)) throw new Error('photo: payload is not a JPEG');
+  if (main.length > PHOTO_MAX_BYTES) throw new Error('photo: too large (max 5 MB)');
+  const thumb = _parseImageDataUrl(photo.thumb_data_url || photo.data_url);
+  if (!thumb) throw new Error('photo: invalid thumb_data_url');
+  if (!_isJpegMagic(thumb)) throw new Error('photo: thumb is not a JPEG');
+  if (thumb.length > PHOTO_THUMB_MAX_BYTES) throw new Error('photo: thumb too large (max 200 KB)');
+
+  const uuid = crypto.randomUUID();
+  const sha = crypto.createHash('sha256').update(main).digest('hex');
+  const now = new Date();
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const absDir = path.join(DIR, 'data', 'photos', yyyy, mm, String(reportId));
+  fs.mkdirSync(absDir, { recursive: true });
+  const relPath = `photos/${yyyy}/${mm}/${reportId}/${uuid}.jpg`;
+  const thumbPath = `photos/${yyyy}/${mm}/${reportId}/${uuid}_thumb.jpg`;
+  fs.writeFileSync(path.join(DIR, 'data', relPath), main);
+  fs.writeFileSync(path.join(DIR, 'data', thumbPath), thumb);
+
+  return {
+    uuid,
+    rel_path: relPath,
+    thumb_path: thumbPath,
+    width: typeof photo.width === 'number' ? photo.width : null,
+    height: typeof photo.height === 'number' ? photo.height : null,
+    bytes: main.length,
+    sha256: sha,
+    uploaded_at: now.toISOString(),
+    uploaded_by: authUser ? authUser.user_id : null
+  };
+}
+
 // ── AUTH HELPERS ─────────────────────────────────────────────
 function getSessionToken(req) {
   const cookies = req.headers.cookie || '';
@@ -4756,6 +4812,167 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       db.clearScanLog(database);
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // -- Contamination reports --
+  if (req.method === 'GET' && req.url === '/api/contamination-types') {
+    try {
+      jsonOk(res, db.listContaminationTypes(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/contamination-reports') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['type_id']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { type_id: 'number', photos: 'array' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const ve = validateEnum(data.severity, ['minor', 'major', 'lost'], 'severity');
+      if (ve) {
+        jsonErr(res, 400, ve);
+        return;
+      }
+      const vl = validateLengths(data, { notes: 2000, bag_id: 100, batch_id: 100, zone_id: 100 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        const reportId = db.createContaminationReport(database, {
+          ...data,
+          user_id: req.authUser ? req.authUser.user_id : null
+        });
+        const photoIds = [];
+        const photos = Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
+        for (const p of photos) {
+          const saved = savePhotoToDisk(reportId, p, req.authUser);
+          if (saved) {
+            photoIds.push(db.addContaminationPhoto(database, reportId, saved));
+          }
+        }
+        broadcastSSE(res);
+        jsonOk(res, { id: reportId, photoIds });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'GET' && req.url.startsWith('/api/contamination-reports')) {
+    const photoMatch = req.url.match(/^\/api\/contamination-reports\/(\d+)\/photos\/([a-f0-9-]+)(?:\?.*)?$/);
+    if (photoMatch) {
+      const reportId = parseInt(photoMatch[1], 10);
+      const uuid = photoMatch[2];
+      const wantThumb = /[?&]thumb=1/.test(req.url);
+      try {
+        const photo = db.getContaminationPhotoByUuid(database, uuid);
+        if (!photo || photo.report_id !== reportId) {
+          jsonErr(res, 404, 'photo not found');
+          return;
+        }
+        const rel = wantThumb ? photo.thumb_path : photo.rel_path;
+        const abs = path.join(DIR, 'data', rel);
+        // Defence-in-depth: refuse to serve anything that isn't a child of data/photos
+        if (!abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
+          jsonErr(res, 400, 'invalid path');
+          return;
+        }
+        if (!fs.existsSync(abs)) {
+          jsonErr(res, 404, 'photo file missing');
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'image/jpeg',
+          'Cache-Control': 'private, max-age=31536000, immutable'
+        });
+        fs.createReadStream(abs).pipe(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+    const singleMatch = req.url.match(/^\/api\/contamination-reports\/(\d+)$/);
+    if (singleMatch) {
+      try {
+        const r = db.getContaminationReportById(database, parseInt(singleMatch[1], 10));
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+    if (req.url === '/api/contamination-reports' || req.url.startsWith('/api/contamination-reports?')) {
+      try {
+        const u = new URL(req.url, 'http://x');
+        const filters = {
+          batchId: u.searchParams.get('batchId') || undefined,
+          bagId: u.searchParams.get('bagId') || undefined,
+          typeId: u.searchParams.get('typeId') ? parseInt(u.searchParams.get('typeId'), 10) : undefined,
+          severity: u.searchParams.get('severity') || undefined,
+          zoneId: u.searchParams.get('zoneId') || undefined,
+          startDate: u.searchParams.get('start') || undefined,
+          endDate: u.searchParams.get('end') || undefined,
+          limit: u.searchParams.get('limit') ? parseInt(u.searchParams.get('limit'), 10) : undefined
+        };
+        jsonOk(res, db.listContaminationReports(database, filters));
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+  }
+  const contamDeleteMatch = req.url.match(/^\/api\/contamination-reports\/(\d+)$/);
+  if (req.method === 'DELETE' && contamDeleteMatch) {
+    const reportId = parseInt(contamDeleteMatch[1], 10);
+    try {
+      const existing = db.getContaminationReportById(database, reportId);
+      if (!existing) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      // Reporter or admin can delete (mirror manual-tasks ACL)
+      const isOwner = req.authUser && existing.user_id === req.authUser.user_id;
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      if (!isOwner && !isAdmin) {
+        jsonErr(res, 403, 'forbidden');
+        return;
+      }
+      const photoPaths = db.deleteContaminationReport(database, reportId);
+      // Best-effort unlink — DB is the source of truth, orphan files are harmless
+      for (const p of photoPaths) {
+        for (const rel of [p.rel_path, p.thumb_path]) {
+          const abs = path.join(DIR, 'data', rel);
+          if (abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
+            try {
+              fs.unlinkSync(abs);
+            } catch (e) {
+              /* ignore — file may already be gone */
+            }
+          }
+        }
+      }
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {

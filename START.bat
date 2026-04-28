@@ -195,9 +195,9 @@ REM ============================================================
 echo.
 echo [3/5] Backing up data...
 if not exist "backups" mkdir "backups"
+for /f "tokens=*" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TIMESTAMP=%%T"
+if not defined TIMESTAMP set "TIMESTAMP=backup"
 if exist "meistertracker.db" (
-    for /f "tokens=*" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TIMESTAMP=%%T"
-    if not defined TIMESTAMP set "TIMESTAMP=backup"
     set "BACKUP_FILE=backups\meistertracker_!TIMESTAMP!.db"
     set "BACKUP_OK=0"
     REM Prefer sqlite3 .backup for a WAL-consistent snapshot. Git for Windows
@@ -216,6 +216,17 @@ if exist "meistertracker.db" (
     )
 ) else (
     echo  -^> No meistertracker.db found, skipping backup.
+)
+REM Contamination photos (audit Section 2). PowerShell Compress-Archive is
+REM available on Windows 10+ by default and matches the tar.gz on Linux.
+if exist "data\photos" (
+    set "PHOTO_BACKUP=backups\photos_!TIMESTAMP!.zip"
+    powershell -NoProfile -Command "try { Compress-Archive -Path 'data\photos\*' -DestinationPath '!PHOTO_BACKUP!' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo  -^> data\photos archived to !PHOTO_BACKUP!
+    ) else (
+        echo  -^> WARNING: photo archive failed.
+    )
 )
 
 REM ============================================================

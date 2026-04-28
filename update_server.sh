@@ -64,9 +64,9 @@ backup_data() {
     BACKUP_DIR="backups"
     mkdir -p "$BACKUP_DIR"
     chmod u+w "$BACKUP_DIR"
+    local stamp
+    stamp="$(date +%Y%m%d_%H%M%S)"
     if [ -f meistertracker.db ]; then
-        local stamp
-        stamp="$(date +%Y%m%d_%H%M%S)"
         # Use sqlite3 .backup for WAL-consistent snapshot if available,
         # fall back to cp (PM2 is stopped later anyway).
         if command -v sqlite3 &>/dev/null; then
@@ -77,6 +77,19 @@ backup_data() {
         echo "  -> meistertracker.db backed up to $BACKUP_DIR/meistertracker_$stamp.db"
     else
         echo "  -> No meistertracker.db found, skipping backup."
+    fi
+    # Contamination photos (audit Section 2). Only present once the feature is
+    # used; tar.gz keeps the backups directory tidy.
+    if [ -d data/photos ]; then
+        if command -v tar &>/dev/null; then
+            tar -czf "$BACKUP_DIR/photos_$stamp.tar.gz" data/photos 2>/dev/null \
+                && echo "  -> data/photos archived to $BACKUP_DIR/photos_$stamp.tar.gz" \
+                || echo "  -> WARNING: photo archive failed (tar exit $?)"
+        else
+            cp -r data/photos "$BACKUP_DIR/photos_$stamp" \
+                && echo "  -> data/photos copied to $BACKUP_DIR/photos_$stamp" \
+                || echo "  -> WARNING: photo copy failed"
+        fi
     fi
 }
 
