@@ -8369,7 +8369,7 @@ function renderHarvests() {
     ? items
         .map(
           (h) =>
-            `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td style="font-family:monospace;font-size:10px">${esc(h.batch) || '\u2014'}</td><td style="font-family:monospace;font-size:10px">${esc(h.bag) || '\u2014'}</td><td>${h.species ? spDot(h.species) + esc(h.species) : '\u2014'}</td><td>${esc(h.strain) || '\u2014'}</td><td>${h.flush || 1}</td><td style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`
+            `<tr><td data-mlabel="${esc(t('th.date'))}" class="hv-date" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td data-mlabel="${esc(t('th.batch'))}" style="font-family:monospace;font-size:10px">${esc(h.batch) || '\u2014'}</td><td data-mlabel="${esc(t('th.bag'))}" style="font-family:monospace;font-size:10px">${esc(h.bag) || '\u2014'}</td><td data-mlabel="${esc(t('th.species'))}">${h.species ? spDot(h.species) + esc(h.species) : '\u2014'}</td><td data-mlabel="${esc(t('th.strain'))}">${esc(h.strain) || '\u2014'}</td><td data-mlabel="${esc(t('th.flush'))}">${h.flush || 1}</td><td data-mlabel="${esc(t('th.grams'))}" class="hv-grams" style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`
         )
         .join('')
     : '<tr><td colspan="7" class="empty">' + t('harvest.noHarvests') + '</td></tr>';
