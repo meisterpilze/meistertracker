@@ -198,8 +198,22 @@ if not exist "backups" mkdir "backups"
 if exist "meistertracker.db" (
     for /f "tokens=*" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TIMESTAMP=%%T"
     if not defined TIMESTAMP set "TIMESTAMP=backup"
-    copy /y "meistertracker.db" "backups\meistertracker_!TIMESTAMP!.db" >nul
-    echo  -^> meistertracker.db backed up.
+    set "BACKUP_FILE=backups\meistertracker_!TIMESTAMP!.db"
+    set "BACKUP_OK=0"
+    REM Prefer sqlite3 .backup for a WAL-consistent snapshot. Git for Windows
+    REM ships sqlite3 in PATH; fall back to a raw file copy if unavailable.
+    where sqlite3 >nul 2>&1
+    if !errorlevel! equ 0 (
+        sqlite3 meistertracker.db ".backup '!BACKUP_FILE!'" >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo  -^> meistertracker.db backed up ^(WAL-consistent via sqlite3^).
+            set "BACKUP_OK=1"
+        )
+    )
+    if "!BACKUP_OK!"=="0" (
+        copy /y "meistertracker.db" "!BACKUP_FILE!" >nul
+        echo  -^> meistertracker.db backed up ^(file copy^).
+    )
 ) else (
     echo  -^> No meistertracker.db found, skipping backup.
 )
@@ -223,19 +237,15 @@ for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:3000.*LIST
     taskkill /PID %%P /F >nul 2>&1
 )
 
+REM Match update_server.sh: always delete + start with --update-env so the
+REM new process picks up any .env changes made since the last launch.
 call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
 if !errorlevel! equ 0 (
-    echo  -^> Process found, restarting...
-    call pm2 restart %PM2_PROCESS_NAME%
-    if !errorlevel! neq 0 (
-        echo  -^> Restart failed, deleting and re-creating...
-        call pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
-        call pm2 start server.js --name %PM2_PROCESS_NAME%
-    )
-) else (
-    echo  -^> Starting new instance...
-    call pm2 start server.js --name %PM2_PROCESS_NAME%
+    echo  -^> Process found, deleting for clean restart...
+    call pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
 )
+echo  -^> Starting instance...
+call pm2 start server.js --name %PM2_PROCESS_NAME% --update-env
 call pm2 save >nul 2>&1
 
 REM Wait briefly for the process to initialize, then verify it stayed up

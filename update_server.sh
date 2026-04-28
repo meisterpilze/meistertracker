@@ -118,6 +118,23 @@ do_update() {
     pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
     pm2 save
 
+    # Wait briefly for the process to initialize, then verify it stayed up.
+    # Match START.bat's "tag stable on success" behavior so we have a marker
+    # of the last known-good deployment on both platforms.
+    sleep 3
+    if ! pm2 show "$PM2_PROCESS_NAME" 2>/dev/null | grep -qi 'online'; then
+        echo ""
+        echo "  ERROR: Server process crashed on startup."
+        echo "  Recent error log:"
+        pm2 logs "$PM2_PROCESS_NAME" --lines 15 --nostream --err 2>/dev/null || true
+        exit 1
+    fi
+    if [ "$IS_WORKTREE" != true ] && command -v git &>/dev/null; then
+        if git tag -f stable HEAD > /dev/null 2>&1; then
+            echo "  -> Tagged current commit as 'stable'."
+        fi
+    fi
+
     echo "==== Update Completed Successfully ===="
     echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
 }
