@@ -151,6 +151,13 @@ CREATE TABLE IF NOT EXISTS duckdns_config (
   le_expiry       TEXT
 );
 
+CREATE TABLE IF NOT EXISTS print_bridge_config (
+  id      INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled INTEGER DEFAULT 0,
+  url     TEXT DEFAULT '',
+  token   TEXT DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS calendar_events (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL,
@@ -808,6 +815,18 @@ const MIGRATIONS = [
         .get();
       if (!hasInvCol.c) db.exec('ALTER TABLE inventory ADD COLUMN avg_grain_rh_pct REAL DEFAULT 52');
     }
+  },
+  {
+    version: 35,
+    description: 'Add print_bridge_config table for editable Windows print bridge settings',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS print_bridge_config (
+        id      INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER DEFAULT 0,
+        url     TEXT DEFAULT '',
+        token   TEXT DEFAULT ''
+      )`);
+    }
   }
 ];
 
@@ -911,6 +930,7 @@ function openDb(dbPath) {
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO duckdns_config(id) VALUES(1)`).run();
+  db.prepare(`INSERT OR IGNORE INTO print_bridge_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO mcp_config(id) VALUES(1)`).run();
   // Backfill: assign numeric barcodes to any entities missing them
   backfillBarcodes(db);
@@ -2578,6 +2598,25 @@ function updateDuckdnsStatus(db, fields) {
   if (sets.length) db.prepare('UPDATE duckdns_config SET ' + sets.join(',') + ' WHERE id=1').run(...vals);
 }
 
+// -- Print Bridge Config --
+function getPrintBridgeCfg(db) {
+  const row = db.prepare('SELECT * FROM print_bridge_config WHERE id = 1').get();
+  return {
+    enabled: row && row.enabled === 1,
+    url: (row && row.url) || '',
+    token: (row && row.token) || ''
+  };
+}
+
+function updatePrintBridgeCfg(db, cfg) {
+  db.prepare(`UPDATE print_bridge_config SET enabled=?, url=?, token=? WHERE id=1`).run(
+    cfg.enabled ? 1 : 0,
+    cfg.url || '',
+    cfg.token || ''
+  );
+  incrementDataVersion(db);
+}
+
 // -- Inventory Delta --
 const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain'];
 
@@ -4004,6 +4043,8 @@ module.exports = {
   getDuckdnsCfg,
   updateDuckdnsCfg,
   updateDuckdnsStatus,
+  getPrintBridgeCfg,
+  updatePrintBridgeCfg,
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,
