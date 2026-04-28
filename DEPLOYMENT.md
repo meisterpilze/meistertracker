@@ -95,6 +95,12 @@ HTTP_REDIRECT_PORT=80
 
 # Windows-only: printer name for label printing (no effect on Linux)
 # PRINTER_NAME=ZDesigner GK420d
+
+# Windows print bridge — see Section 10. When set, the server forwards
+# label prints + status checks to scripts/print-bridge.ps1 running on a
+# Windows PC. Leave unset to use the ZPL-download fallback instead.
+# PRINT_BRIDGE_URL=http://<windows-pc-ip>:9100
+# PRINT_BRIDGE_TOKEN=<long-random-string>
 ```
 
 ## 4. TLS Certificate Setup
@@ -335,14 +341,82 @@ crontab -e
 
 ## 10. Label Printing on Linux
 
-The label-printing endpoint (`/api/print`) sends ZPL to a Zebra GK420d **via the Windows print spooler** (PowerShell). On Linux there is no spooler integration — direct printing from the server is **not supported**.
+The label-printing endpoint (`/api/print`) needs the Windows print spooler to talk to a Zebra GK420d. On Linux you have two practical options:
 
-Workarounds:
-- **"Download ZPL" fallback** in the UI — the app generates a ZPL file you save and print manually from a Windows PC that has the printer driver. Works out of the box.
-- **Print bridge** — run a small service on a Windows PC that receives ZPL files over HTTP and forwards them to the local printer. Requires a custom integration.
-- **CUPS + USB passthrough** — pass the printer through to the Linux server (e.g. Proxmox USB passthrough) and configure CUPS with a Zebra driver. Advanced.
+### Option A — ZPL download fallback (works out of the box, no setup)
 
-The "Download ZPL" fallback is the recommended path on Linux.
+If `PRINT_BRIDGE_URL` is unset, every print button on the Linux server falls back to producing a ZPL file the browser downloads. The user sends the file to a Windows PC that has the Zebra driver and prints it from there (double-clicking the `.zpl` typically works).
+
+Pros: zero setup, works from any browser device.
+Cons: extra click per print, no live printer-status indication.
+
+### Option B — Windows print bridge (recommended for daily lab use)
+
+Run [`scripts/print-bridge.ps1`](scripts/print-bridge.ps1) on a Windows PC that has the Zebra GK420d attached. The Linux server forwards `/api/print` and `/api/printer-status` calls to the bridge over HTTP, so print buttons go straight to the printer like the Windows-native install used to.
+
+The Print tab's status banner reflects the bridge state in real time:
+- **Green** "Printer ready" — bridge reachable, printer online
+- **Yellow** "Printer disconnected" — bridge reachable, but the GK420d is unplugged or off
+- **Red** "Print bridge unreachable" — Windows PC off or service not started
+- **Blue** "ZPL download mode" — no bridge configured, buttons download instead
+
+#### One-time Windows setup (admin)
+
+Open PowerShell as Administrator on the Windows PC and run:
+```powershell
+# Allow the listener to bind to all interfaces without admin every time
+netsh http add urlacl url=http://+:9100/ user=Everyone
+
+# Open the firewall for the bridge port
+New-NetFirewallRule -DisplayName "MeisterTracker Print Bridge" `
+  -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9100
+```
+
+Copy `scripts/print-bridge.ps1` from the repo to e.g. `C:\meistertracker-bridge\print-bridge.ps1`.
+
+#### Auto-start on logon (Task Scheduler)
+
+1. Open Task Scheduler → **Create Basic Task**
+2. Name: `MeisterTracker Print Bridge`
+3. Trigger: **At log on**
+4. Action: **Start a program**
+5. Program: `powershell.exe`
+6. Arguments: `-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1"`
+
+The bridge then runs invisibly in the background after every login. To test manually before scheduling:
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\meistertracker-bridge\print-bridge.ps1
+```
+
+#### Server-side configuration
+
+In your `.env` on the Linux server, set:
+```ini
+PRINT_BRIDGE_URL=http://<windows-pc-ip>:9100
+# Optional but recommended on shared LANs — must match PRINT_BRIDGE_TOKEN
+# in the Windows PowerShell environment when starting the bridge
+PRINT_BRIDGE_TOKEN=<a-long-random-string>
+```
+
+Restart the server (`bash update_server.sh`) and open the Print tab. The status banner should turn green within a few seconds.
+
+#### Token auth (optional, recommended)
+
+To require a token for every bridge request, set the same value on both sides:
+
+On Windows, before launching the bridge:
+```powershell
+$env:PRINT_BRIDGE_TOKEN = "your-long-random-string"
+```
+
+(Add this line at the top of a small wrapper `.ps1` that then runs the bridge, and point Task Scheduler at the wrapper.)
+
+On Linux, in `.env`:
+```ini
+PRINT_BRIDGE_TOKEN=your-long-random-string
+```
+
+Without a token, anyone on the LAN can print to your Zebra. With a token they need both LAN access and the token.
 
 ## 11. Updating
 

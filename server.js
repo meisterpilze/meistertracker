@@ -68,6 +68,14 @@ if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
   log('error', 'PRINTER_NAME contains unsafe characters, falling back to default', { value: PRINTER_NAME_RAW });
 }
 const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
+
+// Optional Windows print bridge (scripts/print-bridge.ps1). When set, the
+// server forwards print + status calls to this URL instead of running
+// PowerShell locally. Required for label printing when the server runs on
+// Linux while the Zebra is attached to a Windows PC on the LAN.
+const PRINT_BRIDGE_URL = (process.env.PRINT_BRIDGE_URL || '').replace(/\/+$/, '');
+const PRINT_BRIDGE_TOKEN = process.env.PRINT_BRIDGE_TOKEN || '';
+
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
@@ -1069,10 +1077,81 @@ setInterval(checkCertRenewal, 12 * 60 * 60 * 1000);
 let _printerStatusCache = null;
 let _printerStatusCacheTime = 0;
 
-function checkPrinterAvailable(callback) {
-  const now = Date.now();
-  if (_printerStatusCache !== null && now - _printerStatusCacheTime < 5000) {
-    return callback(null, _printerStatusCache);
+// Make an HTTP/HTTPS request to the print bridge with a 5s timeout.
+// callback(err, { statusCode, body, raw }) — body is parsed JSON or null.
+function _bridgeRequest(method, urlPath, body, callback) {
+  let target;
+  try {
+    target = new URL(urlPath, PRINT_BRIDGE_URL + '/');
+  } catch (e) {
+    return callback(new Error('Invalid PRINT_BRIDGE_URL: ' + e.message));
+  }
+  const lib = target.protocol === 'https:' ? https : http;
+  const headers = {};
+  if (PRINT_BRIDGE_TOKEN) headers['X-Bridge-Token'] = PRINT_BRIDGE_TOKEN;
+  const bodyBuf = body == null ? null : Buffer.from(body, 'utf8');
+  if (bodyBuf) {
+    headers['Content-Type'] = 'text/plain; charset=utf-8';
+    headers['Content-Length'] = bodyBuf.length;
+  }
+  const req = lib.request(target, { method, headers, timeout: 5000 }, (res) => {
+    let data = '';
+    res.setEncoding('utf8');
+    res.on('data', (c) => (data += c));
+    res.on('end', () => {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        /* not JSON — leave parsed null */
+      }
+      callback(null, { statusCode: res.statusCode, body: parsed, raw: data });
+    });
+  });
+  req.on('timeout', () => {
+    req.destroy(new Error('Bridge timeout'));
+  });
+  req.on('error', (err) => callback(err));
+  if (bodyBuf) req.write(bodyBuf);
+  req.end();
+}
+
+// Returns a rich status object describing whether label printing is currently
+// possible. State values:
+//   'online'              — printer reachable and ready to receive ZPL
+//   'printer_offline'     — bridge reachable but the printer is not connected
+//   'bridge_unreachable'  — PRINT_BRIDGE_URL configured but the bridge did
+//                           not respond (Windows PC off, network issue)
+//   'no_bridge'           — server is non-Windows and PRINT_BRIDGE_URL is
+//                           unset; clients should use the ZPL-download flow
+//   'local_unavailable'   — Windows-local PowerShell path could not find
+//                           the printer
+function getPrinterStatus(callback) {
+  if (PRINT_BRIDGE_URL) {
+    return _bridgeRequest('GET', 'status', null, (err, resp) => {
+      if (err) {
+        return callback(null, {
+          state: 'bridge_unreachable',
+          name: PRINTER_NAME,
+          online: false,
+          bridge: PRINT_BRIDGE_URL,
+          error: err.message
+        });
+      }
+      const printer = resp && resp.body && resp.body.printer;
+      if (resp && resp.statusCode === 200 && resp.body && resp.body.ok && printer && printer.online) {
+        return callback(null, { state: 'online', name: printer.name || PRINTER_NAME, online: true });
+      }
+      return callback(null, {
+        state: 'printer_offline',
+        name: (printer && printer.name) || PRINTER_NAME,
+        online: false,
+        error: (resp && resp.body && resp.body.error) || null
+      });
+    });
+  }
+  if (process.platform !== 'win32') {
+    return callback(null, { state: 'no_bridge', name: PRINTER_NAME, online: false });
   }
   execFile(
     'powershell',
@@ -1082,16 +1161,53 @@ function checkPrinterAvailable(callback) {
       `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
     ],
     (err, stdout) => {
-      const found = !err && stdout.includes(PRINTER_NAME);
-      _printerStatusCache = found;
-      _printerStatusCacheTime = Date.now();
-      callback(null, found);
+      if (err || !stdout.includes(PRINTER_NAME)) {
+        return callback(null, { state: 'local_unavailable', name: PRINTER_NAME, online: false });
+      }
+      callback(null, { state: 'online', name: PRINTER_NAME, online: true });
     }
   );
 }
 
-// Send raw ZPL to the GK420d via Windows
+function checkPrinterAvailable(callback) {
+  const now = Date.now();
+  if (_printerStatusCache !== null && now - _printerStatusCacheTime < 5000) {
+    return callback(null, _printerStatusCache);
+  }
+  getPrinterStatus((err, status) => {
+    const available = !err && status && status.state === 'online';
+    _printerStatusCache = available;
+    _printerStatusCacheTime = Date.now();
+    callback(null, available);
+  });
+}
+
+// Send raw ZPL to the Zebra GK420d. Routes through the print bridge if
+// PRINT_BRIDGE_URL is configured, otherwise prints locally via PowerShell
+// (Windows-only — fails on Linux servers without a bridge).
 function printZPL(zplData, callback) {
+  if (PRINT_BRIDGE_URL) return _printViaBridge(zplData, callback);
+  return _printViaPowerShell(zplData, callback);
+}
+
+function _printViaBridge(zplData, callback) {
+  const zplFixed = zplData.replace(/\r?\n/g, '\r\n');
+  _bridgeRequest('POST', 'print', zplFixed, (err, resp) => {
+    if (err) {
+      log('error', 'Print bridge unreachable', { error: err.message, bridge: PRINT_BRIDGE_URL });
+      return callback('Print bridge unreachable: ' + err.message);
+    }
+    if (!resp || resp.statusCode !== 200 || !resp.body || !resp.body.ok) {
+      const reason = (resp && resp.body && resp.body.error) || 'HTTP ' + (resp && resp.statusCode);
+      log('error', 'Bridge print failed', { reason });
+      return callback('Bridge print failed: ' + reason);
+    }
+    log('info', 'Print via bridge OK', { bytes: resp.body.bytes });
+    callback(null);
+  });
+}
+
+function _printViaPowerShell(zplData, callback) {
   const tmp = path.join(os.tmpdir(), 'mp_label_' + Date.now() + '.zpl');
   const zplFixed = zplData.replace(/\r?\n/g, '\r\n');
 
@@ -6291,23 +6407,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // GET /api/printer-status
+  // GET /api/printer-status — returns rich state plus legacy `found` boolean
   if (req.method === 'GET' && req.url === '/api/printer-status') {
-    // wmic was removed in Windows 11 24H2+; use PowerShell Get-Printer instead.
-    // PRINTER_NAME is already validated at startup but strip quotes defensively.
-    execFile(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
-      ],
-      (err, stdout) => {
-        const found = !err && stdout.includes(PRINTER_NAME);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ found, name: PRINTER_NAME }));
-      }
-    );
+    getPrinterStatus((err, status) => {
+      const out = status || { state: 'unknown', name: PRINTER_NAME, online: false };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ...out, found: out.state === 'online' }));
+    });
     return;
   }
 
