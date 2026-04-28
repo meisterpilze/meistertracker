@@ -3677,4 +3677,88 @@ tr:hover td {
   .content-wrap {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
   }
+
+  /* ── Batches table — mobile card mode ────────────────────────
+     The 12-column batches table is unusable on a 360 px viewport
+     (Actions column ends up ~700 px off-screen). Below we transform
+     the rows into stacked cards via display:block; row labels come
+     from data-mlabel="..." that renderBatches() sets per <td>. */
+  #t-batches {
+    border: 0;
+    width: 100%;
+  }
+  #t-batches > thead {
+    display: none;
+  }
+  #t-batches > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  /* Empty/no-matches row keeps a centred full-row look */
+  #t-batches > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+  }
+  /* Sub-row injected by toggleBatchBags() — leave its full-width layout
+     for the bag chips, just retint to look like a connected detail panel. */
+  #t-batches > tbody > tr[id^='brow-'] {
+    border: 1px dashed var(--c-border);
+    padding: 10px 12px;
+    background: var(--c-bg);
+  }
+  #t-batches > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  #t-batches > tbody > tr > td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    flex: 0 0 84px;
+    color: var(--c-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Promote the batch ID to a card header */
+  #t-batches > tbody > tr > td.bt-id {
+    font-size: 15px !important;
+    font-weight: 600;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  #t-batches > tbody > tr > td.bt-id::before {
+    display: none;
+  }
+  /* Actions row — full width, buttons share the row equally. The
+     (pointer:coarse) rule near .btn-sm already gives us 44px height. */
+  #t-batches > tbody > tr > td.bt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--c-border-light);
+    white-space: normal !important;
+  }
+  #t-batches > tbody > tr > td.bt-actions::before {
+    display: none;
+  }
+  #t-batches > tbody > tr > td.bt-actions .btn-sm {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0 !important;
+    text-align: center;
+  }
 }
