@@ -4483,6 +4483,23 @@ async function loadData() {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   }
 }
+// Last-scan-per-bag lookup. The four hot spots that need it (dashboard
+// harvest tasks, batch-row bag chips, bag-info modal, getBatchLoc) all
+// previously did `[...scanLog].reverse().find(...)` once per bag — O(N×M)
+// for N bags and M scan-log entries. Building this map once per call site
+// turns the per-bag work into a single O(1) Map.get(). Iterating forward
+// and overwriting means the last entry for a given bag wins, equivalent
+// to the original `reverse().find()`. Cheap to build, so we don't bother
+// with global memoisation + invalidation across the 14 scanLog mutation
+// sites.
+function buildLastScanByBag() {
+  const m = new Map();
+  for (const e of scanLog) {
+    const k = (e.bag || '').toUpperCase();
+    if (k) m.set(k, e);
+  }
+  return m;
+}
 function applyData(d) {
   mushroomStrains = d.mushroomStrains || [];
   batches = d.batches || [];
@@ -6911,6 +6928,7 @@ function goToBatch(batchId) {
 function buildHarvestTasks() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const lastByBag = buildLastScanByBag();
   return batches
     .filter((b) => getStatus(b.batchId).status === 'FRUITING')
     .map((b) => {
@@ -6921,7 +6939,7 @@ function buildHarvestTasks() {
       const zoneCounts = {};
       let activeBags = 0;
       b.bags.forEach((bag) => {
-        const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+        const last = lastByBag.get(bag.toUpperCase());
         if (!last || last.action === 'REMOVE' || !last.to) return;
         activeBags++;
         const z = toZone(last.to);
@@ -7921,11 +7939,12 @@ function toggleBatchBags(batchId) {
   const td = document.createElement('td');
   td.colSpan = 12;
   td.style.cssText = 'background:var(--c-bg);padding:8px 12px';
+  const lastByBag = buildLastScanByBag();
   td.innerHTML =
     '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
     b.bags
       .map((bag) => {
-        const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+        const last = lastByBag.get(bag.toUpperCase());
         let loc = '—',
           color = '#aaa';
         if (last) {
@@ -11671,6 +11690,9 @@ function openBagInfo(bagId, batchId, batch) {
   // Harvests for this bag
   const bagHarvests = harvests.filter((h) => (h.bag || '').toUpperCase() === bagId.toUpperCase());
   const totalHarv = bagHarvests.reduce((s, h) => s + (h.grams || 0), 0);
+  // Pre-build last-scan-per-bag map so the bag-chip render below is O(1)/bag
+  // instead of O(M)/bag for an M-length scan log.
+  const lastByBag = buildLastScanByBag();
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
@@ -11684,7 +11706,7 @@ function openBagInfo(bagId, batchId, batch) {
         .map((bag) => {
           const isThis = bag.toUpperCase() === bagId.toUpperCase();
           const bagNum = bag.split('-').pop();
-          const bagLast = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+          const bagLast = lastByBag.get(bag.toUpperCase());
           const loc = !bagLast ? '—' : bagLast.action === 'REMOVE' ? '✗' : bagLast.to || '?';
           return `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${loc}">
           ${bagNum} <span style="font-size:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${loc}</span>
@@ -14036,10 +14058,13 @@ function parseDateStr(s) {
   return new Date(+p[0], +p[1] - 1, +p[2]);
 }
 
-function getBatchLoc(b) {
+function getBatchLoc(b, lastByBag) {
   const locs = {};
+  // Caller (e.g. collectCalendarEvents) can pass in a pre-built map to avoid
+  // O(N×M) when this is called per-batch in a loop.
+  const map = lastByBag || buildLastScanByBag();
   b.bags.forEach((bag) => {
-    const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+    const last = map.get(bag.toUpperCase());
     if (last && last.action !== 'REMOVE' && last.to) locs[last.to] = (locs[last.to] || 0) + 1;
   });
   const entries = Object.entries(locs);
@@ -14119,10 +14144,11 @@ function expandRecurringTaskDates(task) {
 }
 function collectCalendarEvents() {
   const events = [];
+  const lastByBag = buildLastScanByBag();
   batches.forEach((b) => {
     if (!b.due) return;
     const d = new Date(b.due);
-    const loc = getBatchLoc(b);
+    const loc = getBatchLoc(b, lastByBag);
     events.push({
       date: localDateStr(d),
       label: b.batchId + (loc ? ' — ' + loc : ''),
