@@ -153,6 +153,11 @@
     >
       <div class="modal" style="max-width: 360px">
         <h3 id="chpw-title-h3" data-i18n="chpw.title">Change password</h3>
+        <!-- Hidden username companion: lets iOS Keychain / 1Password / etc.
+             recognise this as a credential update for the current user, so
+             the new password gets saved to the right entry instead of being
+             treated as an unrelated form. -->
+        <input type="text" id="chpw-username-helper" autocomplete="username" hidden />
         <label style="display: block; margin-bottom: 8px"
           ><span data-i18n="chpw.current">Current password</span><br /><input
             type="password"
@@ -1237,10 +1242,11 @@
           <div>
             <label style="color: var(--c-amber-dark); font-size: 11px" data-i18n="harvest.grams">Grams</label
             ><input
-              type="number"
+              type="text"
+              inputmode="decimal"
+              enterkeyhint="done"
               id="hp-grams"
-              min="0"
-              step="1"
+              autocomplete="off"
               style="width: 100px"
               data-i18n-placeholder="harvest.gramsPlaceholder"
               placeholder="e.g. 245"
@@ -1621,7 +1627,9 @@
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
                 <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
                 <input
-                  type="text"
+                  type="search"
+                  enterkeyhint="search"
+                  autocomplete="off"
                   id="batch-q"
                   data-i18n-aria-label="aria.searchBatches"
                   aria-label="Search batches"
@@ -1711,11 +1719,11 @@
                   <div class="g2">
                     <div>
                       <label data-i18n="batch.qty">Qty (bags)</label
-                      ><input type="number" id="nb-qty" value="10" min="1" max="500" />
+                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-qty" value="10" />
                     </div>
                     <div>
                       <label data-i18n="batch.incDays">Incubation days</label
-                      ><input type="number" id="nb-days" value="14" min="1" max="90" />
+                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-days" value="14" />
                     </div>
                   </div>
                   <details style="background: var(--c-bg); border-radius: 8px; padding: 10px">
@@ -1838,7 +1846,9 @@
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
                 <div class="sec" style="margin: 0" data-i18n="harvest.log">Harvest log</div>
                 <input
-                  type="text"
+                  type="search"
+                  enterkeyhint="search"
+                  autocomplete="off"
                   id="harvest-q"
                   data-i18n-aria-label="aria.searchHarvests"
                   aria-label="Search harvests"
@@ -2041,7 +2051,7 @@
                   </div>
                   <div id="lw-qty-row">
                     <label id="lw-qty-lbl" data-i18n="lab.qtyMade">Quantity made</label
-                    ><input type="number" id="lw-qty" value="1" min="1" max="50" />
+                    ><input type="text" inputmode="numeric" enterkeyhint="next" id="lw-qty" value="1" />
                   </div>
                   <div>
                     <label data-i18n="batch.notes">Notes (optional)</label
@@ -2280,7 +2290,8 @@
                 <div>
                   <label data-i18n="print.selectBatch">Select batch</label>
                   <input
-                    type="text"
+                    type="search"
+                    enterkeyhint="search"
                     id="print-batch-search"
                     data-i18n-placeholder="print.searchBatch"
                     placeholder="Search batches…"
@@ -2614,6 +2625,7 @@
                 <input
                   type="password"
                   id="backup-dl-pw"
+                  autocomplete="new-password"
                   data-i18n-placeholder="settings.encryptPwPh"
                   placeholder="Encryption password"
                   style="flex: 1; min-width: 140px"
@@ -2638,6 +2650,7 @@
                 <input
                   type="password"
                   id="backup-restore-pw"
+                  autocomplete="off"
                   data-i18n-placeholder="settings.decryptPwPh"
                   placeholder="Decryption password"
                   style="flex: 1; min-width: 140px"
@@ -2680,11 +2693,11 @@
               >
                 <div>
                   <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.username">Username</label
-                  ><input type="text" id="new-username" style="width: 120px; font-size: 13px" />
+                  ><input type="text" id="new-username" autocomplete="username" style="width: 120px; font-size: 13px" />
                 </div>
                 <div>
                   <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.password">Password</label
-                  ><input type="password" id="new-password" style="width: 120px; font-size: 13px" />
+                  ><input type="password" id="new-password" autocomplete="new-password" style="width: 120px; font-size: 13px" />
                 </div>
                 <div>
                   <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.role">Role</label
@@ -3641,6 +3654,9 @@
                     <option value="verschrottet" data-i18n="asset.status.verschrottet">Verschrottet</option>
                   </select>
                   <input
+                    type="search"
+                    enterkeyhint="search"
+                    autocomplete="off"
                     id="asset-search"
                     data-i18n-placeholder="dash.search"
                     placeholder="Suche..."
