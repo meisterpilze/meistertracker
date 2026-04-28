@@ -829,6 +829,27 @@ const LANG = {
     'contam.errSave': 'Save failed: {err}',
     'contam.reportSaved': 'Report #{id} saved ({photos} photo(s))',
     'contam.noTypes': 'No contamination types available',
+    'lab.contam': 'Contamination',
+    'contam.listTitle': 'Contamination reports',
+    'contam.allTypes': 'All types',
+    'contam.allSev': 'All severities',
+    'contam.since': 'Since',
+    'contam.resetFilters': 'Reset',
+    'contam.loading': 'Loading…',
+    'contam.empty': 'No reports yet.',
+    'contam.errLoad': 'Could not load reports: {err}',
+    'contam.count': '{n} report(s)',
+    'contam.detailTitle': 'Contamination report',
+    'contam.delete': 'Delete',
+    'contam.bag': 'Bag',
+    'contam.batch': 'Batch',
+    'contam.reportedBy': 'Reported by',
+    'contam.reportedAt': 'Reported at',
+    'contam.noPhotos': 'No photos attached.',
+    'contam.confirmDeleteTitle': 'Delete report?',
+    'contam.confirmDeleteBody': 'This will permanently delete the report and all attached photos.',
+    'contam.deleted': 'Report deleted.',
+    'contam.errDelete': 'Could not delete report: {err}',
     'bagInfo.confirmRemoveTitle': 'Remove bag?',
     'bagInfo.confirmRemoveBody': 'Remove {bag} from {loc}? This cannot be scanned away \u2014 only fixed manually.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remove {bag}? This cannot be scanned away \u2014 only fixed manually.',
@@ -2231,6 +2252,27 @@ const LANG = {
     'contam.errSave': 'Speichern fehlgeschlagen: {err}',
     'contam.reportSaved': 'Bericht #{id} gespeichert ({photos} Foto(s))',
     'contam.noTypes': 'Keine Kontaminationstypen verfügbar',
+    'lab.contam': 'Kontamination',
+    'contam.listTitle': 'Kontaminationsberichte',
+    'contam.allTypes': 'Alle Typen',
+    'contam.allSev': 'Alle Schwere',
+    'contam.since': 'Seit',
+    'contam.resetFilters': 'Zurücksetzen',
+    'contam.loading': 'Lädt…',
+    'contam.empty': 'Noch keine Berichte.',
+    'contam.errLoad': 'Berichte konnten nicht geladen werden: {err}',
+    'contam.count': '{n} Bericht(e)',
+    'contam.detailTitle': 'Kontaminationsbericht',
+    'contam.delete': 'Löschen',
+    'contam.bag': 'Beutel',
+    'contam.batch': 'Charge',
+    'contam.reportedBy': 'Gemeldet von',
+    'contam.reportedAt': 'Gemeldet am',
+    'contam.noPhotos': 'Keine Fotos angehängt.',
+    'contam.confirmDeleteTitle': 'Bericht löschen?',
+    'contam.confirmDeleteBody': 'Bericht und alle angehängten Fotos werden unwiderruflich gelöscht.',
+    'contam.deleted': 'Bericht gelöscht.',
+    'contam.errDelete': 'Bericht konnte nicht gelöscht werden: {err}',
     'bagInfo.confirmRemoveTitle': 'Beutel entfernen?',
     'bagInfo.confirmRemoveBody': '{bag} aus {loc} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
     'bagInfo.confirmRemoveBodyNoLoc': '{bag} entfernen? Nur manuell r\u00fcckg\u00e4ngig zu machen.',
@@ -3645,6 +3687,27 @@ const LANG = {
     'contam.errSave': 'Falha ao salvar: {err}',
     'contam.reportSaved': 'Relatório #{id} salvo ({photos} foto(s))',
     'contam.noTypes': 'Nenhum tipo de contaminação disponível',
+    'lab.contam': 'Contaminação',
+    'contam.listTitle': 'Relatórios de contaminação',
+    'contam.allTypes': 'Todos os tipos',
+    'contam.allSev': 'Todas as gravidades',
+    'contam.since': 'Desde',
+    'contam.resetFilters': 'Redefinir',
+    'contam.loading': 'Carregando…',
+    'contam.empty': 'Nenhum relatório ainda.',
+    'contam.errLoad': 'Não foi possível carregar relatórios: {err}',
+    'contam.count': '{n} relatório(s)',
+    'contam.detailTitle': 'Relatório de contaminação',
+    'contam.delete': 'Excluir',
+    'contam.bag': 'Saco',
+    'contam.batch': 'Lote',
+    'contam.reportedBy': 'Relatado por',
+    'contam.reportedAt': 'Relatado em',
+    'contam.noPhotos': 'Sem fotos anexadas.',
+    'contam.confirmDeleteTitle': 'Excluir relatório?',
+    'contam.confirmDeleteBody': 'O relatório e todas as fotos anexadas serão excluídos permanentemente.',
+    'contam.deleted': 'Relatório excluído.',
+    'contam.errDelete': 'Não foi possível excluir o relatório: {err}',
     'bagInfo.confirmRemoveTitle': 'Remover saco?',
     'bagInfo.confirmRemoveBody': 'Remover {bag} de {loc}? S\u00f3 se desfaz manualmente.',
     'bagInfo.confirmRemoveBodyNoLoc': 'Remover {bag}? S\u00f3 se desfaz manualmente.',
@@ -4961,6 +5024,7 @@ function openStab(page, sub) {
     renderLabLog();
   }
   if (page === 'lab' && sub === 'lineage') fillLineageSelect();
+  if (page === 'lab' && sub === 'contam') renderContamReports();
   if (page === 'inv' && sub === 'stock') renderInvStock();
   if (page === 'inv' && sub === 'delivery') {
     delMatChange();
@@ -12055,11 +12119,178 @@ async function _crSubmit() {
     }
     closeContamReport();
     setFb('ok', t('contam.reportSaved', { id: r.id, photos: (r.photoIds || []).length }));
+    // Refresh browse view if it's the active sub-tab
+    if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
+      renderContamReports();
+    }
   } catch (e) {
     setFb('err', t('contam.errSave', { err: e.message || 'unknown' }));
   } finally {
     submitBtn.disabled = false;
   }
+}
+
+// ─── CONTAMINATION REPORTS — BROWSE / DRILL-DOWN ──────────────
+// Lab → Kontaminationen sub-tab. Lists reports as cards, click opens
+// the drill-down modal with full-size photos and delete action.
+let _clReports = [];
+let _cdReportId = null;
+
+function _clTypeName(r) {
+  if (currentLang === 'de') return r.name_de;
+  if (currentLang === 'pt') return r.name_pt;
+  return r.name_en;
+}
+
+function _clRelTime(iso) {
+  const d = new Date(iso);
+  const sec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (sec < 60) return t('time.justNow');
+  const min = Math.floor(sec / 60);
+  if (min < 60) return t('time.minsAgo', { n: min });
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return t('time.hoursAgo', { n: hr });
+  return t('time.daysAgo', { n: Math.floor(hr / 24) });
+}
+
+async function _clEnsureTypesLoaded() {
+  if (_crTypes && _crTypes.length) return;
+  try {
+    _crTypes = await apiGet('/api/contamination-types');
+  } catch {
+    _crTypes = [];
+  }
+  // Populate the type filter dropdown if it exists
+  const sel = document.getElementById('cl-type-filter');
+  if (sel && sel.options.length <= 1) {
+    for (const tp of _crTypes) {
+      const o = document.createElement('option');
+      o.value = String(tp.id);
+      o.textContent = _clTypeName(tp);
+      sel.appendChild(o);
+    }
+  }
+}
+
+async function renderContamReports() {
+  await _clEnsureTypesLoaded();
+  const list = document.getElementById('contam-list');
+  const count = document.getElementById('contam-list-count');
+  if (!list) return;
+  list.innerHTML = '<div class="empty">' + t('contam.loading') + '</div>';
+  const params = new URLSearchParams();
+  const typeId = document.getElementById('cl-type-filter')?.value;
+  const sev = document.getElementById('cl-sev-filter')?.value;
+  const since = document.getElementById('cl-since-filter')?.value;
+  if (typeId) params.set('typeId', typeId);
+  if (sev) params.set('severity', sev);
+  if (since) params.set('start', since);
+  try {
+    _clReports = await apiGet('/api/contamination-reports' + (params.toString() ? '?' + params.toString() : ''));
+  } catch (e) {
+    list.innerHTML = '<div class="empty" style="color:var(--c-red-dark)">' + t('contam.errLoad', { err: e.message || 'unknown' }) + '</div>';
+    return;
+  }
+  if (!_clReports.length) {
+    list.innerHTML = '<div class="empty">' + t('contam.empty') + '</div>';
+    count.textContent = '';
+    return;
+  }
+  count.textContent = t('contam.count', { n: _clReports.length });
+  list.innerHTML = _clReports
+    .map((r) => {
+      const sevKey = r.severity === 'major' ? 'sevMajor' : r.severity === 'lost' ? 'sevLost' : 'sevMinor';
+      const typeName = esc(_clTypeName(r));
+      const photoSrc = (r.photo_count || 0) > 0
+        ? `/api/contamination-reports/${r.id}/photos/${r.id}?thumb=1`
+        : '';
+      // photo_count > 0 doesn't tell us a uuid; we fetch the report on click for actual photos.
+      // For the list, render a placeholder if no photo_count, otherwise a generic camera icon —
+      // proper thumb requires another endpoint. Cheap path: just show the first photo via the
+      // detail endpoint's response, but for now show the camera icon for any report with photos.
+      const thumbHtml = (r.photo_count || 0) > 0
+        ? `<div style="font-size:24px">📷</div>`
+        : `<div style="font-size:18px">—</div>`;
+      const target = r.bag_id
+        ? `<span class="contam-list-bag">${esc(r.bag_id)}</span><span class="contam-list-batch">${esc(r.batch_id || '')}</span>`
+        : `<span class="contam-list-bag">${esc(r.batch_id || '—')}</span>`;
+      const notes = r.notes ? `<div class="contam-list-notes">${esc(r.notes)}</div>` : '';
+      return `<div class="contam-list-card" data-cl-id="${r.id}">
+        <div class="contam-list-thumb">${thumbHtml}</div>
+        <div class="contam-list-meta">
+          <div class="contam-list-row">${target}<span class="contam-list-when">${esc(_clRelTime(r.reported_at))}</span></div>
+          <div class="contam-list-row">
+            <span class="contam-type-badge"><span class="dot" style="background:${esc(r.type_color || '#888')}"></span>${typeName}</span>
+            <span class="contam-sev-badge sev-${esc(r.severity)}">${esc(t('contam.' + sevKey))}</span>
+            ${(r.photo_count || 0) > 0 ? `<span style="font-size:11px;color:var(--c-text-muted)">${r.photo_count} 📷</span>` : ''}
+          </div>
+          ${notes}
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+async function openContamDetail(id) {
+  _cdReportId = id;
+  const body = document.getElementById('cd-body');
+  body.innerHTML = '<div class="empty">' + t('contam.loading') + '</div>';
+  document.getElementById('m-contam-detail').classList.add('open');
+  let r;
+  try {
+    r = await apiGet('/api/contamination-reports/' + id);
+  } catch (e) {
+    body.innerHTML = '<div class="empty" style="color:var(--c-red-dark)">' + t('contam.errLoad', { err: e.message || 'unknown' }) + '</div>';
+    return;
+  }
+  const typeName = esc(_clTypeName(r));
+  const sevKey = r.severity === 'major' ? 'sevMajor' : r.severity === 'lost' ? 'sevLost' : 'sevMinor';
+  const photos = Array.isArray(r.photos) ? r.photos : [];
+  const photosHtml = photos.length
+    ? `<div class="cd-photos">${photos
+        .map(
+          (p) =>
+            `<a class="cd-photo" href="/api/contamination-reports/${r.id}/photos/${esc(p.uuid)}" target="_blank" rel="noopener"><img src="/api/contamination-reports/${r.id}/photos/${esc(p.uuid)}?thumb=1" alt="" loading="lazy"></a>`
+        )
+        .join('')}</div>`
+    : `<div class="empty" style="margin:8px 0 14px">${t('contam.noPhotos')}</div>`;
+  const notesHtml = r.notes ? `<div class="cd-notes">${esc(r.notes)}</div>` : '';
+  body.innerHTML = `
+    ${photosHtml}
+    <div class="cd-meta-grid">
+      <div><div class="label">${esc(t('contam.type'))}</div><div><span class="contam-type-badge"><span class="dot" style="background:${esc(r.type_color || '#888')}"></span>${typeName}</span></div></div>
+      <div><div class="label">${esc(t('contam.severity'))}</div><div><span class="contam-sev-badge sev-${esc(r.severity)}">${esc(t('contam.' + sevKey))}</span></div></div>
+      <div><div class="label">${esc(t('contam.bag'))}</div><div style="font-family:monospace">${esc(r.bag_id || '—')}</div></div>
+      <div><div class="label">${esc(t('contam.batch'))}</div><div style="font-family:monospace">${esc(r.batch_id || '—')}</div></div>
+      <div><div class="label">${esc(t('contam.reportedBy'))}</div><div>${esc(r.reporter || '—')}</div></div>
+      <div><div class="label">${esc(t('contam.reportedAt'))}</div><div>${esc(fmtDtTime(r.reported_at))}</div></div>
+    </div>
+    ${notesHtml}
+  `;
+}
+
+function closeContamDetail() {
+  document.getElementById('m-contam-detail').classList.remove('open');
+  _cdReportId = null;
+}
+
+function _cdDelete() {
+  if (!_cdReportId) return;
+  const id = _cdReportId;
+  confirm2(t('contam.confirmDeleteTitle'), t('contam.confirmDeleteBody'), t('contam.delete'), async () => {
+    try {
+      const r = await apiDelete('/api/contamination-reports/' + id);
+      if (r && r.error) {
+        setFb('err', t('contam.errDelete', { err: r.error }));
+        return;
+      }
+      setFb('ok', t('contam.deleted'));
+      closeContamDetail();
+      renderContamReports();
+    } catch (e) {
+      setFb('err', t('contam.errDelete', { err: e.message || 'unknown' }));
+    }
+  });
 }
 
 // ─── BAG-SELECT MODAL (subset-of-batch move) ─────────────────
@@ -17033,6 +17264,32 @@ function initEventListeners() {
   });
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
+  });
+  $('st-lab-contam').addEventListener('click', () => {
+    openStab('lab', 'contam');
+  });
+  // Contamination list filters + drill-down + delete
+  ['cl-type-filter', 'cl-sev-filter', 'cl-since-filter'].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener('change', renderContamReports);
+  });
+  $('cl-reset').addEventListener('click', () => {
+    $('cl-type-filter').value = '';
+    $('cl-sev-filter').value = '';
+    $('cl-since-filter').value = '';
+    renderContamReports();
+  });
+  $('contam-list').addEventListener('click', (e) => {
+    const card = e.target.closest('[data-cl-id]');
+    if (!card) return;
+    const id = parseInt(card.dataset.clId, 10);
+    if (!isNaN(id)) openContamDetail(id);
+  });
+  $('cls-cd').addEventListener('click', closeContamDetail);
+  $('cd-close').addEventListener('click', closeContamDetail);
+  $('cd-delete').addEventListener('click', _cdDelete);
+  document.getElementById('m-contam-detail').addEventListener('click', (e) => {
+    if (e.target.id === 'm-contam-detail') closeContamDetail();
   });
   // Grain spawn weight-lines: event delegation
   $('gs-weight-lines').addEventListener('click', (e) => {
