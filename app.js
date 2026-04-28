@@ -10665,8 +10665,15 @@ async function printAssetLabels() {
   }
   const zpl = makeAssetZPL(ids);
   const err = await sendToPrinter(zpl);
-  if (err) alert(t('assets.printError') + err);
-  else setFb('ok', ids.length + ' Inventar-Etikett' + (ids.length !== 1 ? 'en' : '') + ' gedruckt');
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'inventar_labels.zpl';
+    a.click();
+  } else {
+    setFb('ok', ids.length + ' Inventar-Etikett' + (ids.length !== 1 ? 'en' : '') + ' gedruckt');
+  }
 }
 
 function downloadAssetZPL() {
@@ -12153,8 +12160,15 @@ async function printBagLabels() {
     return;
   }
   const err = await sendToPrinter(zpl);
-  if (err) alert(t('print.printError', { err }));
-  else setFb('ok', 'Printed ' + bags.length + ' labels for ' + b.batchId);
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = b.batchId + '_labels.zpl';
+    a.click();
+  } else {
+    setFb('ok', 'Printed ' + bags.length + ' labels for ' + b.batchId);
+  }
 }
 
 async function printLabLabels() {
@@ -12169,8 +12183,15 @@ async function printLabLabels() {
     return;
   }
   const err = await sendToPrinter(zpl);
-  if (err) alert(t('print.printError', { err }));
-  else setFb('ok', 'Printed ' + ids.length + ' lab label' + (ids.length !== 1 ? 's' : ''));
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'lab_labels.zpl';
+    a.click();
+  } else {
+    setFb('ok', 'Printed ' + ids.length + ' lab label' + (ids.length !== 1 ? 's' : ''));
+  }
 }
 
 async function quickPrintCulture(id) {
