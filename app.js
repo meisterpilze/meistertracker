@@ -404,6 +404,8 @@ const LANG = {
     'todo.batchTasks': 'Batch tasks',
     'todo.all': 'All',
     'todo.urgentOnly': 'Urgent only',
+    'todo.priorityHigh': 'High priority',
+    'todo.priorityMed': 'Medium priority',
     'todo.dueAgo': 'Due {n} day(s) ago',
     'todo.dueIn': 'Due in {n} day(s)',
     // Days
@@ -1543,6 +1545,8 @@ const LANG = {
     'todo.batchTasks': 'Chargen-Aufgaben',
     'todo.all': 'Alle',
     'todo.urgentOnly': 'Nur dringende',
+    'todo.priorityHigh': 'Hohe Priorit\u00e4t',
+    'todo.priorityMed': 'Mittlere Priorit\u00e4t',
     'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
     'todo.dueIn': 'F\u00e4llig in {n} Tag(en)',
     // Days
@@ -2694,6 +2698,8 @@ const LANG = {
     'todo.batchTasks': 'Tarefas dos lotes',
     'todo.all': 'Todas',
     'todo.urgentOnly': 'Apenas urgentes',
+    'todo.priorityHigh': 'Prioridade alta',
+    'todo.priorityMed': 'Prioridade m\u00e9dia',
     'todo.dueAgo': 'Vencido h\u00e1 {n} dia(s)',
     'todo.dueIn': 'Vence em {n} dia(s)',
     // Days
@@ -6114,7 +6120,11 @@ function renderDashBatchTasks() {
             '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
             spColor(tk.species) +
             '">' +
-            (tk.urgent ? '<span class="pdot high"></span>' : tk.warn ? '<span class="pdot med"></span>' : '') +
+            (tk.urgent
+              ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
+              : tk.warn
+                ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
+                : '') +
             '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
             textWithLink +
             '</div>' +

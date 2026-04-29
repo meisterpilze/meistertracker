@@ -1647,21 +1647,42 @@ tr:hover td {
     margin-top: 0;
   }
 }
+/* Priority indicator dot for dashboard tasks. Was a 9 px color-only chip
+   (red/amber/green) with no text fallback — fails for color-blind users
+   per audit Section 3.4. Bumped to 14 px with a letter inside (H/M/L)
+   so the priority is legible without relying on color. */
 .pdot {
-  width: 9px;
-  height: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-top: 5px;
+  margin-top: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  line-height: 1;
 }
 .pdot.high {
   background: #ef4444;
 }
+.pdot.high::before {
+  content: 'H';
+}
 .pdot.med {
   background: #f59e0b;
 }
+.pdot.med::before {
+  content: 'M';
+}
 .pdot.low {
   background: #22c55e;
+}
+.pdot.low::before {
+  content: 'L';
 }
 .bc-cell {
   border: 1px solid var(--c-border);
@@ -3654,8 +3675,18 @@ tr:hover td {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .notif-fab:has(.bell-badge:not([hidden])) {
-    animation: none;
+  /* Disable every named keyframe animation in this stylesheet. The standard
+     "*, *::before, *::after { animation-duration: 0.01ms !important }" trick
+     is too heavy — it would also kill open/close transitions which are
+     functional (they signal state change). Listing the animation-using
+     selectors explicitly leaves transitions intact. */
+  .notif-fab:has(.bell-badge:not([hidden])),
+  .chip-pulse,
+  .count-bump .chip-v,
+  .cam-chip.ch-pulse,
+  .action-fab-item,
+  .batch-row-flash > td {
+    animation: none !important;
   }
 }
 .bell-badge {
