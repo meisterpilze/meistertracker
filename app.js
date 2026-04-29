@@ -1159,6 +1159,8 @@ const LANG = {
     'log.deleteEntryMsg': 'Delete {action} {batch} from {time}?',
     // Inventory cards
     'inv.lowStock': 'LOW STOCK',
+    'inv.shortageWarn': 'Not enough stock for this batch:',
+    'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the difference is logged as used.)',
     'inv.alertBelow': 'Alert below {n}kg',
     'inv.logDelivery': '+ Log delivery',
     'inv.grainBagsEst': '\u2248 {n} grain bags @ {kg}kg each',
@@ -2313,6 +2315,8 @@ const LANG = {
     'log.deleteEntryMsg': '{action} {batch} vom {time} l\u00f6schen?',
     // Inventory cards
     'inv.lowStock': 'NIEDRIGER BESTAND',
+    'inv.shortageWarn': 'Nicht genug Bestand f\u00fcr diese Charge:',
+    'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die Differenz wird als verbraucht protokolliert.)',
     'inv.alertBelow': 'Alarm unter {n}kg',
     'inv.logDelivery': '+ Lieferung erfassen',
     'inv.grainBagsEst': '\u2248 {n} Getreidebeutel \u00e0 {kg}kg',
@@ -3468,6 +3472,8 @@ const LANG = {
     'log.deleteEntryMsg': 'Apagar {action} {batch} de {time}?',
     // Inventory cards
     'inv.lowStock': 'ESTOQUE BAIXO',
+    'inv.shortageWarn': 'Estoque insuficiente para este lote:',
+    'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a diferença é registrada como usada.)',
     'inv.alertBelow': 'Alerta abaixo de {n}kg',
     'inv.logDelivery': '+ Registar entrega',
     'inv.grainBagsEst': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',
@@ -6767,6 +6773,29 @@ function createBatch() {
           gypsum: document.getElementById('nb-gyp').checked
         }
       : null;
+  // Pre-flight inventory check — warn before silently draining substrate.
+  // The deduction code below uses Math.max(0, stock - used), which means an
+  // over-commit silently clamps to zero with no signal to the worker. They
+  // walk away thinking everything's fine, then run out mid-week. Prompt
+  // first so they can either top up before submitting or knowingly proceed.
+  if (substrate) {
+    const _rhPct = substrate.rh || 0;
+    const _dryKg = _rhPct > 0 ? bagKg * (1 - _rhPct / 100) : bagKg;
+    const _hwUsed = qty * _dryKg * (hw / 100);
+    const _wbUsed = qty * _dryKg * (wb / 100);
+    const _gypUsed = substrate.gypsum ? qty * _dryKg * 0.01 : 0;
+    const _stock = inventory.stock || {};
+    const _shortages = [];
+    if (_hwUsed > (_stock.hardwood || 0))
+      _shortages.push('Hardwood: ' + (_stock.hardwood || 0).toFixed(1) + ' kg vorhanden, ' + _hwUsed.toFixed(1) + ' kg nötig');
+    if (_wbUsed > (_stock.wheatbran || 0))
+      _shortages.push('Wheat bran: ' + (_stock.wheatbran || 0).toFixed(1) + ' kg vorhanden, ' + _wbUsed.toFixed(1) + ' kg nötig');
+    if (_gypUsed > (_stock.gypsum || 0))
+      _shortages.push('Gypsum: ' + (_stock.gypsum || 0).toFixed(1) + ' kg vorhanden, ' + _gypUsed.toFixed(1) + ' kg nötig');
+    if (_shortages.length && !window.confirm(t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'))) {
+      return;
+    }
+  }
   const batchId = genBatchId(ms.name);
   spColor(ms.name);
   const due = new Date();
