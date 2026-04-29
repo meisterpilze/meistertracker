@@ -16828,8 +16828,28 @@ function updateOfflineBadge(count) {
 }
 
 // ─── EVENT LISTENERS (CSP-safe, no inline handlers) ─────────────
+// Camera lifecycle state machine. Was two booleans (_camScanner !== null +
+// _camClosing) which left a sliver between "closed" and "ready-to-reopen"
+// where Html5Qrcode raced on the underlying MediaStream — workers reported
+// intermittent "camera already in use" errors. Explicit states make the
+// transition order obvious and let callers (closeCamScan, flipCamera,
+// visibilitychange) bail out cleanly if they're already in a transition.
+const CAM_IDLE = 'idle';
+const CAM_OPENING = 'opening';
+const CAM_OPEN = 'open';
+const CAM_CLOSING = 'closing';
+let _camState = CAM_IDLE;
 let _camScanner = null;
-let _camClosing = false;
+// Dedup window: if the same barcode is decoded again within this many ms,
+// the second read is silently dropped. Stops a 1D-barcode that's still in
+// frame after the resume from immediately re-firing the same scan.
+const SCAN_DEDUP_MS = 3000;
+// Pause between accepting consecutive scans. The old 1.5 s value was
+// generous safety margin against double-reads; with the dedup window above,
+// 800 ms is plenty and lets workers scan a row of 20 bags ~14 s faster.
+const SCAN_PAUSE_MS = 800;
+let _camLastDecoded = '';
+let _camLastDecodedAt = 0;
 // Persisted between sessions so workers who flipped to the front camera once
 // (e.g. to scan a label they were holding up to themselves) don't have to flip
 // every time. Falls back to 'environment' (rear) for first-time / desktop use.
@@ -16891,7 +16911,10 @@ function openCamScan() {
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
   updateCamHud(); // Sync HUD with current scan state
-  if (_camScanner || _camClosing) return;
+  // Anything other than idle is an in-flight transition; the modal is already
+  // open visually so this no-op is fine (e.g. user double-tapped the FAB).
+  if (_camState !== CAM_IDLE) return;
+  _camState = CAM_OPENING;
   _camScanner = new Html5Qrcode('cam-reader');
   var scanner = _camScanner;
   scanner
@@ -16913,22 +16936,36 @@ function openCamScan() {
       },
       function (decoded) {
         if (scanner !== _camScanner) return;
+        // Dedup: same code re-decoded inside the dedup window is silently
+        // dropped. Workers running through 20 bags don't see ghost re-fires
+        // when a 1D label lingers in frame across the pause boundary.
+        var now = Date.now();
+        if (decoded === _camLastDecoded && now - _camLastDecodedAt < SCAN_DEDUP_MS) {
+          return;
+        }
+        _camLastDecoded = decoded;
+        _camLastDecodedAt = now;
         scanner.pause(true);
         processScan(decoded);
         setTimeout(function () {
-          if (scanner === _camScanner) {
+          // Only resume if we're still the active scanner AND the state hasn't
+          // moved to closing in the meantime.
+          if (scanner === _camScanner && _camState === CAM_OPEN) {
             try {
               scanner.resume();
             } catch (e) {}
           }
-        }, 1500);
+        }, SCAN_PAUSE_MS);
       },
       function () {}
     )
     .then(function () {
+      _camState = CAM_OPEN;
       _detectTorchSupport();
     })
     .catch(function (err) {
+      _camState = CAM_IDLE;
+      _camScanner = null;
       console.error('Camera start failed:', err);
       var s = String(err);
       // Permission-denied is its own path because workers on a brand-new phone
@@ -16959,10 +16996,15 @@ function closeCamScan() {
     torchBtn.classList.remove('torch-on');
     torchBtn.hidden = true;
   }
-  if (!_camScanner) return;
+  // Already closed (or in the middle of closing) — nothing to do.
+  if (_camState === CAM_IDLE || _camState === CAM_CLOSING) return;
+  if (!_camScanner) {
+    _camState = CAM_IDLE;
+    return;
+  }
   var scanner = _camScanner;
   _camScanner = null;
-  _camClosing = true;
+  _camState = CAM_CLOSING;
   scanner
     .stop()
     .then(function () {
@@ -16982,12 +17024,12 @@ function closeCamScan() {
       } catch (e) {}
     })
     .finally(function () {
-      _camClosing = false;
+      _camState = CAM_IDLE;
     });
 }
 // Stop camera when tab is hidden (saves battery, prevents "camera in use" on other apps)
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden && _camScanner) closeCamScan();
+  if (document.hidden && _camState !== CAM_IDLE) closeCamScan();
 });
 function flipCamera() {
   _camFacingMode = _camFacingMode === 'environment' ? 'user' : 'environment';
@@ -16996,7 +17038,10 @@ function flipCamera() {
   } catch {
     /* ignore — quota or private mode */
   }
-  if (_camScanner) {
+  // Only re-open the modal if the camera is currently visible/running.
+  // CAM_OPENING is included so a quick double-flip while opening still
+  // restarts with the new facing mode once it lands.
+  if (_camState === CAM_OPEN || _camState === CAM_OPENING) {
     closeCamScan();
     setTimeout(openCamScan, 300);
   }
