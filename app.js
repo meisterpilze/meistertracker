@@ -238,6 +238,10 @@ const LANG = {
     // Bags
     // Batch page
     'batch.allBatches': 'All batches',
+    'batch.filterActive': 'Active',
+    'batch.filterArchived': 'Archived',
+    'batch.filterAll': 'All',
+    'batch.filterArchiveAria': 'Filter by archive status',
     'batch.newBatch': 'New batch',
     'batch.harvests': 'Harvests',
     'batch.createNew': 'Create new batch',
@@ -1026,8 +1030,7 @@ const LANG = {
     'printer.setupTitle': 'Bridge setup (Windows PC)',
     'printer.setupIntro':
       'Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background after every login.',
-    'printer.step1':
-      'Download print-bridge.ps1 on the Windows PC, e.g. into C:\\meistertracker-bridge\\.',
+    'printer.step1': 'Download print-bridge.ps1 on the Windows PC, e.g. into C:\\meistertracker-bridge\\.',
     'printer.step2':
       'Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept. This sets up URL ACL, firewall rule, scheduled task, and starts the bridge.',
     'printer.step3':
@@ -1195,7 +1198,8 @@ const LANG = {
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     // Camera
     'cam.permDeniedTitle': 'Camera permission needed',
-    'cam.permDeniedHelp': 'The camera is blocked, so scanning is disabled. To enable it:\n\nOn iPhone: Settings → Safari → Camera → Allow\n\nOn Android Chrome: tap the lock icon next to the address bar → Permissions → Camera → Allow\n\nThen reload this page.',
+    'cam.permDeniedHelp':
+      'The camera is blocked, so scanning is disabled. To enable it:\n\nOn iPhone: Settings → Safari → Camera → Allow\n\nOn Android Chrome: tap the lock icon next to the address bar → Permissions → Camera → Allow\n\nThen reload this page.',
     'cam.notFound': 'No camera found.',
     'cam.inUse': 'Camera is in use by another application.',
     'cam.unknownError': 'Camera error: {err}',
@@ -1389,6 +1393,10 @@ const LANG = {
     // Bags
     // Batch page
     'batch.allBatches': 'Alle Chargen',
+    'batch.filterActive': 'Aktiv',
+    'batch.filterArchived': 'Archiviert',
+    'batch.filterAll': 'Alle',
+    'batch.filterArchiveAria': 'Nach Archiv-Status filtern',
     'batch.newBatch': 'Neue Charge',
     'batch.harvests': 'Ernten',
     'batch.createNew': 'Neue Charge erstellen',
@@ -1427,7 +1435,8 @@ const LANG = {
     'batch.deleteMsg': 'L\u00f6scht den Chargen-Datensatz dauerhaft. Scan-Log und Ernteeintr\u00e4ge bleiben erhalten.',
     'batch.deleteBtn': 'Charge l\u00f6schen',
     'batch.enterWeight': 'Bitte ein Beutelgewicht eingeben',
-    'batch.substrateExceeds': 'Substratzusammensetzung \u00fcber 100% (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
+    'batch.substrateExceeds':
+      'Substratzusammensetzung \u00fcber 100% (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
     'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
     'batch.inStock': 'Auf Lager:',
     'batch.sufficient': 'ausreichend',
@@ -2185,8 +2194,7 @@ const LANG = {
     'printer.setupTitle': 'Bridge einrichten (Windows-PC)',
     'printer.setupIntro':
       'Einmalig auf dem Windows-PC ausführen, an dem die Zebra hängt. Die Bridge läuft danach im Hintergrund nach jedem Login.',
-    'printer.step1':
-      'print-bridge.ps1 auf dem Windows-PC herunterladen, z.B. nach C:\\meistertracker-bridge\\.',
+    'printer.step1': 'print-bridge.ps1 auf dem Windows-PC herunterladen, z.B. nach C:\\meistertracker-bridge\\.',
     'printer.step2':
       'PowerShell auf dem Windows-PC öffnen und den Installer ausführen. UAC fragt nach Admin-Rechten — bestätigen. Das richtet URL ACL, Firewall-Regel, Scheduled Task ein und startet die Bridge.',
     'printer.step3':
@@ -2332,7 +2340,8 @@ const LANG = {
     // Inventory cards
     'inv.lowStock': 'NIEDRIGER BESTAND',
     'inv.shortageWarn': 'Nicht genug Bestand f\u00fcr diese Charge:',
-    'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die Differenz wird als verbraucht protokolliert.)',
+    'inv.shortageProceed':
+      'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die Differenz wird als verbraucht protokolliert.)',
     'inv.alertBelow': 'Alarm unter {n}kg',
     'inv.logDelivery': '+ Lieferung erfassen',
     'inv.grainBagsEst': '\u2248 {n} Getreidebeutel \u00e0 {kg}kg',
@@ -2359,7 +2368,8 @@ const LANG = {
     // Camera
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     'cam.permDeniedTitle': 'Kamera-Berechtigung erforderlich',
-    'cam.permDeniedHelp': 'Die Kamera ist blockiert, daher ist das Scannen deaktiviert. So aktivierst du sie:\n\nAuf dem iPhone: Einstellungen → Safari → Kamera → Erlauben\n\nAuf Android Chrome: Tippe auf das Schloss-Symbol neben der Adressleiste → Berechtigungen → Kamera → Zulassen\n\nDanach Seite neu laden.',
+    'cam.permDeniedHelp':
+      'Die Kamera ist blockiert, daher ist das Scannen deaktiviert. So aktivierst du sie:\n\nAuf dem iPhone: Einstellungen → Safari → Kamera → Erlauben\n\nAuf Android Chrome: Tippe auf das Schloss-Symbol neben der Adressleiste → Berechtigungen → Kamera → Zulassen\n\nDanach Seite neu laden.',
     'cam.notFound': 'Keine Kamera gefunden.',
     'cam.inUse': 'Kamera wird von einer anderen Anwendung verwendet.',
     'cam.unknownError': 'Kamerafehler: {err}',
@@ -2552,6 +2562,10 @@ const LANG = {
     // Bags
     // Batch page
     'batch.allBatches': 'Todos os lotes',
+    'batch.filterActive': 'Ativos',
+    'batch.filterArchived': 'Arquivados',
+    'batch.filterAll': 'Todos',
+    'batch.filterArchiveAria': 'Filtrar por status de arquivo',
     'batch.newBatch': 'Novo lote',
     'batch.harvests': 'Colheitas',
     'batch.createNew': 'Criar novo lote',
@@ -2559,7 +2573,8 @@ const LANG = {
     'batch.qty': 'Qtd (sacos)',
     'batch.incDays': 'Dias de incuba\u00e7\u00e3o',
     'batch.grainRh': 'Teor de \u00e1gua (%)',
-    'batch.grainRhHint': '\u00c1gua adicionada durante a hidrata\u00e7\u00e3o \u2014 apenas gr\u00e3o seco \u00e9 deduzido do estoque',
+    'batch.grainRhHint':
+      '\u00c1gua adicionada durante a hidrata\u00e7\u00e3o \u2014 apenas gr\u00e3o seco \u00e9 deduzido do estoque',
     'batch.substrate': 'Substrato (opcional)',
     'batch.hardwood': 'Madeira dura %',
     'batch.wheatBran': 'Farelo de trigo %',
@@ -2590,7 +2605,8 @@ const LANG = {
     'batch.deleteMsg': 'Exclui permanentemente o registro do lote. Log de scan e colheitas permanecem.',
     'batch.deleteBtn': 'Excluir lote',
     'batch.enterWeight': 'Insira o peso do saco',
-    'batch.substrateExceeds': 'A composi\u00e7\u00e3o do substrato excede 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
+    'batch.substrateExceeds':
+      'A composi\u00e7\u00e3o do substrato excede 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
     'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
     'batch.inStock': 'Em estoque:',
     'batch.sufficient': 'suficiente',
@@ -3349,8 +3365,7 @@ const LANG = {
     'printer.setupTitle': 'Configurar bridge (PC Windows)',
     'printer.setupIntro':
       'Execute uma vez no PC Windows onde a Zebra est\u00e1 conectada. O bridge ent\u00e3o roda em segundo plano ap\u00f3s cada login.',
-    'printer.step1':
-      'Baixe print-bridge.ps1 no PC Windows, ex. para C:\\meistertracker-bridge\\.',
+    'printer.step1': 'Baixe print-bridge.ps1 no PC Windows, ex. para C:\\meistertracker-bridge\\.',
     'printer.step2':
       'Abra PowerShell no PC Windows e execute o instalador. UAC pedir\u00e1 direitos admin \u2014 aceite. Configura URL ACL, regra de firewall, tarefa agendada, e inicia o bridge.',
     'printer.step3':
@@ -3524,7 +3539,8 @@ const LANG = {
     // Camera
     'assets.gwg': 'GWG (\u2264 800 \u20ac)',
     'cam.permDeniedTitle': 'Permiss\u00e3o da c\u00e2mera necess\u00e1ria',
-    'cam.permDeniedHelp': 'A c\u00e2mera est\u00e1 bloqueada, ent\u00e3o o scanner n\u00e3o funciona. Para habilit\u00e1-la:\n\nNo iPhone: Ajustes \u2192 Safari \u2192 C\u00e2mera \u2192 Permitir\n\nNo Android Chrome: toque no \u00edcone de cadeado ao lado da barra de endere\u00e7os \u2192 Permiss\u00f5es \u2192 C\u00e2mera \u2192 Permitir\n\nDepois recarregue a p\u00e1gina.',
+    'cam.permDeniedHelp':
+      'A c\u00e2mera est\u00e1 bloqueada, ent\u00e3o o scanner n\u00e3o funciona. Para habilit\u00e1-la:\n\nNo iPhone: Ajustes \u2192 Safari \u2192 C\u00e2mera \u2192 Permitir\n\nNo Android Chrome: toque no \u00edcone de cadeado ao lado da barra de endere\u00e7os \u2192 Permiss\u00f5es \u2192 C\u00e2mera \u2192 Permitir\n\nDepois recarregue a p\u00e1gina.',
     'cam.notFound': 'Nenhuma c\u00e2mera encontrada.',
     'cam.inUse': 'A c\u00e2mera est\u00e1 em uso por outro aplicativo.',
     'cam.unknownError': 'Erro de c\u00e2mera: {err}',
@@ -3622,7 +3638,10 @@ function rebuildZoneConstants() {
   locColor = { ...ZONE_COLORS };
   // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
   REF_GROUPS = [
-    { g: 'Actions', items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a })) }
+    {
+      g: 'Actions',
+      items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a }))
+    }
   ];
   REF_GROUPS.push({
     g: 'Zones',
@@ -4374,13 +4393,15 @@ function openBatchAdd() {
   const bs = document.getElementById('ba-batch');
   bs.innerHTML =
     '<option value="">— choose batch —</option>' +
-    batches.map((b) => {
-      const kz = b.strainKuerzel || b.strain || '';
-      const name = b.strainName || b.species || '';
-      const st = (b.strainText || '').trim();
-      const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
-      return `<option value="${esc(b.batchId)}">${label}</option>`;
-    }).join('');
+    batches
+      .map((b) => {
+        const kz = b.strainKuerzel || b.strain || '';
+        const name = b.strainName || b.species || '';
+        const st = (b.strainText || '').trim();
+        const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+        return `<option value="${esc(b.batchId)}">${label}</option>`;
+      })
+      .join('');
   const ls = document.getElementById('ba-loc');
   ls.innerHTML = [...ZONES, ...ALL_RACKS].map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   bs.onchange = baPreview;
@@ -4541,12 +4562,13 @@ function countDueToday() {
   today.setHours(0, 0, 0, 0);
   return batches.filter((b) => {
     const { status } = getStatus(b.batchId);
-    // FRUITING is surfaced via its own "Ready to harvest" card — don't double-count it here.
-    if (status === 'DONE' || status === 'EMPTY' || status === 'FRUITING') return false;
+    // FRUITING → its own "Ready to harvest" card. CONTAM → Contamination reports flow.
+    // Both are tracked elsewhere; don't double-count them as "due today" work.
+    if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
     const due = new Date(b.due);
     due.setHours(0, 0, 0, 0);
     const dl = Math.round((due - today) / 864e5);
-    return dl <= 0 || status === 'CONTAM';
+    return dl <= 0;
   }).length;
 }
 function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
@@ -4646,7 +4668,8 @@ function renderOverviewKPIs() {
     uniqueHarvestedBags > 0 ? Math.round(harvests.reduce((s, h) => s + (h.grams || 0), 0) / uniqueHarvestedBags) : 0;
   // Period yield: avg grams per unique bag harvested in selected period
   const periodBags = new Set(periodHarvests.map((h) => h.bag));
-  const periodYield = periodBags.size > 0 ? Math.round(periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / periodBags.size) : 0;
+  const periodYield =
+    periodBags.size > 0 ? Math.round(periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / periodBags.size) : 0;
   const yieldDelta = avgYield > 0 && periodYield > 0 ? periodYield - avgYield : null;
   let yieldSub = t('dash.ov.perBag');
   if (periodYield > 0) {
@@ -4746,42 +4769,36 @@ function renderOverviewKPIs() {
       '#faf0e6'
     ),
     card(iconFlush, flush2Plus || '0', t('dash.ov.flush2Plus'), t('dash.ov.bagsOnSecondFlush'), '#3a7d7b', '#e6f2f1'),
-    card(
-      iconYield,
-      avgYield > 0 ? avgYield + 'g' : '—',
-      t('dash.ov.avgYield'),
-      yieldSub,
-      '#5a8a32',
-      '#eef4e5'
-    )
+    card(iconYield, avgYield > 0 ? avgYield + 'g' : '—', t('dash.ov.avgYield'), yieldSub, '#5a8a32', '#eef4e5')
   ].join('');
 
-  if (substratesEl) substratesEl.innerHTML = [
-    card(
-      iconGrain,
-      grainUsed > 0 ? fmtKg(grainUsed) : '—',
-      t('dash.ov.grainUsed'),
-      t('dash.ov.fromBatches'),
-      '#6b7c3f',
-      '#f0f2e6'
-    ),
-    card(
-      iconSubstrate,
-      hardwoodUsed > 0 ? fmtKg(hardwoodUsed) : '—',
-      t('dash.ov.hardwoodUsed'),
-      t('dash.ov.fromBatches'),
-      '#8b5e3c',
-      '#f5ede6'
-    ),
-    card(
-      iconSubstrate,
-      wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
-      t('dash.ov.wheatbranUsed'),
-      t('dash.ov.fromBatches'),
-      '#c9a227',
-      '#faf5e0'
-    )
-  ].join('');
+  if (substratesEl)
+    substratesEl.innerHTML = [
+      card(
+        iconGrain,
+        grainUsed > 0 ? fmtKg(grainUsed) : '—',
+        t('dash.ov.grainUsed'),
+        t('dash.ov.fromBatches'),
+        '#6b7c3f',
+        '#f0f2e6'
+      ),
+      card(
+        iconSubstrate,
+        hardwoodUsed > 0 ? fmtKg(hardwoodUsed) : '—',
+        t('dash.ov.hardwoodUsed'),
+        t('dash.ov.fromBatches'),
+        '#8b5e3c',
+        '#f5ede6'
+      ),
+      card(
+        iconSubstrate,
+        wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
+        t('dash.ov.wheatbranUsed'),
+        t('dash.ov.fromBatches'),
+        '#c9a227',
+        '#faf5e0'
+      )
+    ].join('');
 
   qualEl.innerHTML = [
     card(
@@ -4805,7 +4822,10 @@ function renderOverviewKPIs() {
   renderOverviewCharts(periodStart);
 }
 
-let ovChartHarvestInst = null, ovChartSpeciesInst = null, ovChartSubstrateInst = null, ovChartBagsInst = null;
+let ovChartHarvestInst = null,
+  ovChartSpeciesInst = null,
+  ovChartSubstrateInst = null,
+  ovChartBagsInst = null;
 
 function renderOverviewCharts(periodStart) {
   const nowDate = new Date();
@@ -4818,7 +4838,10 @@ function renderOverviewCharts(periodStart) {
       // Full week Mon–Sun (7 days)
       const days = [];
       const cur = new Date(periodStart);
-      for (let i = 0; i < 7; i++) { days.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+      for (let i = 0; i < 7; i++) {
+        days.push(localDateStr(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
       const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
       return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => localDateStr(d) };
     }
@@ -4827,12 +4850,19 @@ function renderOverviewCharts(periodStart) {
       const days = [];
       const cur = new Date(periodStart);
       const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
-      while (cur <= lastDay) { days.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+      while (cur <= lastDay) {
+        days.push(localDateStr(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
       return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => localDateStr(d) };
     }
     // year — monthly buckets Jan–Dec
     const mKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
-    return { keys: mKeys, label: (k) => monthNames[parseInt(k.split('-')[1]) - 1], groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` };
+    return {
+      keys: mKeys,
+      label: (k) => monthNames[parseInt(k.split('-')[1]) - 1],
+      groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    };
   }
   const { keys, label, groupKey } = buildTimeBuckets();
 
@@ -4860,8 +4890,14 @@ function renderOverviewCharts(periodStart) {
   const c1 = document.getElementById('ov-chart-harvest');
   if (c1) {
     const harvestMap = {};
-    periodHarvests.forEach((h) => { const k = groupKey(new Date(h.time)); harvestMap[k] = (harvestMap[k] || 0) + (h.grams || 0); });
-    if (ovChartHarvestInst) { ovChartHarvestInst.destroy(); ovChartHarvestInst = null; }
+    periodHarvests.forEach((h) => {
+      const k = groupKey(new Date(h.time));
+      harvestMap[k] = (harvestMap[k] || 0) + (h.grams || 0);
+    });
+    if (ovChartHarvestInst) {
+      ovChartHarvestInst.destroy();
+      ovChartHarvestInst = null;
+    }
     const ctx = c1.getContext('2d');
     const grad = ctx.createLinearGradient(0, 0, 0, 180);
     grad.addColorStop(0, 'rgba(194,112,62,0.25)');
@@ -4871,19 +4907,23 @@ function renderOverviewCharts(periodStart) {
       type: useBar ? 'bar' : 'line',
       data: {
         labels: keys.map((k, i) => label(k, i)),
-        datasets: [{
-          data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
-          fill: !useBar,
-          backgroundColor: useBar
-            ? keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#c2703e' : 'rgba(194,112,62,0.55)')
-            : grad,
-          borderColor: '#c2703e',
-          borderWidth: 2,
-          pointRadius: keys.length > 20 ? 0 : 3,
-          pointBackgroundColor: '#c2703e',
-          borderRadius: useBar ? 6 : 0,
-          tension: 0.35
-        }]
+        datasets: [
+          {
+            data: keys.map((k) => +((harvestMap[k] || 0) / 1000).toFixed(2)),
+            fill: !useBar,
+            backgroundColor: useBar
+              ? keys.map((k, i) =>
+                  ovPeriod === 'year' && i === nowDate.getMonth() ? '#c2703e' : 'rgba(194,112,62,0.55)'
+                )
+              : grad,
+            borderColor: '#c2703e',
+            borderWidth: 2,
+            pointRadius: keys.length > 20 ? 0 : 3,
+            pointBackgroundColor: '#c2703e',
+            borderRadius: useBar ? 6 : 0,
+            tension: 0.35
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -4900,21 +4940,29 @@ function renderOverviewCharts(periodStart) {
   const c2 = document.getElementById('ov-chart-species');
   if (c2) {
     const bySpecies = {};
-    periodHarvests.forEach((h) => { bySpecies[h.species] = (bySpecies[h.species] || 0) + (h.grams || 0); });
+    periodHarvests.forEach((h) => {
+      bySpecies[h.species] = (bySpecies[h.species] || 0) + (h.grams || 0);
+    });
     const spLabels = Object.keys(bySpecies);
     const spData = spLabels.map((s) => bySpecies[s] / 1000);
-    if (ovChartSpeciesInst) { ovChartSpeciesInst.destroy(); ovChartSpeciesInst = null; }
+    if (ovChartSpeciesInst) {
+      ovChartSpeciesInst.destroy();
+      ovChartSpeciesInst = null;
+    }
     if (!spLabels.length) {
       const ctx = c2.getContext('2d');
       ctx.clearRect(0, 0, c2.width, c2.height);
-      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '12px system-ui';
+      ctx.textAlign = 'center';
       ctx.fillText(t('harvest.noData'), c2.width / 2, 80);
     } else {
       const fmtKg = (v) => Math.round(v * 100) / 100 + 'kg';
       const ctx = c2.getContext('2d');
       const bgColors = spLabels.map((s) => {
         const g = ctx.createLinearGradient(0, 0, 0, c2.clientHeight || 180);
-        g.addColorStop(0, spColor(s) + 'ee'); g.addColorStop(1, spColor(s) + '55');
+        g.addColorStop(0, spColor(s) + 'ee');
+        g.addColorStop(1, spColor(s) + '55');
         return g;
       });
       const dataLabelPlugin = {
@@ -4924,20 +4972,42 @@ function renderOverviewCharts(periodStart) {
           chart.getDatasetMeta(0).data.forEach((bar, i) => {
             const val = data.datasets[0].data[i];
             if (!val) return;
-            cc.save(); cc.fillStyle = '#475569'; cc.font = 'bold 11px system-ui';
-            cc.textAlign = 'center'; cc.textBaseline = 'bottom';
-            cc.fillText(fmtKg(val), bar.x, bar.y - 4); cc.restore();
+            cc.save();
+            cc.fillStyle = '#475569';
+            cc.font = 'bold 11px system-ui';
+            cc.textAlign = 'center';
+            cc.textBaseline = 'bottom';
+            cc.fillText(fmtKg(val), bar.x, bar.y - 4);
+            cc.restore();
           });
         }
       };
       ovChartSpeciesInst = new Chart(c2, {
-        type: 'bar', plugins: [dataLabelPlugin],
-        data: { labels: spLabels, datasets: [{ data: spData, backgroundColor: bgColors, borderColor: spLabels.map((s) => spColor(s)), borderWidth: 1.5, borderRadius: 8, borderSkipped: false }] },
+        type: 'bar',
+        plugins: [dataLabelPlugin],
+        data: {
+          labels: spLabels,
+          datasets: [
+            {
+              data: spData,
+              backgroundColor: bgColors,
+              borderColor: spLabels.map((s) => spColor(s)),
+              borderWidth: 1.5,
+              borderRadius: 8,
+              borderSkipped: false
+            }
+          ]
+        },
         options: {
-          responsive: true, layout: { padding: { top: 22 } },
+          responsive: true,
+          layout: { padding: { top: 22 } },
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtKg(c.parsed.y) } } },
           scales: {
-            y: { ticks: { callback: (v) => fmtKg(v), color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+            y: {
+              ticks: { callback: (v) => fmtKg(v), color: '#94a3b8' },
+              grid: { color: '#e2e8f0' },
+              beginAtZero: true
+            },
             x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
           }
         }
@@ -4948,7 +5018,9 @@ function renderOverviewCharts(periodStart) {
   // ── 3. Substrate usage ───────────────────────────────────
   const c3 = document.getElementById('ov-chart-substrate');
   if (c3) {
-    const hwMap = {}, wbMap = {}, grMap = {};
+    const hwMap = {},
+      wbMap = {},
+      grMap = {};
     (inventory.log || []).forEach((e) => {
       if (e.type !== 'batch') return;
       if (e.mat !== 'hardwood' && e.mat !== 'wheatbran' && e.mat !== 'grain') return;
@@ -4975,11 +5047,16 @@ function renderOverviewCharts(periodStart) {
       subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap), ...Object.keys(grMap)])].sort();
       subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
     }
-    if (ovChartSubstrateInst) { ovChartSubstrateInst.destroy(); ovChartSubstrateInst = null; }
+    if (ovChartSubstrateInst) {
+      ovChartSubstrateInst.destroy();
+      ovChartSubstrateInst = null;
+    }
     if (!subKeys.length) {
       const ctx = c3.getContext('2d');
       ctx.clearRect(0, 0, c3.width, c3.height);
-      ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '12px system-ui';
+      ctx.textAlign = 'center';
       ctx.fillText(t('dash.noHarvestData'), c3.width / 2, 60);
     } else {
       ovChartSubstrateInst = new Chart(c3, {
@@ -4987,16 +5064,38 @@ function renderOverviewCharts(periodStart) {
         data: {
           labels: subLabels,
           datasets: [
-            { label: t('dash.ov.grain'), data: subKeys.map((k) => +(grMap[k] || 0).toFixed(1)), backgroundColor: '#6b7c3f', borderRadius: 5 },
-            { label: t('dash.ov.hardwood'), data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)), backgroundColor: '#8b5e3c', borderRadius: 5 },
-            { label: t('dash.ov.wheatbran'), data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)), backgroundColor: '#c9a227', borderRadius: 5 }
+            {
+              label: t('dash.ov.grain'),
+              data: subKeys.map((k) => +(grMap[k] || 0).toFixed(1)),
+              backgroundColor: '#6b7c3f',
+              borderRadius: 5
+            },
+            {
+              label: t('dash.ov.hardwood'),
+              data: subKeys.map((k) => +(hwMap[k] || 0).toFixed(1)),
+              backgroundColor: '#8b5e3c',
+              borderRadius: 5
+            },
+            {
+              label: t('dash.ov.wheatbran'),
+              data: subKeys.map((k) => +(wbMap[k] || 0).toFixed(1)),
+              backgroundColor: '#c9a227',
+              borderRadius: 5
+            }
           ]
         },
         options: {
           responsive: true,
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } } },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'kg' } }
+          },
           scales: {
-            y: { ticks: { callback: (v) => v + 'kg', color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
+            y: {
+              ticks: { callback: (v) => v + 'kg', color: '#94a3b8' },
+              grid: { color: '#e2e8f0' },
+              beginAtZero: true
+            },
             x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
           }
         }
@@ -5008,24 +5107,36 @@ function renderOverviewCharts(periodStart) {
   const c4 = document.getElementById('ov-chart-bags');
   if (c4) {
     const bagMap = {};
-    batches.filter((b) => new Date(b.created) >= periodStart).forEach((b) => {
-      const k = groupKey(new Date(b.created));
-      bagMap[k] = (bagMap[k] || 0) + (b.qty || 0);
-    });
-    if (ovChartBagsInst) { ovChartBagsInst.destroy(); ovChartBagsInst = null; }
+    batches
+      .filter((b) => new Date(b.created) >= periodStart)
+      .forEach((b) => {
+        const k = groupKey(new Date(b.created));
+        bagMap[k] = (bagMap[k] || 0) + (b.qty || 0);
+      });
+    if (ovChartBagsInst) {
+      ovChartBagsInst.destroy();
+      ovChartBagsInst = null;
+    }
     ovChartBagsInst = new Chart(c4, {
       type: 'bar',
       data: {
         labels: keys.map((k, i) => label(k, i)),
-        datasets: [{
-          data: keys.map((k) => bagMap[k] || 0),
-          backgroundColor: keys.map((k, i) => ovPeriod === 'year' && i === nowDate.getMonth() ? '#2d6a4f' : 'rgba(45,106,79,0.55)'),
-          borderRadius: 6
-        }]
+        datasets: [
+          {
+            data: keys.map((k) => bagMap[k] || 0),
+            backgroundColor: keys.map((k, i) =>
+              ovPeriod === 'year' && i === nowDate.getMonth() ? '#2d6a4f' : 'rgba(45,106,79,0.55)'
+            ),
+            borderRadius: 6
+          }
+        ]
       },
       options: {
         responsive: true,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => c.parsed.y + ' ' + t('dash.ov.bags') } }
+        },
         scales: {
           y: { ticks: { color: '#94a3b8' }, grid: { color: '#e2e8f0' }, beginAtZero: true },
           x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 14 }, grid: { display: false } }
@@ -5096,9 +5207,11 @@ function renderKpiHistory() {
 
   // Build lookup + fixed date keys so x-axis always covers the full period
   const snapshotMap = {};
-  filtered.forEach((s) => { snapshotMap[s.date] = s; });
+  filtered.forEach((s) => {
+    snapshotMap[s.date] = s;
+  });
 
-  let histKeys = [];  // date keys for x-axis
+  let histKeys = []; // date keys for x-axis
   let histLabels = []; // display labels
   if (ovPeriod === 'week') {
     // Mon–Sun (7 days)
@@ -5126,14 +5239,19 @@ function renderKpiHistory() {
     }
     // Build monthly lookup: last snapshot of each month
     const monthSnap = {};
-    filtered.forEach((s) => { const mk = s.date.slice(0, 7); monthSnap[mk] = s; });
+    filtered.forEach((s) => {
+      const mk = s.date.slice(0, 7);
+      monthSnap[mk] = s;
+    });
     // Override snapshotMap for monthly access
-    histKeys.forEach((mk) => { if (monthSnap[mk]) snapshotMap[mk] = monthSnap[mk]; });
+    histKeys.forEach((mk) => {
+      if (monthSnap[mk]) snapshotMap[mk] = monthSnap[mk];
+    });
   }
 
   const snapVal = (key, field) => {
     const s = snapshotMap[key];
-    return s ? (s[field] || 0) : null;
+    return s ? s[field] || 0 : null;
   };
 
   const chartOpts = (yLabel, cb, extraOpts) => ({
@@ -5141,27 +5259,41 @@ function renderKpiHistory() {
     plugins: {
       legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
       tooltip: { callbacks: { label: cb || undefined } },
-      ...(extraOpts && extraOpts.plugins || {})
+      ...((extraOpts && extraOpts.plugins) || {})
     },
     scales: {
-      y: { ticks: { color: '#94a3b8', callback: (v) => v + yLabel }, grid: { color: '#e2e8f0' }, beginAtZero: true,
-        ...(extraOpts && extraOpts.yMax ? { max: extraOpts.yMax } : {}) },
-      x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 9 } }, grid: { display: false },
-        ...(extraOpts && extraOpts.xStacked ? { stacked: true } : {}) }
+      y: {
+        ticks: { color: '#94a3b8', callback: (v) => v + yLabel },
+        grid: { color: '#e2e8f0' },
+        beginAtZero: true,
+        ...(extraOpts && extraOpts.yMax ? { max: extraOpts.yMax } : {})
+      },
+      x: {
+        ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 9 } },
+        grid: { display: false },
+        ...(extraOpts && extraOpts.xStacked ? { stacked: true } : {})
+      }
     }
   });
   const lineDs = (label, data, color, fill) => ({
-    label, data,
+    label,
+    data,
     borderColor: color,
     backgroundColor: fill || color + '33',
-    tension: 0.35, pointRadius: 2, pointBackgroundColor: color,
-    fill: !!fill, spanGaps: true
+    tension: 0.35,
+    pointRadius: 2,
+    pointBackgroundColor: color,
+    fill: !!fill,
+    spanGaps: true
   });
 
   // 1. Harvest chart
   const c1 = document.getElementById('ov-history-harvest-chart');
   if (c1) {
-    if (ovHistHarvestInst) { ovHistHarvestInst.destroy(); ovHistHarvestInst = null; }
+    if (ovHistHarvestInst) {
+      ovHistHarvestInst.destroy();
+      ovHistHarvestInst = null;
+    }
     ovHistHarvestInst = new Chart(c1, {
       type: 'line',
       data: {
@@ -5169,8 +5301,12 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.harvestThisWeek'),
-            histKeys.map((k) => { const v = snapVal(k, 'harvest_kg'); return v !== null ? +v.toFixed(2) : null; }),
-            '#c2703e', 'rgba(194,112,62,0.10)'
+            histKeys.map((k) => {
+              const v = snapVal(k, 'harvest_kg');
+              return v !== null ? +v.toFixed(2) : null;
+            }),
+            '#c2703e',
+            'rgba(194,112,62,0.10)'
           )
         ]
       },
@@ -5181,14 +5317,25 @@ function renderKpiHistory() {
   // 2. Pipeline chart — stacked area showing bag counts through stages
   const c3 = document.getElementById('ov-history-pipeline-chart');
   if (c3) {
-    if (ovHistPipelineInst) { ovHistPipelineInst.destroy(); ovHistPipelineInst = null; }
+    if (ovHistPipelineInst) {
+      ovHistPipelineInst.destroy();
+      ovHistPipelineInst = null;
+    }
     const pipeStages = ['bags_spawn', 'bags_incubation', 'bags_fruiting', 'bags_contaminated'];
-    const pipeFills = ['rgba(124,82,149,0.45)', 'rgba(74,127,165,0.45)', 'rgba(61,122,74,0.45)', 'rgba(176,80,64,0.25)'];
+    const pipeFills = [
+      'rgba(124,82,149,0.45)',
+      'rgba(74,127,165,0.45)',
+      'rgba(61,122,74,0.45)',
+      'rgba(176,80,64,0.25)'
+    ];
     const pipeBorders = ['#7c5295', '#4a7fa5', '#3d7a4a', '#b05040'];
     const pipeNames = [t('dash.ov.spawn'), t('dash.ov.incubation'), t('dash.ov.fruiting'), t('dash.ov.contaminated')];
     // Compute absolute bag counts + total line
     const pipeAbsData = pipeStages.map((stage) =>
-      histKeys.map((k) => { const s = snapshotMap[k]; return s ? (s[stage] || 0) : null; })
+      histKeys.map((k) => {
+        const s = snapshotMap[k];
+        return s ? s[stage] || 0 : null;
+      })
     );
     const totalData = histKeys.map((k) => {
       const s = snapshotMap[k];
@@ -5255,7 +5402,10 @@ function renderKpiHistory() {
   // 4. Contamination rate chart
   const c4 = document.getElementById('ov-history-contam-chart');
   if (c4) {
-    if (ovHistContamInst) { ovHistContamInst.destroy(); ovHistContamInst = null; }
+    if (ovHistContamInst) {
+      ovHistContamInst.destroy();
+      ovHistContamInst = null;
+    }
     ovHistContamInst = new Chart(c4, {
       type: 'line',
       data: {
@@ -5263,8 +5413,12 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.contamRate'),
-            histKeys.map((k) => { const v = snapVal(k, 'contam_rate_pct'); return v !== null ? +v.toFixed(1) : null; }),
-            '#b05040', 'rgba(176,80,64,0.08)'
+            histKeys.map((k) => {
+              const v = snapVal(k, 'contam_rate_pct');
+              return v !== null ? +v.toFixed(1) : null;
+            }),
+            '#b05040',
+            'rgba(176,80,64,0.08)'
           )
         ]
       },
@@ -5275,7 +5429,10 @@ function renderKpiHistory() {
   // 5. Stock levels chart
   const c5 = document.getElementById('ov-history-stock-chart');
   if (c5) {
-    if (ovHistStockInst) { ovHistStockInst.destroy(); ovHistStockInst = null; }
+    if (ovHistStockInst) {
+      ovHistStockInst.destroy();
+      ovHistStockInst = null;
+    }
     ovHistStockInst = new Chart(c5, {
       type: 'line',
       data: {
@@ -5283,17 +5440,26 @@ function renderKpiHistory() {
         datasets: [
           lineDs(
             t('dash.ov.hardwoodUsed').replace(/ .*/, ''),
-            histKeys.map((k) => { const v = snapVal(k, 'stock_hardwood_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            histKeys.map((k) => {
+              const v = snapVal(k, 'stock_hardwood_kg');
+              return v !== null ? +v.toFixed(1) : null;
+            }),
             '#8b5e3c'
           ),
           lineDs(
             t('dash.ov.wheatbranUsed').replace(/ .*/, ''),
-            histKeys.map((k) => { const v = snapVal(k, 'stock_wheatbran_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            histKeys.map((k) => {
+              const v = snapVal(k, 'stock_wheatbran_kg');
+              return v !== null ? +v.toFixed(1) : null;
+            }),
             '#c9a227'
           ),
           lineDs(
             t('dash.ov.grain'),
-            histKeys.map((k) => { const v = snapVal(k, 'stock_grain_kg'); return v !== null ? +v.toFixed(1) : null; }),
+            histKeys.map((k) => {
+              const v = snapVal(k, 'stock_grain_kg');
+              return v !== null ? +v.toFixed(1) : null;
+            }),
             '#6b7c3f'
           )
         ]
@@ -5466,7 +5632,9 @@ function exportOverviewCSV() {
   const bagsCreated = batches.filter((b) => new Date(b.created) >= periodStart).reduce((s, b) => s + (b.qty || 0), 0);
 
   // Materials
-  let grainUsed = 0, hardwoodUsed = 0, wheatbranUsed = 0;
+  let grainUsed = 0,
+    hardwoodUsed = 0,
+    wheatbranUsed = 0;
   (inventory.log || []).forEach((e) => {
     if (e.type !== 'batch' || new Date(e.time) < periodStart) return;
     if (e.mat === 'grain') grainUsed += Math.abs(e.deltaKg || 0);
@@ -5497,18 +5665,20 @@ function exportOverviewCSV() {
   rows.push([]);
   rows.push(['KPI', 'Value']);
   rows.push(['Bags created', bagsCreated]);
-  rows.push(['Grain used (kg)', +(grainUsed).toFixed(2)]);
-  rows.push(['Harvest (kg)', +(harvestKg).toFixed(2)]);
-  rows.push(['Hardwood used (kg)', +(hardwoodUsed).toFixed(2)]);
-  rows.push(['Wheat bran used (kg)', +(wheatbranUsed).toFixed(2)]);
+  rows.push(['Grain used (kg)', +grainUsed.toFixed(2)]);
+  rows.push(['Harvest (kg)', +harvestKg.toFixed(2)]);
+  rows.push(['Hardwood used (kg)', +hardwoodUsed.toFixed(2)]);
+  rows.push(['Wheat bran used (kg)', +wheatbranUsed.toFixed(2)]);
   rows.push(['Harvests logged', periodHarvests.length]);
   rows.push([]);
 
   // Harvest by species
   rows.push(['Harvest by species', 'kg']);
-  Object.keys(bySpecies).sort().forEach((sp) => {
-    rows.push([sp, +(bySpecies[sp] / 1000).toFixed(2)]);
-  });
+  Object.keys(bySpecies)
+    .sort()
+    .forEach((sp) => {
+      rows.push([sp, +(bySpecies[sp] / 1000).toFixed(2)]);
+    });
   rows.push([]);
 
   // Harvest by day
@@ -5527,21 +5697,46 @@ function exportOverviewCSV() {
     if (snaps.length) {
       rows.push([]);
       rows.push(['KPI History (daily snapshots)']);
-      rows.push(['Date', 'Bags created', 'Harvest (kg)', 'Grain (kg)', 'Hardwood (kg)', 'Wheat bran (kg)', 'Contam rate (%)', 'Spawn', 'Incubation', 'Fruiting', 'Contaminated', 'Stock HW (kg)', 'Stock WB (kg)', 'Stock Grain (kg)']);
+      rows.push([
+        'Date',
+        'Bags created',
+        'Harvest (kg)',
+        'Grain (kg)',
+        'Hardwood (kg)',
+        'Wheat bran (kg)',
+        'Contam rate (%)',
+        'Spawn',
+        'Incubation',
+        'Fruiting',
+        'Contaminated',
+        'Stock HW (kg)',
+        'Stock WB (kg)',
+        'Stock Grain (kg)'
+      ]);
       snaps.forEach((s) => {
         rows.push([
           fmtDtShort(s.date) + '.' + s.date.slice(0, 4),
-          s.bags_created || 0, +(s.harvest_kg || 0).toFixed(2), +(s.grain_used_kg || 0).toFixed(2),
-          +(s.hardwood_used_kg || 0).toFixed(2), +(s.wheatbran_used_kg || 0).toFixed(2),
+          s.bags_created || 0,
+          +(s.harvest_kg || 0).toFixed(2),
+          +(s.grain_used_kg || 0).toFixed(2),
+          +(s.hardwood_used_kg || 0).toFixed(2),
+          +(s.wheatbran_used_kg || 0).toFixed(2),
           +(s.contam_rate_pct || 0).toFixed(1),
-          s.bags_spawn || 0, s.bags_incubation || 0, s.bags_fruiting || 0, s.bags_contaminated || 0,
-          +(s.stock_hardwood_kg || 0).toFixed(1), +(s.stock_wheatbran_kg || 0).toFixed(1), +(s.stock_grain_kg || 0).toFixed(1)
+          s.bags_spawn || 0,
+          s.bags_incubation || 0,
+          s.bags_fruiting || 0,
+          s.bags_contaminated || 0,
+          +(s.stock_hardwood_kg || 0).toFixed(1),
+          +(s.stock_wheatbran_kg || 0).toFixed(1),
+          +(s.stock_grain_kg || 0).toFixed(1)
         ]);
       });
     }
   }
 
-  const csv = '\uFEFF' + rows.map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const csv =
+    '\uFEFF' +
+    rows.map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -5595,8 +5790,7 @@ function renderStatus() {
     const harv = getHarvested(b.batchId);
     const due = new Date(b.due);
     const ov =
-      isBatchOverdue(b) &&
-      zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
+      isBatchOverdue(b) && zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
     return { b, c, total, status, harv, due, ov };
   });
 
@@ -6132,8 +6326,6 @@ function renderDashBatchTasks() {
     const id = esc(tk.batchId);
     if (tk.taskAction === 'move')
       return `<button class="btn btn-sm btn-p" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
-    if (tk.taskAction === 'discard')
-      return `<button class="btn btn-sm btn-r" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('status.action.discard')}</button>`;
     return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
   }
   el.innerHTML = shown.length
@@ -6180,14 +6372,15 @@ const BATCH_ATTENTION_PRESETS = {
     labelKey: 'alert.filterDueToday',
     pred: (b) => {
       const { status } = getStatus(b.batchId);
-      // Must match countDueToday — fruiting is handled by Ready-to-harvest.
-      if (status === 'DONE' || status === 'EMPTY' || status === 'FRUITING') return false;
+      // Must match countDueToday — FRUITING/CONTAM are tracked elsewhere
+      // (Ready-to-harvest / Contamination reports), not as due-today work.
+      if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const due = new Date(b.due);
       due.setHours(0, 0, 0, 0);
       const dl = Math.round((due - today) / 864e5);
-      return dl <= 0 || status === 'CONTAM';
+      return dl <= 0;
     }
   },
   overdue: {
@@ -6280,9 +6473,7 @@ function buildHarvestTasks() {
         zoneCounts[z] = (zoneCounts[z] || 0) + 1;
       });
       const zoneIds = Object.keys(zoneCounts).sort((a, z) => zoneCounts[z] - zoneCounts[a]);
-      const zoneLabel = zoneIds.length
-        ? zoneIds.map((z) => zoneDisplayName(z)).join(', ')
-        : '\u2014';
+      const zoneLabel = zoneIds.length ? zoneIds.map((z) => zoneDisplayName(z)).join(', ') : '\u2014';
       const harvTotal = harvests.filter((h) => h.batch === b.batchId).reduce((s, h) => s + (h.grams || 0), 0);
       return {
         batchId: b.batchId,
@@ -6311,13 +6502,18 @@ function renderDashHarvestTasks() {
     return;
   }
   card.style.display = '';
-  if (countEl) countEl.textContent = tp('dash.bags', tasks.reduce((s, t) => s + t.activeBags, 0));
+  if (countEl)
+    countEl.textContent = tp(
+      'dash.bags',
+      tasks.reduce((s, t) => s + t.activeBags, 0)
+    );
   el.innerHTML = tasks
     .map((tk) => {
       const id = esc(tk.batchId);
-      const harvested = tk.harvTotal > 0
-        ? ` \u00b7 <span style="color:var(--c-amber-dark);font-weight:500">${tk.harvTotal}g</span>`
-        : '';
+      const harvested =
+        tk.harvTotal > 0
+          ? ` \u00b7 <span style="color:var(--c-amber-dark);font-weight:500">${tk.harvTotal}g</span>`
+          : '';
       return (
         '<div class="todo-row" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
         spColor(tk.species) +
@@ -6811,12 +7007,21 @@ function createBatch() {
     const _stock = inventory.stock || {};
     const _shortages = [];
     if (_hwUsed > (_stock.hardwood || 0))
-      _shortages.push('Hardwood: ' + (_stock.hardwood || 0).toFixed(1) + ' kg vorhanden, ' + _hwUsed.toFixed(1) + ' kg nötig');
+      _shortages.push(
+        'Hardwood: ' + (_stock.hardwood || 0).toFixed(1) + ' kg vorhanden, ' + _hwUsed.toFixed(1) + ' kg nötig'
+      );
     if (_wbUsed > (_stock.wheatbran || 0))
-      _shortages.push('Wheat bran: ' + (_stock.wheatbran || 0).toFixed(1) + ' kg vorhanden, ' + _wbUsed.toFixed(1) + ' kg nötig');
+      _shortages.push(
+        'Wheat bran: ' + (_stock.wheatbran || 0).toFixed(1) + ' kg vorhanden, ' + _wbUsed.toFixed(1) + ' kg nötig'
+      );
     if (_gypUsed > (_stock.gypsum || 0))
-      _shortages.push('Gypsum: ' + (_stock.gypsum || 0).toFixed(1) + ' kg vorhanden, ' + _gypUsed.toFixed(1) + ' kg nötig');
-    if (_shortages.length && !window.confirm(t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'))) {
+      _shortages.push(
+        'Gypsum: ' + (_stock.gypsum || 0).toFixed(1) + ' kg vorhanden, ' + _gypUsed.toFixed(1) + ' kg nötig'
+      );
+    if (
+      _shortages.length &&
+      !window.confirm(t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'))
+    ) {
       return;
     }
   }
@@ -7231,9 +7436,20 @@ function updateSortIndicators(table, activeState) {
 // log-derived status). When it matches the last render, we skip the
 // rebuild entirely.
 let _rbLastRenderFp = null;
+// Archived = terminal/wrapped-up states. CONTAM lands here once bags are moved
+// to the contam zone (worker has acted; resolution is tracked in Contamination
+// reports). DONE/EMPTY = no active bags left. Pipeline KPIs still count these
+// — only the Batches list view filters them out by default.
+const ARCHIVED_STATUSES = ['DONE', 'EMPTY', 'CONTAM'];
+const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
+
 function renderBatches() {
   const q = (document.getElementById('batch-q').value || '').toLowerCase(),
     body = document.getElementById('batches-body');
+  // Archive filter: 'active' (default) hides DONE/EMPTY/CONTAM, 'archived' shows
+  // only those, 'all' shows everything. A search query bypasses the filter so
+  // direct lookups (incl. goToBatch) always find the batch regardless of state.
+  const archiveFilter = document.getElementById('batch-archive-filter')?.value || 'active';
   updateSortIndicators('batches', tableSort.batches);
   renderBatchAttentionBanner();
   if (!batches.length) {
@@ -7243,15 +7459,23 @@ function renderBatches() {
     }
     return;
   }
-  const filtered = batches.filter(
-    (b) =>
-      (!q ||
-        b.batchId.toLowerCase().includes(q) ||
-        (b.species || '').toLowerCase().includes(q) ||
-        (b.strain || '').toLowerCase().includes(q) ||
-        (b.strainName || '').toLowerCase().includes(q)) &&
-      (!batchAttentionFilter || batchAttentionFilter.pred(b))
-  );
+  const filtered = batches.filter((b) => {
+    const matchesQ =
+      !q ||
+      b.batchId.toLowerCase().includes(q) ||
+      (b.species || '').toLowerCase().includes(q) ||
+      (b.strain || '').toLowerCase().includes(q) ||
+      (b.strainName || '').toLowerCase().includes(q);
+    if (!matchesQ) return false;
+    if (batchAttentionFilter && !batchAttentionFilter.pred(b)) return false;
+    // Skip archive filter when searching — explicit lookup wins over the toggle.
+    if (!q && archiveFilter !== 'all') {
+      const archived = isArchivedStatus(getStatus(b.batchId).status);
+      if (archiveFilter === 'active' && archived) return false;
+      if (archiveFilter === 'archived' && !archived) return false;
+    }
+    return true;
+  });
   const sorted = applyTableSort(filtered, tableSort.batches, (b, k) => {
     if (k === 'strain') return (b.strainText || '').trim() || (!b.strainId && b.strain ? b.strain : '');
     if (k === 'status') return getStatus(b.batchId).status;
@@ -7265,6 +7489,8 @@ function renderBatches() {
     '|' +
     currentLang +
     '|' +
+    archiveFilter +
+    '|' +
     JSON.stringify(tableSort.batches || null) +
     '|' +
     (batchAttentionFilter ? batchAttentionFilter.label || 'flt' : '') +
@@ -7273,7 +7499,13 @@ function renderBatches() {
       .map((b) => {
         const s = getStatus(b.batchId).status;
         const sub = b.substrate
-          ? b.substrate.hardwood + ',' + b.substrate.wheatbran + ',' + b.substrate.rh + ',' + (b.substrate.gypsum ? 1 : 0)
+          ? b.substrate.hardwood +
+            ',' +
+            b.substrate.wheatbran +
+            ',' +
+            b.substrate.rh +
+            ',' +
+            (b.substrate.gypsum ? 1 : 0)
           : '';
         return [
           b.batchId,
@@ -7317,9 +7549,7 @@ function renderBatches() {
           ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
           : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
         const bst = (b.strainText || '').trim();
-        const strainDisplay = bst
-          ? esc(bst)
-          : (!b.strainId && b.strain ? esc(b.strain) : '—');
+        const strainDisplay = bst ? esc(bst) : !b.strainId && b.strain ? esc(b.strain) : '—';
         const canMove = status !== 'DONE';
         const moveBtn = canMove
           ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
@@ -7488,20 +7718,19 @@ function delBatch(id) {
     // Reverse inventory deductions locally
     if (b && inventory.stock) {
       // Sum per-bag weights from bagWeights map, or fall back to qty * bagKg
-      const totalBagKg = b.bagWeights && Object.keys(b.bagWeights).length
-        ? Object.values(b.bagWeights).reduce((s, w) => s + (w || (b.bagKg || 3)), 0)
-        : b.qty * (b.bagKg || 3);
+      const totalBagKg =
+        b.bagWeights && Object.keys(b.bagWeights).length
+          ? Object.values(b.bagWeights).reduce((s, w) => s + (w || b.bagKg || 3), 0)
+          : b.qty * (b.bagKg || 3);
       if (b.batchType === 'grain') {
         inventory.stock.grain = (inventory.stock.grain || 0) + totalBagKg;
       } else if (b.substrate) {
         const rh = b.substrate.rh || 0;
         const totalDryKg = rh > 0 ? totalBagKg * (1 - rh / 100) : totalBagKg;
         if (b.substrate.hardwood)
-          inventory.stock.hardwood =
-            (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
+          inventory.stock.hardwood = (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
         if (b.substrate.wheatbran)
-          inventory.stock.wheatbran =
-            (inventory.stock.wheatbran || 0) + totalDryKg * (b.substrate.wheatbran / 100);
+          inventory.stock.wheatbran = (inventory.stock.wheatbran || 0) + totalDryKg * (b.substrate.wheatbran / 100);
         if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + totalDryKg * 0.01;
       }
     }
@@ -7728,7 +7957,10 @@ function buildAutoTasks() {
   today.setHours(0, 0, 0, 0);
   batches.forEach((b) => {
     const { status, action } = getStatus(b.batchId);
-    if (status === 'DONE' || status === 'EMPTY') return;
+    // Skip terminal/archived states. FRUITING has its own Ready-to-harvest card;
+    // CONTAM is tracked via Contamination reports (resolve as Discarded/Autoclaved/etc.) \u2014
+    // once bags are in the contam zone the worker has already acted, no need to nag here.
+    if (status === 'DONE' || status === 'EMPTY' || status === 'CONTAM' || status === 'FRUITING') return;
     const due = new Date(b.due);
     due.setHours(0, 0, 0, 0);
     const dl = Math.round((due - today) / 864e5);
@@ -7753,11 +7985,6 @@ function buildAutoTasks() {
         text = `${b.batchId} \u2014 ${action}`;
         detail = t('todo.dueIn', { n: dl });
       }
-    } else if (status === 'CONTAM') {
-      text = `${b.batchId} \u2014 ${t('status.action.discard')}`;
-      detail = `${b.species}/${b.strain}`;
-      urgent = true;
-      taskAction = 'discard';
     }
     if (text) tasks.push({ text, detail, urgent, warn, species: b.species, batchId: b.batchId, taskAction });
   });
@@ -8203,9 +8430,15 @@ async function runBatchIdMigration() {
     return;
   }
   let preview = '';
-  if (renames.length) preview += '── Batches (' + renames.length + ') ──\n' + renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  if (renames.length)
+    preview += '── Batches (' + renames.length + ') ──\n' + renames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
   if (renames.length && cultureRenames.length) preview += '\n\n';
-  if (cultureRenames.length) preview += '── Cultures (' + cultureRenames.length + ') ──\n' + cultureRenames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
+  if (cultureRenames.length)
+    preview +=
+      '── Cultures (' +
+      cultureRenames.length +
+      ') ──\n' +
+      cultureRenames.map((r) => `${r.oldId}  →  ${r.newId}`).join('\n');
   if (!confirm(t('migrate.confirm') + '\n\n' + preview)) return;
   let done = 0,
     failed = 0,
@@ -8268,12 +8501,18 @@ async function runBatchIdMigration() {
     for (const { oldId, newId } of cultureRenames) {
       try {
         const r = await apiPost('/api/cultures/' + encodeURIComponent(oldId) + '/rename', { newId });
-        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        if (!r || r.error) {
+          failed++;
+          failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error'));
+          continue;
+        }
         cultures.forEach((c) => {
           if (c.id === oldId) c.id = newId;
           if (c.parentId === oldId) c.parentId = newId;
         });
-        batches.forEach((b) => { if (b.sourceId === oldId) b.sourceId = newId; });
+        batches.forEach((b) => {
+          if (b.sourceId === oldId) b.sourceId = newId;
+        });
         const bc = barcodeByEntity.get('culture:' + oldId);
         if (bc != null) {
           barcodeByEntity.delete('culture:' + oldId);
@@ -8281,7 +8520,10 @@ async function runBatchIdMigration() {
           barcodeRegistry.set(bc, { type: 'culture', id: newId });
         }
         done++;
-      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+      } catch (e) {
+        failed++;
+        failedList.push(oldId + ': ' + e.message);
+      }
     }
   } finally {
     _mutating--;
@@ -8338,19 +8580,36 @@ async function runStrainTextMigration() {
     return;
   }
   let preview = '';
-  if (batchRenames.length) preview += '── Batches (' + batchRenames.length + ') ──\n' + batchRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n') + '\n\n';
-  if (cultureRenames.length) preview += '── Cultures (' + cultureRenames.length + ') ──\n' + cultureRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n');
+  if (batchRenames.length)
+    preview +=
+      '── Batches (' +
+      batchRenames.length +
+      ') ──\n' +
+      batchRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n') +
+      '\n\n';
+  if (cultureRenames.length)
+    preview +=
+      '── Cultures (' +
+      cultureRenames.length +
+      ') ──\n' +
+      cultureRenames.map((r) => r.oldId + '  →  ' + r.newId).join('\n');
   const total = batchRenames.length + cultureRenames.length;
   if (!confirm(total + ' IDs will be renamed.\nBarcodes will NOT be changed.\n\n' + preview)) return;
 
-  let done = 0, failed = 0, failedList = [];
+  let done = 0,
+    failed = 0,
+    failedList = [];
   _mutating++;
   try {
     // Rename batches
     for (const { oldId, newId } of batchRenames) {
       try {
         const r = await apiPost('/api/batches/' + encodeURIComponent(oldId) + '/rename', { newId });
-        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        if (!r || r.error) {
+          failed++;
+          failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error'));
+          continue;
+        }
         batches.forEach((b) => {
           if (b.batchId === oldId) {
             const oldBags = b.bags || [];
@@ -8367,22 +8626,46 @@ async function runStrainTextMigration() {
             });
           }
         });
-        scanLog.forEach((e) => { if (e.batch === oldId) { e.batch = newId; if (e.bag) e.bag = e.bag.replace(oldId, newId); } });
-        movements.forEach((e) => { if (e.batch === oldId) { e.batch = newId; if (e.bag) e.bag = e.bag.replace(oldId, newId); } });
-        harvests.forEach((h) => { if (h.batch === oldId) { h.batch = newId; if (h.bag) h.bag = h.bag.replace(oldId, newId); } });
+        scanLog.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        movements.forEach((e) => {
+          if (e.batch === oldId) {
+            e.batch = newId;
+            if (e.bag) e.bag = e.bag.replace(oldId, newId);
+          }
+        });
+        harvests.forEach((h) => {
+          if (h.batch === oldId) {
+            h.batch = newId;
+            if (h.bag) h.bag = h.bag.replace(oldId, newId);
+          }
+        });
         done++;
-      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+      } catch (e) {
+        failed++;
+        failedList.push(oldId + ': ' + e.message);
+      }
     }
     // Rename cultures
     for (const { oldId, newId } of cultureRenames) {
       try {
         const r = await apiPost('/api/cultures/' + encodeURIComponent(oldId) + '/rename', { newId });
-        if (!r || r.error) { failed++; failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error')); continue; }
+        if (!r || r.error) {
+          failed++;
+          failedList.push(oldId + ': ' + ((r && r.error) || 'unknown error'));
+          continue;
+        }
         cultures.forEach((c) => {
           if (c.id === oldId) c.id = newId;
           if (c.parentId === oldId) c.parentId = newId;
         });
-        batches.forEach((b) => { if (b.sourceId === oldId) b.sourceId = newId; });
+        batches.forEach((b) => {
+          if (b.sourceId === oldId) b.sourceId = newId;
+        });
         // Update barcode registry for the culture
         const bc = barcodeByEntity.get('culture:' + oldId);
         if (bc != null) {
@@ -8391,7 +8674,10 @@ async function runStrainTextMigration() {
           barcodeRegistry.set(bc, { type: 'culture', id: newId });
         }
         done++;
-      } catch (e) { failed++; failedList.push(oldId + ': ' + e.message); }
+      } catch (e) {
+        failed++;
+        failedList.push(oldId + ': ' + e.message);
+      }
     }
   } finally {
     _mutating--;
@@ -10476,7 +10762,15 @@ function fillCultureSelect(id, types) {
         const kz = c.strainKuerzel || c.strain || '';
         const name = c.strainName || c.species || '';
         const st = (c.strainText || '').trim();
-        const label = (kz ? '[' + kz + '] ' : '') + esc(c.id) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '') + ' (' + esc(c.type) + ')';
+        const label =
+          (kz ? '[' + kz + '] ' : '') +
+          esc(c.id) +
+          ' — ' +
+          esc(name) +
+          (st ? ' ' + esc(st) : '') +
+          ' (' +
+          esc(c.type) +
+          ')';
         return `<option value="${esc(c.id)}">${label}</option>`;
       })
       .join('');
@@ -10533,18 +10827,23 @@ function deleteCulture(id) {
     if (batchCount) parts.push(t('lab.deleteBatches', { n: batchCount }));
     warning = ' \u26A0 ' + parts.join(' ') + ' ' + t('lab.deleteRefWarn');
   }
-  confirm2(t('lab.deleteCultureTitle'), t('lab.deleteCultureMsg', { id: id }) + warning, t('lab.deleteCulture'), async () => {
-    const r = await apiDelete('/api/cultures/' + encodeURIComponent(id));
-    if (r && r.error) {
-      setFb('err', t('common.error') + ': ' + r.error);
-      return;
+  confirm2(
+    t('lab.deleteCultureTitle'),
+    t('lab.deleteCultureMsg', { id: id }) + warning,
+    t('lab.deleteCulture'),
+    async () => {
+      const r = await apiDelete('/api/cultures/' + encodeURIComponent(id));
+      if (r && r.error) {
+        setFb('err', t('common.error') + ': ' + r.error);
+        return;
+      }
+      cultures = cultures.filter((x) => x.id !== id);
+      renderCultures();
+      renderLabLog();
+      fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
+      fillCultureSelect('gs-culture', ['PD', 'LC']);
     }
-    cultures = cultures.filter((x) => x.id !== id);
-    renderCultures();
-    renderLabLog();
-    fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-    fillCultureSelect('gs-culture', ['PD', 'LC']);
-  });
+  );
 }
 
 // ─── LAB WORK ────────────────────────────────────────────────
@@ -10795,11 +11094,13 @@ function gsPreview() {
   const totalWet = lines.reduce((s, l) => s + l.kg * l.qty, 0);
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? (parseFloat(grainRhInput.value) || 0) : defaultGrainRh;
+  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
   const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
-  document.getElementById('gs-prev').textContent = sp ? genGrainBatchId(sp, lwStrainText) + ' (' + totalQty + ' bags)' : '\u2014';
+  document.getElementById('gs-prev').textContent = sp
+    ? genGrainBatchId(sp, lwStrainText) + ' (' + totalQty + ' bags)'
+    : '\u2014';
   const el = document.getElementById('gs-mat-preview');
   if (!totalQty || !totalWet) {
     el.style.display = 'none';
@@ -10808,9 +11109,10 @@ function gsPreview() {
   const breakdown = lines.map((l) => l.qty + ' \u00d7 ' + l.kg + ' kg').join(' + ');
   const avail = inventory.stock?.grain || 0;
   const enough = avail >= totalDry;
-  const hydrationNote = grainRh > 0
-    ? ` <span style="font-size:11px;color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
-    : '';
+  const hydrationNote =
+    grainRh > 0
+      ? ` <span style="font-size:11px;color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
+      : '';
   el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
   el.style.display = 'block';
 }
@@ -10836,7 +11138,7 @@ function createGrainBatch() {
   const days = parseInt(document.getElementById('gs-days').value) || 14;
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? (parseFloat(grainRhInput.value) || 0) : defaultGrainRh;
+  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
   const batchId = genGrainBatchId(sp, lwStrainText);
@@ -11110,7 +11412,7 @@ function openBagInfo(bagId, batchId, batch) {
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${(b.strainText || '').trim() ? esc(b.strainText.trim()) : (!b.strainId && b.strain ? esc(b.strain) : '\u2014')}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${(b.strainText || '').trim() ? esc(b.strainText.trim()) : !b.strainId && b.strain ? esc(b.strain) : '\u2014'}</div></div>
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
@@ -11152,9 +11454,7 @@ function biPerformRemove() {
   document.getElementById('m-baginfo').classList.remove('open');
   const bagLast = [...scanLog]
     .reverse()
-    .find(
-      (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
-    );
+    .find((e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE'));
   const fromLoc = bagLast ? bagLast.to : null;
   const b = batches.find((x) => x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
   const tempId = 's' + ++_scanTempIdCounter;
@@ -11189,9 +11489,7 @@ function biConfirmRemove() {
   if (!biBagId) return;
   const bagLast = [...scanLog]
     .reverse()
-    .find(
-      (e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE')
-    );
+    .find((e) => (e.bag || '').toUpperCase() === biBagId.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE'));
   const fromLoc = bagLast ? bagLast.to : null;
   const body = fromLoc
     ? t('bagInfo.confirmRemoveBody', { bag: biBagId, loc: zoneDisplayName(fromLoc) })
@@ -11270,7 +11568,8 @@ function _crLocalizedName(t) {
 function _renderCrTypeGrid() {
   const grid = document.getElementById('cr-type-grid');
   if (!_crTypes || !_crTypes.length) {
-    grid.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted);grid-column:1/-1">' + t('contam.noTypes') + '</div>';
+    grid.innerHTML =
+      '<div style="font-size:12px;color:var(--c-text-muted);grid-column:1/-1">' + t('contam.noTypes') + '</div>';
     return;
   }
   grid.innerHTML = _crTypes
@@ -11366,9 +11665,10 @@ function _renderCrPhotos() {
         `<div class="contam-photo-tile" data-cr-edit="${i}" title="${esc(t('contam.annotateHint'))}"><img src="${esc(p.thumb_data_url)}" alt=""><span class="annot-hint" aria-hidden="true">✏︎</span><button type="button" class="remove" data-cr-remove="${i}" aria-label="Remove">&times;</button></div>`
     )
     .join('');
-  const addTile = _crPhotos.length < CR_MAX_PHOTOS
-    ? `<button type="button" id="cr-add-photo" class="contam-photo-tile add" aria-label="${esc(t('contam.addPhoto'))}">+</button>`
-    : '';
+  const addTile =
+    _crPhotos.length < CR_MAX_PHOTOS
+      ? `<button type="button" id="cr-add-photo" class="contam-photo-tile add" aria-label="${esc(t('contam.addPhoto'))}">+</button>`
+      : '';
   tiles.innerHTML = tilesHtml + addTile;
 }
 
@@ -11646,7 +11946,10 @@ async function renderContamReports() {
   try {
     _clReports = await apiGet('/api/contamination-reports' + (params.toString() ? '?' + params.toString() : ''));
   } catch (e) {
-    list.innerHTML = '<div class="empty" style="color:var(--c-red-dark)">' + t('contam.errLoad', { err: e.message || 'unknown' }) + '</div>';
+    list.innerHTML =
+      '<div class="empty" style="color:var(--c-red-dark)">' +
+      t('contam.errLoad', { err: e.message || 'unknown' }) +
+      '</div>';
     return;
   }
   if (!_clReports.length) {
@@ -11699,7 +12002,10 @@ async function openContamDetail(id) {
   try {
     r = await apiGet('/api/contamination-reports/' + id);
   } catch (e) {
-    body.innerHTML = '<div class="empty" style="color:var(--c-red-dark)">' + t('contam.errLoad', { err: e.message || 'unknown' }) + '</div>';
+    body.innerHTML =
+      '<div class="empty" style="color:var(--c-red-dark)">' +
+      t('contam.errLoad', { err: e.message || 'unknown' }) +
+      '</div>';
     return;
   }
   const typeName = esc(_clTypeName(r));
@@ -11718,9 +12024,7 @@ async function openContamDetail(id) {
   // grid and offer a Reopen action. When unset, render four resolve-action
   // buttons (Autoclaved / Discarded / Recovered / Other) below the metadata.
   const isResolved = !!r.resolved_at;
-  const resolutionLabel = r.resolution
-    ? esc(t('contam.res.' + r.resolution))
-    : '';
+  const resolutionLabel = r.resolution ? esc(t('contam.res.' + r.resolution)) : '';
   const statusCell = isResolved
     ? `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-resolved-badge">✓ ${resolutionLabel}</span><div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">${esc(fmtDtTime(r.resolved_at))}</div></div></div>`
     : `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-open-badge">${esc(t('contam.statusOpen'))}</span></div></div>`;
@@ -12420,7 +12724,12 @@ async function sendToPrinter(zpl) {
 // the page is opened, when the banner is clicked, and after each print
 // attempt so the user sees if the bridge / printer state changed.
 const PRINTER_STATUS_STYLES = {
-  online: { key: 'print.status.online', bg: 'var(--c-primary-light)', border: 'var(--c-green-border)', color: 'var(--c-green-dark)' },
+  online: {
+    key: 'print.status.online',
+    bg: 'var(--c-primary-light)',
+    border: 'var(--c-green-border)',
+    color: 'var(--c-green-dark)'
+  },
   printer_offline: { key: 'print.status.printerOffline', bg: '#fef3c7', border: '#fbbf24', color: '#92400e' },
   bridge_unreachable: { key: 'print.status.bridgeUnreachable', bg: '#fee2e2', border: '#fca5a5', color: '#991b1b' },
   no_bridge: { key: 'print.status.noBridge', bg: '#dbeafe', border: '#93c5fd', color: '#1e40af' },
@@ -12587,7 +12896,7 @@ function fillBatchSelect(filter) {
   const s = document.getElementById('print-batch');
   const cur = s.value;
   const searchInput = document.getElementById('print-batch-search');
-  const q = (filter != null ? filter : (searchInput ? searchInput.value : '')).toLowerCase().trim();
+  const q = (filter != null ? filter : searchInput ? searchInput.value : '').toLowerCase().trim();
   // Newest first; when no search, limit to 50 most recent
   let list = [...batches].reverse();
   if (q) {
@@ -12596,10 +12905,10 @@ function fillBatchSelect(filter) {
     list = list.slice(0, 50);
   }
   s.innerHTML =
-    '<option value="">— ' + t('print.chooseBatch') + ' —</option>' +
-    list
-      .map((b) => `<option value="${esc(b.batchId)}">${batchOptionLabel(b)}</option>`)
-      .join('');
+    '<option value="">— ' +
+    t('print.chooseBatch') +
+    ' —</option>' +
+    list.map((b) => `<option value="${esc(b.batchId)}">${batchOptionLabel(b)}</option>`).join('');
   if (cur) s.value = cur;
 }
 
@@ -13620,7 +13929,10 @@ function processScan(raw) {
     const res = bsToggleBag(val);
     if (res.toggled) {
       _scanBeep(800, 60);
-      setFb('ok', t('bagSelect.toggled', { bag: val, action: res.added ? t('bagSelect.added') : t('bagSelect.removed') }));
+      setFb(
+        'ok',
+        t('bagSelect.toggled', { bag: val, action: res.added ? t('bagSelect.added') : t('bagSelect.removed') })
+      );
     } else {
       _scanBeep(300, 150);
       setFb('err', t('scanFb.bagNotPlaced', { bag: val }));
@@ -16854,6 +17166,7 @@ function initEventListeners() {
     openStab('batch', 'harvest');
   });
   $('batch-q').addEventListener('input', renderBatches);
+  $('batch-archive-filter').addEventListener('change', renderBatches);
   $('batches-body')
     .closest('table')
     .tHead.addEventListener('click', (e) => {
