@@ -573,6 +573,12 @@ const LANG = {
     'contam.reportSaved': 'Report #{id} saved ({photos} photo(s))',
     'contam.reportSavedAutoMoved': 'Report #{id} saved ({photos} photo(s)) — bag moved to CONTAM',
     'contam.autoMove': 'Auto-move bag to CONTAM',
+    'contam.annotateTitle': 'Annotate photo',
+    'contam.annotateClear': 'Clear',
+    'contam.annotateDone': 'Done',
+    'contam.annotateHint': 'Draw on the photo with a finger to mark the spot.',
+    'contam.annotateLoadErr': 'Could not load photo for annotation',
+    'contam.annotateSaveErr': 'Could not save annotated photo',
     'contam.reportQueued': 'Offline — report queued, will be sent when WiFi returns.',
     'contam.noTypes': 'No contamination types available',
     'lab.contam': 'Contamination',
@@ -1721,6 +1727,12 @@ const LANG = {
     'contam.reportSaved': 'Bericht #{id} gespeichert ({photos} Foto(s))',
     'contam.reportSavedAutoMoved': 'Bericht #{id} gespeichert ({photos} Foto(s)) — Beutel nach CONTAM verschoben',
     'contam.autoMove': 'Beutel automatisch nach CONTAM verschieben',
+    'contam.annotateTitle': 'Foto markieren',
+    'contam.annotateClear': 'Löschen',
+    'contam.annotateDone': 'Fertig',
+    'contam.annotateHint': 'Mit dem Finger auf das Foto malen, um die Stelle zu markieren.',
+    'contam.annotateLoadErr': 'Foto konnte für Markierung nicht geladen werden',
+    'contam.annotateSaveErr': 'Markiertes Foto konnte nicht gespeichert werden',
     'contam.reportQueued': 'Offline — Bericht in Warteschlange, wird gesendet sobald WLAN da ist.',
     'contam.noTypes': 'Keine Kontaminationstypen verfügbar',
     'lab.contam': 'Kontamination',
@@ -2879,6 +2891,12 @@ const LANG = {
     'contam.reportSaved': 'Relatório #{id} salvo ({photos} foto(s))',
     'contam.reportSavedAutoMoved': 'Relatório #{id} salvo ({photos} foto(s)) — saco movido para CONTAM',
     'contam.autoMove': 'Mover saco automaticamente para CONTAM',
+    'contam.annotateTitle': 'Anotar foto',
+    'contam.annotateClear': 'Limpar',
+    'contam.annotateDone': 'Concluído',
+    'contam.annotateHint': 'Desenhe na foto com o dedo para marcar o local.',
+    'contam.annotateLoadErr': 'Não foi possível carregar foto para anotação',
+    'contam.annotateSaveErr': 'Não foi possível salvar foto anotada',
     'contam.reportQueued': 'Offline — relatório na fila, será enviado quando o Wi-Fi voltar.',
     'contam.noTypes': 'Nenhum tipo de contaminação disponível',
     'lab.contam': 'Contaminação',
@@ -11345,7 +11363,7 @@ function _renderCrPhotos() {
   const tilesHtml = _crPhotos
     .map(
       (p, i) =>
-        `<div class="contam-photo-tile" data-idx="${i}"><img src="${esc(p.thumb_data_url)}" alt=""><button type="button" class="remove" data-cr-remove="${i}" aria-label="Remove">&times;</button></div>`
+        `<div class="contam-photo-tile" data-cr-edit="${i}" title="${esc(t('contam.annotateHint'))}"><img src="${esc(p.thumb_data_url)}" alt=""><span class="annot-hint" aria-hidden="true">✏︎</span><button type="button" class="remove" data-cr-remove="${i}" aria-label="Remove">&times;</button></div>`
     )
     .join('');
   const addTile = _crPhotos.length < CR_MAX_PHOTOS
@@ -11357,6 +11375,170 @@ function _renderCrPhotos() {
 function _crSelectType(typeId) {
   _crSelectedTypeId = typeId;
   _renderCrTypeGrid();
+}
+
+// ─── PHOTO ANNOTATION ─────────────────────────────────────────
+// Tap a photo tile in the contamination capture modal to open a drawing
+// surface over it. Workers circle / mark the contamination spot with a
+// finger, hit Done, and the strokes get baked into the JPEG before submit.
+// "Trichoderma along the lid seam" is much easier to communicate visually
+// than in notes.
+let _paIdx = -1;
+let _paImg = null; // HTMLImageElement of the photo's full-res copy
+let _paDrawing = false;
+let _paStrokeWidth = 0;
+function openAnnotate(idx) {
+  if (idx < 0 || idx >= _crPhotos.length) return;
+  _paIdx = idx;
+  const photo = _crPhotos[idx];
+  const canvas = document.getElementById('pa-canvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  _paImg = img;
+  img.onload = function () {
+    // Fit canvas to image's natural pixels so strokes composite at the
+    // same scale on submit (no resampling distortion).
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    // Stroke width scaled to image size — ~1% of the long edge feels
+    // right on phone. Applied via lineWidth at draw time.
+    _paStrokeWidth = Math.max(4, Math.round(Math.max(img.naturalWidth, img.naturalHeight) / 100));
+    document.getElementById('m-photo-annotate').classList.add('open');
+  };
+  img.onerror = function () {
+    setFb('err', t('contam.annotateLoadErr'));
+  };
+  img.src = photo.data_url;
+}
+function closeAnnotate() {
+  document.getElementById('m-photo-annotate').classList.remove('open');
+  _paIdx = -1;
+  _paImg = null;
+  _paDrawing = false;
+}
+function _paClear() {
+  if (!_paImg) return;
+  const canvas = document.getElementById('pa-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(_paImg, 0, 0);
+}
+function _paPos(e) {
+  const canvas = document.getElementById('pa-canvas');
+  const r = canvas.getBoundingClientRect();
+  // Translate page coords -> canvas coords (canvas is rendered at scaled
+  // CSS size but its drawing space matches naturalWidth/Height).
+  const sx = canvas.width / r.width;
+  const sy = canvas.height / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+}
+function _paStart(e) {
+  if (_paIdx < 0) return;
+  e.preventDefault();
+  const canvas = document.getElementById('pa-canvas');
+  if (canvas.setPointerCapture && e.pointerId !== undefined) {
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (er) {
+      /* ignore — some pointer types reject capture */
+    }
+  }
+  const ctx = canvas.getContext('2d');
+  const p = _paPos(e);
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = _paStrokeWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  _paDrawing = true;
+}
+function _paMove(e) {
+  if (!_paDrawing) return;
+  e.preventDefault();
+  const ctx = document.getElementById('pa-canvas').getContext('2d');
+  const p = _paPos(e);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+}
+function _paEnd(e) {
+  if (!_paDrawing) return;
+  _paDrawing = false;
+  e.preventDefault();
+}
+async function _paDone() {
+  if (_paIdx < 0 || !_paImg) {
+    closeAnnotate();
+    return;
+  }
+  const canvas = document.getElementById('pa-canvas');
+  // Re-encode the annotated full image at the same compression as the
+  // original (1280 px long edge, q=0.8) so the photo size budget stays
+  // honest and the server-side magic-byte check still sees JPEG.
+  const longEdge = Math.max(canvas.width, canvas.height);
+  const scale = Math.min(1, 1280 / longEdge);
+  const w = Math.max(1, Math.round(canvas.width * scale));
+  const h = Math.max(1, Math.round(canvas.height * scale));
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  out.getContext('2d').drawImage(canvas, 0, 0, w, h);
+  const dataUrl = await new Promise((resolve) => {
+    out.toBlob(
+      (blob) => {
+        if (!blob) {
+          resolve(null);
+          return;
+        }
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => resolve(null);
+        fr.readAsDataURL(blob);
+      },
+      'image/jpeg',
+      0.8
+    );
+  });
+  if (!dataUrl) {
+    setFb('err', t('contam.annotateSaveErr'));
+    closeAnnotate();
+    return;
+  }
+  // New thumbnail (200 px) from the same annotated canvas.
+  const tScale = Math.min(1, 200 / longEdge);
+  const tw = Math.max(1, Math.round(canvas.width * tScale));
+  const th = Math.max(1, Math.round(canvas.height * tScale));
+  const thumb = document.createElement('canvas');
+  thumb.width = tw;
+  thumb.height = th;
+  thumb.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+  const thumbUrl = await new Promise((resolve) => {
+    thumb.toBlob(
+      (blob) => {
+        if (!blob) {
+          resolve(null);
+          return;
+        }
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => resolve(null);
+        fr.readAsDataURL(blob);
+      },
+      'image/jpeg',
+      0.7
+    );
+  });
+  // Save back to the photo entry. Width/height update to the resized
+  // canvas dims so they stay consistent with what the server sees.
+  _crPhotos[_paIdx] = {
+    data_url: dataUrl,
+    thumb_data_url: thumbUrl || _crPhotos[_paIdx].thumb_data_url,
+    width: w,
+    height: h
+  };
+  closeAnnotate();
+  _renderCrPhotos();
 }
 
 async function _crSubmit() {
@@ -16394,7 +16576,8 @@ function initEventListeners() {
       autoMoveEl.checked = recommended;
     }
   });
-  // Photo tiles — add tile triggers file input; remove buttons splice the photo
+  // Photo tiles — add tile triggers file input; remove buttons splice the photo;
+  // tile body taps open the annotation editor (draw on the photo before submit).
   $('cr-photo-tiles').addEventListener('click', (e) => {
     if (e.target.closest('#cr-add-photo')) {
       $('cr-file-input').click();
@@ -16407,11 +16590,33 @@ function initEventListeners() {
         _crPhotos.splice(idx, 1);
         _renderCrPhotos();
       }
+      return;
+    }
+    const editTile = e.target.closest('[data-cr-edit]');
+    if (editTile) {
+      const idx = parseInt(editTile.dataset.crEdit, 10);
+      if (!isNaN(idx)) openAnnotate(idx);
     }
   });
   $('cr-file-input').addEventListener('change', (e) => {
     _crAddFiles(e.target.files);
     e.target.value = ''; // allow picking the same file twice
+  });
+  // Photo annotation modal wiring
+  const _paCanvas = $('pa-canvas');
+  if (_paCanvas) {
+    _paCanvas.addEventListener('pointerdown', _paStart);
+    _paCanvas.addEventListener('pointermove', _paMove);
+    _paCanvas.addEventListener('pointerup', _paEnd);
+    _paCanvas.addEventListener('pointercancel', _paEnd);
+    _paCanvas.addEventListener('pointerleave', _paEnd);
+  }
+  $('pa-clear').addEventListener('click', _paClear);
+  $('pa-cancel').addEventListener('click', closeAnnotate);
+  $('pa-done').addEventListener('click', _paDone);
+  // Backdrop tap dismisses (treat as cancel)
+  document.getElementById('m-photo-annotate').addEventListener('click', (e) => {
+    if (e.target.id === 'm-photo-annotate') closeAnnotate();
   });
   $('m-camscan').addEventListener('click', function (e) {
     if (e.target === this) closeCamScan();
