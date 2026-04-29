@@ -7159,13 +7159,25 @@ function updateSortIndicators(table, activeState) {
     arrow.textContent = active ? (activeState.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ' \u21C5';
   });
 }
+// Guard renderBatches against unnecessary work. The dashboard polls
+// /api/data on every SSE event and re-runs renderBatches each time;
+// without this, a 200-batch table got fully regenerated (~80 ms on
+// low-end Android per the audit) even when nothing visible changed.
+// The fingerprint covers every input the row HTML depends on: filter
+// state, sort state, language, and per-batch fields (incl. the scan-
+// log-derived status). When it matches the last render, we skip the
+// rebuild entirely.
+let _rbLastRenderFp = null;
 function renderBatches() {
   const q = (document.getElementById('batch-q').value || '').toLowerCase(),
     body = document.getElementById('batches-body');
   updateSortIndicators('batches', tableSort.batches);
   renderBatchAttentionBanner();
   if (!batches.length) {
-    body.innerHTML = '<tr><td colspan="12" class="empty">' + t('dash.noBatches') + '</td></tr>';
+    if (_rbLastRenderFp !== 'no-batches') {
+      body.innerHTML = '<tr><td colspan="12" class="empty">' + t('dash.noBatches') + '</td></tr>';
+      _rbLastRenderFp = 'no-batches';
+    }
     return;
   }
   const filtered = batches.filter(
@@ -7183,6 +7195,45 @@ function renderBatches() {
     if (k === 'qty' || k === 'days') return Number(b[k]) || 0;
     return b[k];
   });
+  // Fingerprint: filter state + per-batch fields + status.  /  are
+  // unlikely to appear in real data so they're safe field/row separators.
+  const renderFp =
+    q +
+    '|' +
+    currentLang +
+    '|' +
+    JSON.stringify(tableSort.batches || null) +
+    '|' +
+    (batchAttentionFilter ? batchAttentionFilter.label || 'flt' : '') +
+    '|' +
+    sorted
+      .map((b) => {
+        const s = getStatus(b.batchId).status;
+        const sub = b.substrate
+          ? b.substrate.hardwood + ',' + b.substrate.wheatbran + ',' + b.substrate.rh + ',' + (b.substrate.gypsum ? 1 : 0)
+          : '';
+        return [
+          b.batchId,
+          b.species,
+          b.qty,
+          b.days,
+          b.notes || '',
+          b.due,
+          b.created,
+          s,
+          b.strain || '',
+          b.strainId || '',
+          b.strainName || '',
+          b.strainText || '',
+          b.bagKg || '',
+          b.batchType || '',
+          b.sourceId || '',
+          sub
+        ].join('');
+      })
+      .join('');
+  if (renderFp === _rbLastRenderFp) return;
+  _rbLastRenderFp = renderFp;
   body.innerHTML =
     sorted
       .map((b) => {
