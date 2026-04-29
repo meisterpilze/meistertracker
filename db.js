@@ -906,6 +906,20 @@ const MIGRATIONS = [
       ];
       for (const t of types) seed.run(...t, now);
     }
+  },
+  {
+    version: 37,
+    description: 'Add minor indexes flagged by the audit (Section 3.2)',
+    fn(db) {
+      db.exec(`
+        -- Used by getContaminationReport (server.js / db.js:3629). Partial
+        -- index keeps it small since most scan_log entries have NULL reason.
+        CREATE INDEX IF NOT EXISTS idx_scanlog_action_reason
+          ON scan_log(action) WHERE reason IS NOT NULL;
+        -- Batches order-by-created in readAll / getAllBatches.
+        CREATE INDEX IF NOT EXISTS idx_batches_created ON batches(created);
+      `);
+    }
   }
 ];
 
@@ -1080,12 +1094,23 @@ function readAll(db, opts = {}) {
   const mushroomStrains = listMushroomStrains(db);
   const msById = new Map(mushroomStrains.map((ms) => [ms.id, ms]));
 
-  // Batches + bags
+  // Batches + bags. Bulk-load bags in ONE query and group by batch_id instead
+  // of running bagStmt.all() once per batch (the audit-flagged N+1 — at 200
+  // batches that was 200 statement executions every time readAll fired,
+  // and readAll is called by /api/data which polls on each SSE event).
   const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
-  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  const bagsByBatch = new Map();
+  for (const b of db.prepare('SELECT batch_id, bag_id, bag_kg FROM bags ORDER BY batch_id, bag_id').all()) {
+    let arr = bagsByBatch.get(b.batch_id);
+    if (!arr) {
+      arr = [];
+      bagsByBatch.set(b.batch_id, arr);
+    }
+    arr.push(b);
+  }
   const batches = batchRows.map((r) => {
     const ms = r.strain_id ? msById.get(r.strain_id) : null;
-    const bagRows = bagStmt.all(r.batch_id);
+    const bagRows = bagsByBatch.get(r.batch_id) || [];
     const bagWeights = {};
     for (const b of bagRows) bagWeights[b.bag_id] = b.bag_kg != null ? b.bag_kg : r.bag_kg || 3;
     return {
@@ -2548,8 +2573,8 @@ function readTaskByCaldavUid(db, caldavUid) {
 function readBatchById(db, batchId) {
   const r = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
   if (!r) return null;
-  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
-  return mapBatchRow(r, bagStmt, db);
+  const bagRows = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id').all(batchId);
+  return mapBatchRow(r, bagRows, db);
 }
 
 function deleteTaskById(db, id) {
@@ -3380,17 +3405,23 @@ function deleteMushroomStrain(db, id) {
 }
 
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
-function mapBatchRow(r, bagStmt, db) {
+// `bagRows` is an array of {bag_id, bag_kg} for THIS batch — caller fetches
+// however they want (single .all() for one batch, pre-built bagsByBatch map
+// for bulk callers). `msById` is an optional Map<id, {name,kuerzel}> so bulk
+// callers can avoid the per-batch SELECT against mushroom_strains.
+function mapBatchRow(r, bagRows, db, msById) {
   let strainName = null,
     strainKuerzel = null;
-  if (r.strain_id && db) {
-    const ms = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?').get(r.strain_id);
+  if (r.strain_id) {
+    let ms = msById ? msById.get(r.strain_id) : null;
+    if (!ms && db) {
+      ms = db.prepare('SELECT name, kuerzel FROM mushroom_strains WHERE id=?').get(r.strain_id);
+    }
     if (ms) {
       strainName = ms.name;
       strainKuerzel = ms.kuerzel;
     }
   }
-  const bagRows = bagStmt.all(r.batch_id);
   const bagWeights = {};
   for (const b of bagRows) bagWeights[b.bag_id] = b.bag_kg != null ? b.bag_kg : r.bag_kg || 3;
   return {
@@ -3416,11 +3447,30 @@ function mapBatchRow(r, bagStmt, db) {
   };
 }
 function getAllBatches(db) {
-  const bagStmt = db.prepare('SELECT bag_id, bag_kg FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  // Bulk-load bags in ONE query and group by batch_id, instead of running
+  // bagStmt.all() once per batch (the audit-flagged N+1 — at 200 batches that
+  // was 200 prepared statement executions just for bag info).
+  const bagsByBatch = new Map();
+  for (const b of db.prepare('SELECT batch_id, bag_id, bag_kg FROM bags ORDER BY batch_id, bag_id').all()) {
+    let arr = bagsByBatch.get(b.batch_id);
+    if (!arr) {
+      arr = [];
+      bagsByBatch.set(b.batch_id, arr);
+    }
+    arr.push(b);
+  }
+  // Same for mushroom_strains — used to be a per-batch SELECT inside
+  // mapBatchRow; one bulk query is faster and avoids N re-prepares.
+  const msById = new Map(
+    db
+      .prepare('SELECT id, name, kuerzel FROM mushroom_strains')
+      .all()
+      .map((m) => [m.id, m])
+  );
   return db
     .prepare('SELECT * FROM batches ORDER BY created')
     .all()
-    .map((r) => mapBatchRow(r, bagStmt, db));
+    .map((r) => mapBatchRow(r, bagsByBatch.get(r.batch_id) || [], db, msById));
 }
 function getAllTasks(db) {
   return db
