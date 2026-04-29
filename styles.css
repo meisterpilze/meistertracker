@@ -4430,6 +4430,79 @@ tr:hover td {
   align-items: center;
   justify-content: center;
 }
+/* Annotation hint chip — small "edit" pencil overlay on the bottom-left of
+   each photo tile so workers know they can tap to draw on it. */
+.contam-photo-tile .annot-hint {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: 12px;
+}
+
+/* ═══ PHOTO ANNOTATION MODAL ══════════════════════════════════
+   Full-screen-ish drawing surface. The canvas size matches the photo's
+   intrinsic dimensions so strokes composite at the same pixel scale on
+   submit. Toolbar header with Clear / Cancel / Done. */
+.pa-shell {
+  background: var(--c-surface);
+  width: 96%;
+  max-width: 720px;
+  height: 92vh;
+  height: 92dvh;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+}
+.pa-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--c-border-light);
+  flex-wrap: wrap;
+}
+.pa-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 100px;
+}
+.pa-canvas-wrap {
+  flex: 1;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  /* Allow vertical pan (some content may overflow on tiny landscape) but
+     not horizontal/zoom — drawing gestures are absorbed by the canvas. */
+  touch-action: pan-y;
+}
+#pa-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  /* Stroke gestures, not scroll. */
+  touch-action: none;
+}
+.pa-hint {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--c-text-muted);
+  text-align: center;
+  border-top: 1px solid var(--c-border-light);
+}
 
 /* ═══ CONTAMINATION REPORT LIST + DRILL-DOWN ═══════════════════
    The Lab → Kontaminationen sub-tab. Card-per-report layout works

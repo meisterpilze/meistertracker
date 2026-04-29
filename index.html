@@ -631,6 +631,24 @@
       </div>
     </div>
 
+    <!-- Photo annotation modal — finger-drawing on a contamination photo
+         before submit. Used from the capture-modal photo tile (tap a tile
+         to annotate, X to remove, + tile to add). -->
+    <div class="modal-bg" id="m-photo-annotate" role="dialog" aria-modal="true" aria-labelledby="pa-title">
+      <div class="pa-shell">
+        <div class="pa-header">
+          <span class="pa-title" id="pa-title" data-i18n="contam.annotateTitle">Foto markieren</span>
+          <button id="pa-clear" type="button" class="btn btn-sm" data-i18n="contam.annotateClear">Löschen</button>
+          <button id="pa-cancel" type="button" class="btn btn-sm" data-i18n="common.cancel">Abbrechen</button>
+          <button id="pa-done" type="button" class="btn btn-sm btn-p" data-i18n="contam.annotateDone">Fertig</button>
+        </div>
+        <div class="pa-canvas-wrap">
+          <canvas id="pa-canvas"></canvas>
+        </div>
+        <div class="pa-hint" data-i18n="contam.annotateHint">Mit dem Finger auf das Foto malen, um die Stelle zu markieren.</div>
+      </div>
+    </div>
+
     <!-- Camera scan modal -->
     <div
       class="modal-bg"
