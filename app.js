@@ -4418,7 +4418,12 @@ const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'];
 let ZONES = [],
   ALL_RACKS = [],
   LOCS = [],
-  RACK_ZONE = {};
+  RACK_ZONE = {},
+  // id -> full zone object. Built once per applyData / zone edit so callers
+  // that need .role / .color / etc. can do an O(1) lookup instead of zones.find().
+  // Hot path: dashboard contam-rate (renderOverviewKPIs) iterated all scan-log
+  // entries x zones.find() = O(scanLog * zones).
+  ZONE_BY_ID = {};
 const toZone = (loc) => {
   if (!loc) return loc;
   if (RACK_ZONE[loc]) return RACK_ZONE[loc];
@@ -4468,11 +4473,13 @@ function rebuildZoneConstants() {
   ALL_RACKS = zones.flatMap((z) => z.racks.map((r) => r.id));
   LOCS = [...ZONES, ...ALL_RACKS];
   RACK_ZONE = {};
-  zones.forEach((z) =>
+  ZONE_BY_ID = {};
+  zones.forEach((z) => {
+    ZONE_BY_ID[z.id] = z;
     z.racks.forEach((r) => {
       RACK_ZONE[r.id] = z.id;
-    })
-  );
+    });
+  });
   ZONE_LABELS = {};
   ZONE_COLORS = {};
   zones.forEach((z) => {
@@ -5520,7 +5527,7 @@ function renderOverviewKPIs() {
   const contamBagSet = new Set();
   scanLog.forEach((e) => {
     if (!e.to || !e.bag) return;
-    const z = zones.find((x) => x.id === toZone(e.to));
+    const z = ZONE_BY_ID[toZone(e.to)];
     if (z && z.role === 'contaminated') contamBagSet.add(e.bag);
   });
   const contamRate = allBagsPlaced > 0 ? +((contamBagSet.size / allBagsPlaced) * 100).toFixed(1) : 0;
@@ -5531,7 +5538,7 @@ function renderOverviewKPIs() {
   // 7. Days without contamination (streak)
   const contamEvents = scanLog.filter((e) => {
     if (!e.to || !e.bag) return false;
-    const z = zones.find((x) => x.id === toZone(e.to));
+    const z = ZONE_BY_ID[toZone(e.to)];
     return z && z.role === 'contaminated';
   });
   let daysSinceContam = null,
