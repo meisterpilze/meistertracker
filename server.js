@@ -6392,8 +6392,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Decrypted file is not a valid database');
           return;
         }
-        // Write to temp with restrictive permissions, validate schema
-        tmpPath = path.join(BACKUP_DIR, '_restore_tmp_' + Date.now() + '.db');
+        // Write to temp with restrictive permissions, validate schema.
+        // Random suffix instead of Date.now() — predictable timestamps would
+        // collide if two admins restored concurrently and the path-derived
+        // race is benign but easy to remove (audit Section 3.3).
+        tmpPath = path.join(BACKUP_DIR, '_restore_tmp_' + crypto.randomBytes(8).toString('hex') + '.db');
         fs.writeFileSync(tmpPath, plain, { mode: 0o600 });
         let tmpDb;
         try {
