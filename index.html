@@ -624,6 +624,14 @@
           <textarea id="cr-notes" rows="2" maxlength="2000" data-i18n-placeholder="contam.notesPlaceholder" placeholder="z.B. Bag-Lid feucht, neben TENT-3 entdeckt"></textarea>
         </div>
 
+        <!-- Auto-MOVE checkbox: defaults on for major/lost, off for minor.
+             When checked, the server inserts a MOVE-to-CONTAM scan-log entry
+             alongside the report so the bag's location trail stays accurate. -->
+        <label id="cr-auto-move-row" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;color:var(--c-text-sec);cursor:pointer">
+          <input type="checkbox" id="cr-auto-move" style="width:20px;height:20px;cursor:pointer" />
+          <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
+        </label>
+
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
           <button id="cr-cancel" type="button" class="btn btn-sm" data-i18n="common.cancel">Abbrechen</button>
           <button id="cr-submit" type="button" class="btn btn-sm btn-p" data-i18n="contam.submit">Senden</button>
