@@ -571,6 +571,8 @@ const LANG = {
     'contam.errNoType': 'Please select a contamination type',
     'contam.errSave': 'Save failed: {err}',
     'contam.reportSaved': 'Report #{id} saved ({photos} photo(s))',
+    'contam.reportSavedAutoMoved': 'Report #{id} saved ({photos} photo(s)) — bag moved to CONTAM',
+    'contam.autoMove': 'Auto-move bag to CONTAM',
     'contam.reportQueued': 'Offline — report queued, will be sent when WiFi returns.',
     'contam.noTypes': 'No contamination types available',
     'lab.contam': 'Contamination',
@@ -1715,6 +1717,8 @@ const LANG = {
     'contam.errNoType': 'Bitte einen Kontaminationstyp auswählen',
     'contam.errSave': 'Speichern fehlgeschlagen: {err}',
     'contam.reportSaved': 'Bericht #{id} gespeichert ({photos} Foto(s))',
+    'contam.reportSavedAutoMoved': 'Bericht #{id} gespeichert ({photos} Foto(s)) — Beutel nach CONTAM verschoben',
+    'contam.autoMove': 'Beutel automatisch nach CONTAM verschieben',
     'contam.reportQueued': 'Offline — Bericht in Warteschlange, wird gesendet sobald WLAN da ist.',
     'contam.noTypes': 'Keine Kontaminationstypen verfügbar',
     'lab.contam': 'Kontamination',
@@ -2869,6 +2873,8 @@ const LANG = {
     'contam.errNoType': 'Selecione um tipo de contaminação',
     'contam.errSave': 'Falha ao salvar: {err}',
     'contam.reportSaved': 'Relatório #{id} salvo ({photos} foto(s))',
+    'contam.reportSavedAutoMoved': 'Relatório #{id} salvo ({photos} foto(s)) — saco movido para CONTAM',
+    'contam.autoMove': 'Mover saco automaticamente para CONTAM',
     'contam.reportQueued': 'Offline — relatório na fila, será enviado quando o Wi-Fi voltar.',
     'contam.noTypes': 'Nenhum tipo de contaminação disponível',
     'lab.contam': 'Contaminação',
@@ -11185,6 +11191,10 @@ function openContamReport(bagId, batchId, zoneId) {
   document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.sev === 'minor');
   });
+  // Auto-MOVE default tracks severity: off for minor, on for major/lost.
+  // Worker can still toggle it manually before submit.
+  const autoMoveEl = document.getElementById('cr-auto-move');
+  if (autoMoveEl) autoMoveEl.checked = false;
   _renderCrPhotos();
   // Lazy-load types on first open; refresh on later opens to pick up admin edits
   apiGet('/api/contamination-types')
@@ -11335,7 +11345,8 @@ async function _crSubmit() {
       type_id: _crSelectedTypeId,
       severity: _crSeverity,
       notes: document.getElementById('cr-notes').value.trim(),
-      photos: _crPhotos
+      photos: _crPhotos,
+      auto_move: !!document.getElementById('cr-auto-move')?.checked
     };
     const r = await apiPost('/api/contamination-reports', body);
     if (r && r.error) {
@@ -11348,7 +11359,10 @@ async function _crSubmit() {
       // The browse list won't have this entry yet — replayed when WiFi returns.
       setFb('warn', t('contam.reportQueued'));
     } else {
-      setFb('ok', t('contam.reportSaved', { id: r.id, photos: (r.photoIds || []).length }));
+      // If the server actually moved the bag to CONTAM, surface that in the
+      // toast so the worker isn't surprised by the new scan-log entry.
+      const msgKey = r.autoMovedScanId ? 'contam.reportSavedAutoMoved' : 'contam.reportSaved';
+      setFb('ok', t(msgKey, { id: r.id, photos: (r.photoIds || []).length }));
       // Refresh browse view if it's the active sub-tab
       if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
         renderContamReports();
@@ -16342,6 +16356,14 @@ function initEventListeners() {
     document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
       b.classList.toggle('active', b === btn);
     });
+    // Update auto-MOVE checkbox to the recommended default for this severity.
+    // Worker can still override before submit. Don't override an already-set
+    // explicit choice — only flip if the previous default matches current state.
+    const autoMoveEl = document.getElementById('cr-auto-move');
+    if (autoMoveEl) {
+      const recommended = _crSeverity === 'major' || _crSeverity === 'lost';
+      autoMoveEl.checked = recommended;
+    }
   });
   // Photo tiles — add tile triggers file input; remove buttons splice the photo
   $('cr-photo-tiles').addEventListener('click', (e) => {

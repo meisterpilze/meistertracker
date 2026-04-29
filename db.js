@@ -4253,6 +4253,10 @@ function deleteContaminationReport(db, id) {
   return photos;
 }
 
+function setContaminationReportScanLogId(db, reportId, scanLogId) {
+  db.prepare('UPDATE contamination_reports SET scan_log_id = ? WHERE id = ?').run(scanLogId, reportId);
+}
+
 function resolveContaminationReport(db, id, userId, resolution) {
   const r = db
     .prepare(
@@ -4420,5 +4424,6 @@ module.exports = {
   getContaminationPhotoByUuid,
   deleteContaminationReport,
   resolveContaminationReport,
-  unresolveContaminationReport
+  unresolveContaminationReport,
+  setContaminationReportScanLogId
 };
