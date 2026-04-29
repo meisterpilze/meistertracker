@@ -4868,8 +4868,49 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             photoIds.push(db.addContaminationPhoto(database, reportId, saved));
           }
         }
+        // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
+        // client didn't explicitly opt out), insert a MOVE scan-log entry that
+        // moves the bag to the first zone with role='contaminated'. Stamps
+        // contamination_reports.scan_log_id to link the two records together.
+        // Skipped silently when (a) auto_move is false, (b) severity is minor,
+        // (c) no bag_id (whole-batch report), (d) no contam zone configured.
+        let autoMovedScanId = null;
+        const wantAutoMove = data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
+        if (wantAutoMove && data.bag_id) {
+          const contamZone = database
+            .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
+            .get();
+          if (contamZone) {
+            const lastLoc = database
+              .prepare(
+                "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
+              )
+              .get(data.bag_id);
+            const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
+            const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
+            const ids = db.appendScanEntries(
+              database,
+              [
+                {
+                  time: new Date().toISOString(),
+                  action: 'MOVE',
+                  batch: data.batch_id || null,
+                  bag: data.bag_id,
+                  from: lastLoc ? lastLoc.toLoc : null,
+                  to: contamZone.id,
+                  reason: reasonKey
+                }
+              ],
+              req.authUser ? req.authUser.user_id : null
+            );
+            if (ids && ids.length) {
+              autoMovedScanId = ids[0];
+              db.setContaminationReportScanLogId(database, reportId, autoMovedScanId);
+            }
+          }
+        }
         broadcastSSE(res);
-        jsonOk(res, { id: reportId, photoIds });
+        jsonOk(res, { id: reportId, photoIds, autoMovedScanId });
       } catch (err) {
         safeErr(res, err);
       }
