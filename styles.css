@@ -178,6 +178,20 @@ body {
   width: 18px;
   height: 18px;
 }
+/* Touch-device sidebar items: bump to 48 px min-height + 15 px font so the
+   drawer (opened via the hamburger on mobile) has finger-friendly targets.
+   Defaults below stay at 38 px for desktop where a mouse cursor is precise. */
+@media (pointer: coarse) {
+  .sb-btn {
+    min-height: 48px;
+    font-size: 15px;
+    padding: 11px 14px;
+  }
+  .sb-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}
 .sb-btn:hover {
   background: var(--c-border-light);
   color: var(--c-text);
@@ -3034,6 +3048,12 @@ tr:hover td {
     -webkit-overflow-scrolling: touch;
     gap: 2px;
     padding-bottom: 8px;
+    /* Fade-edge cue so workers see there's more to scroll. The mask hides
+       content fading from opaque (left edge) to transparent (right 24 px),
+       hinting "there's more this way" without taking layout space. The
+       existing horizontal scroll keeps working underneath. */
+    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
   }
   .stab {
     flex-shrink: 0;
