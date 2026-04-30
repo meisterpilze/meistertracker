@@ -56,9 +56,11 @@ CREATE TABLE IF NOT EXISTS scan_log (
   client_uuid TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
--- I-11: idempotency for offline-queue replays. Partial index so legacy rows
--- with NULL client_uuid (created before v39) don't collide.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_scanlog_client_uuid ON scan_log(client_uuid) WHERE client_uuid IS NOT NULL;
+-- R-02: the idx_scanlog_client_uuid partial unique index used to live here,
+-- but SCHEMA executes BEFORE runMigrations and pre-v39 backups do not have
+-- the client_uuid column yet, so SQLite raised "no such column: client_uuid"
+-- and openDb() threw. Index creation now lives inside migration v39, after
+-- the ALTER TABLE that adds the column. See audit-2026-04.md R-02.
 
 CREATE TABLE IF NOT EXISTS harvests (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,

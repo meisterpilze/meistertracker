@@ -575,6 +575,13 @@ setInterval(
 // Every day at 00:00 writes a dated backup to /backups/
 const BACKUP_DIR = path.join(DIR, 'backups');
 const BACKUP_STATUS_FILE = path.join(BACKUP_DIR, '.backup-status.json');
+const OFFSITE_MARKER_FILE = path.join(BACKUP_DIR, '.offsite-sync.json');
+// R-01: rotation only touches files matching this pattern, so manual backups
+// (`meistertracker_*.db`) and any other artefact in the directory stay put.
+// See scripts/rotate-backups.js for the helper and audit-2026-04.md for
+// background.
+const { rotateAutoBackups } = require('./scripts/rotate-backups.js');
+const AUTO_BACKUP_RETENTION_DAYS = 30;
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
 // Clean up orphaned temp files from interrupted backup operations
 try {
@@ -661,6 +668,20 @@ function runDailyBackup() {
       writeBackupStatus({ lastAttempt: { time: startedIso, success: true, skipped: 'already-exists' } });
       return;
     }
+    // R-01: rotate BEFORE writing today's file so the new file is never a
+    // candidate for deletion in the same pass. The 60s mtime guard inside
+    // rotateAutoBackups is belt + suspenders against a future ordering
+    // regression.
+    try {
+      const rot = rotateAutoBackups(BACKUP_DIR, AUTO_BACKUP_RETENTION_DAYS);
+      log('info', 'Auto-backup rotation', {
+        kept: rot.kept.length,
+        deleted: rot.deleted,
+        skipped: rot.skipped
+      });
+    } catch (e) {
+      log('warn', 'Backup rotation failed', { error: e.message });
+    }
     db.backupDb(database, dest)
       .then(() => {
         let sizeBytes = 0;
@@ -669,21 +690,6 @@ function runDailyBackup() {
         } catch {}
         const durationMs = Date.now() - startedAt;
         log('info', 'Auto-backup saved', { path: dest, sizeBytes, durationMs });
-        // Keep last 30 daily backups
-        try {
-          const files = fs
-            .readdirSync(BACKUP_DIR)
-            .filter((f) => f.endsWith('.db'))
-            .sort();
-          if (files.length > 30) {
-            files.slice(0, files.length - 30).forEach((f) => {
-              fs.unlinkSync(path.join(BACKUP_DIR, f));
-              log('info', 'Old backup removed', { file: f });
-            });
-          }
-        } catch (e) {
-          log('warn', 'Backup rotation failed', { error: e.message });
-        }
         // Sanity-check the written file before marking lastSuccess.
         const verifyError = verifyBackupFile(dest);
         if (verifyError) {
@@ -4635,7 +4641,33 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         lastAttempt: backupStatus.lastAttempt || null,
         ageHours: ageHours === null ? null : Math.round(ageHours * 10) / 10
       };
+      // R-06: surface the off-site sync marker so external monitors can flag
+      // a stale off-site copy. The marker is written by the rsync cron (see
+      // DEPLOYMENT.md → Off-site backups). Missing marker = "unknown" — the
+      // operator may not have configured off-site sync yet.
+      let offSite = { lastSync: null, ageMinutes: null, target: null, bytes: null };
+      try {
+        if (fs.existsSync(OFFSITE_MARKER_FILE)) {
+          const parsed = JSON.parse(fs.readFileSync(OFFSITE_MARKER_FILE, 'utf8'));
+          if (parsed && parsed.time) {
+            offSite.lastSync = parsed.time;
+            offSite.ageMinutes = Math.round((Date.now() - new Date(parsed.time).getTime()) / 60000);
+            offSite.target = parsed.target || null;
+            offSite.bytes = typeof parsed.bytes === 'number' ? parsed.bytes : null;
+          }
+        }
+      } catch (e) {
+        log('warn', 'Could not read off-site sync marker', { error: e.message });
+      }
+      health.backup.offSite = offSite;
       if (health.backup.status !== 'ok' && health.status === 'ok') {
+        health.status = 'degraded';
+      }
+      // Off-site marker > 26h old (or missing) is a soft degraded signal —
+      // we still surface it but only flip top-level status if backups themselves
+      // are otherwise OK. If backups are already stale, the existing status
+      // already reflects that.
+      if (offSite.ageMinutes !== null && offSite.ageMinutes > 26 * 60 && health.status === 'ok') {
         health.status = 'degraded';
       }
     }
