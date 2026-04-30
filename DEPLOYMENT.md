@@ -323,23 +323,123 @@ MeisterTracker automatically creates daily SQLite backups at midnight:
 - Stored in the `backups/` directory
 - Uses `VACUUM INTO` for WAL-consistent snapshots
 - Keeps the last 30 days
+- Filename pattern: `meisterpilze_backup_YYYY-MM-DD.db`
+
+`update_server.sh` and `START.bat` also create a one-off snapshot before pulling new code, with the pattern `meistertracker_YYYYMMDD_HHMMSS.db`. These are NOT rotated — they accumulate until you remove them manually. Both prefixes are recognised by the health check below.
 
 ### Verify Backup Health
 ```bash
-node scripts/check-backup-health.js    # quick check, exits 0 if OK
-node scripts/verify-backup.js          # full restore test
+# Quick check — exits 0 if healthy, 1 if degraded, 2 if critical.
+node scripts/check-backup-health.js
+
+# Full restore test of a specific file (uses the same openDb path as
+# /api/backup/restore, so any schema-ordering bug surfaces here).
+node scripts/verify-backup.js --restore-test backups/meisterpilze_backup_2026-04-29.db
+
+# Full restore test of the most recent file in the backup dir — what an
+# operator should run nightly from cron.
+node scripts/verify-backup.js --latest
+
+# Round-trip: take a fresh backup of the live DB and re-open it.
+node scripts/verify-backup.js
 ```
 
-### Off-Site Backups (recommended)
-Backups on the same server are not enough — if the server fails, the backups go with it. Add a cron job to copy them off-site:
+## 10. Off-site backups (REQUIRED)
+
+Backups stored on the same machine as the database are not enough — if the server fails, the backups go with it. The recommended pattern is `rsync` over SSH to a separate host:
+
 ```bash
-crontab -e
-```
-```
-0 2 * * * rsync -a /var/www/meistertracker/backups/ <user>@<backup-server>:/backups/meistertracker/
+# /etc/cron.d/meisterpilze-offsite
+30 0 * * * meisterpilze /usr/local/bin/meisterpilze-offsite-sync.sh
 ```
 
-## 10. Label Printing on Linux
+```bash
+#!/bin/bash
+# /usr/local/bin/meisterpilze-offsite-sync.sh
+set -e
+SRC=/var/www/meistertracker/backups/
+DST=backup-host:/srv/meisterpilze-offsite/
+TARGET="backup-host:/srv/meisterpilze-offsite/"
+START=$(date +%s)
+rsync -az --delete "$SRC" "$DST"
+END=$(date +%s)
+BYTES=$(du -bs "$SRC" | awk '{print $1}')
+# R-06: write a marker so /api/health and check-backup-health.js know this
+# script ran. Without the marker, off-site failure is silent.
+cat > /var/www/meistertracker/backups/.offsite-sync.json <<EOF
+{ "time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)", "bytes": ${BYTES}, "target": "${TARGET}", "durationSeconds": $((END-START)) }
+EOF
+```
+
+### SSH key for the cron user
+```bash
+sudo -u meisterpilze ssh-keygen -t ed25519 -f /home/meisterpilze/.ssh/id_ed25519 -N ""
+sudo -u meisterpilze ssh-copy-id backup-host
+sudo -u meisterpilze ssh backup-host true   # confirm passwordless login works
+```
+
+### Marker file
+The marker (`backups/.offsite-sync.json`) lets the server expose `/api/health → backup.offSite` with `lastSync`, `ageMinutes`, and `target`, and lets `check-backup-health.js` exit 1 (degraded) when the off-site sync hasn't run in `--max-offsite-age-hours` (default: 26). Any cron script in any language can update the marker — see the bash example above.
+
+### Alternative: OneDrive on Windows
+If the project lives under a OneDrive-synced folder (`OneDrive - Meisterpilze`), the `backups/` directory cloud-syncs automatically. This is convenient but **platform-specific and not portable** — on a Linux server you must use rsync (or another off-site tool that touches the marker file).
+
+## 11. Restoring from a backup
+
+Three scenarios in increasing severity:
+
+### A. Encrypted `.enc` restore via the admin UI
+
+If you downloaded a password-encrypted archive from **Settings → Backup → Download**, restore it the same way:
+
+1. Log in as admin.
+2. Open **Settings → Backup → Restore** and pick the `.enc` file.
+3. Enter the password used at download time.
+4. The server validates, swaps in the new database atomically (with a `.pre-restore.bak` rollback safety net), and broadcasts the change to all connected clients.
+
+This is the preferred path when the server is still reachable.
+
+### B. Manual file swap (admin UI unreachable)
+
+When the database is corrupt or the admin UI can't load:
+
+```bash
+# 1. Stop the server
+pm2 stop meisterpilze        # Linux
+# Or close START.bat            # Windows
+
+# 2. Move the broken DB aside (KEEP it — never delete a corrupt DB; you may
+#    need it for forensics or partial recovery later)
+mv meistertracker.db meistertracker.db.broken
+rm -f meistertracker.db-wal meistertracker.db-shm
+
+# 3. Pick a backup. Auto-backups: backups/meisterpilze_backup_YYYY-MM-DD.db
+#    Manual backups: backups/meistertracker_YYYYMMDD_HHMMSS.db
+ls -la backups/
+
+# 4. Verify the chosen file BEFORE swapping it in (catches a corrupt file
+#    early, avoids a second outage on restart):
+node scripts/verify-backup.js --restore-test backups/meisterpilze_backup_2026-04-29.db
+
+# 5. Copy the backup into place
+cp backups/meisterpilze_backup_2026-04-29.db meistertracker.db
+
+# 6. Restart
+pm2 start meisterpilze       # Linux
+# Or double-click START.bat     # Windows
+```
+
+After restart, log in and confirm batches/harvests/users are present. If anything is missing, stop again and try an older backup.
+
+### C. WAL-only recovery (last resort)
+
+If `meistertracker.db` is gone but `meistertracker.db-wal` and `meistertracker.db-shm` survive, **you cannot recover from WAL alone** — SQLite's write-ahead log is meaningless without the original DB file it amends. Treat this as scenario B and accept the loss of whatever was sitting in WAL since the last backup.
+
+To minimise this loss in the future, lower `wal_autocheckpoint` (currently 1000 pages) or run `PRAGMA wal_checkpoint(TRUNCATE)` from a cron, but **the off-site backup (Section 10) is the real defence** — it captures the consistent on-disk state every night.
+
+For background on the encrypted-archive format and the admin restore endpoint, see README.md → Restoring from a backup.
+
+## 12. Label Printing on Linux
 
 The label-printing endpoint (`/api/print`) needs the Windows print spooler to talk to a Zebra GK420d. On Linux you have two practical options:
 
@@ -422,7 +522,7 @@ powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.
 
 The installer persists the token into the scheduled-task arguments, so it survives logoffs / reboots.
 
-## 11. Updating
+## 13. Updating
 
 To update a running installation:
 ```bash
@@ -437,7 +537,7 @@ This will:
 4. Ensure TLS certificates are present
 5. Restart the server via PM2
 
-## 12. Docker Deployment (Alternative)
+## 14. Docker Deployment (Alternative)
 
 MeisterTracker includes a Dockerfile for containerized deployment:
 
