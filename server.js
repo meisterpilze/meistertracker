@@ -4948,7 +4948,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         deltas = data.deltas;
       }
       try {
-        const result = db.insertBatch(database, data, deltas);
+        // I-22: thread the authenticated user_id so inventory_log rows record the actor.
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const result = db.insertBatch(database, data, deltas, userId);
         autoPushBatchCaldav(data);
         broadcastSSE(res);
         jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
@@ -4967,7 +4969,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty);
+        // I-22 + I-23: thread user_id and let addBagsToBatch deduct inventory
+        // for the new bags inside the same transaction.
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty, undefined, userId);
         broadcastSSE(res);
         jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
       } catch (err) {
@@ -5002,7 +5007,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(batchIdMatch[1]);
     try {
-      db.deleteBatchById(database, id);
+      // I-22: forward acting user so the inventory_log credit-back records the actor.
+      db.deleteBatchById(database, id, req.authUser ? req.authUser.user_id : null);
       try {
         autoDeleteBatchCaldav(id);
       } catch (ce) {
@@ -6582,7 +6588,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const val = db.applyInventoryDelta(database, data.mat, data.deltaKg, data.type || null, data.ref || null);
+        // I-22: record the acting user on every inventory delta.
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const val = db.applyInventoryDelta(
+          database,
+          data.mat,
+          data.deltaKg,
+          data.type || null,
+          data.ref || null,
+          userId
+        );
         broadcastSSE(res);
         jsonOk(res, { value: val });
       } catch (err) {
@@ -6613,7 +6628,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const val = db.setInventoryAbsolute(database, data.mat, data.value, data.type || null, data.ref || null);
+        // I-22: record the acting user on absolute inventory sets too.
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const val = db.setInventoryAbsolute(
+          database,
+          data.mat,
+          data.value,
+          data.type || null,
+          data.ref || null,
+          userId
+        );
         broadcastSSE(res);
         jsonOk(res, { value: val });
       } catch (err) {
