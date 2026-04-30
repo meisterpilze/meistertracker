@@ -137,7 +137,8 @@ CREATE TABLE IF NOT EXISTS inventory_log (
   delta_kg REAL NOT NULL,
   running  REAL DEFAULT 0,
   type     TEXT,
-  ref      TEXT
+  ref      TEXT,
+  user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_invlog_time ON inventory_log(time);
 
@@ -997,6 +998,23 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE calendar_events ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0');
       }
     }
+  },
+  {
+    version: 40,
+    description: 'Add user_id to inventory_log for actor accountability (I-22)',
+    fn(db) {
+      // I-22: every stock change should record who performed it. Existing rows
+      // pre-date this column and stay NULL — we don't backfill since the
+      // information is not recoverable from elsewhere. ON DELETE SET NULL so
+      // removing a user keeps the audit trail (just anonymises it).
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('inventory_log')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('user_id')) {
+        db.exec('ALTER TABLE inventory_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+      }
+    }
   }
 ];
 
@@ -1325,7 +1343,9 @@ function readAll(db, opts = {}) {
     deltaKg: r.delta_kg,
     running: r.running,
     type: r.type,
-    ref: r.ref
+    ref: r.ref,
+    // I-22: surface the actor for clients that need it (audit views, KPIs).
+    user_id: r.user_id != null ? r.user_id : null
   }));
   const inventory = {
     stock: {
@@ -2134,7 +2154,7 @@ function resetUserPassword(db, userId, newPassword) {
 // the same transaction as the batch + bag inserts. Atomicity guarantee: if
 // any delta or insert fails, the batch row, bag rows, inventory mutations,
 // and inventory_log entries are all rolled back.
-function insertBatch(db, b, deltas) {
+function insertBatch(db, b, deltas, userId) {
   if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
   if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
   // Resolve strainId → species + strain text
@@ -2146,6 +2166,20 @@ function insertBatch(db, b, deltas) {
     if (!ms) throw new Error('Pilzsorte nicht gefunden');
     species = ms.name + ' (' + ms.kuerzel + ')';
     if (!strain) strain = 'XXX';
+  }
+  // I-19: defensive substrate-composition check. Block batches must have
+  // hardwood + wheatbran summing to 100% (within rounding). The client warns
+  // before submit, but the API/MCP path is bypassable, so guard here too.
+  // Skip when batchType is not 'block' (grain/liquid don't use this split) or
+  // when both percentages are zero (caller opted out of detailed tracking).
+  const batchType = b.batchType || 'block';
+  if (batchType === 'block') {
+    const sub0 = b.substrate || {};
+    const hw0 = sub0.hardwood || 0;
+    const wb0 = sub0.wheatbran || 0;
+    if ((hw0 || wb0) && Math.abs(hw0 + wb0 - 100) > 0.01) {
+      throw new Error('Substrate composition must total 100% (got ' + (hw0 + wb0).toFixed(1) + '%)');
+    }
   }
   db.exec('BEGIN');
   try {
@@ -2186,9 +2220,10 @@ function insertBatch(db, b, deltas) {
     const bagBarcodes = assignBarcodes(db, 'bag', bagIds);
     // Apply inventory deltas inside the same transaction so an under-stock
     // failure or invalid material rolls the batch back too.
+    // I-22: forward `userId` so each row in `inventory_log` records the actor.
     if (Array.isArray(deltas)) {
       for (const d of deltas) {
-        applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, d.type || 'batch', d.ref || b.batchId);
+        applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, d.type || 'batch', d.ref || b.batchId, userId || null);
       }
     }
     incrementDataVersion(db);
@@ -2201,9 +2236,11 @@ function insertBatch(db, b, deltas) {
 }
 
 function updateBatchField(db, batchId, fields) {
-  // Note: qty is intentionally NOT in the allowed list. Changing qty here
-  // would skip the inventory_log entries that addBagsToBatch / deleteBatchById
-  // use to keep stock consistent. Use addBagsToBatch to grow a batch.
+  // Note: qty is intentionally NOT in the allowed list. addBagsToBatch (post
+  // I-23) and deleteBatchById both compute inventory deltas from the bag rows
+  // they create/destroy and write the corresponding inventory_log entries; a
+  // bare qty update here would mutate the count without any of that ledger
+  // bookkeeping. Use addBagsToBatch to grow a batch.
   db.exec('BEGIN');
   try {
     // Handle strainId update: resolve species+strain from mushroom_strains
@@ -2295,18 +2332,35 @@ function renameCulture(db, oldId, newId) {
   }
 }
 
-function addBagsToBatch(db, batchId, newBags, newQty, bagKg) {
+function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
   db.exec('BEGIN');
   try {
+    // I-23: read the full batch row so we can reuse its composition for
+    // proportional inventory deduction. addBagsToBatch previously bumped
+    // qty + bag rows without touching inventory, so growing 10→12 bags
+    // silently consumed real substrate that never hit the ledger.
+    const batch = db.prepare('SELECT * FROM batches WHERE batch_id=?').get(batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+
     // Resolve bag weight: explicit param > batch's existing weight
     let weight = bagKg;
-    if (weight == null) {
-      const row = db.prepare('SELECT bag_kg FROM batches WHERE batch_id=?').get(batchId);
-      weight = row ? row.bag_kg || 3 : 3;
-    }
+    if (weight == null) weight = batch.bag_kg || 3;
+
     const ins = db.prepare('INSERT OR IGNORE INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const id of newBags) ins.run(id, batchId, weight);
     if (newQty != null) db.prepare('UPDATE batches SET qty=? WHERE batch_id=?').run(newQty, batchId);
+
+    // I-23: compute and apply inventory deltas for the *added* bags only.
+    // Reuses computeBatchMaterialDeltasForKg so the deduction math matches
+    // what insertBatch would have charged for those bags originally. Negative
+    // deltas are clamped against current stock by applyInventoryDeltaNoTxn —
+    // the same lenient behaviour insertBatch already has when stock is short.
+    const addedWetKg = weight * newBags.length;
+    const deltas = computeBatchMaterialDeltasForKg(batch, addedWetKg);
+    for (const d of deltas) {
+      applyInventoryDeltaNoTxn(db, d.mat, -d.deltaKg, 'batch-grow', batchId, userId || null);
+    }
+
     // Assign numeric barcodes to new bags
     const bagBarcodes = assignBarcodes(db, 'bag', newBags);
     incrementDataVersion(db);
@@ -2318,7 +2372,7 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg) {
   }
 }
 
-function deleteBatchById(db, batchId) {
+function deleteBatchById(db, batchId, userId) {
   db.exec('BEGIN');
   try {
     // Read batch before deleting so we can reverse inventory deductions
@@ -2335,13 +2389,15 @@ function deleteBatchById(db, batchId) {
         const col = 'stock_' + d.mat;
         db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(d.deltaKg);
         const cur = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
-        db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
+        // I-22: include user_id so the inventory ledger records who triggered the credit-back.
+        db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref,user_id) VALUES(?,?,?,?,?,?,?)').run(
           new Date().toISOString(),
           d.mat,
           d.deltaKg,
           cur.val,
           'batch-delete',
-          batchId
+          batchId,
+          userId || null
         );
       }
     }
@@ -2407,6 +2463,37 @@ function computeBatchMaterialDeltas(db, row) {
       if (gyp) deltas.push({ mat: 'gypsum', deltaKg: totalDryKg * 0.01 });
     }
   }
+  return deltas;
+}
+
+/**
+ * I-23: Compute material kg consumed by adding `addedWetKg` (sum of new bags'
+ * wet weights) to an existing batch. Reuses the batch's stored composition
+ * (hardwood/wheatbran %, rh %, gypsum flag, grain_rh) so the deduction matches
+ * what the original `insertBatch` deduction logic would have charged for those
+ * bags. Returns deltas as positive consumption values; caller flips the sign
+ * when applying to inventory. Returns [] when the batch has no composition
+ * (legacy or zero-percent batches).
+ */
+function computeBatchMaterialDeltasForKg(batch, addedWetKg) {
+  const deltas = [];
+  if (!batch || !(addedWetKg > 0)) return deltas;
+  if (batch.batch_type === 'grain') {
+    const rh = batch.grain_rh || 0;
+    const dryKg = rh > 0 ? addedWetKg * (1 - rh / 100) : addedWetKg;
+    if (dryKg > 0) deltas.push({ mat: 'grain', deltaKg: dryKg });
+    return deltas;
+  }
+  const hw = batch.sub_hardwood || 0;
+  const wb = batch.sub_wheatbran || 0;
+  if (!hw && !wb) return deltas;
+  const rh = batch.sub_rh || 0;
+  const dryKg = rh > 0 ? addedWetKg * (1 - rh / 100) : addedWetKg;
+  const hwUsed = dryKg * (hw / 100);
+  const wbUsed = dryKg * (wb / 100);
+  if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
+  if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+  if (batch.sub_gypsum) deltas.push({ mat: 'gypsum', deltaKg: dryKg * 0.01 });
   return deltas;
 }
 
@@ -2521,6 +2608,32 @@ function insertHarvest(db, h) {
 }
 
 // -- Cultures --
+// I-20: allowed parent types per child type. Enforced in insertCultures and
+// updateCulture. Block batches are not cultures, so they're not in this map.
+// G2G and GS both denote grain spawn cultures and share the same parent rules.
+// Existing rows in the DB may already violate these rules — we don't run any
+// retroactive cleanup, just enforce the constraint going forward.
+const VALID_CULTURE_PARENT_TYPES = {
+  MC: [], // mother culture is the lineage root — no parent allowed
+  PD: ['MC', 'PD'],
+  LC: ['MC', 'PD', 'LC'],
+  G2G: ['MC', 'PD', 'LC', 'G2G', 'GS'],
+  GS: ['MC', 'PD', 'LC', 'G2G', 'GS']
+};
+
+function validateCultureParent(db, type, parentId) {
+  if (!parentId) return null;
+  const parent = db.prepare('SELECT type FROM cultures WHERE id = ?').get(parentId);
+  if (!parent) return 'parent culture not found: ' + parentId;
+  const allowed = VALID_CULTURE_PARENT_TYPES[type];
+  if (!allowed) return 'unknown culture type: ' + type;
+  if (allowed.length === 0) return type + ' cultures cannot have a parent';
+  if (!allowed.includes(parent.type)) {
+    return type + ' parent must be one of [' + allowed.join(', ') + '], got ' + parent.type;
+  }
+  return null;
+}
+
 function insertCultures(db, cultures) {
   if (!cultures.length) return;
   const ins = db.prepare(
@@ -2533,6 +2646,12 @@ function insertCultures(db, cultures) {
     if (c.parentId && c.parentId === c.id) {
       throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
     }
+    // I-20: validate parent type against the child type (defence-in-depth —
+    // the UI dropdown already filters by allowed types, but the API and MCP
+    // tools accept arbitrary parentId so the constraint is enforceable here).
+    const err = validateCultureParent(db, c.type, c.parentId || null);
+    if (err) throw new Error('Invalid culture parent: ' + err);
+
     // Resolve strainId if provided
     let strainId = c.strainId || null;
     let species = c.species || null;
@@ -2573,6 +2692,17 @@ function updateCulture(db, id, fields) {
   // reject self-cycle attempts up front.
   if ((fields.parentId != null && fields.parentId === id) || (fields.parent_id != null && fields.parent_id === id)) {
     throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
+  }
+  // I-20: if a future update path ever lets parent_id through the allowed
+  // list, validate the parent type against the child's existing type. This
+  // covers both the camelCase and snake_case spellings.
+  const incomingParent = fields.parentId != null ? fields.parentId : fields.parent_id != null ? fields.parent_id : null;
+  if (incomingParent) {
+    const cur = db.prepare('SELECT type FROM cultures WHERE id = ?').get(id);
+    if (cur) {
+      const err = validateCultureParent(db, cur.type, incomingParent);
+      if (err) throw new Error('Invalid culture parent: ' + err);
+    }
   }
   // Handle strainId update
   if (fields.strainId != null) {
@@ -2927,7 +3057,8 @@ const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
-function applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref) {
+// I-22: optional `userId` is recorded so the inventory_log shows who acted.
+function applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref, userId) {
   if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   // Clamp negative deltas against current stock so the inventory_log "running" total
@@ -2938,21 +3069,22 @@ function applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref) {
   const recorded = deltaKg < 0 ? Math.max(deltaKg, -cur) : deltaKg;
   db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(recorded);
   const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
-  db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref,user_id) VALUES(?,?,?,?,?,?,?)').run(
     new Date().toISOString(),
     mat,
     recorded,
     row.val,
     type || null,
-    ref || null
+    ref || null,
+    userId || null
   );
   return row.val;
 }
 
-function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+function applyInventoryDelta(db, mat, deltaKg, type, ref, userId) {
   db.exec('BEGIN');
   try {
-    const newVal = applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref);
+    const newVal = applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
     return newVal;
@@ -2962,7 +3094,7 @@ function applyInventoryDelta(db, mat, deltaKg, type, ref) {
   }
 }
 
-function setInventoryAbsolute(db, mat, value, type, ref) {
+function setInventoryAbsolute(db, mat, value, type, ref, userId) {
   if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
   db.exec('BEGIN');
@@ -2970,13 +3102,14 @@ function setInventoryAbsolute(db, mat, value, type, ref) {
     const old = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get().val;
     const delta = value - old;
     db.prepare(`UPDATE inventory SET ${col}=? WHERE id=1`).run(value);
-    db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
+    db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref,user_id) VALUES(?,?,?,?,?,?,?)').run(
       new Date().toISOString(),
       mat,
       delta,
       value,
       type || null,
-      ref || null
+      ref || null,
+      userId || null
     );
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -3874,7 +4007,9 @@ function getInventory(db, logLimit) {
       deltaKg: r.delta_kg,
       running: r.running,
       type: r.type,
-      ref: r.ref
+      ref: r.ref,
+      // I-22: surface acting user for audit views.
+      user_id: r.user_id != null ? r.user_id : null
     }))
   };
 }
