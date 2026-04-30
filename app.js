@@ -4446,6 +4446,7 @@ function confirmBatchAdd() {
       species: batch.species,
       strain: batch.strain,
       user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
       _tempId: tempId
     };
     scanLog.push(entry);
@@ -4498,21 +4499,29 @@ const sbadge = (s) => {
 };
 
 // ─── STATUS CALC ─────────────────────────────────────────────
+// I-10/I-14/I-21: derive zone counts from the *last* event per bag instead
+// of incrementally counting deltas. This naturally handles out-of-order
+// scan replays (e.g. an offline REMOVE that arrives after a fresh ADD): the
+// latest scan-log entry by id always wins, so a stale event can't push a
+// bag's tracked count below zero or above one.
 function getStatus(id) {
   const c = {};
   ZONES.forEach((z) => (c[z] = 0));
-  scanLog
-    .filter((e) => e.batch === id)
-    .forEach((e) => {
-      const tz = toZone(e.to),
-        fz = toZone(e.from);
-      if (e.action === 'ADD' && e.to && c[tz] !== undefined) c[tz] = Math.max(0, c[tz] + 1);
-      if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
-        if (e.from && c[fz] !== undefined) c[fz] = Math.max(0, c[fz] - 1);
-        if (e.to && c[tz] !== undefined) c[tz]++;
-      }
-      if (e.action === 'REMOVE' && e.from && c[fz] !== undefined) c[fz] = Math.max(0, c[fz] - 1);
-    });
+  // Build the last event per bag for this batch. scanLog is ordered by server
+  // id (see db.js getScanLog ORDER BY s.id), so a simple forward iteration
+  // makes the highest-id entry win for each bag. Fall back to bag = batch
+  // (legacy entries that pre-date per-bag tracking) so those still count.
+  const lastByBag = new Map();
+  for (const e of scanLog) {
+    if (e.batch !== id) continue;
+    const key = e.bag || `__batch__:${e.batch}`;
+    lastByBag.set(key, e);
+  }
+  for (const e of lastByBag.values()) {
+    if (e.action === 'REMOVE') continue; // bag is gone
+    const tz = toZone(e.to);
+    if (tz && c[tz] !== undefined) c[tz]++;
+  }
   const total = Object.values(c).reduce((a, b) => a + b, 0);
   // Aggregate by role
   const byRole = {};
@@ -4679,10 +4688,18 @@ function renderOverviewKPIs() {
   }
 
   // 6. Contamination rate (%)
-  const allBagsPlaced = new Set(scanLog.filter((e) => e.action === 'ADD' && e.bag).map((e) => e.bag)).size;
+  // I-13: numerator must be a subset of the denominator. addedBags is the
+  // set of bags that ever had an ADD; contamBagSet only counts bags that
+  // both had an ADD AND were moved to a contaminated zone. Without this
+  // intersection a MOVE-only contaminated bag (e.g. an auto-MOVE from a
+  // contamination report on a bag that pre-dated explicit ADD tracking)
+  // would push the percentage above 100.
+  const addedBags = new Set(scanLog.filter((e) => e.action === 'ADD' && e.bag).map((e) => e.bag));
+  const allBagsPlaced = addedBags.size;
   const contamBagSet = new Set();
   scanLog.forEach((e) => {
     if (!e.to || !e.bag) return;
+    if (!addedBags.has(e.bag)) return;
     const z = ZONE_BY_ID[toZone(e.to)];
     if (z && z.role === 'contaminated') contamBagSet.add(e.bag);
   });
@@ -6808,7 +6825,10 @@ function locMoveTo(toLoc) {
       to: toLoc,
       species: b?.species || null,
       strain: b?.strain || null,
-      user: currentUser?.username || null
+      user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
+      // I-12: optimistic concurrency snapshot for offline-queue replays.
+      expected_current_zone: d.loc ? toZone(d.loc) : null
     };
     scanLog.push(entry);
     movements.push(entry);
@@ -6818,7 +6838,7 @@ function locMoveTo(toLoc) {
   lastLocUndoCount = n;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries });
+  apiPost('/api/scan-log', { entries }).then((r) => handleZoneMismatch(r, entries));
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
@@ -6840,7 +6860,8 @@ function locRemoveSelected() {
       to: null,
       species: b?.species || null,
       strain: b?.strain || null,
-      user: currentUser?.username || null
+      user: currentUser?.username || null,
+      client_uuid: newScanUuid()
     };
     scanLog.push(entry);
     movements.push(entry);
@@ -7181,6 +7202,9 @@ function moveBagsTo(batch, bagIds, dest, cb) {
       species: batch.species,
       strain: batch.strain,
       user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
+      // I-12: optimistic concurrency snapshot for offline-queue replays.
+      expected_current_zone: curLoc ? toZone(curLoc) : null,
       _tempId: tempId
     };
     scanLog.push(entry);
@@ -7198,6 +7222,7 @@ function moveBagsTo(batch, bagIds, dest, cb) {
       scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
     );
   apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (handleZoneMismatch(r, entries)) return; // I-12
     if (r && r.ids)
       entries.forEach((e, i) => {
         if (r.ids[i]) e._serverId = r.ids[i];
@@ -7228,6 +7253,7 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
       species: batch.species,
       strain: batch.strain,
       user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
       _tempId: tempId
     };
     scanLog.push(entry);
@@ -10045,9 +10071,13 @@ async function executeBulkMoveToRack(zoneId, rackId) {
     to: rackId,
     species: b.species,
     strain: b.strain,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    client_uuid: newScanUuid(),
+    // I-12: optimistic concurrency snapshot for offline-queue replays.
+    expected_current_zone: b.loc ? toZone(b.loc) : null
   }));
   const res = await apiPost('/api/scan-log', { entries });
+  if (handleZoneMismatch(res, entries)) return; // I-12
   if (res.error) {
     alert(res.error);
     return;
@@ -11471,6 +11501,7 @@ function biPerformRemove() {
     species: b?.species || null,
     strain: b?.strain || null,
     user: currentUser?.username || null,
+    client_uuid: newScanUuid(),
     _tempId: tempId
   };
   scanLog.push(entry);
@@ -13722,6 +13753,55 @@ function newScanSession() {
   resetScan();
 }
 let _scanTempIdCounter = 0;
+
+// I-12: handle a 409 zone_mismatch response from POST /api/scan-log. The server
+// rejected the MOVE because another user moved the bag while this client's
+// view was stale (typical flow: offline scan that replayed after the bag was
+// moved by someone else online). We discard the local in-memory entry and
+// surface a toast so the user knows their MOVE didn't apply.
+function handleZoneMismatch(r, entries) {
+  if (!r || r.error !== 'zone_mismatch') return false;
+  const list = Array.isArray(entries) ? entries : [entries];
+  // Drop the offending entry from local state so the dashboard doesn't keep
+  // showing a phantom MOVE that the server rejected. We match by bag — server
+  // returns the bag that triggered the conflict.
+  if (r.bag) {
+    const targets = list.filter((e) => e && e.bag === r.bag);
+    for (const e of targets) {
+      const i = scanLog.lastIndexOf(e);
+      if (i >= 0) scanLog.splice(i, 1);
+      const j = movements.lastIndexOf(e);
+      if (j >= 0) movements.splice(j, 1);
+    }
+  }
+  const cur = r.current_zone ? zoneDisplayName(r.current_zone) : 'unbekannt';
+  const msg = `MOVE rejected: bag ${r.bag} was moved by another user. Current zone: ${cur}`;
+  if (typeof setFb === 'function') setFb('err', msg);
+  if (typeof renderStatus === 'function') renderStatus();
+  if (typeof updateSD === 'function') updateSD();
+  return true;
+}
+
+// I-11: idempotency key for scan-log POSTs. The offline queue (sw.js) replays
+// queued POSTs verbatim; without a stable per-entry key, a network partition
+// that times out on the client but succeeds on the server would leave the
+// entry queued and replay it next time, creating a duplicate. The server
+// upserts on client_uuid (UNIQUE INDEX), so retries are safe.
+// crypto.randomUUID is available in all modern browsers and Node 16+; the
+// fallback covers very old browsers (no offline support there anyway).
+function newScanUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback: 16 random bytes formatted as UUID v4. Not cryptographically
+  // strong, but the only consumer is the unique index; sufficient for dedup.
+  const r = Math.random;
+  const hex = (n) => Math.floor(r() * 16 ** n)
+    .toString(16)
+    .padStart(n, '0');
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(r() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
+}
+
 function processScan(raw) {
   // Underscore/hyphen convention:
   // - Location barcodes use UNDERSCORES (e.g. INC_BUERO_01, SPAWN_R1) — kept as-is
@@ -14086,6 +14166,7 @@ function processScan(raw) {
       }
     }
     const tempId = 's' + ++_scanTempIdCounter;
+    const isMove = scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
     const entry = {
       time: new Date().toISOString(),
       action: scan.action,
@@ -14096,6 +14177,10 @@ function processScan(raw) {
       species: batch?.species,
       strain: batch?.strain,
       user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
+      // I-12: optimistic concurrency snapshot for offline-queue replays.
+      // Only meaningful for MOVE/MOVE_BATCH (ADD has no expected zone).
+      expected_current_zone: isMove && scan.from ? toZone(scan.from) : null,
       _tempId: tempId
     };
     scanLog.push(entry);
@@ -14113,12 +14198,17 @@ function processScan(raw) {
         entry._serverId = r.ids[0];
         return;
       }
+      // I-12: server rejected the MOVE because the bag has since been moved
+      // by another user. Discard the local entry and toast the user; do NOT
+      // retry (a retry would just hit the same 409).
+      if (handleZoneMismatch(r, entry)) return;
       if (r && r.error) {
         // Retry once after 3s on server error
         console.warn('Scan log POST failed, retrying:', r.error);
         setTimeout(function () {
           apiPost('/api/scan-log', { entries: [entry] }).then(function (r2) {
             if (r2 && r2.ids && r2.ids[0]) entry._serverId = r2.ids[0];
+            else if (handleZoneMismatch(r2, entry)) return;
             else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
           });
         }, 3000);
@@ -16498,6 +16588,20 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'offline-queue-update') {
       updateOfflineBadge(e.data.pendingCount);
+    }
+    // I-12: SW dropped a queued MOVE because the server returned 409
+    // (the bag was moved by another user while this entry was offline).
+    // Surface a toast so the user knows their MOVE didn't apply.
+    if (e.data && e.data.type === 'scan-replay-rejected') {
+      const cur = e.data.current_zone ? zoneDisplayName(e.data.current_zone) : 'unbekannt';
+      const bag = e.data.bag || '';
+      try {
+        if (typeof setFb === 'function') {
+          setFb('err', `MOVE rejected: bag ${bag} was moved by another user. Current zone: ${cur}`);
+        }
+      } catch {
+        /* setFb not yet wired — drop silently */
+      }
     }
   });
   window.addEventListener('online', () => {
