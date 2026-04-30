@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Pulls latest code, makes a one-off DB snapshot (filename pattern:
+# meistertracker_YYYYMMDD_HHMMSS.db) under backups/, regenerates TLS certs
+# if missing, and restarts the meisterpilze PM2 process.
+#
+# To restore from a backup, see DEPLOYMENT.md → "Restoring from a backup".
+# For off-site replication of backups/, see DEPLOYMENT.md → "Off-site backups
+# (REQUIRED)".
+
 # exit immediately if a command exits with a non-zero status
 set -e
 
