@@ -4748,6 +4748,62 @@ function unresolveContaminationReport(db, id) {
   return r.changes > 0;
 }
 
+// R-23: classifier for `Error.message` strings — true if the message comes
+// from a known validator and is safe to forward to the client as a 400, false
+// for anything else (which should be logged + returned as a generic 500).
+//
+// The previous implementation was a substring regex
+// (`/required|invalid|must be|not found|already|duplicate|too short|too long|cannot|constraint/i`)
+// that matched SQLite messages like
+// "SQLITE_CONSTRAINT: UNIQUE constraint failed: users.username" and forwarded
+// the schema details to clients. The allowlist is curated from every
+// `throw new Error(...)` call site in db.js + photo handling in server.js —
+// anything not matching falls through to the 500 branch by design.
+const SAFE_ERROR_PREFIXES = [
+  // Lookups — db.js
+  'Batch not found:',
+  'Culture not found:',
+  'Zone not found:',
+  'Rack not found:',
+  'batch not found:',
+  // Conflicts — db.js
+  'Zone already exists:',
+  'Rack already exists:',
+  'A batch with ID ',
+  'A culture with ID ',
+  'Unknown zone:',
+  // Validation — db.js
+  'invalid material:',
+  'Invalid culture parent:',
+  'Substrate composition must total',
+  'Zone has ',
+  'Rack has ',
+  'Zone name ',
+  'Cannot delete:',
+  // Photo upload — server.js (every message is prefixed `photo:`)
+  'photo:'
+];
+
+const SAFE_ERROR_BARE = new Set([
+  'qty must be >= 1',
+  'days must be >= 1',
+  'grams must be >= 0',
+  'order must be an array',
+  'mat and name are required',
+  'Pilzsorte nicht gefunden',
+  'Culture parent_id must not equal its own id (self-cycle rejected)',
+  'Name ist Pflichtfeld',
+  'Kürzel ist Pflichtfeld',
+  'Kürzel already taken'
+]);
+
+function isSafeError(msg) {
+  const s = String(msg || '');
+  if (!s) return false;
+  if (SAFE_ERROR_BARE.has(s)) return true;
+  return SAFE_ERROR_PREFIXES.some((p) => s.startsWith(p));
+}
+
 module.exports = {
   openDb,
   readAll,
@@ -4900,5 +4956,7 @@ module.exports = {
   deleteContaminationReport,
   resolveContaminationReport,
   unresolveContaminationReport,
-  setContaminationReportScanLogId
+  setContaminationReportScanLogId,
+  // R-23
+  isSafeError
 };

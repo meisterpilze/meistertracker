@@ -1419,3 +1419,66 @@ describe('db – checkDiskSpace (R-16)', () => {
     assert.throws(() => db.checkDiskSpace(os.tmpdir(), Number.MAX_SAFE_INTEGER), /Insufficient/);
   });
 });
+
+// R-23: safeErr classifier — only forward known validator messages, never
+// leak SQLite constraint / schema details to the client.
+describe('db – isSafeError (R-23)', () => {
+  it('rejects SQLITE_CONSTRAINT messages (would leak schema)', () => {
+    // The previous regex matched on the substring "constraint" and forwarded
+    // these strings — including the table.column — to clients as a 400.
+    assert.equal(db.isSafeError('SQLITE_CONSTRAINT: UNIQUE constraint failed: users.username'), false);
+    assert.equal(db.isSafeError('UNIQUE constraint failed: batches.id'), false);
+    assert.equal(db.isSafeError('SQLITE_CONSTRAINT_FOREIGNKEY: FOREIGN KEY constraint failed'), false);
+  });
+
+  it('rejects unrelated runtime errors', () => {
+    assert.equal(db.isSafeError('Cannot read properties of undefined'), false);
+    assert.equal(db.isSafeError('ENOENT: no such file or directory'), false);
+    assert.equal(db.isSafeError(''), false);
+    assert.equal(db.isSafeError(null), false);
+    assert.equal(db.isSafeError(undefined), false);
+  });
+
+  it('accepts known prefix-style validator messages', () => {
+    assert.equal(db.isSafeError('Batch not found: B-2026-001'), true);
+    assert.equal(db.isSafeError('Culture not found: C-99'), true);
+    assert.equal(db.isSafeError('Zone not found: foo'), true);
+    assert.equal(db.isSafeError('Rack not found: r-1'), true);
+    assert.equal(db.isSafeError('Zone already exists: lab'), true);
+    assert.equal(db.isSafeError('Rack already exists: r-1'), true);
+    assert.equal(db.isSafeError('A batch with ID "B-001" already exists'), true);
+    assert.equal(db.isSafeError('A culture with ID "C-1" already exists'), true);
+    assert.equal(db.isSafeError('Unknown zone: foo'), true);
+    assert.equal(db.isSafeError('invalid material: foo'), true);
+    assert.equal(db.isSafeError('Invalid culture parent: cycle'), true);
+    assert.equal(db.isSafeError('Substrate composition must total 100% (got 99.5%)'), true);
+    assert.equal(db.isSafeError('Zone has 3 bags — remove them first'), true);
+    assert.equal(db.isSafeError('Rack has 1 bags — remove them first'), true);
+    assert.equal(db.isSafeError('Zone name cannot be empty'), true);
+    assert.equal(db.isSafeError('Zone name too long (max 50 chars)'), true);
+    assert.equal(db.isSafeError('Cannot delete: Pilzsorte is still in use (2 batches, 0 cultures).'), true);
+    assert.equal(db.isSafeError('photo: too large (max 5 MB)'), true);
+    assert.equal(db.isSafeError('photo: payload is not a JPEG'), true);
+  });
+
+  it('accepts known bare validator messages', () => {
+    assert.equal(db.isSafeError('qty must be >= 1'), true);
+    assert.equal(db.isSafeError('days must be >= 1'), true);
+    assert.equal(db.isSafeError('grams must be >= 0'), true);
+    assert.equal(db.isSafeError('order must be an array'), true);
+    assert.equal(db.isSafeError('mat and name are required'), true);
+    assert.equal(db.isSafeError('Pilzsorte nicht gefunden'), true);
+    assert.equal(db.isSafeError('Culture parent_id must not equal its own id (self-cycle rejected)'), true);
+    assert.equal(db.isSafeError('Name ist Pflichtfeld'), true);
+    assert.equal(db.isSafeError('Kürzel ist Pflichtfeld'), true);
+    assert.equal(db.isSafeError('Kürzel already taken'), true);
+  });
+
+  it('rejects bare messages that almost match (no partial match)', () => {
+    // Old regex would have accepted these because they contain a hot
+    // substring. New allowlist requires exact match for bare messages.
+    assert.equal(db.isSafeError('something duplicate happened'), false);
+    assert.equal(db.isSafeError('username must be unique constraint'), false);
+    assert.equal(db.isSafeError('Pilzsorte gefunden'), false); // wrong message
+  });
+});
