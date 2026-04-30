@@ -730,28 +730,36 @@ function createMcpServer(database, onWrite, printer) {
         for (let i = 1; i <= params.qty; i++) {
           bags.push(params.batchId + '-' + String(i).padStart(2, '0'));
         }
-        db.insertBatch(database, {
-          batchId: params.batchId,
-          strainId: params.strainId || null,
-          species: params.species,
-          strain: params.strain || null,
-          qty: params.qty,
-          days: params.days,
-          substrate: {
-            hardwood: subHardwood,
-            wheatbran: subWheatbran,
-            rh: subRh,
-            gypsum: subGypsum
+        db.insertBatch(
+          database,
+          {
+            batchId: params.batchId,
+            strainId: params.strainId || null,
+            species: params.species,
+            strain: params.strain || null,
+            qty: params.qty,
+            days: params.days,
+            substrate: {
+              hardwood: subHardwood,
+              wheatbran: subWheatbran,
+              rh: subRh,
+              gypsum: subGypsum
+            },
+            bagKg: params.bagKg || 3,
+            batchType: params.batchType || 'block',
+            grainRh: params.grainRh || 0,
+            sourceId: params.sourceId || null,
+            notes: params.notes || '',
+            created,
+            due,
+            bags
           },
-          bagKg: params.bagKg || 3,
-          batchType: params.batchType || 'block',
-          grainRh: params.grainRh || 0,
-          sourceId: params.sourceId || null,
-          notes: params.notes || '',
-          created,
-          due,
-          bags
-        });
+          // I-22: no inventory deltas from create_batch (the tool description
+          // already documents that callers must use update_inventory separately),
+          // but pass userId for consistency in case that contract changes.
+          null,
+          auth.userId || null
+        );
         notify();
         const persisted = db.readBatchById(database, params.batchId);
         return json({
@@ -1109,12 +1117,14 @@ function createMcpServer(database, onWrite, printer) {
       const adminErr = requireAdminRole();
       if (adminErr) return adminErr;
       try {
+        // I-22: forward auth.userId so the inventory_log records the actor.
         const newStock = db.applyInventoryDelta(
           database,
           params.material,
           params.deltaKg,
           params.type || null,
-          params.ref || null
+          params.ref || null,
+          auth.userId || null
         );
         notify();
         return json({ success: true, material: params.material, deltaKg: params.deltaKg, newStockKg: newStock });
@@ -1410,7 +1420,15 @@ function createMcpServer(database, onWrite, printer) {
         for (let i = 1; i <= params.count; i++) {
           newBags.push(params.batchId + '-' + String(existingCount + i).padStart(2, '0'));
         }
-        const result = db.addBagsToBatch(database, params.batchId, newBags, existingCount + params.count);
+        // I-22 + I-23: forward auth.userId; addBagsToBatch now also deducts inventory.
+        const result = db.addBagsToBatch(
+          database,
+          params.batchId,
+          newBags,
+          existingCount + params.count,
+          undefined,
+          auth.userId || null
+        );
         notify();
         return json({
           success: true,
@@ -1444,7 +1462,8 @@ function createMcpServer(database, onWrite, printer) {
         }
         const batch = db.readBatchById(database, params.batchId);
         if (!batch) return errResult('Batch not found: ' + params.batchId);
-        db.deleteBatchById(database, params.batchId);
+        // I-22: forward acting user so the credit-back inventory rows record the actor.
+        db.deleteBatchById(database, params.batchId, auth.userId || null);
         notify();
         return json({ success: true, batchId: params.batchId, deletedBags: batch.bags.length });
       } catch (e) {

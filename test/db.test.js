@@ -227,6 +227,64 @@ describe('db – batches CRUD', () => {
   it('insertBatch rejects days < 1', () => {
     assert.throws(() => db.insertBatch(d, { ...batch, batchId: 'B-BAD2', days: 0 }), /days must be >= 1/);
   });
+
+  // I-19: substrate composition must total 100% for block batches.
+  it('insertBatch rejects block batch with substrate < 100%', () => {
+    assert.throws(
+      () =>
+        db.insertBatch(d, {
+          ...batch,
+          batchId: 'B-BAD-SUB-LOW',
+          bags: ['B-BAD-SUB-LOW-01'],
+          substrate: { hardwood: 70, wheatbran: 20, rh: 63, gypsum: false }
+        }),
+      /Substrate composition must total 100%/
+    );
+  });
+
+  it('insertBatch rejects block batch with substrate > 100%', () => {
+    assert.throws(
+      () =>
+        db.insertBatch(d, {
+          ...batch,
+          batchId: 'B-BAD-SUB-HIGH',
+          bags: ['B-BAD-SUB-HIGH-01'],
+          substrate: { hardwood: 80, wheatbran: 30, rh: 63, gypsum: false }
+        }),
+      /Substrate composition must total 100%/
+    );
+  });
+
+  it('insertBatch allows block batch with no substrate composition (zero/zero)', () => {
+    // Pre-existing legacy batches and minimal-config batches don't set hw/wb.
+    db.insertBatch(d, {
+      ...batch,
+      batchId: 'B-NO-SUB',
+      bags: ['B-NO-SUB-01'],
+      substrate: { hardwood: 0, wheatbran: 0, rh: 63, gypsum: false }
+    });
+    const stored = db.readBatchById(d, 'B-NO-SUB');
+    assert.equal(stored.batchId, 'B-NO-SUB');
+  });
+
+  it('insertBatch skips substrate check for grain batches', () => {
+    // Grain batches don't use the hardwood/wheatbran split.
+    db.insertBatch(d, {
+      batchId: 'GS-NOSUB',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 1,
+      days: 14,
+      substrate: {},
+      bagKg: 1,
+      batchType: 'grain',
+      created: '2024-02-01T00:00:00Z',
+      due: '2024-02-15T00:00:00Z',
+      bags: ['GS-NOSUB-01']
+    });
+    const stored = db.readBatchById(d, 'GS-NOSUB');
+    assert.equal(stored.batchType, 'grain');
+  });
 });
 
 describe('db – grain hydration deduction', () => {
@@ -457,6 +515,116 @@ describe('db – cultures', () => {
     const data = db.readAll(d);
     assert.equal(data.cultures[0].status, 'retired');
   });
+
+  // I-20: parent type validation in insertCultures.
+  it('insertCultures rejects MC with a parent (root must have no parent)', () => {
+    assert.throws(
+      () =>
+        db.insertCultures(d, [
+          {
+            id: 'MC-BAD-PARENT',
+            type: 'MC',
+            parentId: 'MC-PLEU-010124-01',
+            species: 'Pleurotus',
+            status: 'active',
+            notes: '',
+            created: '2024-01-02T00:00:00Z'
+          }
+        ]),
+      /MC cultures cannot have a parent/
+    );
+  });
+
+  it('insertCultures rejects PD whose parent is not MC or PD', () => {
+    // Seed an LC parent so we have a non-MC, non-PD candidate.
+    db.insertCultures(d, [
+      {
+        id: 'LC-SEED-01',
+        type: 'LC',
+        parentId: 'MC-PLEU-010124-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-03T00:00:00Z'
+      }
+    ]);
+    assert.throws(
+      () =>
+        db.insertCultures(d, [
+          {
+            id: 'PD-BAD-PARENT',
+            type: 'PD',
+            parentId: 'LC-SEED-01',
+            species: 'Pleurotus',
+            status: 'active',
+            notes: '',
+            created: '2024-01-04T00:00:00Z'
+          }
+        ]),
+      /PD parent must be one of \[MC, PD\]/
+    );
+  });
+
+  it('insertCultures accepts LC with PD parent', () => {
+    db.insertCultures(d, [
+      {
+        id: 'PD-FOR-LC',
+        type: 'PD',
+        parentId: 'MC-PLEU-010124-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-05T00:00:00Z'
+      },
+      {
+        id: 'LC-FROM-PD',
+        type: 'LC',
+        parentId: 'PD-FOR-LC',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-06T00:00:00Z'
+      }
+    ]);
+    const data = db.readAll(d);
+    assert.ok(data.cultures.find((c) => c.id === 'LC-FROM-PD'));
+  });
+
+  it('insertCultures rejects unknown parent culture id', () => {
+    assert.throws(
+      () =>
+        db.insertCultures(d, [
+          {
+            id: 'PD-UNKNOWN-PARENT',
+            type: 'PD',
+            parentId: 'NO-SUCH-CULTURE',
+            species: 'Pleurotus',
+            status: 'active',
+            notes: '',
+            created: '2024-01-07T00:00:00Z'
+          }
+        ]),
+      /parent culture not found: NO-SUCH-CULTURE/
+    );
+  });
+
+  it('insertCultures still rejects self-cycles', () => {
+    assert.throws(
+      () =>
+        db.insertCultures(d, [
+          {
+            id: 'SELF-CYCLE-01',
+            type: 'PD',
+            parentId: 'SELF-CYCLE-01',
+            species: 'Pleurotus',
+            status: 'active',
+            notes: '',
+            created: '2024-01-08T00:00:00Z'
+          }
+        ]),
+      /self-cycle/
+    );
+  });
 });
 
 describe('db – tasks', () => {
@@ -558,6 +726,101 @@ describe('db – inventory', () => {
     const data = db.readAll(d);
     assert.equal(data.inventory.thresholds.hardwood.minKg, 100);
     assert.equal(data.inventory.avgComposition.hwPct, 80);
+  });
+
+  // I-22: actor accountability — every inventory_log row records the user_id
+  // that triggered it. Optional, NULL when no user is supplied (legacy / system).
+  it('inventory_log records user_id when supplied', () => {
+    db.createUser(d, 'invlog_alice', 'pass1234', 'admin');
+    const u = db.getUserByUsername(d, 'invlog_alice');
+    db.applyInventoryDelta(d, 'wheatbran', 25, 'delivery', 'audit-trail', u.id);
+    const log = db.readAll(d).inventory.log.filter((l) => l.mat === 'wheatbran' && l.ref === 'audit-trail');
+    assert.equal(log.length, 1);
+    assert.equal(log[0].user_id, u.id);
+  });
+});
+
+describe('db – addBagsToBatch deducts inventory (I-23)', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.applyInventoryDelta(d, 'hardwood', 1000, 'delivery', 'seed');
+    db.applyInventoryDelta(d, 'wheatbran', 1000, 'delivery', 'seed');
+    db.insertBatch(d, {
+      batchId: 'GROW-001',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 10,
+      days: 21,
+      substrate: { hardwood: 75, wheatbran: 25, rh: 0, gypsum: false },
+      bagKg: 3,
+      batchType: 'block',
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-01-22T00:00:00Z',
+      bags: Array.from({ length: 10 }, (_, i) => 'GROW-001-' + String(i + 1).padStart(2, '0'))
+    });
+    // Apply the matching deduction the way the client / server flow does today
+    // (insertBatch deltas are passed by the caller). For this test we set up
+    // the post-create state by hand: 30 kg total wet, 75/25 → 22.5 hw + 7.5 wb.
+    db.applyInventoryDelta(d, 'hardwood', -22.5, 'batch', 'GROW-001');
+    db.applyInventoryDelta(d, 'wheatbran', -7.5, 'batch', 'GROW-001');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('addBagsToBatch deducts substrate proportional to the new bag count', () => {
+    const before = db.readAll(d).inventory.stock;
+    // Add 2 bags × 3 kg = 6 kg substrate. 75/25 split → 4.5 hw + 1.5 wb.
+    db.addBagsToBatch(d, 'GROW-001', ['GROW-001-11', 'GROW-001-12'], 12);
+    const after = db.readAll(d).inventory.stock;
+    assert.ok(Math.abs(before.hardwood - after.hardwood - 4.5) < 1e-6, `hw delta: ${before.hardwood - after.hardwood}`);
+    assert.ok(
+      Math.abs(before.wheatbran - after.wheatbran - 1.5) < 1e-6,
+      `wb delta: ${before.wheatbran - after.wheatbran}`
+    );
+  });
+
+  it('addBagsToBatch records inventory_log entries with batch-grow type', () => {
+    const log = db.readAll(d).inventory.log.filter((l) => l.type === 'batch-grow' && l.ref === 'GROW-001');
+    // Two materials × 1 grow event = 2 entries.
+    assert.equal(log.length, 2);
+    const mats = new Set(log.map((l) => l.mat));
+    assert.ok(mats.has('hardwood'));
+    assert.ok(mats.has('wheatbran'));
+  });
+
+  it('addBagsToBatch records userId in inventory_log when supplied', () => {
+    db.createUser(d, 'grow_bob', 'pass1234', 'admin');
+    const u = db.getUserByUsername(d, 'grow_bob');
+    db.addBagsToBatch(d, 'GROW-001', ['GROW-001-13'], 13, undefined, u.id);
+    const log = db.readAll(d).inventory.log.filter((l) => l.type === 'batch-grow' && l.ref === 'GROW-001');
+    // Newest entries should be the one we just added — they carry the user_id.
+    const recent = log.filter((l) => l.user_id === u.id);
+    assert.ok(recent.length >= 1, 'expected at least one row with the supplied user_id');
+  });
+
+  it('addBagsToBatch on grain batch deducts grain (dry weight)', () => {
+    db.applyInventoryDelta(d, 'grain', 100, 'delivery', 'seed-grain');
+    db.insertBatch(d, {
+      batchId: 'GS-GROW',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 5,
+      days: 14,
+      bagKg: 1,
+      batchType: 'grain',
+      grainRh: 52,
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-01-15T00:00:00Z',
+      bags: Array.from({ length: 5 }, (_, i) => 'GS-GROW-' + String(i + 1).padStart(2, '0'))
+    });
+    const before = db.readAll(d).inventory.stock.grain;
+    // Add 2 bags × 1 kg wet × (1-0.52) = 0.96 kg dry grain.
+    db.addBagsToBatch(d, 'GS-GROW', ['GS-GROW-06', 'GS-GROW-07'], 7);
+    const after = db.readAll(d).inventory.stock.grain;
+    assert.ok(Math.abs(before - after - 0.96) < 1e-6, `grain delta: ${before - after}`);
   });
 });
 

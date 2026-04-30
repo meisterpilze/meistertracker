@@ -141,7 +141,7 @@ function seedData(d) {
   db.insertCultures(d, [
     {
       id: 'MC-001',
-      type: 'mother',
+      type: 'MC',
       species: 'Pleurotus ostreatus',
       strain: 'HK35',
       parentId: null,
@@ -163,7 +163,7 @@ function seedData(d) {
     },
     {
       id: 'MC-002',
-      type: 'mother',
+      type: 'MC',
       species: 'Hericium erinaceus',
       strain: null,
       parentId: null,
@@ -328,7 +328,7 @@ describe('MCP read tool logic', () => {
 
   it('filters cultures by type', () => {
     const data = db.readAll(d);
-    const mothers = data.cultures.filter((c) => c.type === 'mother');
+    const mothers = data.cultures.filter((c) => c.type === 'MC');
     assert.equal(mothers.length, 2);
   });
 

@@ -280,7 +280,8 @@ const LANG = {
     'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
     'batch.deleteBtn': 'Delete batch',
     'batch.enterWeight': 'Please enter a bag weight',
-    'batch.substrateExceeds': 'Substrate composition exceeds 100% (hardwood + wheat bran = {sum}%). Please adjust.',
+    'batch.substrateExceeds':
+      'Substrate composition must total 100% (hardwood + wheat bran = {sum}%). Please adjust.',
     'batch.grainNeeded': 'Grain needed:',
     'batch.inStock': 'In stock:',
     'batch.sufficient': 'sufficient',
@@ -1436,7 +1437,7 @@ const LANG = {
     'batch.deleteBtn': 'Charge l\u00f6schen',
     'batch.enterWeight': 'Bitte ein Beutelgewicht eingeben',
     'batch.substrateExceeds':
-      'Substratzusammensetzung \u00fcber 100% (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
+      'Substratzusammensetzung muss 100% ergeben (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
     'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
     'batch.inStock': 'Auf Lager:',
     'batch.sufficient': 'ausreichend',
@@ -2606,7 +2607,7 @@ const LANG = {
     'batch.deleteBtn': 'Excluir lote',
     'batch.enterWeight': 'Insira o peso do saco',
     'batch.substrateExceeds':
-      'A composi\u00e7\u00e3o do substrato excede 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
+      'A composi\u00e7\u00e3o do substrato deve totalizar 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
     'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
     'batch.inStock': 'Em estoque:',
     'batch.sufficient': 'suficiente',
@@ -7001,7 +7002,12 @@ function createBatch() {
   }
   const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
     wb = parseFloat(document.getElementById('nb-wb').value) || 0;
-  if (hw + wb > 100) {
+  // I-19: substrate must total exactly 100% (within rounding). Previously the
+  // check only fired on > 100; a 70/20 split silently consumed 90% of the dry
+  // mass and the remaining 10% went unaccounted. Now we reject any drift in
+  // either direction. Skip when both fields are zero (no substrate composition,
+  // e.g. grain-spawn batches or batches that opt out of detailed tracking).
+  if ((hw || wb) && Math.abs(hw + wb - 100) > 0.01) {
     alert(t('batch.substrateExceeds', { sum: hw + wb }));
     return;
   }
