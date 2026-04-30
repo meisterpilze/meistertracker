@@ -107,6 +107,24 @@ async function _replayQueue(store, getAll, del, url) {
         // Session expired — keep queued, notify client to re-auth
         notifyClients();
         return;
+      } else if (resp.status === 409) {
+        // Conflict (audit I-12): server rejected the entry because state
+        // changed since it was queued (e.g. an admin moved the bag to a
+        // different zone via the web UI before this offline scan replayed).
+        // Retrying can't help — drop the entry and surface the rejection so
+        // the user can reconcile manually.
+        let detail = null;
+        try {
+          detail = await resp.json();
+        } catch {
+          /* ignore body parse errors */
+        }
+        await del(item.id);
+        self.clients.matchAll().then((clients) => {
+          for (const c of clients) {
+            c.postMessage({ type: 'scan-replay-rejected', reason: 'zone_mismatch', detail });
+          }
+        });
       } else {
         break; // Server error — stop replay, retry later
       }

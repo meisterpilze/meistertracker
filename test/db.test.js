@@ -353,6 +353,30 @@ describe('db – scan log', () => {
     db.clearScanLog(d);
     assert.equal(db.readAll(d).scanLog.length, 0);
   });
+
+  // I-11: client_uuid is the offline-queue idempotency key. A replay (same
+  // entry POSTed twice because the client lost the response) should be a
+  // no-op on the server, and the second call should return the *original*
+  // row id so the client can still reconcile its in-memory entry.
+  it('appendScanEntries dedupes on client_uuid (I-11)', () => {
+    const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const entry = {
+      time: '2024-05-01T12:00:00Z',
+      action: 'ADD',
+      batch: 'B-DEDUP',
+      bag: 'B-DEDUP-01',
+      from: null,
+      to: 'INC',
+      client_uuid: uuid
+    };
+    const before = db.readAll(d).scanLog.length;
+    const [id1] = db.appendScanEntries(d, [entry], null);
+    const [id2] = db.appendScanEntries(d, [entry], null);
+    const after = db.readAll(d).scanLog.length;
+    assert.equal(after - before, 1, 'second insert should be a no-op');
+    assert.ok(id1, 'first insert returns an id');
+    assert.equal(id2, id1, 'second call returns the original id so client can reconcile');
+  });
 });
 
 describe('db – harvests', () => {
