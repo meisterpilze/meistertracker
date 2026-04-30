@@ -5,6 +5,16 @@ const crypto = require('crypto');
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
 const MAX_SESSIONS_PER_USER = 10;
 
+// ── Date helpers ─────────────────────────────────────────────
+// Lab day boundary = the server's local timezone midnight (a single physical lab,
+// one timezone). KPI snapshots and "due today" comparisons should bucket events
+// against this local day, not against UTC — otherwise a 23:00 Berlin event lands
+// in the next UTC day and disappears from the wrong KPI bucket.
+function localDayString(d = new Date()) {
+  const offsetMs = d.getTimezoneOffset() * 60_000;
+  return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 // ── Schema ───────────────────────────────────────────────────
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS batches (
@@ -33,18 +43,22 @@ CREATE TABLE IF NOT EXISTS bags (
 CREATE INDEX IF NOT EXISTS idx_bags_batch ON bags(batch_id);
 
 CREATE TABLE IF NOT EXISTS scan_log (
-  id      INTEGER PRIMARY KEY AUTOINCREMENT,
-  time    TEXT NOT NULL,
-  action  TEXT NOT NULL,
-  batch   TEXT,
-  bag     TEXT,
-  "from"  TEXT,
-  "to"    TEXT,
-  species TEXT,
-  strain  TEXT,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  time        TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  batch       TEXT,
+  bag         TEXT,
+  "from"      TEXT,
+  "to"        TEXT,
+  species     TEXT,
+  strain      TEXT,
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  client_uuid TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
+-- I-11: idempotency for offline-queue replays. Partial index so legacy rows
+-- with NULL client_uuid (created before v39) don't collide.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scanlog_client_uuid ON scan_log(client_uuid) WHERE client_uuid IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS harvests (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +99,10 @@ CREATE TABLE IF NOT EXISTS manual_tasks (
   caldav_synced    TEXT,
   private          INTEGER DEFAULT 0,
   recurrence       TEXT,
-  recurrence_until TEXT
+  recurrence_until TEXT,
+  -- I-15: SEQUENCE counter for VTODO output (RFC 5545 §3.8.7.4). Bumped on
+  -- every update so external CalDAV clients can detect changes.
+  sequence         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -175,7 +192,10 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   recurrence       TEXT,
   recurrence_until TEXT,
   team_assignees   TEXT,
-  exception_dates  TEXT
+  exception_dates  TEXT,
+  -- I-15: SEQUENCE counter for VEVENT output (RFC 5545 §3.8.7.4). Bumped on
+  -- every update so external CalDAV clients can detect changes.
+  sequence         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS calendar_event_assignees (
@@ -941,6 +961,42 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE mcp_config ADD COLUMN revoked_at TEXT');
       }
     }
+  },
+  {
+    version: 39,
+    description: 'Add client_uuid + sequence for scan idempotency and iCal RFC 5545 (I-11, I-15)',
+    fn(db) {
+      // I-11: client-supplied idempotency key on scan_log so the offline
+      // queue (sw.js) can replay POSTs without creating duplicates when a
+      // network partition times out the request but the server has already
+      // committed it. Partial unique index — legacy rows have NULL.
+      const scanCols = db
+        .prepare("SELECT name FROM pragma_table_info('scan_log')")
+        .all()
+        .map((r) => r.name);
+      if (!scanCols.includes('client_uuid')) {
+        db.exec('ALTER TABLE scan_log ADD COLUMN client_uuid TEXT');
+      }
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_scanlog_client_uuid ON scan_log(client_uuid) WHERE client_uuid IS NOT NULL'
+      );
+      // I-15: SEQUENCE counter for VTODO/VEVENT iCal output. Bumped on every
+      // update so external CalDAV clients can detect changes (RFC 5545 §3.8.7.4).
+      const taskCols = db
+        .prepare("SELECT name FROM pragma_table_info('manual_tasks')")
+        .all()
+        .map((r) => r.name);
+      if (!taskCols.includes('sequence')) {
+        db.exec('ALTER TABLE manual_tasks ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0');
+      }
+      const evtCols = db
+        .prepare("SELECT name FROM pragma_table_info('calendar_events')")
+        .all()
+        .map((r) => r.name);
+      if (!evtCols.includes('sequence')) {
+        db.exec('ALTER TABLE calendar_events ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0');
+      }
+    }
   }
 ];
 
@@ -1242,7 +1298,8 @@ function readAll(db, opts = {}) {
       caldavSynced: r.caldav_synced,
       private: r.private === 1 ? true : false,
       recurrence: r.recurrence || null,
-      recurrenceUntil: r.recurrence_until || null
+      recurrenceUntil: r.recurrence_until || null,
+      sequence: r.sequence || 0
     }));
 
   // Team members — include id for DELETE targeting
@@ -1365,7 +1422,8 @@ function readAll(db, opts = {}) {
       recurrenceUntil: r.recurrence_until || null,
       teamAssignees: parseTeamAssignees(r.team_assignees),
       exceptionDates: parseExceptionDates(r.exception_dates),
-      assignees: assigneeMap.get(r.id) || []
+      assignees: assigneeMap.get(r.id) || [],
+      sequence: r.sequence || 0
     }));
 
   // Zones + Racks
@@ -1506,8 +1564,11 @@ function writeAll(db, incoming) {
     // ── Scan Log (replace all) ──
     if (incoming.scanLog) {
       db.prepare('DELETE FROM scan_log').run();
+      // I-11: preserve client_uuid on bulk import so re-imported scan entries
+      // keep their idempotency keys. Older exports won't have the field; the
+      // column is nullable.
       const ins = db.prepare(
-        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain, user_id, reason) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain, user_id, reason, client_uuid) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const e of incoming.scanLog) {
         ins.run(
@@ -1520,7 +1581,8 @@ function writeAll(db, incoming) {
           e.species || null,
           e.strain || null,
           e.userId ?? e.user_id ?? null,
-          e.reason || null
+          e.reason || null,
+          e.client_uuid || e.clientUuid || null
         );
       }
     }
@@ -1893,10 +1955,10 @@ function updateBatchDue(db, batchId, newDueISO) {
 
 // ── Update task due date (for calendar drag or CalDAV bidirectional sync) ──
 function updateTaskDueDate(db, caldavUid, newDueDate) {
-  db.prepare('UPDATE manual_tasks SET due_date = ?, caldav_synced = NULL WHERE caldav_uid = ?').run(
-    newDueDate,
-    caldavUid
-  );
+  // I-15: bump SEQUENCE so the change propagates to CalDAV clients.
+  db.prepare(
+    'UPDATE manual_tasks SET due_date = ?, caldav_synced = NULL, sequence = sequence + 1 WHERE caldav_uid = ?'
+  ).run(newDueDate, caldavUid);
   incrementDataVersion(db);
 }
 
@@ -2038,8 +2100,21 @@ function listUsers(db) {
 }
 
 function deleteUser(db, userId) {
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  // I-16: clean up all auth artifacts so a freshly-recycled user_id can't
+  // inherit OAuth grants/tokens/sessions from the deleted account. Wrap in
+  // a transaction so a partial failure doesn't leave dangling tokens.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 function updateUserPassword(db, userId, hash, salt) {
@@ -2337,14 +2412,37 @@ function computeBatchMaterialDeltas(db, row) {
 
 // -- Scan Log --
 // Append scan entries inside an existing transaction. Caller is responsible for BEGIN/COMMIT
-// and for calling incrementDataVersion(). Returns the inserted row IDs.
+// and for calling incrementDataVersion(). Returns the inserted row IDs (or the
+// existing row id if a client_uuid collision triggered the ON CONFLICT branch).
+//
+// I-11: client_uuid is the offline-queue idempotency key. SQLite UPSERT
+// (ON CONFLICT DO NOTHING) makes the INSERT a no-op when the same UUID is
+// replayed; we then look up the original row id so callers (and the
+// `_serverId` reconciliation on the client) still see a real id.
 function appendScanEntriesNoTxn(db, entries, userId) {
-  const ins = db.prepare(
-    'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id,reason) VALUES(?,?,?,?,?,?,?,?,?,?)'
+  // I-11: SQLite UPSERT against the partial unique index needs the index's
+  // exact WHERE clause in the conflict target ("partial index conflict
+  // resolution", https://www.sqlite.org/lang_upsert.html). Without the
+  // WHERE clause the planner can't match the partial index and raises
+  // "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint".
+  const insIdempotent = db.prepare(
+    'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id,reason,client_uuid) ' +
+      'VALUES(?,?,?,?,?,?,?,?,?,?,?) ' +
+      'ON CONFLICT(client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING'
   );
+  // Fallback for entries without a client_uuid. ON CONFLICT against a partial
+  // index whose WHERE rejects NULL never fires for NULL keys anyway, but
+  // keeping a separate plain INSERT keeps the call site explicit and avoids
+  // depending on that subtle planner detail.
+  const insPlain = db.prepare(
+    'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id,reason,client_uuid) ' +
+      'VALUES(?,?,?,?,?,?,?,?,?,?,?)'
+  );
+  const lookupByUuid = db.prepare('SELECT id FROM scan_log WHERE client_uuid = ?');
   const ids = [];
   for (const e of entries) {
-    const r = ins.run(
+    const stmt = e.client_uuid ? insIdempotent : insPlain;
+    const r = stmt.run(
       e.time,
       e.action,
       e.batch || null,
@@ -2354,9 +2452,17 @@ function appendScanEntriesNoTxn(db, entries, userId) {
       e.species || null,
       e.strain || null,
       userId || null,
-      e.reason || null
+      e.reason || null,
+      e.client_uuid || null
     );
-    ids.push(r.lastInsertRowid);
+    if (r.changes === 0 && e.client_uuid) {
+      // Replay: row already exists. Return the existing id so the client can
+      // still reconcile its in-memory entry with a server id.
+      const existing = lookupByUuid.get(e.client_uuid);
+      ids.push(existing ? existing.id : null);
+    } else {
+      ids.push(r.lastInsertRowid);
+    }
   }
   return ids;
 }
@@ -2595,7 +2701,11 @@ function updateTaskById(db, id, fields) {
   };
   const entries = Object.entries(fields).filter(([k]) => map[k]);
   if (!entries.length) return;
-  const sets = entries.map(([k]) => `${map[k]}=?`).join(',');
+  // I-15: bump SEQUENCE on any meaningful update (RFC 5545 §3.8.7.4) so
+  // CalDAV clients see the change. Skip pure caldavSynced bookkeeping
+  // updates so we don't spuriously invalidate cached calendar entries.
+  const meaningful = entries.some(([k]) => k !== 'caldavSynced' && k !== 'caldavUid');
+  const sets = entries.map(([k]) => `${map[k]}=?`).join(',') + (meaningful ? ', sequence=sequence+1' : '');
   const vals = entries.map(([k, v]) => (k === 'done' || k === 'private' ? (v ? 1 : 0) : v));
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
   incrementDataVersion(db);
@@ -3053,8 +3163,13 @@ function updateCalendarEvent(db, id, fields) {
     else vals.push(v ?? null);
   }
   if (!sets.length) return;
+  // I-15: bump SEQUENCE on any meaningful update so CalDAV clients see the
+  // change. Skip pure caldav_synced / caldav_uid bookkeeping fields.
+  const meaningful = sets.some((s) => !s.startsWith('caldav_synced') && !s.startsWith('caldav_uid'));
+  const sql =
+    'UPDATE calendar_events SET ' + sets.join(',') + (meaningful ? ', sequence=sequence+1' : '') + ' WHERE id=?';
   vals.push(id);
-  db.prepare('UPDATE calendar_events SET ' + sets.join(',') + ' WHERE id=?').run(...vals);
+  db.prepare(sql).run(...vals);
   incrementDataVersion(db);
 }
 
@@ -3064,7 +3179,11 @@ function addCalendarEventException(db, id, dateStr) {
   const current = parseExceptionDates(row.exception_dates);
   if (current.includes(dateStr)) return true;
   current.push(dateStr);
-  db.prepare('UPDATE calendar_events SET exception_dates=? WHERE id=?').run(serializeExceptionDates(current), id);
+  // I-15: adding an EXDATE is a calendar-visible change; bump SEQUENCE.
+  db.prepare('UPDATE calendar_events SET exception_dates=?, sequence=sequence+1 WHERE id=?').run(
+    serializeExceptionDates(current),
+    id
+  );
   incrementDataVersion(db);
   return true;
 }
@@ -3620,7 +3739,9 @@ function getAllTasks(db) {
       dueEndTime: r.due_end_time,
       description: r.description,
       recurrence: r.recurrence || null,
-      recurrenceUntil: r.recurrence_until || null
+      recurrenceUntil: r.recurrence_until || null,
+      caldavUid: r.caldav_uid || null,
+      sequence: r.sequence || 0
     }));
 }
 function getAllHarvests(db) {
@@ -3705,11 +3826,13 @@ function getCalendarEvents(db) {
       endTime: r.end_time,
       category: r.category,
       color: r.color,
+      caldavUid: r.caldav_uid || null,
       recurrence: r.recurrence || null,
       recurrenceUntil: r.recurrence_until || null,
       teamAssignees: parseTeamAssignees(r.team_assignees),
       exceptionDates: parseExceptionDates(r.exception_dates),
-      assignees: assigneeMap.get(r.id) || []
+      assignees: assigneeMap.get(r.id) || [],
+      sequence: r.sequence || 0
     }));
 }
 function getInventory(db, logLimit) {
@@ -3776,15 +3899,19 @@ function getZonesWithRacks(db) {
 
 // ── Daily KPI Snapshot ──────────────────────────────────────
 function snapshotDailyKPIs(db, { force } = {}) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // I-09: bucket events by lab-local day. The DB stores ISO timestamps in UTC,
+  // so we need the UTC range that corresponds to local midnight..23:59:59.999.
+  // `new Date('YYYY-MM-DDTHH:MM:SS')` (no Z) parses as local time; `.toISOString()`
+  // converts back to UTC.
+  const today = localDayString(); // YYYY-MM-DD in lab-local time
 
   // Skip if already snapshotted today (unless force=true for manual retake)
   const existing = db.prepare('SELECT date FROM kpi_snapshots WHERE date = ?').get(today);
   if (existing && !force) return { skipped: true, date: today };
   if (existing && force) db.prepare('DELETE FROM kpi_snapshots WHERE date = ?').run(today);
 
-  const dayStart = today + 'T00:00:00';
-  const dayEnd = today + 'T23:59:59';
+  const dayStart = new Date(today + 'T00:00:00').toISOString();
+  const dayEnd = new Date(today + 'T23:59:59.999').toISOString();
 
   // 1. Bags created today
   const bagsCreated = db
@@ -3822,14 +3949,16 @@ function snapshotDailyKPIs(db, { force } = {}) {
 
   let contamBags = 0;
   if (contamZoneIds.length > 0) {
-    // A bag is contaminated if it was ever moved TO a contaminated zone (or zone:rack)
-    const placeholders = contamZoneIds.map(() => '?').join(',');
-    // scan_log.to can be "zone" or "zone:rack", so we match zone prefix
+    // I-13: only count contaminated bags that were also ADDed to inventory.
+    // Otherwise a MOVE-only bag (e.g. one that moved to CONTAM via the
+    // contamination flow without ever having an explicit ADD) inflates the
+    // numerator while the denominator counts ADDs only — which previously
+    // made `contam_rate_pct` exceed 100%.
     const contamRows = db
       .prepare(
         `SELECT DISTINCT bag FROM scan_log WHERE bag IS NOT NULL AND (` +
           contamZoneIds.map(() => `"to" = ? OR "to" LIKE ? || ':%'`).join(' OR ') +
-          `)`
+          `) AND bag IN (SELECT DISTINCT bag FROM scan_log WHERE action = 'ADD' AND bag IS NOT NULL)`
       )
       .all(...contamZoneIds.flatMap((id) => [id, id]));
     contamBags = contamRows.length;
@@ -3853,7 +3982,13 @@ function snapshotDailyKPIs(db, { force } = {}) {
     .prepare('SELECT COUNT(*) AS v FROM (SELECT bag, MAX(flush) AS mf FROM harvests GROUP BY bag HAVING mf >= 2)')
     .get().v;
 
-  // 10. Pipeline counts — compute current bag locations from scan_log
+  // 10. Pipeline counts — compute current bag locations from scan_log.
+  // I-14: REMOVE always wipes the bag, regardless of `from`. Previously this
+  // was guarded by `bagZone[e.bag] === fromZone`, which meant a stale REMOVE
+  // (replayed offline after the bag had been moved by another user) would
+  // leave the bag tracked at its NEW zone — diverging from
+  // getProductionPipeline (which deletes unconditionally) and from the
+  // client's getStatus (rewritten in I-10 to derive from last-event-per-bag).
   const zoneRoleMap = {};
   zones.forEach((z) => {
     zoneRoleMap[z.id] = z.role;
@@ -3862,10 +3997,9 @@ function snapshotDailyKPIs(db, { force } = {}) {
   const bagZone = {}; // bag -> zone_id (current)
   allScans.forEach((e) => {
     const toZone = e.to ? e.to.split(':')[0] : null;
-    const fromZone = e.from ? e.from.split(':')[0] : null;
     if (e.action === 'ADD' && toZone) bagZone[e.bag] = toZone;
     if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZone) bagZone[e.bag] = toZone;
-    if (e.action === 'REMOVE' && fromZone && bagZone[e.bag] === fromZone) delete bagZone[e.bag];
+    if (e.action === 'REMOVE') delete bagZone[e.bag];
   });
   const roleCounts = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
   Object.values(bagZone).forEach((zId) => {
@@ -4137,7 +4271,9 @@ function getProductionPipeline(db) {
 
   // Batches by type and phase
   const allBatches = db.prepare('SELECT batch_id, batch_type, due FROM batches').all();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // I-09: compare against lab-local day, not UTC day. A 22:00 Berlin "due"
+  // would otherwise tip into tomorrow under UTC and disappear from the ready bucket.
+  const todayStr = localDayString();
   const batchSummary = {
     grain: { incubating: 0, ready: 0 },
     block: { incubating: 0, ready: 0 },
