@@ -155,6 +155,33 @@ pm2 startup
 pm2 save
 ```
 
+### PM2 Log Rotation (REQUIRED)
+
+PM2 writes stdout/stderr to `~/.pm2/logs/meisterpilze-out.log` and
+`meisterpilze-error.log`. Without rotation those files grow forever and
+eventually fill the disk. Install the official rotation module once during
+setup:
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 50M
+pm2 set pm2-logrotate:retain 14
+pm2 set pm2-logrotate:compress true
+pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss
+```
+
+What each setting does:
+
+- `max_size 50M` — rotate the active log when it crosses 50 MB.
+- `retain 14` — keep 14 rotated archives, then delete the oldest. With our
+  log volume that's roughly 2–4 weeks of history; bump higher if you need
+  longer audit retention.
+- `compress true` — gzip rotated archives so 50 MB shrinks to a few MB on
+  disk.
+- `dateFormat YYYY-MM-DD_HH-mm-ss` — readable filenames sorted naturally.
+
+These settings persist across reboots once `pm2 save` has been run.
+
 ### Verify
 ```bash
 pm2 logs meisterpilze    # view server logs (Ctrl+C to exit)
