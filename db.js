@@ -56,9 +56,9 @@ CREATE TABLE IF NOT EXISTS scan_log (
   client_uuid TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
--- I-11: idempotency for offline-queue replays. Partial index so legacy rows
--- with NULL client_uuid (created before v39) don't collide.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_scanlog_client_uuid ON scan_log(client_uuid) WHERE client_uuid IS NOT NULL;
+-- I-11 idempotency index is created by migration v39, not here: pre-v39
+-- databases reach this SCHEMA block before migrations run, and CREATE TABLE
+-- IF NOT EXISTS is a no-op for them (so client_uuid wouldn't exist yet).
 
 CREATE TABLE IF NOT EXISTS harvests (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
