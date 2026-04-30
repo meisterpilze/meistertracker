@@ -189,7 +189,10 @@ function checkMcpAuth(req) {
 const MCP_RATE_WINDOW = 60 * 1000;
 const rateLimits = new Map(); // ip → { timestamps[] }
 function checkRate(req, limit) {
-  const ip = req.socket.remoteAddress || 'unknown';
+  // R-08: respect TRUST_PROXY so the rate-limit key is the real client IP
+  // when running behind a reverse proxy (otherwise everyone shares the
+  // proxy's loopback address and trips the limit collectively).
+  const ip = getClientIP(req);
   const now = Date.now();
   let bucket = rateLimits.get(ip);
   if (!bucket) {
@@ -449,6 +452,40 @@ function requireAdmin(req, res) {
 // data/photos/{YYYY}/{MM}/{report_id}/{uuid}{,_thumb}.jpg.
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const PHOTO_THUMB_MAX_BYTES = 200 * 1024;
+
+// R-15: total-size cap on data/photos/. Without it, a stuck offsite-sync or
+// pathological client can fill the disk and wedge the whole server. Default
+// 10 GB; override with PHOTO_DIR_MAX_GB. Logic lives in scripts/photo-cap.js
+// so the regression test can exercise it directly.
+const photoCap = require('./scripts/photo-cap.js');
+const PHOTO_DIR_MAX_BYTES = (() => {
+  const raw = parseFloat(process.env.PHOTO_DIR_MAX_GB);
+  const gb = Number.isFinite(raw) && raw > 0 ? raw : 10;
+  return Math.round(gb * 1024 * 1024 * 1024);
+})();
+const PHOTO_DIR = path.join(DIR, 'data', 'photos');
+const PHOTO_SIZE_REFRESH_MS = 5 * 60 * 1000; // recompute every 5 min
+let _photoDirSizeBytes = 0;
+let _photoDirSizeStaleAt = 0;
+function _ensurePhotoDirSize(force) {
+  const now = Date.now();
+  if (force || now > _photoDirSizeStaleAt) {
+    try {
+      _photoDirSizeBytes = photoCap.computePhotoDirSize(PHOTO_DIR);
+    } catch (e) {
+      log('warn', 'Failed to scan photo dir for size', { error: e.message });
+    }
+    _photoDirSizeStaleAt = now + PHOTO_SIZE_REFRESH_MS;
+    if (_photoDirSizeBytes > PHOTO_DIR_MAX_BYTES * 0.9) {
+      log('warn', 'Photo directory near cap', {
+        usedMB: Math.round(_photoDirSizeBytes / 1e6),
+        capMB: Math.round(PHOTO_DIR_MAX_BYTES / 1e6)
+      });
+    }
+  }
+  return _photoDirSizeBytes;
+}
+
 function _parseImageDataUrl(s) {
   if (typeof s !== 'string') return null;
   const m = s.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
@@ -462,6 +499,8 @@ function _parseImageDataUrl(s) {
 function _isJpegMagic(buf) {
   return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
 }
+// R-15: PhotoCapError reused from scripts/photo-cap.js so the test and the
+// server share the same error class.
 function savePhotoToDisk(reportId, photo, authUser) {
   if (!photo || typeof photo !== 'object') return null;
   const main = _parseImageDataUrl(photo.data_url);
@@ -472,6 +511,16 @@ function savePhotoToDisk(reportId, photo, authUser) {
   if (!thumb) throw new Error('photo: invalid thumb_data_url');
   if (!_isJpegMagic(thumb)) throw new Error('photo: thumb is not a JPEG');
   if (thumb.length > PHOTO_THUMB_MAX_BYTES) throw new Error('photo: thumb too large (max 200 KB)');
+
+  // R-15: enforce the photo-directory size cap before writing. The cached
+  // total is refreshed every 5 minutes; we add the about-to-be-written
+  // bytes to compare against the cap, then update the cache after the
+  // successful write so the next call sees the new total.
+  // TODO(R-15): orphan-photo cleanup is out of scope for this PR — once it
+  // lands, the cap will breathe in normal operation rather than just stop
+  // accepting writes when full.
+  const currentSize = _ensurePhotoDirSize(false);
+  photoCap.enforceCap(currentSize, main.length + thumb.length, PHOTO_DIR_MAX_BYTES);
 
   const uuid = crypto.randomUUID();
   const sha = crypto.createHash('sha256').update(main).digest('hex');
@@ -484,6 +533,9 @@ function savePhotoToDisk(reportId, photo, authUser) {
   const thumbPath = `photos/${yyyy}/${mm}/${reportId}/${uuid}_thumb.jpg`;
   fs.writeFileSync(path.join(DIR, 'data', relPath), main);
   fs.writeFileSync(path.join(DIR, 'data', thumbPath), thumb);
+  // Update the cached total so consecutive writes in the same 5-min window
+  // are bounded correctly without re-scanning.
+  _photoDirSizeBytes += main.length + thumb.length;
 
   return {
     uuid,
@@ -571,11 +623,37 @@ setInterval(
   60 * 60 * 1000
 );
 
+// R-10: periodic cleanup of expired sessions + read notifications. The
+// session table also has lazy/hourly cleanup above, but the dedicated
+// helpers return a row count so we can log how much we GC'd, and the
+// notifications table had no GC at all before this. Runs every 6h plus
+// once at startup so a server that's been stopped a long time doesn't
+// accumulate forever.
+function runPeriodicCleanup() {
+  try {
+    const sessions = db.cleanupExpiredSessions(database);
+    const notifications = db.cleanupOldNotifications(database);
+    if (sessions > 0 || notifications > 0) {
+      log('info', 'Periodic cleanup', { sessions, notifications });
+    }
+  } catch (e) {
+    log('warn', 'Periodic cleanup failed', { error: e.message });
+  }
+}
+runPeriodicCleanup();
+setInterval(runPeriodicCleanup, 6 * 60 * 60 * 1000);
+
 // ── DAILY AUTO-BACKUP ────────────────────────────────────────
 // Every day at 00:00 writes a dated backup to /backups/
 const BACKUP_DIR = path.join(DIR, 'backups');
 const BACKUP_STATUS_FILE = path.join(BACKUP_DIR, '.backup-status.json');
 const OFFSITE_MARKER_FILE = path.join(BACKUP_DIR, '.offsite-sync.json');
+// R-14: webhook auto-deploy reliability — record each attempt + outcome to
+// a sentinel JSON file so an admin can see whether the last `git fetch && npm
+// install && pm2 restart` chain actually finished without scraping logs.
+// The deploy chain itself writes the success/fail variant; this server only
+// writes `in_progress` before kicking off the spawn.
+const DEPLOY_STATE_FILE = path.join(DIR, 'data', 'deploy-state.json');
 // R-01: rotation only touches files matching this pattern, so manual backups
 // (`meistertracker_*.db`) and any other artefact in the directory stay put.
 // See scripts/rotate-backups.js for the helper and audit-2026-04.md for
@@ -583,10 +661,12 @@ const OFFSITE_MARKER_FILE = path.join(BACKUP_DIR, '.offsite-sync.json');
 const { rotateAutoBackups } = require('./scripts/rotate-backups.js');
 const AUTO_BACKUP_RETENTION_DAYS = 30;
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
-// Clean up orphaned temp files from interrupted backup operations
+// Clean up orphaned temp files from interrupted backup operations.
+// R-13: also picks up `.backup-status.json.tmp.<hex>` leftovers if a process
+// crashed between writeFileSync and renameSync.
 try {
   fs.readdirSync(BACKUP_DIR)
-    .filter((f) => f.startsWith('_'))
+    .filter((f) => f.startsWith('_') || /^\.backup-status\.json\.tmp\./.test(f))
     .forEach((f) => {
       try {
         fs.unlinkSync(path.join(BACKUP_DIR, f));
@@ -610,12 +690,38 @@ function readBackupStatus() {
   }
 }
 
+// R-14: deploy-state sentinel I/O. Best-effort — we don't want a
+// transient filesystem hiccup to break the webhook.
+function readDeployState() {
+  try {
+    if (!fs.existsSync(DEPLOY_STATE_FILE)) return null;
+    const raw = fs.readFileSync(DEPLOY_STATE_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+function writeDeployState(patch) {
+  try {
+    const dataDir = path.dirname(DEPLOY_STATE_FILE);
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const tmp = DEPLOY_STATE_FILE + '.tmp.' + crypto.randomBytes(4).toString('hex');
+    fs.writeFileSync(tmp, JSON.stringify(patch, null, 2));
+    fs.renameSync(tmp, DEPLOY_STATE_FILE);
+  } catch (e) {
+    log('warn', 'Could not write deploy-state file', { error: e.message });
+  }
+}
+
 function writeBackupStatus(patch) {
   try {
     const current = readBackupStatus();
     const next = Object.assign({}, current, patch);
-    // Atomic write: write to temp then rename
-    const tmp = BACKUP_STATUS_FILE + '.tmp';
+    // Atomic write: write to temp then rename. R-13: random tmp suffix so
+    // two concurrent writers don't truncate each other's tmp file before
+    // either rename completes (e.g. backup completes at the same instant
+    // an offsite-sync status update fires).
+    const tmp = BACKUP_STATUS_FILE + '.tmp.' + crypto.randomBytes(4).toString('hex');
     fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
     fs.renameSync(tmp, BACKUP_STATUS_FILE);
   } catch (e) {
@@ -1477,7 +1583,10 @@ public class DOCINFO {
 }
 `.trim();
 
-    const psTmp = path.join(os.tmpdir(), 'mp_print_' + Date.now() + '.ps1');
+    // R-11: Phase 2 I-18 fixed Date.now() in the .zpl tempfile but missed
+    // this .ps1 sibling. Two concurrent print calls would step on the same
+    // tempfile and one would lose its script.
+    const psTmp = path.join(os.tmpdir(), 'mp_print_' + crypto.randomBytes(8).toString('hex') + '.ps1');
     fs.writeFile(psTmp, ps, 'utf8', (err2) => {
       if (err2) {
         fs.unlink(tmp, () => {});
@@ -2728,7 +2837,17 @@ function handleCaldav(req, res) {
   req.on('end', () => {
     try {
       if (method === 'PROPFIND') return handlePropfind(parts, body, req, res);
-      if (method === 'REPORT') return handleReport(parts, body, req, res);
+      if (method === 'REPORT') {
+        // R-09: handleReport is now async — surface async rejections to the
+        // same error path and avoid an unhandledRejection on disk failures.
+        return Promise.resolve(handleReport(parts, body, req, res)).catch((e) => {
+          log('error', 'CalDAV request error', { error: e.message });
+          if (!res.writableEnded) {
+            res.writeHead(500);
+            res.end('Internal server error');
+          }
+        });
+      }
       if (method === 'MKCALENDAR') return handleMkcalendar(parts, body, req, res);
       if (method === 'PUT') return handlePut(parts, body, req, res);
       if (method === 'GET') return handleGet(parts, req, res);
@@ -2944,7 +3063,7 @@ function handlePropfind(parts, body, req, res) {
   res.end('Not found');
 }
 
-function handleReport(parts, body, req, res) {
+async function handleReport(parts, body, req, res) {
   // calendar-multiget: client requests specific .ics files with their data
   if (parts.length === 2 && parts[0] === 'calendars') {
     const calName = parts[1];
@@ -3034,16 +3153,27 @@ function handleReport(parts, body, req, res) {
 
     // If calendar-multiget with specific hrefs
     if (hrefMatches.length > 0) {
+      // R-09: parallelize disk reads. Build the work list first, then read
+      // all files concurrently with Promise.all so a 100-item REPORT runs at
+      // the speed of one read instead of N.
+      const targets = [];
       for (const hrefTag of hrefMatches) {
         const href = hrefTag.replace(/<\/?(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>/gi, '');
         const filename = sanitizePart(decodeURIComponent(href.split('/').pop()));
         if (!filename) continue;
         const filePath = path.join(calDir, filename);
         if (fs.existsSync(filePath) && filename.endsWith('.ics')) {
-          const content = fs.readFileSync(filePath, 'utf8');
-          const etag = getEtag(calName, filename);
-          responses += `\n  <d:response>
-    <d:href>${escapeXml(href)}</d:href>
+          targets.push({ href, filename, filePath });
+        }
+      }
+      const reads = await Promise.all(targets.map((t) => fs.promises.readFile(t.filePath, 'utf8').catch(() => null)));
+      for (let i = 0; i < targets.length; i++) {
+        const content = reads[i];
+        if (content == null) continue; // file vanished between exists() and read()
+        const t = targets[i];
+        const etag = getEtag(calName, t.filename);
+        responses += `\n  <d:response>
+    <d:href>${escapeXml(t.href)}</d:href>
     <d:propstat>
       <d:prop>
         <d:getetag>${etag}</d:getetag>
@@ -3052,14 +3182,17 @@ function handleReport(parts, body, req, res) {
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
   </d:response>`;
-        }
       }
     } else {
       // calendar-query: return all items
       const files = listIcsFiles(calName);
-      for (const f of files) {
-        const filePath = path.join(calDir, f);
-        const content = fs.readFileSync(filePath, 'utf8');
+      const reads = await Promise.all(
+        files.map((f) => fs.promises.readFile(path.join(calDir, f), 'utf8').catch(() => null))
+      );
+      for (let i = 0; i < files.length; i++) {
+        const content = reads[i];
+        if (content == null) continue;
+        const f = files[i];
         const etag = getEtag(calName, f);
         responses += `\n  <d:response>
     <d:href>/caldav/calendars/${encodeURIComponent(calName)}/${encodeURIComponent(f)}</d:href>
@@ -3706,12 +3839,45 @@ setInterval(() => {
   }
 }, 60000);
 
+// R-18: opt-in access logging. Default OFF — logs are noisy and we already
+// have structured logs for everything that matters. Operators flip
+// LOG_ACCESS=true when they need a request trail (incident response,
+// debugging a misbehaving client). Skips SSE long-pollers and unauth health
+// probes so we don't drown the log file.
+const LOG_ACCESS = process.env.LOG_ACCESS === 'true' || process.env.LOG_ACCESS === '1';
 function handleRequest(req, res) {
   const clientIP = getClientIP(req);
   if (!checkRateLimit(clientIP)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
     res.end('{"error":"Too many requests"}');
     return;
+  }
+
+  // R-18: optional access logging — wires up at request entry so we capture
+  // the round-trip even when downstream code throws before res.end().
+  if (LOG_ACCESS) {
+    const reqStart = Date.now();
+    res.once('finish', () => {
+      try {
+        const url = req.url || '';
+        // Skip SSE long-polls (would log once per 30 min connection close)
+        // and skip unauth /api/health probes (every prober hits this every
+        // few seconds).
+        if (url.startsWith('/api/events')) return;
+        const isAuthed = !!req.authUser;
+        if (url === '/api/health' && !isAuthed) return;
+        log('info', 'http', {
+          method: req.method,
+          url,
+          status: res.statusCode,
+          ms: Date.now() - reqStart,
+          user: req.authUser ? req.authUser.username : null,
+          ip: clientIP
+        });
+      } catch (_) {
+        /* never let access logging break a response */
+      }
+    });
   }
 
   // ── Security headers ──
@@ -4676,6 +4842,226 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // R-17: GET /api/health/full — admin-only ops dashboard payload.
+  // Each section is wrapped in try/catch so a single broken probe (e.g.
+  // statfsSync on Windows) doesn't blow up the whole endpoint; the field
+  // becomes null instead. Public /api/health stays minimal.
+  if (req.method === 'GET' && req.url === '/api/health/full') {
+    if (requireAdmin(req, res)) return;
+    const out = {
+      status: 'ok',
+      uptime: Math.round(process.uptime()),
+      version: require('./package.json').version,
+      nodeVersion: process.version,
+      platform: process.platform,
+      timestamp: new Date().toISOString()
+    };
+
+    // disk: backup dir + photos dir free/used MB
+    out.disk = (() => {
+      const probe = (dir) => {
+        try {
+          if (!fs.existsSync(dir)) return null;
+          const stats = fs.statfsSync(dir);
+          const free = Number(stats.bavail) * Number(stats.bsize);
+          const total = Number(stats.blocks) * Number(stats.bsize);
+          return {
+            freeMB: Math.round(free / 1e6),
+            totalMB: Math.round(total / 1e6),
+            usedMB: Math.round((total - free) / 1e6)
+          };
+        } catch (e) {
+          return { error: e.message };
+        }
+      };
+      let photoUsed = null;
+      try {
+        photoUsed = Math.round(_ensurePhotoDirSize(false) / 1e6);
+      } catch (_) {
+        /* ignore */
+      }
+      return {
+        backups: probe(BACKUP_DIR),
+        photos: probe(PHOTO_DIR),
+        photosUsedMB: photoUsed,
+        photosCapMB: Math.round(PHOTO_DIR_MAX_BYTES / 1e6)
+      };
+    })();
+
+    // db: file size, WAL size, last vacuum age
+    out.db = (() => {
+      try {
+        const dbStats = fs.statSync(DB_FILE);
+        let walMB = null;
+        try {
+          walMB = Math.round(fs.statSync(DB_FILE + '-wal').size / 1e6);
+        } catch (_) {
+          /* WAL file may have been checkpointed away */
+        }
+        const backupStatus = readBackupStatus();
+        const lastVacuum = backupStatus.lastSuccess && backupStatus.lastSuccess.time;
+        const lastVacuumAgeHours = lastVacuum
+          ? Math.round(((Date.now() - new Date(lastVacuum).getTime()) / 3600000) * 10) / 10
+          : null;
+        return {
+          sizeMB: Math.round(dbStats.size / 1e6),
+          walMB,
+          lastVacuum: lastVacuum || null,
+          lastVacuumAgeHours,
+          ok: true
+        };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    })();
+
+    // backup: reuse the same shape as /api/health
+    out.backup = (() => {
+      try {
+        const bs = readBackupStatus();
+        const hasSuccess = bs.lastSuccess && bs.lastSuccess.time;
+        const ageHours = hasSuccess
+          ? Math.round(((Date.now() - new Date(bs.lastSuccess.time).getTime()) / 3600000) * 10) / 10
+          : null;
+        let offSite = null;
+        if (fs.existsSync(OFFSITE_MARKER_FILE)) {
+          try {
+            const parsed = JSON.parse(fs.readFileSync(OFFSITE_MARKER_FILE, 'utf8'));
+            if (parsed && parsed.time) {
+              offSite = {
+                lastSync: parsed.time,
+                ageMinutes: Math.round((Date.now() - new Date(parsed.time).getTime()) / 60000),
+                target: parsed.target || null,
+                bytes: typeof parsed.bytes === 'number' ? parsed.bytes : null
+              };
+            }
+          } catch (_) {
+            /* corrupted marker; ignore */
+          }
+        }
+        return {
+          lastSuccess: bs.lastSuccess || null,
+          lastFailure: bs.lastFailure || null,
+          lastAttempt: bs.lastAttempt || null,
+          ageHours,
+          offSite
+        };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // tls: certificate expiry parsed from certs/server.crt
+    out.tls = (() => {
+      try {
+        if (!fs.existsSync(CERT_CRT)) return { configured: false };
+        const certPem = fs.readFileSync(CERT_CRT, 'utf8');
+        const x509 = new crypto.X509Certificate(certPem);
+        const validTo = x509.validTo;
+        const expiryMs = new Date(validTo).getTime();
+        const daysLeft = Number.isFinite(expiryMs) ? Math.round((expiryMs - Date.now()) / 86400000) : null;
+        const isLE = certPem.includes("Let's Encrypt") || /CN=R\d+|CN=E\d+/.test(certPem);
+        return { configured: true, expiry: validTo, daysLeft, type: isLE ? 'lets-encrypt' : 'self-signed' };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // printBridge: configured flag + last-known cached printer state
+    out.printBridge = (() => {
+      try {
+        const cfg = getEffectiveBridgeConfig();
+        return {
+          configured: !!cfg,
+          source: cfg ? cfg.source : null,
+          lastReachable: _printerStatusCacheTime > 0 ? new Date(_printerStatusCacheTime).toISOString() : null,
+          printerOnline: _printerStatusCache === true
+        };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // caldav: filesystem-based — count calendars + best-effort last-sync
+    out.caldav = (() => {
+      try {
+        const cals = listCalendars();
+        let lastSync = null;
+        try {
+          const row = database
+            .prepare('SELECT MAX(caldav_synced) AS m FROM manual_tasks WHERE caldav_synced IS NOT NULL')
+            .get();
+          if (row && row.m) lastSync = row.m;
+        } catch (_) {
+          /* schema variation; ignore */
+        }
+        return { calendars: cals.length, lastSync };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // mcp: live session count
+    out.mcp = (() => {
+      try {
+        return { sessions: mcpSessions.size };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // notifications: backlog + how many older-than-30d unread
+    out.notifications = (() => {
+      try {
+        const total = database.prepare('SELECT COUNT(*) AS c FROM notifications').get();
+        const oldUnread = database
+          .prepare("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND created < datetime('now', '-30 days')")
+          .get();
+        return {
+          total: total ? total.c : 0,
+          unreadOlderThan30d: oldUnread ? oldUnread.c : 0
+        };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // auth: active lockouts + expired-session count
+    out.auth = (() => {
+      try {
+        const now = Date.now();
+        let activeLockouts = 0;
+        for (const entry of loginAttempts.values()) {
+          if (entry.lockedUntil && entry.lockedUntil > now) activeLockouts++;
+        }
+        for (const entry of loginAttemptsPerUser.values()) {
+          if (entry.lockedUntil && entry.lockedUntil > now) activeLockouts++;
+        }
+        const expiredRow = database.prepare("SELECT COUNT(*) AS c FROM sessions WHERE expires < datetime('now')").get();
+        const totalSessions = database.prepare('SELECT COUNT(*) AS c FROM sessions').get();
+        return {
+          activeLockouts,
+          expiredSessions: expiredRow ? expiredRow.c : 0,
+          totalSessions: totalSessions ? totalSessions.c : 0
+        };
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
+
+    // deploy: last webhook auto-deploy attempt sentinel (R-14)
+    try {
+      const dep = readDeployState();
+      if (dep) out.deploy = dep;
+    } catch (_) {
+      /* ignore */
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(out));
+    return;
+  }
+
   // SSE endpoint for real-time sync
   if (req.method === 'GET' && req.url === '/api/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -5310,7 +5696,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         broadcastSSE(res);
         jsonOk(res, { id: reportId, photoIds, autoMovedScanId });
       } catch (err) {
-        safeErr(res, err);
+        // R-15: photo-cap errors map to 507 Insufficient Storage so the
+        // client can display a useful "directory full" message instead of a
+        // generic 400.
+        if (err && err.name === 'PhotoCapError') {
+          jsonErr(res, 507, err.message);
+        } else {
+          safeErr(res, err);
+        }
       }
     });
     return;
@@ -6363,8 +6756,38 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonOk(res, { ok: true, message: 'Restarting...' });
         setTimeout(() => {
           const scriptDir = path.resolve(__dirname);
+          // R-14: write a deploy-state sentinel before spawning the chain.
+          // The chain itself overwrites it with success/fail after each step
+          // (or on the next attempt) so an admin can see what happened
+          // without scraping logs. Failure is implied if a fresh attempt
+          // overwrites without a prior `success`.
+          const targetSha = (body.after || (body.head_commit && body.head_commit.id) || 'unknown').slice(0, 40);
+          const startedAt = new Date().toISOString();
+          try {
+            writeDeployState({
+              status: 'in_progress',
+              sha: targetSha,
+              started: startedAt,
+              sender: body.sender && body.sender.login
+            });
+          } catch (e) {
+            log('warn', 'Could not write deploy-state sentinel', { error: e.message });
+          }
+          const stateFileEsc = DEPLOY_STATE_FILE;
           // Use a lightweight update script instead of interactive START.bat.
-          // Sequence: git pull → npm install → pm2 restart
+          // Sequence: git pull → npm install → pm2 restart. We append
+          // success/failure JSON to the state file so the next /api/health
+          // call can surface it.
+          const successJson = JSON.stringify({
+            status: 'success',
+            sha: targetSha,
+            started: startedAt
+          }).replace(/"/g, '\\"');
+          const failJson = JSON.stringify({
+            status: 'failed',
+            sha: targetSha,
+            started: startedAt
+          }).replace(/"/g, '\\"');
           const script =
             process.platform === 'win32'
               ? [
@@ -6376,7 +6799,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                       '" &&' +
                       ' git fetch origin && git reset --hard origin/main &&' +
                       ' npm install --omit=dev &&' +
-                      ' pm2 restart meisterpilze --update-env'
+                      ' (echo {"status":"success","sha":"' +
+                      targetSha +
+                      '","started":"' +
+                      startedAt +
+                      '","completed":"' +
+                      // cmd has no native ISO date; the JSON is best-effort, the
+                      // mtime of the file gives the actual completion time too.
+                      '"} > "' +
+                      stateFileEsc +
+                      '") &&' +
+                      ' pm2 restart meisterpilze --update-env ||' +
+                      ' (echo {"status":"failed","sha":"' +
+                      targetSha +
+                      '","started":"' +
+                      startedAt +
+                      '"} > "' +
+                      stateFileEsc +
+                      '")'
                   ]
                 ]
               : [
@@ -6385,10 +6825,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                     '-c',
                     'cd "' +
                       scriptDir +
-                      '" &&' +
+                      '" && {' +
                       ' git fetch origin && git reset --hard origin/main &&' +
-                      ' npm install --omit=dev &&' +
-                      ' pm2 restart meisterpilze --update-env'
+                      ' npm install --omit=dev; } && {' +
+                      " printf '%s' \"" +
+                      successJson.replace(/\\"/g, '\\\\"') +
+                      '" > "' +
+                      stateFileEsc +
+                      '";' +
+                      ' pm2 restart meisterpilze --update-env;' +
+                      " } || { printf '%s' \"" +
+                      failJson.replace(/\\"/g, '\\\\"') +
+                      '" > "' +
+                      stateFileEsc +
+                      '"; }'
                   ]
                 ];
           const child = spawn(script[0], script[1], { cwd: scriptDir, detached: true, stdio: 'ignore' });
@@ -6777,8 +7227,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Password required (min 12 characters)');
           return;
         }
-        // Create a fresh VACUUM INTO temp file for a consistent snapshot
-        tmpDest = path.join(BACKUP_DIR, '_download_tmp_' + Date.now() + '.db');
+        // Create a fresh VACUUM INTO temp file for a consistent snapshot.
+        // R-12: random suffix avoids collisions if two admins click download
+        // in the same millisecond — Date.now() ms granularity is not enough.
+        tmpDest = path.join(BACKUP_DIR, '_download_tmp_' + crypto.randomBytes(8).toString('hex') + '.db');
         db.backupDb(database, tmpDest);
         const plain = fs.readFileSync(tmpDest);
         try {
@@ -7587,9 +8039,17 @@ function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
+// R-07: warn-only on both uncaughtException and unhandledRejection.
+// Rationale: uncaught exceptions in async paths are usually narrow correctness
+// bugs (e.g. malformed user input that escaped validation), and crash-looping
+// the whole server amplifies the damage. PM2 still catches genuinely fatal
+// errors (segfaults, OOM) via process exit codes — those bypass this handler.
+// SIGTERM/SIGINT keep their graceful-shutdown behaviour above.
 process.on('uncaughtException', (err) => {
-  log('error', 'Uncaught exception', { error: err.message, stack: err.stack });
-  shutdown('uncaughtException');
+  log('error', 'Uncaught exception (continuing)', {
+    error: err.message,
+    stack: err.stack
+  });
 });
 
 process.on('unhandledRejection', (reason) => {

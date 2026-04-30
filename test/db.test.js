@@ -1315,3 +1315,107 @@ describe('db – writeAll/readAll round-trip (audit I-04)', () => {
     assert.deepEqual(e.exceptionDates.sort(), ['2024-02-10', '2024-02-15']);
   });
 });
+
+// R-10: periodic cleanup helpers — sessions and read notifications
+describe('db – cleanupExpiredSessions (R-10)', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.createUser(d, 'cleanup_alice', 'password123', 'admin');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('deletes sessions whose expiry is in the past', () => {
+    const u = db.getUserByUsername(d, 'cleanup_alice');
+    // Insert two sessions: one expired, one fresh
+    const expiredToken = require('crypto').randomBytes(32).toString('hex');
+    const freshToken = db.createSession(d, u.id);
+    d.prepare(
+      "INSERT INTO sessions(token, user_id, created, expires) VALUES (?, ?, datetime('now', '-30 days'), datetime('now', '-1 day'))"
+    ).run(expiredToken, u.id);
+    const before = d.prepare('SELECT COUNT(*) AS c FROM sessions WHERE user_id = ?').get(u.id).c;
+    assert.ok(before >= 2, 'expected at least 2 sessions before cleanup');
+    const removed = db.cleanupExpiredSessions(d);
+    assert.ok(removed >= 1, 'expected cleanup to remove the expired session');
+    // Fresh session must still exist
+    assert.ok(db.getSession(d, freshToken), 'fresh session should survive');
+    // Expired token must be gone
+    const stillThere = d.prepare('SELECT 1 FROM sessions WHERE token = ?').get(expiredToken);
+    assert.equal(stillThere, undefined);
+  });
+
+  it('does not delete sessions whose expiry is in the future', () => {
+    const u = db.getUserByUsername(d, 'cleanup_alice');
+    const t = db.createSession(d, u.id);
+    const removed = db.cleanupExpiredSessions(d);
+    assert.equal(removed, 0, 'no fresh sessions should be removed');
+    assert.ok(db.getSession(d, t));
+  });
+});
+
+describe('db – cleanupOldNotifications (R-10)', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.createUser(d, 'notif_alice', 'password123', 'admin');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('deletes read notifications older than 30 days', () => {
+    const u = db.getUserByUsername(d, 'notif_alice');
+    const id = db.createNotification(d, { userId: u.id, type: 'test', title: 'old read' });
+    // Mark read and back-date
+    d.prepare("UPDATE notifications SET read = 1, created = datetime('now', '-60 days') WHERE id = ?").run(id);
+    const removed = db.cleanupOldNotifications(d);
+    assert.ok(removed >= 1);
+    const stillThere = d.prepare('SELECT 1 FROM notifications WHERE id = ?').get(id);
+    assert.equal(stillThere, undefined);
+  });
+
+  it('does not delete fresh read notifications', () => {
+    const u = db.getUserByUsername(d, 'notif_alice');
+    const id = db.createNotification(d, { userId: u.id, type: 'test', title: 'recent read' });
+    d.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id);
+    const removed = db.cleanupOldNotifications(d);
+    assert.equal(removed, 0);
+    assert.ok(d.prepare('SELECT 1 FROM notifications WHERE id = ?').get(id));
+  });
+
+  it('does not delete unread notifications regardless of age', () => {
+    const u = db.getUserByUsername(d, 'notif_alice');
+    const id = db.createNotification(d, { userId: u.id, type: 'test', title: 'old unread' });
+    d.prepare("UPDATE notifications SET read = 0, created = datetime('now', '-60 days') WHERE id = ?").run(id);
+    const removed = db.cleanupOldNotifications(d);
+    assert.equal(removed, 0);
+    assert.ok(d.prepare('SELECT 1 FROM notifications WHERE id = ?').get(id));
+  });
+});
+
+// R-16: backup pre-flight disk-space check
+describe('db – checkDiskSpace (R-16)', () => {
+  it('returns ok=true when sufficient space (or skipped on Windows)', () => {
+    const r = db.checkDiskSpace(os.tmpdir(), 1024);
+    assert.equal(r.ok, true);
+  });
+
+  it('throws when required bytes exceed available (when supported)', () => {
+    // On platforms where statfsSync is unsupported, the helper logs and
+    // returns ok:true with skipped:true — that's fine. We only assert the
+    // throw path on platforms that actually expose statfsSync.
+    let supported = false;
+    try {
+      fs.statfsSync(os.tmpdir());
+      supported = true;
+    } catch (_) {
+      supported = false;
+    }
+    if (!supported) return;
+    assert.throws(() => db.checkDiskSpace(os.tmpdir(), Number.MAX_SAFE_INTEGER), /Insufficient/);
+  });
+});
