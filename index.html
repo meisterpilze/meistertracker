@@ -107,8 +107,7 @@
         <p id="m-body3"></p>
         <div class="modal-btns">
           <button class="btn" id="m-cancel3" data-i18n="common.cancel">Cancel</button
-          ><button class="btn btn-p" id="m-ok3a"></button
-          ><button class="btn btn-r" id="m-ok3b"></button>
+          ><button class="btn btn-p" id="m-ok3a"></button><button class="btn btn-r" id="m-ok3b"></button>
         </div>
       </div>
     </div>
@@ -514,20 +513,11 @@
         </p>
         <div
           id="bs-bags"
-          style="
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            max-height: 45vh;
-            overflow-y: auto;
-            margin-bottom: 14px;
-          "
+          style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 45vh; overflow-y: auto; margin-bottom: 14px"
         ></div>
         <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap">
           <span id="bs-count" style="font-size: 13px; color: var(--c-text-sec); font-weight: 600"></span>
-          <button id="bs-continue" class="btn btn-p" data-i18n="bagSelect.continueToZone">
-            Continue → pick zone
-          </button>
+          <button id="bs-continue" class="btn btn-p" data-i18n="bagSelect.continueToZone">Continue → pick zone</button>
         </div>
       </div>
     </div>
@@ -567,17 +557,26 @@
     <!-- Contamination report drill-down — full-size photos + delete -->
     <div class="modal-bg" id="m-contam-detail" role="dialog" aria-modal="true" aria-labelledby="cd-title">
       <div class="modal" style="max-width: 720px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
           <h3 id="cd-title" data-i18n="contam.detailTitle">Kontaminationsbericht</h3>
           <button id="cls-cd" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
             </svg>
           </button>
         </div>
         <div id="cd-body"></div>
-        <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap">
+        <div style="display: flex; gap: 8px; justify-content: space-between; margin-top: 14px; flex-wrap: wrap">
           <button id="cd-delete" type="button" class="btn btn-sm btn-r" data-i18n="contam.delete">Löschen</button>
           <button id="cd-close" type="button" class="btn btn-sm" data-i18n="common.close">Schließen</button>
         </div>
@@ -587,52 +586,91 @@
     <!-- Contamination report modal — capture photo + tag type for a bag/batch -->
     <div class="modal-bg" id="m-contam-report" role="dialog" aria-modal="true" aria-labelledby="cr-title">
       <div class="modal" style="max-width: 540px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
           <h3 id="cr-title" data-i18n="contam.title">Kontamination melden</h3>
           <button id="cls-cr" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
             </svg>
           </button>
         </div>
-        <div id="cr-target" style="font-family:monospace;font-size:13px;color:var(--c-text-sec);margin-bottom:14px;padding:8px 10px;background:var(--c-bg);border-radius:6px"></div>
+        <div
+          id="cr-target"
+          style="
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--c-text-sec);
+            margin-bottom: 14px;
+            padding: 8px 10px;
+            background: var(--c-bg);
+            border-radius: 6px;
+          "
+        ></div>
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom: 14px">
           <label class="cr-label" data-i18n="contam.type">Typ</label>
           <div id="cr-type-grid" class="contam-type-grid"></div>
         </div>
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom: 14px">
           <label class="cr-label" data-i18n="contam.severity">Schwere</label>
           <div class="contam-severity-row" id="cr-severity-row">
-            <button type="button" class="contam-sev-btn active" data-sev="minor" data-i18n="contam.sevMinor">Klein</button>
+            <button type="button" class="contam-sev-btn active" data-sev="minor" data-i18n="contam.sevMinor">
+              Klein
+            </button>
             <button type="button" class="contam-sev-btn" data-sev="major" data-i18n="contam.sevMajor">Größer</button>
             <button type="button" class="contam-sev-btn" data-sev="lost" data-i18n="contam.sevLost">Total</button>
           </div>
         </div>
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom: 14px">
           <label class="cr-label" data-i18n="contam.photos">Foto(s)</label>
           <div id="cr-photo-tiles" class="contam-photo-tiles"></div>
           <input type="file" id="cr-file-input" accept="image/*" capture="environment" multiple hidden />
-          <div id="cr-photo-status" style="font-size:11px;color:var(--c-text-muted);margin-top:4px"></div>
+          <div id="cr-photo-status" style="font-size: 11px; color: var(--c-text-muted); margin-top: 4px"></div>
         </div>
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom: 14px">
           <label class="cr-label" data-i18n="contam.notes">Notiz (optional)</label>
-          <textarea id="cr-notes" rows="2" maxlength="2000" data-i18n-placeholder="contam.notesPlaceholder" placeholder="z.B. Bag-Lid feucht, neben TENT-3 entdeckt"></textarea>
+          <textarea
+            id="cr-notes"
+            rows="2"
+            maxlength="2000"
+            data-i18n-placeholder="contam.notesPlaceholder"
+            placeholder="z.B. Bag-Lid feucht, neben TENT-3 entdeckt"
+          ></textarea>
         </div>
 
         <!-- Auto-MOVE checkbox: defaults on for major/lost, off for minor.
              When checked, the server inserts a MOVE-to-CONTAM scan-log entry
              alongside the report so the bag's location trail stays accurate. -->
-        <label id="cr-auto-move-row" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;color:var(--c-text-sec);cursor:pointer">
-          <input type="checkbox" id="cr-auto-move" style="width:20px;height:20px;cursor:pointer" />
+        <label
+          id="cr-auto-move-row"
+          style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            color: var(--c-text-sec);
+            cursor: pointer;
+          "
+        >
+          <input type="checkbox" id="cr-auto-move" style="width: 20px; height: 20px; cursor: pointer" />
           <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
         </label>
 
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap">
           <button id="cr-cancel" type="button" class="btn btn-sm" data-i18n="common.cancel">Abbrechen</button>
           <button id="cr-submit" type="button" class="btn btn-sm btn-p" data-i18n="contam.submit">Senden</button>
         </div>
@@ -653,7 +691,9 @@
         <div class="pa-canvas-wrap">
           <canvas id="pa-canvas"></canvas>
         </div>
-        <div class="pa-hint" data-i18n="contam.annotateHint">Mit dem Finger auf das Foto malen, um die Stelle zu markieren.</div>
+        <div class="pa-hint" data-i18n="contam.annotateHint">
+          Mit dem Finger auf das Foto malen, um die Stelle zu markieren.
+        </div>
       </div>
     </div>
 
@@ -1037,7 +1077,9 @@
           stroke-linejoin="round"
         >
           <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-          <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+          <path
+            d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+          />
         </svg>
         <span class="bell-badge" id="bell-badge-m" hidden>0</span>
       </button>
@@ -1052,7 +1094,16 @@
          single source of truth for active state and routing. -->
     <nav class="bottom-nav no-print" id="bottom-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation">
       <button class="bottom-nav-btn" id="bn-dash" type="button" data-page="dash">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="3" y="3" width="7" height="7" rx="1" />
           <rect x="14" y="3" width="7" height="7" rx="1" />
           <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -1061,22 +1112,51 @@
         <span data-i18n="nav.dashboard">Dashboard</span>
       </button>
       <button class="bottom-nav-btn" id="bn-batch" type="button" data-page="batch">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
+          />
           <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
           <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
         <span data-i18n="nav.batches">Batches</span>
       </button>
       <button class="bottom-nav-btn" id="bn-lab" type="button" data-page="lab">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M9 3h6v7l4 9H5l4-9V3z" />
           <line x1="9" y1="3" x2="15" y2="3" />
         </svg>
         <span data-i18n="nav.lab">Lab</span>
       </button>
       <button class="bottom-nav-btn" id="bn-cal" type="button" data-page="cal">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -1097,12 +1177,9 @@
     >
       <div class="notif-header">
         <span class="notif-title" id="notif-title" data-i18n="notifications.title">Benachrichtigungen</span>
-        <button
-          class="notif-mark-read"
-          id="notif-mark-read"
-          type="button"
-          data-i18n="notifications.markAllRead"
-        >Alle als gelesen markieren</button>
+        <button class="notif-mark-read" id="notif-mark-read" type="button" data-i18n="notifications.markAllRead">
+          Alle als gelesen markieren
+        </button>
       </div>
       <div class="notif-list" id="notif-list"></div>
       <div class="notif-empty" id="notif-empty" data-i18n="notifications.empty" hidden>
@@ -1271,7 +1348,15 @@
           </div>
           <div>
             <label style="color: var(--c-amber-dark); font-size: 11px" data-i18n="harvest.flush">Flush #</label
-            ><input type="text" inputmode="numeric" enterkeyhint="done" id="hp-flush" value="1" autocomplete="off" style="width: 65px" />
+            ><input
+              type="text"
+              inputmode="numeric"
+              enterkeyhint="done"
+              id="hp-flush"
+              value="1"
+              autocomplete="off"
+              style="width: 65px"
+            />
           </div>
           <button id="act-21" class="btn btn-p btn-sm" data-i18n="harvest.logHarvest">Log harvest</button>
           <button id="btn-22" class="btn btn-sm" data-i18n="harvest.cancel">Cancel</button>
@@ -1321,10 +1406,31 @@
           <!-- Farm-only sections (hidden in Overview mode) -->
           <div id="dash-farm-section">
             <!-- Quick actions: jump straight to the most common creation flows -->
-            <div id="dash-actions-row" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-              <button id="dash-act-newbatch" class="btn btn-p" style="flex:1;min-width:140px;padding:10px 14px;font-weight:600;font-size:13px" data-i18n="dash.actionNewBatch">+ New batch</button>
-              <button id="dash-act-labwork" class="btn btn-p" style="flex:1;min-width:140px;padding:10px 14px;font-weight:600;font-size:13px" data-i18n="dash.actionLabWork">+ Lab work</button>
-              <button id="dash-act-harvest" class="btn btn-p" style="flex:1;min-width:140px;padding:10px 14px;font-weight:600;font-size:13px" data-i18n="dash.actionHarvest">+ Log harvest</button>
+            <div id="dash-actions-row" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap">
+              <button
+                id="dash-act-newbatch"
+                class="btn btn-p"
+                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
+                data-i18n="dash.actionNewBatch"
+              >
+                + New batch
+              </button>
+              <button
+                id="dash-act-labwork"
+                class="btn btn-p"
+                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
+                data-i18n="dash.actionLabWork"
+              >
+                + Lab work
+              </button>
+              <button
+                id="dash-act-harvest"
+                class="btn btn-p"
+                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
+                data-i18n="dash.actionHarvest"
+              >
+                + Log harvest
+              </button>
             </div>
             <!-- ── GROWBLOCKS section ── -->
             <div class="dash-section-header dash-section-growblocks">
@@ -1452,7 +1558,11 @@
               </div>
 
               <!-- Ready to harvest (fruiting batches — separated from Batch tasks to keep it uncluttered) -->
-              <div class="card" id="dash-harvest-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0; display: none">
+              <div
+                class="card"
+                id="dash-harvest-tasks-card"
+                style="padding: 12px 16px; flex: 1; min-width: 0; display: none"
+              >
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
                   <div class="sec" style="margin: 0" data-i18n="harvest.readyToHarvest">Ready to harvest</div>
                   <span id="dash-harvest-count" style="font-size: 11px; color: var(--c-text-muted)"></span>
@@ -1471,7 +1581,9 @@
               <!-- Split batches (bags of the same batch across multiple stages) -->
               <div class="card" id="dash-split-batches-card" style="padding: 12px 16px; flex: 1; display: none">
                 <div style="margin-bottom: 6px">
-                  <div class="sec" style="margin: 0; font-size: 11px" data-i18n="dash.splitBatches.title">Split batches — bags left behind</div>
+                  <div class="sec" style="margin: 0; font-size: 11px" data-i18n="dash.splitBatches.title">
+                    Split batches — bags left behind
+                  </div>
                 </div>
                 <div id="dash-split-batches"></div>
               </div>
@@ -1519,8 +1631,8 @@
           <!-- Charts section — visible in Overview mode only -->
           <div id="dash-charts-section" style="display: none">
             <!-- Top bar: Period toggle + CSV download -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div class="ov-period-toggle" style="margin-bottom:0">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+              <div class="ov-period-toggle" style="margin-bottom: 0">
                 <button
                   class="ov-period-btn active"
                   id="ov-p-week"
@@ -1537,12 +1649,21 @@
                 >
                   This month
                 </button>
-                <button class="ov-period-btn" id="ov-p-year" onclick="setOvPeriod('year')" data-i18n="dash.ov.periodYear">
+                <button
+                  class="ov-period-btn"
+                  id="ov-p-year"
+                  onclick="setOvPeriod('year')"
+                  data-i18n="dash.ov.periodYear"
+                >
                   This year
                 </button>
               </div>
-              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV" style="padding:4px 10px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV" style="padding: 4px 10px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
                 CSV
               </button>
             </div>
@@ -1589,10 +1710,18 @@
 
             <!-- KPI History (trend charts from daily snapshots) -->
             <div id="ov-kpi-history" style="display: none">
-              <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="display: flex; align-items: center; justify-content: space-between">
                 <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
-                <button class="btn btn-sm" onclick="takeKpiSnapshot()" title="Update today's snapshot" style="padding:3px 8px;font-size:11px">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                <button
+                  class="btn btn-sm"
+                  onclick="takeKpiSnapshot()"
+                  title="Update today's snapshot"
+                  style="padding: 3px 8px; font-size: 11px"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                  </svg>
                   Snapshot
                 </button>
               </div>
@@ -1641,19 +1770,40 @@
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  margin-bottom: 8px;
+                  gap: 6px;
+                  flex-wrap: wrap;
+                "
+              >
                 <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
-                <input
-                  type="search"
-                  enterkeyhint="search"
-                  autocomplete="off"
-                  id="batch-q"
-                  data-i18n-aria-label="aria.searchBatches"
-                  aria-label="Search batches"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Search..."
-                  style="width: 140px; font-size: 12px; padding: 4px 8px"
-                />
+                <div style="display: flex; gap: 6px; align-items: center">
+                  <select
+                    id="batch-archive-filter"
+                    data-i18n-aria-label="batch.filterArchiveAria"
+                    aria-label="Filter by archive status"
+                    style="font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
+                  >
+                    <option value="active" data-i18n="batch.filterActive">Active</option>
+                    <option value="archived" data-i18n="batch.filterArchived">Archived</option>
+                    <option value="all" data-i18n="batch.filterAll">All</option>
+                  </select>
+                  <input
+                    type="search"
+                    enterkeyhint="search"
+                    autocomplete="off"
+                    id="batch-q"
+                    data-i18n-aria-label="aria.searchBatches"
+                    aria-label="Search batches"
+                    data-i18n-placeholder="dash.search"
+                    placeholder="Search..."
+                    style="width: 140px; font-size: 12px; padding: 4px 8px"
+                  />
+                </div>
               </div>
               <div style="overflow-x: auto">
                 <table id="t-batches">
@@ -1683,7 +1833,19 @@
             <div class="g2">
               <div class="card">
                 <div class="sec" data-i18n="batch.createNew">Create new batch</div>
-                <div id="nb-source-banner" style="display:none;margin-top:6px;padding:6px 10px;font-size:12px;border-radius:6px;background:#dcfce7;border-left:4px solid #16a34a;color:#14532d"></div>
+                <div
+                  id="nb-source-banner"
+                  style="
+                    display: none;
+                    margin-top: 6px;
+                    padding: 6px 10px;
+                    font-size: 12px;
+                    border-radius: 6px;
+                    background: #dcfce7;
+                    border-left: 4px solid #16a34a;
+                    color: #14532d;
+                  "
+                ></div>
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
                   <div>
                     <label data-i18n="batch.bagWeight">Bag weight</label>
@@ -2094,28 +2256,47 @@
                   <!-- KB (Körnerbrut) fields — shown only when work type = KB -->
                   <div id="lw-kb-rows" style="display: none; flex-direction: column; gap: 10px">
                     <div id="gs-weight-lines">
-                      <div class="gs-wline" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
-                        <div style="flex:1;min-width:120px">
+                      <div
+                        class="gs-wline"
+                        style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px"
+                      >
+                        <div style="flex: 1; min-width: 120px">
                           <label data-i18n="batch.bagWeight">Beutelgewicht</label>
-                          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px">
+                          <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px">
                             <button type="button" class="btn btn-sm gs-wbtn" data-kg="0.7">0.7</button>
                             <button type="button" class="btn btn-sm btn-p gs-wbtn" data-kg="1">1</button>
                             <button type="button" class="btn btn-sm gs-wbtn" data-kg="2">2</button>
                             <button type="button" class="btn btn-sm gs-wbtn" data-kg="5">5</button>
                           </div>
-                          <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-                            <input type="text" inputmode="decimal" class="gs-line-kg" value="1" style="width:70px" autocomplete="off" />
-                            <span style="font-size:12px;color:var(--c-text-muted)">kg</span>
+                          <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px">
+                            <input
+                              type="text"
+                              inputmode="decimal"
+                              class="gs-line-kg"
+                              value="1"
+                              style="width: 70px"
+                              autocomplete="off"
+                            />
+                            <span style="font-size: 12px; color: var(--c-text-muted)">kg</span>
                           </div>
                         </div>
-                        <div style="min-width:80px">
+                        <div style="min-width: 80px">
                           <label data-i18n="batch.qty">Menge (Beutel)</label>
                           <input type="number" class="gs-line-qty" value="10" min="1" max="500" />
                         </div>
-                        <button type="button" class="btn btn-sm gs-line-rm" style="display:none;padding:4px 8px;color:var(--c-red)" title="Remove">&times;</button>
+                        <button
+                          type="button"
+                          class="btn btn-sm gs-line-rm"
+                          style="display: none; padding: 4px 8px; color: var(--c-red)"
+                          title="Remove"
+                        >
+                          &times;
+                        </button>
                       </div>
                     </div>
-                    <button type="button" id="gs-add-line" class="btn btn-sm" style="margin-bottom:4px">+ Gewicht</button>
+                    <button type="button" id="gs-add-line" class="btn btn-sm" style="margin-bottom: 4px">
+                      + Gewicht
+                    </button>
                     <div class="g2">
                       <div>
                         <label data-i18n="batch.incDays">Inkubationstage</label
@@ -2193,9 +2374,7 @@
                     id="lw-result"
                     style="display: none; background: var(--c-bg); border-radius: 8px; padding: 10px 12px"
                   >
-                    <div class="sec" style="margin-bottom: 6px" data-i18n="lab.createdIds">
-                      Created culture IDs
-                    </div>
+                    <div class="sec" style="margin-bottom: 6px" data-i18n="lab.createdIds">Created culture IDs</div>
                     <div
                       id="lw-ids"
                       style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 200px; overflow-y: auto"
@@ -2250,9 +2429,18 @@
           <!-- Contamination reports list -->
           <div class="sp" id="sp-lab-contam">
             <div class="card">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-                <div class="sec" style="margin:0" data-i18n="contam.listTitle">Kontaminationsberichte</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  margin-bottom: 10px;
+                  flex-wrap: wrap;
+                  gap: 8px;
+                "
+              >
+                <div class="sec" style="margin: 0" data-i18n="contam.listTitle">Kontaminationsberichte</div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap">
                   <select id="cl-type-filter" data-i18n-aria-label="contam.type" aria-label="Type filter">
                     <option value="" data-i18n="contam.allTypes">Alle Typen</option>
                   </select>
@@ -2268,10 +2456,12 @@
                     <option value="resolved" data-i18n="contam.statusResolved">Aufgelöst</option>
                   </select>
                   <input type="date" id="cl-since-filter" data-i18n-aria-label="contam.since" aria-label="Since" />
-                  <button id="cl-reset" type="button" class="btn btn-sm" data-i18n="contam.resetFilters">Zurücksetzen</button>
+                  <button id="cl-reset" type="button" class="btn btn-sm" data-i18n="contam.resetFilters">
+                    Zurücksetzen
+                  </button>
                 </div>
               </div>
-              <div id="contam-list-count" style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px"></div>
+              <div id="contam-list-count" style="font-size: 11px; color: var(--c-text-muted); margin-bottom: 8px"></div>
               <div id="contam-list"></div>
             </div>
           </div>
@@ -2283,14 +2473,16 @@
           <div
             id="printer-status-banner"
             class="card"
-            style="margin-bottom: 10px; cursor: pointer; transition: background-color 0.2s, border-color 0.2s"
+            style="
+              margin-bottom: 10px;
+              cursor: pointer;
+              transition:
+                background-color 0.2s,
+                border-color 0.2s;
+            "
             title="Click to re-check"
           >
-            <div
-              id="printer-status-text"
-              style="font-size: 13px; line-height: 1.5"
-              data-i18n="print.status.checking"
-            >
+            <div id="printer-status-text" style="font-size: 13px; line-height: 1.5" data-i18n="print.status.checking">
               Checking printer status…
             </div>
             <div id="printer-status-detail" style="font-size: 11px; opacity: 0.8; margin-top: 4px"></div>
@@ -2714,7 +2906,12 @@
                 </div>
                 <div>
                   <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.password">Password</label
-                  ><input type="password" id="new-password" autocomplete="new-password" style="width: 120px; font-size: 13px" />
+                  ><input
+                    type="password"
+                    id="new-password"
+                    autocomplete="new-password"
+                    style="width: 120px; font-size: 13px"
+                  />
                 </div>
                 <div>
                   <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.role">Role</label
@@ -2991,8 +3188,8 @@
                 style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="printer.desc"
               >
-                Configure where labels are sent. On Windows the server prints directly. On Linux a small bridge
-                service running on a Windows PC forwards print jobs to the Zebra GK420d.
+                Configure where labels are sent. On Windows the server prints directly. On Linux a small bridge service
+                running on a Windows PC forwards print jobs to the Zebra GK420d.
               </p>
               <div
                 id="printer-cfg-status"
@@ -3064,8 +3261,7 @@
                     style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="printer.tokenHint"
                   >
-                    Shared token. Set the same value in PRINT_BRIDGE_TOKEN on the Windows side. Required on shared
-                    LANs.
+                    Shared token. Set the same value in PRINT_BRIDGE_TOKEN on the Windows side. Required on shared LANs.
                   </div>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
@@ -3101,8 +3297,8 @@
               </div>
               <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="2">
                 <li data-i18n="printer.step2">
-                  Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept.
-                  This sets up URL ACL, firewall rule, scheduled task, and starts the bridge.
+                  Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept. This
+                  sets up URL ACL, firewall rule, scheduled task, and starts the bridge.
                 </li>
               </ol>
               <div style="position: relative; margin: 6px 0 12px">
@@ -3137,9 +3333,9 @@
                 data-i18n="printer.manageHint"
               >
                 Useful management commands on the Windows PC:
-                <code>-Status</code> shows installation state,
-                <code>-Disable</code> / <code>-Enable</code> stops/resumes the bridge without uninstalling,
-                <code>-Uninstall</code> removes everything.
+                <code>-Status</code> shows installation state, <code>-Disable</code> /
+                <code>-Enable</code> stops/resumes the bridge without uninstalling, <code>-Uninstall</code> removes
+                everything.
               </div>
             </div>
           </div>
@@ -3314,11 +3510,10 @@
             <div class="card">
               <div class="sec">Embed strain text in IDs</div>
               <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6">
-                Renames batch and culture IDs to include the strain text
-                (e.g. <code>G-LION-140426-01</code> → <code>G-LION-BHA1-140426-01</code>,
-                <code>PD-LION-140426-01</code> → <code>PD-LION-BHA1-140426-01</code>).
-                Only affects items that have a strain text set. Barcodes are not changed.
-                Shows a preview before applying.
+                Renames batch and culture IDs to include the strain text (e.g. <code>G-LION-140426-01</code> →
+                <code>G-LION-BHA1-140426-01</code>, <code>PD-LION-140426-01</code> →
+                <code>PD-LION-BHA1-140426-01</code>). Only affects items that have a strain text set. Barcodes are not
+                changed. Shows a preview before applying.
               </p>
               <button id="btn-migrate-strain-text" class="btn btn-r">Embed strain text in IDs</button>
             </div>
@@ -3862,7 +4057,9 @@
       >
         <!-- Inbox tray: angled opening on top, flat base -->
         <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+        <path
+          d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+        />
       </svg>
       <span class="bell-badge" id="bell-badge" hidden>0</span>
     </button>
