@@ -14,8 +14,15 @@ set -e
 CERT_DIR="certs"
 mkdir -p "$CERT_DIR"
 
-# Domain from first argument or CERT_DOMAIN env var
+# Domain from first argument or CERT_DOMAIN env var.
+# Audit S-10: validate against a strict whitelist before interpolating
+# into the OpenSSL config heredoc — newlines or `=` characters in DOMAIN
+# would otherwise let a hostile env file inject extra cert extensions.
 DOMAIN="${1:-${CERT_DOMAIN:-}}"
+if [ -n "$DOMAIN" ] && ! [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "ERROR: DOMAIN must contain only A-Za-z0-9.-" >&2
+  exit 1
+fi
 
 # Detect LAN IP (Linux then macOS fallback)
 LAN_IP=""
