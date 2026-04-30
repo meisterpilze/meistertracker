@@ -22,6 +22,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $certDir = Join-Path $PSScriptRoot 'certs'
 
+# Audit S-10: whitelist DOMAIN before interpolating into the OpenSSL
+# config heredoc / SAN text-extension. A newline or unexpected character
+# in a hostile env file could otherwise inject extra cert extensions.
+if ($Domain -and $Domain -notmatch '^[A-Za-z0-9.-]+$') {
+    Write-Host 'ERROR: Domain must contain only A-Za-z0-9.-' -ForegroundColor Red
+    exit 1
+}
+
 if ((Test-Path "$certDir\server.key") -and (Test-Path "$certDir\server.crt")) {
     Write-Host '  -> TLS certificates found.'
     exit 0
