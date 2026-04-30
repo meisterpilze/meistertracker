@@ -138,7 +138,7 @@ All data is stored in `meistertracker.db` (SQLite) on the server (shared by all 
 - **Auto-backup**: daily at midnight to `backups/` (keeps last 30 days). Uses SQLite `VACUUM INTO` so the backup is WAL-consistent even while the server is writing. Each run writes `backups/.backup-status.json` with success/failure and size, and the latest file is verified to have a valid SQLite header before the status is marked successful.
 - **Manual backup**: use the Backup tab in the app to export/import an encrypted archive (requires admin).
 - **Remote backup**: `scp user@host:~/meistertracker/meistertracker.db ./backup.db`
-- **Off-machine**: the project folder sits under OneDrive (`OneDrive - Meisterpilze`), so `backups/` is automatically cloud-synced as a secondary copy.
+- **Off-machine** (REQUIRED on production): set up an `rsync`-over-SSH cron that touches `backups/.offsite-sync.json` on each successful run — the marker is read by `/api/health` and `scripts/check-backup-health.js`. See **DEPLOYMENT.md → Off-site backups (REQUIRED)** for the canonical setup. As a Windows-only convenience, the project folder under OneDrive (`OneDrive - Meisterpilze`) cloud-syncs `backups/` automatically.
 
 ### Monitoring backup health
 
@@ -181,6 +181,8 @@ The authenticated `/api/health` endpoint also includes a `backup` section with `
 7. Once you have confirmed the restore is good, you can delete `meistertracker.db.broken`.
 
 For encrypted restores initiated from the admin UI, use **Settings → Backup → Restore** and provide the password that was used when the backup was downloaded.
+
+> For full deployment context (off-site backups, WAL-only recovery, manual file swap on a server with no UI access), see **DEPLOYMENT.md → Restoring from a backup** and **→ Off-site backups (REQUIRED)**.
 
 ## Raspberry Pi Deployment
 
