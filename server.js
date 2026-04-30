@@ -91,6 +91,11 @@ function getClientIP(req) {
 
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
+// I-17: serialize backup restores. Two admins kicking off concurrent
+// /api/backup/restore requests would race on the close→rename→reopen path
+// against the same DB file, leaving a corrupt or wrong-version DB. The
+// flag is process-local (good enough — only one node process owns the DB).
+let restoreInProgress = false;
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
 // ── First-run setup token (audit S-06) ─────────────────────
@@ -1403,7 +1408,10 @@ function _printViaBridge(zplData, callback) {
 }
 
 function _printViaPowerShell(zplData, callback) {
-  const tmp = path.join(os.tmpdir(), 'mp_label_' + Date.now() + '.zpl');
+  // I-18: rapid-fire prints (label batch on a single click) can land in the
+  // same millisecond, so two callers would share `mp_label_<ms>.zpl` and
+  // overwrite each other. Random suffix keeps each call's tempfile unique.
+  const tmp = path.join(os.tmpdir(), 'mp_label_' + crypto.randomBytes(8).toString('hex') + '.zpl');
   const zplFixed = zplData.replace(/\r?\n/g, '\r\n');
 
   fs.writeFile(tmp, zplFixed, 'binary', (err) => {
@@ -1561,6 +1569,59 @@ function readFileHead(filePath, bytes) {
 // Escape iCalendar TEXT values per RFC 5545 §3.3.11
 function escapeIcsText(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+// I-15: build a single-line RRULE property from our internal recurrence enum.
+// Returns null when recurrence is unset or unsupported (so the caller can omit
+// the property entirely). UNTIL is encoded in UTC RFC-5545 form
+// (YYYYMMDDTHHMMSSZ) when `until` is provided as an ISO date / datetime.
+function buildRRuleLine(recurrence, until) {
+  const freqMap = { daily: 'DAILY', weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' };
+  const freq = freqMap[String(recurrence || '').toLowerCase()];
+  if (!freq) return null;
+  let line = 'RRULE:FREQ=' + freq;
+  if (until) {
+    // Accept "YYYY-MM-DD" or full ISO; emit UTC "YYYYMMDDTHHMMSSZ".
+    const d = new Date(until);
+    if (!isNaN(d.getTime())) {
+      const u = d.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+      line += ';UNTIL=' + u;
+    }
+  }
+  return line;
+}
+
+// I-15: format a single EXDATE value to match the event's DTSTART encoding.
+// `dateStr` is whatever the JSON-array column holds — typically YYYY-MM-DD or
+// a full ISO datetime. `dtstartIsAllDay` controls whether we emit a date-only
+// value (VALUE=DATE) or a TZID-qualified local datetime.
+function formatExceptionDate(dateStr, dtstartIsAllDay, dtstartTime) {
+  if (!dateStr) return null;
+  const trimmed = String(dateStr).trim();
+  if (!trimmed) return null;
+  if (dtstartIsAllDay) {
+    // Date-only: strip any time portion, emit YYYYMMDD.
+    const dateOnly = trimmed.slice(0, 10).replace(/-/g, '');
+    if (!/^\d{8}$/.test(dateOnly)) return null;
+    return dateOnly;
+  }
+  // Datetime: combine the exception date with the original event time so the
+  // EXDATE matches the DTSTART instance exactly. dtstartTime is "HH:MM".
+  const dateOnly = trimmed.slice(0, 10).replace(/-/g, '');
+  if (!/^\d{8}$/.test(dateOnly)) return null;
+  const hhmm = (dtstartTime || '00:00').replace(':', '') + '00';
+  return dateOnly + 'T' + hhmm;
+}
+
+// I-15: render the full EXDATE line(s) for an event. CalDAV clients accept a
+// single EXDATE with comma-separated values. Returns null when there are no
+// exceptions so the caller can skip pushing the property.
+function buildExdateLine(exceptionDates, dtstartIsAllDay, dtstartTime, tzid) {
+  if (!Array.isArray(exceptionDates) || !exceptionDates.length) return null;
+  const formatted = exceptionDates.map((d) => formatExceptionDate(d, dtstartIsAllDay, dtstartTime)).filter(Boolean);
+  if (!formatted.length) return null;
+  if (dtstartIsAllDay) return 'EXDATE;VALUE=DATE:' + formatted.join(',');
+  return 'EXDATE;TZID=' + (tzid || 'Europe/Berlin') + ':' + formatted.join(',');
 }
 
 // Sanitize URL path parts to prevent directory traversal attacks.
@@ -1826,6 +1887,10 @@ function taskToVTODO(task) {
     'DTSTAMP:' + now,
     'CREATED:' + created,
     'LAST-MODIFIED:' + now,
+    // I-15: SEQUENCE counter (RFC 5545 §3.8.7.4) — CalDAV clients use this
+    // to detect that an event/todo has been updated. Bumped on every
+    // meaningful edit by db.updateTaskById.
+    'SEQUENCE:' + (Number(task.sequence) || 0),
     'SUMMARY:' + escapeIcsText(task.text || '')
   ];
   if (task.dueDate) {
@@ -1837,6 +1902,10 @@ function taskToVTODO(task) {
       lines.push('DUE;VALUE=DATE:' + d);
     }
   }
+  // I-15: emit RRULE (RFC 5545 §3.8.5.3) when the task is recurring. UNTIL is
+  // expressed in UTC RFC-5545 form (YYYYMMDDTHHMMSSZ) for time-bounded series.
+  const rruleLine = buildRRuleLine(task.recurrence, task.recurrenceUntil);
+  if (rruleLine) lines.push(rruleLine);
   const prioMap = { high: 1, med: 5, low: 9 };
   lines.push('PRIORITY:' + (prioMap[task.priority] || 0));
   lines.push('STATUS:' + (task.done ? 'COMPLETED' : 'NEEDS-ACTION'));
@@ -1875,6 +1944,10 @@ function batchToVEVENT(batch, scanLog) {
     'BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + now,
+    // I-15: SEQUENCE on batch-due VEVENTs. Batches don't have an in-DB
+    // sequence column (the iCal artifact is one-shot per due-date), but
+    // emitting 0 for completeness keeps client validators quiet.
+    'SEQUENCE:0',
     'DTSTART;VALUE=DATE:' + dueDate,
     'DTEND;VALUE=DATE:' + endDate,
     'SUMMARY:' + summary,
@@ -1934,6 +2007,8 @@ function taskDueToVEVENT(task) {
     'BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + now,
+    // I-15: SEQUENCE — bumped by db.updateTaskById on meaningful edits.
+    'SEQUENCE:' + (Number(task.sequence) || 0),
     dtStartLine,
     dtEndLine,
     'SUMMARY:' + escapeIcsText(task.text || ''),
@@ -1941,10 +2016,12 @@ function taskDueToVEVENT(task) {
     'STATUS:' + (task.done ? 'CANCELLED' : 'CONFIRMED'),
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:task-due',
-    'COLOR:#3b82f6',
-    'END:VEVENT',
-    'END:VCALENDAR'
+    'COLOR:#3b82f6'
   ];
+  // I-15: emit RRULE for recurring tasks rendered as VEVENT.
+  const rruleLine = buildRRuleLine(task.recurrence, task.recurrenceUntil);
+  if (rruleLine) lines.push(rruleLine);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
   return { uid, ics: foldIcsLines(lines.join('\r\n')) };
 }
 
@@ -1994,6 +2071,8 @@ function customEventToVEVENT(event) {
     'BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + now,
+    // I-15: SEQUENCE counter (RFC 5545 §3.8.7.4) — bumped by db.updateCalendarEvent.
+    'SEQUENCE:' + (Number(event.sequence) || 0),
     dtstart,
     dtend,
     'SUMMARY:' + escapeIcsText(event.title || ''),
@@ -2001,6 +2080,30 @@ function customEventToVEVENT(event) {
     'TRANSP:TRANSPARENT',
     'X-MEISTERPILZE-TYPE:custom-event'
   );
+  // I-15: emit RRULE when the event is recurring.
+  const rruleLine = buildRRuleLine(event.recurrence, event.recurrenceUntil);
+  if (rruleLine) lines.push(rruleLine);
+  // I-15: emit EXDATE for per-occurrence cancellations. Format must match
+  // DTSTART (date-only vs datetime). exceptionDates may arrive as a JSON
+  // string (from older code paths) or as a parsed array.
+  let exDates = event.exceptionDates;
+  if (typeof exDates === 'string') {
+    try {
+      exDates = JSON.parse(exDates);
+    } catch {
+      exDates = exDates
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+  const exdateLine = buildExdateLine(
+    exDates,
+    event.allDay || !event.startTime,
+    event.startTime || '00:00',
+    'Europe/Berlin'
+  );
+  if (exdateLine) lines.push(exdateLine);
   if (event.description) lines.push('DESCRIPTION:' + escapeIcsText(event.description));
   if (event.assignees && event.assignees.length) {
     for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':mailto:noreply@localhost');
@@ -3813,28 +3916,37 @@ function handleRequest(req, res) {
               return jsonErr(res, 400, 'invalid_grant');
             }
 
-            db.markOAuthCodeUsed(database, codeHash);
-
             const accessToken = crypto.randomBytes(32).toString('hex');
             const refreshToken = crypto.randomBytes(32).toString('hex');
             const accessHash = crypto.createHash('sha256').update(accessToken).digest('hex');
             const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
-            db.createOAuthToken(database, {
-              token: accessHash,
-              tokenType: 'access',
-              clientId: data.client_id,
-              userId: codeRow.userId,
-              expiresInSeconds: 3600,
-              refreshTokenRef: refreshHash
-            });
-            db.createOAuthToken(database, {
-              token: refreshHash,
-              tokenType: 'refresh',
-              clientId: data.client_id,
-              userId: codeRow.userId,
-              expiresInSeconds: 30 * 24 * 3600
-            });
+            // I-08: atomic exchange — burn the auth code and issue both tokens in one txn
+            // so a failed INSERT can't leave the code unusable while the access/refresh
+            // tokens are missing (or vice versa).
+            database.exec('BEGIN');
+            try {
+              db.markOAuthCodeUsed(database, codeHash);
+              db.createOAuthToken(database, {
+                token: accessHash,
+                tokenType: 'access',
+                clientId: data.client_id,
+                userId: codeRow.userId,
+                expiresInSeconds: 3600,
+                refreshTokenRef: refreshHash
+              });
+              db.createOAuthToken(database, {
+                token: refreshHash,
+                tokenType: 'refresh',
+                clientId: data.client_id,
+                userId: codeRow.userId,
+                expiresInSeconds: 30 * 24 * 3600
+              });
+              database.exec('COMMIT');
+            } catch (txErr) {
+              database.exec('ROLLBACK');
+              throw txErr;
+            }
 
             log('info', 'OAuth token issued', { clientId: data.client_id });
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -3853,29 +3965,36 @@ function handleRequest(req, res) {
             if (!refreshRow) return jsonErr(res, 400, 'invalid_grant');
             if (refreshRow.clientId !== data.client_id) return jsonErr(res, 400, 'invalid_grant');
 
-            // Revoke old tokens (rotation)
-            db.revokeOAuthTokensByRefresh(database, refreshHash);
-
             const newAccessToken = crypto.randomBytes(32).toString('hex');
             const newRefreshToken = crypto.randomBytes(32).toString('hex');
             const newAccessHash = crypto.createHash('sha256').update(newAccessToken).digest('hex');
             const newRefreshHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
 
-            db.createOAuthToken(database, {
-              token: newAccessHash,
-              tokenType: 'access',
-              clientId: data.client_id,
-              userId: refreshRow.userId,
-              expiresInSeconds: 3600,
-              refreshTokenRef: newRefreshHash
-            });
-            db.createOAuthToken(database, {
-              token: newRefreshHash,
-              tokenType: 'refresh',
-              clientId: data.client_id,
-              userId: refreshRow.userId,
-              expiresInSeconds: 30 * 24 * 3600
-            });
+            // I-08: atomic rotation — revoke previous pair and issue new pair in one txn
+            // so a failed INSERT can't leave the user without working tokens.
+            database.exec('BEGIN');
+            try {
+              db.revokeOAuthTokensByRefresh(database, refreshHash);
+              db.createOAuthToken(database, {
+                token: newAccessHash,
+                tokenType: 'access',
+                clientId: data.client_id,
+                userId: refreshRow.userId,
+                expiresInSeconds: 3600,
+                refreshTokenRef: newRefreshHash
+              });
+              db.createOAuthToken(database, {
+                token: newRefreshHash,
+                tokenType: 'refresh',
+                clientId: data.client_id,
+                userId: refreshRow.userId,
+                expiresInSeconds: 30 * 24 * 3600
+              });
+              database.exec('COMMIT');
+            } catch (txErr) {
+              database.exec('ROLLBACK');
+              throw txErr;
+            }
 
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(
@@ -4936,7 +5055,41 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const ids = db.appendScanEntries(database, data.entries || [], userId);
+        const entries = data.entries || [];
+        // I-12: optimistic concurrency for offline-queue replays. If a MOVE
+        // entry was queued offline based on a stale view (the bag has since
+        // been moved by another user), reject the whole POST with 409 so the
+        // client can discard the queued entry rather than trampling the more
+        // recent move. expected_current_zone is OPTIONAL — entries without
+        // it skip the check (preserves backward compat with older clients).
+        for (const e of entries) {
+          if (e.action !== 'MOVE' && e.action !== 'MOVE_BATCH') continue;
+          if (!e.expected_current_zone) continue;
+          if (!e.bag) continue;
+          const last = database
+            .prepare(
+              "SELECT action, \"to\" FROM scan_log WHERE bag = ? AND action IN ('ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE') ORDER BY id DESC LIMIT 1"
+            )
+            .get(e.bag);
+          // currentZone = the zone-id portion of the last placement (ignore rack).
+          let currentZone = null;
+          if (last && last.action !== 'REMOVE' && last.to) {
+            currentZone = String(last.to).split(':')[0];
+          }
+          if (currentZone !== e.expected_current_zone) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error: 'zone_mismatch',
+                bag: e.bag,
+                current_zone: currentZone,
+                expected: e.expected_current_zone
+              })
+            );
+            return;
+          }
+        }
+        const ids = db.appendScanEntries(database, entries, userId);
         broadcastSSE(res);
         jsonOk(res, { ids });
       } catch (err) {
@@ -6617,6 +6770,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // -- Backup Restore (encrypted .db) --
   if (req.method === 'POST' && req.url.startsWith('/api/backup/restore')) {
     if (requireAdmin(req, res)) return;
+    // I-17: bail out early if another restore is in flight. Without this,
+    // two admins racing on the close→rename→reopen sequence below could
+    // corrupt the DB file or leave the process holding a stale handle.
+    if (restoreInProgress) {
+      jsonErr(res, 503, 'Another restore is in progress; please retry shortly.');
+      return;
+    }
+    restoreInProgress = true;
     const chunks = [];
     let sz = 0;
     let aborted = false;
@@ -6627,12 +6788,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         aborted = true;
         jsonErr(res, 413, 'Backup file too large');
         req.destroy();
+        restoreInProgress = false;
         return;
       }
       chunks.push(c);
     });
     req.on('end', () => {
-      if (aborted) return;
+      if (aborted) {
+        restoreInProgress = false;
+        return;
+      }
       let tmpPath;
       try {
         const raw = Buffer.concat(chunks);
@@ -6787,6 +6952,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
         log('error', 'Backup restore failed', { error: err.message });
         jsonErr(res, 500, 'Backup restore failed');
+      } finally {
+        // I-17: always release the mutex, even on early returns (decryption
+        // fail / rollback / unexpected throw).
+        restoreInProgress = false;
       }
     });
     return;
