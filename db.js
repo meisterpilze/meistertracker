@@ -920,6 +920,27 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_batches_created ON batches(created);
       `);
     }
+  },
+  {
+    version: 38,
+    description: 'Add audit columns to mcp_config for static MCP token (audit S-08)',
+    fn(db) {
+      // SQLite doesn't support `ADD COLUMN ... IF NOT EXISTS`, so check the
+      // current schema and add only the columns that are missing.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('mcp_config')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('last_used_at')) {
+        db.exec('ALTER TABLE mcp_config ADD COLUMN last_used_at TEXT');
+      }
+      if (!cols.includes('created_at')) {
+        db.exec('ALTER TABLE mcp_config ADD COLUMN created_at TEXT');
+      }
+      if (!cols.includes('revoked_at')) {
+        db.exec('ALTER TABLE mcp_config ADD COLUMN revoked_at TEXT');
+      }
+    }
   }
 ];
 
@@ -2301,6 +2322,10 @@ function deleteLastScanEntries(db, n) {
   incrementDataVersion(db);
 }
 
+function getScanEntryById(db, id) {
+  return db.prepare('SELECT id, user_id, action, time FROM scan_log WHERE id = ?').get(id);
+}
+
 function deleteScanEntryById(db, id) {
   const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
   if (info.changes > 0) incrementDataVersion(db);
@@ -3168,10 +3193,27 @@ function renameZoneName(db, id, newName) {
 
 function getMcpCfg(db) {
   const row = db.prepare('SELECT * FROM mcp_config WHERE id=1').get();
-  return { enabled: row.enabled === 1, hasToken: !!row.api_token };
+  return {
+    enabled: row.enabled === 1,
+    hasToken: !!row.api_token && !row.revoked_at,
+    createdAt: row.created_at || null,
+    lastUsedAt: row.last_used_at || null,
+    revokedAt: row.revoked_at || null
+  };
 }
-function getMcpToken(db) {
-  return db.prepare('SELECT api_token FROM mcp_config WHERE id=1').get().api_token || '';
+// Audit S-08: getMcpToken is called from two places — token verification
+// (server.js checkMcpAuth) and admin diagnostics. The verification path
+// passes touchLastUsed=true so we can record audit timestamps; the admin
+// path defaults to false so just opening the settings page doesn't bump
+// "last used" and mask actual abuse.
+function getMcpToken(db, opts) {
+  const row = db.prepare('SELECT api_token, revoked_at FROM mcp_config WHERE id=1').get();
+  if (!row || !row.api_token) return '';
+  if (row.revoked_at) return '';
+  if (opts && opts.touchLastUsed) {
+    db.prepare('UPDATE mcp_config SET last_used_at=? WHERE id=1').run(new Date().toISOString());
+  }
+  return row.api_token;
 }
 function updateMcpCfg(db, cfg) {
   db.prepare('UPDATE mcp_config SET enabled=? WHERE id=1').run(cfg.enabled ? 1 : 0);
@@ -3180,9 +3222,20 @@ function updateMcpCfg(db, cfg) {
 function generateMcpToken(db) {
   const token = crypto.randomBytes(32).toString('hex');
   const hash = crypto.createHash('sha256').update(token).digest('hex');
-  db.prepare('UPDATE mcp_config SET api_token=? WHERE id=1').run(hash);
+  // Reset audit columns on rotation: created_at = now, last_used_at and
+  // revoked_at cleared so the new token starts fresh.
+  db.prepare('UPDATE mcp_config SET api_token=?, created_at=?, last_used_at=NULL, revoked_at=NULL WHERE id=1').run(
+    hash,
+    new Date().toISOString()
+  );
   incrementDataVersion(db);
   return token; // plaintext returned once to show to user; only hash is stored
+}
+function revokeMcpToken(db) {
+  // Soft revoke: keep the hash so audit history remains visible, but mark
+  // the token revoked so verification short-circuits to "no token".
+  db.prepare('UPDATE mcp_config SET revoked_at=? WHERE id=1').run(new Date().toISOString());
+  incrementDataVersion(db);
 }
 
 // ── OAuth 2.0 ───────────────────────────────────────────────
@@ -4316,6 +4369,7 @@ module.exports = {
   deleteBatchById,
   appendScanEntries,
   deleteLastScanEntries,
+  getScanEntryById,
   deleteScanEntryById,
   clearScanLog,
   insertHarvest,
@@ -4370,6 +4424,7 @@ module.exports = {
   getMcpToken,
   updateMcpCfg,
   generateMcpToken,
+  revokeMcpToken,
   registerOAuthClient,
   getOAuthClient,
   createOAuthCode,

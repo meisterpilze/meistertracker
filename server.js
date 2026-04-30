@@ -93,6 +93,26 @@ let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
+// ── First-run setup token (audit S-06) ─────────────────────
+// On a fresh deployment with zero users, the operator must either:
+//   1) call /api/auth/setup from loopback (default for the START.bat flow), or
+//   2) call /api/auth/setup with header `X-Setup-Token: <generated>`.
+// The token is process-lifetime only (never persisted) and printed via the
+// structured logger so PM2/journald operators can copy it. Once setup
+// completes, the in-memory value is cleared so a stolen log line can't be
+// reused.
+let SETUP_TOKEN = null;
+try {
+  if (db.countUsers(database) === 0) {
+    SETUP_TOKEN = crypto.randomBytes(32).toString('hex');
+    log('warn', 'SETUP TOKEN: ' + SETUP_TOKEN, {
+      hint: 'send X-Setup-Token header to POST /api/auth/setup, or call from localhost'
+    });
+  }
+} catch (e) {
+  log('error', 'countUsers failed at startup', { error: e.message });
+}
+
 // ── MCP (Model Context Protocol) server ────────────────────
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
@@ -121,23 +141,43 @@ setInterval(
   60 * 60 * 1000
 );
 
+// Audit S-01: returns { userId, role } on success, null on failure.
+//   - Legacy static MCP token → role: 'admin' (preserves historical
+//     behaviour; the static token has always granted full access).
+//   - OAuth access token → role looked up from the OAuth user.
+// Audit S-08: passes `touchLastUsed:true` to bump the static token's
+// audit timestamp on each verification, and uses Buffer.from(..., 'hex')
+// explicitly so the encoding is unambiguous.
 function checkMcpAuth(req) {
   const auth = req.headers.authorization || '';
-  if (!auth.startsWith('Bearer ')) return false;
+  if (!auth.startsWith('Bearer ')) return null;
   const token = auth.slice(7);
   const hash = crypto.createHash('sha256').update(token).digest('hex');
 
   // Try legacy static API token
-  const stored = db.getMcpToken(database);
-  if (stored && crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(stored))) {
-    return true;
+  const stored = db.getMcpToken(database, { touchLastUsed: true });
+  if (stored) {
+    const a = Buffer.from(hash, 'hex');
+    const b = Buffer.from(stored, 'hex');
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      return { userId: null, role: 'admin' };
+    }
   }
 
-  // Try OAuth access token
+  // Try OAuth access token — look up the user's current role.
   const oauthToken = db.getOAuthAccessToken(database, hash);
-  if (oauthToken) return true;
+  if (oauthToken) {
+    let role = 'user';
+    try {
+      const user = database.prepare('SELECT role FROM users WHERE id = ?').get(oauthToken.userId);
+      if (user && user.role) role = user.role;
+    } catch (_) {
+      // best effort — fall through with role: 'user' (least privilege)
+    }
+    return { userId: oauthToken.userId, role };
+  }
 
-  return false;
+  return null;
 }
 
 // Simple sliding-window rate limiter (shared for MCP + OAuth endpoints)
@@ -281,9 +321,30 @@ function verifyPkce(codeVerifier, storedCodeChallenge) {
   return crypto.createHash('sha256').update(codeVerifier).digest('base64url') === storedCodeChallenge;
 }
 
+// Track whether we've already warned about a missing PUBLIC_HOSTNAME so the
+// log line doesn't repeat on every request.
+let _hostHeaderWarned = false;
 function getBaseUrl(req) {
-  const host = req.headers.host || 'localhost:' + PORT;
-  return protocol + '://' + host;
+  const reqHost = req.headers.host || 'localhost:' + PORT;
+  const expected = (process.env.PUBLIC_HOSTNAME || '').trim();
+  if (expected) {
+    // PUBLIC_HOSTNAME may be host or host:port — normalise both sides for
+    // comparison. If the request's Host header doesn't match, return the
+    // configured hostname instead of reflecting attacker-controlled input
+    // into OAuth issuer metadata. We don't 502 because legitimate
+    // localhost-from-LAN access still has to work.
+    const reqHostName = reqHost.split(':')[0].toLowerCase();
+    const expHostName = expected.split(':')[0].toLowerCase();
+    if (reqHostName !== expHostName) {
+      return protocol + '://' + expected;
+    }
+    return protocol + '://' + reqHost;
+  }
+  if (!_hostHeaderWarned) {
+    _hostHeaderWarned = true;
+    log('warn', 'PUBLIC_HOSTNAME not configured — Host header reflected into OAuth metadata', {});
+  }
+  return protocol + '://' + reqHost;
 }
 
 function jsonOk(res, data) {
@@ -433,10 +494,26 @@ function savePhotoToDisk(reportId, photo, authUser) {
 }
 
 // ── AUTH HELPERS ─────────────────────────────────────────────
+// Session cookie name varies by transport:
+//   - HTTPS → "__Host-session" (the __Host- prefix forces the browser to
+//     reject any cookie that lacks Secure / Path=/ or that includes a
+//     Domain attribute, blocking sibling-subdomain fixation attacks).
+//   - HTTP  → "session"          (the __Host- prefix REQUIRES Secure, so
+//     it cannot be used over plaintext; we keep the unprefixed name there).
+// We always parse BOTH names on incoming requests so a session minted
+// before the protocol changed (e.g. cert renewal cycle) still resolves.
+function sessionCookieName() {
+  return protocol === 'https' ? '__Host-session' : 'session';
+}
+
 function getSessionToken(req) {
   const cookies = req.headers.cookie || '';
-  const match = cookies.match(/(?:^|;\s*)session=([a-f0-9]+)/);
-  return match ? match[1] : null;
+  // Prefer the prefixed name, fall back to plain — covers both transports
+  // and clients that sent a stale cookie from an earlier session.
+  const m1 = cookies.match(/(?:^|;\s*)__Host-session=([a-f0-9]+)/);
+  if (m1) return m1[1];
+  const m2 = cookies.match(/(?:^|;\s*)session=([a-f0-9]+)/);
+  return m2 ? m2[1] : null;
 }
 
 function checkAuth(req) {
@@ -460,11 +537,22 @@ function cookieFlags() {
 }
 
 function setSessionCookie(res, token) {
-  res.setHeader('Set-Cookie', 'session=' + token + '; ' + cookieFlags() + ' Max-Age=' + SESSION_TTL_SECONDS);
+  res.setHeader(
+    'Set-Cookie',
+    sessionCookieName() + '=' + token + '; ' + cookieFlags() + ' Max-Age=' + SESSION_TTL_SECONDS
+  );
 }
 
 function clearSessionCookie(res) {
-  res.setHeader('Set-Cookie', 'session=; ' + cookieFlags() + ' Max-Age=0');
+  // Clear both names — if we previously set a __Host-session cookie and
+  // are now over HTTP, only clearing "session" would leave the prefixed
+  // cookie behind (and vice versa). Most browsers ignore the second
+  // header line if it duplicates the first so emit them as a single
+  // multi-value array instead.
+  res.setHeader('Set-Cookie', [
+    'session=; ' + cookieFlags() + ' Max-Age=0',
+    '__Host-session=; ' + cookieFlags() + ' Max-Age=0'
+  ]);
 }
 
 // Clean expired sessions + OAuth data on startup and hourly
@@ -1475,11 +1563,16 @@ function escapeIcsText(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
-// Sanitize URL path parts to prevent directory traversal attacks
+// Sanitize URL path parts to prevent directory traversal attacks.
+// Platform-independent: rejects every byte that could mean "another path
+// component" (forward slash, backslash, NUL) regardless of whether the
+// process is running on POSIX or Windows. Also rejects empty / dot / dot-dot.
 function sanitizePart(s) {
-  const clean = path.basename(s);
-  if (!clean || clean === '.' || clean === '..') return null;
-  return clean;
+  if (typeof s !== 'string' || !s) return null;
+  // Reject explicit traversal characters and dotfile names
+  if (/[\/\\\0]/.test(s)) return null;
+  if (s === '.' || s === '..') return null;
+  return s;
 }
 
 function escapeXml(s) {
@@ -3976,7 +4069,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       res.end();
       return;
     }
-    if (!checkMcpAuth(req)) {
+    const mcpAuth = checkMcpAuth(req);
+    if (!mcpAuth) {
       const base = getBaseUrl(req);
       res.writeHead(401, {
         'Content-Type': 'application/json',
@@ -3997,7 +4091,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (e) return;
         let session = sessionId ? mcpSessions.get(sessionId) : null;
         if (!session) {
-          const server = createMcpServer(database, () => broadcastSSE(null), { printZPL, checkPrinterAvailable });
+          // Audit S-01: pass the caller's auth context (userId, role) into
+          // the MCP server so destructive tools can require admin role.
+          const server = createMcpServer(database, () => broadcastSSE(null), {
+            printZPL,
+            checkPrinterAvailable,
+            auth: mcpAuth
+          });
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
             onsessioninitialized: (sid) => {
@@ -4068,6 +4168,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       res.end(JSON.stringify({ error: 'setup already completed' }));
       return;
     }
+    // Defence: a fresh public-facing deployment should not allow ANY
+    // remote unauthenticated caller to claim admin. Two acceptable paths:
+    //   1. The request originates from loopback (operator on the box).
+    //   2. The request carries the in-memory setup token printed to logs
+    //      on first start (operator who can read PM2/journald).
+    const ip = req.socket.remoteAddress || '';
+    const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const presentedToken = req.headers['x-setup-token'] || '';
+    let tokenOk = false;
+    if (SETUP_TOKEN && typeof presentedToken === 'string' && presentedToken.length === SETUP_TOKEN.length) {
+      try {
+        tokenOk = crypto.timingSafeEqual(Buffer.from(presentedToken, 'utf8'), Buffer.from(SETUP_TOKEN, 'utf8'));
+      } catch (_) {
+        tokenOk = false;
+      }
+    }
+    if (!isLoopback && !tokenOk) {
+      log('warn', 'Remote setup attempt rejected', { ip });
+      jsonErr(res, 403, 'setup must run from localhost or with a valid X-Setup-Token header');
+      return;
+    }
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
@@ -4087,6 +4208,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const dbUser = db.getUserByUsername(database, username);
         const token = db.createSession(database, dbUser.id);
         setSessionCookie(res, token);
+        // Setup completed — invalidate the in-memory token so a stolen
+        // log line can't be reused after the admin is created.
+        SETUP_TOKEN = null;
         jsonOk(res, { username: user.username, role: 'admin' });
       } catch (err) {
         safeErr(res, err);
@@ -4124,6 +4248,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         clearLoginAttempts(throttleKey);
         clearLoginAttemptsPerUser(userKey);
+        // Rotate: invalidate any pre-existing session token presented in
+        // the request before minting a new one. Defends against stolen
+        // pre-auth cookies surviving the legitimate user's login.
+        const oldToken = getSessionToken(req);
+        if (oldToken) {
+          try {
+            db.deleteSession(database, oldToken);
+          } catch (_) {
+            /* best effort — token may not exist anymore */
+          }
+        }
         const token = db.createSession(database, user.id);
         setSessionCookie(res, token);
         jsonOk(res, { username: user.username, role: user.role });
@@ -4343,7 +4478,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       log('error', 'Health check: database unreachable', { error: e.message });
     }
     const mem = process.memoryUsage();
-    // Public: minimal status only. Detailed info requires auth.
+    // Public: minimal status only. Detailed info (Node version, platform,
+    // memory, backup status) is admin-only — workers don't need to know
+    // exact Node versions to triage their own work, and that detail aids
+    // targeted exploitation if a CVE later hits a specific version.
     const authUser = checkAuth(req);
     const health = {
       status: dbOk ? 'ok' : 'degraded',
@@ -4351,7 +4489,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       uptime: Math.round(process.uptime()),
       version: require('./package.json').version
     };
-    if (authUser) {
+    if (authUser && authUser.role === 'admin') {
       health.platform = process.platform;
       health.nodeVersion = process.version;
       health.sseClients = sseClients.size;
@@ -4797,10 +4935,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const scanIdMatch = req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if (req.method === 'DELETE' && scanIdMatch) {
-    // Any authenticated user can undo a scan entry (workers must be able to undo their own scans).
-    // Auth is already enforced by the top-level /api/ guard above.
+    // Audit S-03: workers should be able to undo their own scans, but
+    // not delete scans authored by other users. Owner-or-admin ACL,
+    // mirroring the contamination-report pattern. The user_id column on
+    // scan_log is nullable for legacy rows — only enforce ownership when
+    // the column is set; otherwise fall back to admin-only.
+    const id = parseInt(scanIdMatch[1]);
     try {
-      const ok = db.deleteScanEntryById(database, parseInt(scanIdMatch[1]));
+      const entry = db.getScanEntryById(database, id);
+      if (!entry) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const ownerKnown = entry.user_id !== null && entry.user_id !== undefined;
+      const isOwner = ownerKnown && req.authUser && entry.user_id === req.authUser.user_id;
+      if (!isAdmin && ownerKnown && !isOwner) {
+        jsonErr(res, 403, 'forbidden');
+        return;
+      }
+      if (!isAdmin && !ownerKnown) {
+        jsonErr(res, 403, 'forbidden');
+        return;
+      }
+      const ok = db.deleteScanEntryById(database, id);
       broadcastSSE(res);
       jsonOk(res, { deleted: ok });
     } catch (err) {
@@ -5182,6 +5340,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'DELETE' && cultureMatch) {
+    // Audit S-03: deleting a culture orphans batches.source_id and
+    // contradicts the README role model (workers may create cultures
+    // but only admins remove them).
+    if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(cultureMatch[1]);
     try {
       const deleted = db.deleteCulture(database, id);
@@ -5399,8 +5561,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vt);
         return;
       }
+      // Audit S-03: cap reduced from 100,000,000 to 1,000,000 to prevent
+      // accidental fraud / fat-finger entries by workers without making
+      // asset entry admin-only (matches the README role model).
       const vrng = validateRanges(data, {
-        purchasePrice: { min: 0, max: 100000000 },
+        purchasePrice: { min: 0, max: 1000000 },
         usefulLife: { min: 1, max: 100 }
       });
       if (vrng) {
@@ -5912,72 +6077,91 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       raw += c;
     });
     req.on('end', () => {
-      const sig = req.headers['x-hub-signature-256'];
-      if (!sig) {
-        jsonErr(res, 401, 'missing signature');
-        return;
-      }
-      const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex');
-      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-        log('warn', 'GitHub webhook signature mismatch');
-        jsonErr(res, 401, 'bad signature');
-        return;
-      }
-      const event = req.headers['x-github-event'];
-      if (event === 'ping') {
-        jsonOk(res, { ok: true, msg: 'pong' });
-        return;
-      }
-      if (event !== 'push') {
-        jsonOk(res, { ok: true, msg: 'ignored event: ' + event });
-        return;
-      }
-      let body;
+      // Defence in depth: any throw inside this async callback would otherwise
+      // bubble to `uncaughtException` and terminate the process.
       try {
-        body = JSON.parse(raw);
-      } catch (_) {
-        jsonErr(res, 400, 'bad json');
-        return;
-      }
-      if (body.ref !== 'refs/heads/main') {
-        jsonOk(res, { ok: true, msg: 'ignored ref: ' + body.ref });
-        return;
-      }
-      log('info', 'GitHub webhook: push to main, restarting server', { sender: body.sender && body.sender.login });
-      jsonOk(res, { ok: true, message: 'Restarting...' });
-      setTimeout(() => {
-        const scriptDir = path.resolve(__dirname);
-        // Use a lightweight update script instead of interactive START.bat.
-        // Sequence: git pull → npm install → pm2 restart
-        const script =
-          process.platform === 'win32'
-            ? [
-                'cmd.exe',
-                [
-                  '/c',
-                  'cd /d "' +
-                    scriptDir +
-                    '" &&' +
-                    ' git fetch origin && git reset --hard origin/main &&' +
-                    ' npm install --omit=dev &&' +
-                    ' pm2 restart meisterpilze --update-env'
+        const sig = req.headers['x-hub-signature-256'];
+        if (!sig) {
+          jsonErr(res, 401, 'missing signature');
+          return;
+        }
+        const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex');
+        // Length check first — timingSafeEqual throws RangeError on mismatched
+        // byte lengths, and the attacker controls the X-Hub-Signature-256
+        // header. Without this guard a single bad-length signature crashes
+        // the server (audit S-02).
+        const sigBuf = Buffer.from(sig);
+        const expBuf = Buffer.from(expected);
+        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+          log('warn', 'GitHub webhook signature mismatch');
+          jsonErr(res, 401, 'bad signature');
+          return;
+        }
+        const event = req.headers['x-github-event'];
+        if (event === 'ping') {
+          jsonOk(res, { ok: true, msg: 'pong' });
+          return;
+        }
+        if (event !== 'push') {
+          jsonOk(res, { ok: true, msg: 'ignored event: ' + event });
+          return;
+        }
+        let body;
+        try {
+          body = JSON.parse(raw);
+        } catch (_) {
+          jsonErr(res, 400, 'bad json');
+          return;
+        }
+        if (body.ref !== 'refs/heads/main') {
+          jsonOk(res, { ok: true, msg: 'ignored ref: ' + body.ref });
+          return;
+        }
+        log('info', 'GitHub webhook: push to main, restarting server', {
+          sender: body.sender && body.sender.login
+        });
+        jsonOk(res, { ok: true, message: 'Restarting...' });
+        setTimeout(() => {
+          const scriptDir = path.resolve(__dirname);
+          // Use a lightweight update script instead of interactive START.bat.
+          // Sequence: git pull → npm install → pm2 restart
+          const script =
+            process.platform === 'win32'
+              ? [
+                  'cmd.exe',
+                  [
+                    '/c',
+                    'cd /d "' +
+                      scriptDir +
+                      '" &&' +
+                      ' git fetch origin && git reset --hard origin/main &&' +
+                      ' npm install --omit=dev &&' +
+                      ' pm2 restart meisterpilze --update-env'
+                  ]
                 ]
-              ]
-            : [
-                'bash',
-                [
-                  '-c',
-                  'cd "' +
-                    scriptDir +
-                    '" &&' +
-                    ' git fetch origin && git reset --hard origin/main &&' +
-                    ' npm install --omit=dev &&' +
-                    ' pm2 restart meisterpilze --update-env'
-                ]
-              ];
-        const child = spawn(script[0], script[1], { cwd: scriptDir, detached: true, stdio: 'ignore' });
-        child.unref();
-      }, 500);
+              : [
+                  'bash',
+                  [
+                    '-c',
+                    'cd "' +
+                      scriptDir +
+                      '" &&' +
+                      ' git fetch origin && git reset --hard origin/main &&' +
+                      ' npm install --omit=dev &&' +
+                      ' pm2 restart meisterpilze --update-env'
+                  ]
+                ];
+          const child = spawn(script[0], script[1], { cwd: scriptDir, detached: true, stdio: 'ignore' });
+          child.unref();
+        }, 500);
+      } catch (err) {
+        log('error', 'GitHub webhook handler crashed', { error: err.message });
+        try {
+          jsonErr(res, 500, 'internal');
+        } catch (_) {
+          /* response may already have been sent */
+        }
+      }
     });
     return;
   }
@@ -6318,13 +6502,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Backup Download (encrypted .db) --
+  // Audit S-04: format upgraded.
+  //   v2 layout: magic(4) + version(1) + salt(32) + iv(12) + tag(16) + ciphertext
+  //     - magic   = "MPLZ" (Meisterpilze)
+  //     - version = 0x02
+  //     - scrypt  = N=131072, r=8, p=4 (≈1s on a modern server)
+  //     - no outer HMAC: GCM auth tag is already AEAD over salt+iv+ct
+  //   Old format (no magic prefix) still decrypts via the legacy path on
+  //   restore so existing .enc files keep working.
   if (req.method === 'POST' && req.url === '/api/backup/download') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
       let tmpDest;
       try {
-        if (!data || !data.password || data.password.length < 8) {
-          jsonErr(res, 400, 'Password required (min 8 characters)');
+        if (!data || !data.password || data.password.length < 12) {
+          jsonErr(res, 400, 'Password required (min 12 characters)');
           return;
         }
         // Create a fresh VACUUM INTO temp file for a consistent snapshot
@@ -6337,16 +6529,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           log('warn', 'Failed to clean backup temp file', { error: e.message });
         }
         tmpDest = null;
-        // Encrypt: salt(32) + iv(12) + authTag(16) + ciphertext
         const salt = crypto.randomBytes(32);
-        const key = crypto.scryptSync(data.password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+        const key = crypto.scryptSync(data.password, salt, 32, {
+          N: 131072,
+          r: 8,
+          p: 4,
+          maxmem: 256 * 1024 * 1024
+        });
         const iv = crypto.randomBytes(12);
         const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
         const enc = Buffer.concat([cipher.update(plain), cipher.final()]);
         const tag = cipher.getAuthTag();
-        const payload = Buffer.concat([salt, iv, tag, enc]);
-        const hmac = crypto.createHmac('sha256', key).update(payload).digest();
-        const out = Buffer.concat([payload, hmac]);
+        const magic = Buffer.from('MPLZ', 'ascii');
+        const version = Buffer.from([0x02]);
+        const out = Buffer.concat([magic, version, salt, iv, tag, enc]);
         const stamp = new Date().toISOString().slice(0, 10);
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
@@ -6354,7 +6550,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           'Content-Length': out.length
         });
         res.end(out);
-        log('info', 'Backup downloaded', { actor: req.authUser.username });
+        log('info', 'Backup downloaded', { actor: req.authUser.username, format: 'v2' });
       } catch (err) {
         if (tmpDest)
           try {
@@ -6396,34 +6592,71 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Password required');
           return;
         }
-        // Decrypt: salt(32) + iv(12) + authTag(16) + ciphertext [+ hmac(32)]
-        if (raw.length < 60 + 16) {
-          jsonErr(res, 400, 'File too small to be a valid backup');
-          return;
-        }
-        const salt = raw.subarray(0, 32);
-        const iv = raw.subarray(32, 44);
-        const key = crypto.scryptSync(password, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
-        // Try with HMAC first (current format), fall back to legacy (no HMAC)
-        let plain;
-        function tryDecrypt(withHmac) {
-          const payload = withHmac ? raw.subarray(0, raw.length - 32) : raw;
-          const pTag = payload.subarray(44, 60);
-          const pCipher = payload.subarray(60);
-          if (withHmac) {
-            const storedHmac = raw.subarray(raw.length - 32);
-            const expectedHmac = crypto.createHmac('sha256', key).update(payload).digest();
-            if (!crypto.timingSafeEqual(storedHmac, expectedHmac)) return null;
+        // Audit S-04: detect format by magic prefix.
+        //   v2 (new): "MPLZ" + 0x02 + salt(32) + iv(12) + tag(16) + ct
+        //   v1 (legacy): salt(32) + iv(12) + tag(16) + ct [+ hmac(32)]
+        const MAGIC = Buffer.from('MPLZ', 'ascii');
+        const isV2 = raw.length >= 5 && raw.subarray(0, 4).equals(MAGIC) && raw[4] === 0x02;
+        let plain = null;
+        if (isV2) {
+          // v2: 4 (magic) + 1 (version) + 32 (salt) + 12 (iv) + 16 (tag) + ct
+          if (raw.length < 4 + 1 + 32 + 12 + 16) {
+            jsonErr(res, 400, 'File too small to be a valid backup');
+            return;
           }
-          const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-          decipher.setAuthTag(pTag);
+          const salt = raw.subarray(5, 37);
+          const iv = raw.subarray(37, 49);
+          const tag = raw.subarray(49, 65);
+          const cipherText = raw.subarray(65);
+          const key = crypto.scryptSync(password, salt, 32, {
+            N: 131072,
+            r: 8,
+            p: 4,
+            maxmem: 256 * 1024 * 1024
+          });
           try {
-            return Buffer.concat([decipher.update(pCipher), decipher.final()]);
-          } catch (e) {
-            return null;
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+            decipher.setAuthTag(tag);
+            plain = Buffer.concat([decipher.update(cipherText), decipher.final()]);
+          } catch (_) {
+            plain = null;
           }
+        } else {
+          // Legacy v1 path (no magic prefix) — kept verbatim so existing
+          // backups still restore. tryDecrypt(true) handles backups that
+          // include the redundant outer HMAC; tryDecrypt(false) handles
+          // backups from before the HMAC was added.
+          if (raw.length < 60 + 16) {
+            jsonErr(res, 400, 'File too small to be a valid backup');
+            return;
+          }
+          const salt = raw.subarray(0, 32);
+          const iv = raw.subarray(32, 44);
+          const key = crypto.scryptSync(password, salt, 32, {
+            N: 32768,
+            r: 8,
+            p: 1,
+            maxmem: 64 * 1024 * 1024
+          });
+          function tryDecrypt(withHmac) {
+            const payload = withHmac ? raw.subarray(0, raw.length - 32) : raw;
+            const pTag = payload.subarray(44, 60);
+            const pCipher = payload.subarray(60);
+            if (withHmac) {
+              const storedHmac = raw.subarray(raw.length - 32);
+              const expectedHmac = crypto.createHmac('sha256', key).update(payload).digest();
+              if (!crypto.timingSafeEqual(storedHmac, expectedHmac)) return null;
+            }
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+            decipher.setAuthTag(pTag);
+            try {
+              return Buffer.concat([decipher.update(pCipher), decipher.final()]);
+            } catch (e) {
+              return null;
+            }
+          }
+          plain = tryDecrypt(true) || tryDecrypt(false);
         }
-        plain = tryDecrypt(true) || tryDecrypt(false);
         if (!plain) {
           jsonErr(res, 401, 'Wrong password or corrupted file');
           return;
