@@ -4804,8 +4804,32 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vd);
         return;
       }
+      // Validate optional inventory deltas — applied atomically with the batch.
+      // Shape: [{ mat: 'hardwood'|'wheatbran'|'gypsum'|'grain', deltaKg: number, type?: string, ref?: string }, ...]
+      let deltas = null;
+      if (data.deltas != null) {
+        if (!Array.isArray(data.deltas)) {
+          jsonErr(res, 400, 'deltas must be an array');
+          return;
+        }
+        for (const d of data.deltas) {
+          if (!d || typeof d !== 'object') {
+            jsonErr(res, 400, 'deltas entries must be objects');
+            return;
+          }
+          if (!['hardwood', 'wheatbran', 'gypsum', 'grain'].includes(d.mat)) {
+            jsonErr(res, 400, 'deltas[].mat must be hardwood/wheatbran/gypsum/grain');
+            return;
+          }
+          if (typeof d.deltaKg !== 'number' || !Number.isFinite(d.deltaKg)) {
+            jsonErr(res, 400, 'deltas[].deltaKg must be a finite number');
+            return;
+          }
+        }
+        deltas = data.deltas;
+      }
       try {
-        const result = db.insertBatch(database, data);
+        const result = db.insertBatch(database, data, deltas);
         autoPushBatchCaldav(data);
         broadcastSSE(res);
         jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
@@ -5013,59 +5037,84 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vl);
         return;
       }
+      // Track disk-side photo files written so we can best-effort delete them
+      // if the surrounding DB transaction rolls back. Disk writes themselves
+      // are not transactional, so on rollback we accept that orphaned files
+      // may remain — TODO: write to a temp staging dir and atomically move on
+      // commit if this becomes load-bearing.
+      const writtenPhotoFiles = [];
+      let reportId = null;
+      let photoIds = [];
+      let autoMovedScanId = null;
       try {
-        const reportId = db.createContaminationReport(database, {
-          ...data,
-          user_id: req.authUser ? req.authUser.user_id : null
-        });
-        const photoIds = [];
-        const photos = Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
-        for (const p of photos) {
-          const saved = savePhotoToDisk(reportId, p, req.authUser);
-          if (saved) {
-            photoIds.push(db.addContaminationPhoto(database, reportId, saved));
-          }
-        }
-        // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
-        // client didn't explicitly opt out), insert a MOVE scan-log entry that
-        // moves the bag to the first zone with role='contaminated'. Stamps
-        // contamination_reports.scan_log_id to link the two records together.
-        // Skipped silently when (a) auto_move is false, (b) severity is minor,
-        // (c) no bag_id (whole-batch report), (d) no contam zone configured.
-        let autoMovedScanId = null;
-        const wantAutoMove = data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
-        if (wantAutoMove && data.bag_id) {
-          const contamZone = database
-            .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
-            .get();
-          if (contamZone) {
-            const lastLoc = database
-              .prepare(
-                "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
-              )
-              .get(data.bag_id);
-            const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
-            const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
-            const ids = db.appendScanEntries(
-              database,
-              [
-                {
-                  time: new Date().toISOString(),
-                  action: 'MOVE',
-                  batch: data.batch_id || null,
-                  bag: data.bag_id,
-                  from: lastLoc ? lastLoc.toLoc : null,
-                  to: contamZone.id,
-                  reason: reasonKey
-                }
-              ],
-              req.authUser ? req.authUser.user_id : null
-            );
-            if (ids && ids.length) {
-              autoMovedScanId = ids[0];
-              db.setContaminationReportScanLogId(database, reportId, autoMovedScanId);
+        database.exec('BEGIN');
+        try {
+          reportId = db.createContaminationReport(database, {
+            ...data,
+            user_id: req.authUser ? req.authUser.user_id : null
+          });
+          const photos = Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
+          for (const p of photos) {
+            const saved = savePhotoToDisk(reportId, p, req.authUser);
+            if (saved) {
+              writtenPhotoFiles.push(path.join(DIR, 'data', saved.rel_path));
+              writtenPhotoFiles.push(path.join(DIR, 'data', saved.thumb_path));
+              photoIds.push(db.addContaminationPhoto(database, reportId, saved));
             }
           }
+          // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
+          // client didn't explicitly opt out), insert a MOVE scan-log entry that
+          // moves the bag to the first zone with role='contaminated'. Stamps
+          // contamination_reports.scan_log_id to link the two records together.
+          // Skipped silently when (a) auto_move is false, (b) severity is minor,
+          // (c) no bag_id (whole-batch report), (d) no contam zone configured.
+          const wantAutoMove = data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
+          if (wantAutoMove && data.bag_id) {
+            const contamZone = database
+              .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
+              .get();
+            if (contamZone) {
+              const lastLoc = database
+                .prepare(
+                  "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
+                )
+                .get(data.bag_id);
+              const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
+              const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
+              // Use the no-txn variant so this insert is part of the surrounding transaction.
+              const ids = db.appendScanEntriesNoTxn(
+                database,
+                [
+                  {
+                    time: new Date().toISOString(),
+                    action: 'MOVE',
+                    batch: data.batch_id || null,
+                    bag: data.bag_id,
+                    from: lastLoc ? lastLoc.toLoc : null,
+                    to: contamZone.id,
+                    reason: reasonKey
+                  }
+                ],
+                req.authUser ? req.authUser.user_id : null
+              );
+              if (ids && ids.length) {
+                autoMovedScanId = ids[0];
+                db.setContaminationReportScanLogId(database, reportId, autoMovedScanId);
+              }
+            }
+          }
+          database.exec('COMMIT');
+        } catch (innerErr) {
+          database.exec('ROLLBACK');
+          // Best-effort cleanup of disk files written during the failed transaction.
+          for (const f of writtenPhotoFiles) {
+            try {
+              fs.unlinkSync(f);
+            } catch {
+              /* ignore — file already gone or never existed */
+            }
+          }
+          throw innerErr;
         }
         broadcastSSE(res);
         jsonOk(res, { id: reportId, photoIds, autoMovedScanId });

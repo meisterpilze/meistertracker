@@ -501,9 +501,18 @@ describe('db – inventory', () => {
     assert.equal(val, 100);
   });
 
-  it('applyInventoryDelta subtracts stock (floor at 0)', () => {
+  it('applyInventoryDelta clamps under-stock subtraction and records actual delta', () => {
+    // Stock is currently 100 (from the previous addStock test). Requesting -200 should
+    // clamp to -100 so the inventory_log delta_kg matches what actually came out of stock.
     const val = db.applyInventoryDelta(d, 'hardwood', -200, 'batch', 'B-001');
     assert.equal(val, 0);
+    const data = db.readAll(d);
+    const hwLog = data.inventory.log.filter((l) => l.mat === 'hardwood');
+    // Sum of recorded deltas must equal final stock — the ledger reconciles.
+    const sum = hwLog.reduce((acc, l) => acc + l.deltaKg, 0);
+    assert.equal(sum, 0);
+    // The most recent hardwood entry records the clamped (-100), not the requested (-200).
+    assert.equal(hwLog[hwLog.length - 1].deltaKg, -100);
   });
 
   it('setInventoryAbsolute sets stock value', () => {
@@ -891,5 +900,131 @@ describe('db – notifications', () => {
     assert.equal(db.countUnreadNotifications(d, temp.id), 1);
     db.deleteUser(d, temp.id);
     assert.equal(db.countUnreadNotifications(d, temp.id), 0);
+  });
+});
+
+describe('db – writeAll/readAll round-trip (audit I-04)', () => {
+  let d, p, strainId;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    // Seed a strain so strain_id resolves cleanly
+    strainId = db.createMushroomStrain(d, {
+      name: 'Pleurotus ostreatus',
+      kuerzel: 'HK35',
+      description: 'Test strain'
+    });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('preserves strain_id, strain_text, reason, quality, notes, exception_dates across writeAll', () => {
+    // Construct a snapshot containing every field the audit flagged as
+    // dropped by writeAll. Round-trip via writeAll(readAll-shape) and verify.
+    const snapshot = {
+      batches: [
+        {
+          batchId: 'B-RT-01',
+          species: 'Pleurotus ostreatus (HK35)',
+          strain: 'XXX',
+          strainId: strainId,
+          strainText: 'lab-batch-RT-01',
+          qty: 5,
+          days: 14,
+          substrate: { hardwood: 75, wheatbran: 25, rh: 63, gypsum: false },
+          bagKg: 3,
+          batchType: 'block',
+          notes: 'rt test',
+          created: '2024-02-01T00:00:00Z',
+          due: '2024-02-15T00:00:00Z',
+          bags: ['B-RT-01-01', 'B-RT-01-02']
+        }
+      ],
+      cultures: [
+        {
+          id: 'MC-RT-01',
+          type: 'MC',
+          species: 'Pleurotus ostreatus',
+          strain: 'HK35',
+          strainId: strainId,
+          strainText: 'lab-culture-RT-01',
+          parentId: null,
+          status: 'active',
+          notes: '',
+          created: '2024-02-01T00:00:00Z'
+        }
+      ],
+      scanLog: [
+        {
+          time: '2024-02-02T00:00:00Z',
+          action: 'MOVE',
+          batch: 'B-RT-01',
+          bag: 'B-RT-01-01',
+          from: null,
+          to: 'CONTAM',
+          species: null,
+          strain: null,
+          reason: 'contam_trichoderma'
+        }
+      ],
+      harvests: [
+        {
+          time: '2024-02-10T00:00:00Z',
+          batch: 'B-RT-01',
+          bag: 'B-RT-01-01',
+          species: 'Pleurotus ostreatus',
+          strain: 'HK35',
+          grams: 250,
+          flush: 1,
+          quality: 'A',
+          notes: 'good flush'
+        }
+      ],
+      calendarEvents: [
+        {
+          id: 'evt-RT-01',
+          title: 'Daily check',
+          startDate: '2024-02-01',
+          allDay: true,
+          category: 'custom',
+          recurrence: 'daily',
+          recurrenceUntil: '2024-03-01',
+          exceptionDates: ['2024-02-10', '2024-02-15'],
+          created: '2024-02-01T00:00:00Z'
+        }
+      ]
+    };
+
+    db.writeAll(d, snapshot);
+    const out = db.readAll(d);
+
+    // Batch round-trip
+    const b = out.batches.find((x) => x.batchId === 'B-RT-01');
+    assert.ok(b, 'batch B-RT-01 not found after round-trip');
+    assert.equal(b.strainId, strainId);
+    assert.equal(b.strainText, 'lab-batch-RT-01');
+
+    // Culture round-trip
+    const c = out.cultures.find((x) => x.id === 'MC-RT-01');
+    assert.ok(c, 'culture MC-RT-01 not found after round-trip');
+    assert.equal(c.strainId, strainId);
+    assert.equal(c.strainText, 'lab-culture-RT-01');
+
+    // scan_log round-trip
+    const s = out.scanLog.find((x) => x.bag === 'B-RT-01-01' && x.action === 'MOVE');
+    assert.ok(s, 'scan-log entry not found after round-trip');
+    assert.equal(s.reason, 'contam_trichoderma');
+
+    // Harvest round-trip
+    const h = out.harvests.find((x) => x.bag === 'B-RT-01-01');
+    assert.ok(h, 'harvest not found after round-trip');
+    assert.equal(h.quality, 'A');
+    assert.equal(h.notes, 'good flush');
+
+    // Calendar event round-trip
+    const e = out.calendarEvents.find((x) => x.id === 'evt-RT-01');
+    assert.ok(e, 'calendar event not found after round-trip');
+    assert.deepEqual(e.exceptionDates.sort(), ['2024-02-10', '2024-02-15']);
   });
 });

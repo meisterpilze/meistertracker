@@ -7051,16 +7051,43 @@ function createBatch() {
     bags
   });
 
-  // Save batch to server
+  // Compute inventory deltas up front so they can travel with the POST and be
+  // applied atomically on the server (audit I-02).
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  const deltas = [];
+  const stockSnapshot = { ...inventory.stock };
+  if (substrate) {
+    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    const hwUsed = qty * dryKgPerBag * (hw / 100);
+    const wbUsed = qty * dryKgPerBag * (wb / 100);
+    if (hwUsed > 0) {
+      inventory.stock.hardwood = Math.max(0, inventory.stock.hardwood - hwUsed);
+      deltas.push({ mat: 'hardwood', deltaKg: -hwUsed, type: 'batch', ref: batchId });
+    }
+    if (wbUsed > 0) {
+      inventory.stock.wheatbran = Math.max(0, inventory.stock.wheatbran - wbUsed);
+      deltas.push({ mat: 'wheatbran', deltaKg: -wbUsed, type: 'batch', ref: batchId });
+    }
+    if (substrate.gypsum) {
+      const gypUsed = qty * dryKgPerBag * 0.01;
+      inventory.stock.gypsum = Math.max(0, inventory.stock.gypsum - gypUsed);
+      deltas.push({ mat: 'gypsum', deltaKg: -gypUsed, type: 'batch', ref: batchId });
+    }
+  }
+
+  // Save batch + inventory deltas atomically on the server
   const batchObj = batches[batches.length - 1];
   const createBtn = document.getElementById('btn-24');
   if (createBtn) createBtn.disabled = true;
-  apiPost('/api/batches', batchObj)
+  apiPost('/api/batches', { ...batchObj, deltas })
     .then((r) => {
       if (r && r.error) {
         // Rollback local state so UI reflects server truth (e.g. duplicate batchId)
         const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
         if (i >= 0) batches.splice(i, 1);
+        // Roll back the optimistic stock mutation too — server didn't apply the deltas.
+        inventory.stock = stockSnapshot;
         alert(t('batch.saveFailed') + r.error);
         renderBatches();
         renderStatus();
@@ -7084,30 +7111,6 @@ function createBatch() {
     .finally(() => {
       if (createBtn) createBtn.disabled = false;
     });
-
-  // Auto-deduct materials from inventory via server-side deltas
-  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  const deltas = [];
-  if (substrate) {
-    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
-    const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
-    const hwUsed = qty * dryKgPerBag * (hw / 100);
-    const wbUsed = qty * dryKgPerBag * (wb / 100);
-    if (hwUsed > 0) {
-      inventory.stock.hardwood = Math.max(0, inventory.stock.hardwood - hwUsed);
-      deltas.push({ mat: 'hardwood', deltaKg: -hwUsed, type: 'batch', ref: batchId });
-    }
-    if (wbUsed > 0) {
-      inventory.stock.wheatbran = Math.max(0, inventory.stock.wheatbran - wbUsed);
-      deltas.push({ mat: 'wheatbran', deltaKg: -wbUsed, type: 'batch', ref: batchId });
-    }
-    if (substrate.gypsum) {
-      const gypUsed = qty * dryKgPerBag * 0.01;
-      inventory.stock.gypsum = Math.max(0, inventory.stock.gypsum - gypUsed);
-      deltas.push({ mat: 'gypsum', deltaKg: -gypUsed, type: 'batch', ref: batchId });
-    }
-  }
-  if (deltas.length) invDeltas(deltas);
   if (document.getElementById('nb-strain-sel')) document.getElementById('nb-strain-sel').value = '';
   const nbStrainTextEl = document.getElementById('nb-strain-text');
   if (nbStrainTextEl) nbStrainTextEl.value = '';
