@@ -1177,6 +1177,7 @@ function readAll(db, opts = {}) {
       to: r.to,
       species: r.species,
       strain: r.strain,
+      reason: r.reason || null,
       userId: r.user_id,
       user: r.username || null
     }));
@@ -1193,7 +1194,9 @@ function readAll(db, opts = {}) {
       species: r.species,
       strain: r.strain,
       grams: r.grams,
-      flush: r.flush
+      flush: r.flush,
+      quality: r.quality || null,
+      notes: r.notes || null
     }));
 
   // Cultures
@@ -1361,6 +1364,7 @@ function readAll(db, opts = {}) {
       recurrence: r.recurrence || null,
       recurrenceUntil: r.recurrence_until || null,
       teamAssignees: parseTeamAssignees(r.team_assignees),
+      exceptionDates: parseExceptionDates(r.exception_dates),
       assignees: assigneeMap.get(r.id) || []
     }));
 
@@ -1443,10 +1447,12 @@ function writeAll(db, incoming) {
       }
 
       const upsertBatch = db.prepare(`
-        INSERT INTO batches(batch_id, species, strain, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO batches(batch_id, species, strain, strain_id, strain_text, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(batch_id) DO UPDATE SET
-          species=excluded.species, strain=excluded.strain, qty=excluded.qty, days=excluded.days,
+          species=excluded.species, strain=excluded.strain,
+          strain_id=excluded.strain_id, strain_text=excluded.strain_text,
+          qty=excluded.qty, days=excluded.days,
           sub_hardwood=excluded.sub_hardwood, sub_wheatbran=excluded.sub_wheatbran,
           sub_rh=excluded.sub_rh, sub_gypsum=excluded.sub_gypsum,
           bag_kg=excluded.bag_kg, batch_type=excluded.batch_type,
@@ -1463,6 +1469,8 @@ function writeAll(db, incoming) {
           b.batchId,
           b.species,
           b.strain || null,
+          b.strainId || null,
+          b.strainText || '',
           b.qty,
           b.days,
           sub.hardwood || 0,
@@ -1499,7 +1507,7 @@ function writeAll(db, incoming) {
     if (incoming.scanLog) {
       db.prepare('DELETE FROM scan_log').run();
       const ins = db.prepare(
-        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain, user_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO scan_log(time, action, batch, bag, "from", "to", species, strain, user_id, reason) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const e of incoming.scanLog) {
         ins.run(
@@ -1511,7 +1519,8 @@ function writeAll(db, incoming) {
           e.to || null,
           e.species || null,
           e.strain || null,
-          e.userId ?? e.user_id ?? null
+          e.userId ?? e.user_id ?? null,
+          e.reason || null
         );
       }
     }
@@ -1520,10 +1529,20 @@ function writeAll(db, incoming) {
     if (incoming.harvests) {
       db.prepare('DELETE FROM harvests').run();
       const ins = db.prepare(
-        'INSERT INTO harvests(time, batch, bag, species, strain, grams, flush) VALUES(?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO harvests(time, batch, bag, species, strain, grams, flush, quality, notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const h of incoming.harvests) {
-        ins.run(h.time, h.batch || null, h.bag || null, h.species || null, h.strain || null, h.grams, h.flush || 1);
+        ins.run(
+          h.time,
+          h.batch || null,
+          h.bag || null,
+          h.species || null,
+          h.strain || null,
+          h.grams,
+          h.flush || 1,
+          h.quality || null,
+          h.notes || null
+        );
       }
     }
 
@@ -1544,10 +1563,11 @@ function writeAll(db, incoming) {
       }
 
       const upsert = db.prepare(`
-        INSERT INTO cultures(id, type, species, strain, parent_id, source, status, notes, created)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cultures(id, type, species, strain, strain_id, strain_text, parent_id, source, status, notes, created)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type=excluded.type, species=excluded.species, strain=excluded.strain,
+          strain_id=excluded.strain_id, strain_text=excluded.strain_text,
           parent_id=excluded.parent_id, source=excluded.source, status=excluded.status,
           notes=excluded.notes, created=excluded.created
       `);
@@ -1558,6 +1578,8 @@ function writeAll(db, incoming) {
           c.type,
           c.species || null,
           c.strain || null,
+          c.strainId || null,
+          c.strainText || '',
           c.parentId || null,
           c.source || null,
           c.status || 'active',
@@ -1714,15 +1736,16 @@ function writeAll(db, incoming) {
       const upsert = db.prepare(`
         INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
           start_time, end_time, category, color, caldav_uid, caldav_synced, created,
-          recurrence, recurrence_until, team_assignees)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          recurrence, recurrence_until, team_assignees, exception_dates)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           title=excluded.title, description=excluded.description, start_date=excluded.start_date,
           end_date=excluded.end_date, all_day=excluded.all_day, start_time=excluded.start_time,
           end_time=excluded.end_time, category=excluded.category, color=excluded.color,
           caldav_uid=excluded.caldav_uid, caldav_synced=excluded.caldav_synced, created=excluded.created,
           recurrence=excluded.recurrence, recurrence_until=excluded.recurrence_until,
-          team_assignees=excluded.team_assignees
+          team_assignees=excluded.team_assignees,
+          exception_dates=excluded.exception_dates
       `);
       for (const e of incoming.calendarEvents) {
         upsert.run(
@@ -1741,7 +1764,8 @@ function writeAll(db, incoming) {
           e.created,
           e.recurrence || null,
           e.recurrenceUntil || null,
-          serializeTeamAssignees(e.teamAssignees)
+          serializeTeamAssignees(e.teamAssignees),
+          serializeExceptionDates(e.exceptionDates)
         );
       }
       // Sync assignees
@@ -2031,7 +2055,11 @@ function resetUserPassword(db, userId, newPassword) {
 // ── Atomic CRUD functions ───────────────────────────────────
 
 // -- Batches --
-function insertBatch(db, b) {
+// `deltas` is an optional array of { mat, deltaKg, type, ref } applied inside
+// the same transaction as the batch + bag inserts. Atomicity guarantee: if
+// any delta or insert fails, the batch row, bag rows, inventory mutations,
+// and inventory_log entries are all rolled back.
+function insertBatch(db, b, deltas) {
   if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
   if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
   // Resolve strainId → species + strain text
@@ -2081,6 +2109,13 @@ function insertBatch(db, b) {
     const bagIds = (b.bags || []).map((x) => (typeof x === 'string' ? x : x.id));
     // Assign numeric barcodes to all new bags
     const bagBarcodes = assignBarcodes(db, 'bag', bagIds);
+    // Apply inventory deltas inside the same transaction so an under-stock
+    // failure or invalid material rolls the batch back too.
+    if (Array.isArray(deltas)) {
+      for (const d of deltas) {
+        applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, d.type || 'batch', d.ref || b.batchId);
+      }
+    }
     incrementDataVersion(db);
     db.exec('COMMIT');
     return { bagBarcodes };
@@ -2136,6 +2171,15 @@ function renameBatch(db, oldId, newId) {
     db.prepare('UPDATE scan_log SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
+    // Audit I-06: contamination reports also reference batch_id and bag_id; without these
+    // updates the reports would orphan and the contamination history for the batch would
+    // disappear from the UI after a rename.
+    db.prepare('UPDATE contamination_reports SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    db.prepare("UPDATE contamination_reports SET bag_id = REPLACE(bag_id, ?, ?) WHERE bag_id LIKE ? || '%'").run(
+      oldId,
+      newId,
+      oldId
+    );
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     // Update barcode registry: rename entity_id for bags that were renamed
@@ -2228,6 +2272,12 @@ function deleteBatchById(db, batchId) {
     }
     db.prepare('DELETE FROM harvests WHERE batch=?').run(batchId);
     db.prepare('DELETE FROM scan_log WHERE batch=?').run(batchId);
+    // Audit I-07: keep contamination history (audit-relevant) by NULLing the FK
+    // instead of deleting the report rows. The reports list (listContaminationReports)
+    // already filters by batch_id only when set, so NULL rows remain visible in the
+    // unfiltered view.
+    db.prepare('UPDATE contamination_reports SET batch_id = NULL WHERE batch_id = ?').run(batchId);
+    db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? || '%'").run(batchId);
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -2286,35 +2336,42 @@ function computeBatchMaterialDeltas(db, row) {
 }
 
 // -- Scan Log --
-function appendScanEntries(db, entries, userId) {
+// Append scan entries inside an existing transaction. Caller is responsible for BEGIN/COMMIT
+// and for calling incrementDataVersion(). Returns the inserted row IDs.
+function appendScanEntriesNoTxn(db, entries, userId) {
   const ins = db.prepare(
     'INSERT INTO scan_log(time,action,batch,bag,"from","to",species,strain,user_id,reason) VALUES(?,?,?,?,?,?,?,?,?,?)'
   );
   const ids = [];
+  for (const e of entries) {
+    const r = ins.run(
+      e.time,
+      e.action,
+      e.batch || null,
+      e.bag || null,
+      e.from || null,
+      e.to || null,
+      e.species || null,
+      e.strain || null,
+      userId || null,
+      e.reason || null
+    );
+    ids.push(r.lastInsertRowid);
+  }
+  return ids;
+}
+
+function appendScanEntries(db, entries, userId) {
   db.exec('BEGIN');
   try {
-    for (const e of entries) {
-      const r = ins.run(
-        e.time,
-        e.action,
-        e.batch || null,
-        e.bag || null,
-        e.from || null,
-        e.to || null,
-        e.species || null,
-        e.strain || null,
-        userId || null,
-        e.reason || null
-      );
-      ids.push(r.lastInsertRowid);
-    }
+    const ids = appendScanEntriesNoTxn(db, entries, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
+    return ids;
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
   }
-  return ids;
 }
 
 function deleteLastScanEntries(db, n) {
@@ -2366,6 +2423,10 @@ function insertCultures(db, cultures) {
        parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text`
   );
   for (const c of cultures) {
+    // Reject self-cycles up front so the lineage walker never has to discover them.
+    if (c.parentId && c.parentId === c.id) {
+      throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
+    }
     // Resolve strainId if provided
     let strainId = c.strainId || null;
     let species = c.species || null;
@@ -2402,6 +2463,11 @@ function insertCultures(db, cultures) {
 }
 
 function updateCulture(db, id, fields) {
+  // Defence-in-depth: even though parent_id isn't in the allowed list today,
+  // reject self-cycle attempts up front.
+  if ((fields.parentId != null && fields.parentId === id) || (fields.parent_id != null && fields.parent_id === id)) {
+    throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
+  }
   // Handle strainId update
   if (fields.strainId != null) {
     const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
@@ -2749,24 +2815,37 @@ function updatePrintBridgeCfg(db, cfg) {
 // -- Inventory Delta --
 const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain'];
 
-function applyInventoryDelta(db, mat, deltaKg, type, ref) {
+// Apply a single inventory delta inside an existing transaction. Caller is
+// responsible for BEGIN/COMMIT. Returns the new running total for the material.
+function applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref) {
   if (!VALID_MATS.includes(mat)) throw new Error('invalid material: ' + mat);
   const col = 'stock_' + mat;
+  // Clamp negative deltas against current stock so the inventory_log "running" total
+  // matches the sum of recorded deltas. Without this, requesting -200 against a stock
+  // of 100 would record a -200 delta but only mutate stock by -100, breaking ledger
+  // reconciliation. The MAX(0, ...) SQL guard is therefore unnecessary.
+  const cur = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get().val;
+  const recorded = deltaKg < 0 ? Math.max(deltaKg, -cur) : deltaKg;
+  db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(recorded);
+  const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
+  db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
+    new Date().toISOString(),
+    mat,
+    recorded,
+    row.val,
+    type || null,
+    ref || null
+  );
+  return row.val;
+}
+
+function applyInventoryDelta(db, mat, deltaKg, type, ref) {
   db.exec('BEGIN');
   try {
-    db.prepare(`UPDATE inventory SET ${col} = MAX(0, ${col} + ?) WHERE id=1`).run(deltaKg);
-    const row = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
-    db.prepare('INSERT INTO inventory_log(time,mat,delta_kg,running,type,ref) VALUES(?,?,?,?,?,?)').run(
-      new Date().toISOString(),
-      mat,
-      deltaKg,
-      row.val,
-      type || null,
-      ref || null
-    );
+    const newVal = applyInventoryDeltaNoTxn(db, mat, deltaKg, type, ref);
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return row.val;
+    return newVal;
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -3972,7 +4051,11 @@ function traceLineageBack(db, entityType, entityId) {
     }
   } else if (entityType === 'culture') {
     let current = db.prepare('SELECT * FROM cultures WHERE id=?').get(entityId);
-    while (current) {
+    // Guard against parent-pointer cycles. Self-cycles are rejected at insert/update,
+    // but legacy data or future edits could still produce a loop — break on revisit.
+    const visited = new Set();
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
       chain.push({
         type: 'culture',
         id: current.id,
@@ -3982,11 +4065,7 @@ function traceLineageBack(db, entityType, entityId) {
         status: current.status,
         created: current.created
       });
-      if (current.parent_id) {
-        current = db.prepare('SELECT * FROM cultures WHERE id=?').get(current.parent_id);
-      } else {
-        current = null;
-      }
+      current = current.parent_id ? db.prepare('SELECT * FROM cultures WHERE id=?').get(current.parent_id) : null;
     }
   }
   return chain;
@@ -4368,6 +4447,7 @@ module.exports = {
   addBagsToBatch,
   deleteBatchById,
   appendScanEntries,
+  appendScanEntriesNoTxn,
   deleteLastScanEntries,
   getScanEntryById,
   deleteScanEntryById,
