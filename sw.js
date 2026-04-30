@@ -83,7 +83,34 @@ function _idbDelete(store, id) {
   );
 }
 
-const queuePendingScan = (body) => _idbAdd(STORE_SCANS, body);
+// R-21: cap the scan queue. A 12-hour offline window with one rapid scanner
+// can pile thousands of entries into IndexedDB; the IDB quota then rejects
+// adds silently with no notification, and reconnect blasts the server with
+// sequential POSTs (Phase 2 idempotency prevents duplicate writes but the
+// server is unhappy). 500 ≈ 2× a typical lab-day scan count. Drop oldest on
+// overflow (FIFO) — the user is offline anyway and the oldest scans are the
+// least likely to still be relevant.
+const SCAN_QUEUE_MAX = 500;
+
+async function queuePendingScan(body) {
+  const all = await getPendingScans();
+  if (all.length >= SCAN_QUEUE_MAX) {
+    const dropCount = all.length - SCAN_QUEUE_MAX + 1;
+    for (let i = 0; i < dropCount; i++) {
+      try {
+        await deletePendingScan(all[i].id);
+      } catch {
+        /* best-effort eviction */
+      }
+    }
+    self.clients.matchAll().then((clients) => {
+      for (const c of clients) {
+        c.postMessage({ type: 'scan-queue-overflow', dropped: dropCount, max: SCAN_QUEUE_MAX });
+      }
+    });
+  }
+  return _idbAdd(STORE_SCANS, body);
+}
 const getPendingScans = () => _idbGetAll(STORE_SCANS);
 const deletePendingScan = (id) => _idbDelete(STORE_SCANS, id);
 
@@ -93,6 +120,10 @@ const deletePendingContam = (id) => _idbDelete(STORE_CONTAM, id);
 
 async function _replayQueue(store, getAll, del, url) {
   const pending = await getAll();
+  // R-22: track whether we hit a server-side failure (5xx) so the caller
+  // can apply exponential backoff. Network errors and 401s are NOT server
+  // failures — they don't deserve a long cooldown.
+  let serverFailure = false;
   for (const item of pending) {
     try {
       const resp = await fetch(url, {
@@ -126,21 +157,60 @@ async function _replayQueue(store, getAll, del, url) {
           }
         });
       } else {
-        break; // Server error — stop replay, retry later
+        // R-22: 5xx (and any other unexpected status) — the server is
+        // unhealthy. Stop replay and signal the caller so it can apply
+        // exponential backoff before retrying.
+        if (resp.status >= 500) serverFailure = true;
+        break;
       }
     } catch {
-      break; // Still offline — stop replay
+      break; // Still offline — stop replay (no backoff; network errors retry naturally)
     }
   }
   notifyClients();
+  if (serverFailure) {
+    throw new Error('replay-server-failure');
+  }
 }
 
 const replayPendingScans = () => _replayQueue(STORE_SCANS, getPendingScans, deletePendingScan, '/api/scan-log');
 const replayPendingContams = () =>
   _replayQueue(STORE_CONTAM, getPendingContams, deletePendingContam, '/api/contamination-reports');
+
+// R-22: every successful asset fetch in the SW's stale-while-revalidate
+// branch was triggering replayAll(), so a single page load with 50 assets
+// fired 50 replays in quick succession. Phase 2 idempotency prevents
+// duplicate writes but the server gets flogged. Solution:
+//   1. 1-second debounce — collapse bursts.
+//   2. On 5xx response, set a cooldown 30s in the future; back off
+//      exponentially up to 5 minutes after consecutive failures.
+//   3. Reset failure count on first successful replay.
+let _replayDebounceTimer = null;
+let _replayCooldownUntil = 0;
+let _replayFailureCount = 0;
+
+function scheduleReplay() {
+  if (_replayDebounceTimer) return;
+  if (Date.now() < _replayCooldownUntil) return;
+  _replayDebounceTimer = setTimeout(() => {
+    _replayDebounceTimer = null;
+    replayAll().catch(() => {});
+  }, 1000);
+}
+
 async function replayAll() {
-  await replayPendingScans();
-  await replayPendingContams();
+  try {
+    await replayPendingScans();
+    await replayPendingContams();
+    // First successful pass after a streak of failures clears the backoff.
+    _replayFailureCount = 0;
+    _replayCooldownUntil = 0;
+  } catch (e) {
+    _replayFailureCount++;
+    const cooldownSec = Math.min(30 * Math.pow(2, _replayFailureCount - 1), 300);
+    _replayCooldownUntil = Date.now() + cooldownSec * 1000;
+    throw e;
+  }
 }
 
 function notifyClients() {
@@ -179,7 +249,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'replay-pending') {
-    replayAll();
+    scheduleReplay();
   }
   if (e.data && e.data.type === 'get-pending-count') {
     notifyClients();
@@ -260,8 +330,11 @@ self.addEventListener('fetch', (e) => {
             caches.open(CACHE).then((c) => c.put(e.request, clone));
           }
           // Opportunistically replay queued scans + contam reports when network
-          // comes back. Cheap when the queues are empty.
-          replayAll();
+          // comes back. Cheap when the queues are empty. R-22: scheduleReplay
+          // debounces bursts (asset fetches during a page load can fire 50+
+          // times in quick succession) and applies exponential backoff on
+          // server errors so we don't flog a struggling server.
+          scheduleReplay();
           return res;
         })
         .catch(() => null);
