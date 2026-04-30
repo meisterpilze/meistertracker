@@ -1,6 +1,8 @@
 'use strict';
 const { DatabaseSync: Database } = require('node:sqlite');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
 const MAX_SESSIONS_PER_USER = 10;
@@ -1108,6 +1110,10 @@ function backfillBarcodes(db) {
 
 function openDb(dbPath) {
   const db = new Database(dbPath);
+  // R-16: stash the path on the handle so backupDb() can stat the source DB
+  // for its disk-space pre-flight without having to plumb it through every
+  // caller. Non-enumerable so it doesn't show up in stringification.
+  Object.defineProperty(db, '_mpDbPath', { value: dbPath, enumerable: false, writable: false });
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
@@ -1936,6 +1942,34 @@ function writeAll(db, incoming) {
 }
 
 // ── Backup ───────────────────────────────────────────────────
+
+// R-16: pre-flight disk-space check. VACUUM INTO with no free space leaves
+// a half-written file behind and fails part-way through, so we'd rather
+// fail loudly upfront. Node's fs.statfsSync was added in 18.15 but is not
+// fully available on Windows in all Node 22 builds — treat any throw from
+// statfsSync as "platform doesn't support this; log and continue".
+function checkDiskSpace(targetPath, requiredBytes) {
+  try {
+    const dir = path.dirname(path.resolve(targetPath));
+    const stats = fs.statfsSync(dir);
+    const free = Number(stats.bavail) * Number(stats.bsize);
+    if (free < requiredBytes) {
+      throw new Error(
+        'Insufficient disk space: ' +
+          Math.round(free / 1e6) +
+          'MB free, ' +
+          Math.round(requiredBytes / 1e6) +
+          'MB required'
+      );
+    }
+    return { free, required: requiredBytes, ok: true };
+  } catch (e) {
+    if (e.message && e.message.startsWith('Insufficient')) throw e;
+    // statfsSync not supported (older Node, Windows without polyfill): skip.
+    return { free: null, required: requiredBytes, ok: true, skipped: true, reason: e.message };
+  }
+}
+
 function backupDb(db, destPath) {
   // VACUUM INTO doesn't support bound parameters — whitelist path chars to prevent injection.
   // Allow absolute paths with letters, digits, dots, dashes, underscores, slashes, colons (Windows drive),
@@ -1945,6 +1979,23 @@ function backupDb(db, destPath) {
   }
   if (!/^[A-Za-z0-9 ._/\\:-]+$/.test(destPath)) {
     throw new Error('Backup path contains unsafe characters');
+  }
+  // R-16: pre-flight disk-space check. Require ~3x the current DB size: the
+  // VACUUM target file is up to 1x, plus headroom for SQLite's own working
+  // copy. Errors here surface as backup failures rather than corrupting the
+  // primary DB.
+  try {
+    const dbFile = db._mpDbPath || null;
+    if (dbFile && fs.existsSync(dbFile)) {
+      const dbSize = fs.statSync(dbFile).size;
+      checkDiskSpace(destPath, 3 * dbSize);
+    }
+  } catch (spaceErr) {
+    if (spaceErr.message && spaceErr.message.startsWith('Insufficient')) {
+      throw spaceErr;
+    }
+    // Other errors from the space check (e.g. statSync race) shouldn't
+    // block the backup itself — fall through to VACUUM.
   }
   // Escape single quotes just in case (shouldn't match the whitelist above, but defense-in-depth)
   const safePath = destPath.replace(/'/g, "''");
@@ -2064,6 +2115,20 @@ function deleteSessionsByUserId(db, userId) {
 
 function deleteExpiredSessions(db) {
   db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+}
+
+// R-10: periodic cleanup helpers (called from server.js setInterval).
+// Both return the count of rows deleted so the caller can log totals.
+function cleanupExpiredSessions(db) {
+  const info = db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+  return info.changes;
+}
+
+function cleanupOldNotifications(db) {
+  // Hold read notifications 30 days, then GC. Unread notifications are kept
+  // forever so users don't lose anything they haven't seen.
+  const info = db.prepare("DELETE FROM notifications WHERE read = 1 AND created < datetime('now', '-30 days')").run();
+  return info.changes;
 }
 
 // ── Notifications ──
@@ -4688,6 +4753,7 @@ module.exports = {
   readAll,
   writeAll,
   backupDb,
+  checkDiskSpace,
   getDataVersion,
   readCaldavConfig,
   updateTaskCaldavUid,
@@ -4702,6 +4768,8 @@ module.exports = {
   deleteSession,
   deleteSessionsByUserId,
   deleteExpiredSessions,
+  cleanupExpiredSessions,
+  cleanupOldNotifications,
   createNotification,
   listNotifications,
   countUnreadNotifications,
