@@ -413,11 +413,41 @@ function Write-Json {
     $Response.Close()
 }
 
+function ConstantTimeEq($a, $b) {
+    # Constant-time string equality. Avoids `-eq` which short-circuits on
+    # the first character mismatch and leaks length/prefix via timing.
+    # PowerShell 5.1 compatible — no FixedTimeEquals (PS 7+ only).
+    if ($null -eq $a -or $null -eq $b) { return $false }
+    if ($a.Length -ne $b.Length) { return $false }
+    $diff = 0
+    for ($i = 0; $i -lt $a.Length; $i++) {
+        $diff = $diff -bor ([int][char]$a[$i] -bxor [int][char]$b[$i])
+    }
+    return ($diff -eq 0)
+}
+
 function Test-Auth {
     param($Request)
     if (-not $Token) { return $true }
     $hdr = $Request.Headers['X-Bridge-Token']
-    return $hdr -and ($hdr -eq $Token)
+    if (-not $hdr) { return $false }
+    return (ConstantTimeEq $hdr $Token)
+}
+
+# ── Bind safety guard (audit S-07) ─────────────────────────────────────────
+# If no token is configured, refuse to bind on a network-visible prefix.
+# `https://+:port/` and `https://*:port/` both accept LAN traffic; only
+# `https://127.0.0.1:port/` (or `localhost`) is safe to run unauthenticated.
+# Prevents the previous footgun where a missing PRINT_BRIDGE_TOKEN env var
+# only emitted a console warning while still accepting unauthenticated
+# `POST /print` from anyone on the LAN.
+if (-not $Token) {
+    $isLoopback = $UrlAclPrefix -match '^https://(127\.0\.0\.1|localhost)(:|/)'
+    if (-not $isLoopback) {
+        Write-Host 'REFUSING to start: PRINT_BRIDGE_TOKEN is empty and the bridge would bind to a LAN-visible address.' -ForegroundColor Red
+        Write-Host '  Either set -Token / PRINT_BRIDGE_TOKEN, or rebind to 127.0.0.1.' -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 # ── HTTPS listener ─────────────────────────────────────────────────────────
