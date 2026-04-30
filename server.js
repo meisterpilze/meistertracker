@@ -363,15 +363,16 @@ function jsonErr(res, code, msg) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: msg }));
 }
-// Safe error response: log internals, send generic message to client for unexpected errors
+// Safe error response: log internals, send generic message to client for
+// unexpected errors. R-23: classifier lives in db.js (db.isSafeError) since
+// the allowlist is fundamentally a registry of every validator message db.js
+// emits — keeping it next to the throw sites makes drift easier to catch.
 function safeErr(res, err) {
-  const msg = err.message || '';
-  // Known validation errors from db.js are safe to expose
-  const safe = /required|invalid|must be|not found|already|duplicate|too short|too long|cannot|constraint/i.test(msg);
-  if (safe) {
+  const msg = String((err && err.message) || '');
+  if (db.isSafeError(msg)) {
     jsonErr(res, 400, msg);
   } else {
-    log('error', 'Unexpected error', { error: msg, stack: err.stack });
+    log('error', 'Unexpected error', { error: msg, stack: err && err.stack });
     jsonErr(res, 500, 'Internal server error');
   }
 }
@@ -1341,6 +1342,9 @@ setInterval(checkCertRenewal, 12 * 60 * 60 * 1000);
 // Short-lived cache for printer availability check (5 seconds)
 let _printerStatusCache = null;
 let _printerStatusCacheTime = 0;
+// R-20: cached count of stuck print-spooler jobs (Paused/Error/Blocked/etc).
+// queueStuck > 0 is a degraded signal even when the printer reports online.
+let _printerQueueStuckCache = 0;
 
 // Read the effective bridge configuration. DB values (Settings → Drucker)
 // take precedence over env vars (PRINT_BRIDGE_URL/PRINT_BRIDGE_TOKEN), so a
@@ -1445,24 +1449,35 @@ function getPrinterStatus(callback) {
           state: 'bridge_unreachable',
           name: PRINTER_NAME,
           online: false,
+          queueStuck: 0,
           bridge: cfg.url,
           error: err.message
         });
       }
       const printer = resp && resp.body && resp.body.printer;
+      // R-20: pass queueStuck through unchanged. Bridge versions that
+      // pre-date the audit will return undefined — coerce to 0 so consumers
+      // can rely on the field being a number.
+      const queueStuck = resp && resp.body && Number.isFinite(resp.body.queueStuck) ? resp.body.queueStuck : 0;
       if (resp && resp.statusCode === 200 && resp.body && resp.body.ok && printer && printer.online) {
-        return callback(null, { state: 'online', name: printer.name || PRINTER_NAME, online: true });
+        return callback(null, {
+          state: 'online',
+          name: printer.name || PRINTER_NAME,
+          online: true,
+          queueStuck
+        });
       }
       return callback(null, {
         state: 'printer_offline',
         name: (printer && printer.name) || PRINTER_NAME,
         online: false,
+        queueStuck,
         error: (resp && resp.body && resp.body.error) || null
       });
     });
   }
   if (process.platform !== 'win32') {
-    return callback(null, { state: 'no_bridge', name: PRINTER_NAME, online: false });
+    return callback(null, { state: 'no_bridge', name: PRINTER_NAME, online: false, queueStuck: 0 });
   }
   execFile(
     'powershell',
@@ -1473,9 +1488,9 @@ function getPrinterStatus(callback) {
     ],
     (err, stdout) => {
       if (err || !stdout.includes(PRINTER_NAME)) {
-        return callback(null, { state: 'local_unavailable', name: PRINTER_NAME, online: false });
+        return callback(null, { state: 'local_unavailable', name: PRINTER_NAME, online: false, queueStuck: 0 });
       }
-      callback(null, { state: 'online', name: PRINTER_NAME, online: true });
+      callback(null, { state: 'online', name: PRINTER_NAME, online: true, queueStuck: 0 });
     }
   );
 }
@@ -1488,6 +1503,7 @@ function checkPrinterAvailable(callback) {
   getPrinterStatus((err, status) => {
     const available = !err && status && status.state === 'online';
     _printerStatusCache = available;
+    _printerQueueStuckCache = status && Number.isFinite(status.queueStuck) ? status.queueStuck : 0;
     _printerStatusCacheTime = Date.now();
     callback(null, available);
   });
@@ -4967,20 +4983,38 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
     })();
 
-    // printBridge: configured flag + last-known cached printer state
+    // printBridge: configured flag + last-known cached printer state.
+    // R-20: also surface queueStuck so monitors can flag spooler stalls
+    // (paper out, jam, paused job, OfflineLogonRequired) even when the
+    // printer itself reports online.
     out.printBridge = (() => {
       try {
         const cfg = getEffectiveBridgeConfig();
+        const queueStuck = Number.isFinite(_printerQueueStuckCache) ? _printerQueueStuckCache : 0;
         return {
           configured: !!cfg,
           source: cfg ? cfg.source : null,
           lastReachable: _printerStatusCacheTime > 0 ? new Date(_printerStatusCacheTime).toISOString() : null,
-          printerOnline: _printerStatusCache === true
+          printerOnline: _printerStatusCache === true,
+          queueStuck
         };
       } catch (e) {
         return { error: e.message };
       }
     })();
+    // R-20: queueStuck > 0 is a degraded signal — paper out / jam / blocked
+    // job all sit silently in the spooler with PrinterStatus still reporting
+    // online. Only flip when the bridge is actually configured (otherwise
+    // queueStuck stays 0 and this branch never fires).
+    if (
+      out.printBridge &&
+      out.printBridge.configured &&
+      Number.isFinite(out.printBridge.queueStuck) &&
+      out.printBridge.queueStuck > 0 &&
+      out.status === 'ok'
+    ) {
+      out.status = 'degraded';
+    }
 
     // caldav: filesystem-based — count calendars + best-effort last-sync
     out.caldav = (() => {
@@ -7797,6 +7831,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Invalidate the printer-status cache so the UI sees the new state
         // immediately.
         _printerStatusCache = null;
+        _printerQueueStuckCache = 0;
         _printerStatusCacheTime = 0;
         jsonOk(res);
       } catch (err) {

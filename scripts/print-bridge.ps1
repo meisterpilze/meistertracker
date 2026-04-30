@@ -392,13 +392,50 @@ function Send-Zpl {
     }
 }
 
+function Get-StuckJobCount {
+    # R-20: PrinterStatus only distinguishes online/offline/printing/idle and
+    # does NOT surface OutOfPaper, Jammed, or stalled spooler queues. Without
+    # this check the bridge says printer.online: true while a queued job sits
+    # blocked indefinitely, the server returns 200 from /api/print, and the
+    # user sees a success toast but no physical label. Treat the queue
+    # contents as a separate degraded signal that the consumer can choose to
+    # surface as a yellow status.
+    param($PrinterName)
+    try {
+        $jobs = Get-PrintJob -PrinterName $PrinterName -ErrorAction SilentlyContinue
+        if (-not $jobs) { return 0 }
+        # JobStatus values that indicate the job won't progress without
+        # operator intervention: Paused, Error, Blocked, OfflineLogonRequired.
+        # Use -match because JobStatus can be a flag combination ("Spooling, Printing").
+        $stuck = $jobs | Where-Object { $_.JobStatus -match 'Paused|Error|Blocked|OfflineLogonRequired' }
+        return @($stuck).Count
+    } catch {
+        # Best-effort — older drivers / unsupported PS versions can throw.
+        return 0
+    }
+}
+
 function Test-PrinterOnline {
     try {
         $p = Get-Printer -Name $PrinterName -ErrorAction Stop
         # PrinterStatus 0 = Idle/OK, 3 = Offline. Treat anything but Offline as online.
-        return @{ ok = $true; printer = @{ name = $PrinterName; online = ($p.PrinterStatus -ne 'Offline'); status = "$($p.PrinterStatus)" } }
+        $queueStuck = Get-StuckJobCount -PrinterName $PrinterName
+        return @{
+            ok = $true
+            printer = @{
+                name = $PrinterName
+                online = ($p.PrinterStatus -ne 'Offline')
+                status = "$($p.PrinterStatus)"
+            }
+            queueStuck = $queueStuck
+        }
     } catch {
-        return @{ ok = $false; error = "Printer '$PrinterName' not found"; printer = @{ name = $PrinterName; online = $false } }
+        return @{
+            ok = $false
+            error = "Printer '$PrinterName' not found"
+            printer = @{ name = $PrinterName; online = $false }
+            queueStuck = 0
+        }
     }
 }
 

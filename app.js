@@ -1208,6 +1208,7 @@ const LANG = {
     'cam.scanCleared': 'Scan cleared',
     // Offline
     'offline.queued': '{n} queued',
+    'sw.scanQueueOverflow': 'Offline scan queue full ({max}). Dropped {dropped} oldest entries.',
     // Task delete
     'task.deleteTitle': 'Delete task?',
     'task.deleteMsg': 'This task will be permanently removed.',
@@ -2378,6 +2379,7 @@ const LANG = {
     'cam.scanCleared': 'Scan zur\u00fcckgesetzt',
     // Offline
     'offline.queued': '{n} in Warteschlange',
+    'sw.scanQueueOverflow': 'Offline-Scan-Warteschlange voll ({max}). {dropped} älteste Einträge verworfen.',
     // Task delete
     'task.deleteTitle': 'Aufgabe l\u00f6schen?',
     'task.deleteMsg': 'Diese Aufgabe wird unwiderruflich entfernt.',
@@ -3549,6 +3551,7 @@ const LANG = {
     'cam.scanCleared': 'Scan redefinido',
     // Offline
     'offline.queued': '{n} na fila',
+    'sw.scanQueueOverflow': 'Fila de scans offline cheia ({max}). Descartadas {dropped} entradas mais antigas.',
     // Task delete
     'task.deleteTitle': 'Apagar tarefa?',
     'task.deleteMsg': 'Esta tarefa ser\u00e1 permanentemente removida.',
@@ -16604,6 +16607,20 @@ if ('serviceWorker' in navigator) {
       try {
         if (typeof setFb === 'function') {
           setFb('err', `MOVE rejected: bag ${bag} was moved by another user. Current zone: ${cur}`);
+        }
+      } catch {
+        /* setFb not yet wired — drop silently */
+      }
+    }
+    // R-21: SW dropped the oldest scans because the offline queue hit its cap.
+    // Surface a toast so the user knows some scans were lost and can re-scan
+    // critical bags if needed before going back online.
+    if (e.data && e.data.type === 'scan-queue-overflow') {
+      const dropped = e.data.dropped || 0;
+      const max = e.data.max || 0;
+      try {
+        if (typeof setFb === 'function') {
+          setFb('err', t('sw.scanQueueOverflow', { dropped, max }));
         }
       } catch {
         /* setFb not yet wired — drop silently */
