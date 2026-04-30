@@ -226,14 +226,25 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
 }
 
 // ── MCP Server Factory ────────────────────────────────────
+// Audit S-01: `printer` may also carry `auth = { userId, role }` describing
+// the bearer token that opened this session. Destructive tools call
+// `requireAdminRole(auth)` and short-circuit with an error result when the
+// caller is not an admin. The legacy static MCP token is treated as admin
+// (preserves historical behaviour); OAuth tokens carry the user's role.
 function createMcpServer(database, onWrite, printer) {
   const server = new McpServer({
     name: 'meistertracker',
     version: '1.0.0'
   });
 
+  const auth = (printer && printer.auth) || { userId: null, role: 'admin' };
+
   function notify() {
     if (typeof onWrite === 'function') onWrite();
+  }
+
+  function requireAdminRole() {
+    return auth && auth.role === 'admin' ? null : errResult('admin role required');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -945,6 +956,8 @@ function createMcpServer(database, onWrite, printer) {
         .describe('ISO date (YYYY-MM-DD) — delete only this occurrence of a recurring event')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         const ev = db.getCalendarEventById(database, params.id);
         if (!ev) return errResult('event not found: ' + params.id);
@@ -1093,6 +1106,8 @@ function createMcpServer(database, onWrite, printer) {
       ref: z.string().optional().describe('Reference note (e.g. supplier name, batch ID)')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         const newStock = db.applyInventoryDelta(
           database,
@@ -1257,6 +1272,8 @@ function createMcpServer(database, onWrite, printer) {
       id: z.number().describe('Pilzsorte id')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         const removed = db.deleteMushroomStrain(database, params.id);
         if (!removed) return errResult('Pilzsorte not found: ' + params.id);
@@ -1289,6 +1306,8 @@ function createMcpServer(database, onWrite, printer) {
       order: z.array(z.string()).optional().describe('Array of zone IDs in desired order (for reorder)')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         switch (params.action) {
           case 'create': {
@@ -1341,6 +1360,8 @@ function createMcpServer(database, onWrite, printer) {
       zoneId: z.string().optional().describe('Zone ID (required for create)')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         switch (params.action) {
           case 'create': {
@@ -1413,6 +1434,8 @@ function createMcpServer(database, onWrite, printer) {
       confirm: z.boolean().optional().describe('Must be true to confirm deletion')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         if (params.confirm !== true) {
           return errResult(
@@ -1462,6 +1485,8 @@ function createMcpServer(database, onWrite, printer) {
       confirm: z.boolean().optional().describe('Must be true to confirm deletion')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         if (params.confirm !== true) {
           return errResult(
@@ -1560,6 +1585,11 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
+      // 'list' is read-only and could be allowed for everyone, but the
+      // audit guidance lists `manage_assets` as admin-only — financial
+      // records should not leak even read-only to workers.
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         switch (params.action) {
           case 'list':
@@ -1630,6 +1660,8 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         switch (params.action) {
           case 'list':
@@ -1732,6 +1764,8 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         switch (params.action) {
           case 'create': {
