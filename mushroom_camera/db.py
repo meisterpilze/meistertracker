@@ -123,6 +123,49 @@ CREATE TABLE IF NOT EXISTS camera_fruiting_ready_flags (
 );
 CREATE INDEX IF NOT EXISTS idx_cam_frf_bag      ON camera_fruiting_ready_flags(bag_id);
 CREATE INDEX IF NOT EXISTS idx_cam_frf_resolved ON camera_fruiting_ready_flags(resolved_at);
+
+-- Contamination training labels, built automatically from contamination_reports.
+-- is_clean=1 rows are healthy samples; is_clean=0 rows are contamination examples.
+-- contam_type_id links to the existing contamination_types table.
+-- Once a model is trained, model_* columns store its prediction for comparison.
+CREATE TABLE IF NOT EXISTS camera_contamination_labels (
+  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+  report_id               INTEGER REFERENCES contamination_reports(id) ON DELETE CASCADE,
+  measurement_id          INTEGER REFERENCES camera_measurements(id) ON DELETE SET NULL,
+  frame_path              TEXT,
+  crop_x                  INTEGER DEFAULT 0,
+  crop_y                  INTEGER DEFAULT 0,
+  crop_w                  INTEGER DEFAULT 0,
+  crop_h                  INTEGER DEFAULT 0,
+  contam_type_id          INTEGER REFERENCES contamination_types(id) ON DELETE SET NULL,
+  is_clean                INTEGER NOT NULL DEFAULT 0,
+  labelled_at             TEXT NOT NULL,
+  labelled_by             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  model_predicted_type_id INTEGER REFERENCES contamination_types(id) ON DELETE SET NULL,
+  model_confidence        REAL,
+  model_run_at            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cam_lbl_report ON camera_contamination_labels(report_id);
+CREATE INDEX IF NOT EXISTS idx_cam_lbl_type   ON camera_contamination_labels(contam_type_id);
+CREATE INDEX IF NOT EXISTS idx_cam_lbl_clean  ON camera_contamination_labels(is_clean);
+
+-- Automated contamination detections produced once the model is trained.
+-- reviewed=0 means the operator hasn't confirmed or dismissed it yet.
+CREATE TABLE IF NOT EXISTS camera_contamination_detections (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  detected_at    TEXT NOT NULL,
+  measurement_id INTEGER NOT NULL REFERENCES camera_measurements(id) ON DELETE CASCADE,
+  bag_id         TEXT NOT NULL REFERENCES bags(bag_id) ON DELETE CASCADE,
+  contam_type_id INTEGER REFERENCES contamination_types(id) ON DELETE SET NULL,
+  confidence     REAL NOT NULL,
+  reviewed       INTEGER DEFAULT 0,
+  confirmed      INTEGER,                -- 1=confirmed contam, 0=false positive
+  reviewed_at    TEXT,
+  reviewed_by    INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cam_det_bag      ON camera_contamination_detections(bag_id);
+CREATE INDEX IF NOT EXISTS idx_cam_det_time     ON camera_contamination_detections(detected_at);
+CREATE INDEX IF NOT EXISTS idx_cam_det_reviewed ON camera_contamination_detections(reviewed);
 """
 
 
@@ -498,3 +541,54 @@ def create_notification(
         (user_id, type_, title, body, link_type, link_id, _now()),
     )
     con.commit()
+
+
+# ---------------------------------------------------------------------------
+# Camera visibility / occlusion tracking
+# ---------------------------------------------------------------------------
+
+def get_unseen_bags(con: sqlite3.Connection, role: str, hours: int = 24) -> list:
+    """
+    Return bags in zones of the given role that haven't appeared in any camera
+    frame for more than `hours` hours.  These are likely occluded by other bags
+    and need a physical check.
+    """
+    return con.execute(
+        """
+        SELECT b.bag_id, b.batch_id, ba.species,
+               MAX(cm.captured_at) AS last_seen_at
+        FROM bags b
+        JOIN batches ba ON b.batch_id = ba.batch_id
+        LEFT JOIN camera_measurements cm ON cm.bag_id = b.bag_id
+        WHERE (
+            SELECT "to"
+            FROM scan_log
+            WHERE bag = b.bag_id AND "to" IS NOT NULL
+            ORDER BY id DESC LIMIT 1
+        ) IN (SELECT id FROM zones WHERE role = ?)
+        GROUP BY b.bag_id
+        HAVING last_seen_at IS NULL
+           OR last_seen_at < datetime('now', ? || ' hours')
+        ORDER BY last_seen_at ASC NULLS FIRST
+        """,
+        (role, f"-{hours}"),
+    ).fetchall()
+
+
+def insert_contamination_detection(
+    con: sqlite3.Connection,
+    *,
+    detected_at: str,
+    measurement_id: int,
+    bag_id: str,
+    contam_type_id: int | None,
+    confidence: float,
+) -> int:
+    cur = con.execute(
+        """INSERT INTO camera_contamination_detections
+           (detected_at, measurement_id, bag_id, contam_type_id, confidence)
+           VALUES(?,?,?,?,?)""",
+        (detected_at, measurement_id, bag_id, contam_type_id, confidence),
+    )
+    con.commit()
+    return cur.lastrowid

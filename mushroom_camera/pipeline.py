@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 from . import config as cfg
-from . import capture, qr_reader, detector, analyser, colonisation
+from . import capture, qr_reader, detector, analyser, colonisation, labeller
 from . import db as camdb
 
 log = logging.getLogger(__name__)
@@ -45,7 +45,36 @@ def run_cycle(con) -> None:
             _process_fruiting_camera(con, cam_id, cam_cfg, fruiting_bags, captured_at)
 
     _learn_from_new_harvests(con)
+    _sync_contamination_labels(con)
+    _check_unseen_bags(con)
     log.info("Camera cycle complete.")
+
+
+def _sync_contamination_labels(con) -> None:
+    """Pick up any new contamination reports and tag nearby frames as training data."""
+    new_contam = labeller.sync_labels_from_reports(con, cfg.INCUBATION_BAG_RADIUS_PX)
+    new_clean  = labeller.add_clean_labels(con, cfg.INCUBATION_BAG_RADIUS_PX)
+    if new_contam or new_clean:
+        stats = labeller.label_stats(con)
+        log.info("Label dataset: %s", stats)
+
+
+def _check_unseen_bags(con) -> None:
+    """Notify if bags in incubation or fruiting haven't been seen for >24 h."""
+    for role in ("incubation", "fruiting"):
+        unseen = camdb.get_unseen_bags(con, role, hours=cfg.UNSEEN_BAG_ALERT_HOURS)
+        for row in unseen:
+            last = row["last_seen_at"] or "never"
+            log.warning("Bag %s (%s) not seen for >%dh (last: %s)", row["bag_id"], role, cfg.UNSEEN_BAG_ALERT_HOURS, last)
+            camdb.create_notification(
+                con,
+                user_id=cfg.NOTIFY_USER_ID,
+                type_="camera_bag_not_visible",
+                title=f"Bag {row['bag_id']} not visible",
+                body=f"No camera reading for >{cfg.UNSEEN_BAG_ALERT_HOURS}h — may be occluded. Last seen: {last[:10] if last != 'never' else 'never'}.",
+                link_type="bag",
+                link_id=row["bag_id"],
+            )
 
 
 def _process_incubation_camera(

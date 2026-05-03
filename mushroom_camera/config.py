@@ -78,6 +78,16 @@ INCUBATION_BAG_RADIUS_PX = int(os.getenv("INCUBATION_BAG_RADIUS_PX", "150"))
 COLONISATION_SCORE_THRESHOLD  = float(os.getenv("COLONISATION_SCORE_THRESHOLD", "0.85"))
 COLONISATION_MIN_FRACTION     = float(os.getenv("COLONISATION_MIN_FRACTION", "0.70"))
 
+# Alert when a bag in incubation or fruiting hasn't appeared in any camera
+# frame for this many hours (likely occluded by other bags in a dense rack).
+UNSEEN_BAG_ALERT_HOURS = int(os.getenv("UNSEEN_BAG_ALERT_HOURS", "24"))
+
+# Contamination classifier (optional — only used once you have trained a model).
+# Set to a path like "/opt/models/contam_classifier.pt" after training.
+# Leave empty to skip automated contamination screening.
+CONTAM_MODEL = os.getenv("CONTAM_MODEL", "")
+CONTAM_CONF_THRESHOLD = float(os.getenv("CONTAM_CONF_THRESHOLD", "0.75"))
+
 # MeisterTracker user_id that receives in-app harvest/pinning notifications.
 # 1 is the first created user (usually the admin).
 NOTIFY_USER_ID = int(os.getenv("NOTIFY_USER_ID", "1"))
