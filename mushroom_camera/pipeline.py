@@ -1,13 +1,13 @@
 """
-Hourly camera pipeline: capture → QR decode → detect → analyse → persist.
+Hourly camera pipeline: capture → QR decode → detect/analyse → persist.
 
-run_cycle() is the top-level function called by the scheduler.  It:
-  1. Finds all bags currently in fruiting zones.
-  2. For each enabled camera, grabs a frame.
-  3. Decodes QR codes to identify which bags are visible.
-  4. Runs YOLO detection and attributes detections to nearby QR code positions.
-  5. Writes measurements, and raises pinning / harvest-flag events as needed.
-  6. After harvest events, updates the per-strain learned model.
+run_cycle() handles two separate zone types in one pass:
+
+Fruiting zones  — YOLOv8 mushroom detection, cap diameter + color, pinning
+                  events, growth-stall harvest flags, strain model learning.
+
+Incubation zones — HSV colonisation fraction, readiness score, fruiting-ready
+                   flags when score exceeds threshold.  No YOLO required.
 """
 import logging
 import os
@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 from . import config as cfg
-from . import capture, qr_reader, detector, analyser
+from . import capture, qr_reader, detector, analyser, colonisation, labeller
 from . import db as camdb
 
 log = logging.getLogger(__name__)
@@ -27,22 +27,144 @@ def run_cycle(con) -> None:
     captured_at = datetime.now(timezone.utc).isoformat()
     log.info("Camera cycle starting at %s", captured_at)
 
-    fruiting_bags = {row["bag_id"]: dict(row) for row in camdb.get_fruiting_bags(con)}
-    if not fruiting_bags:
-        log.info("No bags in fruiting zones — skipping cycle.")
+    fruiting_bags   = {row["bag_id"]: dict(row) for row in camdb.get_fruiting_bags(con)}
+    incubating_bags = {row["bag_id"]: dict(row) for row in camdb.get_incubating_bags(con)}
+
+    if not fruiting_bags and not incubating_bags:
+        log.info("No bags in fruiting or incubation zones — skipping cycle.")
         return
 
     for cam_cfg in cfg.CAMERAS:
         cam_id = camdb.upsert_camera(
             con, cam_cfg["name"], cam_cfg["rtsp_url"], cam_cfg.get("zone_id")
         )
-        _process_camera(con, cam_id, cam_cfg, fruiting_bags, captured_at)
+        zone_role = cam_cfg.get("zone_role", "fruiting")   # add zone_role to CAMERAS config
+        if zone_role == "incubation":
+            _process_incubation_camera(con, cam_id, cam_cfg, incubating_bags, captured_at)
+        else:
+            _process_fruiting_camera(con, cam_id, cam_cfg, fruiting_bags, captured_at)
 
     _learn_from_new_harvests(con)
+    _sync_contamination_labels(con)
+    _check_unseen_bags(con)
     log.info("Camera cycle complete.")
 
 
-def _process_camera(con, cam_id: int, cam_cfg: dict, fruiting_bags: dict, captured_at: str) -> None:
+def _sync_contamination_labels(con) -> None:
+    """Pick up any new contamination reports and tag nearby frames as training data."""
+    new_contam = labeller.sync_labels_from_reports(con, cfg.INCUBATION_BAG_RADIUS_PX)
+    new_clean  = labeller.add_clean_labels(con, cfg.INCUBATION_BAG_RADIUS_PX)
+    if new_contam or new_clean:
+        stats = labeller.label_stats(con)
+        log.info("Label dataset: %s", stats)
+
+
+def _check_unseen_bags(con) -> None:
+    """Notify if bags in incubation or fruiting haven't been seen for >24 h."""
+    for role in ("incubation", "fruiting"):
+        unseen = camdb.get_unseen_bags(con, role, hours=cfg.UNSEEN_BAG_ALERT_HOURS)
+        for row in unseen:
+            last = row["last_seen_at"] or "never"
+            log.warning("Bag %s (%s) not seen for >%dh (last: %s)", row["bag_id"], role, cfg.UNSEEN_BAG_ALERT_HOURS, last)
+            camdb.notify_admins(
+                con,
+                type_="camera_bag_not_visible",
+                title=f"Bag {row['bag_id']} not visible",
+                body=f"No camera reading for >{cfg.UNSEEN_BAG_ALERT_HOURS}h — may be occluded. Last seen: {last[:10] if last != 'never' else 'never'}.",
+                link_type="bag",
+                link_id=row["bag_id"],
+            )
+
+
+def _process_incubation_camera(
+    con, cam_id: int, cam_cfg: dict, incubating_bags: dict, captured_at: str
+) -> None:
+    frame = capture.grab_frame(cam_cfg["rtsp_url"])
+    if frame is None:
+        log.warning("No frame from incubation camera '%s'", cam_cfg["name"])
+        return
+
+    qr_results = qr_reader.decode_qr_codes(frame)
+    if not qr_results:
+        log.info("Incubation camera '%s': no QR codes visible.", cam_cfg["name"])
+
+    bag_radius_px = cfg.INCUBATION_BAG_RADIUS_PX
+
+    for qr in qr_results:
+        bag_id = camdb.lookup_bag_by_barcode(con, qr.barcode)
+        if bag_id is None or bag_id not in incubating_bags:
+            continue
+
+        bag_meta     = incubating_bags[bag_id]
+        batch_id     = bag_meta["batch_id"]
+        expected_days = bag_meta.get("expected_days")
+
+        # Elapsed days since batch was created
+        elapsed_days: float | None = None
+        if bag_meta.get("batch_created"):
+            try:
+                created_dt = datetime.fromisoformat(bag_meta["batch_created"])
+                now_dt     = datetime.fromisoformat(captured_at)
+                elapsed_days = (now_dt - created_dt).total_seconds() / 86400.0
+            except Exception:
+                pass
+
+        col_frac = colonisation.colonisation_fraction(frame, qr.cx, qr.cy, bag_radius_px)
+        score    = colonisation.readiness_score(
+            col_frac,
+            elapsed_days or 0.0,
+            expected_days or 0,
+        )
+
+        frame_path = _maybe_save_frame(frame, bag_id, captured_at)
+        camdb.insert_incubation_snapshot(
+            con,
+            camera_id=cam_id,
+            bag_id=bag_id,
+            batch_id=batch_id,
+            captured_at=captured_at,
+            colonisation_frac=col_frac,
+            readiness_score=score,
+            elapsed_days=elapsed_days,
+            expected_days=expected_days,
+            frame_path=frame_path,
+        )
+        log.info(
+            "Incubation bag %s: col=%.0f%% score=%.2f elapsed=%.1fd",
+            bag_id, col_frac * 100, score, elapsed_days or 0,
+        )
+
+        if colonisation.is_ready_to_fruit(
+            score, col_frac,
+            score_threshold=cfg.COLONISATION_SCORE_THRESHOLD,
+            min_colonisation=cfg.COLONISATION_MIN_FRACTION,
+        ) and camdb.get_open_fruiting_ready_flag(con, bag_id) is None:
+            _raise_fruiting_ready_flag(con, bag_id, batch_id, captured_at, score, elapsed_days, expected_days)
+
+
+def _raise_fruiting_ready_flag(con, bag_id, batch_id, captured_at, score, elapsed_days, expected_days):
+    camdb.insert_fruiting_ready_flag(
+        con,
+        bag_id=bag_id,
+        batch_id=batch_id,
+        flagged_at=captured_at,
+        peak_score=score,
+    )
+    body_parts = [f"Visible colonisation ≥ 70 %."]
+    if elapsed_days is not None and expected_days:
+        body_parts.append(f"Day {elapsed_days:.0f} of {expected_days}.")
+    camdb.notify_admins(
+        con,
+        type_="camera_fruiting_ready",
+        title=f"Ready to fruit — bag {bag_id}",
+        body=" ".join(body_parts),
+        link_type="bag",
+        link_id=bag_id,
+    )
+    log.info("Fruiting-ready flag raised for bag %s (score=%.2f).", bag_id, score)
+
+
+def _process_fruiting_camera(con, cam_id: int, cam_cfg: dict, fruiting_bags: dict, captured_at: str) -> None:
     frame = capture.grab_frame(cam_cfg["rtsp_url"])
     if frame is None:
         log.warning("No frame from camera '%s'", cam_cfg["name"])
@@ -117,9 +239,8 @@ def _handle_pinning(con, bag_id, batch_id, strain_id, detections, frame_area, ca
             detected_at=captured_at,
             measurement_id=meas_id,
         )
-        camdb.create_notification(
+        camdb.notify_admins(
             con,
-            user_id=cfg.NOTIFY_USER_ID,
             type_="camera_pinning",
             title=f"Pins detected — bag {bag_id}",
             body=f"First pins spotted on {captured_at[:10]}. Check again next reading to confirm.",
@@ -130,9 +251,8 @@ def _handle_pinning(con, bag_id, batch_id, strain_id, detections, frame_area, ca
     else:
         camdb.confirm_pinning_event(con, pending["id"])
         log.info("Pinning confirmed on bag %s.", bag_id)
-        camdb.create_notification(
+        camdb.notify_admins(
             con,
-            user_id=cfg.NOTIFY_USER_ID,
             type_="camera_pinning_confirmed",
             title=f"Pinning confirmed — bag {bag_id}",
             body=f"Pins confirmed on {captured_at[:10]}.",
@@ -191,9 +311,8 @@ def _handle_harvest_flag(con, bag_id, batch_id, strain_id, captured_at):
     if predicted_at:
         body_parts.append(f"Predicted harvest: {predicted_at[:10]}.")
 
-    camdb.create_notification(
+    camdb.notify_admins(
         con,
-        user_id=cfg.NOTIFY_USER_ID,
         type_="camera_harvest_ready",
         title=f"Ready to harvest — bag {bag_id}",
         body=" ".join(body_parts),

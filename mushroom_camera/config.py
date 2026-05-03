@@ -9,18 +9,31 @@ import os
 # The Node.js app writes here; we write to our own tables in the same file.
 DB_PATH = os.getenv("MEISTERTRACKER_DB", "/opt/meistertracker/data/meistertracker.db")
 
-# One entry per physical camera.  zone_id must match an id in the zones table.
+# One entry per physical camera.
+#   zone_id   — must match an id in the zones table
+#   zone_role — "fruiting" (default) or "incubation"
+#               Fruiting cameras run YOLOv8 mushroom detection.
+#               Incubation cameras run HSV colonisation analysis only (no YOLO).
 CAMERAS = [
     {
-        "name": "Tent Camera 1",
+        "name": "Fruiting Camera 1",
         "rtsp_url": os.getenv("CAM1_RTSP", "rtsp://admin:password@192.168.1.10/stream1"),
         "zone_id": "TENT1",
+        "zone_role": "fruiting",
     },
     {
-        "name": "Tent Camera 2",
+        "name": "Fruiting Camera 2",
         "rtsp_url": os.getenv("CAM2_RTSP", "rtsp://admin:password@192.168.1.11/stream1"),
         "zone_id": "TENT2",
+        "zone_role": "fruiting",
     },
+    # Uncomment and adjust when you add an incubation camera:
+    # {
+    #     "name": "Incubation Camera",
+    #     "rtsp_url": os.getenv("CAM3_RTSP", "rtsp://admin:password@192.168.1.12/stream1"),
+    #     "zone_id": "INC",
+    #     "zone_role": "incubation",
+    # },
 ]
 
 # YOLOv8 model weights file.  Set to a local path after fine-tuning on
@@ -52,6 +65,25 @@ QR_ASSIGN_RADIUS_PX = int(os.getenv("QR_ASSIGN_RADIUS_PX", "400"))
 # Directory for saving annotated frame thumbnails.  Set to empty string to skip.
 FRAME_SAVE_DIR = os.getenv("FRAME_SAVE_DIR", "/opt/meistertracker/data/camera_frames")
 
-# MeisterTracker user_id that receives in-app harvest/pinning notifications.
-# 1 is the first created user (usually the admin).
-NOTIFY_USER_ID = int(os.getenv("NOTIFY_USER_ID", "1"))
+# Incubation colonisation analysis:
+#   Radius (in pixels) of the circular region around each QR code centroid
+#   that is analysed for white coverage.  Set to roughly half the bag face
+#   width in pixels at your camera distance.
+INCUBATION_BAG_RADIUS_PX = int(os.getenv("INCUBATION_BAG_RADIUS_PX", "150"))
+
+# Readiness thresholds — flag a bag as ready to fruit when BOTH conditions hold:
+#   composite score >= COLONISATION_SCORE_THRESHOLD
+#   raw colonisation fraction >= COLONISATION_MIN_FRACTION
+# These can be tightened if you get false positives.
+COLONISATION_SCORE_THRESHOLD  = float(os.getenv("COLONISATION_SCORE_THRESHOLD", "0.85"))
+COLONISATION_MIN_FRACTION     = float(os.getenv("COLONISATION_MIN_FRACTION", "0.70"))
+
+# Alert when a bag in incubation or fruiting hasn't appeared in any camera
+# frame for this many hours (likely occluded by other bags in a dense rack).
+UNSEEN_BAG_ALERT_HOURS = int(os.getenv("UNSEEN_BAG_ALERT_HOURS", "24"))
+
+# Contamination classifier (optional — only used once you have trained a model).
+# Set to a path like "/opt/models/contam_classifier.pt" after training.
+# Leave empty to skip automated contamination screening.
+CONTAM_MODEL = os.getenv("CONTAM_MODEL", "")
+CONTAM_CONF_THRESHOLD = float(os.getenv("CONTAM_CONF_THRESHOLD", "0.75"))
