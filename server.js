@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
 const { createMcpServer } = require('./mcp-server.js');
@@ -255,6 +256,86 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml'
 };
+
+// ── P-01: Pre-compressed static assets ─────────────────────────
+// Pre-gzip + pre-brotli text/JS/CSS/HTML/JSON assets at startup so each
+// request just streams the cached bytes. Skip images / favicon / PDFs:
+// already-compressed payloads can't be gzipped meaningfully and brotli
+// makes them slightly larger. Recompresses only when the source mtime
+// is newer than the cached .gz/.br (avoid touching disk on every boot).
+const COMPRESSIBLE_EXT = new Set(['.html', '.js', '.css', '.json', '.svg']);
+function precompressOne(file) {
+  if (!fs.existsSync(file)) return;
+  const ext = path.extname(file).toLowerCase();
+  if (!COMPRESSIBLE_EXT.has(ext)) return;
+  const stat = fs.statSync(file);
+  const data = fs.readFileSync(file);
+  // gzip
+  const gzPath = file + '.gz';
+  const gzStale = !fs.existsSync(gzPath) || fs.statSync(gzPath).mtimeMs < stat.mtimeMs;
+  if (gzStale) {
+    try {
+      fs.writeFileSync(gzPath, zlib.gzipSync(data, { level: 9 }));
+    } catch (e) {
+      log('warn', 'gzip precompress failed', { file, error: e.message });
+    }
+  }
+  // brotli (Node 11+)
+  if (typeof zlib.brotliCompressSync === 'function') {
+    const brPath = file + '.br';
+    const brStale = !fs.existsSync(brPath) || fs.statSync(brPath).mtimeMs < stat.mtimeMs;
+    if (brStale) {
+      try {
+        fs.writeFileSync(
+          brPath,
+          zlib.brotliCompressSync(data, {
+            params: {
+              [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+              [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length
+            }
+          })
+        );
+      } catch (e) {
+        log('warn', 'brotli precompress failed', { file, error: e.message });
+      }
+    }
+  }
+}
+function precompressStaticAssets() {
+  const root = DIR;
+  const files = ['app.js', 'styles.css', 'index.html', 'login.html', 'login.js', 'manifest.json'];
+  for (const f of files) precompressOne(path.join(root, f));
+  // lib/* — recurse one level
+  const libDir = path.join(root, 'lib');
+  if (fs.existsSync(libDir)) {
+    for (const entry of fs.readdirSync(libDir)) {
+      if (entry.endsWith('.gz') || entry.endsWith('.br')) continue;
+      precompressOne(path.join(libDir, entry));
+    }
+  }
+  // lang/* — pre-compress the per-locale files (added by P-03)
+  const langDir = path.join(root, 'lang');
+  if (fs.existsSync(langDir)) {
+    for (const entry of fs.readdirSync(langDir)) {
+      if (entry.endsWith('.gz') || entry.endsWith('.br')) continue;
+      precompressOne(path.join(langDir, entry));
+    }
+  }
+}
+// Pick the best encoding based on Accept-Encoding. Returns { encoding, path }
+// or null if the client doesn't accept any pre-compressed variant or the
+// compressed file is missing on disk.
+function pickEncoding(acceptEncoding, filePath) {
+  if (!acceptEncoding) return null;
+  const ae = String(acceptEncoding).toLowerCase();
+  if (ae.includes('br') && fs.existsSync(filePath + '.br')) {
+    return { encoding: 'br', path: filePath + '.br' };
+  }
+  if (ae.includes('gzip') && fs.existsSync(filePath + '.gz')) {
+    return { encoding: 'gzip', path: filePath + '.gz' };
+  }
+  return null;
+}
 
 function getLocalIP() {
   for (const ifaces of Object.values(os.networkInterfaces()))
@@ -5121,17 +5202,41 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/data
   if (req.method === 'GET' && url === '/api/data') {
+    // P-04: ETag short-circuit. The DB already maintains a monotonic
+    // data_version counter (db.incrementDataVersion is fired on every write).
+    // We expose it as ETag "v<n>" and honor If-None-Match so phones polling
+    // every 30 s skip the entire readAll + JSON.stringify when nothing changed.
+    // The notification unread count is per-user and not part of data_version,
+    // so we mix the user_id and the unread count into the ETag to keep it
+    // accurate per client. (Otherwise a notification arriving for user A
+    // would be missed by user B's still-cached response.)
+    let unread = 0;
+    try {
+      unread = db.countUnreadNotifications(database, req.authUser.user_id);
+    } catch {
+      /* meta absent — fall through to 0 */
+    }
+    let version = 0;
+    try {
+      version = db.getDataVersion(database);
+    } catch {
+      /* meta absent — fall through to 0 */
+    }
+    const etag = '"v' + version + '-u' + (req.authUser.user_id || 0) + '-n' + unread + '"';
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ETag: etag, 'Cache-Control': 'private, no-cache' });
+      res.end();
+      return;
+    }
     const payload = readData();
     // Per-user unread notification count so the bell badge can update
     // on every sync without a separate request.
-    try {
-      payload.notifications = {
-        unread: db.countUnreadNotifications(database, req.authUser.user_id)
-      };
-    } catch {
-      payload.notifications = { unread: 0 };
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    payload.notifications = { unread };
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      ETag: etag,
+      'Cache-Control': 'private, no-cache'
+    });
     res.end(JSON.stringify(payload));
     return;
   }
@@ -7900,6 +8005,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   else if (url === '/sw.js') filePath = path.join(DIR, 'sw.js');
   else if (url === '/manifest.json') filePath = path.join(DIR, 'manifest.json');
   else if (url.startsWith('/lib/')) filePath = path.join(DIR, 'lib', path.basename(url));
+  else if (url.startsWith('/lang/') && /^\/lang\/[a-zA-Z-]+\.js$/.test(url))
+    filePath = path.join(DIR, 'lang', path.basename(url));
   else if (url.match(/^\/(icon-\d+\.png|favicon\.ico|icon\.svg)$/)) filePath = path.join(DIR, url.slice(1));
   else {
     res.writeHead(404);
@@ -7915,27 +8022,58 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  fs.readFile(filePath, (err, data) => {
+  const ext = path.extname(filePath).toLowerCase();
+  // P-01: serve pre-compressed variant when client accepts it. Skip images
+  // (already compressed) and any extension we didn't precompute (e.g. .ico).
+  const acceptEncoding = req.headers['accept-encoding'];
+  const compressible = COMPRESSIBLE_EXT.has(ext);
+  const picked = compressible ? pickEncoding(acceptEncoding, filePath) : null;
+  const sendPath = picked ? picked.path : filePath;
+
+  fs.readFile(sendPath, (err, data) => {
     if (err) {
+      // Compressed file disappeared mid-flight — fall back to raw
+      if (picked) {
+        fs.readFile(filePath, (err2, raw) => {
+          if (err2) {
+            res.writeHead(404);
+            res.end('Not found');
+            return;
+          }
+          writeStaticResponse(res, raw, filePath, ext, url, null);
+        });
+        return;
+      }
       res.writeHead(404);
       res.end('Not found');
       return;
     }
-    const ext = path.extname(filePath);
-    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
-    // Cache immutable vendor libs aggressively; cache HTML/CSS/SW short-term
-    if (url.startsWith('/lib/')) {
-      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
-    } else if (ext === '.png' || ext === '.ico' || ext === '.svg') {
-      headers['Cache-Control'] = 'public, max-age=86400';
-    } else if (ext === '.css' || ext === '.js') {
-      headers['Cache-Control'] = 'public, max-age=300';
-    } else {
-      headers['Cache-Control'] = 'no-cache';
-    }
-    res.writeHead(200, headers);
-    res.end(data);
+    writeStaticResponse(res, data, filePath, ext, url, picked && picked.encoding);
   });
+}
+
+function writeStaticResponse(res, data, filePath, ext, url, encoding) {
+  const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+  // Cache immutable vendor libs and per-locale lang files aggressively;
+  // cache HTML/CSS/SW short-term.
+  if (url.startsWith('/lib/') || url.startsWith('/lang/')) {
+    headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+  } else if (ext === '.png' || ext === '.ico' || ext === '.svg') {
+    headers['Cache-Control'] = 'public, max-age=86400';
+  } else if (ext === '.css' || ext === '.js') {
+    headers['Cache-Control'] = 'public, max-age=300';
+  } else {
+    headers['Cache-Control'] = 'no-cache';
+  }
+  // Vary on Accept-Encoding so caches don't mix gzip / br / raw responses.
+  if (COMPRESSIBLE_EXT.has(ext)) {
+    headers['Vary'] = 'Accept-Encoding';
+  }
+  if (encoding) {
+    headers['Content-Encoding'] = encoding;
+  }
+  res.writeHead(200, headers);
+  res.end(data);
 }
 
 // ── TLS HOT-RELOAD ──────────────────────────────────────────
@@ -7949,6 +8087,15 @@ function reloadTlsCerts() {
   } catch (e) {
     log('error', 'Failed to reload TLS certificates', { error: e.message });
   }
+}
+
+// P-01: pre-compress static assets at startup (gzip + brotli) so each
+// request just streams cached bytes — no per-request CPU spent on zlib.
+try {
+  precompressStaticAssets();
+  log('info', 'Static asset precompression complete');
+} catch (e) {
+  log('warn', 'Static asset precompression failed', { error: e.message });
 }
 
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──

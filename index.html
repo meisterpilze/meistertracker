@@ -11,10 +11,14 @@
     <meta name="apple-mobile-web-app-title" content="Meisterpilze" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="stylesheet" href="/styles.css" />
-    <script src="/lib/jsbarcode.min.js" defer></script>
-    <script src="/lib/qrcode.min.js" defer></script>
-    <script src="/lib/chart.min.js" defer></script>
-    <script src="/lib/html5-qrcode.min.js" defer></script>
+    <!-- P-02: vendor libs deferred until idle. The four libs total ~660 KB raw
+         (~195 KB gzip) and are only used in specific flows (camera scanner,
+         dashboard charts, label print/preview). Loading them eagerly with
+         <script defer> still has them parse + compile on every page load,
+         even on phones that just open the dashboard. We injection-load them
+         after DOMContentLoaded + idle so the first paint isn't blocked.
+         A single _vendorLibsReady promise lets the few callers that hit
+         these libs await readiness — see app.js loadVendorLibs(). -->
   </head>
   <body>
     <!-- Add bags modal -->

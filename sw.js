@@ -1,7 +1,7 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meisterpilze-v19';
+const CACHE = 'meisterpilze-v20';
 const ASSETS = [
   '/',
   '/styles.css',
@@ -12,10 +12,17 @@ const ASSETS = [
   // Vendor libs — pre-cached so the scanner and dashboard chart work on first
   // offline navigation (sw fetch handler is network-first, so without explicit
   // pre-caching these wouldn't be in the cache until they'd been fetched once).
+  // P-02: app.js no longer eager-loads these via <script> tags; the in-app
+  // loadVendorLibs() helper injects them on demand. They stay in the SW
+  // pre-cache so the first offline use of the scanner / charts / labels
+  // still finds them.
   '/lib/jsbarcode.min.js',
   '/lib/qrcode.min.js',
   '/lib/chart.min.js',
-  '/lib/html5-qrcode.min.js'
+  '/lib/html5-qrcode.min.js',
+  // P-03: per-locale language files. Pre-cache the default 'de' so first
+  // load offline still has translations; en/pt are fetched on demand.
+  '/lang/de.js'
 ];
 
 // ── IndexedDB offline queues ────────────────────────────────
