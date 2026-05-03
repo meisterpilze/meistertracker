@@ -30,3 +30,7 @@ watchdog-error.log
 
 # Claude Code
 .claude/
+
+# Pre-compressed static asset variants (regenerated on server startup)
+*.gz
+*.br
