@@ -1510,6 +1510,64 @@ function incrementDataVersion(db) {
   return v;
 }
 
+// ── P-06: Bag-zone cache ────────────────────────────────────
+// snapshotDailyKPIs and getProductionPipeline both used to do a full
+// `SCAN scan_log` to derive the per-bag current zone, then iterate the
+// rows in JS to derive zone counts. At 50K scans that's ~80 ms per
+// snapshot blocking the writer.
+//
+// We maintain a process-lifetime in-memory map (bag -> zone_id) that we
+// update incrementally on each scan_log insert. The cache is rebuilt
+// once on first access (lazy) by reading scan_log once; thereafter every
+// write path that inserts into scan_log calls applyScanEntryToBagZoneCache
+// with the new entry, so reads are O(1).
+//
+// Cache key = the database object. We keep a WeakMap so multiple Database
+// instances (e.g. in tests) don't cross-contaminate.
+const _bagZoneCacheByDb = new WeakMap();
+
+function _readBagZoneFromDb(db) {
+  const map = new Map();
+  const stmt = db.prepare('SELECT action, bag, "to" FROM scan_log ORDER BY id');
+  for (const e of stmt.iterate()) {
+    if (!e.bag) continue;
+    const toZ = e.to ? e.to.split(':')[0] : null;
+    if (e.action === 'ADD' && toZ) map.set(e.bag, toZ);
+    else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZ) map.set(e.bag, toZ);
+    else if (e.action === 'REMOVE') map.delete(e.bag);
+  }
+  return map;
+}
+
+/** Get the bag→zone-id map for `db`. Builds once, then returned by
+ * reference — DO NOT mutate from outside the helpers below. */
+function getBagZoneMap(db) {
+  let cached = _bagZoneCacheByDb.get(db);
+  if (!cached) {
+    cached = _readBagZoneFromDb(db);
+    _bagZoneCacheByDb.set(db, cached);
+  }
+  return cached;
+}
+
+/** Apply a single scan_log entry to the cache (incremental update path).
+ * Called from every write site that inserts into scan_log so consumers
+ * never have to re-scan the table. */
+function applyScanEntryToBagZoneCache(db, entry) {
+  const cached = _bagZoneCacheByDb.get(db);
+  if (!cached || !entry || !entry.bag) return; // not built yet — first read will build it
+  const toZ = entry.to ? entry.to.split(':')[0] : null;
+  if (entry.action === 'ADD' && toZ) cached.set(entry.bag, toZ);
+  else if ((entry.action === 'MOVE' || entry.action === 'MOVE_BATCH') && toZ) cached.set(entry.bag, toZ);
+  else if (entry.action === 'REMOVE') cached.delete(entry.bag);
+}
+
+/** Force a rebuild on next read. Used by writeAll (which replaces all of
+ * scan_log) and by tests that mutate scan_log directly. */
+function invalidateBagZoneCache(db) {
+  _bagZoneCacheByDb.delete(db);
+}
+
 // ── Write All (diff incoming JSON against DB, apply changes) ─
 // Used by backup/restore only — normal mutations use atomic functions below
 function writeAll(db, incoming) {
@@ -1591,6 +1649,10 @@ function writeAll(db, incoming) {
     // ── Scan Log (replace all) ──
     if (incoming.scanLog) {
       db.prepare('DELETE FROM scan_log').run();
+      // P-06: scan_log was wiped — invalidate the in-memory bag-zone cache
+      // so the next snapshotDailyKPIs / getProductionPipeline rebuilds it
+      // from the freshly-imported rows.
+      invalidateBagZoneCache(db);
       // I-11: preserve client_uuid on bulk import so re-imported scan entries
       // keep their idempotency keys. Older exports won't have the field; the
       // column is nullable.
@@ -2347,6 +2409,8 @@ function renameBatch(db, oldId, newId) {
     if (conflict) throw new Error('A batch with ID "' + newId + '" already exists');
     db.prepare('UPDATE bags SET bag_id=REPLACE(bag_id,?,?) WHERE batch_id=?').run(oldId, newId, oldId);
     db.prepare('UPDATE scan_log SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
+    // P-06: bag IDs were renamed in scan_log — invalidate the cache.
+    invalidateBagZoneCache(db);
     db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
     // Audit I-06: contamination reports also reference batch_id and bag_id; without these
@@ -2469,6 +2533,8 @@ function deleteBatchById(db, batchId, userId) {
     }
     db.prepare('DELETE FROM harvests WHERE batch=?').run(batchId);
     db.prepare('DELETE FROM scan_log WHERE batch=?').run(batchId);
+    // P-06: scan_log rows for this batch are gone — invalidate the cache.
+    invalidateBagZoneCache(db);
     // Audit I-07: keep contamination history (audit-relevant) by NULLing the FK
     // instead of deleting the report rows. The reports list (listContaminationReports)
     // already filters by batch_id only when set, so NULL rows remain visible in the
@@ -2615,6 +2681,11 @@ function appendScanEntriesNoTxn(db, entries, userId) {
       ids.push(existing ? existing.id : null);
     } else {
       ids.push(r.lastInsertRowid);
+      // P-06: keep the in-memory bag→zone cache in sync incrementally so
+      // snapshotDailyKPIs / getProductionPipeline don't have to re-scan
+      // scan_log on every call. A REPLAY (changes === 0) is a no-op for
+      // the cache because the original entry already updated it.
+      applyScanEntryToBagZoneCache(db, e);
     }
   }
   return ids;
@@ -2635,6 +2706,9 @@ function appendScanEntries(db, entries, userId) {
 
 function deleteLastScanEntries(db, n) {
   db.prepare('DELETE FROM scan_log WHERE id IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT ?)').run(n);
+  // P-06: rows removed — incremental update not possible without re-reading,
+  // so invalidate and let the next read rebuild from scratch.
+  invalidateBagZoneCache(db);
   incrementDataVersion(db);
 }
 
@@ -2644,12 +2718,16 @@ function getScanEntryById(db, id) {
 
 function deleteScanEntryById(db, id) {
   const info = db.prepare('DELETE FROM scan_log WHERE id = ?').run(id);
-  if (info.changes > 0) incrementDataVersion(db);
+  if (info.changes > 0) {
+    invalidateBagZoneCache(db); // P-06: row removed — rebuild cache lazily
+    incrementDataVersion(db);
+  }
   return info.changes > 0;
 }
 
 function clearScanLog(db) {
   db.prepare('DELETE FROM scan_log').run();
+  invalidateBagZoneCache(db); // P-06
   incrementDataVersion(db);
 }
 
@@ -4190,23 +4268,18 @@ function snapshotDailyKPIs(db, { force } = {}) {
   // leave the bag tracked at its NEW zone — diverging from
   // getProductionPipeline (which deletes unconditionally) and from the
   // client's getStatus (rewritten in I-10 to derive from last-event-per-bag).
+  // P-06: bag-zone state is maintained in-memory by appendScanEntries; we
+  // just read the cached map here instead of re-scanning scan_log.
   const zoneRoleMap = {};
   zones.forEach((z) => {
     zoneRoleMap[z.id] = z.role;
   });
-  const allScans = db.prepare('SELECT action, bag, "from", "to" FROM scan_log ORDER BY id').all();
-  const bagZone = {}; // bag -> zone_id (current)
-  allScans.forEach((e) => {
-    const toZone = e.to ? e.to.split(':')[0] : null;
-    if (e.action === 'ADD' && toZone) bagZone[e.bag] = toZone;
-    if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZone) bagZone[e.bag] = toZone;
-    if (e.action === 'REMOVE') delete bagZone[e.bag];
-  });
+  const bagZoneMap = getBagZoneMap(db);
   const roleCounts = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
-  Object.values(bagZone).forEach((zId) => {
+  for (const zId of bagZoneMap.values()) {
     const role = zoneRoleMap[zId];
     if (role && roleCounts[role] !== undefined) roleCounts[role]++;
-  });
+  }
 
   // 11. Total batches & current stock
   const totalBatches = db.prepare('SELECT COUNT(*) AS v FROM batches').get().v;
@@ -4488,18 +4561,12 @@ function getProductionPipeline(db) {
   }
 
   // Bags per zone with capacity
+  // P-06: bag-zone map is maintained in memory; used to be a full scan_log SCAN.
   const zones = db.prepare('SELECT id, name, role, max_capacity FROM zones ORDER BY sort_order').all();
-  const scanLog = db.prepare('SELECT action, bag, "from", "to" FROM scan_log ORDER BY id').all();
-  const bagZone = {};
-  for (const e of scanLog) {
-    const toZ = e.to ? e.to.split(':')[0] : null;
-    if (e.action === 'ADD' && toZ) bagZone[e.bag] = toZ;
-    else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZ) bagZone[e.bag] = toZ;
-    else if (e.action === 'REMOVE') delete bagZone[e.bag];
-  }
+  const bagZoneMap = getBagZoneMap(db);
   const zoneCounts = {};
-  for (const bag of Object.values(bagZone)) {
-    zoneCounts[bag] = (zoneCounts[bag] || 0) + 1;
+  for (const zId of bagZoneMap.values()) {
+    zoneCounts[zId] = (zoneCounts[zId] || 0) + 1;
   }
   const zoneOverview = zones.map((z) => ({
     id: z.id,
@@ -4811,6 +4878,8 @@ module.exports = {
   backupDb,
   checkDiskSpace,
   getDataVersion,
+  getBagZoneMap,
+  invalidateBagZoneCache,
   readCaldavConfig,
   updateTaskCaldavUid,
   updateBatchDue,
