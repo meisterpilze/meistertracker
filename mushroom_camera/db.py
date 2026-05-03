@@ -592,3 +592,39 @@ def insert_contamination_detection(
     )
     con.commit()
     return cur.lastrowid
+
+
+# ---------------------------------------------------------------------------
+# Admin user helpers
+# ---------------------------------------------------------------------------
+
+def get_admin_user_ids(con: sqlite3.Connection) -> list[int]:
+    """Return IDs of all users with role='admin'."""
+    rows = con.execute("SELECT id FROM users WHERE role='admin'").fetchall()
+    return [row["id"] for row in rows]
+
+
+def notify_admins(
+    con: sqlite3.Connection,
+    *,
+    type_: str,
+    title: str,
+    body: str | None = None,
+    link_type: str | None = None,
+    link_id: str | None = None,
+) -> None:
+    """Send a notification to every admin user and no one else."""
+    admin_ids = get_admin_user_ids(con)
+    if not admin_ids:
+        log.warning("notify_admins: no admin users found in users table.")
+        return
+    for uid in admin_ids:
+        create_notification(
+            con,
+            user_id=uid,
+            type_=type_,
+            title=title,
+            body=body,
+            link_type=link_type,
+            link_id=link_id,
+        )

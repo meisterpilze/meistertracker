@@ -66,9 +66,8 @@ def _check_unseen_bags(con) -> None:
         for row in unseen:
             last = row["last_seen_at"] or "never"
             log.warning("Bag %s (%s) not seen for >%dh (last: %s)", row["bag_id"], role, cfg.UNSEEN_BAG_ALERT_HOURS, last)
-            camdb.create_notification(
+            camdb.notify_admins(
                 con,
-                user_id=cfg.NOTIFY_USER_ID,
                 type_="camera_bag_not_visible",
                 title=f"Bag {row['bag_id']} not visible",
                 body=f"No camera reading for >{cfg.UNSEEN_BAG_ALERT_HOURS}h — may be occluded. Last seen: {last[:10] if last != 'never' else 'never'}.",
@@ -154,9 +153,8 @@ def _raise_fruiting_ready_flag(con, bag_id, batch_id, captured_at, score, elapse
     body_parts = [f"Visible colonisation ≥ 70 %."]
     if elapsed_days is not None and expected_days:
         body_parts.append(f"Day {elapsed_days:.0f} of {expected_days}.")
-    camdb.create_notification(
+    camdb.notify_admins(
         con,
-        user_id=cfg.NOTIFY_USER_ID,
         type_="camera_fruiting_ready",
         title=f"Ready to fruit — bag {bag_id}",
         body=" ".join(body_parts),
@@ -241,9 +239,8 @@ def _handle_pinning(con, bag_id, batch_id, strain_id, detections, frame_area, ca
             detected_at=captured_at,
             measurement_id=meas_id,
         )
-        camdb.create_notification(
+        camdb.notify_admins(
             con,
-            user_id=cfg.NOTIFY_USER_ID,
             type_="camera_pinning",
             title=f"Pins detected — bag {bag_id}",
             body=f"First pins spotted on {captured_at[:10]}. Check again next reading to confirm.",
@@ -254,9 +251,8 @@ def _handle_pinning(con, bag_id, batch_id, strain_id, detections, frame_area, ca
     else:
         camdb.confirm_pinning_event(con, pending["id"])
         log.info("Pinning confirmed on bag %s.", bag_id)
-        camdb.create_notification(
+        camdb.notify_admins(
             con,
-            user_id=cfg.NOTIFY_USER_ID,
             type_="camera_pinning_confirmed",
             title=f"Pinning confirmed — bag {bag_id}",
             body=f"Pins confirmed on {captured_at[:10]}.",
@@ -315,9 +311,8 @@ def _handle_harvest_flag(con, bag_id, batch_id, strain_id, captured_at):
     if predicted_at:
         body_parts.append(f"Predicted harvest: {predicted_at[:10]}.")
 
-    camdb.create_notification(
+    camdb.notify_admins(
         con,
-        user_id=cfg.NOTIFY_USER_ID,
         type_="camera_harvest_ready",
         title=f"Ready to harvest — bag {bag_id}",
         body=" ".join(body_parts),

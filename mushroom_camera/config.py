@@ -87,7 +87,3 @@ UNSEEN_BAG_ALERT_HOURS = int(os.getenv("UNSEEN_BAG_ALERT_HOURS", "24"))
 # Leave empty to skip automated contamination screening.
 CONTAM_MODEL = os.getenv("CONTAM_MODEL", "")
 CONTAM_CONF_THRESHOLD = float(os.getenv("CONTAM_CONF_THRESHOLD", "0.75"))
-
-# MeisterTracker user_id that receives in-app harvest/pinning notifications.
-# 1 is the first created user (usually the admin).
-NOTIFY_USER_ID = int(os.getenv("NOTIFY_USER_ID", "1"))
