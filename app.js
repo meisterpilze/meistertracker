@@ -397,6 +397,7 @@ async function loadCurrentUser() {
   }
   showServerTab();
   showMcpTab();
+  showCameraTab();
   showAdminNav();
 }
 function showAdminNav() {
@@ -5026,6 +5027,436 @@ async function requestLeCert() {
 function showMcpTab() {
   const btn = document.getElementById('st-settings-mcp');
   if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+}
+
+// ─── CAMERA TAB (admin-only WIP) ─────────────────────────────
+// Surfaces what the Python mushroom_camera module writes into camera_* tables
+// and lets admins edit calibration values + manage the cameras list. The
+// detection/measurement loop is external; this dashboard does not run it.
+const _cam = {
+  calibration: null,
+  cameras: [],
+  editingId: null,
+  pxDistance: null
+};
+
+const CAM_CALIB_FIELDS = [
+  ['pxPerMm', 'cam.pxPerMm', 'real'],
+  ['incubationBagRadiusPx', 'cam.incubationBagRadiusPx', 'int'],
+  ['qrAssignRadiusPx', 'cam.qrAssignRadiusPx', 'int'],
+  ['yoloConfThreshold', 'cam.yoloConfThreshold', 'real'],
+  ['pinMaxAreaRatio', 'cam.pinMaxAreaRatio', 'real'],
+  ['harvestGrowthThresholdPct', 'cam.harvestGrowthThresholdPct', 'real'],
+  ['harvestStallReadings', 'cam.harvestStallReadings', 'int'],
+  ['colonisationScoreThreshold', 'cam.colonisationScoreThreshold', 'real'],
+  ['colonisationMinFraction', 'cam.colonisationMinFraction', 'real'],
+  ['unseenBagAlertHours', 'cam.unseenBagAlertHours', 'int'],
+  ['contamConfThreshold', 'cam.contamConfThreshold', 'real']
+];
+
+function showCameraTab() {
+  const btn = document.getElementById('st-settings-camera');
+  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+}
+
+async function loadCameraTab() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  let data;
+  try {
+    const r = await authFetch('/api/camera/dashboard');
+    data = await r.json();
+  } catch (e) {
+    document.getElementById('cam-stats').textContent = t('common.error') + ': ' + (e.message || '');
+    return;
+  }
+  _cam.calibration = data.calibration;
+  _cam.cameras = data.cameras || [];
+  renderCameraStats(data.stats);
+  renderCameraList(_cam.cameras);
+  renderCameraCalibForm(_cam.calibration);
+  renderCameraFlags(data.flags);
+  renderCameraRecent(data.recentMeasurements || []);
+}
+
+function renderCameraStats(s) {
+  const el = document.getElementById('cam-stats');
+  if (!el) return;
+  if (!s) {
+    el.textContent = t('common.error');
+    return;
+  }
+  const cell = (label, value) =>
+    `<div class="card" style="padding:10px;margin:0">
+      <div style="font-size:11px;color:var(--c-text-muted)">${esc(label)}</div>
+      <div style="font-size:18px;font-weight:600;color:var(--c-text)">${esc(String(value))}</div>
+    </div>`;
+  el.innerHTML =
+    cell(t('cam.statCameras'), s.enabledCameras + ' / ' + s.cameras) +
+    cell(t('cam.statMeasurements7d'), s.measurementsLast7) +
+    cell(t('cam.statSnapshots7d'), s.snapshotsLast7) +
+    cell(t('cam.statOpenHarvest'), s.openHarvestFlags) +
+    cell(t('cam.statOpenFruiting'), s.openFruitingFlags) +
+    cell(t('cam.statLabelled'), s.labelledSamples);
+}
+
+function renderCameraList(list) {
+  const el = document.getElementById('cam-list');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML =
+      '<div style="font-size:13px;color:var(--c-text-muted);padding:8px 0">' + esc(t('cam.noCameras')) + '</div>';
+    return;
+  }
+  const rows = list
+    .map((c) => {
+      const zone = c.zoneId ? esc(zoneDisplayName(c.zoneId)) : '<span style="color:var(--c-text-muted)">—</span>';
+      const masked = maskRtspUrl(c.rtspUrl);
+      const stateBadge = c.enabled
+        ? `<span class="badge" style="background:#dcfce7;color:#166534">${esc(t('cam.enabled'))}</span>`
+        : `<span class="badge" style="background:#fef3c7;color:#92400e">${esc(t('cam.disabled'))}</span>`;
+      return `<div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:600">${esc(c.name)} ${stateBadge}</div>
+            <div style="font-size:11px;color:var(--c-text-muted);font-family:monospace;word-break:break-all">${esc(masked)}</div>
+            <div style="font-size:11px;color:var(--c-text-muted)">${esc(t('cam.fieldZone'))}: ${zone}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm" data-cam-edit="${c.id}" data-i18n="cam.edit">Edit</button>
+            <button class="btn btn-sm btn-r" data-cam-delete="${c.id}" data-i18n="cam.delete">Delete</button>
+          </div>
+        </div>`;
+    })
+    .join('');
+  el.innerHTML = rows;
+  el.querySelectorAll('[data-cam-edit]').forEach((b) =>
+    b.addEventListener('click', () => openCameraEdit(parseInt(b.dataset.camEdit, 10)))
+  );
+  el.querySelectorAll('[data-cam-delete]').forEach((b) =>
+    b.addEventListener('click', () => deleteCamera(parseInt(b.dataset.camDelete, 10)))
+  );
+}
+
+function maskRtspUrl(url) {
+  // Hide credentials (rtsp://user:pass@host -> rtsp://***@host) so admins
+  // sharing screenshots don't leak passwords.
+  if (!url) return '';
+  return url.replace(/^(rtsp?:\/\/)([^:]+):([^@]+)@/i, '$1***:***@');
+}
+
+function renderCameraCalibForm(c) {
+  const wrap = document.getElementById('cam-calib-form');
+  if (!wrap) return;
+  if (!c) {
+    wrap.textContent = t('common.error');
+    return;
+  }
+  wrap.innerHTML = CAM_CALIB_FIELDS.map(([key, label, kind]) => {
+    const step = kind === 'int' ? '1' : '0.01';
+    const val = c[key] != null ? c[key] : '';
+    return `<div>
+        <label style="font-size:12px;font-weight:600;display:block" data-i18n="${label}">${esc(key)}</label>
+        <input type="number" step="${step}" min="0" data-cam-calib="${key}" value="${esc(String(val))}" style="width:100%" />
+      </div>`;
+  }).join('');
+  translatePage();
+  const ts = c.updatedAt ? new Date(c.updatedAt).toLocaleString(loc()) : '—';
+  document.getElementById('cam-calib-status').textContent = t('cam.lastUpdated') + ': ' + ts;
+}
+
+async function saveCameraCalibration() {
+  const inputs = document.querySelectorAll('[data-cam-calib]');
+  const patch = {};
+  for (const el of inputs) {
+    const v = el.value.trim();
+    if (v === '') continue;
+    const num = Number(v);
+    if (!Number.isFinite(num) || num < 0) {
+      document.getElementById('cam-calib-status').textContent = t('cam.invalidValue') + ': ' + el.dataset.camCalib;
+      return;
+    }
+    patch[el.dataset.camCalib] = num;
+  }
+  try {
+    const r = await authFetch('/api/camera/calibration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      document.getElementById('cam-calib-status').textContent = t('common.error') + ': ' + (err.error || r.status);
+      return;
+    }
+    const updated = await r.json();
+    _cam.calibration = updated;
+    renderCameraCalibForm(updated);
+    document.getElementById('cam-calib-status').textContent = t('cam.saved');
+  } catch (e) {
+    document.getElementById('cam-calib-status').textContent = t('common.error') + ': ' + (e.message || '');
+  }
+}
+
+function renderCameraFlags(flags) {
+  const el = document.getElementById('cam-flags');
+  if (!el) return;
+  if (!flags || ((!flags.harvest || !flags.harvest.length) && (!flags.fruiting || !flags.fruiting.length))) {
+    el.innerHTML =
+      '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
+    return;
+  }
+  const row = (kind, f) => {
+    const ago = f.flaggedAt ? new Date(f.flaggedAt).toLocaleString(loc()) : '—';
+    const extra =
+      kind === 'harvest'
+        ? (f.predictedHarvestAt ? esc(t('cam.predicted')) + ': ' + new Date(f.predictedHarvestAt).toLocaleString(loc()) : '')
+        : (f.peakScore != null ? esc(t('cam.peakScore')) + ': ' + Number(f.peakScore).toFixed(2) : '');
+    return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--c-border)">
+        <div style="flex:1;min-width:180px">
+          <div><b>${esc(f.bagId)}</b> <span style="color:var(--c-text-muted)">${esc(f.batchId || '')}</span></div>
+          <div style="font-size:11px;color:var(--c-text-muted)">${esc(ago)}${extra ? ' · ' + extra : ''}</div>
+        </div>
+        <button class="btn btn-sm" data-cam-resolve="${kind}:${f.id}" data-i18n="cam.resolve">Resolve</button>
+      </div>`;
+  };
+  let html = '';
+  if (flags.harvest && flags.harvest.length) {
+    html +=
+      '<div style="font-weight:600;margin-bottom:4px">' + esc(t('cam.harvestFlags')) + '</div>' +
+      flags.harvest.map((f) => row('harvest', f)).join('');
+  }
+  if (flags.fruiting && flags.fruiting.length) {
+    html +=
+      '<div style="font-weight:600;margin:10px 0 4px">' + esc(t('cam.fruitingFlags')) + '</div>' +
+      flags.fruiting.map((f) => row('fruiting', f)).join('');
+  }
+  el.innerHTML = html;
+  translatePage();
+  el.querySelectorAll('[data-cam-resolve]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const [kind, id] = b.dataset.camResolve.split(':');
+      try {
+        const r = await authFetch('/api/camera/flags/' + kind + '/' + id + '/resolve', { method: 'POST' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+        loadCameraTab();
+      } catch (e) {
+        alert(t('common.error') + ': ' + (e.message || ''));
+      }
+    })
+  );
+}
+
+function renderCameraRecent(rows) {
+  const el = document.getElementById('cam-recent');
+  if (!el) return;
+  if (!rows.length) {
+    el.innerHTML =
+      '<div style="color:var(--c-text-muted)">' + esc(t('cam.noRecent')) + '</div>';
+    return;
+  }
+  const head = `<thead><tr>
+      <th>${esc(t('cam.colTime'))}</th>
+      <th>${esc(t('cam.colBag'))}</th>
+      <th>${esc(t('cam.colDiameter'))}</th>
+      <th>${esc(t('cam.colCount'))}</th>
+      <th>${esc(t('cam.colConf'))}</th>
+    </tr></thead>`;
+  const body = rows
+    .map((m) => {
+      const dt = m.capturedAt ? new Date(m.capturedAt).toLocaleString(loc()) : '—';
+      const dia = m.capDiameterMm != null ? Number(m.capDiameterMm).toFixed(1) + ' mm' : '—';
+      const conf = m.detectionConf != null ? (Number(m.detectionConf) * 100).toFixed(0) + '%' : '—';
+      return `<tr>
+          <td>${esc(dt)}</td>
+          <td>${esc(m.bagId)}</td>
+          <td>${esc(dia)}</td>
+          <td>${esc(String(m.mushroomCount || 0))}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+    })
+    .join('');
+  el.innerHTML = '<div style="overflow-x:auto"><table>' + head + '<tbody>' + body + '</tbody></table></div>';
+}
+
+function openCameraEdit(id) {
+  _cam.editingId = id || null;
+  const cam = id ? _cam.cameras.find((c) => c.id === id) : null;
+  document.getElementById('cam-edit-title').textContent = id ? t('cam.editCamera') : t('cam.addCamera');
+  document.getElementById('cam-edit-name').value = cam ? cam.name : '';
+  document.getElementById('cam-edit-rtsp').value = cam ? cam.rtspUrl : '';
+  document.getElementById('cam-edit-enabled').checked = cam ? !!cam.enabled : true;
+  document.getElementById('cam-edit-status').textContent = '';
+  // Populate zone dropdown from existing zones
+  const sel = document.getElementById('cam-edit-zone');
+  sel.innerHTML =
+    `<option value="">${esc(t('cam.zoneNone'))}</option>` +
+    zones.map((z) => `<option value="${esc(z.id)}">${esc(z.name || z.id)}</option>`).join('');
+  sel.value = cam && cam.zoneId ? cam.zoneId : '';
+  document.getElementById('m-cam-edit').classList.add('open');
+  setTimeout(() => document.getElementById('cam-edit-name').focus(), 0);
+}
+
+function closeCameraEdit() {
+  document.getElementById('m-cam-edit').classList.remove('open');
+  _cam.editingId = null;
+}
+
+async function saveCameraEdit() {
+  const payload = {
+    name: document.getElementById('cam-edit-name').value.trim(),
+    rtspUrl: document.getElementById('cam-edit-rtsp').value.trim(),
+    zoneId: document.getElementById('cam-edit-zone').value || null,
+    enabled: document.getElementById('cam-edit-enabled').checked
+  };
+  if (!payload.name) {
+    document.getElementById('cam-edit-status').textContent = t('cam.fieldName') + ': ' + t('common.required');
+    return;
+  }
+  if (!payload.rtspUrl) {
+    document.getElementById('cam-edit-status').textContent = t('cam.fieldRtsp') + ': ' + t('common.required');
+    return;
+  }
+  try {
+    const url = _cam.editingId ? '/api/camera/cameras/' + _cam.editingId : '/api/camera/cameras';
+    const method = _cam.editingId ? 'PUT' : 'POST';
+    const r = await authFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      document.getElementById('cam-edit-status').textContent = err.error || ('HTTP ' + r.status);
+      return;
+    }
+    closeCameraEdit();
+    loadCameraTab();
+  } catch (e) {
+    document.getElementById('cam-edit-status').textContent = e.message || t('common.error');
+  }
+}
+
+async function deleteCamera(id) {
+  const cam = _cam.cameras.find((c) => c.id === id);
+  if (!cam) return;
+  if (!confirm(t('cam.confirmDelete', { name: cam.name }))) return;
+  try {
+    const r = await authFetch('/api/camera/cameras/' + id, { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+    loadCameraTab();
+  } catch (e) {
+    alert(t('common.error') + ': ' + (e.message || ''));
+  }
+}
+
+// Pixel calibration helper: load image into canvas, click two endpoints,
+// compute pixel distance, divide by user-entered mm to get px/mm.
+function initCameraPxCalib() {
+  const fileInput = document.getElementById('cam-calib-image');
+  const canvas = document.getElementById('cam-calib-canvas');
+  const pxLabel = document.getElementById('cam-calib-px');
+  const mmInput = document.getElementById('cam-calib-mm');
+  const applyBtn = document.getElementById('cam-calib-apply');
+  if (!fileInput || !canvas || !pxLabel || !mmInput || !applyBtn) return;
+  const ctx = canvas.getContext('2d');
+  let img = null;
+  let p1 = null;
+  let p2 = null;
+
+  function redraw() {
+    if (!img) return;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    function dot(p, color) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    if (p1) dot(p1, '#ea580c');
+    if (p2) dot(p2, '#0284c7');
+    if (p1 && p2) {
+      ctx.strokeStyle = '#ea580c';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+  }
+
+  function updatePx() {
+    if (p1 && p2) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const px = Math.sqrt(dx * dx + dy * dy);
+      _cam.pxDistance = px;
+      pxLabel.style.display = '';
+      pxLabel.textContent = t('cam.pxMeasured', { px: px.toFixed(1) });
+      applyBtn.disabled = false;
+    } else {
+      _cam.pxDistance = null;
+      pxLabel.style.display = 'none';
+      applyBtn.disabled = true;
+    }
+  }
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const im = new Image();
+      im.onload = () => {
+        // Cap canvas at 800px wide so it fits on small screens
+        const maxW = 800;
+        const scale = im.width > maxW ? maxW / im.width : 1;
+        canvas.width = Math.round(im.width * scale);
+        canvas.height = Math.round(im.height * scale);
+        canvas.style.display = '';
+        img = im;
+        p1 = null;
+        p2 = null;
+        updatePx();
+        redraw();
+      };
+      im.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+
+  canvas.addEventListener('click', (e) => {
+    if (!img) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    if (!p1 || (p1 && p2)) {
+      p1 = { x, y };
+      p2 = null;
+    } else {
+      p2 = { x, y };
+    }
+    updatePx();
+    redraw();
+  });
+
+  applyBtn.addEventListener('click', () => {
+    if (!_cam.pxDistance) return;
+    const mm = parseFloat(mmInput.value);
+    if (!Number.isFinite(mm) || mm <= 0) {
+      alert(t('cam.invalidMm'));
+      return;
+    }
+    const ratio = _cam.pxDistance / mm;
+    const inp = document.querySelector('[data-cam-calib="pxPerMm"]');
+    if (inp) {
+      inp.value = ratio.toFixed(3);
+      inp.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      document.getElementById('cam-calib-status').textContent =
+        t('cam.calibratedFromImage', { ratio: ratio.toFixed(3) });
+    }
+  });
 }
 
 // ─── SERVER TAB ─────────────────────────────────────────────
@@ -14249,6 +14680,19 @@ function initEventListeners() {
   $('st-settings-mcp').addEventListener('click', () => {
     openStab('settings', 'mcp');
   });
+  $('st-settings-camera').addEventListener('click', () => {
+    openStab('settings', 'camera');
+    loadCameraTab();
+  });
+  $('cam-calib-save').addEventListener('click', saveCameraCalibration);
+  $('cam-calib-reload').addEventListener('click', loadCameraTab);
+  $('cam-add-btn').addEventListener('click', () => openCameraEdit(null));
+  $('cam-edit-cancel').addEventListener('click', closeCameraEdit);
+  $('cam-edit-save').addEventListener('click', saveCameraEdit);
+  document.getElementById('m-cam-edit').addEventListener('click', (e) => {
+    if (e.target.id === 'm-cam-edit') closeCameraEdit();
+  });
+  initCameraPxCalib();
   $('st-settings-server').addEventListener('click', () => {
     openStab('settings', 'server');
     loadServerTab();
