@@ -2744,6 +2744,9 @@
             <button class="stab" id="st-settings-duckdns" data-i18n="settings.tabDuckdns">DuckDNS</button>
             <button class="stab" id="st-settings-printer" data-i18n="settings.tabPrinter">Drucker</button>
             <button class="stab" id="st-settings-mcp" style="display: none" data-i18n="settings.tabMcp">MCP</button>
+            <button class="stab" id="st-settings-camera" style="display: none" data-i18n="settings.tabCamera">
+              Camera
+            </button>
             <button class="stab" id="st-settings-server" style="display: none" data-i18n="settings.tabServer">
               Server
             </button>
@@ -3475,6 +3478,155 @@
               ></div>
             </div>
           </div>
+          <!-- Camera (admin-only WIP) -->
+          <div class="sp" id="sp-settings-camera">
+            <div
+              class="card"
+              style="background: var(--c-yellow-bg, #fef3c7); border-left: 4px solid #f59e0b"
+            >
+              <div class="sec" style="color: #92400e" data-i18n="cam.wipTitle">Work in progress</div>
+              <div
+                style="font-size: 12px; color: #78350f; line-height: 1.6"
+                data-i18n="cam.wipDesc"
+              >
+                The camera service runs as an external Python process
+                (<code>python -m mushroom_camera</code>). This admin tab manages the
+                cameras list, calibration values, and open flags. Calibration changes are
+                stored in the DB; the Python module currently reads env vars and will pick
+                up DB-backed values in a future update.
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="cam.statsTitle">Status</div>
+              <div id="cam-stats" class="g3" style="font-size: 13px; color: var(--c-text-sec)"></div>
+            </div>
+
+            <div class="card">
+              <div
+                style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap"
+              >
+                <div class="sec" style="margin: 0" data-i18n="cam.camerasTitle">Cameras</div>
+                <button id="cam-add-btn" class="btn btn-sm btn-p" data-i18n="cam.addCamera">+ Add camera</button>
+              </div>
+              <div id="cam-list" style="margin-top: 10px"></div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="cam.calibrationTitle">Calibration</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="cam.calibrationDesc"
+              >
+                Tunes the detection thresholds and spatial scale of the camera pipeline.
+                Defaults match the Python module's environment variables.
+              </p>
+              <div id="cam-calib-form" class="g2" style="gap: 10px"></div>
+              <div style="display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap">
+                <button id="cam-calib-save" class="btn btn-sm btn-p" data-i18n="cam.saveCalibration">
+                  Save calibration
+                </button>
+                <button id="cam-calib-reload" class="btn btn-sm" data-i18n="cam.reload">Reload</button>
+              </div>
+              <div
+                id="cam-calib-status"
+                style="font-size: 12px; color: var(--c-text-muted); margin-top: 8px; min-height: 16px"
+              ></div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="cam.pxCalibTitle">Pixel calibration helper</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="cam.pxCalibDesc"
+              >
+                Upload a frame with a ruler in view. Click the two endpoints of a known
+                distance, enter the real-world length in mm, and the pixels-per-mm value
+                will be computed and saved.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <input id="cam-calib-image" type="file" accept="image/*" style="font-size: 12px" />
+                <div style="position: relative; max-width: 100%; overflow: auto">
+                  <canvas
+                    id="cam-calib-canvas"
+                    style="max-width: 100%; cursor: crosshair; border: 1px solid var(--c-border); border-radius: 6px; display: none"
+                  ></canvas>
+                </div>
+                <div
+                  id="cam-calib-px"
+                  style="font-size: 12px; color: var(--c-text-muted); display: none"
+                ></div>
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+                  <label style="font-size: 12px; margin: 0" data-i18n="cam.realDistanceMm"
+                    >Real distance (mm)</label
+                  >
+                  <input
+                    id="cam-calib-mm"
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    style="width: 100px"
+                    value="100"
+                  />
+                  <button id="cam-calib-apply" class="btn btn-sm btn-p" disabled data-i18n="cam.applyPxPerMm">
+                    Apply px/mm
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="cam.flagsTitle">Open flags</div>
+              <div
+                id="cam-flags"
+                style="font-size: 12px; color: var(--c-text-sec); line-height: 1.6"
+              ></div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="cam.recentTitle">Recent measurements</div>
+              <div id="cam-recent" style="font-size: 12px; color: var(--c-text-sec)"></div>
+            </div>
+          </div>
+
+          <!-- Camera add/edit modal -->
+          <div class="modal-bg" id="m-cam-edit" role="dialog" aria-modal="true" aria-labelledby="cam-edit-title">
+            <div class="modal" style="max-width: 480px">
+              <h3 id="cam-edit-title" data-i18n="cam.addCamera">Add camera</h3>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div>
+                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldName">Name</label>
+                  <input id="cam-edit-name" type="text" maxlength="80" />
+                </div>
+                <div>
+                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldRtsp">RTSP URL</label>
+                  <input
+                    id="cam-edit-rtsp"
+                    type="text"
+                    placeholder="rtsp://user:pass@host/stream1"
+                    style="font-family: monospace; font-size: 12px"
+                  />
+                </div>
+                <div>
+                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldZone">Zone</label>
+                  <select id="cam-edit-zone"></select>
+                </div>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input id="cam-edit-enabled" type="checkbox" style="width: auto" checked />
+                  <span data-i18n="cam.fieldEnabled">Enabled</span>
+                </label>
+                <div
+                  id="cam-edit-status"
+                  style="font-size: 12px; color: var(--c-red, #b91c1c); min-height: 16px"
+                ></div>
+              </div>
+              <div class="modal-btns">
+                <button id="cam-edit-cancel" class="btn" data-i18n="common.cancel">Cancel</button>
+                <button id="cam-edit-save" class="btn btn-p" data-i18n="common.save">Save</button>
+              </div>
+            </div>
+          </div>
+
           <!-- Server -->
           <div class="sp" id="sp-settings-server">
             <div class="card">
