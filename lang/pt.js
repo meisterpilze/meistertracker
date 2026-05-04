@@ -141,6 +141,12 @@ window.LANG['pt'] = {
   'dash.remove': 'Remover',
   'dash.currentlyIn': 'Atualmente em {loc}',
   'dash.zones': 'Zonas',
+  'dash.zoneSpawn': 'Fase Spawn',
+  'dash.zoneInc': 'Incubação',
+  'dash.zoneTent1': 'Tenda 1',
+  'dash.zoneTent2': 'Tenda 2',
+  'dash.zoneTent3': 'Tenda 3',
+  'dash.zoneContam': 'Contaminado',
   'dash.racks': 'Estantes',
   'dash.moveBags': 'Mover {n} saco(s)',
   'dash.fruitingTents': 'Tendas de Frutifica\u00e7\u00e3o',
@@ -312,6 +318,9 @@ window.LANG['pt'] = {
   'print.printerInfoDetail':
     'via servidor \u2014 sem di\u00e1logo. Certifique-se de que o servidor est\u00e1 rodando e a impressora ligada.',
   'print.status.checking': 'Verificando impressora\u2026',
+  'print.status.online': 'Impressora pronta: {name}',
+  'print.status.printerOffline': 'Impressora desconectada: {name}',
+  'print.status.localUnavailable': 'Impressora n\u00e3o encontrada localmente: {name}',
   'print.status.bridgeUnreachable':
     'Bridge de impress\u00e3o n\u00e3o acess\u00edvel. O PC Windows est\u00e1 ligado e o servi\u00e7o bridge iniciado?',
   'print.status.noBridge':
@@ -963,6 +972,9 @@ window.LANG['pt'] = {
   'printer.platform': 'Plataforma do servidor',
   'printer.printerName': 'Nome da impressora',
   'printer.effectiveSource': 'Fonte ativa',
+  'printer.sourceDb': 'Configurações (UI)',
+  'printer.sourceEnv': 'Arquivo .env',
+  'printer.sourceNone': 'Não configurado (apenas PowerShell local)',
   'printer.enable': 'Ativar print bridge',
   'printer.bridgeUrl': 'URL do bridge',
   'printer.urlHint':
@@ -1109,6 +1121,8 @@ window.LANG['pt'] = {
   'alert.dueToday.one': '1 lote vence hoje ou precisa de aten\u00e7\u00e3o',
   'alert.dueToday.other': '{n} lotes vencem hoje ou precisam de aten\u00e7\u00e3o',
   'alert.filterShowAll': 'Mostrar todos',
+  'alert.filterDueToday': 'Vencem hoje ou precisam de atenção',
+  'alert.filterOverdue': 'Atrasados',
   'dash.splitBatches.title': 'Lotes divididos \u2014 sacos deixados para tr\u00e1s',
   'dash.splitBatches.in': 'em',
   'dash.actionNewBatch': '+ Novo lote',
