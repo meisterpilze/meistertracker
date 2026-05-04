@@ -179,6 +179,36 @@ CREATE TABLE IF NOT EXISTS print_bridge_config (
   token   TEXT DEFAULT ''
 );
 
+-- Camera dashboard (admin-only WIP). The Python mushroom_camera module
+-- owns the camera_measurements / snapshots / flags / labels tables and
+-- creates them in its own ensure_schema(); the two below are also created
+-- here because the Node-side dashboard reads them before the Python module
+-- has run for the first time on a fresh install.
+CREATE TABLE IF NOT EXISTS camera_cameras (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  name      TEXT NOT NULL,
+  rtsp_url  TEXT NOT NULL,
+  zone_id   TEXT REFERENCES zones(id) ON DELETE SET NULL,
+  enabled   INTEGER DEFAULT 1,
+  created   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS camera_calibration (
+  id                            INTEGER PRIMARY KEY CHECK (id = 1),
+  px_per_mm                     REAL    DEFAULT 2.0,
+  incubation_bag_radius_px      INTEGER DEFAULT 150,
+  qr_assign_radius_px           INTEGER DEFAULT 400,
+  yolo_conf_threshold           REAL    DEFAULT 0.4,
+  pin_max_area_ratio            REAL    DEFAULT 0.04,
+  harvest_growth_threshold_pct  REAL    DEFAULT 2.0,
+  harvest_stall_readings        INTEGER DEFAULT 3,
+  colonisation_score_threshold  REAL    DEFAULT 0.85,
+  colonisation_min_fraction     REAL    DEFAULT 0.70,
+  unseen_bag_alert_hours        INTEGER DEFAULT 24,
+  contam_conf_threshold         REAL    DEFAULT 0.75,
+  updated_at                    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS calendar_events (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL,
@@ -1018,6 +1048,44 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE inventory_log ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
       }
     }
+  },
+  {
+    version: 41,
+    description: 'Camera dashboard: ensure camera_cameras + camera_calibration exist (admin tab WIP)',
+    fn(db) {
+      // The Python mushroom_camera module creates `camera_cameras` (and other
+      // camera_* tables) in its own ensure_schema(). The Node.js dashboard
+      // needs camera_cameras to exist before the operator has run the Python
+      // module even once, so we create it here with the same shape. Calibration
+      // values were env-vars only; this migration moves them into a singleton
+      // row that the admin UI can edit. Defaults match config.py.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS camera_cameras (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          name      TEXT NOT NULL,
+          rtsp_url  TEXT NOT NULL,
+          zone_id   TEXT REFERENCES zones(id) ON DELETE SET NULL,
+          enabled   INTEGER DEFAULT 1,
+          created   TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS camera_calibration (
+          id                            INTEGER PRIMARY KEY CHECK (id = 1),
+          px_per_mm                     REAL    DEFAULT 2.0,
+          incubation_bag_radius_px      INTEGER DEFAULT 150,
+          qr_assign_radius_px           INTEGER DEFAULT 400,
+          yolo_conf_threshold           REAL    DEFAULT 0.4,
+          pin_max_area_ratio            REAL    DEFAULT 0.04,
+          harvest_growth_threshold_pct  REAL    DEFAULT 2.0,
+          harvest_stall_readings        INTEGER DEFAULT 3,
+          colonisation_score_threshold  REAL    DEFAULT 0.85,
+          colonisation_min_fraction     REAL    DEFAULT 0.70,
+          unseen_bag_alert_hours        INTEGER DEFAULT 24,
+          contam_conf_threshold         REAL    DEFAULT 0.75,
+          updated_at                    TEXT
+        );
+        INSERT OR IGNORE INTO camera_calibration (id) VALUES (1);
+      `);
+    }
   }
 ];
 
@@ -1127,6 +1195,7 @@ function openDb(dbPath) {
   db.prepare(`INSERT OR IGNORE INTO duckdns_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO print_bridge_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO mcp_config(id) VALUES(1)`).run();
+  db.prepare(`INSERT OR IGNORE INTO camera_calibration(id) VALUES(1)`).run();
   // Backfill: assign numeric barcodes to any entities missing them
   backfillBarcodes(db);
   return db;
@@ -3666,6 +3735,189 @@ function renameZoneName(db, id, newName) {
   incrementDataVersion(db);
 }
 
+// -- Camera dashboard (admin WIP) --------------------------------------------
+const CAMERA_CALIB_FIELDS = [
+  ['pxPerMm', 'px_per_mm', 'real'],
+  ['incubationBagRadiusPx', 'incubation_bag_radius_px', 'int'],
+  ['qrAssignRadiusPx', 'qr_assign_radius_px', 'int'],
+  ['yoloConfThreshold', 'yolo_conf_threshold', 'real'],
+  ['pinMaxAreaRatio', 'pin_max_area_ratio', 'real'],
+  ['harvestGrowthThresholdPct', 'harvest_growth_threshold_pct', 'real'],
+  ['harvestStallReadings', 'harvest_stall_readings', 'int'],
+  ['colonisationScoreThreshold', 'colonisation_score_threshold', 'real'],
+  ['colonisationMinFraction', 'colonisation_min_fraction', 'real'],
+  ['unseenBagAlertHours', 'unseen_bag_alert_hours', 'int'],
+  ['contamConfThreshold', 'contam_conf_threshold', 'real']
+];
+
+function getCameraCalibration(db) {
+  const row = db.prepare('SELECT * FROM camera_calibration WHERE id=1').get();
+  const out = { updatedAt: row.updated_at || null };
+  for (const [js, sql] of CAMERA_CALIB_FIELDS) out[js] = row[sql];
+  return out;
+}
+
+function updateCameraCalibration(db, patch) {
+  const sets = [];
+  const vals = [];
+  for (const [js, sql, kind] of CAMERA_CALIB_FIELDS) {
+    if (patch[js] === undefined) continue;
+    const raw = patch[js];
+    const num = kind === 'int' ? parseInt(raw, 10) : parseFloat(raw);
+    if (!Number.isFinite(num)) throw new Error(js + ' must be a number');
+    if (num < 0) throw new Error(js + ' must be >= 0');
+    sets.push(sql + '=?');
+    vals.push(num);
+  }
+  if (!sets.length) return;
+  sets.push('updated_at=?');
+  vals.push(new Date().toISOString());
+  db.prepare('UPDATE camera_calibration SET ' + sets.join(', ') + ' WHERE id=1').run(...vals);
+}
+
+function listCameras(db) {
+  return db
+    .prepare(
+      `SELECT id, name, rtsp_url AS rtspUrl, zone_id AS zoneId, enabled, created
+       FROM camera_cameras ORDER BY name COLLATE NOCASE`
+    )
+    .all()
+    .map((r) => ({ ...r, enabled: r.enabled === 1 }));
+}
+
+function insertCamera(db, { name, rtspUrl, zoneId, enabled }) {
+  if (!name || !name.trim()) throw new Error('Camera name is required');
+  if (!rtspUrl || !rtspUrl.trim()) throw new Error('RTSP URL is required');
+  if (zoneId) {
+    const z = db.prepare('SELECT id FROM zones WHERE id=?').get(zoneId);
+    if (!z) throw new Error('Unknown zone: ' + zoneId);
+  }
+  const info = db
+    .prepare(
+      `INSERT INTO camera_cameras(name, rtsp_url, zone_id, enabled, created)
+       VALUES(?,?,?,?,?)`
+    )
+    .run(name.trim(), rtspUrl.trim(), zoneId || null, enabled === false ? 0 : 1, new Date().toISOString());
+  return info.lastInsertRowid;
+}
+
+function updateCamera(db, id, patch) {
+  const cam = db.prepare('SELECT id FROM camera_cameras WHERE id=?').get(id);
+  if (!cam) throw new Error('Camera not found: ' + id);
+  const sets = [];
+  const vals = [];
+  if (patch.name !== undefined) {
+    if (!patch.name || !patch.name.trim()) throw new Error('Camera name is required');
+    sets.push('name=?');
+    vals.push(patch.name.trim());
+  }
+  if (patch.rtspUrl !== undefined) {
+    if (!patch.rtspUrl || !patch.rtspUrl.trim()) throw new Error('RTSP URL is required');
+    sets.push('rtsp_url=?');
+    vals.push(patch.rtspUrl.trim());
+  }
+  if (patch.zoneId !== undefined) {
+    if (patch.zoneId) {
+      const z = db.prepare('SELECT id FROM zones WHERE id=?').get(patch.zoneId);
+      if (!z) throw new Error('Unknown zone: ' + patch.zoneId);
+    }
+    sets.push('zone_id=?');
+    vals.push(patch.zoneId || null);
+  }
+  if (patch.enabled !== undefined) {
+    sets.push('enabled=?');
+    vals.push(patch.enabled ? 1 : 0);
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  db.prepare('UPDATE camera_cameras SET ' + sets.join(', ') + ' WHERE id=?').run(...vals);
+}
+
+function deleteCamera(db, id) {
+  db.prepare('DELETE FROM camera_cameras WHERE id=?').run(id);
+}
+
+// Aggregate counts shown on the camera dashboard. The Python module owns most
+// of these tables, so we tolerate them not existing yet (sqlite_master check)
+// instead of failing the dashboard load on a fresh DB where the Python service
+// has never run.
+function getCameraDashboardStats(db) {
+  function tableExists(name) {
+    return !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(name);
+  }
+  function countRows(name, where) {
+    if (!tableExists(name)) return 0;
+    return db.prepare(`SELECT COUNT(*) AS c FROM ${name} ${where || ''}`).get().c;
+  }
+  const last7 = `WHERE captured_at >= datetime('now','-7 days')`;
+  return {
+    cameras: countRows('camera_cameras'),
+    enabledCameras: countRows('camera_cameras', 'WHERE enabled=1'),
+    measurementsTotal: countRows('camera_measurements'),
+    measurementsLast7: countRows('camera_measurements', last7),
+    snapshotsTotal: countRows('camera_incubation_snapshots'),
+    snapshotsLast7: countRows('camera_incubation_snapshots', last7),
+    openHarvestFlags: countRows('camera_harvest_flags', 'WHERE resolved_at IS NULL'),
+    openFruitingFlags: countRows('camera_fruiting_ready_flags', 'WHERE resolved_at IS NULL'),
+    labelledSamples: countRows('camera_contamination_labels'),
+    pendingDetections: countRows('camera_contamination_detections', 'WHERE reviewed=0')
+  };
+}
+
+function listOpenCameraFlags(db) {
+  function tableExists(name) {
+    return !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(name);
+  }
+  const harvest = tableExists('camera_harvest_flags')
+    ? db
+        .prepare(
+          `SELECT id, bag_id AS bagId, batch_id AS batchId, flush_number AS flushNumber,
+                  flagged_at AS flaggedAt, predicted_harvest_at AS predictedHarvestAt,
+                  peak_diameter_mm AS peakDiameterMm
+           FROM camera_harvest_flags
+           WHERE resolved_at IS NULL
+           ORDER BY flagged_at DESC LIMIT 50`
+        )
+        .all()
+    : [];
+  const fruiting = tableExists('camera_fruiting_ready_flags')
+    ? db
+        .prepare(
+          `SELECT id, bag_id AS bagId, batch_id AS batchId,
+                  flagged_at AS flaggedAt, peak_score AS peakScore
+           FROM camera_fruiting_ready_flags
+           WHERE resolved_at IS NULL
+           ORDER BY flagged_at DESC LIMIT 50`
+        )
+        .all()
+    : [];
+  return { harvest, fruiting };
+}
+
+function resolveCameraFlag(db, kind, id) {
+  const table =
+    kind === 'harvest' ? 'camera_harvest_flags' : kind === 'fruiting' ? 'camera_fruiting_ready_flags' : null;
+  if (!table) throw new Error('Unknown flag kind: ' + kind);
+  const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(table);
+  if (!exists) throw new Error(table + ' not yet created — run python -m mushroom_camera once');
+  db.prepare(`UPDATE ${table} SET resolved_at=? WHERE id=? AND resolved_at IS NULL`).run(new Date().toISOString(), id);
+}
+
+function listRecentCameraMeasurements(db, limit) {
+  const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='camera_measurements'`).get();
+  if (!exists) return [];
+  return db
+    .prepare(
+      `SELECT id, captured_at AS capturedAt, camera_id AS cameraId, bag_id AS bagId,
+              batch_id AS batchId, cap_diameter_mm AS capDiameterMm,
+              detection_conf AS detectionConf, mushroom_count AS mushroomCount
+       FROM camera_measurements
+       ORDER BY captured_at DESC
+       LIMIT ?`
+    )
+    .all(Math.min(parseInt(limit, 10) || 25, 200));
+}
+
 function getMcpCfg(db) {
   const row = db.prepare('SELECT * FROM mcp_config WHERE id=1').get();
   return {
@@ -4970,6 +5222,17 @@ module.exports = {
   updateMcpCfg,
   generateMcpToken,
   revokeMcpToken,
+  // Camera dashboard (admin WIP)
+  getCameraCalibration,
+  updateCameraCalibration,
+  listCameras,
+  insertCamera,
+  updateCamera,
+  deleteCamera,
+  getCameraDashboardStats,
+  listOpenCameraFlags,
+  resolveCameraFlag,
+  listRecentCameraMeasurements,
   registerOAuthClient,
   getOAuthClient,
   createOAuthCode,
