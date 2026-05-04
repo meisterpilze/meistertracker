@@ -7995,6 +7995,113 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Camera dashboard (admin-only WIP) ─────────────────────────────────────
+  // Surfaces the data that the Python `mushroom_camera` module writes into
+  // `camera_*` SQLite tables, plus admin-editable calibration values used by
+  // that module. The Python module currently reads its calibration from env
+  // vars; storing them here is a forward-compatible step so the dashboard can
+  // become the source of truth without restarting the camera service.
+  if (req.method === 'GET' && req.url === '/api/camera/dashboard') {
+    if (requireAdmin(req, res)) return;
+    try {
+      jsonOk(res, {
+        stats: db.getCameraDashboardStats(database),
+        cameras: db.listCameras(database),
+        flags: db.listOpenCameraFlags(database),
+        calibration: db.getCameraCalibration(database),
+        recentMeasurements: db.listRecentCameraMeasurements(database, 25)
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/camera/cameras') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const id = db.insertCamera(database, {
+          name: data.name,
+          rtspUrl: data.rtspUrl,
+          zoneId: data.zoneId,
+          enabled: data.enabled !== false
+        });
+        log('info', 'Camera added', { actor: req.authUser.username, id, name: data.name });
+        jsonOk(res, { id });
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    });
+    return;
+  }
+
+  const camMatch = req.url.match(/^\/api\/camera\/cameras\/(\d+)$/);
+  if (camMatch && req.method === 'PUT') {
+    if (requireAdmin(req, res)) return;
+    const id = parseInt(camMatch[1], 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.updateCamera(database, id, data);
+        log('info', 'Camera updated', { actor: req.authUser.username, id });
+        jsonOk(res);
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    });
+    return;
+  }
+  if (camMatch && req.method === 'DELETE') {
+    if (requireAdmin(req, res)) return;
+    const id = parseInt(camMatch[1], 10);
+    try {
+      db.deleteCamera(database, id);
+      log('info', 'Camera deleted', { actor: req.authUser.username, id });
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/camera/calibration') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.updateCameraCalibration(database, data || {});
+        log('info', 'Camera calibration updated', { actor: req.authUser.username });
+        jsonOk(res, db.getCameraCalibration(database));
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    });
+    return;
+  }
+
+  const flagMatch = req.url.match(/^\/api\/camera\/flags\/(harvest|fruiting)\/(\d+)\/resolve$/);
+  if (flagMatch && req.method === 'POST') {
+    if (requireAdmin(req, res)) return;
+    try {
+      db.resolveCameraFlag(database, flagMatch[1], parseInt(flagMatch[2], 10));
+      jsonOk(res);
+    } catch (err) {
+      jsonErr(res, 400, err.message);
+    }
+    return;
+  }
+
   // Static files
   let filePath;
   if (url === '/' || url === '/index.html') filePath = path.join(DIR, 'index.html');

@@ -179,6 +179,9 @@ for (const [k, locs] of refs.entries()) {
   // literal first arg, but the actual key is built dynamically and can't be
   // verified statically.
   if (k.endsWith('.')) continue;
+  // Skip template-literal placeholders — `data-i18n="${labelKey}"` captures the
+  // literal `${labelKey}` as the key, but it's resolved at runtime.
+  if (k.includes('${')) continue;
   unknown.push({ key: k, locs });
 }
 // tp() base keys — verify .one and .other exist
