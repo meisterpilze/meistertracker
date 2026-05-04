@@ -141,6 +141,12 @@ window.LANG['en'] = {
   'dash.remove': 'Remove',
   'dash.currentlyIn': 'Currently in {loc}',
   'dash.zones': 'Zones',
+  'dash.zoneSpawn': 'Spawn Run',
+  'dash.zoneInc': 'Incubation',
+  'dash.zoneTent1': 'Tent 1',
+  'dash.zoneTent2': 'Tent 2',
+  'dash.zoneTent3': 'Tent 3',
+  'dash.zoneContam': 'Contaminated',
   'dash.racks': 'Racks',
   'dash.moveBags': 'Move {n} bag(s)',
   'dash.fruitingTents': 'Fruiting Tents',
@@ -212,8 +218,7 @@ window.LANG['en'] = {
   'batch.deleteMsg': 'Permanently deletes the batch record. Scan log and harvest entries remain.',
   'batch.deleteBtn': 'Delete batch',
   'batch.enterWeight': 'Please enter a bag weight',
-  'batch.substrateExceeds':
-    'Substrate composition must total 100% (hardwood + wheat bran = {sum}%). Please adjust.',
+  'batch.substrateExceeds': 'Substrate composition must total 100% (hardwood + wheat bran = {sum}%). Please adjust.',
   'batch.grainNeeded': 'Grain needed:',
   'batch.inStock': 'In stock:',
   'batch.sufficient': 'sufficient',
@@ -308,6 +313,9 @@ window.LANG['en'] = {
   'print.printerInfoDetail':
     'via the server \u2014 no dialog needed. Make sure the server is running and the printer is on.',
   'print.status.checking': 'Checking printer status\u2026',
+  'print.status.online': 'Printer ready: {name}',
+  'print.status.printerOffline': 'Printer disconnected: {name}',
+  'print.status.localUnavailable': 'Printer not found locally: {name}',
   'print.status.bridgeUnreachable':
     'Print bridge unreachable. Is the Windows PC running and the bridge service started?',
   'print.status.noBridge':
@@ -950,6 +958,9 @@ window.LANG['en'] = {
   'printer.platform': 'Server platform',
   'printer.printerName': 'Printer name',
   'printer.effectiveSource': 'Active source',
+  'printer.sourceDb': 'Settings (UI)',
+  'printer.sourceEnv': '.env file',
+  'printer.sourceNone': 'Not configured (local PowerShell only)',
   'printer.enable': 'Enable print bridge',
   'printer.bridgeUrl': 'Bridge URL',
   'printer.urlHint':
@@ -1090,6 +1101,8 @@ window.LANG['en'] = {
   'alert.dueToday.one': '1 batch due today or needs attention',
   'alert.dueToday.other': '{n} batches due today or need attention',
   'alert.filterShowAll': 'Show all',
+  'alert.filterDueToday': 'Due today or needs attention',
+  'alert.filterOverdue': 'Overdue',
   'dash.splitBatches.title': 'Split batches — bags left behind',
   'dash.splitBatches.in': 'in',
   'dash.actionNewBatch': '+ New batch',
