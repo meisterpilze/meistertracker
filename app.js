@@ -7723,6 +7723,11 @@ function fillStrainSelects() {
   ['nb-strain-sel', 'lw-st'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
+    // Skip rewrite when options are unchanged: SSE-pushed re-syncs (any other
+    // user moving bags / scanning / harvesting) would otherwise clobber the
+    // <select> mid-tap, which on Android closes the native picker and drops
+    // the selection.
+    if (el.innerHTML === opts) return;
     const cur = el.value;
     el.innerHTML = opts;
     if (cur) el.value = cur;
@@ -7896,8 +7901,7 @@ function cultureStrainDisplay(c) {
 function fillCultureSelect(id, types) {
   const s = document.getElementById(id);
   if (!s) return;
-  const cur = s.value;
-  s.innerHTML =
+  const opts =
     '<option value="">— none —</option>' +
     cultures
       .filter((c) => (c.status === 'active' || c.status === 'stored') && (!types || types.includes(c.type)))
@@ -7917,6 +7921,10 @@ function fillCultureSelect(id, types) {
         return `<option value="${esc(c.id)}">${label}</option>`;
       })
       .join('');
+  // Skip rewrite when options are unchanged — see fillStrainSelects for why.
+  if (s.innerHTML === opts) return;
+  const cur = s.value;
+  s.innerHTML = opts;
   if (cur) s.value = cur;
 }
 function renderCultures() {
