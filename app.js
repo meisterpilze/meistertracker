@@ -13680,6 +13680,26 @@ if (typeof pushBatchCaldav === 'undefined') {
   };
 }
 
+// All .modal-bg elements ship with a `hidden` attribute in index.html so the
+// app degrades gracefully when styles.css fails to load (otherwise every modal
+// renders as a visible block — the partner saw this when an SW-cached bad
+// styles.css served on Android). The CSS rule .modal-bg.open { display:flex }
+// already wins over UA [hidden] visually, but `hidden` also makes the element
+// inert for keyboard + screen-reader users. This observer keeps the attribute
+// in sync with the .open class so an opened modal is actually interactable.
+(function syncModalHiddenWithOpen() {
+  const observer = new MutationObserver((muts) => {
+    for (const m of muts) {
+      const el = m.target;
+      if (el.classList.contains('open')) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    }
+  });
+  document.querySelectorAll('.modal-bg').forEach((el) => {
+    observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
+
 // Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
 // m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
 // so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
