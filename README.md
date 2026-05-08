@@ -138,7 +138,7 @@ All data is stored in `meistertracker.db` (SQLite) on the server (shared by all 
 - **Auto-backup**: daily at midnight to `backups/` (keeps last 30 days). Uses SQLite `VACUUM INTO` so the backup is WAL-consistent even while the server is writing. Each run writes `backups/.backup-status.json` with success/failure and size, and the latest file is verified to have a valid SQLite header before the status is marked successful.
 - **Manual backup**: use the Backup tab in the app to export/import an encrypted archive (requires admin).
 - **Remote backup**: `scp user@host:~/meistertracker/meistertracker.db ./backup.db`
-- **Off-machine** (REQUIRED on production): set up an `rsync`-over-SSH cron that touches `backups/.offsite-sync.json` on each successful run — the marker is read by `/api/health` and `scripts/check-backup-health.js`. See **DEPLOYMENT.md → Off-site backups (REQUIRED)** for the canonical setup. As a Windows-only convenience, the project folder under OneDrive (`OneDrive - Meisterpilze`) cloud-syncs `backups/` automatically.
+- **Off-machine** (REQUIRED on production): set up an `rsync`-over-SSH cron that touches `backups/.offsite-sync.json` on each successful run — the marker is read by `/api/health` and `scripts/check-backup-health.js`. See **DEPLOYMENT.md → Off-site backups (REQUIRED)** for the canonical setup. As a Windows-only convenience, placing the project folder under a cloud-synced directory (OneDrive, Dropbox, iCloud Drive, etc.) cloud-syncs `backups/` automatically.
 
 ### Monitoring backup health
 
