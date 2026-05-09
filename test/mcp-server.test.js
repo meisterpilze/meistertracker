@@ -117,7 +117,7 @@ function seedData(d) {
     priority: 'high',
     done: false,
     created: '2025-03-15T00:00:00Z',
-    assignee: 'Max',
+    assignee: 'Alice',
     dueDate: '2025-03-20'
   });
   db.insertTask(d, {
@@ -125,7 +125,7 @@ function seedData(d) {
     priority: 'med',
     done: true,
     created: '2025-03-14T00:00:00Z',
-    assignee: 'Julian',
+    assignee: 'Bob',
     dueDate: '2025-03-18'
   });
   db.insertTask(d, {
@@ -291,9 +291,9 @@ describe('MCP read tool logic', () => {
 
   it('filters tasks by assignee', () => {
     const data = db.readAll(d);
-    const maxTasks = data.manualTasks.filter((t) => t.assignee && t.assignee.toLowerCase().includes('max'));
-    assert.equal(maxTasks.length, 1);
-    assert.equal(maxTasks[0].text, 'Check incubation temps');
+    const aliceTasks = data.manualTasks.filter((t) => t.assignee && t.assignee.toLowerCase().includes('alice'));
+    assert.equal(aliceTasks.length, 1);
+    assert.equal(aliceTasks[0].text, 'Check incubation temps');
   });
 
   it('filters tasks by done status', () => {
@@ -713,8 +713,8 @@ describe('Daily briefing logic', () => {
       if (!byAssignee[key]) byAssignee[key] = [];
       byAssignee[key].push(t);
     }
-    assert.ok(byAssignee.Max);
-    assert.equal(byAssignee.Max.length, 1);
+    assert.ok(byAssignee.Alice);
+    assert.equal(byAssignee.Alice.length, 1);
     assert.ok(byAssignee.Unassigned);
     assert.equal(byAssignee.Unassigned.length, 1);
   });

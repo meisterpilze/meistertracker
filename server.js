@@ -2489,7 +2489,7 @@ function notifyTaskAssignees(task, userIds, actor) {
   }
 }
 
-// Parse a task.assignee CSV ("Jonas,Julian") into an array of trimmed names.
+// Parse a task.assignee CSV ("Alice,Bob") into an array of trimmed names.
 function parseTaskAssigneeCsv(s) {
   if (!s || typeof s !== 'string') return [];
   return s
