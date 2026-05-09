@@ -391,7 +391,7 @@ START=$(date +%s)
 rsync -az --delete "$SRC" "$DST"
 END=$(date +%s)
 BYTES=$(du -bs "$SRC" | awk '{print $1}')
-# R-06: write a marker so /api/health and check-backup-health.js know this
+# Write a marker so /api/health and check-backup-health.js know this
 # script ran. Without the marker, off-site failure is silent.
 cat > /var/www/meistertracker/backups/.offsite-sync.json <<EOF
 { "time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)", "bytes": ${BYTES}, "target": "${TARGET}", "durationSeconds": $((END-START)) }

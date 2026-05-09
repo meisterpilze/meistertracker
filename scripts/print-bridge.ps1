@@ -471,7 +471,7 @@ function Test-Auth {
     return (ConstantTimeEq $hdr $Token)
 }
 
-# ── Bind safety guard (audit S-07) ─────────────────────────────────────────
+# ── Bind safety guard (S-07) ───────────────────────────────────────────────
 # If no token is configured, refuse to bind on a network-visible prefix.
 # `https://+:port/` and `https://*:port/` both accept LAN traffic; only
 # `https://127.0.0.1:port/` (or `localhost`) is safe to run unauthenticated.

@@ -1190,7 +1190,7 @@ describe('db – notifications', () => {
   });
 });
 
-describe('db – writeAll/readAll round-trip (audit I-04)', () => {
+describe('db – writeAll/readAll round-trip (I-04)', () => {
   let d, p, strainId;
   before(() => {
     ({ db: d, path: p } = tmpDb());

@@ -3745,7 +3745,7 @@ function createBatch() {
   });
 
   // Compute inventory deltas up front so they can travel with the POST and be
-  // applied atomically on the server (audit I-02).
+  // applied atomically on the server (I-02).
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
