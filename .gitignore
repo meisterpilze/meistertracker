@@ -31,6 +31,12 @@ watchdog-error.log
 # Claude Code
 .claude/
 
+# Internal working / audit docs (never commit)
+audit-*.md
+audit-plan.md
+pain-points.md
+phase-*.md
+
 # Pre-compressed static asset variants (regenerated on server startup)
 *.gz
 *.br
