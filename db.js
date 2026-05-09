@@ -2104,7 +2104,7 @@ function checkDiskSpace(targetPath, requiredBytes) {
 function backupDb(db, destPath) {
   // VACUUM INTO doesn't support bound parameters — whitelist path chars to prevent injection.
   // Allow absolute paths with letters, digits, dots, dashes, underscores, slashes, colons (Windows drive),
-  // spaces (Windows user dirs like "OneDrive - Meisterpilze"), and backslashes.
+  // spaces (Windows user dirs often contain them), and backslashes.
   if (typeof destPath !== 'string' || !destPath.length) {
     throw new Error('Backup path required');
   }
