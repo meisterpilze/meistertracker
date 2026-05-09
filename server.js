@@ -6851,6 +6851,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+  // Revoke the static MCP API token. Soft-revoke: keeps the row+hash for
+  // audit history (created_at, last_used_at) but flips revoked_at, which
+  // causes db.getMcpToken to return '' so verifyMcpToken cannot match.
+  // After this call /api/mcp/generate-token can mint a fresh token.
+  if (req.method === 'DELETE' && req.url === '/api/mcp/token') {
+    if (requireAdmin(req, res)) return;
+    try {
+      db.revokeMcpToken(database);
+      log('info', 'MCP API token revoked', { actor: req.authUser.username });
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   if (req.method === 'GET' && req.url === '/api/mcp/status') {
     if (requireAdmin(req, res)) return;
     try {
