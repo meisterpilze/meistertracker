@@ -1,19 +1,41 @@
-# Meisterpilze Lab Tracker
+# Meistertracker
 
-Lab management system for mushroom cultivation — track batches, cultures, harvests, and inventory with a barcode-driven scanning workflow and label printing.
+A self-hosted lab management system for mushroom cultivation — barcode-driven scanning, batch / culture / harvest tracking, label printing, and CalDAV calendar sync. Runs on a single Node.js process (Linux, macOS, Windows, Raspberry Pi).
+
+## About
+
+Meistertracker is developed by, with, and for **Meisterpilze UG** — a small mushroom-cultivation lab in Germany. It is released under the **GNU Affero General Public License v3.0 or later** so other small labs can run, modify, and self-host it freely.
+
+The software is provided **without warranty of any kind** and the authors accept no liability for damages arising from its use.
+
+> **AGPL §13 reminder**: if you operate this software as a network service for users other than yourself, you must offer them the corresponding source code (including any modifications). The unmodified upstream is at <https://github.com/loewenmaehne/meistertracker> — linking back is usually enough to comply.
+
+See [`LICENSE`](LICENSE) for the full terms.
 
 ## Features
 
-- **Barcode scanning workflow** — ADD, MOVE, REMOVE, HARVEST actions via scanner
-- **Batch management** — fruiting blocks and grain spawn bags with lifecycle tracking
-- **Culture library** — mother cultures, petri dishes, liquid cultures with lineage tracing
-- **Harvest logging** — per-bag weight tracking with flush numbers and analytics
-- **Inventory** — substrate stock levels, delivery logging, low-stock alerts
-- **Label printing** — Code 128 barcodes and QR codes for Zebra GK420d (60x30mm)
-- **Task management** — auto-generated batch tasks + manual tasks with team assignment
-- **CalDAV calendar sync** — built-in CalDAV server for Apple Calendar, Thunderbird, DAVx5
-- **PWA** — installable on phones/tablets with offline support
-- **Dashboard** — KPIs, pipeline chart, harvest analytics, rack occupancy
+### Core lab workflow
+
+- **Barcode scanning** — ADD, MOVE, REMOVE, HARVEST actions via USB-keyboard scanner or phone camera
+- **Batch management** — fruiting blocks and grain spawn bags with full lifecycle tracking
+- **Culture library** — mother cultures, petri dishes, liquid cultures, grain-to-grain spawn with lineage tracing
+- **Harvest logging** — per-bag weight tracking with flush numbers and yield analytics
+- **Inventory ledger** — substrate stock, delivery logging, low-stock alerts, audit trail per change
+- **Contamination reports** — photo upload + on-screen annotations, optional auto-MOVE to CONTAM zone, follow-up tasks
+- **Asset register** — fixed-asset bookkeeping with depreciation, CSV export, printable labels
+- **Task management** — auto-generated batch tasks plus manual tasks with team assignment
+- **CalDAV calendar sync** — built-in CalDAV server consumed by Apple Calendar, Thunderbird, DAVx5
+- **Dashboard** — KPIs, production pipeline chart, harvest analytics, rack occupancy, contamination rate
+- **Label printing** — Code 128 + QR labels for Zebra GK420d (50×30 mm, 203 dpi)
+- **PWA** — installable on phones / tablets, offline scan queue replays on reconnect
+- **Multi-language UI** — German, English, Portuguese
+
+### Optional modules
+
+- **MCP integration** — expose batches, cultures, scans, harvests, and maintenance to Claude Desktop via the Model Context Protocol with OAuth + PKCE
+- **Camera AI** ([`mushroom_camera/`](mushroom_camera/)) — Python sidecar that runs YOLOv8 fruiting detection and HSV colonisation analysis hourly, writing snapshots back to the same SQLite database
+- **Print bridge** — HTTPS-secured Windows service that forwards label prints from a Linux server to a USB-attached Zebra GK420d
+- **DuckDNS + Let's Encrypt** — built-in dynamic DNS and automatic free TLS for self-hosted public access (no Nginx required)
 
 ## Quick Start
 
@@ -25,7 +47,7 @@ bash update_server.sh
 
 On Windows, double-click `START.bat` instead.
 
-Open **http://localhost:3000** in your browser. For other devices on the same WiFi, use **http://\<your-ip\>:3000**.
+Open **https://localhost:3000** in your browser. The server upgrades plain HTTP automatically and (best-effort) binds port 80 for the redirect. For other devices on the same WiFi, use **https://\<your-ip\>:3000** and accept the self-signed certificate warning on first connect.
 
 ### Prerequisites
 
@@ -133,7 +155,7 @@ Tasks belong to the people listed in their `assignee` field. An unassigned task 
 
 ## Data & Backups
 
-All data is stored in `meistertracker.db` (SQLite) on the server (shared by all devices automatically). Changes sync every 5 seconds.
+All data is stored in `meistertracker.db` (SQLite) on the server (shared by all devices automatically). Connected clients receive changes in near-real-time via Server-Sent Events; offline scans queue inside the service worker and replay automatically on reconnect.
 
 - **Auto-backup**: daily at midnight to `backups/` (keeps last 30 days). Uses SQLite `VACUUM INTO` so the backup is WAL-consistent even while the server is writing. Each run writes `backups/.backup-status.json` with success/failure and size, and the latest file is verified to have a valid SQLite header before the status is marked successful.
 - **Manual backup**: use the Backup tab in the app to export/import an encrypted archive (requires admin).
@@ -208,26 +230,50 @@ For a dedicated always-on server (Pi 4/5 recommended):
 
 ## API
 
-| Endpoint              | Method | Description                            |
-| --------------------- | ------ | -------------------------------------- |
-| `/api/data`           | GET    | Fetch all data                         |
-| `/api/data`           | POST   | Save all data (with safety checks)     |
-| `/api/health`         | GET    | Health check (status, uptime, version) |
-| `/api/print`          | POST   | Send ZPL to printer                    |
-| `/api/printer-status` | GET    | Check printer connection               |
-| `/api/caldav/sync`    | POST   | Sync all tasks to CalDAV               |
-| `/caldav/calendars/`  | CalDAV | CalDAV endpoint for calendar clients   |
+The full REST surface (50+ endpoints covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
+
+Notable surfaces worth knowing about:
+
+| Path                   | Description                                                      |
+| ---------------------- | ---------------------------------------------------------------- |
+| `GET /api/health`      | Public liveness + uptime                                         |
+| `GET /api/health/full` | Admin-only ops view (disk, printer, DuckDNS, LE expiry, backup …) |
+| `POST /api/data`       | Full-state save (admin) — used by the SPA                        |
+| `POST /api/print`      | Send ZPL to printer (or print bridge)                            |
+| `/caldav/calendars/`   | CalDAV endpoint for Apple Calendar / Thunderbird / DAVx5         |
+| `/oauth/authorize`     | OAuth 2.0 with PKCE for MCP clients                              |
+| `/mcp`                 | Model Context Protocol transport                                 |
 
 ## Project Structure
 
 ```
-server.js         Node.js HTTP server + CalDAV + printer integration
-index.html        SPA shell (HTML only)
-app.js            Frontend application logic
-styles.css        Stylesheet
-sw.js             Service worker for offline/PWA support
-manifest.json     PWA manifest
-lib/              Third-party libraries (JsBarcode, QRCode, Chart.js)
-update_server.sh  Setup, update, and management script
-START.bat         Windows launcher
+server.js              HTTP+HTTPS server, CalDAV, OAuth, printer integration
+db.js                  SQLite schema, migrations, queries, sessions, KPI snapshots
+mcp-server.js          Model Context Protocol tool surface
+index.html             SPA shell
+app.js                 Frontend application logic
+styles.css             Stylesheet
+sw.js                  Service worker (PWA, offline scan queue)
+manifest.json          PWA manifest
+login.html, login.js   Login + first-admin setup page
+openapi.yaml           REST API specification
+
+lang/                  Language packs (de, en, pt)
+lib/                   Vendored libraries (Chart.js, JsBarcode, html5-qrcode, qrcode)
+mushroom_camera/       Optional Python AI camera module — see DEPLOYMENT.md
+scripts/               Utilities: backup health, photo capture, print bridge, i18n audits
+test/                  Test suite (db, mcp-server, backup, perf, photo-cap)
+
+update_server.sh       Linux / macOS setup, update, and process management
+START.bat              Windows launcher (mirrors update_server.sh)
+gen-cert.sh, .ps1      Self-signed TLS certificate generators
+Dockerfile             Containerized deployment
 ```
+
+## License
+
+Released under the [GNU Affero General Public License v3.0 or later](LICENSE).
+
+Copyright © 2025–2026 Meisterpilze UG and contributors.
+
+Vendored third-party libraries in `lib/` ship under their own permissive licenses (Chart.js — BSD-3, JsBarcode — MIT, html5-qrcode — Apache-2.0, qrcode-generator — MIT). See each minified file's banner for the full notice.
