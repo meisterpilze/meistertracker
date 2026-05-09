@@ -2355,7 +2355,7 @@ function insertBatch(db, b, deltas, userId) {
   if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
   if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
   // Resolve strainId → species + strain text
-  let strainId = b.strainId || null;
+  const strainId = b.strainId || null;
   let species = b.species;
   let strain = b.strain || null;
   if (strainId) {
@@ -2866,7 +2866,7 @@ function insertCultures(db, cultures) {
     if (err) throw new Error('Invalid culture parent: ' + err);
 
     // Resolve strainId if provided
-    let strainId = c.strainId || null;
+    const strainId = c.strainId || null;
     let species = c.species || null;
     let strain = c.strain || null;
     if (strainId) {
