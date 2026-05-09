@@ -693,6 +693,10 @@ window.LANG['de'] = {
   'mcp.copy': 'Kopieren',
   'mcp.apiKey': 'API-Schlüssel (Skripte / Automatisierung)',
   'mcp.generateKey': 'API-Schlüssel generieren',
+  'mcp.revokeKey': 'Schlüssel widerrufen',
+  'mcp.revokeKeyConfirm':
+    'Aktuellen MCP-API-Schlüssel widerrufen? Bestehende Skripte, die ihn verwenden, funktionieren nicht mehr.',
+  'mcp.keyRevoked': 'API-Schlüssel widerrufen.',
   'mcp.keyHint':
     'Für Skripte oder Tools, die kein OAuth unterstützen. Als Bearer-Token im Authorization-Header verwenden. Wird nur einmal angezeigt.',
   'mcp.save': 'Speichern',

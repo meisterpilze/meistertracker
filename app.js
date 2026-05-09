@@ -5962,6 +5962,24 @@ async function generateMcpToken() {
     showMcpStatus(t('mcp.error').replace('{msg}', e.message), 'var(--c-red-dark)');
   }
 }
+async function revokeMcpToken() {
+  if (!confirm(t('mcp.revokeKeyConfirm'))) return;
+  try {
+    const r = await authFetch('/api/mcp/token', { method: 'DELETE' });
+    const data = await r.json();
+    if (data.error) {
+      showMcpStatus(t('mcp.error').replace('{msg}', data.error), 'var(--c-red-dark)');
+      return;
+    }
+    _mcpToken = null;
+    document.getElementById('mcp-token-display').textContent = '';
+    document.getElementById('mcp-token-display').style.display = 'none';
+    document.getElementById('mcp-copy-token-btn').style.display = 'none';
+    showMcpStatus(t('mcp.keyRevoked'), 'var(--c-green-dark)');
+  } catch (e) {
+    showMcpStatus(t('mcp.error').replace('{msg}', e.message), 'var(--c-red-dark)');
+  }
+}
 
 async function runMcpDiagnostics() {
   const el = document.getElementById('mcp-diag-result');
@@ -14733,6 +14751,7 @@ function initEventListeners() {
   $('le-request-btn').addEventListener('click', requestLeCert);
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);
   $('mcp-gen-token-btn').addEventListener('click', generateMcpToken);
+  $('mcp-revoke-token-btn').addEventListener('click', revokeMcpToken);
   $('mcp-enabled').addEventListener('change', function () {
     toggleMcpSections(this.checked);
   });

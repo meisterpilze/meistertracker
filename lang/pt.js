@@ -695,6 +695,10 @@ window.LANG['pt'] = {
   'mcp.copy': 'Copiar',
   'mcp.apiKey': 'Chave de API (scripts / automação)',
   'mcp.generateKey': 'Gerar chave de API',
+  'mcp.revokeKey': 'Revogar chave',
+  'mcp.revokeKeyConfirm':
+    'Revogar a chave de API MCP atual? Scripts existentes que a utilizam deixarão de funcionar.',
+  'mcp.keyRevoked': 'Chave de API revogada.',
   'mcp.keyHint':
     'Para scripts ou ferramentas que não suportam OAuth. Use como Bearer token no header Authorization. A chave é exibida apenas uma vez.',
   'mcp.save': 'Salvar',
