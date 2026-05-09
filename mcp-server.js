@@ -1920,7 +1920,7 @@ function createMcpServer(database, onWrite, printer) {
     }
   );
 
-  // Example: complete_maintenance({ id: 1, completedBy: 'Julian' })
+  // Example: complete_maintenance({ id: 1, completedBy: 'Alice' })
   server.tool(
     'complete_maintenance',
     'Mark a scheduled maintenance task as completed. Records who completed it and when.',

@@ -151,7 +151,7 @@ This starts the server as a PM2 process named `meisterpilze`.
 pm2 startup
 # Copy the printed `sudo env PATH=...` command and run it. Example output
 # (yours will differ — use what your machine prints):
-#   sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u julian --hp /home/julian
+#   sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u <your-user> --hp /home/<your-user>
 pm2 save
 ```
 
