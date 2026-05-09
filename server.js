@@ -527,6 +527,75 @@ function validateEnum(value, allowed, fieldName) {
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
   return null;
 }
+// Defense-in-depth content validation. Server-rendered fields elsewhere (and
+// some innerHTML interpolations on the client) trust these strings, so we
+// pin the character set + length up-front. Mirrors the batchId regex used
+// by /api/batches.
+const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
+function validateMushroomStrain(data) {
+  if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
+  if (data.name !== undefined && data.name !== null) {
+    if (typeof data.name !== 'string') return 'name must be a string';
+    if (data.name.length > 200) return 'name exceeds max length of 200';
+  }
+  if (data.kuerzel !== undefined && data.kuerzel !== null) {
+    if (typeof data.kuerzel !== 'string') return 'kuerzel must be a string';
+    if (data.kuerzel.length > 16) return 'kuerzel exceeds max length of 16';
+    if (data.kuerzel.length > 0 && !/^[A-Za-z0-9_\-]+$/.test(data.kuerzel)) {
+      return 'kuerzel must be alphanumeric with - or _';
+    }
+  }
+  if (data.description !== undefined && data.description !== null) {
+    if (typeof data.description !== 'string') return 'description must be a string';
+    if (data.description.length > 2000) return 'description exceeds max length of 2000';
+  }
+  return null;
+}
+const SCAN_ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'CONTAM'];
+function validateScanEntries(entries) {
+  if (!Array.isArray(entries)) return 'entries must be an array';
+  if (entries.length > 1000) return 'too many entries (max 1000 per request)';
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e || typeof e !== 'object') return 'entry[' + i + '] must be an object';
+    if (!SCAN_ACTIONS.includes(e.action)) {
+      return 'entry[' + i + '].action must be one of: ' + SCAN_ACTIONS.join(', ');
+    }
+    if (!e.time || typeof e.time !== 'string' || isNaN(new Date(e.time).getTime())) {
+      return 'entry[' + i + '].time must be an ISO timestamp';
+    }
+    // Optional ID-like fields — pin charset + length to prevent stored XSS via
+    // raw rendering in the client.
+    for (const f of ['batch', 'bag', 'from', 'to', 'expected_current_zone']) {
+      const v = e[f];
+      if (v === undefined || v === null || v === '') continue;
+      if (typeof v !== 'string') return 'entry[' + i + '].' + f + ' must be a string';
+      if (v.length > 100) return 'entry[' + i + '].' + f + ' exceeds max length of 100';
+      if (!ID_CHARSET_RE.test(v)) {
+        return 'entry[' + i + '].' + f + ' must be alphanumeric with - _ @ . :';
+      }
+    }
+    // Free-text-ish fields — only length-capped.
+    for (const [f, max] of [
+      ['species', 200],
+      ['strain', 200],
+      ['reason', 2000]
+    ]) {
+      const v = e[f];
+      if (v === undefined || v === null) continue;
+      if (typeof v !== 'string') return 'entry[' + i + '].' + f + ' must be a string';
+      if (v.length > max) return 'entry[' + i + '].' + f + ' exceeds max length of ' + max;
+    }
+    if (e.client_uuid !== undefined && e.client_uuid !== null && e.client_uuid !== '') {
+      if (typeof e.client_uuid !== 'string') return 'entry[' + i + '].client_uuid must be a string';
+      if (e.client_uuid.length > 64) return 'entry[' + i + '].client_uuid exceeds max length of 64';
+      if (!/^[A-Za-z0-9_\-]+$/.test(e.client_uuid)) {
+        return 'entry[' + i + '].client_uuid must be alphanumeric with - or _';
+      }
+    }
+  }
+  return null;
+}
 // Admin-only guard — returns true if blocked (response already sent)
 function requireAdmin(req, res) {
   if (!req.authUser || req.authUser.role !== 'admin') {
@@ -5414,6 +5483,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
+      const vs = validateMushroomStrain(data);
+      if (vs) {
+        jsonErr(res, 400, vs);
+        return;
+      }
       try {
         const id = db.createMushroomStrain(database, data);
         broadcastSSE(res);
@@ -5430,6 +5504,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
+        return;
+      }
+      const vs = validateMushroomStrain(data);
+      if (vs) {
+        jsonErr(res, 400, vs);
         return;
       }
       try {
@@ -5644,6 +5723,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const entries = data.entries || [];
+        const ve = validateScanEntries(entries);
+        if (ve) {
+          jsonErr(res, 400, ve);
+          return;
+        }
         // I-12: optimistic concurrency for offline-queue replays. If a MOVE
         // entry was queued offline based on a stale view (the bag has since
         // been moved by another user), reject the whole POST with 409 so the
