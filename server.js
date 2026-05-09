@@ -7064,7 +7064,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // (or on the next attempt) so an admin can see what happened
           // without scraping logs. Failure is implied if a fresh attempt
           // overwrites without a prior `success`.
-          const targetSha = (body.after || (body.head_commit && body.head_commit.id) || 'unknown').slice(0, 40);
+          // Defense-in-depth: even though the webhook is HMAC-verified, pin
+          // the SHA to a strict hex whitelist before it ever reaches the
+          // `bash -c "..."` interpolation below. If the GITHUB_WEBHOOK_SECRET
+          // ever leaks, an attacker still cannot smuggle shell metacharacters
+          // through `body.after`.
+          const rawSha = body.after || (body.head_commit && body.head_commit.id) || '';
+          const targetSha = /^[a-f0-9]{7,40}$/i.test(rawSha) ? rawSha.slice(0, 40) : 'unknown';
           const startedAt = new Date().toISOString();
           try {
             writeDeployState({
