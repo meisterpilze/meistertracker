@@ -409,7 +409,7 @@ sudo -u meisterpilze ssh backup-host true   # confirm passwordless login works
 The marker (`backups/.offsite-sync.json`) lets the server expose `/api/health → backup.offSite` with `lastSync`, `ageMinutes`, and `target`, and lets `check-backup-health.js` exit 1 (degraded) when the off-site sync hasn't run in `--max-offsite-age-hours` (default: 26). Any cron script in any language can update the marker — see the bash example above.
 
 ### Alternative: OneDrive on Windows
-If the project lives under a OneDrive-synced folder (`OneDrive - Meisterpilze`), the `backups/` directory cloud-syncs automatically. This is convenient but **platform-specific and not portable** — on a Linux server you must use rsync (or another off-site tool that touches the marker file).
+If the project lives under a OneDrive-synced folder, the `backups/` directory cloud-syncs automatically. This is convenient but **platform-specific and not portable** — on a Linux server you must use rsync (or another off-site tool that touches the marker file).
 
 ## 11. Restoring from a backup
 
