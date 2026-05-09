@@ -32,7 +32,11 @@ module.exports = [
       'no-constant-condition': 'warn',
       'no-debugger': 'error',
       'no-duplicate-case': 'error',
-      'no-empty': ['warn', { allowEmptyCatch: false }],
+      // Empty `catch {}` is an established pattern in this codebase for
+      // best-effort cleanup (rmSync, unlinkSync) and optional stat lookups
+      // where a missing file is fine. Real silent-error bugs get caught
+      // in review.
+      'no-empty': ['warn', { allowEmptyCatch: true }],
       'no-unreachable': 'error',
       'eqeqeq': ['warn', 'smart'],
       'no-var': 'warn',

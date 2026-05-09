@@ -1073,7 +1073,7 @@ function _acmeHttps(method, url, body, extraHeaders, callback) {
       if (raw)
         try {
           json = JSON.parse(raw);
-        } catch (_) {} // eslint-disable-line no-empty
+        } catch (_) {}
       callback(null, res.statusCode, res.headers, json || raw);
     });
   });
@@ -3644,7 +3644,7 @@ function handlePut(parts, body, req, res) {
               const ev = db.readCalendarEventByCaldavUid(database, caldavUid);
               if (ev) {
                 ev.assignees = [];
-                const { uid: newUid, ics } = customEventToVEVENT(ev);
+                const { ics } = customEventToVEVENT(ev);
                 fs.writeFileSync(filePath, ics, 'utf8');
                 invalidateCtag(calName);
                 recordChange(calName, fileName, 'changed');
