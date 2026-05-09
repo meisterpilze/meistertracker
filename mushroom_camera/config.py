@@ -17,20 +17,23 @@ DB_PATH = os.getenv("MEISTERTRACKER_DB", "/opt/meistertracker/data/meistertracke
 CAMERAS = [
     {
         "name": "Fruiting Camera 1",
-        "rtsp_url": os.getenv("CAM1_RTSP", "rtsp://admin:password@192.168.1.10/stream1"),
+        # Required: set CAM1_RTSP env var, e.g. rtsp://user:pass@192.168.1.10/stream1
+        "rtsp_url": os.getenv("CAM1_RTSP", ""),
         "zone_id": "TENT1",
         "zone_role": "fruiting",
     },
     {
         "name": "Fruiting Camera 2",
-        "rtsp_url": os.getenv("CAM2_RTSP", "rtsp://admin:password@192.168.1.11/stream1"),
+        # Required: set CAM2_RTSP env var, e.g. rtsp://user:pass@192.168.1.11/stream1
+        "rtsp_url": os.getenv("CAM2_RTSP", ""),
         "zone_id": "TENT2",
         "zone_role": "fruiting",
     },
     # Uncomment and adjust when you add an incubation camera:
     # {
     #     "name": "Incubation Camera",
-    #     "rtsp_url": os.getenv("CAM3_RTSP", "rtsp://admin:password@192.168.1.12/stream1"),
+    #     # Required: set CAM3_RTSP env var, e.g. rtsp://user:pass@192.168.1.12/stream1
+    #     "rtsp_url": os.getenv("CAM3_RTSP", ""),
     #     "zone_id": "INC",
     #     "zone_role": "incubation",
     # },
