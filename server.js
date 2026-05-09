@@ -3994,6 +3994,15 @@ function handleRequest(req, res) {
   );
   if (protocol === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Permissions-Policy: explicitly drop powerful APIs the app doesn't use.
+  // camera=(self) is required for the html5-qrcode scanner; fullscreen=(self)
+  // is left open for any future scanner-fullscreen UI. Everything else is
+  // off — closes attack-surface that a future XSS could otherwise pivot
+  // into (e.g. exfiltrating geolocation, capturing the microphone).
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), autoplay=(), fullscreen=(self)'
+  );
 
   // ── Well-known CalDAV discovery (RFC 6764) ──
   // Use 308 (Permanent Redirect) instead of 301 so that iOS/CalDAV clients
