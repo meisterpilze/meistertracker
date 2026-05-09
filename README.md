@@ -8,7 +8,7 @@
 > **The lab management system behind [Meisterpilze](https://www.meisterpilze.de).**
 > Barcode-driven scanning, batch / culture / harvest tracking, label printing, calendar sync — a single self-hosted Node.js process that runs a real specialty-mushroom production lab.
 
-Meistertracker is the operational backbone of **[Meisterpilze](https://www.meisterpilze.de)**, an urban mushroom farm in Erlangen, Germany, growing shiitake, oyster, king oyster, lion's mane, and blue oyster mushrooms. Every fruiting block, every culture transfer, and every harvest gram in the lab is tracked through this software — released under **AGPL-3.0-or-later** so other labs can run, modify, and self-host it freely.
+Meistertracker is the operational backbone of **[Meisterpilze](https://www.meisterpilze.de)**, an urban mushroom farm in Erlangen, Germany, growing shiitake, oyster, king oyster, lion's mane, and blue oyster mushrooms for restaurants, retail, and home growers. Every fruiting block, every culture transfer, and every harvest gram in the lab is tracked through this software — released under **AGPL-3.0-or-later** so other labs can run, modify, and self-host it freely.
 
 ## About
 
