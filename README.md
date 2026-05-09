@@ -353,4 +353,4 @@ Released under the [GNU Affero General Public License v3.0 or later](LICENSE).
 
 Copyright © 2025–2026 Meisterpilze UG and contributors.
 
-Vendored third-party libraries in `lib/` ship under their own permissive licenses (Chart.js — BSD-3, JsBarcode — MIT, html5-qrcode — Apache-2.0, qrcode-generator — MIT). See each minified file's banner for the full notice.
+Vendored third-party libraries in `lib/` ship under their own permissive licenses (Chart.js — MIT, JsBarcode — MIT, html5-qrcode — Apache-2.0, qrcode-generator — MIT). See each minified file's banner for the full notice.
