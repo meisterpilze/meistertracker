@@ -4168,20 +4168,39 @@ function handleRequest(req, res) {
             res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris required"}');
             return;
           }
-          // Validate redirect URIs are http(s) URLs
+          // Validate redirect URIs. RFC 8252 (OAuth 2.0 for Native Apps):
+          // public clients must use https:// or loopback http://. Plain http
+          // to a public host would let an attacker register a phishing
+          // redirect — PKCE alone does not prevent that since the attacker
+          // *is* the registered client. Accept exactly:
+          //   - https://...   (any host)
+          //   - http://127.0.0.1[:port][/...]
+          //   - http://[::1][:port][/...]
+          //   - http://localhost[:port][/...]   (dev convenience)
           for (const uri of redirectUris) {
+            let u;
             try {
-              const u = new URL(uri);
-              if (u.protocol !== 'https:' && u.protocol !== 'http:') {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(
-                  '{"error":"invalid_client_metadata","error_description":"redirect_uris must be http or https URLs"}'
-                );
-                return;
-              }
+              u = new URL(uri);
             } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end('{"error":"invalid_client_metadata","error_description":"invalid redirect_uri"}');
+              return;
+            }
+            const isHttps = u.protocol === 'https:';
+            const isLoopbackHttp =
+              u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === '[::1]' || u.hostname === '::1' || u.hostname === 'localhost');
+            if (!isHttps && !isLoopbackHttp) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                '{"error":"invalid_client_metadata","error_description":"redirect_uri must be https:// or http://(127.0.0.1|[::1]|localhost) per RFC 8252"}'
+              );
+              return;
+            }
+            if (u.hash) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                '{"error":"invalid_client_metadata","error_description":"redirect_uri must not contain a fragment"}'
+              );
               return;
             }
           }
