@@ -1,0 +1,65 @@
+name: Bug Report
+description: Something doesn't work as documented or expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the sections below.
+
+        **For security vulnerabilities, do _not_ open an issue** — please use the
+        [Security Advisory form](https://github.com/loewenmaehne/meistertracker/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the server with `./update_server.sh`
+        2. Open https://localhost:3000
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Meistertracker commit
+      description: Output of `git rev-parse --short HEAD`.
+      placeholder: e.g. 08bb9ea
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: e.g. 22.6.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Ubuntu 22.04 / Raspberry Pi OS / macOS 14
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (if relevant)
+      placeholder: e.g. Chrome 120 / Safari 17
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server log excerpt
+      description: Relevant lines from `watchdog.log` or terminal output. Redact any tokens or personal data.
+      render: text
