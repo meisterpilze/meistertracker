@@ -43,7 +43,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 ### Optional modules
 
 - **MCP integration** — expose batches, cultures, scans, harvests, and maintenance to Claude Desktop via the Model Context Protocol with OAuth + PKCE
-- **Camera AI** ([`mushroom_camera/`](mushroom_camera/)) — Python sidecar that runs YOLOv8 fruiting detection and HSV colonisation analysis hourly, writing snapshots back to the same SQLite database
+- **Camera AI** *(in active development)* ([`mushroom_camera/`](mushroom_camera/)) — Python sidecar for RTSP-based fruiting and incubation monitoring, writing hourly snapshots back to the same SQLite database
 - **Print bridge** — HTTPS-secured Windows service that forwards label prints from a Linux server to a USB-attached Zebra GK420d
 - **DuckDNS + Let's Encrypt** — built-in dynamic DNS and automatic free TLS for self-hosted public access (no Nginx required)
 
@@ -261,9 +261,9 @@ The Core features above are everything you need to run a lab. The three pieces b
 
 For the full tool list see [`mcp-server.js`](mcp-server.js); the OAuth flow is documented in [`openapi.yaml`](openapi.yaml).
 
-### Camera AI module — `mushroom_camera/`
+### Camera AI module — `mushroom_camera/` *(in active development)*
 
-A Python sidecar that watches RTSP cameras placed in the fruiting tents and incubation room, runs YOLOv8 fruiting detection and HSV colonisation analysis hourly, and writes snapshots back to the same SQLite database. The main Node.js app reads those tables to surface a live camera dashboard at `Settings → Camera`.
+A Python sidecar that watches RTSP cameras placed in the fruiting tents and incubation room and writes hourly snapshots back to the same SQLite database. The main Node.js app reads those tables to surface a live camera dashboard at `Settings → Camera`. The detection pipeline is still being trained on real lab data — current results should be treated as experimental.
 
 ```bash
 cd mushroom_camera
