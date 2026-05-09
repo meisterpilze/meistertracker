@@ -8333,7 +8333,12 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   // Cache immutable vendor libs and per-locale lang files aggressively;
   // cache HTML/CSS/SW short-term.
-  if (url.startsWith('/lib/') || url.startsWith('/lang/')) {
+  if (url === '/sw.js') {
+    // The service worker is the killswitch path — must always revalidate
+    // so a bad SW build can be rolled back within one navigation rather
+    // than waiting up to 5 min + the browser's own 24 h SW-bypass cache.
+    headers['Cache-Control'] = 'no-cache';
+  } else if (url.startsWith('/lib/') || url.startsWith('/lang/')) {
     headers['Cache-Control'] = 'public, max-age=31536000, immutable';
   } else if (ext === '.png' || ext === '.ico' || ext === '.svg') {
     headers['Cache-Control'] = 'public, max-age=86400';
