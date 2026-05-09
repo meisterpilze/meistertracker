@@ -1015,7 +1015,7 @@ function openBatchAdd() {
         const kz = b.strainKuerzel || b.strain || '';
         const name = b.strainName || b.species || '';
         const st = (b.strainText || '').trim();
-        const label = (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+        const label = (kz ? '[' + esc(kz) + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
         return `<option value="${esc(b.batchId)}">${label}</option>`;
       })
       .join('');
@@ -4301,9 +4301,9 @@ function toggleBatchBags(batchId) {
         const bw = b.bagWeights ? b.bagWeights[bag] : null;
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
-        const wTag = showW ? `<span style="font-size:8px;color:#888;margin-left:1px">${bw}kg</span>` : '';
+        const wTag = showW ? `<span style="font-size:8px;color:#888;margin-left:1px">${esc(bw)}kg</span>` : '';
         return `<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
-      ${num}${wTag} <span style="font-size:9px;color:${color};font-weight:600">${loc}</span>
+      ${esc(num)}${wTag} <span style="font-size:9px;color:${color};font-weight:600">${esc(loc)}</span>
     </span>`;
       })
       .join('') +
@@ -6515,7 +6515,7 @@ function renderInvLog() {
     <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
     <td style="font-weight:600;color:${e.deltaKg < 0 ? 'var(--c-red-dark)' : 'var(--c-green-dark)'}">${e.deltaKg > 0 ? '+' : ''}${e.deltaKg.toFixed(2)} kg</td>
     <td style="font-size:11px">${(e.running || 0).toFixed(1)} kg</td>
-    <td><span class="badge ${e.type === 'delivery' ? 'b-add' : e.type === 'adjustment' ? 'b-move' : 'b-harvest'}">${e.type}</span></td>
+    <td><span class="badge ${e.type === 'delivery' ? 'b-add' : e.type === 'adjustment' ? 'b-move' : 'b-harvest'}">${esc(e.type)}</span></td>
     <td style="font-size:11px;color:var(--c-text-sec)">${esc(e.ref) || '—'}</td>
   </tr>`
     )
@@ -7910,7 +7910,7 @@ function fillCultureSelect(id, types) {
         const name = c.strainName || c.species || '';
         const st = (c.strainText || '').trim();
         const label =
-          (kz ? '[' + kz + '] ' : '') +
+          (kz ? '[' + esc(kz) + '] ' : '') +
           esc(c.id) +
           ' — ' +
           esc(name) +
@@ -8064,7 +8064,7 @@ function fillParentSelect(types) {
         const kz = c.strainKuerzel || c.strain || '';
         const name = c.strainName || c.species || '';
         const st = (c.strainText || '').trim();
-        const label = (kz ? '[' + kz + '] ' : '') + esc(c.id) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+        const label = (kz ? '[' + esc(kz) + '] ' : '') + esc(c.id) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
         return `<option value="${esc(c.id)}">${label}</option>`;
       })
       .join('');
@@ -8575,8 +8575,8 @@ function openBagInfo(bagId, batchId, batch) {
           const bagNum = bag.split('-').pop();
           const bagLast = lastByBag.get(bag.toUpperCase());
           const loc = !bagLast ? '—' : bagLast.action === 'REMOVE' ? '✗' : bagLast.to || '?';
-          return `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${loc}">
-          ${bagNum} <span style="font-size:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${loc}</span>
+          return `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${esc(loc)}">
+          ${esc(bagNum)} <span style="font-size:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${esc(loc)}</span>
         </span>`;
         })
         .join('')}
@@ -10049,7 +10049,7 @@ function batchOptionLabel(b) {
   const kz = b.strainKuerzel || b.strain || '';
   const name = b.strainName || b.species || '';
   const st = (b.strainText || '').trim();
-  return (kz ? '[' + kz + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
+  return (kz ? '[' + esc(kz) + '] ' : '') + esc(b.batchId) + ' — ' + esc(name) + (st ? ' ' + esc(st) : '');
 }
 function fillBatchSelect(filter) {
   const s = document.getElementById('print-batch');
