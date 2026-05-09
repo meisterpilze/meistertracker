@@ -10,7 +10,7 @@
 
 Meistertracker is the operational backbone of **[Meisterpilze](https://www.meisterpilze.de)**, an urban mushroom farm in Erlangen, Germany, growing shiitake, oyster, king oyster, lion's mane, and blue oyster mushrooms for restaurants, retail, and home growers. Every fruiting block, every culture transfer, and every harvest gram in the lab is tracked through this software — released under **AGPL-3.0-or-later** so other labs can run, modify, and self-host it freely.
 
-## About
+## 🍄 About
 
 Meistertracker is developed and maintained at **[Meisterpilze UG](https://www.meisterpilze.de)** in Erlangen, Germany — an urban specialty-mushroom farm founded in June 2024 by **Dr. Jonas Hahn** (research, biologist) and **Luis Veloso** (production, chemist). In their own words: *„Eine Verbindung von Wissenschaft und Natur"* — a blend of science and nature in service of better food.
 
@@ -22,7 +22,7 @@ The software is provided **without warranty of any kind** and the authors accept
 
 See [`LICENSE`](LICENSE) for the full terms.
 
-## Features
+## ✨ Features
 
 ### Core lab workflow
 
@@ -47,7 +47,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Print bridge** — HTTPS-secured Windows service that forwards label prints from a Linux server to a USB-attached Zebra GK420d
 - **DuckDNS + Let's Encrypt** — built-in dynamic DNS and automatic free TLS for self-hosted public access (no Nginx required)
 
-## Who is this for?
+## 👥 Who is this for?
 
 - **Specialty mushroom farms** with 5-50 fruiting tents who have outgrown spreadsheets
 - **University and commercial fungal labs** that need traceable culture lineage, contamination logs, and audit trails
@@ -56,7 +56,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 
 You probably do not need this if you are hobby-growing one or two bags at home — a notebook is fine. If you are tracking 100+ bags across multiple zones with multiple workers, label printers, and offline phone scanners, this is built for you.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/loewenmaehne/meistertracker.git
@@ -75,7 +75,7 @@ Open **https://localhost:3000** in your browser. The server upgrades plain HTTP 
 
 > **Setting up a fresh Linux server?** See [DEPLOYMENT.md](DEPLOYMENT.md) for a step-by-step guide covering Node install, PM2, TLS, DuckDNS + Let's Encrypt, and security hardening.
 
-## Configuration
+## ⚙️ Configuration
 
 Create a `.env` file in the project root to override defaults:
 
@@ -84,7 +84,7 @@ PORT=3000
 PRINTER_NAME=ZDesigner GK420d
 ```
 
-## Server Management
+## 🖥️ Server Management
 
 ### Linux / macOS
 
@@ -131,7 +131,7 @@ pm2 save
 ```
 PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the next launch to restore the meisterpilze process.
 
-## Scanning Workflow
+## 📷 Scanning Workflow
 
 1. Print the **Reference Barcodes** page (Print tab) and hang it at your station
 2. Scan **ADD** → scan a **location** (INC, TENT1, etc.) → scan **bag barcodes**
@@ -141,7 +141,7 @@ PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the ne
 
 The scan bar works on every tab. Scanners must be in USB Keyboard mode.
 
-## Label Printing (Zebra GK420d)
+## 🏷️ Label Printing (Zebra GK420d)
 
 The server sends ZPL directly to the printer via the Windows print spooler — no browser dialog needed.
 
@@ -150,7 +150,7 @@ The server sends ZPL directly to the printer via the Windows print spooler — n
 
 On non-Windows systems, use the "Download ZPL" fallback to send labels manually.
 
-## Authorization
+## 🔐 Authorization
 
 The app has two user roles: **worker** and **admin**.
 
@@ -172,7 +172,7 @@ The app has two user roles: **worker** and **admin**.
 
 Tasks belong to the people listed in their `assignee` field. An unassigned task (empty assignee) is considered "for everyone" and any authenticated worker may modify or delete it.
 
-## Data & Backups
+## 💾 Data & Backups
 
 All data is stored in `meistertracker.db` (SQLite) on the server (shared by all devices automatically). Connected clients receive changes in near-real-time via Server-Sent Events; offline scans queue inside the service worker and replay automatically on reconnect.
 
@@ -225,7 +225,7 @@ For encrypted restores initiated from the admin UI, use **Settings → Backup �
 
 > For full deployment context (off-site backups, WAL-only recovery, manual file swap on a server with no UI access), see **DEPLOYMENT.md → Restoring from a backup** and **→ Off-site backups (REQUIRED)**.
 
-## Raspberry Pi Deployment
+## 🥧 Raspberry Pi Deployment
 
 For a dedicated always-on server (Pi 4/5 recommended):
 
@@ -247,7 +247,7 @@ For a dedicated always-on server (Pi 4/5 recommended):
    ```
 5. Assign a static IP in your router's DHCP settings
 
-## Optional Modules
+## 🧩 Optional Modules
 
 The Core features above are everything you need to run a lab. The three pieces below are entirely optional — none of them is required for the main app to work, and any combination of them can be enabled per deployment.
 
@@ -288,7 +288,7 @@ The installer handles TLS certificate, URL ACL, inbound firewall rule, scheduled
 
 Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
 
-## API
+## 🔌 API
 
 The full REST surface (40+ operations covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
 
@@ -304,7 +304,7 @@ Notable surfaces worth knowing about:
 | `/oauth/authorize`     | OAuth 2.0 with PKCE for MCP clients                              |
 | `/mcp`                 | Model Context Protocol transport                                 |
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 server.js              HTTP+HTTPS server, CalDAV, OAuth, printer integration
@@ -330,7 +330,7 @@ gen-cert.sh, .ps1      Self-signed TLS certificate generators
 Dockerfile             Containerized deployment
 ```
 
-## Contributing
+## 🤝 Contributing
 
 Issues and pull requests are welcome at <https://github.com/loewenmaehne/meistertracker/issues>. By submitting a contribution you agree that your code is licensed under the AGPL-3.0-or-later — the same terms as the rest of the project.
 
@@ -347,7 +347,7 @@ npm run format      # prettier --write
 
 The CI workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, format check, and tests on every PR against `main`.
 
-## License
+## 📜 License
 
 Released under the [GNU Affero General Public License v3.0 or later](LICENSE).
 
