@@ -1,10 +1,20 @@
 # Meistertracker
 
-A self-hosted lab management system for mushroom cultivation — barcode-driven scanning, batch / culture / harvest tracking, label printing, and CalDAV calendar sync. Runs on a single Node.js process (Linux, macOS, Windows, Raspberry Pi).
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![CI](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml/badge.svg)](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml)
+[![Built at Meisterpilze](https://img.shields.io/badge/built%20at-meisterpilze.de-2ea44f.svg)](https://www.meisterpilze.de)
+[![Node 22+](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://nodejs.org)
+
+> **The lab management system behind [Meisterpilze](https://www.meisterpilze.de).**
+> Barcode-driven scanning, batch / culture / harvest tracking, label printing, calendar sync — a single self-hosted Node.js process that runs a real specialty-mushroom production lab.
+
+Meistertracker is the operational backbone of **[Meisterpilze](https://www.meisterpilze.de)**, an urban mushroom farm in Erlangen, Germany, growing shiitake, oyster, king oyster, lion's mane, and blue oyster mushrooms for restaurants, retail, and home growers. Every fruiting block, every culture transfer, and every harvest gram in the lab is tracked through this software — and after two years of daily production use it is released under **AGPL-3.0-or-later** so other labs can run, modify, and self-host it freely.
 
 ## About
 
-Meistertracker is developed by, with, and for **Meisterpilze UG** — a small mushroom-cultivation lab in Germany. It is released under the **GNU Affero General Public License v3.0 or later** so other small labs can run, modify, and self-host it freely.
+Meistertracker is developed and maintained at **[Meisterpilze UG](https://www.meisterpilze.de)** in Erlangen, Germany — an urban specialty-mushroom farm founded in June 2024 by **Dr. Jonas Hahn** (research, biologist) and **Luis Veloso** (production, chemist). In their own words: *„Eine Verbindung von Wissenschaft und Natur"* — a blend of science and nature in service of better food.
+
+The software was built in-house because no off-the-shelf tool fit how a real specialty-mushroom lab actually works: barcode scanning over typing, lifecycle phases that match the fungal biology, and a label printer right at the workbench. After two years of daily production use, we publish it under **AGPL-3.0-or-later** so other labs can build on it freely.
 
 The software is provided **without warranty of any kind** and the authors accept no liability for damages arising from its use.
 
@@ -36,6 +46,15 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Camera AI** ([`mushroom_camera/`](mushroom_camera/)) — Python sidecar that runs YOLOv8 fruiting detection and HSV colonisation analysis hourly, writing snapshots back to the same SQLite database
 - **Print bridge** — HTTPS-secured Windows service that forwards label prints from a Linux server to a USB-attached Zebra GK420d
 - **DuckDNS + Let's Encrypt** — built-in dynamic DNS and automatic free TLS for self-hosted public access (no Nginx required)
+
+## Who is this for?
+
+- **Specialty mushroom farms** with 5-50 fruiting tents who have outgrown spreadsheets
+- **University and commercial fungal labs** that need traceable culture lineage, contamination logs, and audit trails
+- **Mushroom growkit producers** doing per-bag QC and harvest analytics
+- **Fungal R&D labs** experimenting with substrates, strain crosses, and yield optimisation
+
+You probably do not need this if you are hobby-growing one or two bags at home — a notebook is fine. If you are tracking 100+ bags across multiple zones with multiple workers, label printers, and offline phone scanners, this is built for you.
 
 ## Quick Start
 
