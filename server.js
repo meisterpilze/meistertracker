@@ -4188,7 +4188,11 @@ function handleRequest(req, res) {
             }
             const isHttps = u.protocol === 'https:';
             const isLoopbackHttp =
-              u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === '[::1]' || u.hostname === '::1' || u.hostname === 'localhost');
+              u.protocol === 'http:' &&
+              (u.hostname === '127.0.0.1' ||
+                u.hostname === '[::1]' ||
+                u.hostname === '::1' ||
+                u.hostname === 'localhost');
             if (!isHttps && !isLoopbackHttp) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(
