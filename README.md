@@ -1,4 +1,4 @@
-# 🧫 Meistertracker
+# 🔬 Meistertracker
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![CI](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml/badge.svg)](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml)
