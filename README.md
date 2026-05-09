@@ -290,7 +290,7 @@ Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
 
 ## API
 
-The full REST surface (50+ endpoints covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
+The full REST surface (40+ operations covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
 
 Notable surfaces worth knowing about:
 

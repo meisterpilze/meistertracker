@@ -36,6 +36,7 @@ audit-*.md
 audit-plan.md
 pain-points.md
 phase-*.md
+i18n-report.md
 
 # Pre-compressed static asset variants (regenerated on server startup)
 *.gz
