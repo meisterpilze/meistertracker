@@ -1,5 +1,5 @@
 'use strict';
-// Phase 3 backup hotfix regression tests — see audit-2026-04.md.
+// Phase 3 backup hotfix regression tests.
 //
 // R-01: rotation must not delete today's auto-backup when manual backups
 //       sort lexicographically AFTER it.

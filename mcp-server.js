@@ -226,7 +226,7 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
 }
 
 // ── MCP Server Factory ────────────────────────────────────
-// Audit S-01: `printer` may also carry `auth = { userId, role }` describing
+// S-01: `printer` may also carry `auth = { userId, role }` describing
 // the bearer token that opened this session. Destructive tools call
 // `requireAdminRole(auth)` and short-circuit with an error result when the
 // caller is not an admin. The legacy static MCP token is treated as admin

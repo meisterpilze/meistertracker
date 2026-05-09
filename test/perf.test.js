@@ -1,5 +1,5 @@
 'use strict';
-// Phase 4 performance regression tests — see phase-4-performance.md.
+// Phase 4 performance regression tests.
 //
 // P-01: HTTP compression — pre-gzipped + pre-brotli static assets served
 //       with Content-Encoding negotiation, identical raw bytes.
