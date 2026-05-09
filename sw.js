@@ -146,7 +146,7 @@ async function _replayQueue(store, getAll, del, url) {
         notifyClients();
         return;
       } else if (resp.status === 409) {
-        // Conflict (audit I-12): server rejected the entry because state
+        // Conflict (I-12): server rejected the entry because state
         // changed since it was queued (e.g. an admin moved the bag to a
         // different zone via the web UI before this offline scan replayed).
         // Retrying can't help — drop the entry and surface the rejection so

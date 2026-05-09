@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_scanlog_time ON scan_log(time);
 -- I-11 idempotency index is created by migration v39, not here: pre-v39
 -- databases reach this SCHEMA block before migrations run, and CREATE TABLE
 -- IF NOT EXISTS is a no-op for them (so client_uuid wouldn't exist yet).
--- See audit-2026-04.md R-02 + PR #382.
+-- See PR #382.
 
 CREATE TABLE IF NOT EXISTS harvests (
   id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -977,7 +977,7 @@ const MIGRATIONS = [
   },
   {
     version: 38,
-    description: 'Add audit columns to mcp_config for static MCP token (audit S-08)',
+    description: 'Add audit columns to mcp_config for the static MCP token',
     fn(db) {
       // SQLite doesn't support `ADD COLUMN ... IF NOT EXISTS`, so check the
       // current schema and add only the columns that are missing.
@@ -998,7 +998,7 @@ const MIGRATIONS = [
   },
   {
     version: 39,
-    description: 'Add client_uuid + sequence for scan idempotency and iCal RFC 5545 (I-11, I-15)',
+    description: 'Add client_uuid + sequence for scan idempotency and iCal RFC 5545 conformance',
     fn(db) {
       // I-11: client-supplied idempotency key on scan_log so the offline
       // queue (sw.js) can replay POSTs without creating duplicates when a
@@ -1034,7 +1034,7 @@ const MIGRATIONS = [
   },
   {
     version: 40,
-    description: 'Add user_id to inventory_log for actor accountability (I-22)',
+    description: 'Add user_id to inventory_log for actor accountability',
     fn(db) {
       // I-22: every stock change should record who performed it. Existing rows
       // pre-date this column and stay NULL — we don't backfill since the
@@ -2482,7 +2482,7 @@ function renameBatch(db, oldId, newId) {
     invalidateBagZoneCache(db);
     db.prepare('UPDATE harvests SET bag=REPLACE(bag,?,?),batch=? WHERE batch=?').run(oldId, newId, newId, oldId);
     db.prepare('UPDATE inventory_log SET ref=? WHERE ref=?').run(newId, oldId);
-    // Audit I-06: contamination reports also reference batch_id and bag_id; without these
+    // I-06: contamination reports also reference batch_id and bag_id; without these
     // updates the reports would orphan and the contamination history for the batch would
     // disappear from the UI after a rename.
     db.prepare('UPDATE contamination_reports SET batch_id=? WHERE batch_id=?').run(newId, oldId);
@@ -2604,7 +2604,7 @@ function deleteBatchById(db, batchId, userId) {
     db.prepare('DELETE FROM scan_log WHERE batch=?').run(batchId);
     // P-06: scan_log rows for this batch are gone — invalidate the cache.
     invalidateBagZoneCache(db);
-    // Audit I-07: keep contamination history (audit-relevant) by NULLing the FK
+    // I-07: keep contamination history (audit-relevant) by NULLing the FK
     // instead of deleting the report rows. The reports list (listContaminationReports)
     // already filters by batch_id only when set, so NULL rows remain visible in the
     // unfiltered view.
@@ -3928,7 +3928,7 @@ function getMcpCfg(db) {
     revokedAt: row.revoked_at || null
   };
 }
-// Audit S-08: getMcpToken is called from two places — token verification
+// S-08: getMcpToken is called from two places — token verification
 // (server.js checkMcpAuth) and admin diagnostics. The verification path
 // passes touchLastUsed=true so we can record audit timestamps; the admin
 // path defaults to false so just opening the settings page doesn't bump

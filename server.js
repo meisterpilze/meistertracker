@@ -99,7 +99,7 @@ let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 let restoreInProgress = false;
 if (!fs.existsSync(CAL_DIR)) fs.mkdirSync(CAL_DIR);
 
-// ── First-run setup token (audit S-06) ─────────────────────
+// ── First-run setup token (S-06) ───────────────────────────
 // On a fresh deployment with zero users, the operator must either:
 //   1) call /api/auth/setup from loopback (default for the START.bat flow), or
 //   2) call /api/auth/setup with header `X-Setup-Token: <generated>`.
@@ -147,11 +147,11 @@ setInterval(
   60 * 60 * 1000
 );
 
-// Audit S-01: returns { userId, role } on success, null on failure.
+// S-01: returns { userId, role } on success, null on failure.
 //   - Legacy static MCP token → role: 'admin' (preserves historical
 //     behaviour; the static token has always granted full access).
 //   - OAuth access token → role looked up from the OAuth user.
-// Audit S-08: passes `touchLastUsed:true` to bump the static token's
+// S-08: passes `touchLastUsed:true` to bump the static token's
 // audit timestamp on each verification, and uses Buffer.from(..., 'hex')
 // explicitly so the encoding is unambiguous.
 function checkMcpAuth(req) {
@@ -738,8 +738,7 @@ const OFFSITE_MARKER_FILE = path.join(BACKUP_DIR, '.offsite-sync.json');
 const DEPLOY_STATE_FILE = path.join(DIR, 'data', 'deploy-state.json');
 // R-01: rotation only touches files matching this pattern, so manual backups
 // (`meistertracker_*.db`) and any other artefact in the directory stay put.
-// See scripts/rotate-backups.js for the helper and audit-2026-04.md for
-// background.
+// See scripts/rotate-backups.js for the helper.
 const { rotateAutoBackups } = require('./scripts/rotate-backups.js');
 const AUTO_BACKUP_RETENTION_DAYS = 30;
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
@@ -4479,7 +4478,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (e) return;
         let session = sessionId ? mcpSessions.get(sessionId) : null;
         if (!session) {
-          // Audit S-01: pass the caller's auth context (userId, role) into
+          // S-01: pass the caller's auth context (userId, role) into
           // the MCP server so destructive tools can require admin role.
           const server = createMcpServer(database, () => broadcastSSE(null), {
             printZPL,
@@ -5675,7 +5674,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   const scanIdMatch = req.url.match(/^\/api\/scan-log\/(\d+)$/);
   if (req.method === 'DELETE' && scanIdMatch) {
-    // Audit S-03: workers should be able to undo their own scans, but
+    // S-03: workers should be able to undo their own scans, but
     // not delete scans authored by other users. Owner-or-admin ACL,
     // mirroring the contamination-report pattern. The user_id column on
     // scan_log is nullable for legacy rows — only enforce ownership when
@@ -6112,7 +6111,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'DELETE' && cultureMatch) {
-    // Audit S-03: deleting a culture orphans batches.source_id and
+    // S-03: deleting a culture orphans batches.source_id and
     // contradicts the README role model (workers may create cultures
     // but only admins remove them).
     if (requireAdmin(req, res)) return;
@@ -6333,7 +6332,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vt);
         return;
       }
-      // Audit S-03: cap reduced from 100,000,000 to 1,000,000 to prevent
+      // S-03: cap reduced from 100,000,000 to 1,000,000 to prevent
       // accidental fraud / fat-finger entries by workers without making
       // asset entry admin-only (matches the README role model).
       const vrng = validateRanges(data, {
@@ -6861,7 +6860,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Length check first — timingSafeEqual throws RangeError on mismatched
         // byte lengths, and the attacker controls the X-Hub-Signature-256
         // header. Without this guard a single bad-length signature crashes
-        // the server (audit S-02).
+        // the server (S-02).
         const sigBuf = Buffer.from(sig);
         const expBuf = Buffer.from(expected);
         if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
@@ -7349,7 +7348,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Backup Download (encrypted .db) --
-  // Audit S-04: format upgraded.
+  // S-04: format upgraded.
   //   v2 layout: magic(4) + version(1) + salt(32) + iv(12) + tag(16) + ciphertext
   //     - magic   = "MPLZ" (Meisterpilze)
   //     - version = 0x02
@@ -7453,7 +7452,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Password required');
           return;
         }
-        // Audit S-04: detect format by magic prefix.
+        // S-04: detect format by magic prefix.
         //   v2 (new): "MPLZ" + 0x02 + salt(32) + iv(12) + tag(16) + ct
         //   v1 (legacy): salt(32) + iv(12) + tag(16) + ct [+ hmac(32)]
         const MAGIC = Buffer.from('MPLZ', 'ascii');

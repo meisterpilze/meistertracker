@@ -15,7 +15,7 @@ CERT_DIR="certs"
 mkdir -p "$CERT_DIR"
 
 # Domain from first argument or CERT_DOMAIN env var.
-# Audit S-10: validate against a strict whitelist before interpolating
+# Validate against a strict whitelist before interpolating
 # into the OpenSSL config heredoc — newlines or `=` characters in DOMAIN
 # would otherwise let a hostile env file inject extra cert extensions.
 DOMAIN="${1:-${CERT_DOMAIN:-}}"

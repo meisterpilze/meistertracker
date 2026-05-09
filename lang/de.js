@@ -1,4 +1,4 @@
-// Auto-extracted from app.js — see P-03 in phase-4-performance.md
+// Auto-extracted from app.js as part of P-03 (lazy locale loading).
 window.LANG = window.LANG || {};
 window.LANG['de'] = {
   // Common (reused across modals / dialogs)

@@ -1,7 +1,7 @@
 'use strict';
 // Auto-backup rotation helper. Lives in scripts/ so it can be required by
 // server.js AND imported into the test suite without booting the whole
-// HTTP server. See R-01 in audit-2026-04.md for the bug this fixes.
+// HTTP server.
 
 const fs = require('fs');
 const path = require('path');
