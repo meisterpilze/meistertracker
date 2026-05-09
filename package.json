@@ -1,7 +1,17 @@
 {
   "name": "meistertracker",
   "version": "1.0.0",
-  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "Meisterpilze UG",
+  "description": "Lab management system for mushroom cultivation — barcode scanning, batch / culture / harvest tracking, label printing, CalDAV sync.",
+  "homepage": "https://github.com/loewenmaehne/meistertracker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loewenmaehne/meistertracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/loewenmaehne/meistertracker/issues"
+  },
   "engines": {
     "node": ">=22.0.0"
   },
