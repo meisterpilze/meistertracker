@@ -20,6 +20,12 @@ jobs:
 
       - run: npm ci
 
+      # Fail on HIGH or CRITICAL transitive vulns. Moderate findings only
+      # warn (audit output is still printed). Run `npm audit fix` locally
+      # when this step fails.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
