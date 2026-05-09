@@ -17,10 +17,6 @@ const zlib = require('zlib');
 
 const db = require('../db.js');
 
-function tmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'mt-perf-test-'));
-}
-
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_perf_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
   return { path: p, db: db.openDb(p) };
