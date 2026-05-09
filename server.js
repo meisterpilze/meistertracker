@@ -4907,7 +4907,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // a stale off-site copy. The marker is written by the rsync cron (see
       // DEPLOYMENT.md → Off-site backups). Missing marker = "unknown" — the
       // operator may not have configured off-site sync yet.
-      let offSite = { lastSync: null, ageMinutes: null, target: null, bytes: null };
+      const offSite = { lastSync: null, ageMinutes: null, target: null, bytes: null };
       try {
         if (fs.existsSync(OFFSITE_MARKER_FILE)) {
           const parsed = JSON.parse(fs.readFileSync(OFFSITE_MARKER_FILE, 'utf8'));
@@ -5759,7 +5759,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // commit if this becomes load-bearing.
       const writtenPhotoFiles = [];
       let reportId = null;
-      let photoIds = [];
+      const photoIds = [];
       let autoMovedScanId = null;
       try {
         database.exec('BEGIN');
@@ -6020,7 +6020,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vrng);
         return;
       }
-      let vd = validateDate(data.time, 'time');
+      const vd = validateDate(data.time, 'time');
       if (vd) {
         jsonErr(res, 400, vd);
         return;
@@ -6154,7 +6154,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
-      let ve = validateEnum(data.priority, ['low', 'med', 'high'], 'priority');
+      const ve = validateEnum(data.priority, ['low', 'med', 'high'], 'priority');
       if (ve) {
         jsonErr(res, 400, ve);
         return;
