@@ -227,11 +227,9 @@ describe('R-02 — openDb works against a pre-v39 SQLite file', () => {
     const dir = tmpDir();
     try {
       const src = db.openDb(preV39Path);
-      const dest = path.join(dir, 'meisterpilze_backup_round-trip.db');
-      // backupDb's path validator rejects this filename's hyphen pattern only
-      // if the date part doesn't match — but it's fine here because the
-      // whitelist allows hyphens. Use a simple filename to avoid relying on
-      // pattern subtleties.
+      // Use a simple filename — backupDb's path validator is strict about
+      // the canonical `meisterpilze_backup_<date>.db` shape, and we only
+      // need round-trip integrity here, not naming.
       const simpleDest = path.join(dir, 'roundtrip.db');
       await db.backupDb(src, simpleDest);
       src.close();
