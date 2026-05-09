@@ -228,6 +228,47 @@ For a dedicated always-on server (Pi 4/5 recommended):
    ```
 5. Assign a static IP in your router's DHCP settings
 
+## Optional Modules
+
+The Core features above are everything you need to run a lab. The three pieces below are entirely optional — none of them is required for the main app to work, and any combination of them can be enabled per deployment.
+
+### MCP integration (Claude Desktop)
+
+[`mcp-server.js`](mcp-server.js) exposes the lab state as a Model Context Protocol tool surface so an LLM client (Claude Desktop, Claude Code, …) can read and mutate batches, cultures, scans, harvests, inventory, tasks, contamination reports, zones, racks, and maintenance schedules.
+
+- **Transport** — HTTPS, OAuth 2.0 with PKCE; clients register dynamically per RFC 7591.
+- **Auth** — every tool call carries the OAuth-derived user identity; admin-only operations are gated server-side.
+- **Setup** — open `Settings → MCP` in the admin UI and paste the connection URL into your MCP client. A legacy static-token transport remains available for headless integrations under the same tab.
+
+For the full tool list see [`mcp-server.js`](mcp-server.js); the OAuth flow is documented in [`openapi.yaml`](openapi.yaml).
+
+### Camera AI module — `mushroom_camera/`
+
+A Python sidecar that watches RTSP cameras placed in the fruiting tents and incubation room, runs YOLOv8 fruiting detection and HSV colonisation analysis hourly, and writes snapshots back to the same SQLite database. The main Node.js app reads those tables to surface a live camera dashboard at `Settings → Camera`.
+
+```bash
+cd mushroom_camera
+pip install -r requirements.txt
+export CAM1_RTSP="rtsp://user:pass@camera.lan/stream1"
+python -m mushroom_camera        # APScheduler daemon — runs every hour
+python -m mushroom_camera --now  # one-shot cycle (good for cron)
+```
+
+The sidecar is independent: the main app keeps working fine if `mushroom_camera/` is never started — the Camera tab simply reports "no measurements yet". Tuning thresholds live in [`mushroom_camera/config.py`](mushroom_camera/config.py); see **DEPLOYMENT.md** for deploying it as a systemd service alongside the main process.
+
+### Print bridge (Windows)
+
+If your Linux server can't talk to the Zebra directly (very common when the printer is in a different room from the server), run [`scripts/print-bridge.ps1`](scripts/print-bridge.ps1) on a Windows PC that has the GK420d attached via USB. The Linux server forwards `/api/print` and `/api/printer-status` calls to the bridge over HTTPS with token authentication, so labels go straight to the printer with live status feedback.
+
+```powershell
+# On the Windows PC — one-time setup (auto-elevates via UAC):
+powershell -ExecutionPolicy Bypass -File print-bridge.ps1 -Install -Token "long-random-string"
+```
+
+The installer handles TLS certificate, URL ACL, inbound firewall rule, scheduled task, and immediate start in one step. Then enter the URL + token in the admin UI under `Settings → Drucker`. Without a print bridge configured, the app falls back to a "Download ZPL" workflow — no driver setup needed but one extra click per print.
+
+Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
+
 ## API
 
 The full REST surface (50+ endpoints covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
@@ -269,6 +310,23 @@ START.bat              Windows launcher (mirrors update_server.sh)
 gen-cert.sh, .ps1      Self-signed TLS certificate generators
 Dockerfile             Containerized deployment
 ```
+
+## Contributing
+
+Issues and pull requests are welcome at <https://github.com/loewenmaehne/meistertracker/issues>. By submitting a contribution you agree that your code is licensed under the AGPL-3.0-or-later — the same terms as the rest of the project.
+
+Local development:
+
+```bash
+git clone https://github.com/loewenmaehne/meistertracker.git
+cd meistertracker
+npm install
+npm test            # ~211 unit tests
+npm run lint        # eslint
+npm run format      # prettier --write
+```
+
+The CI workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint, format check, and tests on every PR against `main`.
 
 ## License
 
