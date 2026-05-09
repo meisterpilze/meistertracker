@@ -119,6 +119,15 @@ try {
   log('error', 'countUsers failed at startup', { error: e.message });
 }
 
+// ── Constant-time login dummy hash (defense against username enumeration) ──
+// If a login request hits a non-existent username, we still run a full scrypt
+// against this throwaway hash so the response time matches a real user with
+// a wrong password. Without this, attackers could enumerate valid accounts
+// by measuring 10 ms (no scrypt) vs 50-200 ms (real scrypt) responses.
+// Salt+hash are randomized per process, never persisted.
+const DUMMY_PASSWORD_SALT = crypto.randomBytes(16).toString('hex');
+const DUMMY_PASSWORD_HASH = crypto.scryptSync('', DUMMY_PASSWORD_SALT, 64).toString('hex');
+
 // ── MCP (Model Context Protocol) server ────────────────────
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
@@ -4626,7 +4635,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           return;
         }
         const user = db.getUserByUsernameCaseInsensitive(database, username);
-        if (!user || !db.verifyPassword(user.hash, user.salt, password)) {
+        // Constant-time login: always run scrypt, even when the username is
+        // unknown — falling back to a process-local dummy hash keeps the
+        // response time independent of whether the account exists. The
+        // !user check below still rejects unknown accounts, but does so at
+        // the same latency as a real user with a wrong password.
+        const candidateHash = user ? user.hash : DUMMY_PASSWORD_HASH;
+        const candidateSalt = user ? user.salt : DUMMY_PASSWORD_SALT;
+        const passwordOk = db.verifyPassword(candidateHash, candidateSalt, password);
+        if (!user || !passwordOk) {
           recordLoginFailure(throttleKey);
           recordLoginFailurePerUser(userKey);
           res.writeHead(401, { 'Content-Type': 'application/json' });
