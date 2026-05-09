@@ -4949,16 +4949,37 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // POST /api/csp-reports — log CSP violations
+  // POST /api/csp-reports — log CSP violations. Public endpoint (the
+  // browser sends these without credentials), so we hard-cap body, rate-
+  // limit per IP, and never echo the body in errors.
   if (req.method === 'POST' && req.url === '/api/csp-reports') {
+    if (!checkRate(req, 30)) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      res.end('{"error":"too_many_requests"}');
+      return;
+    }
+    const CSP_BODY_MAX = 10000;
     let body = '';
+    let aborted = false;
     req.on('data', (c) => {
-      body += c;
-      if (body.length > 10000) {
+      if (aborted) return;
+      // Reject BEFORE appending so a single oversized chunk can't land
+      // in memory just to be discarded.
+      if (body.length + c.length > CSP_BODY_MAX) {
+        aborted = true;
+        try {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end('{"error":"payload_too_large"}');
+        } catch (_) {
+          /* response may already be in flight */
+        }
         req.destroy();
+        return;
       }
+      body += c;
     });
     req.on('end', () => {
+      if (aborted) return;
       try {
         const report = JSON.parse(body);
         log('warn', 'CSP violation', report['csp-report'] || report);
