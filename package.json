@@ -7,10 +7,10 @@
   "homepage": "https://meistertracker.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/loewenmaehne/meistertracker.git"
+    "url": "git+https://github.com/meisterpilze/meistertracker.git"
   },
   "bugs": {
-    "url": "https://github.com/loewenmaehne/meistertracker/issues"
+    "url": "https://github.com/meisterpilze/meistertracker/issues"
   },
   "engines": {
     "node": ">=22.0.0"
