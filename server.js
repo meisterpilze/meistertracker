@@ -4485,7 +4485,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 <div class="card">
   <div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M12 13v5M8 21h8M9 3c0 0-2-2-2-3M15 3c0 0 2-2 2-3"/></svg></div>
   <h1>Authorize Access</h1>
-  <p class="sub"><span class="client">${esc(clientName)}</span> wants to access<br>Meisterpilze Lab Tracker</p>
+  <p class="sub"><span class="client">${esc(clientName)}</span> wants to access<br>Meistertracker</p>
   <ul class="perms">
     <li>Read batches, tasks, calendar, inventory</li>
     <li>Create and update batches, tasks, events</li>
