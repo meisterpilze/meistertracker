@@ -21,7 +21,8 @@
     "lint": "eslint server.js db.js sw.js mcp-server.js test/",
     "lint:fix": "eslint --fix server.js db.js sw.js mcp-server.js test/",
     "format": "prettier --write server.js db.js sw.js mcp-server.js styles.css test/",
-    "format:check": "prettier --check server.js db.js sw.js mcp-server.js styles.css test/"
+    "format:check": "prettier --check server.js db.js sw.js mcp-server.js styles.css test/",
+    "license-check": "license-checker-rseidelsohn --production --onlyAllow 'MIT;Apache-2.0;ISC;BSD-2-Clause;BSD-3-Clause;0BSD;BSD-4-Clause;CC0-1.0;CC-BY-3.0;CC-BY-4.0;Unlicense;BlueOak-1.0.0;Python-2.0;AGPL-3.0;AGPL-3.0-only;AGPL-3.0-or-later;GPL-3.0;GPL-3.0-only;GPL-3.0-or-later;LGPL-2.1-or-later;LGPL-3.0;LGPL-3.0-only;LGPL-3.0-or-later;WTFPL;MIT-0' --summary"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
+    "license-checker-rseidelsohn": "^4.4.2",
     "prettier": "^3.8.1"
   }
 }

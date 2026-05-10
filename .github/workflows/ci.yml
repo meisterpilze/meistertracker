@@ -26,6 +26,12 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
+      # Fail if any production dep ships a license outside the AGPL-3.0
+      # compatible allowlist in package.json. Update the allowlist there
+      # if a new dep introduces a permissive license that's still safe.
+      - name: License check
+        run: npm run license-check
+
       - name: Lint
         run: npm run lint
 
