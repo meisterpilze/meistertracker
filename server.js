@@ -83,6 +83,19 @@ if (PM2_PROCESS_NAME !== PM2_PROCESS_NAME_RAW) {
   });
 }
 
+// ZPL label dimensions in dots. Default 400×240 = 50×30mm at 203dpi
+// (Zebra GK420d / ZD420 standard small label). Forks with different
+// label stock can override via env, but note the field positions in
+// app.js and mcp-server.js itemsToZPL() are laid out for 400 dots
+// wide — significantly different sizes will need layout tweaks too.
+function _intEnv(name, def, min, max) {
+  const v = parseInt(process.env[name], 10);
+  if (Number.isFinite(v) && v >= min && v <= max) return v;
+  return def;
+}
+const LABEL_WIDTH_DOTS = _intEnv('LABEL_WIDTH_DOTS', 400, 100, 4000);
+const LABEL_HEIGHT_DOTS = _intEnv('LABEL_HEIGHT_DOTS', 240, 100, 4000);
+
 // Optional Windows print bridge (scripts/print-bridge.ps1). When configured,
 // the server forwards print + status calls to this URL instead of running
 // PowerShell locally. Required for label printing when the server runs on
@@ -5383,6 +5396,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Per-user unread notification count so the bell badge can update
     // on every sync without a separate request.
     payload.notifications = { unread };
+    // Expose label dimensions so the client's ZPL builder can adapt
+    // without a separate round-trip. Static for the process lifetime.
+    payload.labelDims = { widthDots: LABEL_WIDTH_DOTS, heightDots: LABEL_HEIGHT_DOTS };
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
