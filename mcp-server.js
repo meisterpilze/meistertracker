@@ -57,10 +57,21 @@ function fmtDt(d) {
   return dd + '.' + mm + '.' + yy;
 }
 
+// Label size from LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env vars.
+// Default 400×240 dots = 50×30mm at 203dpi (Zebra GK420d small label).
+// Field positions in itemsToZPL/bagLabelItems/labLabelItems assume
+// 400 dots wide; significantly different sizes need their own layout.
+const _LABEL_W = (() => {
+  const v = parseInt(process.env.LABEL_WIDTH_DOTS, 10);
+  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 400;
+})();
+const _LABEL_H = (() => {
+  const v = parseInt(process.env.LABEL_HEIGHT_DOTS, 10);
+  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 240;
+})();
 function itemsToZPL(items) {
-  // Fixed label size: 400×240 dots (50×30mm @ 203dpi).
   // ^LT0/^LS0 reset stored offsets, ^PON/^FWN force normal orientation.
-  let z = '^XA^PW400^LL240^CI28^LH0,0^LT0^LS0^PON^FWN';
+  let z = '^XA^PW' + _LABEL_W + '^LL' + _LABEL_H + '^CI28^LH0,0^LT0^LS0^PON^FWN';
   for (const it of items) {
     if (it.type === 'barcode') {
       z +=
