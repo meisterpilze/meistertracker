@@ -141,14 +141,16 @@ PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the ne
 
 The scan bar works on every tab. Scanners must be in USB Keyboard mode.
 
-## 🏷️ Label Printing (Zebra GK420d)
+## 🏷️ Label Printing (Zebra ZPL · 50×30 mm · 203 dpi)
 
 The server sends ZPL directly to the printer via the Windows print spooler — no browser dialog needed.
 
-1. Connect GK420d via USB and ensure it is powered on
-2. Labels are 60x30mm, Code 128, optimised for 203dpi
+1. Connect a ZPL-compatible Zebra (GK420d, ZD420, ZD230, …) via USB and ensure it is powered on
+2. Labels are **50 × 30 mm**, Code 128 / QR, designed for **203 dpi** (`^PW400 ^LL240`)
 
 On non-Windows systems, use the "Download ZPL" fallback to send labels manually.
+
+> **Compatibility:** the layout is tuned for ZPL II at 203 dpi with 50×30 mm landscape labels. Different Zebras at the same dpi/label size work as-is; different label sizes, 300 dpi printers, or non-ZPL printers (Brother QL, Dymo LabelWriter, …) need either a layout refactor or a new print backend. See [FORKING.md §2](FORKING.md#2-hardware-assumptions) for the full breakdown.
 
 ## 🔐 Authorization
 
@@ -329,6 +331,10 @@ START.bat              Windows launcher (mirrors update_server.sh)
 gen-cert.sh, .ps1      Self-signed TLS certificate generators
 Dockerfile             Containerized deployment
 ```
+
+## 🍴 Running it for your own lab?
+
+Meistertracker was built for one specific operator and a few rough edges still reflect that — a fixed inventory schema, German tax-law defaults in the asset register, a CalDAV slug baked in for compatibility, and a print pipeline tuned for Zebra ZPL at 203 dpi with 50×30 mm labels. Most of these are configurable via env vars; some need a small fork. Read [FORKING.md](FORKING.md) for the full inventory of what's tuned to Meisterpilze vs. what's generic, and the env-var matrix for the configurable bits.
 
 ## 🤝 Contributing
 
