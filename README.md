@@ -5,7 +5,7 @@
 [![Built at Meisterpilze](https://img.shields.io/badge/built%20at-meisterpilze.de-2ea44f.svg)](https://www.meisterpilze.de)
 [![Node 22+](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://nodejs.org)
 
-**Meistertracker is a self-hosted lab management system for specialty-mushroom cultivation.** Workers walk the lab with phones or tablets, scan barcodes on bags and cultures with the device camera, and the software tracks every fruiting block from inoculation to harvest — across the four phases of the cultivation cycle (spawn run → incubation → fruiting → contamination triage).
+**Meistertracker is a self-hosted lab management system for mushroom cultivation.** Workers walk the lab with phones or tablets, scan barcodes on bags and cultures with the device camera, and the software tracks every fruiting block from inoculation to harvest — across the four phases of the cultivation cycle (spawn run → incubation → fruiting → contamination triage).
 
 Print barcode and QR labels at the workbench, file contamination reports with photos, weigh harvests against KPI dashboards, manage cultures, inventory, and a fixed-asset register, and sync tasks and due dates to any CalDAV calendar (Apple Calendar, Google Calendar, Thunderbird, DAVx5). Multi-user with role-based access (worker / admin), MCP integration for Claude Desktop and other LLM clients, offline-capable as a PWA. One Node.js process, SQLite database, no cloud dependencies — runs on **Windows, macOS, or Linux** (including a Raspberry Pi).
 
@@ -15,7 +15,7 @@ Meistertracker is the operational backbone of **[Meisterpilze](https://www.meist
 
 Meistertracker is developed and maintained at **[Meisterpilze UG](https://www.meisterpilze.de)** in Erlangen, Germany — an urban specialty-mushroom farm founded in June 2024 by **Dr. Jonas Hahn** (research, biologist) and **Luis Veloso** (production, chemist). In their own words: *„Eine Verbindung von Wissenschaft und Natur"* — a blend of science and nature in service of better food.
 
-The software was built in-house because no off-the-shelf tool fit how a real specialty-mushroom lab actually works: barcode scanning over typing, lifecycle phases that match the fungal biology, and a label printer right at the workbench. It runs daily in our lab and is published under **AGPL-3.0-or-later** so other labs can build on it freely.
+The software was built in-house because no off-the-shelf tool fit how a real mushroom lab actually works: barcode scanning over typing, lifecycle phases that match the fungal biology, and a label printer right at the workbench. It runs daily in our lab and is published under **AGPL-3.0-or-later** so other labs can build on it freely.
 
 The software is provided **without warranty of any kind** and the authors accept no liability for damages arising from its use.
 
