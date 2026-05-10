@@ -2,7 +2,7 @@
 
 [![Website](https://img.shields.io/badge/web-meistertracker.com-2ea44f.svg)](https://meistertracker.com)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![CI](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml/badge.svg)](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml)
+[![CI](https://github.com/meisterpilze/meistertracker/actions/workflows/ci.yml/badge.svg)](https://github.com/meisterpilze/meistertracker/actions/workflows/ci.yml)
 [![Built at Meisterpilze](https://img.shields.io/badge/built%20at-meisterpilze.de-2ea44f.svg)](https://www.meisterpilze.de)
 [![Node 22+](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://nodejs.org)
 
@@ -20,7 +20,7 @@ The software was built in-house because no off-the-shelf tool fit how a real mus
 
 The software is provided **without warranty of any kind** and the authors accept no liability for damages arising from its use.
 
-> **AGPL §13 reminder**: if you operate this software as a network service for users other than yourself, you must offer them the corresponding source code (including any modifications). The unmodified upstream is at <https://github.com/loewenmaehne/meistertracker> — linking back is usually enough to comply.
+> **AGPL §13 reminder**: if you operate this software as a network service for users other than yourself, you must offer them the corresponding source code (including any modifications). The unmodified upstream is at <https://github.com/meisterpilze/meistertracker> — linking back is usually enough to comply.
 
 See [`LICENSE`](LICENSE) for the full terms.
 
@@ -61,7 +61,7 @@ You probably do not need this if you are hobby-growing one or two bags at home �
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/loewenmaehne/meistertracker.git
+git clone https://github.com/meisterpilze/meistertracker.git
 cd meistertracker
 bash update_server.sh
 ```
@@ -241,7 +241,7 @@ For a dedicated always-on server (Pi 4/5 recommended):
    ```
 3. Clone and start:
    ```bash
-   git clone https://github.com/loewenmaehne/meistertracker.git
+   git clone https://github.com/meisterpilze/meistertracker.git
    cd meistertracker && bash update_server.sh
    ```
 4. Enable autostart:
@@ -340,12 +340,12 @@ Meistertracker was built for one specific operator and a few rough edges still r
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome at <https://github.com/loewenmaehne/meistertracker/issues>. By submitting a contribution you agree that your code is licensed under the AGPL-3.0-or-later — the same terms as the rest of the project.
+Issues and pull requests are welcome at <https://github.com/meisterpilze/meistertracker/issues>. By submitting a contribution you agree that your code is licensed under the AGPL-3.0-or-later — the same terms as the rest of the project.
 
 Local development:
 
 ```bash
-git clone https://github.com/loewenmaehne/meistertracker.git
+git clone https://github.com/meisterpilze/meistertracker.git
 cd meistertracker
 npm install
 npm test            # ~211 unit tests
