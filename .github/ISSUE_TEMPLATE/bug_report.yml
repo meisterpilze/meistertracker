@@ -9,7 +9,7 @@ body:
 
         **For security vulnerabilities, do _not_ open an issue** — please use the
         [Security Advisory form](https://github.com/loewenmaehne/meistertracker/security/advisories/new)
-        or email <security@meistertracker.de> instead.
+        or email <security@meistertracker.com> instead.
   - type: textarea
     id: what-happened
     attributes:

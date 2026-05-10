@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/loewenmaehne/meistertracker/security/advisories/new
     about: Preferred — private workspace to coordinate the fix. Do not open a public issue.
   - name: Security vulnerability (email)
-    url: mailto:security@meistertracker.de?subject=%5Bsecurity%5D%20Meistertracker
+    url: mailto:security@meistertracker.com?subject=%5Bsecurity%5D%20Meistertracker
     about: Use this if you don't have a GitHub account or the advisory form is unavailable.
   - name: Search existing issues
     url: https://github.com/loewenmaehne/meistertracker/issues?q=is%3Aissue
