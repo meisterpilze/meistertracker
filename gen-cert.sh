@@ -59,7 +59,7 @@ distinguished_name = dn
 x509_extensions = v3_ext
 
 [dn]
-CN = Meisterpilze Lab Tracker
+CN = Meistertracker
 
 [v3_ext]
 subjectAltName = $SAN
