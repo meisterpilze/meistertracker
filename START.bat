@@ -64,7 +64,10 @@ REM ============================================================
 cd /d "%~2"
 
 REM ---- Configuration ----
-set "PM2_PROCESS_NAME=meisterpilze"
+REM Override via env to run multiple instances under distinct PM2 names
+REM or to match a fork's branding. Must match the value server.js reads
+REM from PM2_PROCESS_NAME.
+if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze"
 set "NEED_PATH_REFRESH=0"
 
 REM ============================================================

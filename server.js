@@ -70,6 +70,19 @@ if (!/^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW)) {
 }
 const PRINTER_NAME = /^[\w\s.\-()]+$/u.test(PRINTER_NAME_RAW) ? PRINTER_NAME_RAW : 'ZDesigner GK420d';
 
+// PM2 process name — used by the GitHub-webhook auto-deploy chain
+// (`pm2 restart <name>` after `git pull`). Forks running PM2 with a
+// different process name should set PM2_PROCESS_NAME in their env so
+// the auto-deploy lands on the right process. Validated to a strict
+// charset before any shell interpolation.
+const PM2_PROCESS_NAME_RAW = process.env.PM2_PROCESS_NAME || 'meisterpilze';
+const PM2_PROCESS_NAME = /^[A-Za-z0-9_\-]{1,64}$/.test(PM2_PROCESS_NAME_RAW) ? PM2_PROCESS_NAME_RAW : 'meisterpilze';
+if (PM2_PROCESS_NAME !== PM2_PROCESS_NAME_RAW) {
+  log('error', 'PM2_PROCESS_NAME contains unsafe characters, falling back to default', {
+    value: PM2_PROCESS_NAME_RAW
+  });
+}
+
 // Optional Windows print bridge (scripts/print-bridge.ps1). When configured,
 // the server forwards print + status calls to this URL instead of running
 // PowerShell locally. Required for label printing when the server runs on
@@ -7122,7 +7135,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                       '"} > "' +
                       stateFileEsc +
                       '") &&' +
-                      ' pm2 restart meisterpilze --update-env ||' +
+                      ' pm2 restart ' +
+                      PM2_PROCESS_NAME +
+                      ' --update-env ||' +
                       ' (echo {"status":"failed","sha":"' +
                       targetSha +
                       '","started":"' +
@@ -7146,7 +7161,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                       '" > "' +
                       stateFileEsc +
                       '";' +
-                      ' pm2 restart meisterpilze --update-env;' +
+                      ' pm2 restart ' +
+                      PM2_PROCESS_NAME +
+                      ' --update-env;' +
                       " } || { printf '%s' \"" +
                       failJson.replace(/\\"/g, '\\\\"') +
                       '" > "' +
