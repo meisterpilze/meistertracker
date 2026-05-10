@@ -372,15 +372,20 @@ const MIGRATIONS = [
       );
       CREATE INDEX IF NOT EXISTS idx_racks_zone ON racks(zone_id);
     `);
-      // Seed default zones
+      // Seed default zones. Names are stored in English; the UI maps the
+      // canonical IDs (SPAWN/INC/TENT1-3/CONTAM) to localised display
+      // names via KNOWN_ZONE_I18N in app.js. Operators who prefer custom
+      // names can rename them in Settings → Zones (the rename writes the
+      // chosen name to the row and the i18n shadowing falls away once
+      // the localised key no longer matches).
       const now = new Date().toISOString();
       const insZ = db.prepare('INSERT OR IGNORE INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)');
       insZ.run('SPAWN', 'Spawn Run', 'spawn', '#a855f7', 1, now);
-      insZ.run('INC', 'Inkubation', 'incubation', '#0ea5e9', 2, now);
-      insZ.run('TENT1', 'Zelt 1', 'fruiting', '#10b981', 3, now);
-      insZ.run('TENT2', 'Zelt 2', 'fruiting', '#10b981', 4, now);
-      insZ.run('TENT3', 'Zelt 3', 'fruiting', '#10b981', 5, now);
-      insZ.run('CONTAM', 'Kontamination', 'contaminated', '#ef4444', 99, now);
+      insZ.run('INC', 'Incubation', 'incubation', '#0ea5e9', 2, now);
+      insZ.run('TENT1', 'Tent 1', 'fruiting', '#10b981', 3, now);
+      insZ.run('TENT2', 'Tent 2', 'fruiting', '#10b981', 4, now);
+      insZ.run('TENT3', 'Tent 3', 'fruiting', '#10b981', 5, now);
+      insZ.run('CONTAM', 'Contamination', 'contaminated', '#ef4444', 99, now);
       // Seed default racks
       const insR = db.prepare('INSERT OR IGNORE INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
       insR.run('SPAWN_R1', 'SPAWN', 1, now);
