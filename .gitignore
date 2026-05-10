@@ -14,6 +14,12 @@ data.json
 *.db-wal
 *.db-shm
 
+# Runtime data (photos, calendar attachments, ad-hoc per-instance state).
+# `data/photos/{YYYY}/{MM}/{report_id}/*.jpg` is written by the server when
+# operators attach photos to contamination reports — these may contain
+# workers' hands/badges/faces and must never be committed (GDPR).
+data/
+
 # Calendars
 calendars/
 
