@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server.js db.js app.js mcp-server.js index.html login.html login.js styles.css sw.js manifest.json openapi.yaml ./
+COPY icon-192.png icon-512.png favicon.ico ./
 COPY lib/ lib/
 COPY lang/ lang/
 COPY scripts/ scripts/
