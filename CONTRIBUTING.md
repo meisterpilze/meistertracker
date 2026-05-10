@@ -6,13 +6,13 @@ This is a small, maintainer-paced project. Drive-by patches are welcome; please 
 
 ## Reporting issues
 
-- **Bugs and feature requests:** open a [GitHub issue](https://github.com/loewenmaehne/meistertracker/issues/new/choose). The forms ask for the bits we need (commit hash, Node version, repro steps).
-- **Security vulnerabilities:** please file a private [Security Advisory](https://github.com/loewenmaehne/meistertracker/security/advisories/new) or email <security@meistertracker.com> — do **not** open a public issue. See [SECURITY.md](SECURITY.md).
+- **Bugs and feature requests:** open a [GitHub issue](https://github.com/meisterpilze/meistertracker/issues/new/choose). The forms ask for the bits we need (commit hash, Node version, repro steps).
+- **Security vulnerabilities:** please file a private [Security Advisory](https://github.com/meisterpilze/meistertracker/security/advisories/new) or email <security@meistertracker.com> — do **not** open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
 ```sh
-git clone https://github.com/loewenmaehne/meistertracker.git
+git clone https://github.com/meisterpilze/meistertracker.git
 cd meistertracker
 npm ci
 npm test
@@ -81,4 +81,4 @@ If you want to work on the camera module, please open an issue first to talk abo
 
 ## Questions
 
-For open-ended questions that aren't bugs or feature requests, search [existing issues](https://github.com/loewenmaehne/meistertracker/issues?q=is%3Aissue) first; if nothing matches, file a new issue and we'll convert it to a discussion if useful.
+For open-ended questions that aren't bugs or feature requests, search [existing issues](https://github.com/meisterpilze/meistertracker/issues?q=is%3Aissue) first; if nothing matches, file a new issue and we'll convert it to a discussion if useful.

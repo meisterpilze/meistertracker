@@ -52,7 +52,7 @@ Prepare the directory and clone:
 ```bash
 sudo mkdir -p /var/www
 sudo chown $USER:$USER /var/www
-git clone git@github.com:loewenmaehne/meistertracker.git /var/www/meistertracker
+git clone git@github.com:meisterpilze/meistertracker.git /var/www/meistertracker
 cd /var/www/meistertracker
 ```
 
@@ -63,7 +63,7 @@ GitHub no longer accepts password authentication for git operations. You'll need
 ```bash
 sudo mkdir -p /var/www
 sudo chown $USER:$USER /var/www
-git clone https://github.com/loewenmaehne/meistertracker.git /var/www/meistertracker
+git clone https://github.com/meisterpilze/meistertracker.git /var/www/meistertracker
 cd /var/www/meistertracker
 ```
 
