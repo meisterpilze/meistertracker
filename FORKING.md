@@ -36,27 +36,72 @@ so existing clients re-fetch the shell.
 
 ## 2. Hardware assumptions
 
-### Label printer
+### Label printer — **read this carefully before forking the print code**
 
-Default `PRINTER_NAME=ZDesigner GK420d` (Zebra). Override via env. Other
-Zebras (ZD420, ZD230) using the same ZPL dialect work without changes
-*if* you also adjust the label dimensions.
+The print pipeline is built tightly around one specific setup:
 
-Default label is 50×30mm @ 203dpi → `^PW400^LL240`. Override via:
+> **ZPL II · 203 dpi · 50×30 mm landscape · Zebra GK420d (or compatible)**
 
-```sh
-LABEL_WIDTH_DOTS=600   # e.g. 75mm at 203dpi
-LABEL_HEIGHT_DOTS=400  # e.g. 50mm at 203dpi
-```
+Everything else needs varying amounts of work.
 
-Caveat: the field positions inside `itemsToZPL()` (in `app.js` and
-`mcp-server.js`) are laid out for 400 dots wide — significantly larger
-or smaller labels need their own layout. Treat the env vars as a
-slight-adjustment dial, not a full re-layout.
+#### What works out of the box
 
-The print-bridge (`scripts/print-bridge.ps1`) is **Windows-only**. Linux
-hosts use the ZPL-download fallback (the UI emits a `.zpl` file the
-operator forwards manually). Documented in [DEPLOYMENT.md §12](DEPLOYMENT.md#12-windows-print-bridge-optional).
+Any ZPL-II thermal printer at 203 dpi with 50×30 mm label stock.
+Verified models include the Zebra **GK420d / GK420t / GX420d / ZD220 /
+ZD230 / ZD420 / ZD500 / ZD620**. ZPL-clone printers (Argox CP-2140,
+Bixolon SLP-TX400 in ZPL mode) at the same dpi/label size also work.
+
+Set `PRINTER_NAME=<exact Windows printer name>` (env or `.env`) so the
+print bridge can find it.
+
+#### What "slightly different" labels can do
+
+The env vars `LABEL_WIDTH_DOTS` and `LABEL_HEIGHT_DOTS` only change the
+`^PW` / `^LL` headers the printer reads — they do **not** change the
+field layout inside the label. So they're useful when:
+
+- ✅ Your label feeder reports slightly different dots (e.g. 408×244 vs. 400×240)
+- ✅ You print the same 50×30mm content on slightly larger stock and accept blank margin
+
+They're **not** enough when:
+
+- ❌ Your labels are a different physical size (e.g. 40×20mm or 75×50mm) — text and barcodes will overflow or sit in the corner
+- ❌ Your printer is 300 dpi — every font and coordinate would need to double
+- ❌ Your labels are portrait-oriented
+
+#### What needs a layout refactor (~200 LOC)
+
+The 50×30mm canvas is the single source of truth. The layout assumes
+`width=400` everywhere — the comment at `app.js:9493` says so explicitly.
+Hard-coded coordinates live in:
+
+| File | Where | What |
+|---|---|---|
+| `app.js` | `bagLabelItems()` ~9673 | Bag label fields (y=155/185/215, blockW=400, fontH=28/24/24) |
+| `app.js` | `labLabelItems()` ~9743 | Lab/culture label fields (same scheme) |
+| `app.js` | `bcParams()` ~9482 | Barcode width + centering, hardcoded `> 400` and `(400 - w) / 2` |
+| `app.js` | Asset-print template ~7677 | `^FB400`, `^A0N,30,30` etc. inline in ZPL strings |
+| `app.js` | `buildPreviewCell()` UI preview | `viewBox="0 0 400 240"` — the in-app preview is also pinned to 400×240 |
+| `mcp-server.js` | `itemsToZPL()` and `bagLabelItems()` ~121 | Mirror of the client logic for MCP-driven printing |
+
+Forking for a different label size means editing all six places (or
+introducing a label-template abstraction) and updating the preview
+viewBox. Not impossible, but more than a config tweak.
+
+#### What needs a new print backend (much bigger scope)
+
+Brother QL-series, Dymo LabelWriter, Citizen CL-S, and most non-Zebra
+thermal printers don't speak ZPL at all. To support them you'd add a
+new pipeline that emits raster bitmaps (PNG/PDF) and a corresponding
+print-bridge for those drivers. That's a separate project, not a
+config swap.
+
+#### Print bridge
+
+`scripts/print-bridge.ps1` is **Windows-only**. Linux/macOS hosts fall
+back to "ZPL download" — the UI emits a `.zpl` file the operator
+forwards to a print queue manually. Documented in
+[DEPLOYMENT.md §12](DEPLOYMENT.md#12-windows-print-bridge-optional).
 
 ### Cameras (optional `mushroom_camera/` module)
 
