@@ -181,6 +181,10 @@ const SP_COLORS = [
   '#65a30d'
 ];
 let REF_GROUPS = [];
+// ZPL label dimensions in dots, populated from /api/data labelDims
+// (server reads LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env). Default
+// 400×240 = 50×30mm at 203dpi (Zebra GK420d small label).
+const labelDims = { widthDots: 400, heightDots: 240 };
 const KNOWN_ZONE_I18N = {
   SPAWN: 'dash.zoneSpawn',
   INC: 'dash.zoneInc',
@@ -464,6 +468,12 @@ function applyData(d) {
     barcodeByEntity.set(bc.entity_type + ':' + bc.entity_id, bc.barcode);
   }
   rebuildZoneConstants();
+  // ZPL label dimensions (set by server from LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS
+  // env vars). Fall back to the default 50×30mm @ 203dpi if missing.
+  if (d.labelDims && typeof d.labelDims.widthDots === 'number' && typeof d.labelDims.heightDots === 'number') {
+    labelDims.widthDots = d.labelDims.widthDots;
+    labelDims.heightDots = d.labelDims.heightDots;
+  }
   batches.forEach((b) => spColor(b.species));
   cultures.forEach((c) => spColor(c.species));
   fillStrainSelects();
@@ -7659,7 +7669,11 @@ function makeAssetZPL(ids) {
       if (a.name.length > 28 || loc.length > 36) truncated.push(a.name || id);
       const bc = bcParams(bcVal);
       return (
-        '^XA^PW400^LL240^CI28^LH0,0' +
+        '^XA^PW' +
+        labelDims.widthDots +
+        '^LL' +
+        labelDims.heightDots +
+        '^CI28^LH0,0' +
         '^FO' +
         bc.x +
         ',40^BY' +
@@ -9494,9 +9508,12 @@ function zplText(s) {
 }
 
 function itemsToZPL(items) {
-  // Fixed label size: 400×240 dots (50×30mm @ 203dpi).
+  // Label size from server config (LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env).
+  // Default 400×240 dots = 50×30mm at 203dpi. Field positions in the
+  // callers assume 400 dots wide; significantly different sizes need
+  // their own layout.
   // ^LT0/^LS0 reset stored offsets, ^PON/^FWN force normal orientation.
-  let z = '^XA^PW400^LL240^CI28^LH0,0^LT0^LS0^PON^FWN';
+  let z = '^XA^PW' + labelDims.widthDots + '^LL' + labelDims.heightDots + '^CI28^LH0,0^LT0^LS0^PON^FWN';
   for (const it of items) {
     if (it.type === 'barcode') {
       z +=
