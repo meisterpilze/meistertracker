@@ -11,8 +11,10 @@
 # exit immediately if a command exits with a non-zero status
 set -e
 
-# Configuration
-PM2_PROCESS_NAME="meisterpilze"
+# Configuration — override via env to run multiple instances under
+# distinct PM2 names, or to match a fork's branding. Must match the
+# value the server itself reads from PM2_PROCESS_NAME (server.js).
+PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-meisterpilze}"
 
 # ---- Helper functions ----
 
