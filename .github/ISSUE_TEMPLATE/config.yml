@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
+  - name: Security vulnerability (GitHub Advisory)
     url: https://github.com/loewenmaehne/meistertracker/security/advisories/new
-    about: Please report security issues privately via a GitHub Security Advisory — do not open a public issue.
+    about: Preferred — private workspace to coordinate the fix. Do not open a public issue.
+  - name: Security vulnerability (email)
+    url: mailto:info@meisterpilze.de?subject=%5Bsecurity%5D%20Meistertracker
+    about: Use this if you don't have a GitHub account or the advisory form is unavailable.
   - name: Search existing issues
     url: https://github.com/loewenmaehne/meistertracker/issues?q=is%3Aissue
     about: Please search before filing — your question may already have an answer.
