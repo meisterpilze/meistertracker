@@ -28,8 +28,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { BACKUP_PREFIX } = require('./rotate-backups.js');
 
-const AUTO_BACKUP_PREFIX = 'meisterpilze_backup_';
+const AUTO_BACKUP_PREFIX = BACKUP_PREFIX;
 const MANUAL_BACKUP_PREFIX = 'meistertracker_';
 
 function parseArgs(argv) {

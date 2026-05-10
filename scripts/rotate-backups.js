@@ -6,13 +6,25 @@
 const fs = require('fs');
 const path = require('path');
 
+// Auto-backup filename prefix. Default 'meisterpilze_backup_' for
+// backwards compatibility with existing prod backup directories.
+// Forks can override via env to brand their own deployment, but note
+// existing files keep the old prefix and won't be rotated by the new
+// pattern — pick a prefix BEFORE the first auto-backup runs, or
+// rename existing files to match.
+function _backupPrefix() {
+  const v = process.env.BACKUP_FILENAME_PREFIX;
+  if (v && /^[A-Za-z0-9_\-]+_$/.test(v)) return v;
+  return 'meisterpilze_backup_';
+}
+const BACKUP_PREFIX = _backupPrefix();
+function _escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 // Filenames matching this pattern are considered auto-backups and ARE
-// candidates for rotation. Manual backups (`meistertracker_*`) and any
-// other file in the directory are explicitly NOT candidates — alphabetic
-// sort places `meisterpilze_b...` BEFORE `meistertracker_*`, which used
-// to put today's auto-backup at the head of a >30-file slice and made
-// `verifyBackupFile` fail with `stat ENOENT` immediately afterwards.
-const AUTO_BACKUP_FILENAME = /^meisterpilze_backup_\d{4}-\d{2}-\d{2}\.db$/;
+// candidates for rotation. Manual / encrypted backups and any other
+// file in the directory are explicitly NOT candidates.
+const AUTO_BACKUP_FILENAME = new RegExp('^' + _escapeRegex(BACKUP_PREFIX) + '\\d{4}-\\d{2}-\\d{2}\\.db$');
 
 // Files newer than this threshold are NEVER deleted, regardless of retention
 // policy. This is belt + suspenders against a future ordering regression
@@ -75,6 +87,7 @@ function rotateAutoBackups(dir, retentionDays = 30) {
 
 module.exports = {
   AUTO_BACKUP_FILENAME,
+  BACKUP_PREFIX,
   MIN_FILE_AGE_MS,
   rotateAutoBackups
 };
