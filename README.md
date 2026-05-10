@@ -1,6 +1,6 @@
 # 🔬 Meistertracker
 
-[![Website](https://img.shields.io/badge/web-meistertracker.de-2ea44f.svg)](https://meistertracker.de)
+[![Website](https://img.shields.io/badge/web-meistertracker.com-2ea44f.svg)](https://meistertracker.com)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![CI](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml/badge.svg)](https://github.com/loewenmaehne/meistertracker/actions/workflows/ci.yml)
 [![Built at Meisterpilze](https://img.shields.io/badge/built%20at-meisterpilze.de-2ea44f.svg)](https://www.meisterpilze.de)
