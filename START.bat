@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title Meisterpilze Lab Tracker
+title Meistertracker
 
 REM ============================================================
 REM  Phase 1 (outer wrapper): Update code from git FIRST, then
@@ -12,7 +12,7 @@ REM ============================================================
 if not "%~1"=="--relaunched" (
     echo.
     echo  ========================================
-    echo    Meisterpilze Lab Tracker
+    echo    Meistertracker
     echo  ========================================
     echo.
     echo [1/5] Updating code from git...

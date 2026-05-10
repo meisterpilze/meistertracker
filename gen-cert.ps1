@@ -68,7 +68,7 @@ distinguished_name = dn
 x509_extensions = v3_ext
 
 [dn]
-CN = Meisterpilze Lab Tracker
+CN = Meistertracker
 
 [v3_ext]
 subjectAltName = $sanOpenssl
@@ -105,7 +105,7 @@ try {
     $sanText = $sanTextParts -join '&'
 
     $cert = New-SelfSignedCertificate `
-        -Subject 'CN=Meisterpilze Lab Tracker' `
+        -Subject 'CN=Meistertracker' `
         -TextExtension @("2.5.29.17={text}$sanText") `
         -CertStoreLocation 'Cert:\CurrentUser\My' `
         -KeyExportPolicy Exportable `
