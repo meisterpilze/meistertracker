@@ -7,7 +7,7 @@ This is a small, maintainer-paced project. Drive-by patches are welcome; please 
 ## Reporting issues
 
 - **Bugs and feature requests:** open a [GitHub issue](https://github.com/loewenmaehne/meistertracker/issues/new/choose). The forms ask for the bits we need (commit hash, Node version, repro steps).
-- **Security vulnerabilities:** please file a private [Security Advisory](https://github.com/loewenmaehne/meistertracker/security/advisories/new) or email <info@meisterpilze.de> — do **not** open a public issue. See [SECURITY.md](SECURITY.md).
+- **Security vulnerabilities:** please file a private [Security Advisory](https://github.com/loewenmaehne/meistertracker/security/advisories/new) or email <security@meistertracker.de> — do **not** open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
 

@@ -7,8 +7,8 @@ Please report security issues **privately** through one of these channels:
 - **GitHub Security Advisory** (preferred):
   <https://github.com/loewenmaehne/meistertracker/security/advisories/new>
   Gives us a private workspace to coordinate the fix and credits you on disclosure.
-- **Email**: <info@meisterpilze.de>
-  Use this if you don't have a GitHub account or the advisory form is unavailable. Please prefix the subject line with `[security]`. We will respond from the same address.
+- **Email**: <security@meistertracker.de>
+  Use this if you don't have a GitHub account or the advisory form is unavailable. Please prefix the subject line with `[security]`. We will reply from the maintainer's regular address.
 
 We aim to acknowledge reports within **72 hours**. For HIGH-severity issues we aim to ship a fix within **30 days**; lower-severity issues may take longer depending on the scope of the change required.
 
