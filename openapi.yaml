@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Meisterpilze Lab Tracker API
+  title: Meistertracker API
   version: 1.0.0
-  description: REST API for the Meisterpilze mushroom lab management system.
+  description: REST API for the Meistertracker mushroom lab management system.
 servers:
   - url: https://localhost:3000
     description: Local development (HTTPS)
