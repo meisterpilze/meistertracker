@@ -180,7 +180,7 @@ the depreciation columns. Or fork the asset-register section.
 
 ## 7. Documentation references
 
-These docs assume the original repo URL (`github.com/loewenmaehne/meistertracker`):
+These docs assume the original repo URL (`github.com/meisterpilze/meistertracker`):
 
 - `README.md`
 - `CONTRIBUTING.md`

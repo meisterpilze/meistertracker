@@ -10,7 +10,7 @@ If you experience or witness behaviour in this repository (issues, pull requests
 
 Reports are handled confidentially. The maintainers will review the report and respond as outlined in the Covenant's *Enforcement Guidelines*.
 
-For **security** vulnerabilities, please use the [Security Advisory form](https://github.com/loewenmaehne/meistertracker/security/advisories/new) or email <security@meistertracker.com> instead — see [SECURITY.md](SECURITY.md).
+For **security** vulnerabilities, please use the [Security Advisory form](https://github.com/meisterpilze/meistertracker/security/advisories/new) or email <security@meistertracker.com> instead — see [SECURITY.md](SECURITY.md).
 
 ## Scope
 
