@@ -843,7 +843,7 @@ const DEPLOY_STATE_FILE = path.join(DIR, 'data', 'deploy-state.json');
 // R-01: rotation only touches files matching this pattern, so manual backups
 // (`meistertracker_*.db`) and any other artefact in the directory stay put.
 // See scripts/rotate-backups.js for the helper.
-const { rotateAutoBackups } = require('./scripts/rotate-backups.js');
+const { rotateAutoBackups, BACKUP_PREFIX } = require('./scripts/rotate-backups.js');
 const AUTO_BACKUP_RETENTION_DAYS = 30;
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
 // Clean up orphaned temp files from interrupted backup operations.
@@ -953,7 +953,7 @@ function runDailyBackup() {
     const d = new Date();
     const stamp =
       d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    const dest = path.join(BACKUP_DIR, 'meisterpilze_backup_' + stamp + '.db');
+    const dest = path.join(BACKUP_DIR, BACKUP_PREFIX + stamp + '.db');
     if (fs.existsSync(dest)) {
       // Already have today's backup — record lastAttempt but don't overwrite.
       writeBackupStatus({ lastAttempt: { time: startedIso, success: true, skipped: 'already-exists' } });
@@ -7602,7 +7602,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const stamp = new Date().toISOString().slice(0, 10);
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
-          'Content-Disposition': 'attachment; filename="meisterpilze_backup_' + stamp + '.enc"',
+          'Content-Disposition': 'attachment; filename="' + BACKUP_PREFIX + stamp + '.enc"',
           'Content-Length': out.length
         });
         res.end(out);
