@@ -2,11 +2,13 @@
 
 ## Reporting a vulnerability
 
-Please report security issues **privately** by drafting a GitHub Security Advisory:
+Please report security issues **privately** through one of these channels:
 
-<https://github.com/loewenmaehne/meistertracker/security/advisories/new>
-
-This gives us a private workspace to coordinate the fix and credits you on disclosure.
+- **GitHub Security Advisory** (preferred):
+  <https://github.com/loewenmaehne/meistertracker/security/advisories/new>
+  Gives us a private workspace to coordinate the fix and credits you on disclosure.
+- **Email**: <info@meisterpilze.de>
+  Use this if you don't have a GitHub account or the advisory form is unavailable. Please prefix the subject line with `[security]`. We will respond from the same address.
 
 We aim to acknowledge reports within **72 hours**. For HIGH-severity issues we aim to ship a fix within **30 days**; lower-severity issues may take longer depending on the scope of the change required.
 
