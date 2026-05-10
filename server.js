@@ -4466,7 +4466,7 @@ function handleRequest(req, res) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Authorize – Meisterpilze</title><link rel="icon" href="/favicon.ico">
+<title>Authorize – Meistertracker</title><link rel="icon" href="/favicon.ico">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b;font-size:15px;display:flex;align-items:center;justify-content:center;min-height:100vh}
@@ -8485,7 +8485,7 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
 listenServer.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
   console.log('');
-  console.log('  Meisterpilze Lab Tracker is running!');
+  console.log('  Meistertracker is running!');
   console.log('');
   console.log('  Open on this PC:      ' + protocol + '://localhost:' + PORT);
   console.log('  Open on phone/tablet: ' + protocol + '://' + ip + ':' + PORT);

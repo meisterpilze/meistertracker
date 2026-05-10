@@ -1,6 +1,6 @@
 {
-  "name": "Meisterpilze Lab Tracker",
-  "short_name": "Meisterpilze",
+  "name": "Meistertracker",
+  "short_name": "Meistertracker",
   "description": "Lab tracker for mushroom cultivation — batches, cultures, harvests and scan workflow",
   "start_url": "/",
   "display": "standalone",
