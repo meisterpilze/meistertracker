@@ -8,7 +8,7 @@ body:
         Thanks for taking the time to file a bug. Please fill in the sections below.
 
         **For security vulnerabilities, do _not_ open an issue** — please use the
-        [Security Advisory form](https://github.com/loewenmaehne/meistertracker/security/advisories/new)
+        [Security Advisory form](https://github.com/meisterpilze/meistertracker/security/advisories/new)
         or email <security@meistertracker.com> instead.
   - type: textarea
     id: what-happened
