@@ -45,6 +45,7 @@ window.LANG['en'] = {
   'strains.deleteProtected': 'Cannot delete: still in use.',
   'strains.batches': 'batches',
   'strains.cultures': 'cultures',
+  'strains.empty': 'No Pilzsorten defined yet.',
   // Scan strip
   'scan.action': 'Action',
   'scan.from': 'From',
@@ -346,6 +347,8 @@ window.LANG['en'] = {
   'print.selectBatchFirst': 'Select a batch first.',
   'print.noBagsInRange': 'No bags in that range.',
   'print.selectCulture': 'Select at least one culture.',
+  'print.selectBatchAbove': 'Select a batch above.',
+  'print.tickCulturesPreview': 'Tick cultures in the list to preview labels.',
   // To-do
   'todo.batchTasks': 'Batch tasks',
   'todo.all': 'All',
@@ -358,6 +361,7 @@ window.LANG['en'] = {
   // Team
   'team.membersDesc':
     'Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.',
+  'team.empty': 'No team members yet. Add your first member below.',
   // CalDAV
   'caldav.title': 'CalDAV calendar server',
   'caldav.desc':
@@ -436,6 +440,7 @@ window.LANG['en'] = {
   'inv.stock': 'Stock',
   'inv.logDelivery': 'Log delivery',
   'inv.usageLog': 'Usage log',
+  'inv.noUsageHistory': 'No usage history yet.',
   'inv.alertThresholds': 'Alert thresholds',
   'inv.alertThresholdsDesc':
     'Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".',
@@ -470,6 +475,8 @@ window.LANG['en'] = {
   'assets.total': 'Total',
   'assets.purchaseValueActive': 'Purchase value (active)',
   'assets.bookValueToday': 'Book value today (active)',
+  'assets.empty': 'No assets recorded. Click "Add" to get started.',
+  'assets.noneAvailable': 'No assets available.',
   'assets.newId': 'New ID: {id}',
   'assets.editing': 'Editing: {id}',
   'assets.fillRequired': 'Please fill in all required fields.',

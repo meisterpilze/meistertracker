@@ -45,6 +45,7 @@ window.LANG['de'] = {
   'strains.deleteProtected': 'Löschen nicht möglich: noch in Verwendung.',
   'strains.batches': 'Chargen',
   'strains.cultures': 'Kulturen',
+  'strains.empty': 'Noch keine Pilzsorten angelegt.',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',
@@ -350,6 +351,8 @@ window.LANG['de'] = {
   'print.selectBatchFirst': 'Bitte zuerst eine Charge w\u00e4hlen.',
   'print.noBagsInRange': 'Keine Beutel in diesem Bereich.',
   'print.selectCulture': 'Bitte mindestens eine Kultur ausw\u00e4hlen.',
+  'print.selectBatchAbove': 'Charge oben w\u00e4hlen.',
+  'print.tickCulturesPreview': 'Kulturen in der Liste anhaken, um Etiketten in der Vorschau zu sehen.',
   // To-do
   'todo.batchTasks': 'Chargen-Aufgaben',
   'todo.all': 'Alle',
@@ -362,6 +365,7 @@ window.LANG['de'] = {
   // Team
   'team.membersDesc':
     'F\u00fcge Teammitglieder hinzu, um Aufgaben individuell zuzuweisen. Jedes Mitglied kann optional einen eigenen CalDAV-Kalender erhalten.',
+  'team.empty': 'Noch keine Teammitglieder. F\u00fcge unten dein erstes Mitglied hinzu.',
   // CalDAV
   'caldav.title': 'CalDAV-Kalenderserver',
   'caldav.desc':
@@ -442,6 +446,7 @@ window.LANG['de'] = {
   'inv.stock': 'Bestand',
   'inv.logDelivery': 'Lieferung erfassen',
   'inv.usageLog': 'Verbrauchsprotokoll',
+  'inv.noUsageHistory': 'Noch keine Verbrauchshistorie.',
   'inv.alertThresholds': 'Warnschwellen',
   'inv.alertThresholdsDesc':
     'Mindestbestand f\u00fcr Warnung festlegen. Auch die Standard-Beutelgr\u00f6\u00dfe f\u00fcr die Sch\u00e4tzung "reicht f\u00fcr X Beutel" einstellen.',
@@ -476,6 +481,8 @@ window.LANG['de'] = {
   'assets.total': 'Gesamt',
   'assets.purchaseValueActive': 'Anschaffungswert (aktiv)',
   'assets.bookValueToday': 'Buchwert heute (aktiv)',
+  'assets.empty': 'Keine Anlagen erfasst. Klicke auf "Hinzufügen" um loszulegen.',
+  'assets.noneAvailable': 'Keine Anlagen vorhanden.',
   'assets.newId': 'Neue ID: {id}',
   'assets.editing': 'Bearbeiten: {id}',
   'assets.fillRequired': 'Bitte alle Pflichtfelder ausf\u00fcllen.',

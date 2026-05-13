@@ -45,6 +45,7 @@ window.LANG['pt'] = {
   'strains.deleteProtected': 'Não é possível apagar: ainda em uso.',
   'strains.batches': 'lotes',
   'strains.cultures': 'culturas',
+  'strains.empty': 'Nenhuma Pilzsorte definida ainda.',
   // Scan strip
   'scan.action': 'A\u00e7\u00e3o',
   'scan.from': 'De',
@@ -351,6 +352,8 @@ window.LANG['pt'] = {
   'print.selectBatchFirst': 'Selecione um lote primeiro.',
   'print.noBagsInRange': 'Nenhum saco neste intervalo.',
   'print.selectCulture': 'Selecione pelo menos uma cultura.',
+  'print.selectBatchAbove': 'Selecione um lote acima.',
+  'print.tickCulturesPreview': 'Marque as culturas na lista para pré-visualizar etiquetas.',
   // To-do
   'todo.batchTasks': 'Tarefas dos lotes',
   'todo.all': 'Todas',
@@ -363,6 +366,7 @@ window.LANG['pt'] = {
   // Team
   'team.membersDesc':
     'Adicione membros da equipe para atribuir tarefas individualmente. Cada membro pode ter seu pr\u00f3prio calend\u00e1rio CalDAV.',
+  'team.empty': 'Ainda n\u00e3o h\u00e1 membros na equipe. Adicione seu primeiro membro abaixo.',
   // CalDAV
   'caldav.title': 'Servidor de calend\u00e1rio CalDAV',
   'caldav.desc':
@@ -443,6 +447,7 @@ window.LANG['pt'] = {
   'inv.stock': 'Estoque',
   'inv.logDelivery': 'Registrar entrega',
   'inv.usageLog': 'Hist\u00f3rico de uso',
+  'inv.noUsageHistory': 'Ainda n\u00e3o h\u00e1 hist\u00f3rico de uso.',
   'inv.alertThresholds': 'Limites de alerta',
   'inv.alertThresholdsDesc':
     'Defina o n\u00edvel m\u00ednimo de estoque para alerta. Defina tamb\u00e9m o tamanho padr\u00e3o do saco para calcular "suficiente para X sacos".',
@@ -478,6 +483,8 @@ window.LANG['pt'] = {
   'assets.total': 'Total',
   'assets.purchaseValueActive': 'Valor de aquisi\u00e7\u00e3o (ativos)',
   'assets.bookValueToday': 'Valor cont\u00e1bil hoje (ativos)',
+  'assets.empty': 'Nenhum ativo registrado. Clique em "Adicionar" para come\u00e7ar.',
+  'assets.noneAvailable': 'Nenhum ativo dispon\u00edvel.',
   'assets.newId': 'Novo ID: {id}',
   'assets.editing': 'Editando: {id}',
   'assets.fillRequired': 'Preencha todos os campos obrigat\u00f3rios.',
