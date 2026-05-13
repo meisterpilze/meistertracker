@@ -4744,7 +4744,7 @@ function renderTeam() {
   if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
   if (!el) return;
   if (!teamMembers.length) {
-    el.innerHTML = '<div class="empty" style="padding:1rem">No team members yet. Add your first member below.</div>';
+    el.innerHTML = '<div class="empty" style="padding:1rem">' + t('team.empty') + '</div>';
     return;
   }
   el.innerHTML = teamMembers
@@ -6528,7 +6528,7 @@ function renderInvLog() {
   const filter = document.getElementById('inv-log-filter').value;
   const body = document.getElementById('inv-log-body');
   if (!inventory.log || !inventory.log.length) {
-    body.innerHTML = '<tr><td colspan="6" class="empty">No usage history yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty">' + t('inv.noUsageHistory') + '</td></tr>';
     return;
   }
   const rows = [...inventory.log]
@@ -7392,7 +7392,7 @@ function renderAssets() {
   const body = document.getElementById('assets-body');
   if (!rows.length) {
     body.innerHTML =
-      '<tr><td colspan="8" class="empty">Keine Anlagen erfasst. Klicke auf "Hinzufügen" um loszulegen.</td></tr>';
+      '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
     return;
   }
   body.innerHTML = rows
@@ -7629,7 +7629,7 @@ function renderStichtagReport() {
 function renderAssetLabelList() {
   const el = document.getElementById('asset-label-list');
   if (!assets.length) {
-    el.innerHTML = '<div class="empty">Keine Anlagen vorhanden.</div>';
+    el.innerHTML = '<div class="empty">' + t('assets.noneAvailable') + '</div>';
     return;
   }
   el.innerHTML = assets
@@ -7784,7 +7784,7 @@ function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
   if (!mushroomStrains.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">Noch keine Pilzsorten angelegt.</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
   }
   // Count usage
@@ -10112,7 +10112,7 @@ function renderBagPreview() {
   const mode = document.getElementById('print-mode').value;
   const qr = document.getElementById('bag-qr').checked;
   if (!id) {
-    el.innerHTML = '<div class="empty">Select a batch above.</div>';
+    el.innerHTML = '<div class="empty">' + t('print.selectBatchAbove') + '</div>';
     return;
   }
   const batch = batches.find((b) => b.batchId === id);
@@ -10181,7 +10181,7 @@ function renderLabPreview() {
   const el = document.getElementById('lab-preview');
   const ids = [...selectedLabIds];
   if (!ids.length) {
-    el.innerHTML = '<div class="empty">Tick cultures in the list to preview labels.</div>';
+    el.innerHTML = '<div class="empty">' + t('print.tickCulturesPreview') + '</div>';
     return;
   }
   const detail = document.getElementById('lab-mode').value;
