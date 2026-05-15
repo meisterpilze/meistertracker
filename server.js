@@ -56,6 +56,11 @@ if (PORT_RAW < 1 || PORT_RAW > 65535) {
   log('error', 'Invalid PORT, using default 3000', { value: PORT_RAW });
 }
 const PORT = PORT_RAW >= 1 && PORT_RAW <= 65535 ? PORT_RAW : 3000;
+// Set by update_server.sh / START.bat when launched from inside a git worktree.
+// Surfaced via /api/health so the UI can render a "this is not production"
+// banner — prevents people from confidently entering real data into a feature
+// branch instance running alongside prod.
+const WORKTREE_MODE = process.env.WORKTREE_MODE === '1' || process.env.WORKTREE_MODE === 'true';
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
@@ -5039,7 +5044,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       status: dbOk ? 'ok' : 'degraded',
       db: dbOk ? 'connected' : 'error',
       uptime: Math.round(process.uptime()),
-      version: require('./package.json').version
+      version: require('./package.json').version,
+      worktree: WORKTREE_MODE
     };
     if (authUser && authUser.role === 'admin') {
       health.platform = process.platform;
