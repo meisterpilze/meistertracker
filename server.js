@@ -1100,6 +1100,14 @@ function startDuckdnsUpdater() {
     clearInterval(duckdnsInterval);
     duckdnsInterval = null;
   }
+  // A worktree instance shares the parent repo's settings DB only when it
+  // points at the same file — but even with separate DBs the same DuckDNS
+  // creds often get copied in. Skip the updater entirely so the worktree
+  // never fights prod over the external A record.
+  if (WORKTREE_MODE) {
+    log('info', 'DuckDNS updater skipped (worktree mode)');
+    return;
+  }
   const cfg = db.getDuckdnsCfg(database);
   if (cfg.enabled && cfg.domain && cfg.token) {
     updateDuckdnsIP();
@@ -1509,6 +1517,11 @@ function requestLetsEncryptCert(callback) {
 }
 
 function checkCertRenewal() {
+  // Worktree instance must not race prod for the ACME challenge: both
+  // would try to bind port 80 for http-01 and hammer the LE rate limit
+  // on the same hostname. Cert files live in this worktree's certs/
+  // (per-directory) so the renewal would be lost anyway.
+  if (WORKTREE_MODE) return;
   const cfg = db.getDuckdnsCfg(database);
   if (!cfg.leEnabled || !cfg.domain || !cfg.token) return;
   if (!cfg.leExpiry) return;
