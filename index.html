@@ -2809,6 +2809,7 @@
             <button class="stab" id="st-settings-server" style="display: none" data-i18n="settings.tabServer">
               Server
             </button>
+            <button class="stab" id="st-settings-growth">Growth</button>
           </div>
           <!-- Scan log -->
           <div class="sp active" id="sp-settings-log">
@@ -3738,6 +3739,11 @@
               <button id="btn-migrate-strain-text" class="btn btn-r">Embed strain text in IDs</button>
             </div>
           </div>
+
+          <!-- Growth (90-day marketing KPI dashboard) -->
+          <div class="sp" id="sp-settings-growth">
+            <div id="kpi-root"></div>
+          </div>
         </div>
 
         <!-- ══ INVENTORY ══ -->
@@ -4346,5 +4352,450 @@
     </button>
 
     <script src="/app.js" defer></script>
+
+    <!-- Growth: 90-day marketing KPI dashboard (vanilla JS port of meisterpilze-kpi.jsx).
+         Mounts into #kpi-root inside the Admin → Growth sub-tab. State persists to
+         localStorage under the key 'meisterpilze_kpi_v1'. Inlined here to keep the
+         change purely frontend (no static-file whitelist entry needed in server.js). -->
+    <script>
+      (function () {
+        'use strict';
+
+        const STORAGE_KEY = 'meisterpilze_kpi_v1';
+        const TRACKING_LINKS = [
+          { label: 'Package Flyer (Etsy/eBay)', url: 'https://bit.ly/paket' },
+          { label: 'Farmers Market Stand', url: 'https://bit.ly/mpmarkt' },
+          { label: 'Instagram Bio', url: 'https://bit.ly/mpio' }
+        ];
+        const WEEK_TARGETS = { posts: 3, directOrders: 5 };
+        const STAGES = ['Identified', 'Sampled', 'Followed Up', 'Signed'];
+        const STAGE_COLOR = {
+          Identified: '#607d8b',
+          Sampled: '#ff9800',
+          'Followed Up': '#2196f3',
+          Signed: '#8bc34a'
+        };
+
+        let state;
+        let tab = 'dashboard';
+        let showAdd = false;
+        let initialized = false;
+
+        function defaultState() {
+          return {
+            startDate: new Date().toISOString().slice(0, 10),
+            emailListSize: 0,
+            weeks: [],
+            restaurants: []
+          };
+        }
+
+        function load() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? Object.assign(defaultState(), JSON.parse(raw)) : defaultState();
+          } catch (e) {
+            return defaultState();
+          }
+        }
+
+        function save() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          } catch (e) {
+            /* quota or disabled */
+          }
+        }
+
+        function weekNumber() {
+          const diff = Math.floor((Date.now() - new Date(state.startDate).getTime()) / 6048e5);
+          return Math.min(Math.max(diff + 1, 1), 13);
+        }
+
+        function ensureWeek() {
+          const wk = weekNumber();
+          if (!state.weeks.some((w) => w.number === wk)) {
+            state.weeks.push({
+              number: wk,
+              posts: 0,
+              orders: 0,
+              emailSize: state.emailListSize || 0,
+              restaurantContact: 'no'
+            });
+          }
+          state.weeks = state.weeks.map((w) => Object.assign({}, w, { current: w.number === wk }));
+        }
+
+        function esc(s) {
+          return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+          );
+        }
+
+        function inputStyle(good) {
+          const border = good ? 'rgba(139,195,74,0.5)' : 'rgba(255,255,255,0.1)';
+          const color = good ? '#8bc34a' : '#e0e0e0';
+          return (
+            "background:rgba(255,255,255,0.05);border:1px solid " + border +
+            ";border-radius:6px;color:" + color +
+            ";font-size:13px;font-family:'Space Mono',monospace;padding:4px 8px;width:100%;outline:none;box-sizing:border-box"
+          );
+        }
+
+        function statCard(label, value, sub, accent) {
+          return (
+            '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:4px">' +
+              '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">' + esc(label) + '</div>' +
+              '<div style="font-size:28px;font-weight:800;color:' + (accent || '#e0e0e0') + ";font-family:'Space Mono',monospace;line-height:1\">" + esc(value) + '</div>' +
+              (sub ? '<div style="font-size:11px;color:#666">' + esc(sub) + '</div>' : '') +
+            '</div>'
+          );
+        }
+
+        function progressBar(value, max, color) {
+          const pct = Math.min((value / Math.max(max, 1)) * 100, 100);
+          return (
+            '<div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">' +
+              '<div style="height:100%;width:' + pct + '%;background:' + (color || '#8bc34a') + ';border-radius:3px;transition:width 0.4s ease"></div>' +
+            '</div>'
+          );
+        }
+
+        function renderHeader() {
+          const totalDays = Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5);
+          const daysLeft = Math.max(90 - totalDays, 0);
+          const tabs = [
+            ['dashboard', 'Overview'],
+            ['weekly', 'Weekly Log'],
+            ['restaurants', 'Restaurants'],
+            ['links', 'Tracking Links']
+          ];
+          return (
+            '<div style="background:linear-gradient(135deg,#1a2410 0%,#0f1a0a 100%);border-bottom:1px solid rgba(139,195,74,0.15);padding:20px 24px 0">' +
+              '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">' +
+                '<div>' +
+                  "<div style=\"font-size:11px;color:#8bc34a;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;font-family:'Space Mono',monospace\">Meisterpilze</div>" +
+                  '<h1 style="margin:0;font-size:22px;font-weight:800;color:#f5f5f5;line-height:1.1">90-Day Growth Dashboard</h1>' +
+                '</div>' +
+                '<div style="text-align:right">' +
+                  "<div style=\"font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:" + (daysLeft < 14 ? '#ff9800' : '#8bc34a') + ';line-height:1">' + daysLeft + '</div>' +
+                  '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">days left</div>' +
+                '</div>' +
+              '</div>' +
+              '<div style="padding-bottom:16px">' +
+                progressBar(totalDays, 90) +
+                '<div style="display:flex;justify-content:space-between;margin-top:4px">' +
+                  '<span style="font-size:10px;color:#555">Day ' + totalDays + '</span>' +
+                  '<span style="font-size:10px;color:#555">Day 90</span>' +
+                '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:0">' +
+                tabs.map(function (entry) {
+                  const key = entry[0];
+                  const label = entry[1];
+                  const active = tab === key;
+                  return (
+                    '<button type="button" data-act="tab" data-tab="' + key + '" style="background:none;border:none;border-bottom:2px solid ' +
+                    (active ? '#8bc34a' : 'transparent') + ';color:' + (active ? '#8bc34a' : '#666') +
+                    ';padding:8px 16px;font-size:13px;font-weight:' + (active ? 700 : 400) +
+                    ";cursor:pointer;font-family:inherit;transition:color 0.2s\">" + esc(label) + '</button>'
+                  );
+                }).join('') +
+              '</div>' +
+            '</div>'
+          );
+        }
+
+        function renderDashboard() {
+          const totalPosts = state.weeks.reduce((s, w) => s + (w.posts || 0), 0);
+          const totalOrders = state.weeks.reduce((s, w) => s + (w.orders || 0), 0);
+          const signed = state.restaurants.filter((r) => r.stage === 'Signed').length;
+          const latestEmail = state.weeks.length
+            ? Math.max.apply(null, state.weeks.map((w) => w.emailSize || 0))
+            : state.emailListSize;
+          const wk = weekNumber();
+          const target = wk * WEEK_TARGETS.posts;
+          let streak = 0;
+          const sorted = state.weeks.slice().sort((a, b) => b.number - a.number);
+          for (const w of sorted) {
+            if ((w.posts || 0) >= WEEK_TARGETS.posts) streak++;
+            else break;
+          }
+          const priorities = [
+            { label: "Own Lion's Mane online", value: totalPosts, max: target, color: '#8bc34a', detail: totalPosts + ' posts published' },
+            { label: 'Build email list to 200', value: latestEmail, max: 200, color: '#64b5f6', detail: latestEmail + ' / 200 subscribers' },
+            { label: 'Land 1 trophy restaurant', value: signed, max: 1, color: '#ff9800', detail: signed + ' signed · ' + state.restaurants.length + ' in pipeline' }
+          ];
+          return (
+            '<div style="display:flex;flex-direction:column;gap:16px">' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+                statCard('Total Posts', totalPosts, 'Target: ' + target, totalPosts >= target ? '#8bc34a' : '#ff9800') +
+                statCard('Email List', latestEmail, 'Target: 200 by Day 90', '#64b5f6') +
+                statCard('Direct Orders', totalOrders, 'This sprint', '#ce93d8') +
+                statCard('Restaurants Signed', signed, 'Target: 1 by Day 60', signed >= 1 ? '#8bc34a' : '#ff9800') +
+              '</div>' +
+              '<div style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">' +
+                '<div>' +
+                  '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px">Post Streak</div>' +
+                  '<div style="font-size:13px;color:#aaa;margin-top:2px">Weeks hitting 3+ posts in a row</div>' +
+                '</div>' +
+                "<div style=\"font-family:'Space Mono',monospace;font-size:36px;font-weight:700;color:" + (streak > 0 ? '#8bc34a' : '#555') + '">' + streak + '🔥</div>' +
+              '</div>' +
+              '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px">' +
+                '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">90-Day Priorities</div>' +
+                priorities.map(function (p) {
+                  return (
+                    '<div style="margin-bottom:12px">' +
+                      '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
+                        '<span style="font-size:13px;font-weight:600">' + esc(p.label) + '</span>' +
+                        '<span style="font-size:12px;color:#666">' + esc(p.detail) + '</span>' +
+                      '</div>' +
+                      progressBar(p.value, p.max, p.color) +
+                    '</div>'
+                  );
+                }).join('') +
+              '</div>' +
+              '<div style="background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.2);border-radius:12px;padding:14px 16px">' +
+                '<div style="font-size:11px;color:#ff9800;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Monday Check-in — Week ' + wk + '</div>' +
+                '<div style="font-size:13px;color:#aaa;line-height:1.6">3 questions only: Did I post 3x? Did the email list grow? Did I contact a restaurant?<br>Log it in <strong style="color:#e0e0e0">Weekly Log</strong> → takes 2 minutes.</div>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+
+        function renderWeekly() {
+          const headers = ['Week', 'Posts (≥3)', 'Orders (≥5)', 'Email Size', 'Restaurant'];
+          const rows = state.weeks.slice().sort((a, b) => b.number - a.number).map(function (w) {
+            return (
+              '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:10px 12px;background:' +
+              (w.current ? 'rgba(139,195,74,0.08)' : 'rgba(255,255,255,0.02)') + ';border-radius:8px;border:1px solid ' +
+              (w.current ? 'rgba(139,195,74,0.3)' : 'rgba(255,255,255,0.05)') + ';margin-bottom:6px">' +
+                "<div style=\"font-family:'Space Mono',monospace;font-size:11px;color:#8bc34a;font-weight:700\">W" + w.number + '</div>' +
+                '<div style="display:flex;flex-direction:column;gap:2px">' +
+                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Posts</div>' +
+                  '<input type="number" min="0" max="20" value="' + (w.posts ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="posts" style="' + inputStyle((w.posts || 0) >= WEEK_TARGETS.posts) + '">' +
+                '</div>' +
+                '<div style="display:flex;flex-direction:column;gap:2px">' +
+                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Orders</div>' +
+                  '<input type="number" min="0" value="' + (w.orders ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="orders" style="' + inputStyle((w.orders || 0) >= WEEK_TARGETS.directOrders) + '">' +
+                '</div>' +
+                '<div style="display:flex;flex-direction:column;gap:2px">' +
+                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Email List</div>' +
+                  '<input type="number" min="0" value="' + (w.emailSize ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="emailSize" style="' + inputStyle(false) + '">' +
+                '</div>' +
+                '<div style="display:flex;flex-direction:column;gap:2px">' +
+                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Rest. Contact</div>' +
+                  '<select data-act="week" data-wk="' + w.number + '" data-field="restaurantContact" style="' + inputStyle(w.restaurantContact === 'yes') + ';cursor:pointer">' +
+                    '<option value="no"' + (w.restaurantContact === 'no' ? ' selected' : '') + '>—</option>' +
+                    '<option value="yes"' + (w.restaurantContact === 'yes' ? ' selected' : '') + '>✓ Done</option>' +
+                  '</select>' +
+                '</div>' +
+              '</div>'
+            );
+          }).join('');
+          return (
+            '<div>' +
+              '<div style="margin-bottom:16px">' +
+                '<div style="font-size:13px;color:#888;margin-bottom:12px">Log each Monday. Posts = Instagram/content published. Orders = direct website orders. Email List = current total. Restaurant Contact = did you reach out to at least one restaurant this week?</div>' +
+                '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;padding:4px 12px;margin-bottom:4px">' +
+                  headers.map(function (h) {
+                    return '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px">' + esc(h) + '</div>';
+                  }).join('') +
+                '</div>' +
+                rows +
+              '</div>' +
+              '<div style="margin-top:16px;padding:14px;background:rgba(255,255,255,0.02);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">' +
+                '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Starting Email List Size</div>' +
+                '<input type="number" value="' + state.emailListSize + '" data-act="emailListSize" style="' + inputStyle(false) + ';width:120px">' +
+              '</div>' +
+            '</div>'
+          );
+        }
+
+        function renderRestaurants() {
+          const addPanel = showAdd
+            ? (
+                '<div data-rest-form style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:16px;margin-bottom:16px">' +
+                  '<div style="display:flex;flex-direction:column;gap:10px">' +
+                    '<input placeholder="Restaurant name" data-rest-input="name" style="' + inputStyle(false) + ';font-size:14px;padding:8px 12px">' +
+                    '<select data-rest-input="stage" style="' + inputStyle(false) + ';font-size:14px;padding:8px 12px;cursor:pointer">' +
+                      STAGES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
+                    '</select>' +
+                    '<input placeholder="Notes (optional)" data-rest-input="notes" style="' + inputStyle(false) + ';font-size:13px;padding:8px 12px">' +
+                    '<button type="button" data-act="rest-add" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:10px;cursor:pointer">Add Restaurant</button>' +
+                  '</div>' +
+                '</div>'
+              )
+            : '';
+          const summary = STAGES.map(function (s) {
+            const count = state.restaurants.filter((r) => r.stage === s).length;
+            return (
+              '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;text-align:center;border:1px solid ' + STAGE_COLOR[s] + '30">' +
+                "<div style=\"font-size:20px;font-weight:800;color:" + STAGE_COLOR[s] + ";font-family:'Space Mono',monospace\">" + count + '</div>' +
+                '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px">' + s + '</div>' +
+              '</div>'
+            );
+          }).join('');
+          const list = state.restaurants.length === 0
+            ? '<div style="text-align:center;color:#555;font-size:14px;padding:32px">No restaurants yet. Add your first target above.</div>'
+            : state.restaurants.map(function (r) {
+                return (
+                  '<div style="background:rgba(255,255,255,0.02);border:1px solid ' + STAGE_COLOR[r.stage] + '30;border-left:3px solid ' + STAGE_COLOR[r.stage] + ';border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">' +
+                    '<div style="flex:1">' +
+                      '<div style="font-weight:600;font-size:14px">' + esc(r.name) + '</div>' +
+                      (r.notes ? '<div style="font-size:12px;color:#666;margin-top:2px">' + esc(r.notes) + '</div>' : '') +
+                    '</div>' +
+                    '<select data-act="rest-stage" data-id="' + r.id + '" style="background:' + STAGE_COLOR[r.stage] + '20;border:1px solid ' + STAGE_COLOR[r.stage] + '50;border-radius:6px;color:' + STAGE_COLOR[r.stage] + ';font-size:12px;padding:4px 8px;cursor:pointer;font-weight:600">' +
+                      STAGES.map(function (s) { return '<option value="' + s + '"' + (r.stage === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+                    '</select>' +
+                    '<button type="button" data-act="rest-del" data-id="' + r.id + '" style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0 4px">×</button>' +
+                  '</div>'
+                );
+              }).join('');
+          return (
+            '<div>' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+                '<div style="font-size:13px;color:#888">Track your restaurant pipeline. Target: 1 signed by Day 60.</div>' +
+                '<button type="button" data-act="rest-toggle" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:8px 14px;cursor:pointer">+ Add</button>' +
+              '</div>' +
+              addPanel +
+              '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">' + summary + '</div>' +
+              list +
+            '</div>'
+          );
+        }
+
+        function renderLinks() {
+          const cards = TRACKING_LINKS.map(function (l) {
+            return (
+              '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px">' +
+                '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">' + esc(l.label) + '</div>' +
+                "<div style=\"font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#e0e0e0;margin-bottom:8px\">" + esc(l.url) + '</div>' +
+                '<div style="display:flex;gap:8px">' +
+                  '<a href="https://app.bitly.com/" target="_blank" rel="noreferrer" style="font-size:12px;color:#64b5f6;text-decoration:none;background:rgba(100,181,246,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(100,181,246,0.2)">View stats in Bitly →</a>' +
+                '</div>' +
+              '</div>'
+            );
+          }).join('');
+          return (
+            '<div style="display:flex;flex-direction:column;gap:12px">' +
+              '<div style="font-size:13px;color:#888;margin-bottom:4px">These Bitly links are live and tracking clicks. Use each one in its specific placement so you can see which channel drives the most conversions.</div>' +
+              cards +
+              '<div style="background:rgba(255,152,0,0.05);border:1px solid rgba(255,152,0,0.2);border-radius:12px;padding:14px 16px;font-size:13px;color:#aaa;line-height:1.6">' +
+                '<strong style="color:#ff9800">How to use:</strong><br>' +
+                '<strong style="color:#e0e0e0">bit.ly/paket</strong> → Print on your package flyer insert (Etsy/eBay orders)<br>' +
+                '<strong style="color:#e0e0e0">bit.ly/mpmarkt</strong> → QR code for your farmers market stand<br>' +
+                '<strong style="color:#e0e0e0">bit.ly/mpio</strong> → Instagram bio link<br><br>' +
+                'Check Bitly analytics weekly to see which channel converts best.' +
+              '</div>' +
+            '</div>'
+          );
+        }
+
+        function render() {
+          const root = document.getElementById('kpi-root');
+          if (!root) return;
+          const body =
+            tab === 'dashboard' ? renderDashboard()
+            : tab === 'weekly' ? renderWeekly()
+            : tab === 'restaurants' ? renderRestaurants()
+            : renderLinks();
+          root.innerHTML =
+            "<div style=\"background:#0f1410;color:#e0e0e0;font-family:'DM Sans',sans-serif;border-radius:8px;overflow:hidden\">" +
+              renderHeader() +
+              '<div style="padding:20px 24px">' + body + '</div>' +
+            '</div>';
+        }
+
+        function onClick(e) {
+          const t = e.target.closest('[data-act]');
+          if (!t) return;
+          const act = t.dataset.act;
+          if (act === 'tab') {
+            tab = t.dataset.tab;
+            render();
+          } else if (act === 'rest-toggle') {
+            showAdd = !showAdd;
+            render();
+          } else if (act === 'rest-add') {
+            const form = t.closest('[data-rest-form]');
+            if (!form) return;
+            const nameEl = form.querySelector('[data-rest-input="name"]');
+            const stageEl = form.querySelector('[data-rest-input="stage"]');
+            const notesEl = form.querySelector('[data-rest-input="notes"]');
+            const name = (nameEl.value || '').trim();
+            if (!name) return;
+            state.restaurants.push({
+              id: Date.now(),
+              name: name,
+              stage: stageEl.value,
+              notes: (notesEl.value || '').trim()
+            });
+            showAdd = false;
+            save();
+            render();
+          } else if (act === 'rest-del') {
+            const id = Number(t.dataset.id);
+            state.restaurants = state.restaurants.filter((r) => r.id !== id);
+            save();
+            render();
+          }
+        }
+
+        function onChange(e) {
+          const t = e.target.closest('[data-act]');
+          if (!t) return;
+          const act = t.dataset.act;
+          if (act === 'week') {
+            const wk = Number(t.dataset.wk);
+            const field = t.dataset.field;
+            const val = t.tagName === 'SELECT' ? t.value : Number(t.value) || 0;
+            const w = state.weeks.find((x) => x.number === wk);
+            if (!w) return;
+            w[field] = val;
+            save();
+            if (field === 'posts') t.setAttribute('style', inputStyle(val >= WEEK_TARGETS.posts));
+            else if (field === 'orders') t.setAttribute('style', inputStyle(val >= WEEK_TARGETS.directOrders));
+            else if (field === 'restaurantContact') t.setAttribute('style', inputStyle(val === 'yes') + ';cursor:pointer');
+          } else if (act === 'emailListSize') {
+            state.emailListSize = Number(t.value) || 0;
+            save();
+          } else if (act === 'rest-stage') {
+            const id = Number(t.dataset.id);
+            const r = state.restaurants.find((x) => x.id === id);
+            if (!r) return;
+            r.stage = t.value;
+            save();
+            render();
+          }
+        }
+
+        function init() {
+          if (initialized) return;
+          initialized = true;
+          state = load();
+          ensureWeek();
+          save();
+          const root = document.getElementById('kpi-root');
+          if (!root) return;
+          root.addEventListener('click', onClick);
+          root.addEventListener('change', onChange);
+          const tabBtn = document.getElementById('st-settings-growth');
+          if (tabBtn) {
+            tabBtn.addEventListener('click', function () {
+              if (typeof openStab === 'function') openStab('settings', 'growth');
+              render();
+            });
+          }
+          render();
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init);
+        } else {
+          init();
+        }
+      })();
+    </script>
   </body>
 </html>
