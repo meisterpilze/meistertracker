@@ -7042,6 +7042,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // -- GitHub Webhook (auto-restart on push to main) --
   if (req.method === 'POST' && req.url === '/api/webhook/github') {
+    // In worktree mode the auto-deploy chain would run `git fetch && git reset
+    // --hard origin/main` in this worktree's directory and obliterate the
+    // feature-branch commits a developer is iterating on. The webhook URL is
+    // configured once per repo in GitHub, so this only fires here if the
+    // worktree is reachable on the same hostname — but if someone tunnels in
+    // for testing, the destructive reset is silent. Refuse it.
+    if (WORKTREE_MODE) {
+      jsonOk(res, { ok: true, msg: 'ignored: worktree mode' });
+      return;
+    }
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
     if (!secret) {
       jsonErr(res, 500, 'webhook secret not configured');
