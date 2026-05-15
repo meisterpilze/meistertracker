@@ -26,11 +26,22 @@ if not "%~1"=="--relaunched" (
             if not "!WKT_CHECK!"=="!GIT_DIR_VAL!" set "IS_WORKTREE=1"
         )
         if "!IS_WORKTREE!"=="1" (
+            REM Auto-configure so a worktree run lives alongside prod:
+            REM   - different PORT (default 3001) so prod on 3000 keeps serving
+            REM   - different PM2 name so 'pm2 delete' won't touch prod
+            REM   - WORKTREE_MODE flag so the server can render a UI warning
+            REM Env vars set here are inherited by the Phase 2 temp copy via cmd /c.
+            if not defined PORT set "PORT=3001"
+            if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze-worktree"
+            set "WORKTREE_MODE=1"
             echo.
             echo  +------------------------------------------+
             echo  ^|  Running in git worktree                 ^|
             echo  ^|  Git pull will be skipped                ^|
             echo  +------------------------------------------+
+            echo   -^> Port:     !PORT!
+            echo   -^> PM2 name: !PM2_PROCESS_NAME!
+            echo   -^> Production on port 3000 will NOT be touched.
         ) else if exist ".git" (
             git fetch origin >nul 2>&1
             if !errorlevel! equ 0 (
@@ -68,6 +79,7 @@ REM Override via env to run multiple instances under distinct PM2 names
 REM or to match a fork's branding. Must match the value server.js reads
 REM from PM2_PROCESS_NAME.
 if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze"
+if not defined PORT set "PORT=3000"
 set "NEED_PATH_REFRESH=0"
 
 REM ============================================================
@@ -245,10 +257,16 @@ REM ============================================================
 echo.
 echo [5/5] Starting server...
 
-REM Kill any stale node processes on our port before starting
-for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:3000.*LISTENING"') do (
-    echo  -^> Killing stale process on port 3000 ^(PID %%P^)...
-    taskkill /PID %%P /F >nul 2>&1
+REM Kill stale node processes on our port before starting.
+REM In worktree mode skip this entirely so a parallel run never reaches
+REM across into the production instance on a different port.
+if "%WORKTREE_MODE%"=="1" (
+    echo  -^> Worktree mode: skipping stale-port cleanup ^(prod on 3000 untouched^).
+) else (
+    for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do (
+        echo  -^> Killing stale process on port %PORT% ^(PID %%P^)...
+        taskkill /PID %%P /F >nul 2>&1
+    )
 )
 
 REM Match update_server.sh: always delete + start with --update-env so the
@@ -275,22 +293,29 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 
-REM Tag this commit as stable (last known-good deployment)
-where git >nul 2>&1
-if !errorlevel! equ 0 (
-    git tag -f stable HEAD >nul 2>&1
+REM Tag this commit as stable (last known-good deployment).
+REM Skip in worktree mode — that tag is for prod only and must not move
+REM when running a feature-branch instance.
+if not "%WORKTREE_MODE%"=="1" (
+    where git >nul 2>&1
     if !errorlevel! equ 0 (
-        echo  -^> Tagged current commit as 'stable'.
+        git tag -f stable HEAD >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo  -^> Tagged current commit as 'stable'.
+        )
     )
 )
 
 echo.
 echo  ========================================
 echo    Server started successfully!
+if "%WORKTREE_MODE%"=="1" (
+    echo    [WORKTREE INSTANCE - production on 3000 is separate]
+)
 if exist "certs\server.crt" (
-    echo    URL: https://localhost:3000
+    echo    URL: https://localhost:%PORT%
 ) else (
-    echo    URL: http://localhost:3000
+    echo    URL: http://localhost:%PORT%
     echo.
     echo    WARNING: No TLS certs found, running HTTP only.
     echo    iOS camera scanning requires HTTPS.
