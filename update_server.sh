@@ -25,10 +25,24 @@ detect_worktree() {
         git_dir="$(git rev-parse --git-dir 2>/dev/null)"
         if [[ "$git_dir" == */.git/worktrees/* ]]; then
             IS_WORKTREE=true
+            # Auto-isolate so a worktree run lives alongside prod:
+            #   - different PORT (default 3001) so prod on 3000 keeps serving
+            #   - different PM2 name so 'pm2 delete' won't touch prod
+            #   - WORKTREE_MODE flag so the server can render a UI warning
+            : "${PORT:=3001}"
+            export PORT
+            if [[ "$PM2_PROCESS_NAME" == "meisterpilze" ]]; then
+                PM2_PROCESS_NAME="meisterpilze-worktree"
+            fi
+            export PM2_PROCESS_NAME
+            export WORKTREE_MODE=1
             echo "┌──────────────────────────────────────────┐"
             echo "│  Running in git worktree                 │"
             echo "│  Git pull will be skipped                │"
             echo "└──────────────────────────────────────────┘"
+            echo "  -> Port:     $PORT"
+            echo "  -> PM2 name: $PM2_PROCESS_NAME"
+            echo "  -> Production on port 3000 will NOT be touched."
         fi
     fi
 }
@@ -105,7 +119,6 @@ backup_data() {
 
 do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
-    detect_worktree
     check_node
     ensure_pm2
 
@@ -234,6 +247,11 @@ show_usage() {
 }
 
 # ---- Main ----
+
+# Detect worktree before dispatching so every subcommand (update/start/stop/
+# status) sees the isolated PM2 name + port. Otherwise running 'start' or
+# 'stop' from a worktree would silently target the prod PM2 process.
+detect_worktree
 
 case "${1:-update}" in
     update)   do_update   ;;
