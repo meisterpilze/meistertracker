@@ -270,7 +270,14 @@ body {
 
 /* Worktree warning banner — fixed at the very top of the viewport so it
    floats over the sidebar + topbar; unmissable amber on dark text. Body
-   gets .has-worktree-banner when active to nudge layout down. */
+   gets .has-worktree-banner when active to nudge layout down.
+   The [hidden] override below has higher specificity (0,2,0) than the
+   base .worktree-banner rule (0,1,0) — otherwise `display: flex` would
+   defeat the UA `[hidden] { display: none }` rule and the banner would
+   ship visible to every prod user. */
+.worktree-banner[hidden] {
+  display: none;
+}
 .worktree-banner {
   position: fixed;
   top: 0;
