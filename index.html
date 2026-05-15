@@ -53,6 +53,22 @@
               }
               el.hidden = false;
               document.body.classList.add('has-worktree-banner');
+              // Banner text wraps on narrow viewports — without this, the
+              // sidebar/topbar/body padding-top stay at the single-line
+              // height and the wrapped banner covers real content. Track
+              // the actual height and surface it as a CSS variable.
+              var syncHeight = function () {
+                var h = el.offsetHeight;
+                if (h > 0) {
+                  document.documentElement.style.setProperty('--worktree-banner-h', h + 'px');
+                }
+              };
+              syncHeight();
+              if (window.ResizeObserver) {
+                new ResizeObserver(syncHeight).observe(el);
+              } else {
+                window.addEventListener('resize', syncHeight);
+              }
             })
             .catch(function () {
               /* offline or auth wall — banner stays hidden, that's fine */

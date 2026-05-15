@@ -311,15 +311,18 @@ body {
 }
 /* Push fixed-positioned chrome (sidebar, mobile topbar) down so the banner
    doesn't visually cover them. content-wrap flows naturally and is shifted
-   via body padding-top. 38px ≈ banner height at the default font. */
+   via body padding-top. The banner text wraps on narrow viewports, so the
+   inline probe sets --worktree-banner-h to the actual height via
+   ResizeObserver; 38px is the single-line fallback for the first paint
+   before the script runs. */
 body.has-worktree-banner {
-  padding-top: calc(38px + env(safe-area-inset-top, 0px));
+  padding-top: var(--worktree-banner-h, 38px);
 }
 body.has-worktree-banner .sidebar {
-  top: calc(38px + env(safe-area-inset-top, 0px));
+  top: var(--worktree-banner-h, 38px);
 }
 body.has-worktree-banner .mobile-topbar {
-  top: calc(38px + env(safe-area-inset-top, 0px));
+  top: var(--worktree-banner-h, 38px);
 }
 
 /* Mobile topbar */
