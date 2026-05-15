@@ -31,9 +31,15 @@ detect_worktree() {
             #   - WORKTREE_MODE flag so the server can render a UI warning
             : "${PORT:=3001}"
             export PORT
-            if [[ "$PM2_PROCESS_NAME" == "meisterpilze" ]]; then
-                PM2_PROCESS_NAME="meisterpilze-worktree"
-            fi
+            # Always append -worktree so forks running with a custom
+            # PM2_PROCESS_NAME (e.g. "mytracker") still get isolation —
+            # otherwise `pm2 delete $PM2_PROCESS_NAME` later in this script
+            # would target the fork's prod process. Skip the rewrite if the
+            # suffix is already present (re-entrant runs).
+            case "$PM2_PROCESS_NAME" in
+                *-worktree) ;;
+                *) PM2_PROCESS_NAME="${PM2_PROCESS_NAME}-worktree" ;;
+            esac
             export PM2_PROCESS_NAME
             export WORKTREE_MODE=1
             echo "┌──────────────────────────────────────────┐"
