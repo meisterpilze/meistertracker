@@ -32,7 +32,14 @@ if not "%~1"=="--relaunched" (
             REM   - WORKTREE_MODE flag so the server can render a UI warning
             REM Env vars set here are inherited by the Phase 2 temp copy via cmd /c.
             if not defined PORT set "PORT=3001"
-            if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze-worktree"
+            REM Always append -worktree so forks with a custom PM2_PROCESS_NAME
+            REM still get isolation. Skip if already suffixed (re-entrant runs).
+            if not defined PM2_PROCESS_NAME (
+                set "PM2_PROCESS_NAME=meisterpilze-worktree"
+            ) else (
+                set "PM2_NAME_TAIL=!PM2_PROCESS_NAME:~-9!"
+                if not "!PM2_NAME_TAIL!"=="-worktree" set "PM2_PROCESS_NAME=!PM2_PROCESS_NAME!-worktree"
+            )
             set "WORKTREE_MODE=1"
             echo.
             echo  +------------------------------------------+
