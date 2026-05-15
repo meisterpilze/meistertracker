@@ -21,6 +21,48 @@
          these libs await readiness — see app.js loadVendorLibs(). -->
   </head>
   <body>
+    <!-- Worktree warning banner: shown only when the server is running from
+         a git worktree (WORKTREE_MODE=1, surfaced via /api/health). Designed
+         to be impossible to miss so nobody enters real data here thinking
+         it's the prod instance. Hidden by default; the inline script below
+         flips it on if /api/health reports worktree:true. -->
+    <div id="worktree-banner" class="worktree-banner" role="alert" hidden>
+      <span class="worktree-banner-icon" aria-hidden="true">⚠</span>
+      <span class="worktree-banner-text">
+        <b>WORKTREE INSTANCE</b> — this is <b>not production</b>. Data entered here is isolated to this branch.
+        <span id="worktree-banner-port"></span>
+      </span>
+    </div>
+    <script>
+      // Self-contained probe so the banner appears as soon as possible,
+      // independent of the main app bundle's auth/init flow. /api/health
+      // returns the worktree flag in its public (unauthenticated) payload.
+      (function () {
+        try {
+          fetch('/api/health', { credentials: 'same-origin' })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (h) {
+              if (!h || !h.worktree) return;
+              var el = document.getElementById('worktree-banner');
+              if (!el) return;
+              var portEl = document.getElementById('worktree-banner-port');
+              if (portEl && window.location.port) {
+                portEl.textContent = ' Port ' + window.location.port + '.';
+              }
+              el.hidden = false;
+              document.body.classList.add('has-worktree-banner');
+            })
+            .catch(function () {
+              /* offline or auth wall — banner stays hidden, that's fine */
+            });
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
+
     <!-- Add bags modal -->
     <div class="modal-bg" id="m-addbags" role="dialog" aria-modal="true" aria-labelledby="m-addbags-title" hidden>
       <div class="modal">

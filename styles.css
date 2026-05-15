@@ -268,6 +268,53 @@ body {
   margin-left: var(--sidebar-collapsed);
 }
 
+/* Worktree warning banner — fixed at the very top of the viewport so it
+   floats over the sidebar + topbar; unmissable amber on dark text. Body
+   gets .has-worktree-banner when active to nudge layout down. */
+.worktree-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: repeating-linear-gradient(45deg, #f59e0b 0 14px, #fbbf24 14px 28px);
+  color: #1f1300;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-bottom: 2px solid #b45309;
+  text-align: center;
+  line-height: 1.35;
+}
+.worktree-banner-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.worktree-banner-text b {
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+/* Push fixed-positioned chrome (sidebar, mobile topbar) down so the banner
+   doesn't visually cover them. content-wrap flows naturally and is shifted
+   via body padding-top. 38px ≈ banner height at the default font. */
+body.has-worktree-banner {
+  padding-top: calc(38px + env(safe-area-inset-top, 0px));
+}
+body.has-worktree-banner .sidebar {
+  top: calc(38px + env(safe-area-inset-top, 0px));
+}
+body.has-worktree-banner .mobile-topbar {
+  top: calc(38px + env(safe-area-inset-top, 0px));
+}
+
 /* Mobile topbar */
 .mobile-topbar {
   display: none;
