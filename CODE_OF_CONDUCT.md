@@ -10,6 +10,8 @@ If you experience or witness behaviour in this repository (issues, pull requests
 
 Reports are handled confidentially. The maintainers will review the report and respond as outlined in the Covenant's *Enforcement Guidelines*.
 
+> When you contact us by email, we process your message to handle your report. See the [privacy notice for meistertracker.com](https://meistertracker.com/legal) for how that data is handled.
+
 For **security** vulnerabilities, please use the [Security Advisory form](https://github.com/meisterpilze/meistertracker/security/advisories/new) or email <security@meistertracker.com> instead — see [SECURITY.md](SECURITY.md).
 
 ## Scope

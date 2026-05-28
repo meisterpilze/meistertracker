@@ -14,6 +14,8 @@ We aim to acknowledge reports within **72 hours**. For HIGH-severity issues we a
 
 Please do **not** open public GitHub issues for security vulnerabilities — that exposes the bug to anyone watching the repo before a fix is available.
 
+> When you contact us by email, we process your message to handle your report. See the [privacy notice for meistertracker.com](https://meistertracker.com/legal) for how that data is handled.
+
 ## Disclosure
 
 We follow coordinated disclosure: reporter and maintainer agree on a public-disclosure date once a fix is available. We credit reporters in the fixing commit and in the published advisory unless you prefer to stay anonymous.
