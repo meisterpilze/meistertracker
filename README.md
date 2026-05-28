@@ -24,6 +24,8 @@ The software is provided **without warranty of any kind** and the authors accept
 
 See [`LICENSE`](LICENSE) for the full terms.
 
+**Legal notice:** the [meistertracker.com](https://meistertracker.com) domain that redirects to this repository is operated privately by Julian Zienert (Netherlands). See its [imprint & privacy notice](https://meistertracker.com/legal) for how visits to the domain and emails to `@meistertracker.com` addresses are handled.
+
 ## ✨ Features
 
 ### Core lab workflow
