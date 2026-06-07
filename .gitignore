@@ -47,3 +47,11 @@ i18n-report.md
 # Pre-compressed static asset variants (regenerated on server startup)
 *.gz
 *.br
+
+# Local-only notes & scratch files (not part of the app)
+CONTEXT.md
+/Context
+*-kpi.jsx
+*-strategy.md
+/strategy/
+/planning/
