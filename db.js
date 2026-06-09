@@ -2253,7 +2253,7 @@ function getSession(db, token) {
     .prepare(
       `SELECT s.token, s.user_id, s.expires, u.username, u.role
      FROM sessions s JOIN users u ON s.user_id = u.id
-     WHERE s.token = ? AND s.expires > datetime('now')`
+     WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
     .get(token);
 }
@@ -2267,13 +2267,13 @@ function deleteSessionsByUserId(db, userId) {
 }
 
 function deleteExpiredSessions(db) {
-  db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+  db.prepare("DELETE FROM sessions WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").run();
 }
 
 // R-10: periodic cleanup helpers (called from server.js setInterval).
 // Both return the count of rows deleted so the caller can log totals.
 function cleanupExpiredSessions(db) {
-  const info = db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+  const info = db.prepare("DELETE FROM sessions WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").run();
   return info.changes;
 }
 
@@ -4053,7 +4053,7 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
 
 function getOAuthCode(db, code) {
   const row = db
-    .prepare("SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > datetime('now')")
+    .prepare("SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
     .get(code);
   if (!row) return null;
   return {
@@ -4082,7 +4082,7 @@ function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSec
 function getOAuthAccessToken(db, tokenHash) {
   const row = db
     .prepare(
-      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > datetime('now')"
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
     )
     .get(tokenHash);
   if (!row) return null;
@@ -4092,7 +4092,7 @@ function getOAuthAccessToken(db, tokenHash) {
 function getOAuthRefreshToken(db, tokenHash) {
   const row = db
     .prepare(
-      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > datetime('now')"
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
     )
     .get(tokenHash);
   if (!row) return null;
@@ -4107,15 +4107,15 @@ function revokeOAuthTokensByRefresh(db, refreshHash) {
 }
 
 function deleteExpiredOAuthData(db) {
-  db.prepare("DELETE FROM oauth_codes WHERE expires < datetime('now') OR used = 1").run();
-  db.prepare("DELETE FROM oauth_tokens WHERE expires < datetime('now') OR revoked = 1").run();
+  db.prepare("DELETE FROM oauth_codes WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR used = 1").run();
+  db.prepare("DELETE FROM oauth_tokens WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR revoked = 1").run();
 }
 
 function listOAuthClients(db) {
   const rows = db
     .prepare(
       `SELECT c.client_id, c.client_name, c.redirect_uris, c.client_secret_hash, c.created,
-    (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > datetime('now')) as active_sessions
+    (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) as active_sessions
     FROM oauth_clients c WHERE c.revoked = 0 ORDER BY c.created DESC`
     )
     .all();
