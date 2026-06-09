@@ -2209,6 +2209,13 @@ function readCaldavConfig(db) {
 
 // ── Auth helpers ────────────────────────────────────────────
 function createUser(db, username, password, role) {
+  // Login matches usernames case-insensitively (getUserByUsernameCaseInsensitive),
+  // but the column's UNIQUE is case-sensitive. Without this guard 'Admin' could
+  // be created alongside 'admin' and the ambiguous lookup would lock one of them
+  // out. Reject case-insensitive duplicates up front.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
+    throw new Error('Username already exists');
+  }
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   const created = new Date().toISOString();
@@ -5168,7 +5175,8 @@ const SAFE_ERROR_BARE = new Set([
   'Culture parent_id must not equal its own id (self-cycle rejected)',
   'Name ist Pflichtfeld',
   'Kürzel ist Pflichtfeld',
-  'Kürzel already taken'
+  'Kürzel already taken',
+  'Username already exists'
 ]);
 
 function isSafeError(msg) {
