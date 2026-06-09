@@ -2486,6 +2486,13 @@ function updateBatchField(db, batchId, fields) {
   }
 }
 
+// Escape SQL LIKE wildcards (% _ and the escape char itself) so a literal
+// value can be matched with `LIKE ? ESCAPE '\'`. Batch ids may contain '_',
+// which LIKE would otherwise treat as "any single char".
+function escapeLikePattern(s) {
+  return String(s).replace(/[\\%_]/g, '\\$&');
+}
+
 function renameBatch(db, oldId, newId) {
   db.exec('BEGIN');
   // Defer FK checks to COMMIT so we can update parent (batches) and child (bags)
@@ -2508,19 +2515,19 @@ function renameBatch(db, oldId, newId) {
     // updates the reports would orphan and the contamination history for the batch would
     // disappear from the UI after a rename.
     db.prepare('UPDATE contamination_reports SET batch_id=? WHERE batch_id=?').run(newId, oldId);
-    db.prepare("UPDATE contamination_reports SET bag_id = REPLACE(bag_id, ?, ?) WHERE bag_id LIKE ? || '%'").run(
-      oldId,
-      newId,
-      oldId
-    );
+    // Rewrite the batch prefix of bag_id for THIS batch's bags only. Match
+    // `oldId-%` (with wildcards in oldId escaped) so a rename of "B-1" cannot
+    // touch "B-10"'s reports, and rebuild via substr so a recurring id
+    // fragment in the suffix isn't double-replaced.
+    db.prepare(
+      "UPDATE contamination_reports SET bag_id = ? || substr(bag_id, ?) WHERE bag_id LIKE ? ESCAPE '\\'"
+    ).run(newId, oldId.length + 1, escapeLikePattern(oldId) + '-%');
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     // Update barcode registry: rename entity_id for bags that were renamed
-    db.prepare("UPDATE barcodes SET entity_id=REPLACE(entity_id,?,?) WHERE entity_type='bag' AND entity_id LIKE ?").run(
-      oldId,
-      newId,
-      oldId + '%'
-    );
+    db.prepare(
+      "UPDATE barcodes SET entity_id = ? || substr(entity_id, ?) WHERE entity_type='bag' AND entity_id LIKE ? ESCAPE '\\'"
+    ).run(newId, oldId.length + 1, escapeLikePattern(oldId) + '-%');
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -2631,7 +2638,12 @@ function deleteBatchById(db, batchId, userId) {
     // already filters by batch_id only when set, so NULL rows remain visible in the
     // unfiltered view.
     db.prepare('UPDATE contamination_reports SET batch_id = NULL WHERE batch_id = ?').run(batchId);
-    db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? || '%'").run(batchId);
+    // Only NULL bag_id for bags of THIS batch ("batchId-%", wildcards escaped) —
+    // a bare "batchId%" prefix would also clear e.g. "B-10"'s reports when
+    // deleting "B-1".
+    db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? ESCAPE '\\'").run(
+      escapeLikePattern(batchId) + '-%'
+    );
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
     incrementDataVersion(db);
     db.exec('COMMIT');
