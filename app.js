@@ -2198,11 +2198,12 @@ function _kpiGroupKey(dateStr, period) {
   const d = new Date(dateStr + 'T00:00:00');
   if (period === 'monthly') return dateStr.slice(0, 7);
   if (period === 'weekly') {
+    // Thursday of this week determines the ISO week-year. Reuse the correct
+    // isoWeekNumber() helper — the previous ad-hoc formula used a Sunday-based
+    // getDay() and was off by one week for every date in 2024 and 2025.
     const thu = new Date(d);
     thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
-    const y = thu.getFullYear();
-    const w = Math.ceil(((thu - new Date(y, 0, 4)) / 864e5 + new Date(y, 0, 4).getDay() + 6) / 7);
-    return y + '-W' + String(w).padStart(2, '0');
+    return thu.getFullYear() + '-W' + String(isoWeekNumber(thu)).padStart(2, '0');
   }
   return dateStr;
 }
@@ -4661,8 +4662,12 @@ function renderHarvests() {
   harvests.forEach((h) => {
     const d = new Date(h.time);
     const mon = new Date(d);
-    mon.setDate(d.getDate() - d.getDay() + 1);
-    const key = mon.toISOString().slice(0, 10);
+    // (getDay()+6)%7 puts Monday at offset 0 … Sunday at 6; the old
+    // `- getDay() + 1` bucketed Sunday into the *next* week. Key by the local
+    // date, not toISOString() (which shifts a local-midnight Monday to Sunday
+    // in CEST and splits one local week across two buckets).
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const key = localDateStr(mon);
     byWeek[key] = (byWeek[key] || 0) + h.grams;
   });
   const weekKeys = Object.keys(byWeek).sort();
