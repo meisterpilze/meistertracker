@@ -1343,6 +1343,11 @@ function renderOverviewKPIs() {
   const periodYield =
     periodBags.size > 0 ? Math.round(periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / periodBags.size) : 0;
   const yieldDelta = avgYield > 0 && periodYield > 0 ? periodYield - avgYield : null;
+  // periodSub = label for the selected period ("This week"/"This month"/…).
+  // Declared here (not further down) because yieldSub below references it —
+  // a later `const` would throw a temporal-dead-zone ReferenceError and abort
+  // the whole render whenever there is a harvest in the period.
+  const periodSub = t('dash.ov.period' + ovPeriod.charAt(0).toUpperCase() + ovPeriod.slice(1));
   let yieldSub = t('dash.ov.perBag');
   if (periodYield > 0) {
     const arrow = yieldDelta > 0 ? '↑' : yieldDelta < 0 ? '↓' : '=';
@@ -1434,7 +1439,6 @@ function renderOverviewKPIs() {
   const iconStreak = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
   const iconFlush = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
 
-  const periodSub = t('dash.ov.period' + ovPeriod.charAt(0).toUpperCase() + ovPeriod.slice(1));
   const periodLabel = document.getElementById('ov-period-label');
   if (periodLabel) periodLabel.textContent = periodSub;
 
