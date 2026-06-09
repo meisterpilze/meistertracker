@@ -695,8 +695,8 @@ function createMcpServer(database, onWrite, printer) {
         .optional()
         .describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
       species: z.string().optional().describe('Mushroom species (required when strainId is omitted)'),
-      qty: z.number().describe('Number of bags (>= 1)'),
-      days: z.number().describe('Incubation days (>= 1)'),
+      qty: z.number().int().min(1).max(10000).describe('Number of bags (1–10000)'),
+      days: z.number().int().min(1).max(3650).describe('Incubation days (1–3650)'),
       strain: z.string().optional().describe('Strain kuerzel (free-text fallback when strainId is omitted)'),
       subHardwood: z.number().optional().describe('Substrate hardwood %'),
       subWheatbran: z.number().optional().describe('Substrate wheat bran %'),
@@ -1420,7 +1420,7 @@ function createMcpServer(database, onWrite, printer) {
     'Add more bags to an existing batch. Generates new bag IDs sequentially. Use this instead of update_batch when you need more bags — it keeps inventory log consistent.',
     {
       batchId: z.string().describe('Batch ID'),
-      count: z.number().describe('Number of bags to add (>= 1)')
+      count: z.number().int().min(1).max(10000).describe('Number of bags to add (1–10000)')
     },
     async (params) => {
       try {
