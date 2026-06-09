@@ -5441,8 +5441,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/scan-log — paginated scan log history
   if (req.method === 'GET' && url === '/api/scan-log') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = Math.min(parseInt(params.get('limit')) || 200, 1000);
-    const offset = parseInt(params.get('offset')) || 0;
+    const limit = Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 200, 1000));
+    const offset = Math.max(0, parseInt(params.get('offset'), 10) || 0);
     const batch = params.get('batch') || null;
     const action = params.get('action') || null;
     let where = '1=1';
@@ -5487,8 +5487,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/harvests — paginated harvest history
   if (req.method === 'GET' && url === '/api/harvests') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = Math.min(parseInt(params.get('limit')) || 200, 1000);
-    const offset = parseInt(params.get('offset')) || 0;
+    const limit = Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 200, 1000));
+    const offset = Math.max(0, parseInt(params.get('offset'), 10) || 0);
     const batch = params.get('batch') || null;
     let where = '1=1';
     const args = [];
@@ -5521,7 +5521,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/kpi-snapshots — historical KPI data for trend analysis
   if (req.method === 'GET' && url === '/api/kpi-snapshots') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = params.get('limit') ? Math.min(parseInt(params.get('limit')) || 90, 365) : null;
+    const limit = params.get('limit') ? Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 90, 365)) : null;
     const rows = db.getKpiSnapshots(database, limit);
     jsonOk(res, { items: rows });
     return;
