@@ -2821,6 +2821,9 @@ function appendScanEntries(db, entries, userId) {
     return ids;
   } catch (err) {
     db.exec('ROLLBACK');
+    // appendScanEntriesNoTxn already mutated the in-memory bag-zone cache; the
+    // rollback undid the rows but not the cache, so force a rebuild on next read.
+    invalidateBagZoneCache(db);
     throw err;
   }
 }

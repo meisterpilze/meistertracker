@@ -6086,6 +6086,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           database.exec('COMMIT');
         } catch (innerErr) {
           database.exec('ROLLBACK');
+          // appendScanEntriesNoTxn above mutated the in-memory bag-zone cache;
+          // the rollback undid the scan rows but not the cache — rebuild on next read.
+          db.invalidateBagZoneCache(database);
           // Best-effort cleanup of disk files written during the failed transaction.
           for (const f of writtenPhotoFiles) {
             try {
