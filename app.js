@@ -315,6 +315,15 @@ function parseDecimal(v) {
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   return parseFloat(s);
 }
+// Record a scan entry's server-side id once its POST resolves. If the user
+// undid the entry before the POST landed (no _serverId yet → the undo set
+// _undoPending), delete the now-known row so it doesn't resurface on the next
+// sync.
+function setEntryServerId(entry, id) {
+  if (!entry || !id) return;
+  entry._serverId = id;
+  if (entry._undoPending) apiDelete('/api/scan-log/' + id);
+}
 function safeHref(url) {
   if (!url) return '';
   const u = String(url).trim();
@@ -1098,7 +1107,7 @@ function confirmBatchAdd() {
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   updateSD();
@@ -3536,7 +3545,7 @@ function locMoveTo(toLoc) {
     if (handleZoneMismatch(r, entries)) return; // I-12
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   updateSD();
@@ -3574,7 +3583,7 @@ function locRemoveSelected() {
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   updateSD();
@@ -3957,7 +3966,7 @@ function moveBagsTo(batch, bagIds, dest, cb) {
     if (handleZoneMismatch(r, entries)) return; // I-12
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   if (cb) cb(entries.length, skipped);
@@ -4005,7 +4014,7 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   if (cb) cb(entries.length);
@@ -8732,7 +8741,7 @@ function biPerformRemove() {
   sessionEntries.push(entry);
   scan.count++;
   apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
-    if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
+    if (r && r.ids && r.ids[0]) setEntryServerId(entry, r.ids[0]);
   });
   updateSD();
   const msg = fromLoc
@@ -10605,6 +10614,7 @@ function undoSuccessRow(btn) {
   if (mi !== -1) movements.splice(mi, 1);
   sessionEntries.splice(idx, 1);
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   scan.count = Math.max(0, scan.count - 1);
   _scanBeep(400, 100);
   setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
@@ -10824,6 +10834,7 @@ function undoScanEntry(btn) {
   sessionEntries.splice(idx, 1);
   // Delete from server
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   // Remove DOM row
   if (row) row.remove();
   scan.count = Math.max(0, scan.count - 1);
@@ -11434,7 +11445,7 @@ function processScan(raw) {
     scan.count++;
     apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
       if (r && r.ids && r.ids[0]) {
-        entry._serverId = r.ids[0];
+        setEntryServerId(entry, r.ids[0]);
         return;
       }
       // I-12: server rejected the MOVE because the bag has since been moved
@@ -11446,7 +11457,7 @@ function processScan(raw) {
         console.warn('Scan log POST failed, retrying:', r.error);
         setTimeout(function () {
           apiPost('/api/scan-log', { entries: [entry] }).then(function (r2) {
-            if (r2 && r2.ids && r2.ids[0]) entry._serverId = r2.ids[0];
+            if (r2 && r2.ids && r2.ids[0]) setEntryServerId(entry, r2.ids[0]);
             else if (handleZoneMismatch(r2, entry)) return;
             else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
           });
