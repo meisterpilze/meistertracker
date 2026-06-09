@@ -303,6 +303,18 @@ function esc(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+// Parse a user-entered decimal that may use a German comma as the decimal
+// separator ("1,5" → 1.5, "1.234,5" → 1234.5). The app's default language is
+// German and the quantity inputs are type=text inputmode=decimal, so mobile
+// keyboards offer a comma — plain parseFloat('847,5') silently returns 847.
+// Returns NaN for unparseable input; callers apply `|| 0` / Number.isFinite
+// exactly as before.
+function parseDecimal(v) {
+  if (v == null) return NaN;
+  let s = String(v).trim();
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  return parseFloat(s);
+}
 function safeHref(url) {
   if (!url) return '';
   const u = String(url).trim();
@@ -3361,7 +3373,7 @@ function setLabMin(type) {
   const hint = type === 'GS' ? ' (kg per strain)' : '';
   const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type) + hint, cur);
   if (val === null) return;
-  inventory.labThresholds[type] = parseFloat(val) || 0;
+  inventory.labThresholds[type] = parseDecimal(val) || 0;
   saveLabThresholds();
   renderDashLabStock();
   renderDashAlerts();
@@ -3600,16 +3612,16 @@ function nbPreview() {
     st = ms ? ms.kuerzel : '';
   const qty = parseInt(document.getElementById('nb-qty').value) || 0;
   document.getElementById('nb-prev').textContent = sp && st ? genBatchId(sp) + ' (' + qty + ' bags)' : '—';
-  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (!qty || !bagKg) {
     document.getElementById('nb-mat-preview').style.display = 'none';
     return;
   }
   let lines = [];
   {
-    const hw = parseFloat(document.getElementById('nb-hw').value) || 0;
-    const wb = parseFloat(document.getElementById('nb-wb').value) || 0;
-    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
+    const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+    const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const gyp = document.getElementById('nb-gyp').checked;
     if (hw || wb) {
       // Correct calculation: subtract water first, then split dry matter
@@ -3647,8 +3659,8 @@ function nbPreview() {
   } else el.style.display = 'none';
 }
 function nbSubSum() {
-  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
-    wb = parseFloat(document.getElementById('nb-wb').value) || 0,
+  const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
+    wb = parseDecimal(document.getElementById('nb-wb').value) || 0,
     s = hw + wb;
   document.getElementById('nb-subsum').textContent =
     hw || wb ? 'Total: ' + s + '%' + (s !== 100 ? ' — should add up to 100%' : '') : '';
@@ -3671,7 +3683,7 @@ function createBatch() {
   const st = strainText || 'XXX';
   const qty = parseInt(document.getElementById('nb-qty').value) || 0,
     days = parseInt(document.getElementById('nb-days').value) || 14;
-  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
     alert(t('batch.fillQty'));
     return;
@@ -3680,8 +3692,8 @@ function createBatch() {
     alert(t('batch.enterWeight'));
     return;
   }
-  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
-    wb = parseFloat(document.getElementById('nb-wb').value) || 0;
+  const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
+    wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
   // I-19: substrate must total exactly 100% (within rounding). Previously the
   // check only fired on > 100; a 70/20 split silently consumed 90% of the dry
   // mass and the remaining 10% went unaccounted. Now we reject any drift in
@@ -3696,7 +3708,7 @@ function createBatch() {
       ? {
           hardwood: hw,
           wheatbran: wb,
-          rh: parseFloat(document.getElementById('nb-rh').value) || null,
+          rh: parseDecimal(document.getElementById('nb-rh').value) || null,
           gypsum: document.getElementById('nb-gyp').checked
         }
       : null;
@@ -3764,7 +3776,7 @@ function createBatch() {
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
   if (substrate) {
-    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
     const hwUsed = qty * dryKgPerBag * (hw / 100);
     const wbUsed = qty * dryKgPerBag * (wb / 100);
@@ -4471,7 +4483,7 @@ function showHarvestPanel(bagId, batchId) {
   setFb('harvest', t('harvest.bagScanned', { bag: bagId }), { noModal: true });
 }
 function confirmHarvest() {
-  const g = parseFloat(document.getElementById('hp-grams').value),
+  const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
     alert(t('harvest.enterWeight'));
@@ -5457,7 +5469,7 @@ function initCameraPxCalib() {
 
   applyBtn.addEventListener('click', () => {
     if (!_cam.pxDistance) return;
-    const mm = parseFloat(mmInput.value);
+    const mm = parseDecimal(mmInput.value);
     if (!Number.isFinite(mm) || mm <= 0) {
       alert(t('cam.invalidMm'));
       return;
@@ -6378,7 +6390,7 @@ function renderThresholds() {
 function updateAvgComp(key, val) {
   if (!inventory.avgComposition)
     inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 };
-  inventory.avgComposition[key] = parseFloat(val) || 0;
+  inventory.avgComposition[key] = parseDecimal(val) || 0;
   saveInvConfig();
   renderInvStock();
 }
@@ -6386,7 +6398,7 @@ function updateAvgComp(key, val) {
 function updateThreshold(mat, key, val) {
   if (!inventory.thresholds) inventory.thresholds = {};
   if (!inventory.thresholds[mat]) inventory.thresholds[mat] = { minKg: 0 };
-  inventory.thresholds[mat][key] = parseFloat(val) || 0;
+  inventory.thresholds[mat][key] = parseDecimal(val) || 0;
   saveInvConfig();
   renderInvStock();
 }
@@ -6400,7 +6412,7 @@ function delMatChange() {
 }
 function delPreview() {
   const mat = document.getElementById('del-mat').value;
-  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const el = document.getElementById('del-preview');
   if (!kg) {
     el.style.display = 'none';
@@ -6432,7 +6444,7 @@ function adjPreview(mode) {
   const el = document.getElementById('adj-preview');
   let newVal, diff;
   if (mode === 'absolute') {
-    const abs = parseFloat(document.getElementById('adj-absolute').value);
+    const abs = parseDecimal(document.getElementById('adj-absolute').value);
     if (isNaN(abs)) {
       el.style.display = 'none';
       return;
@@ -6449,7 +6461,7 @@ function adjPreview(mode) {
       diff.toFixed(2) +
       t('inv.kgFromCurrent');
   } else {
-    const delta = parseFloat(document.getElementById('adj-delta').value);
+    const delta = parseDecimal(document.getElementById('adj-delta').value);
     if (isNaN(delta)) {
       el.style.display = 'none';
       return;
@@ -6470,7 +6482,7 @@ function adjPreview(mode) {
 }
 function logDelivery() {
   const mat = document.getElementById('del-mat').value;
-  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const note = document.getElementById('del-note').value.trim();
   if (kg <= 0) {
     alert(t('inv.enterQty'));
@@ -6498,10 +6510,10 @@ function logAdjustment() {
   const cur = inventory.stock[mat] || 0;
   let newStock, delta;
   if (absVal !== '') {
-    newStock = Math.max(0, parseFloat(absVal) || 0);
+    newStock = Math.max(0, parseDecimal(absVal) || 0);
     delta = newStock - cur;
   } else if (deltaVal !== '') {
-    delta = parseFloat(deltaVal) || 0;
+    delta = parseDecimal(deltaVal) || 0;
     newStock = Math.max(0, cur + delta);
   } else {
     alert(t('inv.enterAmount'));
@@ -7477,7 +7489,7 @@ function saveAsset() {
   const name = document.getElementById('asset-name').value.trim();
   const category = document.getElementById('asset-category').value;
   const entryDate = document.getElementById('asset-entry-date').value;
-  const price = parseFloat(document.getElementById('asset-price').value);
+  const price = parseDecimal(document.getElementById('asset-price').value);
   const life = parseInt(document.getElementById('asset-life').value);
   if (!name || !entryDate || isNaN(price) || price < 0 || isNaN(life) || life < 1) {
     alert(t('assets.fillRequired'));
@@ -8216,7 +8228,7 @@ const genGrainBatchId = (sp, strainText) => {
 function gsReadLines() {
   const lines = [];
   for (const row of document.querySelectorAll('.gs-wline')) {
-    const kg = parseFloat(row.querySelector('.gs-line-kg').value) || 0;
+    const kg = parseDecimal(row.querySelector('.gs-line-kg').value) || 0;
     const qty = parseInt(row.querySelector('.gs-line-qty').value) || 0;
     if (kg > 0 && qty > 0) lines.push({ kg, qty });
   }
@@ -8281,7 +8293,7 @@ function gsPreview() {
   const totalWet = lines.reduce((s, l) => s + l.kg * l.qty, 0);
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
+  const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
   const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
@@ -8325,7 +8337,7 @@ function createGrainBatch() {
   const days = parseInt(document.getElementById('gs-days').value) || 14;
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
+  const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
   const batchId = genGrainBatchId(sp, lwStrainText);
