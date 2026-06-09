@@ -7807,7 +7807,28 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         } catch (e) {
           log('warn', 'Failed to create pre-restore backup', { error: e.message });
         } // keep old db as safety net
-        fs.renameSync(tmpPath, DB_FILE);
+        try {
+          fs.renameSync(tmpPath, DB_FILE);
+        } catch (renameErr) {
+          // The swap failed (e.g. Windows EBUSY/EPERM). The original DB_FILE is
+          // untouched, but we already closed `database` above — reopen it so the
+          // server keeps serving instead of throwing on every request against a
+          // closed handle.
+          log('error', 'Failed to swap in restored database, reopening original', { error: renameErr.message });
+          try {
+            database = db.openDb(DB_FILE);
+          } catch (reErr) {
+            log('error', 'Failed to reopen original database after swap failure', { error: reErr.message });
+          }
+          try {
+            fs.unlinkSync(tmpPath);
+          } catch (e) {
+            log('warn', 'Failed to clean restore temp after swap failure', { error: e.message });
+          }
+          tmpPath = null;
+          jsonErr(res, 500, 'Restore failed, previous data has been preserved');
+          return;
+        }
         tmpPath = null;
         try {
           database = db.openDb(DB_FILE);
