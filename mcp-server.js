@@ -1492,6 +1492,8 @@ function createMcpServer(database, onWrite, printer) {
       newId: z.string().describe('New batch ID')
     },
     async (params) => {
+      const adminErr = requireAdminRole();
+      if (adminErr) return adminErr;
       try {
         db.renameBatch(database, params.oldId, params.newId);
         notify();
