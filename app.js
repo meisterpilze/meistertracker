@@ -2375,7 +2375,7 @@ function exportOverviewCSV() {
   // Harvest by day
   const byDay = {};
   periodHarvests.forEach((h) => {
-    const key = new Date(h.time).toISOString().slice(0, 10);
+    const key = localDateStr(new Date(h.time));
     byDay[key] = (byDay[key] || 0) + (h.grams || 0);
   });
 
@@ -2412,7 +2412,7 @@ function exportOverviewCSV() {
 
   // KPI History snapshots for this period
   if (kpiHistoryData && kpiHistoryData.length) {
-    const periodKey = periodStart.toISOString().slice(0, 10);
+    const periodKey = localDateStr(periodStart);
     const snaps = kpiHistoryData.filter((s) => s.date >= periodKey);
     if (snaps.length) {
       rows.push([]);
