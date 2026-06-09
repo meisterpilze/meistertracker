@@ -11742,10 +11742,19 @@ function addDays(d, n) {
   x.setDate(x.getDate() + n);
   return x;
 }
-function addMonths(d, n) {
-  const x = new Date(d);
-  x.setMonth(x.getMonth() + n);
-  return x;
+// Add n months to `base`, clamping the day to the target month's last day
+// (Jan 31 + 1 → Feb 28/29). MUST be computed from the original base each time,
+// NOT cumulatively from the previous occurrence — setMonth overflows (Feb 31 →
+// Mar 3), which both skips February and permanently shifts every later
+// occurrence onto the 3rd.
+function addMonthsClamped(base, n) {
+  const m = base.getMonth() + n;
+  const y = base.getFullYear() + Math.floor(m / 12);
+  const tm = ((m % 12) + 12) % 12;
+  const day = Math.min(base.getDate(), new Date(y, tm + 1, 0).getDate());
+  const r = new Date(base);
+  r.setFullYear(y, tm, day);
+  return r;
 }
 function expandRecurringEvent(ev) {
   const out = [];
@@ -11759,6 +11768,7 @@ function expandRecurringEvent(ev) {
   const hardEnd = ev.recurrenceUntil ? parseDateStr(ev.recurrenceUntil) : null;
   let cur = new Date(base);
   let guard = 0;
+  let monthIdx = 0;
   while (guard++ < 500) {
     if (hardEnd && cur > hardEnd) break;
     if (cur > winEnd) break;
@@ -11768,7 +11778,7 @@ function expandRecurringEvent(ev) {
     }
     if (ev.recurrence === 'daily') cur = addDays(cur, 1);
     else if (ev.recurrence === 'weekly') cur = addDays(cur, 7);
-    else if (ev.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else if (ev.recurrence === 'monthly') cur = addMonthsClamped(base, ++monthIdx);
     else break;
   }
   return out;
@@ -11786,6 +11796,7 @@ function expandRecurringTaskDates(task) {
   const hardEnd = task.recurrenceUntil ? parseDateStr(task.recurrenceUntil) : null;
   let cur = new Date(base);
   let guard = 0;
+  let monthIdx = 0;
   while (guard++ < 500) {
     if (hardEnd && cur > hardEnd) break;
     if (cur > winEnd) break;
@@ -11794,7 +11805,7 @@ function expandRecurringTaskDates(task) {
     }
     if (task.recurrence === 'daily') cur = addDays(cur, 1);
     else if (task.recurrence === 'weekly') cur = addDays(cur, 7);
-    else if (task.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else if (task.recurrence === 'monthly') cur = addMonthsClamped(base, ++monthIdx);
     else break;
   }
   return out;
