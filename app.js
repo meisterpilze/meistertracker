@@ -7664,7 +7664,11 @@ function renderStichtagReport() {
     alert(t('assets.chooseCutoff'));
     return;
   }
-  const aktiv = assets.filter((a) => a.status === 'aktiv' || (a.exitDate && a.exitDate > ref));
+  // As-of the cutoff: only assets already acquired by `ref` (entryDate <= ref)
+  // that were still in service then — active, or exited after the cutoff.
+  // Without the entryDate guard a past-Stichtag report counted assets bought
+  // after the cutoff at full price, inflating the totals.
+  const aktiv = assets.filter((a) => a.entryDate <= ref && (a.status === 'aktiv' || (a.exitDate && a.exitDate > ref)));
   let totalPurchase = 0,
     totalBook = 0,
     totalAccum = 0;
