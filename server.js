@@ -163,6 +163,20 @@ const DUMMY_PASSWORD_HASH = crypto.scryptSync('', DUMMY_PASSWORD_SALT, 64).toStr
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
 const MCP_SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+// Tear down all live MCP sessions. Each session's server captured the `database`
+// handle at creation time; after a restore swaps `database`, those captured
+// handles are closed/stale, so the sessions must be dropped and the clients
+// forced to re-initialize against the new database.
+function closeAllMcpSessions() {
+  for (const session of mcpSessions.values()) {
+    try {
+      session.server.close();
+    } catch (e) {
+      /* best-effort */
+    }
+  }
+  mcpSessions.clear();
+}
 setInterval(
   () => {
     const now = Date.now();
@@ -7834,6 +7848,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         } catch (e) {
           log('warn', 'Failed to close database before restore', { error: e.message });
         }
+        // Drop live MCP sessions — their captured DB handle is now closed and
+        // every reopen path below rebinds `database` to a new handle.
+        closeAllMcpSessions();
         try {
           fs.copyFileSync(DB_FILE, bakPath);
         } catch (e) {
