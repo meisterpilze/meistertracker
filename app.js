@@ -11002,17 +11002,16 @@ let _scanTempIdCounter = 0;
 function handleZoneMismatch(r, entries) {
   if (!r || r.error !== 'zone_mismatch') return false;
   const list = Array.isArray(entries) ? entries : [entries];
-  // Drop the offending entry from local state so the dashboard doesn't keep
-  // showing a phantom MOVE that the server rejected. We match by bag — server
-  // returns the bag that triggered the conflict.
-  if (r.bag) {
-    const targets = list.filter((e) => e && e.bag === r.bag);
-    for (const e of targets) {
-      const i = scanLog.lastIndexOf(e);
-      if (i >= 0) scanLog.splice(i, 1);
-      const j = movements.lastIndexOf(e);
-      if (j >= 0) movements.splice(j, 1);
-    }
+  // The server rejects the ENTIRE POST on a single conflict, so none of these
+  // entries persisted. Drop them all from local state — not just the offending
+  // bag — or the other N-1 entries of a bulk move linger as phantom moves on
+  // the dashboard until the next resync silently reverts them.
+  for (const e of list) {
+    if (!e) continue;
+    const i = scanLog.lastIndexOf(e);
+    if (i >= 0) scanLog.splice(i, 1);
+    const j = movements.lastIndexOf(e);
+    if (j >= 0) movements.splice(j, 1);
   }
   const cur = r.current_zone ? zoneDisplayName(r.current_zone) : 'unbekannt';
   const msg = `MOVE rejected: bag ${r.bag} was moved by another user. Current zone: ${cur}`;
