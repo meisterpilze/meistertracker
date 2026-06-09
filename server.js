@@ -4635,32 +4635,44 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (req.method === 'POST') {
       jsonBody(req, res, async (e, body) => {
         if (e) return;
-        let session = sessionId ? mcpSessions.get(sessionId) : null;
-        if (!session) {
-          // S-01: pass the caller's auth context (userId, role) into
-          // the MCP server so destructive tools can require admin role.
-          const server = createMcpServer(database, () => broadcastSSE(null), {
-            printZPL,
-            checkPrinterAvailable,
-            auth: mcpAuth
-          });
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(),
-            onsessioninitialized: (sid) => {
-              mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
-            }
-          });
-          transport.onclose = () => {
-            const sid = transport.sessionId;
-            if (sid) mcpSessions.delete(sid);
-            server.close().catch(() => {});
-          };
-          await server.connect(transport);
-          session = { transport, server, lastActive: Date.now() };
-        } else {
-          session.lastActive = Date.now();
+        try {
+          let session = sessionId ? mcpSessions.get(sessionId) : null;
+          if (!session) {
+            // S-01: pass the caller's auth context (userId, role) into
+            // the MCP server so destructive tools can require admin role.
+            const server = createMcpServer(database, () => broadcastSSE(null), {
+              printZPL,
+              checkPrinterAvailable,
+              auth: mcpAuth
+            });
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => crypto.randomUUID(),
+              onsessioninitialized: (sid) => {
+                mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
+              }
+            });
+            transport.onclose = () => {
+              const sid = transport.sessionId;
+              if (sid) mcpSessions.delete(sid);
+              server.close().catch(() => {});
+            };
+            await server.connect(transport);
+            session = { transport, server, lastActive: Date.now() };
+          } else {
+            session.lastActive = Date.now();
+          }
+          await session.transport.handleRequest(req, res, body);
+        } catch (err) {
+          // Without this, a rejection from server.connect()/handleRequest()
+          // becomes an unhandledRejection and the client never gets a response.
+          log('error', 'MCP request handling failed', { error: err && err.message });
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end('{"error":"internal error"}');
+          } else {
+            res.destroy();
+          }
         }
-        session.transport.handleRequest(req, res, body);
       });
       return;
     }
