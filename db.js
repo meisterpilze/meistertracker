@@ -2537,9 +2537,11 @@ function renameBatch(db, oldId, newId) {
     // `oldId-%` (with wildcards in oldId escaped) so a rename of "B-1" cannot
     // touch "B-10"'s reports, and rebuild via substr so a recurring id
     // fragment in the suffix isn't double-replaced.
-    db.prepare(
-      "UPDATE contamination_reports SET bag_id = ? || substr(bag_id, ?) WHERE bag_id LIKE ? ESCAPE '\\'"
-    ).run(newId, oldId.length + 1, escapeLikePattern(oldId) + '-%');
+    db.prepare("UPDATE contamination_reports SET bag_id = ? || substr(bag_id, ?) WHERE bag_id LIKE ? ESCAPE '\\'").run(
+      newId,
+      oldId.length + 1,
+      escapeLikePattern(oldId) + '-%'
+    );
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     // Update barcode registry: rename entity_id for bags that were renamed
@@ -4084,7 +4086,9 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
 
 function getOAuthCode(db, code) {
   const row = db
-    .prepare("SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
+    .prepare(
+      "SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+    )
     .get(code);
   if (!row) return null;
   return {
