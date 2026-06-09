@@ -2606,7 +2606,7 @@ function renderRackSection(zone, racks, filtered) {
   const sectionClass = 'location-section' + (dashMode === 'farm' && zoneHasUrgent ? '' : ' collapsed');
   return `<div class="${sectionClass}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
     </div>
     <div class="location-section-body">${capHtml}
@@ -2637,7 +2637,7 @@ function renderFruitingSection(fruitingZones, filtered) {
 
       if (!batchEntries.length) {
         return `<div class="tent-column">
-        <div class="tent-column-header">${zoneDisplayName(z.id)}</div>
+        <div class="tent-column-header">${esc(zoneDisplayName(z.id))}</div>
         <div class="tent-column-empty">${t('dash.empty')}</div>
       </div>`;
       }
@@ -2676,7 +2676,7 @@ function renderFruitingSection(fruitingZones, filtered) {
       </div>`
         : '';
       return `<div class="tent-column">
-      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
+      <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
       ${cards}
     </div>`;
     })
@@ -2732,7 +2732,7 @@ function renderSimpleZoneSection(zone, filtered) {
     : '';
   return `<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${zoneDisplayName(zone.id)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
       <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
     </div>${capHtml}
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
@@ -2778,7 +2778,7 @@ function renderContamSection(zone, filtered) {
 
   return `<div class="location-section contam-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${zoneDisplayName(zone.id)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${esc(zoneDisplayName(zone.id))}</div>
       <span class="location-section-count">${tp('dash.bags', entries.length)}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
