@@ -8160,6 +8160,18 @@ function fillParentSelect(types) {
       .join('');
   if (cur) s.value = cur;
 }
+// Highest numeric suffix currently in use for a culture-id prefix. Generating
+// the next id from this (not from the count) means deleting an earlier culture
+// and creating a new one can't reuse an id — the server's
+// INSERT … ON CONFLICT(id) DO UPDATE would otherwise silently overwrite the
+// surviving culture's data.
+function maxCultureSuffix(prefix) {
+  return cultures.reduce((mx, c) => {
+    if (!c.id || !c.id.startsWith(prefix)) return mx;
+    const n = parseInt(c.id.slice(prefix.length), 10);
+    return Number.isFinite(n) && n > mx ? n : mx;
+  }, 0);
+}
 function lwPreview() {
   const type = document.getElementById('lw-type').value;
   const strainId = parseInt(document.getElementById('lw-st')?.value) || null;
@@ -8174,10 +8186,8 @@ function lwPreview() {
   }
   const stRaw = (document.getElementById('lw-strain-text')?.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stRaw ? '-' + stRaw : '') + '-' + todayStr() + '-';
-  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
-  prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(existing + i + 1).padStart(2, '0')).join(
-    '\n'
-  );
+  const base = maxCultureSuffix(prefix);
+  prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(base + i + 1).padStart(2, '0')).join('\n');
   box.style.display = 'block';
 }
 // lw-st change and lw-qty input listeners live in initEventListeners()
@@ -8201,9 +8211,9 @@ function logLabWork() {
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr() + '-';
-  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
+  const base = maxCultureSuffix(prefix);
   const newC = Array.from({ length: qty }, (_, i) => ({
-    id: prefix + String(existing + i + 1).padStart(2, '0'),
+    id: prefix + String(base + i + 1).padStart(2, '0'),
     type,
     species: sp,
     strain: st || '',
