@@ -1602,10 +1602,21 @@ const _bagZoneCacheByDb = new WeakMap();
 
 function _readBagZoneFromDb(db) {
   const map = new Map();
+  // Resolve rack ids (underscores, e.g. INC_R1) to their zone once via a local
+  // map — a plain split(':') leaves the rack id intact, so every rack-placed
+  // bag was keyed under a non-existent "zone" and dropped from KPI snapshots
+  // and the production pipeline.
+  const rackZone = new Map();
+  for (const r of db.prepare('SELECT id, zone_id FROM racks').all()) rackZone.set(r.id, r.zone_id);
+  const resolve = (loc) => {
+    if (!loc) return null;
+    const base = String(loc).split(':')[0];
+    return rackZone.get(base) || base;
+  };
   const stmt = db.prepare('SELECT action, bag, "to" FROM scan_log ORDER BY id');
   for (const e of stmt.iterate()) {
     if (!e.bag) continue;
-    const toZ = e.to ? e.to.split(':')[0] : null;
+    const toZ = resolve(e.to);
     if (e.action === 'ADD' && toZ) map.set(e.bag, toZ);
     else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZ) map.set(e.bag, toZ);
     else if (e.action === 'REMOVE') map.delete(e.bag);
@@ -1630,7 +1641,7 @@ function getBagZoneMap(db) {
 function applyScanEntryToBagZoneCache(db, entry) {
   const cached = _bagZoneCacheByDb.get(db);
   if (!cached || !entry || !entry.bag) return; // not built yet — first read will build it
-  const toZ = entry.to ? entry.to.split(':')[0] : null;
+  const toZ = entry.to ? zoneIdOfLocation(db, entry.to) : null;
   if (entry.action === 'ADD' && toZ) cached.set(entry.bag, toZ);
   else if ((entry.action === 'MOVE' || entry.action === 'MOVE_BATCH') && toZ) cached.set(entry.bag, toZ);
   else if (entry.action === 'REMOVE') cached.delete(entry.bag);
