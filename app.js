@@ -3501,7 +3501,7 @@ document.getElementById('dash-locations').addEventListener('click', function (e)
   e.stopPropagation();
   toggleLocBag(chip.dataset.bag, chip.dataset.batch, chip.dataset.loc);
 });
-let lastLocUndoCount = 0;
+let lastLocUndoEntries = [];
 function locMoveTo(toLoc) {
   if (!selectedLocBags.size) return;
   const now = new Date().toISOString();
@@ -3528,10 +3528,16 @@ function locMoveTo(toLoc) {
     entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount = n;
+  lastLocUndoEntries = entries;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries }).then((r) => handleZoneMismatch(r, entries));
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (handleZoneMismatch(r, entries)) return; // I-12
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        if (r.ids[i]) e._serverId = r.ids[i];
+      });
+  });
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
@@ -3561,10 +3567,15 @@ function locRemoveSelected() {
     entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount = n;
+  lastLocUndoEntries = entries;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries });
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        if (r.ids[i]) e._serverId = r.ids[i];
+      });
+  });
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.removed', { n: n }));
@@ -3579,14 +3590,36 @@ function setLocFb(msg) {
   _toastTimer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
 function locUndo() {
-  if (!lastLocUndoCount) return;
-  const n2 = lastLocUndoCount;
-  scanLog.splice(scanLog.length - n2, n2);
-  lastLocUndoCount = 0;
-  apiDelete('/api/scan-log/last/' + n2);
+  if (!lastLocUndoEntries.length) return;
+  const toUndo = lastLocUndoEntries;
+  lastLocUndoEntries = [];
+  // Remove exactly these entries by identity — NOT by position. A background
+  // pollSync may have appended other users' rows since the move, so
+  // splice(length - n, n) could drop the wrong local entries.
+  for (const e of toUndo) {
+    const si = scanLog.indexOf(e);
+    if (si !== -1) scanLog.splice(si, 1);
+    const mi = movements.indexOf(e);
+    if (mi !== -1) movements.splice(mi, 1);
+  }
   updateSD();
   renderStatus();
-  setFb('ok', 'Undo successful');
+  // Delete each persisted row by its own id (owner-or-admin ACL) instead of the
+  // admin-only DELETE /scan-log/last/N, which 403'd for workers (yet still
+  // showed "success") and for admins deleted the globally-newest N rows —
+  // possibly another user's scans. Report the real outcome.
+  Promise.all(
+    toUndo.map((e) =>
+      e._serverId ? apiDelete('/api/scan-log/' + e._serverId).then((r) => !!r && !r.error) : Promise.resolve(false)
+    )
+  ).then((results) => {
+    if (results.length && results.every(Boolean)) {
+      setFb('ok', t('scanFb.undoOk'));
+    } else {
+      setFb('err', t('scanFb.undoFail'));
+      refresh(); // re-sync so the UI reflects what actually persisted
+    }
+  });
 }
 
 // ─── BATCHES ─────────────────────────────────────────────────
