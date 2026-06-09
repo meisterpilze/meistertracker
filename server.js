@@ -7120,10 +7120,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     let raw = '';
+    let whSize = 0;
+    let whAborted = false;
     req.on('data', (c) => {
+      whSize += c.length;
+      if (whSize > MAX_BODY_SIZE) {
+        // Cap the body before buffering — the HMAC check only runs on 'end',
+        // so without this an unbounded payload could exhaust memory first.
+        whAborted = true;
+        jsonErr(res, 413, 'Payload too large');
+        req.destroy();
+        return;
+      }
       raw += c;
     });
     req.on('end', () => {
+      if (whAborted) return;
       // Defence in depth: any throw inside this async callback would otherwise
       // bubble to `uncaughtException` and terminate the process.
       try {
