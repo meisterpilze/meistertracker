@@ -13808,6 +13808,10 @@ document.addEventListener('keydown', function (e) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) {
       if (id === 'm-bagselect') bsClose();
+      // closeCamScan() stops the MediaStream + decode loop; just removing the
+      // 'open' class would leave the camera live (LED on, battery drain,
+      // barcodes still firing processScan) behind a hidden modal.
+      else if (id === 'm-camscan') closeCamScan();
       else el.classList.remove('open');
       return;
     }
