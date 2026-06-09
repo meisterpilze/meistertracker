@@ -111,6 +111,28 @@ function sqliteHeaderOk(filePath) {
   }
 }
 
+// Deeper than the magic-header check: opens the file read-only and runs
+// PRAGMA quick_check, which catches torn writes / bad pages that leave the
+// first 16 bytes intact. A failed open ("disk image is malformed") or a
+// non-'ok' result means the backup is not restorable.
+function integrityOk(filePath) {
+  let conn;
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    conn = new DatabaseSync(filePath, { readonly: true });
+    const r = conn.prepare('PRAGMA quick_check').get();
+    return !!r && r.quick_check === 'ok';
+  } catch (_) {
+    return false;
+  } finally {
+    try {
+      if (conn) conn.close();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
 function statBackups(prefix, files) {
   const stats = files
     .filter((f) => f.startsWith(prefix))
@@ -187,8 +209,11 @@ if (!fs.existsSync(backupDir)) {
     if (!sqliteHeaderOk(latest.full)) {
       autoCorrupt = true;
       critical.push('Latest auto-backup missing SQLite magic header (corrupt?): ' + latest.file);
+    } else if (!integrityOk(latest.full)) {
+      autoCorrupt = true;
+      critical.push('Latest auto-backup failed PRAGMA quick_check (corrupt?): ' + latest.file);
     } else if (!autoCorrupt) {
-      info.push('Latest auto-backup has valid SQLite magic header');
+      info.push('Latest auto-backup passed header + quick_check');
     }
   }
 
