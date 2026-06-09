@@ -10206,10 +10206,12 @@ function renderLabList() {
       if (filter === 'all') return c.status === 'active' || c.status === 'stored';
       if (filter === 'today') {
         const d = new Date(c.created);
+        // Must match todayStr()'s DDMMYY order — building YYMMDD here made the
+        // "today" filter match only when day-of-month equalled the 2-digit year.
         return (
-          String(d.getFullYear()).slice(2) +
+          String(d.getDate()).padStart(2, '0') +
             String(d.getMonth() + 1).padStart(2, '0') +
-            String(d.getDate()).padStart(2, '0') ===
+            String(d.getFullYear()).slice(2) ===
           today
         );
       }
