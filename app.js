@@ -303,6 +303,27 @@ function esc(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+// Parse a user-entered decimal that may use a German comma as the decimal
+// separator ("1,5" → 1.5, "1.234,5" → 1234.5). The app's default language is
+// German and the quantity inputs are type=text inputmode=decimal, so mobile
+// keyboards offer a comma — plain parseFloat('847,5') silently returns 847.
+// Returns NaN for unparseable input; callers apply `|| 0` / Number.isFinite
+// exactly as before.
+function parseDecimal(v) {
+  if (v == null) return NaN;
+  let s = String(v).trim();
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  return parseFloat(s);
+}
+// Record a scan entry's server-side id once its POST resolves. If the user
+// undid the entry before the POST landed (no _serverId yet → the undo set
+// _undoPending), delete the now-known row so it doesn't resurface on the next
+// sync.
+function setEntryServerId(entry, id) {
+  if (!entry || !id) return;
+  entry._serverId = id;
+  if (entry._undoPending) apiDelete('/api/scan-log/' + id);
+}
 function safeHref(url) {
   if (!url) return '';
   const u = String(url).trim();
@@ -1086,7 +1107,7 @@ function confirmBatchAdd() {
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   updateSD();
@@ -1343,6 +1364,11 @@ function renderOverviewKPIs() {
   const periodYield =
     periodBags.size > 0 ? Math.round(periodHarvests.reduce((s, h) => s + (h.grams || 0), 0) / periodBags.size) : 0;
   const yieldDelta = avgYield > 0 && periodYield > 0 ? periodYield - avgYield : null;
+  // periodSub = label for the selected period ("This week"/"This month"/…).
+  // Declared here (not further down) because yieldSub below references it —
+  // a later `const` would throw a temporal-dead-zone ReferenceError and abort
+  // the whole render whenever there is a harvest in the period.
+  const periodSub = t('dash.ov.period' + ovPeriod.charAt(0).toUpperCase() + ovPeriod.slice(1));
   let yieldSub = t('dash.ov.perBag');
   if (periodYield > 0) {
     const arrow = yieldDelta > 0 ? '↑' : yieldDelta < 0 ? '↓' : '=';
@@ -1434,7 +1460,6 @@ function renderOverviewKPIs() {
   const iconStreak = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
   const iconFlush = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
 
-  const periodSub = t('dash.ov.period' + ovPeriod.charAt(0).toUpperCase() + ovPeriod.slice(1));
   const periodLabel = document.getElementById('ov-period-label');
   if (periodLabel) periodLabel.textContent = periodSub;
 
@@ -2182,11 +2207,12 @@ function _kpiGroupKey(dateStr, period) {
   const d = new Date(dateStr + 'T00:00:00');
   if (period === 'monthly') return dateStr.slice(0, 7);
   if (period === 'weekly') {
+    // Thursday of this week determines the ISO week-year. Reuse the correct
+    // isoWeekNumber() helper — the previous ad-hoc formula used a Sunday-based
+    // getDay() and was off by one week for every date in 2024 and 2025.
     const thu = new Date(d);
     thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
-    const y = thu.getFullYear();
-    const w = Math.ceil(((thu - new Date(y, 0, 4)) / 864e5 + new Date(y, 0, 4).getDay() + 6) / 7);
-    return y + '-W' + String(w).padStart(2, '0');
+    return thu.getFullYear() + '-W' + String(isoWeekNumber(thu)).padStart(2, '0');
   }
   return dateStr;
 }
@@ -2349,7 +2375,7 @@ function exportOverviewCSV() {
   // Harvest by day
   const byDay = {};
   periodHarvests.forEach((h) => {
-    const key = new Date(h.time).toISOString().slice(0, 10);
+    const key = localDateStr(new Date(h.time));
     byDay[key] = (byDay[key] || 0) + (h.grams || 0);
   });
 
@@ -2386,7 +2412,7 @@ function exportOverviewCSV() {
 
   // KPI History snapshots for this period
   if (kpiHistoryData && kpiHistoryData.length) {
-    const periodKey = periodStart.toISOString().slice(0, 10);
+    const periodKey = localDateStr(periodStart);
     const snaps = kpiHistoryData.filter((s) => s.date >= periodKey);
     if (snaps.length) {
       rows.push([]);
@@ -2602,7 +2628,7 @@ function renderRackSection(zone, racks, filtered) {
   const sectionClass = 'location-section' + (dashMode === 'farm' && zoneHasUrgent ? '' : ' collapsed');
   return `<div class="${sectionClass}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${zoneDisplayName(zone)}</div>
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
     </div>
     <div class="location-section-body">${capHtml}
@@ -2633,7 +2659,7 @@ function renderFruitingSection(fruitingZones, filtered) {
 
       if (!batchEntries.length) {
         return `<div class="tent-column">
-        <div class="tent-column-header">${zoneDisplayName(z.id)}</div>
+        <div class="tent-column-header">${esc(zoneDisplayName(z.id))}</div>
         <div class="tent-column-empty">${t('dash.empty')}</div>
       </div>`;
       }
@@ -2672,7 +2698,7 @@ function renderFruitingSection(fruitingZones, filtered) {
       </div>`
         : '';
       return `<div class="tent-column">
-      <div class="tent-column-header">${zoneDisplayName(z.id)} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
+      <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
       ${cards}
     </div>`;
     })
@@ -2728,7 +2754,7 @@ function renderSimpleZoneSection(zone, filtered) {
     : '';
   return `<div class="location-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${zoneDisplayName(zone.id)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
       <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
     </div>${capHtml}
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
@@ -2774,7 +2800,7 @@ function renderContamSection(zone, filtered) {
 
   return `<div class="location-section contam-section">
     <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${zoneDisplayName(zone.id)}</div>
+      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${esc(zoneDisplayName(zone.id))}</div>
       <span class="location-section-count">${tp('dash.bags', entries.length)}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
@@ -3357,7 +3383,7 @@ function setLabMin(type) {
   const hint = type === 'GS' ? ' (kg per strain)' : '';
   const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type) + hint, cur);
   if (val === null) return;
-  inventory.labThresholds[type] = parseFloat(val) || 0;
+  inventory.labThresholds[type] = parseDecimal(val) || 0;
   saveLabThresholds();
   renderDashLabStock();
   renderDashAlerts();
@@ -3485,7 +3511,7 @@ document.getElementById('dash-locations').addEventListener('click', function (e)
   e.stopPropagation();
   toggleLocBag(chip.dataset.bag, chip.dataset.batch, chip.dataset.loc);
 });
-let lastLocUndoCount = 0;
+let lastLocUndoEntries = [];
 function locMoveTo(toLoc) {
   if (!selectedLocBags.size) return;
   const now = new Date().toISOString();
@@ -3512,10 +3538,16 @@ function locMoveTo(toLoc) {
     entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount = n;
+  lastLocUndoEntries = entries;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries }).then((r) => handleZoneMismatch(r, entries));
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (handleZoneMismatch(r, entries)) return; // I-12
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        setEntryServerId(e, r.ids[i]);
+      });
+  });
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
@@ -3545,10 +3577,15 @@ function locRemoveSelected() {
     entries.push(entry);
     scan.count++;
   });
-  lastLocUndoCount = n;
+  lastLocUndoEntries = entries;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries });
+  apiPost('/api/scan-log', { entries }).then(function (r) {
+    if (r && r.ids)
+      entries.forEach((e, i) => {
+        setEntryServerId(e, r.ids[i]);
+      });
+  });
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.removed', { n: n }));
@@ -3563,14 +3600,36 @@ function setLocFb(msg) {
   _toastTimer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
 function locUndo() {
-  if (!lastLocUndoCount) return;
-  const n2 = lastLocUndoCount;
-  scanLog.splice(scanLog.length - n2, n2);
-  lastLocUndoCount = 0;
-  apiDelete('/api/scan-log/last/' + n2);
+  if (!lastLocUndoEntries.length) return;
+  const toUndo = lastLocUndoEntries;
+  lastLocUndoEntries = [];
+  // Remove exactly these entries by identity — NOT by position. A background
+  // pollSync may have appended other users' rows since the move, so
+  // splice(length - n, n) could drop the wrong local entries.
+  for (const e of toUndo) {
+    const si = scanLog.indexOf(e);
+    if (si !== -1) scanLog.splice(si, 1);
+    const mi = movements.indexOf(e);
+    if (mi !== -1) movements.splice(mi, 1);
+  }
   updateSD();
   renderStatus();
-  setFb('ok', 'Undo successful');
+  // Delete each persisted row by its own id (owner-or-admin ACL) instead of the
+  // admin-only DELETE /scan-log/last/N, which 403'd for workers (yet still
+  // showed "success") and for admins deleted the globally-newest N rows —
+  // possibly another user's scans. Report the real outcome.
+  Promise.all(
+    toUndo.map((e) =>
+      e._serverId ? apiDelete('/api/scan-log/' + e._serverId).then((r) => !!r && !r.error) : Promise.resolve(false)
+    )
+  ).then((results) => {
+    if (results.length && results.every(Boolean)) {
+      setFb('ok', t('scanFb.undoOk'));
+    } else {
+      setFb('err', t('scanFb.undoFail'));
+      refresh(); // re-sync so the UI reflects what actually persisted
+    }
+  });
 }
 
 // ─── BATCHES ─────────────────────────────────────────────────
@@ -3596,16 +3655,16 @@ function nbPreview() {
     st = ms ? ms.kuerzel : '';
   const qty = parseInt(document.getElementById('nb-qty').value) || 0;
   document.getElementById('nb-prev').textContent = sp && st ? genBatchId(sp) + ' (' + qty + ' bags)' : '—';
-  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (!qty || !bagKg) {
     document.getElementById('nb-mat-preview').style.display = 'none';
     return;
   }
   let lines = [];
   {
-    const hw = parseFloat(document.getElementById('nb-hw').value) || 0;
-    const wb = parseFloat(document.getElementById('nb-wb').value) || 0;
-    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
+    const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+    const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const gyp = document.getElementById('nb-gyp').checked;
     if (hw || wb) {
       // Correct calculation: subtract water first, then split dry matter
@@ -3643,8 +3702,8 @@ function nbPreview() {
   } else el.style.display = 'none';
 }
 function nbSubSum() {
-  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
-    wb = parseFloat(document.getElementById('nb-wb').value) || 0,
+  const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
+    wb = parseDecimal(document.getElementById('nb-wb').value) || 0,
     s = hw + wb;
   document.getElementById('nb-subsum').textContent =
     hw || wb ? 'Total: ' + s + '%' + (s !== 100 ? ' — should add up to 100%' : '') : '';
@@ -3667,7 +3726,7 @@ function createBatch() {
   const st = strainText || 'XXX';
   const qty = parseInt(document.getElementById('nb-qty').value) || 0,
     days = parseInt(document.getElementById('nb-days').value) || 14;
-  const bagKg = parseFloat(document.getElementById('nb-weight').value) || 0;
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
     alert(t('batch.fillQty'));
     return;
@@ -3676,8 +3735,8 @@ function createBatch() {
     alert(t('batch.enterWeight'));
     return;
   }
-  const hw = parseFloat(document.getElementById('nb-hw').value) || 0,
-    wb = parseFloat(document.getElementById('nb-wb').value) || 0;
+  const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
+    wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
   // I-19: substrate must total exactly 100% (within rounding). Previously the
   // check only fired on > 100; a 70/20 split silently consumed 90% of the dry
   // mass and the remaining 10% went unaccounted. Now we reject any drift in
@@ -3692,7 +3751,7 @@ function createBatch() {
       ? {
           hardwood: hw,
           wheatbran: wb,
-          rh: parseFloat(document.getElementById('nb-rh').value) || null,
+          rh: parseDecimal(document.getElementById('nb-rh').value) || null,
           gypsum: document.getElementById('nb-gyp').checked
         }
       : null;
@@ -3760,7 +3819,7 @@ function createBatch() {
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
   if (substrate) {
-    const rh = parseFloat(document.getElementById('nb-rh').value) || 0;
+    const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
     const hwUsed = qty * dryKgPerBag * (hw / 100);
     const wbUsed = qty * dryKgPerBag * (wb / 100);
@@ -3907,7 +3966,7 @@ function moveBagsTo(batch, bagIds, dest, cb) {
     if (handleZoneMismatch(r, entries)) return; // I-12
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   if (cb) cb(entries.length, skipped);
@@ -3955,7 +4014,7 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
-        if (r.ids[i]) e._serverId = r.ids[i];
+        setEntryServerId(e, r.ids[i]);
       });
   });
   if (cb) cb(entries.length);
@@ -4467,7 +4526,7 @@ function showHarvestPanel(bagId, batchId) {
   setFb('harvest', t('harvest.bagScanned', { bag: bagId }), { noModal: true });
 }
 function confirmHarvest() {
-  const g = parseFloat(document.getElementById('hp-grams').value),
+  const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
     alert(t('harvest.enterWeight'));
@@ -4612,8 +4671,12 @@ function renderHarvests() {
   harvests.forEach((h) => {
     const d = new Date(h.time);
     const mon = new Date(d);
-    mon.setDate(d.getDate() - d.getDay() + 1);
-    const key = mon.toISOString().slice(0, 10);
+    // (getDay()+6)%7 puts Monday at offset 0 … Sunday at 6; the old
+    // `- getDay() + 1` bucketed Sunday into the *next* week. Key by the local
+    // date, not toISOString() (which shifts a local-midnight Monday to Sunday
+    // in CEST and splits one local week across two buckets).
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const key = localDateStr(mon);
     byWeek[key] = (byWeek[key] || 0) + h.grams;
   });
   const weekKeys = Object.keys(byWeek).sort();
@@ -5453,7 +5516,7 @@ function initCameraPxCalib() {
 
   applyBtn.addEventListener('click', () => {
     if (!_cam.pxDistance) return;
-    const mm = parseFloat(mmInput.value);
+    const mm = parseDecimal(mmInput.value);
     if (!Number.isFinite(mm) || mm <= 0) {
       alert(t('cam.invalidMm'));
       return;
@@ -6175,24 +6238,28 @@ function renderLog() {
     ? items
         .map((e) => {
           const isRecent = now - new Date(e.time).getTime() < h24;
-          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td data-mlabel="${esc(t('settings.user'))}" style="font-size:11px">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\'' + esc(e.time) + "','" + esc(e.batch) + "','" + esc(e.action) + '\')" title="' + t('common.delete') + '">✕</button>' : ''}</td></tr>`;
+          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td data-mlabel="${esc(t('settings.user'))}" style="font-size:11px">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\'' + esc(e.time) + "','" + esc(e.batch) + "','" + esc(e.action) + "','" + esc(e.bag || '') + '\')" title="' + t('common.delete') + '">✕</button>' : ''}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="9" class="empty">' + t('settings.noScans') + '</td></tr>';
   const loadMore = document.getElementById('log-load-more');
   if (loadMore) loadMore.style.display = hasMore ? 'block' : 'none';
 }
-function deleteLogEntry(btn, time, batch, action) {
+function deleteLogEntry(btn, time, batch, action, bag) {
   confirm2(
     t('log.deleteEntry'),
     t('log.deleteEntryMsg', { action: action, batch: batch, time: fmtDtTime(time) }),
     t('common.delete'),
     () => {
-      const idx = scanLog.findIndex((e) => e.time === time && e.batch === batch && e.action === action);
+      // Match on bag too: a bulk ADD/MOVE writes the same time+batch+action to
+      // every bag, so without the bag the ✕ on one row deleted the first
+      // matching row (and its server id) instead of the clicked one.
+      const match = (e) => e.time === time && e.batch === batch && e.action === action && (e.bag || '') === bag;
+      const idx = scanLog.findIndex(match);
       if (idx === -1) return;
       const entry = scanLog[idx];
       scanLog.splice(idx, 1);
-      const mi = movements.findIndex((e) => e.time === time && e.batch === batch && e.action === action);
+      const mi = movements.findIndex(match);
       if (mi !== -1) movements.splice(mi, 1);
       const serverId = entry._serverId || entry.id;
       if (serverId) apiDelete('/api/scan-log/' + serverId);
@@ -6374,7 +6441,7 @@ function renderThresholds() {
 function updateAvgComp(key, val) {
   if (!inventory.avgComposition)
     inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 };
-  inventory.avgComposition[key] = parseFloat(val) || 0;
+  inventory.avgComposition[key] = parseDecimal(val) || 0;
   saveInvConfig();
   renderInvStock();
 }
@@ -6382,7 +6449,7 @@ function updateAvgComp(key, val) {
 function updateThreshold(mat, key, val) {
   if (!inventory.thresholds) inventory.thresholds = {};
   if (!inventory.thresholds[mat]) inventory.thresholds[mat] = { minKg: 0 };
-  inventory.thresholds[mat][key] = parseFloat(val) || 0;
+  inventory.thresholds[mat][key] = parseDecimal(val) || 0;
   saveInvConfig();
   renderInvStock();
 }
@@ -6396,7 +6463,7 @@ function delMatChange() {
 }
 function delPreview() {
   const mat = document.getElementById('del-mat').value;
-  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const el = document.getElementById('del-preview');
   if (!kg) {
     el.style.display = 'none';
@@ -6428,7 +6495,7 @@ function adjPreview(mode) {
   const el = document.getElementById('adj-preview');
   let newVal, diff;
   if (mode === 'absolute') {
-    const abs = parseFloat(document.getElementById('adj-absolute').value);
+    const abs = parseDecimal(document.getElementById('adj-absolute').value);
     if (isNaN(abs)) {
       el.style.display = 'none';
       return;
@@ -6445,7 +6512,7 @@ function adjPreview(mode) {
       diff.toFixed(2) +
       t('inv.kgFromCurrent');
   } else {
-    const delta = parseFloat(document.getElementById('adj-delta').value);
+    const delta = parseDecimal(document.getElementById('adj-delta').value);
     if (isNaN(delta)) {
       el.style.display = 'none';
       return;
@@ -6466,7 +6533,7 @@ function adjPreview(mode) {
 }
 function logDelivery() {
   const mat = document.getElementById('del-mat').value;
-  const kg = parseFloat(document.getElementById('del-kg').value) || 0;
+  const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const note = document.getElementById('del-note').value.trim();
   if (kg <= 0) {
     alert(t('inv.enterQty'));
@@ -6494,10 +6561,10 @@ function logAdjustment() {
   const cur = inventory.stock[mat] || 0;
   let newStock, delta;
   if (absVal !== '') {
-    newStock = Math.max(0, parseFloat(absVal) || 0);
+    newStock = Math.max(0, parseDecimal(absVal) || 0);
     delta = newStock - cur;
   } else if (deltaVal !== '') {
-    delta = parseFloat(deltaVal) || 0;
+    delta = parseDecimal(deltaVal) || 0;
     newStock = Math.max(0, cur + delta);
   } else {
     alert(t('inv.enterAmount'));
@@ -7473,7 +7540,7 @@ function saveAsset() {
   const name = document.getElementById('asset-name').value.trim();
   const category = document.getElementById('asset-category').value;
   const entryDate = document.getElementById('asset-entry-date').value;
-  const price = parseFloat(document.getElementById('asset-price').value);
+  const price = parseDecimal(document.getElementById('asset-price').value);
   const life = parseInt(document.getElementById('asset-life').value);
   if (!name || !entryDate || isNaN(price) || price < 0 || isNaN(life) || life < 1) {
     alert(t('assets.fillRequired'));
@@ -7606,7 +7673,11 @@ function renderStichtagReport() {
     alert(t('assets.chooseCutoff'));
     return;
   }
-  const aktiv = assets.filter((a) => a.status === 'aktiv' || (a.exitDate && a.exitDate > ref));
+  // As-of the cutoff: only assets already acquired by `ref` (entryDate <= ref)
+  // that were still in service then — active, or exited after the cutoff.
+  // Without the entryDate guard a past-Stichtag report counted assets bought
+  // after the cutoff at full price, inflating the totals.
+  const aktiv = assets.filter((a) => a.entryDate <= ref && (a.status === 'aktiv' || (a.exitDate && a.exitDate > ref)));
   let totalPurchase = 0,
     totalBook = 0,
     totalAccum = 0;
@@ -8102,6 +8173,18 @@ function fillParentSelect(types) {
       .join('');
   if (cur) s.value = cur;
 }
+// Highest numeric suffix currently in use for a culture-id prefix. Generating
+// the next id from this (not from the count) means deleting an earlier culture
+// and creating a new one can't reuse an id — the server's
+// INSERT … ON CONFLICT(id) DO UPDATE would otherwise silently overwrite the
+// surviving culture's data.
+function maxCultureSuffix(prefix) {
+  return cultures.reduce((mx, c) => {
+    if (!c.id || !c.id.startsWith(prefix)) return mx;
+    const n = parseInt(c.id.slice(prefix.length), 10);
+    return Number.isFinite(n) && n > mx ? n : mx;
+  }, 0);
+}
 function lwPreview() {
   const type = document.getElementById('lw-type').value;
   const strainId = parseInt(document.getElementById('lw-st')?.value) || null;
@@ -8116,10 +8199,8 @@ function lwPreview() {
   }
   const stRaw = (document.getElementById('lw-strain-text')?.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stRaw ? '-' + stRaw : '') + '-' + todayStr() + '-';
-  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
-  prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(existing + i + 1).padStart(2, '0')).join(
-    '\n'
-  );
+  const base = maxCultureSuffix(prefix);
+  prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(base + i + 1).padStart(2, '0')).join('\n');
   box.style.display = 'block';
 }
 // lw-st change and lw-qty input listeners live in initEventListeners()
@@ -8143,9 +8224,9 @@ function logLabWork() {
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr() + '-';
-  const existing = cultures.filter((c) => c.id.startsWith(prefix)).length;
+  const base = maxCultureSuffix(prefix);
   const newC = Array.from({ length: qty }, (_, i) => ({
-    id: prefix + String(existing + i + 1).padStart(2, '0'),
+    id: prefix + String(base + i + 1).padStart(2, '0'),
     type,
     species: sp,
     strain: st || '',
@@ -8212,7 +8293,7 @@ const genGrainBatchId = (sp, strainText) => {
 function gsReadLines() {
   const lines = [];
   for (const row of document.querySelectorAll('.gs-wline')) {
-    const kg = parseFloat(row.querySelector('.gs-line-kg').value) || 0;
+    const kg = parseDecimal(row.querySelector('.gs-line-kg').value) || 0;
     const qty = parseInt(row.querySelector('.gs-line-qty').value) || 0;
     if (kg > 0 && qty > 0) lines.push({ kg, qty });
   }
@@ -8277,7 +8358,7 @@ function gsPreview() {
   const totalWet = lines.reduce((s, l) => s + l.kg * l.qty, 0);
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
+  const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
   const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
@@ -8321,7 +8402,7 @@ function createGrainBatch() {
   const days = parseInt(document.getElementById('gs-days').value) || 14;
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
-  const grainRh = grainRhInput ? parseFloat(grainRhInput.value) || 0 : defaultGrainRh;
+  const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
   const batchId = genGrainBatchId(sp, lwStrainText);
@@ -8660,7 +8741,7 @@ function biPerformRemove() {
   sessionEntries.push(entry);
   scan.count++;
   apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
-    if (r && r.ids && r.ids[0]) entry._serverId = r.ids[0];
+    if (r && r.ids && r.ids[0]) setEntryServerId(entry, r.ids[0]);
   });
   updateSD();
   const msg = fromLoc
@@ -10153,10 +10234,12 @@ function renderLabList() {
       if (filter === 'all') return c.status === 'active' || c.status === 'stored';
       if (filter === 'today') {
         const d = new Date(c.created);
+        // Must match todayStr()'s DDMMYY order — building YYMMDD here made the
+        // "today" filter match only when day-of-month equalled the 2-digit year.
         return (
-          String(d.getFullYear()).slice(2) +
+          String(d.getDate()).padStart(2, '0') +
             String(d.getMonth() + 1).padStart(2, '0') +
-            String(d.getDate()).padStart(2, '0') ===
+            String(d.getFullYear()).slice(2) ===
           today
         );
       }
@@ -10531,6 +10614,7 @@ function undoSuccessRow(btn) {
   if (mi !== -1) movements.splice(mi, 1);
   sessionEntries.splice(idx, 1);
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   scan.count = Math.max(0, scan.count - 1);
   _scanBeep(400, 100);
   setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
@@ -10750,6 +10834,7 @@ function undoScanEntry(btn) {
   sessionEntries.splice(idx, 1);
   // Delete from server
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   // Remove DOM row
   if (row) row.remove();
   scan.count = Math.max(0, scan.count - 1);
@@ -10928,17 +11013,16 @@ let _scanTempIdCounter = 0;
 function handleZoneMismatch(r, entries) {
   if (!r || r.error !== 'zone_mismatch') return false;
   const list = Array.isArray(entries) ? entries : [entries];
-  // Drop the offending entry from local state so the dashboard doesn't keep
-  // showing a phantom MOVE that the server rejected. We match by bag — server
-  // returns the bag that triggered the conflict.
-  if (r.bag) {
-    const targets = list.filter((e) => e && e.bag === r.bag);
-    for (const e of targets) {
-      const i = scanLog.lastIndexOf(e);
-      if (i >= 0) scanLog.splice(i, 1);
-      const j = movements.lastIndexOf(e);
-      if (j >= 0) movements.splice(j, 1);
-    }
+  // The server rejects the ENTIRE POST on a single conflict, so none of these
+  // entries persisted. Drop them all from local state — not just the offending
+  // bag — or the other N-1 entries of a bulk move linger as phantom moves on
+  // the dashboard until the next resync silently reverts them.
+  for (const e of list) {
+    if (!e) continue;
+    const i = scanLog.lastIndexOf(e);
+    if (i >= 0) scanLog.splice(i, 1);
+    const j = movements.lastIndexOf(e);
+    if (j >= 0) movements.splice(j, 1);
   }
   const cur = r.current_zone ? zoneDisplayName(r.current_zone) : 'unbekannt';
   const msg = `MOVE rejected: bag ${r.bag} was moved by another user. Current zone: ${cur}`;
@@ -11361,7 +11445,7 @@ function processScan(raw) {
     scan.count++;
     apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
       if (r && r.ids && r.ids[0]) {
-        entry._serverId = r.ids[0];
+        setEntryServerId(entry, r.ids[0]);
         return;
       }
       // I-12: server rejected the MOVE because the bag has since been moved
@@ -11373,7 +11457,7 @@ function processScan(raw) {
         console.warn('Scan log POST failed, retrying:', r.error);
         setTimeout(function () {
           apiPost('/api/scan-log', { entries: [entry] }).then(function (r2) {
-            if (r2 && r2.ids && r2.ids[0]) entry._serverId = r2.ids[0];
+            if (r2 && r2.ids && r2.ids[0]) setEntryServerId(entry, r2.ids[0]);
             else if (handleZoneMismatch(r2, entry)) return;
             else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
           });
@@ -11693,10 +11777,19 @@ function addDays(d, n) {
   x.setDate(x.getDate() + n);
   return x;
 }
-function addMonths(d, n) {
-  const x = new Date(d);
-  x.setMonth(x.getMonth() + n);
-  return x;
+// Add n months to `base`, clamping the day to the target month's last day
+// (Jan 31 + 1 → Feb 28/29). MUST be computed from the original base each time,
+// NOT cumulatively from the previous occurrence — setMonth overflows (Feb 31 →
+// Mar 3), which both skips February and permanently shifts every later
+// occurrence onto the 3rd.
+function addMonthsClamped(base, n) {
+  const m = base.getMonth() + n;
+  const y = base.getFullYear() + Math.floor(m / 12);
+  const tm = ((m % 12) + 12) % 12;
+  const day = Math.min(base.getDate(), new Date(y, tm + 1, 0).getDate());
+  const r = new Date(base);
+  r.setFullYear(y, tm, day);
+  return r;
 }
 function expandRecurringEvent(ev) {
   const out = [];
@@ -11710,6 +11803,7 @@ function expandRecurringEvent(ev) {
   const hardEnd = ev.recurrenceUntil ? parseDateStr(ev.recurrenceUntil) : null;
   let cur = new Date(base);
   let guard = 0;
+  let monthIdx = 0;
   while (guard++ < 500) {
     if (hardEnd && cur > hardEnd) break;
     if (cur > winEnd) break;
@@ -11719,7 +11813,7 @@ function expandRecurringEvent(ev) {
     }
     if (ev.recurrence === 'daily') cur = addDays(cur, 1);
     else if (ev.recurrence === 'weekly') cur = addDays(cur, 7);
-    else if (ev.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else if (ev.recurrence === 'monthly') cur = addMonthsClamped(base, ++monthIdx);
     else break;
   }
   return out;
@@ -11737,6 +11831,7 @@ function expandRecurringTaskDates(task) {
   const hardEnd = task.recurrenceUntil ? parseDateStr(task.recurrenceUntil) : null;
   let cur = new Date(base);
   let guard = 0;
+  let monthIdx = 0;
   while (guard++ < 500) {
     if (hardEnd && cur > hardEnd) break;
     if (cur > winEnd) break;
@@ -11745,7 +11840,7 @@ function expandRecurringTaskDates(task) {
     }
     if (task.recurrence === 'daily') cur = addDays(cur, 1);
     else if (task.recurrence === 'weekly') cur = addDays(cur, 7);
-    else if (task.recurrence === 'monthly') cur = addMonths(cur, 1);
+    else if (task.recurrence === 'monthly') cur = addMonthsClamped(base, ++monthIdx);
     else break;
   }
   return out;
@@ -13759,6 +13854,10 @@ document.addEventListener('keydown', function (e) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) {
       if (id === 'm-bagselect') bsClose();
+      // closeCamScan() stops the MediaStream + decode loop; just removing the
+      // 'open' class would leave the camera live (LED on, battery drain,
+      // barcodes still firing processScan) behind a hidden modal.
+      else if (id === 'm-camscan') closeCamScan();
       else el.classList.remove('open');
       return;
     }
@@ -13982,6 +14081,23 @@ function openCamScan() {
       function () {}
     )
     .then(function () {
+      // If the modal was closed (or re-opened) while start() was still pending,
+      // this scanner is orphaned: closeCamScan ran before the stream existed, so
+      // its stop() no-op'd and the camera is now live with no owner. Stop it and
+      // don't clobber _camState (which would strand the next openCamScan).
+      if (scanner !== _camScanner) {
+        try {
+          scanner
+            .stop()
+            .then(function () {
+              try {
+                scanner.clear();
+              } catch (e) {}
+            })
+            .catch(function () {});
+        } catch (e) {}
+        return;
+      }
       _camState = CAM_OPEN;
       _detectTorchSupport();
     })

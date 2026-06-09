@@ -651,6 +651,8 @@ window.LANG['pt'] = {
   'scanFb.cultureNotUsable': 'Cultura {id} est\u00e1 {status} e n\u00e3o pode ser usada',
   'scanFb.moved': '{n} movido(s) \u2192 {loc}',
   'scanFb.removed': '{n} removido(s)',
+  'scanFb.undoOk': 'Desfeito',
+  'scanFb.undoFail': 'Falha ao desfazer',
   'scanFb.confirmRemove': 'Remover {n}?',
   // Batch add modal
   'batchAdd.title': 'Adicionar sacos ao lote',

@@ -642,6 +642,8 @@ window.LANG['en'] = {
   'scanFb.cultureNotUsable': 'Culture {id} is {status} and cannot be used',
   'scanFb.moved': 'Moved {n} \u2192 {loc}',
   'scanFb.removed': 'Removed {n}',
+  'scanFb.undoOk': 'Undone',
+  'scanFb.undoFail': 'Undo failed',
   'scanFb.confirmRemove': 'Remove {n}?',
   // Batch add modal
   'batchAdd.title': 'Add bags to batch',
