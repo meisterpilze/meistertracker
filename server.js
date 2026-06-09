@@ -2285,13 +2285,27 @@ function writeTaskToCalendar(task, calName) {
   return uid;
 }
 
+// YYYYMMDD of `date` in Europe/Berlin (the .ics TZID), independent of the
+// server's own timezone. Deriving an all-day date via toISOString() (UTC)
+// shifts it a day earlier for a due date stored as Berlin local midnight.
+function _berlinDateCompact(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+    .format(date)
+    .replace(/-/g, '');
+}
+
 // Convert a batch to VEVENT .ics content (all-day event for due date)
 function batchToVEVENT(batch, scanLog) {
   const uid = 'batch-' + batch.batchId + '@meisterpilze';
   const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const dueDate = new Date(batch.due).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const dueDate = _berlinDateCompact(new Date(batch.due));
   // DTEND is next day for all-day events per RFC 5545
-  const endDate = new Date(new Date(batch.due).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const endDate = _berlinDateCompact(new Date(new Date(batch.due).getTime() + 86400000));
   const loc = scanLog ? getBatchLocServer(batch, scanLog) : '';
   const summary = escapeIcsText(batch.batchId + (loc ? ' — ' + loc : ''));
   const lines = [
@@ -2396,10 +2410,14 @@ function customEventToVEVENT(event) {
     dtend = 'DTEND;VALUE=DATE:' + endD;
   } else {
     const d = event.startDate.replace(/-/g, '');
+    // Use endDate for the DTEND day so a timed event spanning multiple days
+    // isn't collapsed to its start day (which also produced DTEND < DTSTART when
+    // endTime < startTime). Falls back to startDate for same-day events.
+    const dEnd = (event.endDate || event.startDate).replace(/-/g, '');
     const st = (event.startTime || '09:00').replace(':', '') + '00';
     const et = (event.endTime || '10:00').replace(':', '') + '00';
     dtstart = 'DTSTART;TZID=Europe/Berlin:' + d + 'T' + st;
-    dtend = 'DTEND;TZID=Europe/Berlin:' + d + 'T' + et;
+    dtend = 'DTEND;TZID=Europe/Berlin:' + dEnd + 'T' + et;
   }
   const needsTZ = dtstart.includes('TZID=');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meisterpilze Lab Tracker//EN'];
