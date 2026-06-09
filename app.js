@@ -14071,6 +14071,23 @@ function openCamScan() {
       function () {}
     )
     .then(function () {
+      // If the modal was closed (or re-opened) while start() was still pending,
+      // this scanner is orphaned: closeCamScan ran before the stream existed, so
+      // its stop() no-op'd and the camera is now live with no owner. Stop it and
+      // don't clobber _camState (which would strand the next openCamScan).
+      if (scanner !== _camScanner) {
+        try {
+          scanner
+            .stop()
+            .then(function () {
+              try {
+                scanner.clear();
+              } catch (e) {}
+            })
+            .catch(function () {});
+        } catch (e) {}
+        return;
+      }
       _camState = CAM_OPEN;
       _detectTorchSupport();
     })
