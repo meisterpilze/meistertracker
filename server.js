@@ -6089,7 +6089,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           'Content-Type': 'image/jpeg',
           'Cache-Control': 'private, max-age=31536000, immutable'
         });
-        fs.createReadStream(abs).pipe(res);
+        // pipe() does not forward the read stream's 'error' (e.g. a concurrent
+        // report DELETE unlinking the file after the existsSync check), which
+        // would otherwise leave the response hanging forever. Headers are
+        // already sent, so just tear down the socket.
+        const photoStream = fs.createReadStream(abs);
+        photoStream.on('error', (e) => {
+          log('warn', 'Photo stream error', { error: e.message });
+          res.destroy();
+        });
+        photoStream.pipe(res);
       } catch (err) {
         safeErr(res, err);
       }
