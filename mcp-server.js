@@ -16,6 +16,16 @@ function errResult(msg) {
   return { content: [{ type: 'text', text: JSON.stringify({ error: msg }) }], isError: true };
 }
 
+// Like the HTTP safeErr: only surface error text on db.isSafeError's allowlist
+// (validator messages); otherwise return a generic message so unexpected errors
+// — raw SQLite "constraint failed: <table>.<col>", fs paths, etc. — don't leak
+// schema/internals to the MCP client. Use for caught exceptions; intentional
+// tool messages still pass through errResult() directly.
+function safeErrResult(e) {
+  const msg = String((e && e.message) || '');
+  return errResult(db.isSafeError(msg) ? msg : 'Internal error');
+}
+
 // Build a map of bagId → current location by replaying scan log
 function buildBagLocationMap(scanLog) {
   const map = new Map();
@@ -787,7 +797,7 @@ function createMcpServer(database, onWrite, printer) {
           strainKuerzel: persisted ? persisted.strainKuerzel : null
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -826,7 +836,7 @@ function createMcpServer(database, onWrite, printer) {
           strainKuerzel: persisted ? persisted.strainKuerzel : null
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -855,7 +865,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: Number(id), text: params.text, assignee: params.assignee || null });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -884,7 +894,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id, updated: Object.keys(updates) });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -959,7 +969,7 @@ function createMcpServer(database, onWrite, printer) {
         if (unknownAssigneeNames.length) result.unknownAssigneeNames = unknownAssigneeNames;
         return json(result);
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -989,7 +999,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: params.id, mode: 'series' });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1052,7 +1062,7 @@ function createMcpServer(database, onWrite, printer) {
           strain
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1110,7 +1120,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, count: entries.length, ids: ids.map(Number) });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1140,7 +1150,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, material: params.material, deltaKg: params.deltaKg, newStockKg: newStock });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1169,7 +1179,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id, updated: Object.keys(updates) });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1219,7 +1229,7 @@ function createMcpServer(database, onWrite, printer) {
         const persisted = db.getAllCultures(database).find((c) => c.id === params.id);
         return json({ success: true, id: params.id, culture: persisted });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1255,7 +1265,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: Number(id), name: params.name, kuerzel: params.kuerzel });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1281,7 +1291,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id, updated: Object.keys(updates) });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1301,7 +1311,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: params.id });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1366,7 +1376,7 @@ function createMcpServer(database, onWrite, printer) {
             return errResult('Unknown action: ' + params.action);
         }
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1405,7 +1415,7 @@ function createMcpServer(database, onWrite, printer) {
             return errResult('Unknown action: ' + params.action);
         }
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1449,7 +1459,7 @@ function createMcpServer(database, onWrite, printer) {
           bagBarcodes: result.bagBarcodes
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1478,7 +1488,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, batchId: params.batchId, deletedBags: batch.bags.length });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1499,7 +1509,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, oldId: params.oldId, newId: params.newId });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1530,7 +1540,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: params.id });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1581,7 +1591,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, barcode, entityType: params.entityType, entityId: params.entityId });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1665,7 +1675,7 @@ function createMcpServer(database, onWrite, printer) {
             return errResult('Unknown action: ' + params.action);
         }
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1724,7 +1734,7 @@ function createMcpServer(database, onWrite, printer) {
             return errResult('Unknown action: ' + params.action);
         }
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1838,7 +1848,7 @@ function createMcpServer(database, onWrite, printer) {
             return errResult('Unknown action: ' + params.action);
         }
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1928,7 +1938,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: Number(id), type: params.type });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -1948,7 +1958,7 @@ function createMcpServer(database, onWrite, printer) {
         notify();
         return json({ success: true, id: params.id });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -2057,7 +2067,7 @@ function createMcpServer(database, onWrite, printer) {
           });
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
@@ -2118,7 +2128,7 @@ function createMcpServer(database, onWrite, printer) {
           });
         });
       } catch (e) {
-        return errResult(e.message);
+        return safeErrResult(e);
       }
     }
   );
