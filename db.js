@@ -2899,50 +2899,60 @@ function insertCultures(db, cultures) {
      ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain, strain_id=excluded.strain_id,
        parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text`
   );
-  for (const c of cultures) {
-    // Reject self-cycles up front so the lineage walker never has to discover them.
-    if (c.parentId && c.parentId === c.id) {
-      throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
-    }
-    // I-20: validate parent type against the child type (defence-in-depth —
-    // the UI dropdown already filters by allowed types, but the API and MCP
-    // tools accept arbitrary parentId so the constraint is enforceable here).
-    const err = validateCultureParent(db, c.type, c.parentId || null);
-    if (err) throw new Error('Invalid culture parent: ' + err);
-
-    // Resolve strainId if provided
-    const strainId = c.strainId || null;
-    let species = c.species || null;
-    let strain = c.strain || null;
-    if (strainId) {
-      const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
-      if (ms) {
-        species = ms.name;
-        strain = ms.kuerzel;
+  // Wrap the whole batch so a validation failure on culture N doesn't leave
+  // cultures 1..N-1 committed without barcodes or a version bump (the callers
+  // — POST /api/cultures and the MCP create_culture tool — don't wrap it).
+  db.exec('BEGIN');
+  try {
+    for (const c of cultures) {
+      // Reject self-cycles up front so the lineage walker never has to discover them.
+      if (c.parentId && c.parentId === c.id) {
+        throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
       }
+      // I-20: validate parent type against the child type (defence-in-depth —
+      // the UI dropdown already filters by allowed types, but the API and MCP
+      // tools accept arbitrary parentId so the constraint is enforceable here).
+      const err = validateCultureParent(db, c.type, c.parentId || null);
+      if (err) throw new Error('Invalid culture parent: ' + err);
+
+      // Resolve strainId if provided
+      const strainId = c.strainId || null;
+      let species = c.species || null;
+      let strain = c.strain || null;
+      if (strainId) {
+        const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
+        if (ms) {
+          species = ms.name;
+          strain = ms.kuerzel;
+        }
+      }
+      ins.run(
+        c.id,
+        c.type,
+        species,
+        strain,
+        strainId,
+        c.parentId || null,
+        c.source || null,
+        c.status || 'active',
+        c.notes || '',
+        c.created,
+        c.strainText || ''
+      );
     }
-    ins.run(
-      c.id,
-      c.type,
-      species,
-      strain,
-      strainId,
-      c.parentId || null,
-      c.source || null,
-      c.status || 'active',
-      c.notes || '',
-      c.created,
-      c.strainText || ''
+    // Assign numeric barcodes to all new cultures
+    const cultureBarcodes = assignBarcodes(
+      db,
+      'culture',
+      cultures.map((c) => c.id)
     );
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return { cultureBarcodes };
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  // Assign numeric barcodes to all new cultures
-  const cultureBarcodes = assignBarcodes(
-    db,
-    'culture',
-    cultures.map((c) => c.id)
-  );
-  incrementDataVersion(db);
-  return { cultureBarcodes };
 }
 
 function updateCulture(db, id, fields) {
