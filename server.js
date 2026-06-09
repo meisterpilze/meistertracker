@@ -163,6 +163,20 @@ const DUMMY_PASSWORD_HASH = crypto.scryptSync('', DUMMY_PASSWORD_SALT, 64).toStr
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
 const mcpSessions = new Map(); // sessionId → { transport, server, lastActive }
 const MCP_SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+// Tear down all live MCP sessions. Each session's server captured the `database`
+// handle at creation time; after a restore swaps `database`, those captured
+// handles are closed/stale, so the sessions must be dropped and the clients
+// forced to re-initialize against the new database.
+function closeAllMcpSessions() {
+  for (const session of mcpSessions.values()) {
+    try {
+      session.server.close();
+    } catch (e) {
+      /* best-effort */
+    }
+  }
+  mcpSessions.clear();
+}
 setInterval(
   () => {
     const now = Date.now();
@@ -1067,7 +1081,7 @@ function updateDuckdnsIP(callback) {
     encodeURIComponent(cfg.token) +
     '&verbose=true';
 
-  https
+  const ddReq = https
     .get(url, (resp) => {
       let data = '';
       resp.on('data', (c) => {
@@ -1093,6 +1107,9 @@ function updateDuckdnsIP(callback) {
       log('error', 'DuckDNS update error', { error: e.message });
       if (callback) callback(e);
     });
+  // Match the ACME helper's 30 s timeout so a stalled duckdns.org connection
+  // can't hang /api/duckdns/* or a cert-renewal step indefinitely.
+  ddReq.setTimeout(30000, () => ddReq.destroy(new Error('DuckDNS request timed out')));
 }
 
 function startDuckdnsUpdater() {
@@ -1264,7 +1281,7 @@ function setDuckdnsTxt(domain, token, value, callback) {
     '&txt=' +
     encodeURIComponent(value) +
     '&verbose=true';
-  https
+  const txtReq = https
     .get(url, (resp) => {
       let data = '';
       resp.on('data', (c) => {
@@ -1277,6 +1294,7 @@ function setDuckdnsTxt(domain, token, value, callback) {
       });
     })
     .on('error', callback);
+  txtReq.setTimeout(30000, () => txtReq.destroy(new Error('DuckDNS TXT request timed out')));
 }
 
 function clearDuckdnsTxt(domain, token) {
@@ -1286,7 +1304,8 @@ function clearDuckdnsTxt(domain, token) {
     '&token=' +
     encodeURIComponent(token) +
     '&txt=&clear=true&verbose=true';
-  https.get(url, () => {}).on('error', () => {});
+  const clrReq = https.get(url, () => {}).on('error', () => {});
+  clrReq.setTimeout(30000, () => clrReq.destroy());
 }
 
 // ── PKCS#10 CSR construction ──
@@ -1688,6 +1707,11 @@ function getPrinterStatus(callback) {
       '-Command',
       `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
     ],
+    // Timeout so a hung spooler/PowerShell can't leave /api/printer-status and
+    // any /api/print waiting on checkPrinterAvailable hanging forever (the
+    // bridge and the print path already cap at 5 s / 15 s). On timeout execFile
+    // kills the child and calls back with an error → local_unavailable below.
+    { timeout: 10000, windowsHide: true },
     (err, stdout) => {
       if (err || !stdout.includes(PRINTER_NAME)) {
         return callback(null, { state: 'local_unavailable', name: PRINTER_NAME, online: false, queueStuck: 0 });
@@ -2261,13 +2285,27 @@ function writeTaskToCalendar(task, calName) {
   return uid;
 }
 
+// YYYYMMDD of `date` in Europe/Berlin (the .ics TZID), independent of the
+// server's own timezone. Deriving an all-day date via toISOString() (UTC)
+// shifts it a day earlier for a due date stored as Berlin local midnight.
+function _berlinDateCompact(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+    .format(date)
+    .replace(/-/g, '');
+}
+
 // Convert a batch to VEVENT .ics content (all-day event for due date)
 function batchToVEVENT(batch, scanLog) {
   const uid = 'batch-' + batch.batchId + '@meisterpilze';
   const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const dueDate = new Date(batch.due).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const dueDate = _berlinDateCompact(new Date(batch.due));
   // DTEND is next day for all-day events per RFC 5545
-  const endDate = new Date(new Date(batch.due).getTime() + 86400000).toISOString().replace(/[-:]/g, '').split('T')[0];
+  const endDate = _berlinDateCompact(new Date(new Date(batch.due).getTime() + 86400000));
   const loc = scanLog ? getBatchLocServer(batch, scanLog) : '';
   const summary = escapeIcsText(batch.batchId + (loc ? ' — ' + loc : ''));
   const lines = [
@@ -2372,10 +2410,14 @@ function customEventToVEVENT(event) {
     dtend = 'DTEND;VALUE=DATE:' + endD;
   } else {
     const d = event.startDate.replace(/-/g, '');
+    // Use endDate for the DTEND day so a timed event spanning multiple days
+    // isn't collapsed to its start day (which also produced DTEND < DTSTART when
+    // endTime < startTime). Falls back to startDate for same-day events.
+    const dEnd = (event.endDate || event.startDate).replace(/-/g, '');
     const st = (event.startTime || '09:00').replace(':', '') + '00';
     const et = (event.endTime || '10:00').replace(':', '') + '00';
     dtstart = 'DTSTART;TZID=Europe/Berlin:' + d + 'T' + st;
-    dtend = 'DTEND;TZID=Europe/Berlin:' + d + 'T' + et;
+    dtend = 'DTEND;TZID=Europe/Berlin:' + dEnd + 'T' + et;
   }
   const needsTZ = dtstart.includes('TZID=');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meisterpilze Lab Tracker//EN'];
@@ -4630,32 +4672,44 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (req.method === 'POST') {
       jsonBody(req, res, async (e, body) => {
         if (e) return;
-        let session = sessionId ? mcpSessions.get(sessionId) : null;
-        if (!session) {
-          // S-01: pass the caller's auth context (userId, role) into
-          // the MCP server so destructive tools can require admin role.
-          const server = createMcpServer(database, () => broadcastSSE(null), {
-            printZPL,
-            checkPrinterAvailable,
-            auth: mcpAuth
-          });
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(),
-            onsessioninitialized: (sid) => {
-              mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
-            }
-          });
-          transport.onclose = () => {
-            const sid = transport.sessionId;
-            if (sid) mcpSessions.delete(sid);
-            server.close().catch(() => {});
-          };
-          await server.connect(transport);
-          session = { transport, server, lastActive: Date.now() };
-        } else {
-          session.lastActive = Date.now();
+        try {
+          let session = sessionId ? mcpSessions.get(sessionId) : null;
+          if (!session) {
+            // S-01: pass the caller's auth context (userId, role) into
+            // the MCP server so destructive tools can require admin role.
+            const server = createMcpServer(database, () => broadcastSSE(null), {
+              printZPL,
+              checkPrinterAvailable,
+              auth: mcpAuth
+            });
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => crypto.randomUUID(),
+              onsessioninitialized: (sid) => {
+                mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
+              }
+            });
+            transport.onclose = () => {
+              const sid = transport.sessionId;
+              if (sid) mcpSessions.delete(sid);
+              server.close().catch(() => {});
+            };
+            await server.connect(transport);
+            session = { transport, server, lastActive: Date.now() };
+          } else {
+            session.lastActive = Date.now();
+          }
+          await session.transport.handleRequest(req, res, body);
+        } catch (err) {
+          // Without this, a rejection from server.connect()/handleRequest()
+          // becomes an unhandledRejection and the client never gets a response.
+          log('error', 'MCP request handling failed', { error: err && err.message });
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end('{"error":"internal error"}');
+          } else {
+            res.destroy();
+          }
         }
-        session.transport.handleRequest(req, res, body);
       });
       return;
     }
@@ -4841,8 +4895,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // ── Auth gate ─────────────────────────────────────────────
   const isLoginPage = url === '/login.html';
   const isPublicAsset = !!url.match(/^\/(login\.js|icon-\d+\.png|favicon\.ico|icon\.svg|manifest\.json|sw\.js)$/);
+  // The GitHub webhook authenticates itself via an HMAC signature; GitHub
+  // cannot send a session cookie, so leaving it behind the session gate made
+  // every delivery 401 (the whole auto-deploy chain was dead code). Its own
+  // handler verifies GITHUB_WEBHOOK_SECRET + signature and refuses in worktree
+  // mode, so it is safe to exempt here.
+  const isWebhook = req.method === 'POST' && url === '/api/webhook/github';
 
-  if (!isLoginPage && !isPublicAsset) {
+  if (!isLoginPage && !isPublicAsset && !isWebhook) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -5430,8 +5490,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/scan-log — paginated scan log history
   if (req.method === 'GET' && url === '/api/scan-log') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = Math.min(parseInt(params.get('limit')) || 200, 1000);
-    const offset = parseInt(params.get('offset')) || 0;
+    const limit = Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 200, 1000));
+    const offset = Math.max(0, parseInt(params.get('offset'), 10) || 0);
     const batch = params.get('batch') || null;
     const action = params.get('action') || null;
     let where = '1=1';
@@ -5476,8 +5536,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/harvests — paginated harvest history
   if (req.method === 'GET' && url === '/api/harvests') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = Math.min(parseInt(params.get('limit')) || 200, 1000);
-    const offset = parseInt(params.get('offset')) || 0;
+    const limit = Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 200, 1000));
+    const offset = Math.max(0, parseInt(params.get('offset'), 10) || 0);
     const batch = params.get('batch') || null;
     let where = '1=1';
     const args = [];
@@ -5510,7 +5570,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/kpi-snapshots — historical KPI data for trend analysis
   if (req.method === 'GET' && url === '/api/kpi-snapshots') {
     const params = new URL(req.url, 'http://x').searchParams;
-    const limit = params.get('limit') ? Math.min(parseInt(params.get('limit')) || 90, 365) : null;
+    const limit = params.get('limit') ? Math.max(1, Math.min(parseInt(params.get('limit'), 10) || 90, 365)) : null;
     const rows = db.getKpiSnapshots(database, limit);
     jsonOk(res, { items: rows });
     return;
@@ -5835,10 +5895,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               "SELECT action, \"to\" FROM scan_log WHERE bag = ? AND action IN ('ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE') ORDER BY id DESC LIMIT 1"
             )
             .get(e.bag);
-          // currentZone = the zone-id portion of the last placement (ignore rack).
+          // currentZone = the zone of the last placement. last.to may be a
+          // rack id (underscores, e.g. INC_R1) — resolve it back to its zone
+          // so it matches the client's toZone(expected_current_zone). A plain
+          // split(':') would leave the rack id intact and 409 every rack move.
           let currentZone = null;
           if (last && last.action !== 'REMOVE' && last.to) {
-            currentZone = String(last.to).split(':')[0];
+            currentZone = db.zoneIdOfLocation(database, last.to);
           }
           if (currentZone !== e.expected_current_zone) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
@@ -6023,6 +6086,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           database.exec('COMMIT');
         } catch (innerErr) {
           database.exec('ROLLBACK');
+          // appendScanEntriesNoTxn above mutated the in-memory bag-zone cache;
+          // the rollback undid the scan rows but not the cache — rebuild on next read.
+          db.invalidateBagZoneCache(database);
           // Best-effort cleanup of disk files written during the failed transaction.
           for (const f of writtenPhotoFiles) {
             try {
@@ -6075,7 +6141,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           'Content-Type': 'image/jpeg',
           'Cache-Control': 'private, max-age=31536000, immutable'
         });
-        fs.createReadStream(abs).pipe(res);
+        // pipe() does not forward the read stream's 'error' (e.g. a concurrent
+        // report DELETE unlinking the file after the existsSync check), which
+        // would otherwise leave the response hanging forever. Headers are
+        // already sent, so just tear down the socket.
+        const photoStream = fs.createReadStream(abs);
+        photoStream.on('error', (e) => {
+          log('warn', 'Photo stream error', { error: e.message });
+          res.destroy();
+        });
+        photoStream.pipe(res);
       } catch (err) {
         safeErr(res, err);
       }
@@ -7071,10 +7146,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     let raw = '';
+    let whSize = 0;
+    let whAborted = false;
     req.on('data', (c) => {
+      whSize += c.length;
+      if (whSize > MAX_BODY_SIZE) {
+        // Cap the body before buffering — the HMAC check only runs on 'end',
+        // so without this an unbounded payload could exhaust memory first.
+        whAborted = true;
+        jsonErr(res, 413, 'Payload too large');
+        req.destroy();
+        return;
+      }
       raw += c;
     });
     req.on('end', () => {
+      if (whAborted) return;
       // Defence in depth: any throw inside this async callback would otherwise
       // bubble to `uncaughtException` and terminate the process.
       try {
@@ -7664,7 +7751,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const chunks = [];
     let sz = 0;
     let aborted = false;
+    let ended = false;
     const MAX_BACKUP = 50 * 1024 * 1024; // 50 MB limit for backup files
+    // I-17b: if the client drops the connection mid-upload, 'end' never fires,
+    // so neither the oversize branch nor the 'end' finally releases the mutex —
+    // every later restore would 503 forever. Release it on close when the 'end'
+    // handler never ran. (No-op once a restore has completed.)
+    req.on('close', () => {
+      if (!ended) restoreInProgress = false;
+    });
     req.on('data', (c) => {
       sz += c.length;
       if (sz > MAX_BACKUP) {
@@ -7677,6 +7772,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       chunks.push(c);
     });
     req.on('end', () => {
+      ended = true;
       if (aborted) {
         restoreInProgress = false;
         return;
@@ -7790,12 +7886,36 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         } catch (e) {
           log('warn', 'Failed to close database before restore', { error: e.message });
         }
+        // Drop live MCP sessions — their captured DB handle is now closed and
+        // every reopen path below rebinds `database` to a new handle.
+        closeAllMcpSessions();
         try {
           fs.copyFileSync(DB_FILE, bakPath);
         } catch (e) {
           log('warn', 'Failed to create pre-restore backup', { error: e.message });
         } // keep old db as safety net
-        fs.renameSync(tmpPath, DB_FILE);
+        try {
+          fs.renameSync(tmpPath, DB_FILE);
+        } catch (renameErr) {
+          // The swap failed (e.g. Windows EBUSY/EPERM). The original DB_FILE is
+          // untouched, but we already closed `database` above — reopen it so the
+          // server keeps serving instead of throwing on every request against a
+          // closed handle.
+          log('error', 'Failed to swap in restored database, reopening original', { error: renameErr.message });
+          try {
+            database = db.openDb(DB_FILE);
+          } catch (reErr) {
+            log('error', 'Failed to reopen original database after swap failure', { error: reErr.message });
+          }
+          try {
+            fs.unlinkSync(tmpPath);
+          } catch (e) {
+            log('warn', 'Failed to clean restore temp after swap failure', { error: e.message });
+          }
+          tmpPath = null;
+          jsonErr(res, 500, 'Restore failed, previous data has been preserved');
+          return;
+        }
         tmpPath = null;
         try {
           database = db.openDb(DB_FILE);
@@ -8548,6 +8668,19 @@ listenServer.listen(PORT, '0.0.0.0', () => {
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
 function shutdown(signal) {
   log('info', 'Received ' + signal + ', shutting down...');
+  // End all long-lived SSE responses first. server.close() waits for open
+  // connections to finish, but SSE streams never finish on their own
+  // (heartbeats keep them active), so without this the close callbacks never
+  // fire and every shutdown hits the 5 s force-exit(1) — making PM2/systemd
+  // treat each routine stop as a failed shutdown.
+  for (const c of sseClients) {
+    try {
+      c.end();
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  sseClients.clear();
   const servers = [listenServer];
   if (listenServer !== server) servers.push(server);
   if (legacyRedirectServer) servers.push(legacyRedirectServer);

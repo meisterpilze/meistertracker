@@ -1602,10 +1602,21 @@ const _bagZoneCacheByDb = new WeakMap();
 
 function _readBagZoneFromDb(db) {
   const map = new Map();
+  // Resolve rack ids (underscores, e.g. INC_R1) to their zone once via a local
+  // map — a plain split(':') leaves the rack id intact, so every rack-placed
+  // bag was keyed under a non-existent "zone" and dropped from KPI snapshots
+  // and the production pipeline.
+  const rackZone = new Map();
+  for (const r of db.prepare('SELECT id, zone_id FROM racks').all()) rackZone.set(r.id, r.zone_id);
+  const resolve = (loc) => {
+    if (!loc) return null;
+    const base = String(loc).split(':')[0];
+    return rackZone.get(base) || base;
+  };
   const stmt = db.prepare('SELECT action, bag, "to" FROM scan_log ORDER BY id');
   for (const e of stmt.iterate()) {
     if (!e.bag) continue;
-    const toZ = e.to ? e.to.split(':')[0] : null;
+    const toZ = resolve(e.to);
     if (e.action === 'ADD' && toZ) map.set(e.bag, toZ);
     else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && toZ) map.set(e.bag, toZ);
     else if (e.action === 'REMOVE') map.delete(e.bag);
@@ -1630,7 +1641,7 @@ function getBagZoneMap(db) {
 function applyScanEntryToBagZoneCache(db, entry) {
   const cached = _bagZoneCacheByDb.get(db);
   if (!cached || !entry || !entry.bag) return; // not built yet — first read will build it
-  const toZ = entry.to ? entry.to.split(':')[0] : null;
+  const toZ = entry.to ? zoneIdOfLocation(db, entry.to) : null;
   if (entry.action === 'ADD' && toZ) cached.set(entry.bag, toZ);
   else if ((entry.action === 'MOVE' || entry.action === 'MOVE_BATCH') && toZ) cached.set(entry.bag, toZ);
   else if (entry.action === 'REMOVE') cached.delete(entry.bag);
@@ -1640,6 +1651,23 @@ function applyScanEntryToBagZoneCache(db, entry) {
  * scan_log) and by tests that mutate scan_log directly. */
 function invalidateBagZoneCache(db) {
   _bagZoneCacheByDb.delete(db);
+}
+
+/** Resolve a scan_log location value to its owning zone id.
+ * `loc` may be a zone id ("INC"), a rack id ("INC_R1", underscores), or the
+ * legacy "ZONE:rack" colon form. Rack ids must be mapped back to their zone
+ * via the racks table — a plain split(':') leaves the rack id intact, which
+ * breaks the optimistic-concurrency zone check (rack moves wrongly 409) and
+ * KPI/pipeline aggregation (rack-placed bags fall out of every zone bucket).
+ * Mirrors the client-side toZone() in app.js. */
+function zoneIdOfLocation(db, loc) {
+  if (!loc) return null;
+  const base = String(loc).split(':')[0];
+  if (!base) return null;
+  if (db.prepare('SELECT 1 FROM zones WHERE id = ?').get(base)) return base;
+  const rack = db.prepare('SELECT zone_id FROM racks WHERE id = ?').get(base);
+  if (rack && rack.zone_id) return rack.zone_id;
+  return base;
 }
 
 // ── Write All (diff incoming JSON against DB, apply changes) ─
@@ -2181,6 +2209,13 @@ function readCaldavConfig(db) {
 
 // ── Auth helpers ────────────────────────────────────────────
 function createUser(db, username, password, role) {
+  // Login matches usernames case-insensitively (getUserByUsernameCaseInsensitive),
+  // but the column's UNIQUE is case-sensitive. Without this guard 'Admin' could
+  // be created alongside 'admin' and the ambiguous lookup would lock one of them
+  // out. Reject case-insensitive duplicates up front.
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
+    throw new Error('Username already exists');
+  }
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   const created = new Date().toISOString();
@@ -2236,7 +2271,7 @@ function getSession(db, token) {
     .prepare(
       `SELECT s.token, s.user_id, s.expires, u.username, u.role
      FROM sessions s JOIN users u ON s.user_id = u.id
-     WHERE s.token = ? AND s.expires > datetime('now')`
+     WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
     .get(token);
 }
@@ -2250,13 +2285,13 @@ function deleteSessionsByUserId(db, userId) {
 }
 
 function deleteExpiredSessions(db) {
-  db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+  db.prepare("DELETE FROM sessions WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").run();
 }
 
 // R-10: periodic cleanup helpers (called from server.js setInterval).
 // Both return the count of rows deleted so the caller can log totals.
 function cleanupExpiredSessions(db) {
-  const info = db.prepare("DELETE FROM sessions WHERE expires < datetime('now')").run();
+  const info = db.prepare("DELETE FROM sessions WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").run();
   return info.changes;
 }
 
@@ -2469,6 +2504,13 @@ function updateBatchField(db, batchId, fields) {
   }
 }
 
+// Escape SQL LIKE wildcards (% _ and the escape char itself) so a literal
+// value can be matched with `LIKE ? ESCAPE '\'`. Batch ids may contain '_',
+// which LIKE would otherwise treat as "any single char".
+function escapeLikePattern(s) {
+  return String(s).replace(/[\\%_]/g, '\\$&');
+}
+
 function renameBatch(db, oldId, newId) {
   db.exec('BEGIN');
   // Defer FK checks to COMMIT so we can update parent (batches) and child (bags)
@@ -2491,19 +2533,21 @@ function renameBatch(db, oldId, newId) {
     // updates the reports would orphan and the contamination history for the batch would
     // disappear from the UI after a rename.
     db.prepare('UPDATE contamination_reports SET batch_id=? WHERE batch_id=?').run(newId, oldId);
-    db.prepare("UPDATE contamination_reports SET bag_id = REPLACE(bag_id, ?, ?) WHERE bag_id LIKE ? || '%'").run(
-      oldId,
+    // Rewrite the batch prefix of bag_id for THIS batch's bags only. Match
+    // `oldId-%` (with wildcards in oldId escaped) so a rename of "B-1" cannot
+    // touch "B-10"'s reports, and rebuild via substr so a recurring id
+    // fragment in the suffix isn't double-replaced.
+    db.prepare("UPDATE contamination_reports SET bag_id = ? || substr(bag_id, ?) WHERE bag_id LIKE ? ESCAPE '\\'").run(
       newId,
-      oldId
+      oldId.length + 1,
+      escapeLikePattern(oldId) + '-%'
     );
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     // Update barcode registry: rename entity_id for bags that were renamed
-    db.prepare("UPDATE barcodes SET entity_id=REPLACE(entity_id,?,?) WHERE entity_type='bag' AND entity_id LIKE ?").run(
-      oldId,
-      newId,
-      oldId + '%'
-    );
+    db.prepare(
+      "UPDATE barcodes SET entity_id = ? || substr(entity_id, ?) WHERE entity_type='bag' AND entity_id LIKE ? ESCAPE '\\'"
+    ).run(newId, oldId.length + 1, escapeLikePattern(oldId) + '-%');
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -2614,7 +2658,12 @@ function deleteBatchById(db, batchId, userId) {
     // already filters by batch_id only when set, so NULL rows remain visible in the
     // unfiltered view.
     db.prepare('UPDATE contamination_reports SET batch_id = NULL WHERE batch_id = ?').run(batchId);
-    db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? || '%'").run(batchId);
+    // Only NULL bag_id for bags of THIS batch ("batchId-%", wildcards escaped) —
+    // a bare "batchId%" prefix would also clear e.g. "B-10"'s reports when
+    // deleting "B-1".
+    db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? ESCAPE '\\'").run(
+      escapeLikePattern(batchId) + '-%'
+    );
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -2774,6 +2823,9 @@ function appendScanEntries(db, entries, userId) {
     return ids;
   } catch (err) {
     db.exec('ROLLBACK');
+    // appendScanEntriesNoTxn already mutated the in-memory bag-zone cache; the
+    // rollback undid the rows but not the cache, so force a rebuild on next read.
+    invalidateBagZoneCache(db);
     throw err;
   }
 }
@@ -2859,50 +2911,60 @@ function insertCultures(db, cultures) {
      ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain, strain_id=excluded.strain_id,
        parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text`
   );
-  for (const c of cultures) {
-    // Reject self-cycles up front so the lineage walker never has to discover them.
-    if (c.parentId && c.parentId === c.id) {
-      throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
-    }
-    // I-20: validate parent type against the child type (defence-in-depth —
-    // the UI dropdown already filters by allowed types, but the API and MCP
-    // tools accept arbitrary parentId so the constraint is enforceable here).
-    const err = validateCultureParent(db, c.type, c.parentId || null);
-    if (err) throw new Error('Invalid culture parent: ' + err);
-
-    // Resolve strainId if provided
-    const strainId = c.strainId || null;
-    let species = c.species || null;
-    let strain = c.strain || null;
-    if (strainId) {
-      const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
-      if (ms) {
-        species = ms.name;
-        strain = ms.kuerzel;
+  // Wrap the whole batch so a validation failure on culture N doesn't leave
+  // cultures 1..N-1 committed without barcodes or a version bump (the callers
+  // — POST /api/cultures and the MCP create_culture tool — don't wrap it).
+  db.exec('BEGIN');
+  try {
+    for (const c of cultures) {
+      // Reject self-cycles up front so the lineage walker never has to discover them.
+      if (c.parentId && c.parentId === c.id) {
+        throw new Error('Culture parent_id must not equal its own id (self-cycle rejected)');
       }
+      // I-20: validate parent type against the child type (defence-in-depth —
+      // the UI dropdown already filters by allowed types, but the API and MCP
+      // tools accept arbitrary parentId so the constraint is enforceable here).
+      const err = validateCultureParent(db, c.type, c.parentId || null);
+      if (err) throw new Error('Invalid culture parent: ' + err);
+
+      // Resolve strainId if provided
+      const strainId = c.strainId || null;
+      let species = c.species || null;
+      let strain = c.strain || null;
+      if (strainId) {
+        const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
+        if (ms) {
+          species = ms.name;
+          strain = ms.kuerzel;
+        }
+      }
+      ins.run(
+        c.id,
+        c.type,
+        species,
+        strain,
+        strainId,
+        c.parentId || null,
+        c.source || null,
+        c.status || 'active',
+        c.notes || '',
+        c.created,
+        c.strainText || ''
+      );
     }
-    ins.run(
-      c.id,
-      c.type,
-      species,
-      strain,
-      strainId,
-      c.parentId || null,
-      c.source || null,
-      c.status || 'active',
-      c.notes || '',
-      c.created,
-      c.strainText || ''
+    // Assign numeric barcodes to all new cultures
+    const cultureBarcodes = assignBarcodes(
+      db,
+      'culture',
+      cultures.map((c) => c.id)
     );
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return { cultureBarcodes };
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  // Assign numeric barcodes to all new cultures
-  const cultureBarcodes = assignBarcodes(
-    db,
-    'culture',
-    cultures.map((c) => c.id)
-  );
-  incrementDataVersion(db);
-  return { cultureBarcodes };
 }
 
 function updateCulture(db, id, fields) {
@@ -4024,7 +4086,9 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
 
 function getOAuthCode(db, code) {
   const row = db
-    .prepare("SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > datetime('now')")
+    .prepare(
+      "SELECT * FROM oauth_codes WHERE code = ? AND used = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+    )
     .get(code);
   if (!row) return null;
   return {
@@ -4053,7 +4117,7 @@ function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSec
 function getOAuthAccessToken(db, tokenHash) {
   const row = db
     .prepare(
-      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > datetime('now')"
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access' AND revoked = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
     )
     .get(tokenHash);
   if (!row) return null;
@@ -4063,7 +4127,7 @@ function getOAuthAccessToken(db, tokenHash) {
 function getOAuthRefreshToken(db, tokenHash) {
   const row = db
     .prepare(
-      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > datetime('now')"
+      "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND revoked = 0 AND expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
     )
     .get(tokenHash);
   if (!row) return null;
@@ -4078,15 +4142,15 @@ function revokeOAuthTokensByRefresh(db, refreshHash) {
 }
 
 function deleteExpiredOAuthData(db) {
-  db.prepare("DELETE FROM oauth_codes WHERE expires < datetime('now') OR used = 1").run();
-  db.prepare("DELETE FROM oauth_tokens WHERE expires < datetime('now') OR revoked = 1").run();
+  db.prepare("DELETE FROM oauth_codes WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR used = 1").run();
+  db.prepare("DELETE FROM oauth_tokens WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR revoked = 1").run();
 }
 
 function listOAuthClients(db) {
   const rows = db
     .prepare(
       `SELECT c.client_id, c.client_name, c.redirect_uris, c.client_secret_hash, c.created,
-    (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > datetime('now')) as active_sessions
+    (SELECT COUNT(*) FROM oauth_tokens t WHERE t.client_id = c.client_id AND t.token_type = 'access' AND t.revoked = 0 AND t.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) as active_sessions
     FROM oauth_clients c WHERE c.revoked = 0 ORDER BY c.created DESC`
     )
     .all();
@@ -5118,7 +5182,8 @@ const SAFE_ERROR_BARE = new Set([
   'Culture parent_id must not equal its own id (self-cycle rejected)',
   'Name ist Pflichtfeld',
   'Kürzel ist Pflichtfeld',
-  'Kürzel already taken'
+  'Kürzel already taken',
+  'Username already exists'
 ]);
 
 function isSafeError(msg) {
@@ -5137,6 +5202,7 @@ module.exports = {
   getDataVersion,
   getBagZoneMap,
   invalidateBagZoneCache,
+  zoneIdOfLocation,
   readCaldavConfig,
   updateTaskCaldavUid,
   updateBatchDue,

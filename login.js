@@ -1,4 +1,13 @@
 (async()=>{
+  // Resolve the ?redirect= target to a same-origin path only. A bare
+  // startsWith('/')&&!startsWith('//') check is bypassed by '/\evil.com',
+  // which the URL parser normalises to '//evil.com' (protocol-relative →
+  // attacker origin). Parse and compare origins instead.
+  function safeRedirect(raw){
+    if(!raw) return '/';
+    try{ const u=new URL(raw, window.location.origin); return u.origin===window.location.origin ? u.pathname+u.search+u.hash : '/'; }
+    catch{ return '/'; }
+  }
   const form=document.getElementById('form');
   const title=document.getElementById('title');
   const subtitle=document.getElementById('subtitle');
@@ -10,7 +19,7 @@
   // Already logged in?
   try{
     const me=await fetch('/api/auth/me');
-    if(me.ok){const p=new URLSearchParams(window.location.search);const r=p.get('redirect');window.location.href=(r&&r.startsWith('/')&&!r.startsWith('//'))?r:'/';return;}
+    if(me.ok){const p=new URLSearchParams(window.location.search);window.location.href=safeRedirect(p.get('redirect'));return;}
   }catch{}
 
   // Setup mode?
@@ -85,7 +94,7 @@
         resetBtn();
         return;
       }
-      const rp=new URLSearchParams(window.location.search);const rd=rp.get('redirect');window.location.href=(rd&&rd.startsWith('/')&&!rd.startsWith('//'))?rd:'/';
+      const rp=new URLSearchParams(window.location.search);window.location.href=safeRedirect(rp.get('redirect'));
     }catch(err){
       showError('Connection error \u2014 is the server running?');
       resetBtn();

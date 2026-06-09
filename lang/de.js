@@ -649,6 +649,8 @@ window.LANG['de'] = {
   'scanFb.cultureNotUsable': 'Kultur {id} ist {status} und kann nicht verwendet werden',
   'scanFb.moved': '{n} verschoben \u2192 {loc}',
   'scanFb.removed': '{n} entfernt',
+  'scanFb.undoOk': 'Rückgängig gemacht',
+  'scanFb.undoFail': 'Rückgängig fehlgeschlagen',
   'scanFb.confirmRemove': '{n} entfernen?',
   // Batch add modal
   'batchAdd.title': 'Beutel zur Charge hinzuf\u00fcgen',
