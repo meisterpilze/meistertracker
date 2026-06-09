@@ -5835,10 +5835,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               "SELECT action, \"to\" FROM scan_log WHERE bag = ? AND action IN ('ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE') ORDER BY id DESC LIMIT 1"
             )
             .get(e.bag);
-          // currentZone = the zone-id portion of the last placement (ignore rack).
+          // currentZone = the zone of the last placement. last.to may be a
+          // rack id (underscores, e.g. INC_R1) — resolve it back to its zone
+          // so it matches the client's toZone(expected_current_zone). A plain
+          // split(':') would leave the rack id intact and 409 every rack move.
           let currentZone = null;
           if (last && last.action !== 'REMOVE' && last.to) {
-            currentZone = String(last.to).split(':')[0];
+            currentZone = db.zoneIdOfLocation(database, last.to);
           }
           if (currentZone !== e.expected_current_zone) {
             res.writeHead(409, { 'Content-Type': 'application/json' });

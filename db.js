@@ -1642,6 +1642,23 @@ function invalidateBagZoneCache(db) {
   _bagZoneCacheByDb.delete(db);
 }
 
+/** Resolve a scan_log location value to its owning zone id.
+ * `loc` may be a zone id ("INC"), a rack id ("INC_R1", underscores), or the
+ * legacy "ZONE:rack" colon form. Rack ids must be mapped back to their zone
+ * via the racks table — a plain split(':') leaves the rack id intact, which
+ * breaks the optimistic-concurrency zone check (rack moves wrongly 409) and
+ * KPI/pipeline aggregation (rack-placed bags fall out of every zone bucket).
+ * Mirrors the client-side toZone() in app.js. */
+function zoneIdOfLocation(db, loc) {
+  if (!loc) return null;
+  const base = String(loc).split(':')[0];
+  if (!base) return null;
+  if (db.prepare('SELECT 1 FROM zones WHERE id = ?').get(base)) return base;
+  const rack = db.prepare('SELECT zone_id FROM racks WHERE id = ?').get(base);
+  if (rack && rack.zone_id) return rack.zone_id;
+  return base;
+}
+
 // ── Write All (diff incoming JSON against DB, apply changes) ─
 // Used by backup/restore only — normal mutations use atomic functions below
 function writeAll(db, incoming) {
@@ -5137,6 +5154,7 @@ module.exports = {
   getDataVersion,
   getBagZoneMap,
   invalidateBagZoneCache,
+  zoneIdOfLocation,
   readCaldavConfig,
   updateTaskCaldavUid,
   updateBatchDue,
