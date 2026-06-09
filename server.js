@@ -1688,6 +1688,11 @@ function getPrinterStatus(callback) {
       '-Command',
       `Get-Printer -Name "${PRINTER_NAME.replace(/"/g, '')}" | Select-Object -Property Name,PrinterStatus | ConvertTo-Json`
     ],
+    // Timeout so a hung spooler/PowerShell can't leave /api/printer-status and
+    // any /api/print waiting on checkPrinterAvailable hanging forever (the
+    // bridge and the print path already cap at 5 s / 15 s). On timeout execFile
+    // kills the child and calls back with an error → local_unavailable below.
+    { timeout: 10000, windowsHide: true },
     (err, stdout) => {
       if (err || !stdout.includes(PRINTER_NAME)) {
         return callback(null, { state: 'local_unavailable', name: PRINTER_NAME, online: false, queueStuck: 0 });
