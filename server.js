@@ -4846,8 +4846,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // ── Auth gate ─────────────────────────────────────────────
   const isLoginPage = url === '/login.html';
   const isPublicAsset = !!url.match(/^\/(login\.js|icon-\d+\.png|favicon\.ico|icon\.svg|manifest\.json|sw\.js)$/);
+  // The GitHub webhook authenticates itself via an HMAC signature; GitHub
+  // cannot send a session cookie, so leaving it behind the session gate made
+  // every delivery 401 (the whole auto-deploy chain was dead code). Its own
+  // handler verifies GITHUB_WEBHOOK_SECRET + signature and refuses in worktree
+  // mode, so it is safe to exempt here.
+  const isWebhook = req.method === 'POST' && url === '/api/webhook/github';
 
-  if (!isLoginPage && !isPublicAsset) {
+  if (!isLoginPage && !isPublicAsset && !isWebhook) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
