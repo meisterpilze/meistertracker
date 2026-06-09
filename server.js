@@ -8642,6 +8642,19 @@ listenServer.listen(PORT, '0.0.0.0', () => {
 // ── GRACEFUL SHUTDOWN ────────────────────────────────────────
 function shutdown(signal) {
   log('info', 'Received ' + signal + ', shutting down...');
+  // End all long-lived SSE responses first. server.close() waits for open
+  // connections to finish, but SSE streams never finish on their own
+  // (heartbeats keep them active), so without this the close callbacks never
+  // fire and every shutdown hits the 5 s force-exit(1) — making PM2/systemd
+  // treat each routine stop as a failed shutdown.
+  for (const c of sseClients) {
+    try {
+      c.end();
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  sseClients.clear();
   const servers = [listenServer];
   if (listenServer !== server) servers.push(server);
   if (legacyRedirectServer) servers.push(legacyRedirectServer);
