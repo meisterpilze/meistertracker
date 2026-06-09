@@ -1081,7 +1081,7 @@ function updateDuckdnsIP(callback) {
     encodeURIComponent(cfg.token) +
     '&verbose=true';
 
-  https
+  const ddReq = https
     .get(url, (resp) => {
       let data = '';
       resp.on('data', (c) => {
@@ -1107,6 +1107,9 @@ function updateDuckdnsIP(callback) {
       log('error', 'DuckDNS update error', { error: e.message });
       if (callback) callback(e);
     });
+  // Match the ACME helper's 30 s timeout so a stalled duckdns.org connection
+  // can't hang /api/duckdns/* or a cert-renewal step indefinitely.
+  ddReq.setTimeout(30000, () => ddReq.destroy(new Error('DuckDNS request timed out')));
 }
 
 function startDuckdnsUpdater() {
@@ -1278,7 +1281,7 @@ function setDuckdnsTxt(domain, token, value, callback) {
     '&txt=' +
     encodeURIComponent(value) +
     '&verbose=true';
-  https
+  const txtReq = https
     .get(url, (resp) => {
       let data = '';
       resp.on('data', (c) => {
@@ -1291,6 +1294,7 @@ function setDuckdnsTxt(domain, token, value, callback) {
       });
     })
     .on('error', callback);
+  txtReq.setTimeout(30000, () => txtReq.destroy(new Error('DuckDNS TXT request timed out')));
 }
 
 function clearDuckdnsTxt(domain, token) {
@@ -1300,7 +1304,8 @@ function clearDuckdnsTxt(domain, token) {
     '&token=' +
     encodeURIComponent(token) +
     '&txt=&clear=true&verbose=true';
-  https.get(url, () => {}).on('error', () => {});
+  const clrReq = https.get(url, () => {}).on('error', () => {});
+  clrReq.setTimeout(30000, () => clrReq.destroy());
 }
 
 // ── PKCS#10 CSR construction ──
