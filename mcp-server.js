@@ -699,15 +699,18 @@ function createMcpServer(database, onWrite, printer) {
     'create_batch',
     'Create a new production batch with auto-generated bags. Prefer strainId (use list_mushroom_strains); when omitted, species is required. Does NOT auto-deduct inventory — use update_inventory separately for substrate usage. Does NOT place bags in zones — use move_bags to ADD bags after creation.',
     {
-      batchId: z.string().describe('Batch ID (e.g. FB-2025-042)'),
+      batchId: z
+        .string()
+        .regex(/^[A-Za-z0-9_\-@.:]{1,100}$/, 'batchId: letters/digits/_-@.: only, max 100')
+        .describe('Batch ID (e.g. FB-2025-042)'),
       strainId: z
         .number()
         .optional()
         .describe('Pilzsorte id. When set, species/strain are auto-filled from mushroom_strains.'),
-      species: z.string().optional().describe('Mushroom species (required when strainId is omitted)'),
+      species: z.string().max(200).optional().describe('Mushroom species (required when strainId is omitted)'),
       qty: z.number().int().min(1).max(10000).describe('Number of bags (1–10000)'),
       days: z.number().int().min(1).max(3650).describe('Incubation days (1–3650)'),
-      strain: z.string().optional().describe('Strain kuerzel (free-text fallback when strainId is omitted)'),
+      strain: z.string().max(200).optional().describe('Strain kuerzel (free-text fallback when strainId is omitted)'),
       subHardwood: z.number().optional().describe('Substrate hardwood %'),
       subWheatbran: z.number().optional().describe('Substrate wheat bran %'),
       subRh: z.number().optional().describe('Substrate relative humidity %'),
@@ -1429,7 +1432,10 @@ function createMcpServer(database, onWrite, printer) {
     'add_bags_to_batch',
     'Add more bags to an existing batch. Generates new bag IDs sequentially. Use this instead of update_batch when you need more bags — it keeps inventory log consistent.',
     {
-      batchId: z.string().describe('Batch ID'),
+      batchId: z
+        .string()
+        .regex(/^[A-Za-z0-9_\-@.:]{1,100}$/, 'batchId: letters/digits/_-@.: only, max 100')
+        .describe('Batch ID'),
       count: z.number().int().min(1).max(10000).describe('Number of bags to add (1–10000)')
     },
     async (params) => {
@@ -1499,7 +1505,10 @@ function createMcpServer(database, onWrite, printer) {
     'Rename a batch ID. Updates all references in bags, scan_log, harvests, and inventory_log. NOT for metadata changes (→ update_batch).',
     {
       oldId: z.string().describe('Current batch ID'),
-      newId: z.string().describe('New batch ID')
+      newId: z
+        .string()
+        .regex(/^[A-Za-z0-9_\-@.:]{1,100}$/, 'newId: letters/digits/_-@.: only, max 100')
+        .describe('New batch ID')
     },
     async (params) => {
       const adminErr = requireAdminRole();
