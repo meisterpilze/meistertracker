@@ -7667,7 +7667,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const chunks = [];
     let sz = 0;
     let aborted = false;
+    let ended = false;
     const MAX_BACKUP = 50 * 1024 * 1024; // 50 MB limit for backup files
+    // I-17b: if the client drops the connection mid-upload, 'end' never fires,
+    // so neither the oversize branch nor the 'end' finally releases the mutex —
+    // every later restore would 503 forever. Release it on close when the 'end'
+    // handler never ran. (No-op once a restore has completed.)
+    req.on('close', () => {
+      if (!ended) restoreInProgress = false;
+    });
     req.on('data', (c) => {
       sz += c.length;
       if (sz > MAX_BACKUP) {
@@ -7680,6 +7688,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       chunks.push(c);
     });
     req.on('end', () => {
+      ended = true;
       if (aborted) {
         restoreInProgress = false;
         return;
