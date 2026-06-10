@@ -1,7 +1,7 @@
 // Cache version — bump this when deploying new static assets
 // The SW uses network-first so cached assets only serve as offline fallback.
 // Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meistertracker-v23';
+const CACHE = 'meistertracker-v24';
 const ASSETS = [
   '/',
   '/styles.css',

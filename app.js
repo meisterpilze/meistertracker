@@ -943,6 +943,10 @@ function refresh() {
 // Sales orders → products → production demand. Fetched on demand from the
 // dedicated /api/orders, /api/products, /api/customers endpoints (not the
 // /api/data full-state blob). See ORDERS_HUB_DESIGN.md.
+//
+// Module-level DOM helper: the app's main `$` is declared local to
+// initEventListeners, so these top-level render functions need their own.
+const $ = (id) => document.getElementById(id);
 let _ordersCache = [];
 let _ordersFilter = '';
 
