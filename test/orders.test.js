@@ -36,15 +36,17 @@ describe('order hub – schema (migration v42)', () => {
       'orders',
       'order_items',
       'order_allocations',
-      'order_sync_log'
+      'order_sync_log',
+      'materials',
+      'product_bom'
     ]) {
       assert.ok(tables.includes(t), `missing table ${t}`);
     }
   });
 
-  it('records migration v42 as applied', () => {
-    const row = d.prepare('SELECT version FROM schema_version WHERE version = 42').get();
-    assert.ok(row, 'schema_version should include 42');
+  it('records migrations v42 + v43 as applied', () => {
+    assert.ok(d.prepare('SELECT version FROM schema_version WHERE version = 42').get(), 'v42 applied');
+    assert.ok(d.prepare('SELECT version FROM schema_version WHERE version = 43').get(), 'v43 applied');
   });
 });
 
@@ -58,42 +60,43 @@ describe('order hub – products & mapping', () => {
     fs.unlinkSync(p);
   });
 
-  it('upserts a product with components and reads it back', () => {
+  it('creates materials + a product with stock and a BOM, reads it back', () => {
+    const grain = db.upsertMaterial(d, { name: 'Roggen', unit: 'kg', stock: 10 });
+    const bag = db.upsertMaterial(d, { name: 'Filterbeutel', unit: 'Stk', stock: 50 });
     const id = db.upsertProduct(d, {
-      sku: 'GK-SHII-3',
-      name: 'Shiitake Growkit 3kg',
-      category: 'growkit',
-      species: 'shiitake',
-      components: [{ fulfillType: 'produce', batchType: 'block', species: 'shiitake', leadDays: 21, qtyPerUnit: 1 }]
+      sku: 'AIO-3',
+      name: 'All-in-One 3kg',
+      category: 'all-in-one',
+      stock: 4,
+      leadDays: 18,
+      bom: [
+        { materialId: grain, qtyPerUnit: 1.5 },
+        { materialId: bag, qtyPerUnit: 1 }
+      ]
     });
     assert.ok(id > 0);
     const prod = db.getProduct(d, id);
-    assert.equal(prod.name, 'Shiitake Growkit 3kg');
-    assert.equal(prod.active, 1);
-    assert.equal(prod.components.length, 1);
-    assert.equal(prod.components[0].batchType, 'block');
-    assert.equal(prod.components[0].leadDays, 21);
+    assert.equal(prod.name, 'All-in-One 3kg');
+    assert.equal(prod.stock, 4);
+    assert.equal(prod.producible, 1);
+    assert.equal(prod.bom.length, 2);
+    const g = prod.bom.find((b) => b.materialName === 'Roggen');
+    assert.equal(g.qtyPerUnit, 1.5);
+    assert.equal(g.unit, 'kg');
   });
 
-  it('updating a product replaces its components', () => {
+  it('updating a product replaces its BOM', () => {
+    const cvg = db.upsertMaterial(d, { name: 'CVG', unit: 'L', stock: 30 });
     const id = db.upsertProduct(d, {
-      sku: 'GK-OYS-3',
-      name: 'Oyster Growkit',
-      category: 'growkit',
-      components: [{ fulfillType: 'produce', batchType: 'block', species: 'oyster', qtyPerUnit: 1 }]
+      name: 'Substrat CVG',
+      category: 'substrat',
+      bom: [{ materialId: cvg, qtyPerUnit: 3 }]
     });
-    db.upsertProduct(d, {
-      id,
-      name: 'Oyster Growkit 3kg',
-      category: 'growkit',
-      components: [
-        { fulfillType: 'produce', batchType: 'block', species: 'oyster', leadDays: 18, qtyPerUnit: 1 },
-        { fulfillType: 'stock', qtyPerUnit: 1, notes: 'instructions leaflet' }
-      ]
-    });
+    db.upsertProduct(d, { id, name: 'Substrat CVG 3L', category: 'substrat', bom: [{ materialId: cvg, qtyPerUnit: 3.2 }] });
     const prod = db.getProduct(d, id);
-    assert.equal(prod.name, 'Oyster Growkit 3kg');
-    assert.equal(prod.components.length, 2);
+    assert.equal(prod.name, 'Substrat CVG 3L');
+    assert.equal(prod.bom.length, 1);
+    assert.equal(prod.bom[0].qtyPerUnit, 3.2);
   });
 
   it('maps a channel listing and back-resolves already-imported items', () => {
@@ -234,64 +237,62 @@ describe('order hub – demand engine & reservation', () => {
     fs.unlinkSync(p);
   });
 
-  it('computes net-to-start, lead-time start-by, and reservation reduces it', () => {
+  it('reserves from finished stock first, then produces the shortfall + checks components', () => {
+    const grain = db.upsertMaterial(d, { name: 'Roggen', unit: 'kg', stock: 4 }); // only 4 kg on hand
+    const bag = db.upsertMaterial(d, { name: 'Beutel', unit: 'Stk', stock: 100 });
     const pid = db.upsertProduct(d, {
-      sku: 'GK',
-      name: 'Shiitake Kit',
-      category: 'growkit',
-      components: [{ fulfillType: 'produce', batchType: 'block', species: 'shiitake', leadDays: 21, qtyPerUnit: 1 }]
+      name: 'All-in-One',
+      category: 'all-in-one',
+      stock: 2,
+      leadDays: 7,
+      bom: [
+        { materialId: grain, qtyPerUnit: 1.5 },
+        { materialId: bag, qtyPerUnit: 1 }
+      ]
     });
-    db.mapListing(d, { channel: 'wix', channelSku: 'WX-GK', productId: pid });
+    db.mapListing(d, { channel: 'wix', channelSku: 'WX-AIO', productId: pid });
     db.upsertOrder(d, {
       channel: 'wix',
       channelOrderId: 'O-1',
       shipBy: '2026-06-20',
       customerEmail: 'c1@ex.de',
-      items: [{ channelSku: 'WX-GK', title: 'Kit', qty: 5 }]
-    });
-    db.upsertOrder(d, {
-      channel: 'wix',
-      channelOrderId: 'O-2',
-      shipBy: '2026-06-18', // earliest → drives start-by
-      customerEmail: 'c2@ex.de',
-      items: [{ channelSku: 'WX-GK', title: 'Kit', qty: 7 }]
+      items: [{ channelSku: 'WX-AIO', title: 'AIO', qty: 5 }]
     });
 
-    let demand = db.computeProductionDemand(d);
-    const row = demand.find((r) => r.batchType === 'block' && r.species === 'shiitake');
+    const row = db.computeProductionDemand(d).find((r) => r.productId === pid);
     assert.ok(row, 'demand row present');
-    assert.equal(row.gross, 12);
-    assert.equal(row.netToStart, 12);
-    assert.equal(row.startBy, '2026-05-28', 'earliest ship_by (06-18) minus 21 lead days');
+    assert.equal(row.demand, 5);
+    assert.equal(row.fromStock, 2, '2 reserved from finished stock');
+    assert.equal(row.toProduce, 3, 'produce the remaining 3');
+    assert.equal(row.startBy, '2026-06-13', 'ship 06-20 minus 7 lead days');
+    const g = row.components.find((c) => c.materialName === 'Roggen');
+    assert.equal(g.need, 4.5); // 3 × 1.5 kg
+    assert.ok(Math.abs(g.short - 0.5) < 1e-9, 'short 0.5 kg grain (have 4, need 4.5)');
+    assert.equal(row.componentsShort, true);
 
-    // Reserve 5 units (against O-1's line) → drops out of net, flips O-1 to in_production.
+    // Reserve 2 against the order line → open demand drops, toProduce shrinks.
     const item = d
       .prepare("SELECT oi.id FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.channel_order_id = 'O-1'")
       .get();
-    db.reserveDemand(d, { batchId: null, allocations: [{ orderItemId: item.id, qty: 5 }] });
-
-    demand = db.computeProductionDemand(d);
-    const row2 = demand.find((r) => r.batchType === 'block' && r.species === 'shiitake');
-    assert.equal(row2.reserved, 5);
-    assert.equal(row2.netToStart, 7);
-    assert.equal(d.prepare("SELECT status FROM orders WHERE channel_order_id = 'O-1'").get().status, 'in_production');
+    db.reserveDemand(d, { allocations: [{ orderItemId: item.id, qty: 2 }] });
+    const row2 = db.computeProductionDemand(d).find((r) => r.productId === pid);
+    assert.equal(row2.reserved, 2);
+    assert.equal(row2.toProduce, 1, 'open 3 − 2 from stock = 1 to produce');
   });
 
-  it("'stock' components never appear as production demand", () => {
-    const sid = db.upsertProduct(d, {
-      sku: 'SUPPLY',
-      name: 'Substratbeutel',
-      category: 'supply',
-      components: [{ fulfillType: 'stock', qtyPerUnit: 1 }]
-    });
-    db.mapListing(d, { channel: 'ebay', channelSku: 'EB-SUB', productId: sid });
+  it('non-producible items (Zubehör) become backorder when out of stock, not production', () => {
+    const sid = db.upsertProduct(d, { name: 'Spritzenfilter', category: 'zubehoer', stock: 1, producible: 0 });
+    db.mapListing(d, { channel: 'ebay', channelSku: 'EB-FILT', productId: sid });
     db.upsertOrder(d, {
       channel: 'ebay',
       channelOrderId: 'EB-1',
       customerEmail: 'g@ex.de',
-      items: [{ channelSku: 'EB-SUB', title: 'Beutel', qty: 6 }]
+      items: [{ channelSku: 'EB-FILT', title: 'Filter', qty: 3 }]
     });
-    const demand = db.computeProductionDemand(d);
-    assert.ok(!demand.find((r) => r.batchType == null && r.species == null), 'stock lines excluded');
+    const row = db.computeProductionDemand(d).find((r) => r.productId === sid);
+    assert.equal(row.fromStock, 1);
+    assert.equal(row.toProduce, 0, 'not producible → never "produce"');
+    assert.equal(row.backorder, 2, '3 − 1 in stock = 2 to restock');
+    assert.equal(row.components.length, 0);
   });
 });
