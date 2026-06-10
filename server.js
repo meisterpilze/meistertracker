@@ -6664,6 +6664,72 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // Materials (raw materials / consumables) — list (authed) / mutate (admin)
+  if (req.method === 'GET' && url === '/api/materials') {
+    try {
+      jsonOk(res, { items: db.listMaterials(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/materials') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertMaterial(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const materialMatch = url.match(/^\/api\/materials\/(\d+)$/);
+  if (req.method === 'PATCH' && materialMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertMaterial(database, { ...data, id: parseInt(materialMatch[1], 10) });
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && materialMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const deleted = db.deleteMaterial(database, parseInt(materialMatch[1], 10));
+      broadcastSSE(res);
+      jsonOk(res, { deleted });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Tasks --
   if (req.method === 'POST' && req.url === '/api/tasks') {
     jsonBody(req, res, (e, data) => {
@@ -8780,7 +8846,11 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   // Cache immutable vendor libs and per-locale lang files aggressively;
   // cache HTML/CSS/SW short-term.
-  if (url === '/sw.js') {
+  if (WORKTREE_MODE) {
+    // Test/worktree instance: never cache static assets, so code changes show
+    // up on a plain reload without service-worker / HTTP-cache gymnastics.
+    headers['Cache-Control'] = 'no-store';
+  } else if (url === '/sw.js') {
     // The service worker is the killswitch path — must always revalidate
     // so a bad SW build can be rolled back within one navigation rather
     // than waiting up to 5 min + the browser's own 24 h SW-bypass cache.
