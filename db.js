@@ -1237,6 +1237,46 @@ const MIGRATIONS = [
         );
       `);
     }
+  },
+  {
+    version: 43,
+    description: 'Order hub v2: finished-goods stock, materials + BOM, MRP fields',
+    fn(db) {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('products')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('stock')) db.exec('ALTER TABLE products ADD COLUMN stock REAL DEFAULT 0');
+      if (!cols.includes('lead_days')) db.exec('ALTER TABLE products ADD COLUMN lead_days INTEGER DEFAULT 0');
+      if (!cols.includes('producible')) db.exec('ALTER TABLE products ADD COLUMN producible INTEGER DEFAULT 1');
+      const allocCols = db
+        .prepare("SELECT name FROM pragma_table_info('order_allocations')")
+        .all()
+        .map((r) => r.name);
+      if (!allocCols.includes('source')) {
+        db.exec("ALTER TABLE order_allocations ADD COLUMN source TEXT DEFAULT 'batch'");
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS materials (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          name      TEXT NOT NULL,
+          unit      TEXT DEFAULT 'Stk',          -- 'kg' | 'L' | 'Stk'
+          stock     REAL DEFAULT 0,
+          threshold REAL DEFAULT 0,
+          notes     TEXT DEFAULT '',
+          created   TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS product_bom (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          material_id  INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+          qty_per_unit REAL NOT NULL DEFAULT 1,
+          notes        TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_bom_product ON product_bom(product_id);
+        CREATE INDEX IF NOT EXISTS idx_bom_material ON product_bom(material_id);
+      `);
+    }
   }
 ];
 
@@ -5354,7 +5394,8 @@ function listProducts(db, { activeOnly = false } = {}) {
   const where = activeOnly ? 'WHERE active = 1' : '';
   return db
     .prepare(
-      `SELECT id, sku, name, category, species, strain, active, notes, created
+      `SELECT id, sku, name, category, species, strain, active, notes, created,
+              stock, lead_days AS leadDays, producible
        FROM products ${where} ORDER BY name COLLATE NOCASE`
     )
     .all();
@@ -5362,14 +5403,19 @@ function listProducts(db, { activeOnly = false } = {}) {
 
 function getProduct(db, id) {
   const p = db
-    .prepare('SELECT id, sku, name, category, species, strain, active, notes, created FROM products WHERE id = ?')
+    .prepare(
+      `SELECT id, sku, name, category, species, strain, active, notes, created,
+              stock, lead_days AS leadDays, producible
+       FROM products WHERE id = ?`
+    )
     .get(id);
   if (!p) return null;
-  p.components = db
+  p.bom = db
     .prepare(
-      `SELECT id, fulfill_type AS fulfillType, batch_type AS batchType, species, strain,
-              recipe_id AS recipeId, lead_days AS leadDays, grams, qty_per_unit AS qtyPerUnit, notes
-       FROM product_components WHERE product_id = ? ORDER BY id`
+      `SELECT b.id, b.material_id AS materialId, m.name AS materialName, m.unit,
+              b.qty_per_unit AS qtyPerUnit, m.stock AS materialStock, b.notes
+       FROM product_bom b JOIN materials m ON m.id = b.material_id
+       WHERE b.product_id = ? ORDER BY b.id`
     )
     .all(id);
   return p;
@@ -5380,37 +5426,54 @@ function upsertProduct(db, p) {
   const now = new Date().toISOString();
   let id = p.id;
   const active = p.active === 0 ? 0 : 1;
+  const producible = p.producible === 0 ? 0 : 1;
+  const stock = p.stock != null ? p.stock : 0;
+  const leadDays = p.leadDays != null ? p.leadDays : 0;
   if (id) {
     db.prepare(
-      'UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?, notes = ? WHERE id = ?'
-    ).run(p.sku || null, p.name, p.category || null, p.species || null, p.strain || null, active, p.notes || '', id);
+      `UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?,
+        notes = ?, stock = ?, lead_days = ?, producible = ? WHERE id = ?`
+    ).run(
+      p.sku || null,
+      p.name,
+      p.category || null,
+      p.species || null,
+      p.strain || null,
+      active,
+      p.notes || '',
+      stock,
+      leadDays,
+      producible,
+      id
+    );
   } else {
     const info = db
       .prepare(
-        'INSERT INTO products(sku, name, category, species, strain, active, notes, created) VALUES(?,?,?,?,?,?,?,?)'
+        `INSERT INTO products(sku, name, category, species, strain, active, notes, stock, lead_days, producible, created)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?)`
       )
-      .run(p.sku || null, p.name, p.category || null, p.species || null, p.strain || null, active, p.notes || '', now);
+      .run(
+        p.sku || null,
+        p.name,
+        p.category || null,
+        p.species || null,
+        p.strain || null,
+        active,
+        p.notes || '',
+        stock,
+        leadDays,
+        producible,
+        now
+      );
     id = info.lastInsertRowid;
   }
-  if (Array.isArray(p.components)) {
-    db.prepare('DELETE FROM product_components WHERE product_id = ?').run(id);
-    const ins = db.prepare(
-      `INSERT INTO product_components(product_id, fulfill_type, batch_type, species, strain, recipe_id, lead_days, grams, qty_per_unit, notes)
-       VALUES(?,?,?,?,?,?,?,?,?,?)`
-    );
-    for (const c of p.components) {
-      ins.run(
-        id,
-        c.fulfillType || 'produce',
-        c.batchType || null,
-        c.species || null,
-        c.strain || null,
-        c.recipeId || null,
-        c.leadDays || 0,
-        c.grams != null ? c.grams : null,
-        c.qtyPerUnit != null ? c.qtyPerUnit : 1,
-        c.notes || ''
-      );
+  // One-level bill of materials: [{ materialId, qtyPerUnit, notes }]
+  if (Array.isArray(p.bom)) {
+    db.prepare('DELETE FROM product_bom WHERE product_id = ?').run(id);
+    const ins = db.prepare('INSERT INTO product_bom(product_id, material_id, qty_per_unit, notes) VALUES(?,?,?,?)');
+    for (const c of p.bom) {
+      if (!c.materialId) continue;
+      ins.run(id, c.materialId, c.qtyPerUnit != null ? c.qtyPerUnit : 1, c.notes || '');
     }
   }
   incrementDataVersion(db);
@@ -5419,6 +5482,44 @@ function upsertProduct(db, p) {
 
 function deleteProduct(db, id) {
   const info = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  incrementDataVersion(db);
+  return info.changes;
+}
+
+// ── Materials (raw materials / consumables for the BOM) ──
+function listMaterials(db) {
+  return db
+    .prepare('SELECT id, name, unit, stock, threshold, notes, created FROM materials ORDER BY name COLLATE NOCASE')
+    .all();
+}
+
+function upsertMaterial(db, m) {
+  if (!m || !m.name) throw new Error('upsertMaterial: name required');
+  const now = new Date().toISOString();
+  const stock = m.stock != null ? m.stock : 0;
+  const threshold = m.threshold != null ? m.threshold : 0;
+  let id = m.id;
+  if (id) {
+    db.prepare('UPDATE materials SET name = ?, unit = ?, stock = ?, threshold = ?, notes = ? WHERE id = ?').run(
+      m.name,
+      m.unit || 'Stk',
+      stock,
+      threshold,
+      m.notes || '',
+      id
+    );
+  } else {
+    const info = db
+      .prepare('INSERT INTO materials(name, unit, stock, threshold, notes, created) VALUES(?,?,?,?,?,?)')
+      .run(m.name, m.unit || 'Stk', stock, threshold, m.notes || '', now);
+    id = info.lastInsertRowid;
+  }
+  incrementDataVersion(db);
+  return id;
+}
+
+function deleteMaterial(db, id) {
+  const info = db.prepare('DELETE FROM materials WHERE id = ?').run(id);
   incrementDataVersion(db);
   return info.changes;
 }
@@ -5729,38 +5830,39 @@ function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
 }
 
 function computeProductionDemand(db) {
-  const gross = db
+  // MRP rollup per product:
+  //   open demand → reserve from finished stock first → shortfall = produce
+  //   for the produce shortfall, explode the one-level BOM and check material stock.
+  const rows = db
     .prepare(
-      `SELECT pc.batch_type AS batchType, pc.species, pc.strain, pc.recipe_id AS recipeId, pc.lead_days AS leadDays,
-              SUM(oi.qty * pc.qty_per_unit) AS gross, MIN(o.ship_by) AS earliestShipBy
+      `SELECT p.id AS productId, p.name, p.category, p.stock, p.lead_days AS leadDays, p.producible,
+              SUM(oi.qty) AS demand, MIN(o.ship_by) AS earliestShipBy,
+              COALESCE((SELECT SUM(a.qty) FROM order_allocations a
+                          JOIN order_items oi2 ON oi2.id = a.order_item_id
+                         WHERE oi2.product_id = p.id AND a.status = 'reserved'), 0) AS reserved
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
-       JOIN product_components pc ON pc.product_id = oi.product_id
-       WHERE o.status IN ('new','in_production') AND pc.fulfill_type = 'produce'
-       GROUP BY pc.batch_type, pc.species, pc.strain, pc.recipe_id, pc.lead_days`
+       JOIN products p ON p.id = oi.product_id
+       WHERE o.status IN ('new','in_production')
+       GROUP BY p.id`
     )
     .all();
-  const reserved = db
-    .prepare(
-      `SELECT pc.batch_type AS batchType, pc.species, pc.strain, pc.recipe_id AS recipeId, COALESCE(SUM(a.qty), 0) AS reserved
-       FROM order_allocations a
-       JOIN order_items oi ON oi.id = a.order_item_id
-       JOIN orders o ON o.id = oi.order_id
-       JOIN product_components pc ON pc.product_id = oi.product_id
-       WHERE o.status IN ('new','in_production') AND pc.fulfill_type = 'produce' AND a.status = 'reserved'
-       GROUP BY pc.batch_type, pc.species, pc.strain, pc.recipe_id`
-    )
-    .all();
-  const key = (r) =>
-    [r.batchType || '', r.species || '', r.strain || '', r.recipeId == null ? '' : r.recipeId].join('|');
-  const resMap = new Map(reserved.map((r) => [key(r), r.reserved]));
-  return gross
+
+  const bomStmt = db.prepare(
+    `SELECT m.id AS materialId, m.name AS materialName, m.unit, m.stock AS materialStock, b.qty_per_unit AS qtyPerUnit
+     FROM product_bom b JOIN materials m ON m.id = b.material_id WHERE b.product_id = ?`
+  );
+
+  return rows
     .map((r) => {
-      const res = resMap.get(key(r)) || 0;
-      const netToStart = Math.max(0, (r.gross || 0) - res);
+      const openDemand = Math.max(0, (r.demand || 0) - (r.reserved || 0));
+      const fromStock = Math.min(openDemand, Math.max(0, r.stock || 0));
+      const remaining = openDemand - fromStock;
+      const toProduce = r.producible ? remaining : 0;
+      const backorder = r.producible ? 0 : remaining; // non-producible & out of stock → must restock
       let startBy = null;
-      if (r.earliestShipBy) {
-        // Date-only ship_by is treated as UTC midnight so lead-time subtraction is timezone-safe.
+      if (toProduce > 0 && r.earliestShipBy) {
+        // Date-only ship_by treated as UTC midnight so lead-time subtraction is timezone-safe.
         const base = String(r.earliestShipBy);
         const d = new Date(base.length === 10 ? base + 'T00:00:00Z' : base);
         if (!isNaN(d.getTime())) {
@@ -5768,19 +5870,37 @@ function computeProductionDemand(db) {
           startBy = d.toISOString().slice(0, 10);
         }
       }
+      const components =
+        toProduce > 0
+          ? bomStmt.all(r.productId).map((c) => {
+              const need = toProduce * (c.qtyPerUnit || 0);
+              const have = c.materialStock || 0;
+              return {
+                materialId: c.materialId,
+                materialName: c.materialName,
+                unit: c.unit,
+                need,
+                have,
+                short: Math.max(0, need - have)
+              };
+            })
+          : [];
       return {
-        batchType: r.batchType,
-        species: r.species,
-        strain: r.strain,
-        recipeId: r.recipeId,
+        productId: r.productId,
+        product: r.name,
+        category: r.category,
+        demand: r.demand || 0,
+        reserved: r.reserved || 0,
+        fromStock,
+        toProduce,
+        backorder,
         leadDays: r.leadDays || 0,
-        gross: r.gross || 0,
-        reserved: res,
-        netToStart,
-        startBy
+        startBy,
+        components,
+        componentsShort: components.some((c) => c.short > 0)
       };
     })
-    .filter((r) => r.netToStart > 0 || r.reserved > 0)
+    .filter((r) => r.toProduce > 0 || r.fromStock > 0 || r.backorder > 0)
     .sort((a, b) => (a.startBy || '9999-99-99').localeCompare(b.startBy || '9999-99-99'));
 }
 
@@ -5801,6 +5921,9 @@ module.exports = {
   mergeCustomers,
   reserveDemand,
   computeProductionDemand,
+  listMaterials,
+  upsertMaterial,
+  deleteMaterial,
   openDb,
   readAll,
   writeAll,
