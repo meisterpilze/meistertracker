@@ -2300,11 +2300,12 @@
                 <table id="t-demand">
                   <thead>
                     <tr>
-                      <th data-i18n="orders.th.need">Brauche</th>
-                      <th data-i18n="orders.th.gross">Bedarf</th>
-                      <th data-i18n="orders.th.reserved">Reserviert</th>
-                      <th data-i18n="orders.th.net">Netto starten</th>
+                      <th data-i18n="orders.th.product">Produkt</th>
+                      <th data-i18n="orders.th.demand">Bedarf</th>
+                      <th data-i18n="orders.th.fromStock">vom Lager</th>
+                      <th data-i18n="orders.th.toProduce">produzieren</th>
                       <th data-i18n="orders.th.startBy">Start bis</th>
+                      <th data-i18n="orders.th.components">Komponenten</th>
                     </tr>
                   </thead>
                   <tbody id="demand-body"></tbody>
@@ -2333,15 +2334,22 @@
                   <input id="oh-p-name" data-i18n-placeholder="orders.p.name" placeholder="Produktname" />
                   <input id="oh-p-sku" data-i18n-placeholder="orders.p.sku" placeholder="SKU (optional)" />
                   <select id="oh-p-category">
-                    <option value="growkit" data-i18n="orders.cat.growkit">Growkit</option>
-                    <option value="spawn" data-i18n="orders.cat.spawn">Körnerbrut</option>
-                    <option value="culture" data-i18n="orders.cat.culture">Kultur</option>
-                    <option value="supply" data-i18n="orders.cat.supply">Bedarf</option>
+                    <option value="all-in-one" data-i18n="orders.cat.allinone">All-in-One</option>
+                    <option value="substrat" data-i18n="orders.cat.substrat">Substrat</option>
+                    <option value="koernerbrut" data-i18n="orders.cat.koernerbrut">Körnerbrut</option>
+                    <option value="kultur" data-i18n="orders.cat.kultur">Kultur</option>
+                    <option value="zuchtset" data-i18n="orders.cat.zuchtset">Zuchtset</option>
+                    <option value="zubehoer" data-i18n="orders.cat.zubehoer">Zubehör</option>
                   </select>
-                  <input id="oh-p-species" data-i18n-placeholder="orders.p.species" placeholder="Art (z. B. Shiitake)" />
+                  <input id="oh-p-stock" type="number" min="0" step="1" data-i18n-placeholder="orders.p.stock" placeholder="Fertigbestand" />
+                  <input id="oh-p-lead" type="number" min="0" step="1" data-i18n-placeholder="orders.p.lead" placeholder="Vorlauf (Tage)" />
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 13px">
+                    <input type="checkbox" id="oh-p-producible" checked style="width: auto" />
+                    <span data-i18n="orders.p.producible">herstellbar (sonst Zukauf/Lager)</span>
+                  </label>
                 </div>
-                <div class="muted" style="font-size: 12px; margin: 6px 0" data-i18n="orders.components">
-                  Komponenten (was zur Erfüllung nötig ist)
+                <div class="muted" style="font-size: 12px; margin: 6px 0" data-i18n="orders.bomTitle">
+                  Stückliste — Material × Menge pro Stück
                 </div>
                 <div id="oh-p-components"></div>
                 <button class="btn btn-sm" data-action="oh-comp-add" style="margin-top: 6px" data-i18n="orders.addComponent">
@@ -2373,6 +2381,51 @@
                     </tr>
                   </thead>
                   <tbody id="orders-catalog-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="orders.materials">Material / Lager</div>
+                <button class="btn btn-sm btn-p" data-action="oh-mat-new" data-i18n="orders.newMaterial">+ Material</button>
+              </div>
+              <div id="orders-mat-form" class="oh-manual" style="display: none">
+                <input type="hidden" id="oh-mat-id" />
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px">
+                  <input id="oh-mat-name" data-i18n-placeholder="orders.mat.name" placeholder="Material" />
+                  <select id="oh-mat-unit">
+                    <option value="Stk">Stk</option>
+                    <option value="kg">kg</option>
+                    <option value="L">L</option>
+                  </select>
+                  <input id="oh-mat-stock" type="number" min="0" step="0.1" data-i18n-placeholder="orders.mat.stock" placeholder="Bestand" />
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 8px">
+                  <button class="btn btn-p btn-sm" data-action="oh-mat-save" data-i18n="common.save">Speichern</button>
+                  <button class="btn btn-sm" data-action="oh-mat-cancel" data-i18n="common.cancel">Abbrechen</button>
+                  <button
+                    class="btn btn-sm"
+                    data-action="oh-mat-delete"
+                    id="oh-mat-delete"
+                    style="display: none; margin-left: auto; color: var(--c-red-dark)"
+                    data-i18n="common.delete"
+                  >
+                    Löschen
+                  </button>
+                </div>
+              </div>
+              <div style="overflow-x: auto">
+                <table id="t-materials">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.mat.name">Material</th>
+                      <th data-i18n="orders.mat.unit">Einheit</th>
+                      <th data-i18n="orders.mat.stock">Bestand</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-mat-body"></tbody>
                 </table>
               </div>
             </div>
