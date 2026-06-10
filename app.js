@@ -823,7 +823,8 @@ const PAGES = {
   print: 'n-print',
   cal: 'n-cal',
   settings: 'n-settings',
-  strains: 'n-strains'
+  strains: 'n-strains',
+  orders: 'n-orders'
 };
 function go(page, btnId) {
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
@@ -860,6 +861,7 @@ function go(page, btnId) {
   }
   if (page === 'settings') renderLog();
   if (page === 'strains') renderStrains();
+  if (page === 'orders') renderOrders();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -902,6 +904,10 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
   if (page === 'settings' && sub === 'log') renderLog();
+  if (page === 'orders' && sub === 'inbox') renderOrders();
+  if (page === 'orders' && sub === 'tomake') renderOrdersDemand();
+  if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
+  if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
 }
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -929,7 +935,335 @@ function refresh() {
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
+  if (id === 'orders') _refreshOrdersActive();
   updateTodoBadge();
+}
+
+// ═══ ORDER HUB (Phase 0) ═══════════════════════════════════════════════════
+// Sales orders → products → production demand. Fetched on demand from the
+// dedicated /api/orders, /api/products, /api/customers endpoints (not the
+// /api/data full-state blob). See ORDERS_HUB_DESIGN.md.
+let _ordersCache = [];
+let _ordersFilter = '';
+
+function _ohEmpty(cols, msg) {
+  return `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
+}
+function _ohChannel(ch) {
+  const label =
+    ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
+  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(label)}</span>`;
+}
+function _ohStatus(st) {
+  return `<span class="oh-st oh-st-${esc(st)}">${esc(t('orders.status.' + st))}</span>`;
+}
+function _refreshOrdersActive() {
+  const active = document.querySelector('#p-orders .sp.active');
+  const id = active ? active.id : 'sp-orders-inbox';
+  if (id === 'sp-orders-tomake') renderOrdersDemand();
+  else if (id === 'sp-orders-mapping') renderOrdersMapping();
+  else if (id === 'sp-orders-customers') renderOrdersCustomers();
+  else renderOrders();
+}
+
+function renderOrders() {
+  const body = $('orders-body');
+  if (!body) return;
+  apiGet('/api/orders?limit=500')
+    .then((d) => {
+      _ordersCache = d.items || [];
+      _renderOrdersInbox();
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(6, t('common.error'));
+    });
+  apiGet('/api/products/unmapped')
+    .then((d) => {
+      const items = d.items || [];
+      const banner = $('orders-unmapped-banner');
+      if (banner) banner.style.display = items.length ? 'flex' : 'none';
+      const cnt = $('orders-unmapped-count');
+      if (cnt) cnt.textContent = items.length;
+    })
+    .catch(() => {});
+}
+
+function _renderOrdersInbox() {
+  const body = $('orders-body');
+  if (!body) return;
+  const rows = _ordersCache.filter((o) => !_ordersFilter || o.status === _ordersFilter);
+  if (!rows.length) {
+    body.innerHTML = _ohEmpty(6, t('orders.none'));
+    return;
+  }
+  body.innerHTML = rows
+    .map(
+      (o) =>
+        `<tr><td>${_ohChannel(o.channel)}</td>` +
+        `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+        `<td>${esc(o.customerName || '—')}</td>` +
+        `<td>${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
+        `<td style="font-size:11px">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
+        `<td>${_ohStatus(o.status)}</td></tr>`
+    )
+    .join('');
+}
+
+function setOrdersFilter(f) {
+  _ordersFilter = f;
+  document.querySelectorAll('#sp-orders-inbox .oh-fchip').forEach((c) => c.classList.toggle('active', (c.dataset.filter || '') === f));
+  _renderOrdersInbox();
+}
+
+function renderOrdersDemand() {
+  const body = $('demand-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(5, t('common.loading'));
+  apiGet('/api/orders/demand')
+    .then((d) => {
+      const rows = d.items || [];
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(5, t('orders.demandNone'));
+        return;
+      }
+      body.innerHTML = rows
+        .map(
+          (r) =>
+            `<tr><td><strong>${esc(r.species || '—')}</strong> ${esc(r.strain || '')} ` +
+            `<span class="muted" style="font-size:11px">${esc(r.batchType || '')}</span></td>` +
+            `<td>${r.gross}</td><td>${r.reserved}</td><td><strong>${r.netToStart}</strong></td>` +
+            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td></tr>`
+        )
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(5, t('common.error'));
+    });
+}
+
+function renderOrdersMapping() {
+  const left = $('orders-unmapped-list');
+  if (!left) return;
+  Promise.all([apiGet('/api/products/unmapped'), apiGet('/api/products')])
+    .then(([u, p]) => {
+      const products = p.items || [];
+      const opts = products.map((pr) => `<option value="${pr.id}">${esc(pr.name)}</option>`).join('');
+      const items = u.items || [];
+      left.innerHTML = items.length
+        ? items
+            .map(
+              (it) =>
+                `<div class="oh-maprow">${_ohChannel(it.channel)}` +
+                `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
+                `<div class="muted" style="font-size:11px;font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
+                `<select class="oh-mapsel" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" style="width:auto;font-size:12px">` +
+                `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}</select>` +
+                `<button class="btn btn-sm btn-p" data-action="oh-map">${esc(t('orders.assign'))}</button></div>`
+            )
+            .join('')
+        : `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('orders.allMapped'))}</div>`;
+      const cat = $('orders-catalog-body');
+      if (cat) {
+        cat.innerHTML = products.length
+          ? products
+              .map(
+                (pr) =>
+                  `<tr><td><strong>${esc(pr.name)}</strong></td><td>${esc(pr.category || '—')}</td>` +
+                  `<td class="muted" style="font-size:11px">${esc(pr.sku || '')}</td></tr>`
+              )
+              .join('')
+          : _ohEmpty(3, t('orders.noProducts'));
+      }
+    })
+    .catch(() => {
+      left.innerHTML = `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('common.error'))}</div>`;
+    });
+}
+
+function renderOrdersCustomers() {
+  const body = $('orders-customers-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(6, t('common.loading'));
+  apiGet('/api/customers')
+    .then((d) => {
+      const rows = d.items || [];
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(6, t('orders.noCustomers'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((c) => {
+          const chans = (c.channels || '')
+            .split(',')
+            .filter(Boolean)
+            .map(_ohChannel)
+            .join(' ');
+          const ltv = c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00';
+          return (
+            `<tr><td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
+            `<td>${chans}</td><td>${c.orderCount || 0}</td>` +
+            `<td><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
+            `<td style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
+            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td></tr>`
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(6, t('common.error'));
+    });
+}
+
+function ordersActionHandler(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'oh-filter') {
+    setOrdersFilter(btn.dataset.filter || '');
+  } else if (action === 'oh-goto-mapping') {
+    openStab('orders', 'mapping');
+  } else if (action === 'oh-manual-toggle') {
+    const p = $('orders-manual-panel');
+    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  } else if (action === 'oh-import-csv') {
+    const f = $('orders-csv-file');
+    if (f) f.click();
+  } else if (action === 'oh-manual-submit') {
+    _ordersManualSubmit();
+  } else if (action === 'oh-map') {
+    const row = btn.closest('.oh-maprow');
+    const sel = row && row.querySelector('.oh-mapsel');
+    if (!sel || !sel.value) {
+      setFb('err', t('orders.choose'));
+      return;
+    }
+    apiPost('/api/products/map', {
+      channel: sel.dataset.channel,
+      channelSku: sel.dataset.sku || null,
+      listingId: sel.dataset.listing || null,
+      productId: parseInt(sel.value, 10)
+    }).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.mapped'));
+      renderOrdersMapping();
+    });
+  }
+}
+
+function _ordersManualSubmit() {
+  const oid = ($('oh-m-oid').value || '').trim();
+  if (!oid) {
+    setFb('err', t('orders.needOrderId'));
+    return;
+  }
+  const order = {
+    channel: $('oh-m-channel').value || 'manual',
+    channelOrderId: oid,
+    customerName: ($('oh-m-cust').value || '').trim() || null,
+    customerEmail: ($('oh-m-email').value || '').trim() || null,
+    shipBy: $('oh-m-shipby').value || null,
+    items: [
+      {
+        channelSku: ($('oh-m-sku').value || '').trim() || null,
+        title: ($('oh-m-title').value || '').trim() || null,
+        qty: parseInt($('oh-m-qty').value, 10) || 1
+      }
+    ]
+  };
+  apiPost('/api/orders/import', order).then((r) => {
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('orders.added'));
+    ['oh-m-oid', 'oh-m-cust', 'oh-m-email', 'oh-m-sku', 'oh-m-title', 'oh-m-shipby'].forEach((id) => {
+      const el = $(id);
+      if (el) el.value = '';
+    });
+    const q = $('oh-m-qty');
+    if (q) q.value = '1';
+    renderOrders();
+  });
+}
+
+function _ordersImportCsv(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const lines = String(reader.result || '')
+        .split(/\r?\n/)
+        .filter((l) => l.trim());
+      if (lines.length < 2) {
+        setFb('err', t('orders.csvEmpty'));
+        return;
+      }
+      const splitRow = (l) => l.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, ''));
+      const head = splitRow(lines[0]).map((h) => h.toLowerCase());
+      const col = (names) => {
+        for (const n of names) {
+          const i = head.indexOf(n);
+          if (i >= 0) return i;
+        }
+        return -1;
+      };
+      const ci = {
+        channel: col(['channel', 'kanal']),
+        oid: col(['order_id', 'order id', 'channel_order_id', 'bestellnummer', 'order']),
+        name: col(['customer_name', 'customer', 'name', 'kunde']),
+        email: col(['customer_email', 'email', 'e-mail']),
+        shipby: col(['ship_by', 'ship by', 'liefern bis', 'deliver_by']),
+        sku: col(['sku', 'channel_sku', 'artikelnummer']),
+        title: col(['title', 'item', 'artikel', 'produkt']),
+        qty: col(['qty', 'quantity', 'menge', 'anzahl'])
+      };
+      if (ci.oid < 0) {
+        setFb('err', t('orders.csvNoOrderId'));
+        return;
+      }
+      const byId = new Map();
+      for (let i = 1; i < lines.length; i++) {
+        const cells = splitRow(lines[i]);
+        const oid = cells[ci.oid];
+        if (!oid) continue;
+        const channel = (ci.channel >= 0 && cells[ci.channel]) || 'manual';
+        const key = channel + '|' + oid;
+        if (!byId.has(key)) {
+          byId.set(key, {
+            channel,
+            channelOrderId: oid,
+            customerName: ci.name >= 0 ? cells[ci.name] || null : null,
+            customerEmail: ci.email >= 0 ? cells[ci.email] || null : null,
+            shipBy: ci.shipby >= 0 ? cells[ci.shipby] || null : null,
+            items: []
+          });
+        }
+        byId.get(key).items.push({
+          channelSku: ci.sku >= 0 ? cells[ci.sku] || null : null,
+          title: ci.title >= 0 ? cells[ci.title] || null : null,
+          qty: ci.qty >= 0 ? parseInt(cells[ci.qty], 10) || 1 : 1
+        });
+      }
+      const orders = [...byId.values()];
+      if (!orders.length) {
+        setFb('err', t('orders.csvEmpty'));
+        return;
+      }
+      apiPost('/api/orders/import', { orders }).then((r) => {
+        if (r && r.error) {
+          setFb('err', r.error);
+          return;
+        }
+        setFb('ok', t('orders.imported', { n: r.imported != null ? r.imported : orders.length }));
+        renderOrders();
+      });
+    } catch (err) {
+      setFb('err', t('common.error'));
+    }
+  };
+  reader.readAsText(file);
 }
 
 // ─── MODALS ──────────────────────────────────────────────────
@@ -14439,6 +14773,21 @@ function initEventListeners() {
     go('strains', 'n-strains');
     renderStrains();
   });
+  $('n-orders').addEventListener('click', () => {
+    go('orders', 'n-orders');
+  });
+  $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
+  $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
+  $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
+  $('st-orders-customers').addEventListener('click', () => openStab('orders', 'customers'));
+  $('p-orders').addEventListener('click', ordersActionHandler);
+  const _ohCsv = $('orders-csv-file');
+  if (_ohCsv)
+    _ohCsv.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) _ordersImportCsv(f);
+      e.target.value = '';
+    });
   $('btn-add-zone').addEventListener('click', addZone);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
