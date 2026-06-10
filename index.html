@@ -2320,7 +2320,48 @@
               <div id="orders-unmapped-list"></div>
             </div>
             <div class="card">
-              <div class="sec" data-i18n="orders.catalog">Produktkatalog</div>
+              <div
+                style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px"
+              >
+                <div class="sec" style="margin: 0" data-i18n="orders.catalog">Produktkatalog</div>
+                <button class="btn btn-sm btn-p" data-action="oh-prod-new" data-i18n="orders.newProduct">+ Neues Produkt</button>
+              </div>
+
+              <div id="orders-prod-form" class="oh-manual" style="display: none">
+                <input type="hidden" id="oh-p-id" />
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px">
+                  <input id="oh-p-name" data-i18n-placeholder="orders.p.name" placeholder="Produktname" />
+                  <input id="oh-p-sku" data-i18n-placeholder="orders.p.sku" placeholder="SKU (optional)" />
+                  <select id="oh-p-category">
+                    <option value="growkit" data-i18n="orders.cat.growkit">Growkit</option>
+                    <option value="spawn" data-i18n="orders.cat.spawn">Körnerbrut</option>
+                    <option value="culture" data-i18n="orders.cat.culture">Kultur</option>
+                    <option value="supply" data-i18n="orders.cat.supply">Bedarf</option>
+                  </select>
+                  <input id="oh-p-species" data-i18n-placeholder="orders.p.species" placeholder="Art (z. B. Shiitake)" />
+                </div>
+                <div class="muted" style="font-size: 12px; margin: 6px 0" data-i18n="orders.components">
+                  Komponenten (was zur Erfüllung nötig ist)
+                </div>
+                <div id="oh-p-components"></div>
+                <button class="btn btn-sm" data-action="oh-comp-add" style="margin-top: 6px" data-i18n="orders.addComponent">
+                  + Komponente
+                </button>
+                <div style="display: flex; gap: 6px; margin-top: 10px">
+                  <button class="btn btn-p btn-sm" data-action="oh-prod-save" data-i18n="common.save">Speichern</button>
+                  <button class="btn btn-sm" data-action="oh-prod-cancel" data-i18n="common.cancel">Abbrechen</button>
+                  <button
+                    class="btn btn-sm"
+                    data-action="oh-prod-delete"
+                    id="oh-p-delete"
+                    style="display: none; margin-left: auto; color: var(--c-red-dark)"
+                    data-i18n="common.delete"
+                  >
+                    Löschen
+                  </button>
+                </div>
+              </div>
+
               <div style="overflow-x: auto">
                 <table id="t-catalog">
                   <thead>
@@ -2328,6 +2369,7 @@
                       <th data-i18n="orders.th.product">Produkt</th>
                       <th data-i18n="orders.th.category">Kategorie</th>
                       <th data-i18n="orders.th.sku">SKU</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="orders-catalog-body"></tbody>
