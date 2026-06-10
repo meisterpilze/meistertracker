@@ -5749,8 +5749,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             jsonErr(res, 400, 'deltas entries must be objects');
             return;
           }
-          if (!['hardwood', 'wheatbran', 'gypsum', 'grain'].includes(d.mat)) {
-            jsonErr(res, 400, 'deltas[].mat must be hardwood/wheatbran/gypsum/grain');
+          if (!['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'].includes(d.mat)) {
+            jsonErr(res, 400, 'deltas[].mat must be hardwood/wheatbran/gypsum/grain/coir');
             return;
           }
           if (typeof d.deltaKg !== 'number' || !Number.isFinite(d.deltaKg)) {
@@ -6661,72 +6661,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         safeErr(res, err);
       }
     });
-    return;
-  }
-
-  // Materials (raw materials / consumables) — list (authed) / mutate (admin)
-  if (req.method === 'GET' && url === '/api/materials') {
-    try {
-      jsonOk(res, { items: db.listMaterials(database) });
-    } catch (err) {
-      safeErr(res, err);
-    }
-    return;
-  }
-  if (req.method === 'POST' && url === '/api/materials') {
-    if (requireAdmin(req, res)) return;
-    jsonBody(req, res, (e, data) => {
-      if (e) {
-        jsonErr(res, 400, e.message);
-        return;
-      }
-      const vr = validateRequired(data, ['name']);
-      if (vr) {
-        jsonErr(res, 400, vr);
-        return;
-      }
-      try {
-        const id = db.upsertMaterial(database, data);
-        broadcastSSE(res);
-        jsonOk(res, { id });
-      } catch (err) {
-        safeErr(res, err);
-      }
-    });
-    return;
-  }
-  const materialMatch = url.match(/^\/api\/materials\/(\d+)$/);
-  if (req.method === 'PATCH' && materialMatch) {
-    if (requireAdmin(req, res)) return;
-    jsonBody(req, res, (e, data) => {
-      if (e) {
-        jsonErr(res, 400, e.message);
-        return;
-      }
-      const vr = validateRequired(data, ['name']);
-      if (vr) {
-        jsonErr(res, 400, vr);
-        return;
-      }
-      try {
-        const id = db.upsertMaterial(database, { ...data, id: parseInt(materialMatch[1], 10) });
-        broadcastSSE(res);
-        jsonOk(res, { id });
-      } catch (err) {
-        safeErr(res, err);
-      }
-    });
-    return;
-  }
-  if (req.method === 'DELETE' && materialMatch) {
-    if (requireAdmin(req, res)) return;
-    try {
-      const deleted = db.deleteMaterial(database, parseInt(materialMatch[1], 10));
-      broadcastSSE(res);
-      jsonOk(res, { deleted });
-    } catch (err) {
-      safeErr(res, err);
-    }
     return;
   }
 

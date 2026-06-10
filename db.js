@@ -1277,6 +1277,47 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_bom_material ON product_bom(material_id);
       `);
     }
+  },
+  {
+    version: 44,
+    description:
+      'Order hub v3: per-product production spec on products, coir in inventory, drop v2 materials/product_bom',
+    fn(db) {
+      // The order-hub no longer keeps its own materials/BOM tables. Instead each
+      // product carries a production spec mirroring the batch (charge) form, and
+      // the demand engine consumes the shared `inventory` ledger (grain/hardwood/
+      // wheatbran/gypsum/coir) via the same hydration math as batches.
+      const pcols = db
+        .prepare("SELECT name FROM pragma_table_info('products')")
+        .all()
+        .map((r) => r.name);
+      const addP = (name, ddl) => {
+        if (!pcols.includes(name)) db.exec('ALTER TABLE products ADD COLUMN ' + ddl);
+      };
+      addP('prod_type', "prod_type TEXT DEFAULT 'buy'"); // allinone|block|grain|buy
+      addP('prod_species', 'prod_species TEXT');
+      addP('prod_strain', 'prod_strain TEXT');
+      addP('prod_days', 'prod_days INTEGER DEFAULT 14');
+      addP('prod_bag_kg', 'prod_bag_kg REAL DEFAULT 0'); // substrate wet kg / unit
+      addP('prod_substrate', 'prod_substrate TEXT'); // holzkleie|cvg
+      addP('prod_hardwood_pct', 'prod_hardwood_pct REAL DEFAULT 0');
+      addP('prod_wheatbran_pct', 'prod_wheatbran_pct REAL DEFAULT 0');
+      addP('prod_coir_pct', 'prod_coir_pct REAL DEFAULT 0');
+      addP('prod_gypsum', 'prod_gypsum INTEGER DEFAULT 0');
+      addP('prod_rh_pct', 'prod_rh_pct REAL DEFAULT 0'); // substrate hydration %
+      addP('prod_grain_kg', 'prod_grain_kg REAL DEFAULT 0'); // grain spawn wet kg / unit
+      addP('prod_grain_rh_pct', 'prod_grain_rh_pct REAL DEFAULT 52');
+      // Coir/CVG raw material in the shared inventory ledger
+      const icols = db
+        .prepare("SELECT name FROM pragma_table_info('inventory')")
+        .all()
+        .map((r) => r.name);
+      if (!icols.includes('stock_coir')) db.exec('ALTER TABLE inventory ADD COLUMN stock_coir REAL DEFAULT 0');
+      if (!icols.includes('thresh_coir')) db.exec('ALTER TABLE inventory ADD COLUMN thresh_coir REAL DEFAULT 0');
+      // Drop the v2 order-hub BOM tables — superseded by the per-product spec.
+      db.exec('DROP TABLE IF EXISTS product_bom');
+      db.exec('DROP TABLE IF EXISTS materials');
+    }
   }
 ];
 
@@ -1619,13 +1660,15 @@ function readAll(db, opts = {}) {
       hardwood: inv.stock_hardwood,
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
-      grain: inv.stock_grain
+      grain: inv.stock_grain,
+      coir: inv.stock_coir || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
-      grain: { minKg: inv.thresh_grain }
+      grain: { minKg: inv.thresh_grain },
+      coir: { minKg: inv.thresh_coir || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -3519,7 +3562,7 @@ function updatePrintBridgeCfg(db, cfg) {
 }
 
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -3590,12 +3633,13 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   const t = thresholds || {};
   const a = avgComposition || {};
   db.prepare(
-    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
+    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,thresh_coir=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
   ).run(
     (t.hardwood && t.hardwood.minKg) ?? 50,
     (t.wheatbran && t.wheatbran.minKg) ?? 20,
     (t.gypsum && t.gypsum.minKg) ?? 5,
     (t.grain && t.grain.minKg) ?? 10,
+    (t.coir && t.coir.minKg) ?? 0,
     a.hwPct ?? 75,
     a.wbPct ?? 25,
     a.rhPct ?? 63,
@@ -4629,13 +4673,15 @@ function getInventory(db, logLimit) {
       hardwood: inv.stock_hardwood,
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
-      grain: inv.stock_grain
+      grain: inv.stock_grain,
+      coir: inv.stock_coir || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
-      grain: { minKg: inv.thresh_grain }
+      grain: { minKg: inv.thresh_grain },
+      coir: { minKg: inv.thresh_coir || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -5395,7 +5441,7 @@ function listProducts(db, { activeOnly = false } = {}) {
   return db
     .prepare(
       `SELECT id, sku, name, category, species, strain, active, notes, created,
-              stock, lead_days AS leadDays, producible
+              stock, lead_days AS leadDays, prod_type AS prodType
        FROM products ${where} ORDER BY name COLLATE NOCASE`
     )
     .all();
@@ -5405,19 +5451,18 @@ function getProduct(db, id) {
   const p = db
     .prepare(
       `SELECT id, sku, name, category, species, strain, active, notes, created,
-              stock, lead_days AS leadDays, producible
+              stock, lead_days AS leadDays,
+              prod_type AS prodType, prod_species AS prodSpecies, prod_strain AS prodStrain,
+              prod_days AS prodDays, prod_bag_kg AS prodBagKg, prod_substrate AS prodSubstrate,
+              prod_hardwood_pct AS prodHardwoodPct, prod_wheatbran_pct AS prodWheatbranPct,
+              prod_coir_pct AS prodCoirPct, prod_gypsum AS prodGypsum, prod_rh_pct AS prodRhPct,
+              prod_grain_kg AS prodGrainKg, prod_grain_rh_pct AS prodGrainRhPct
        FROM products WHERE id = ?`
     )
     .get(id);
   if (!p) return null;
-  p.bom = db
-    .prepare(
-      `SELECT b.id, b.material_id AS materialId, m.name AS materialName, m.unit,
-              b.qty_per_unit AS qtyPerUnit, m.stock AS materialStock, b.notes
-       FROM product_bom b JOIN materials m ON m.id = b.material_id
-       WHERE b.product_id = ? ORDER BY b.id`
-    )
-    .all(id);
+  // Per-unit raw-material need (dry kg) so the catalog/editor can preview it.
+  p.materialNeed = computeProductMaterialNeed(p);
   return p;
 }
 
@@ -5425,56 +5470,73 @@ function upsertProduct(db, p) {
   if (!p || !p.name) throw new Error('upsertProduct: name required');
   const now = new Date().toISOString();
   let id = p.id;
-  const active = p.active === 0 ? 0 : 1;
-  const producible = p.producible === 0 ? 0 : 1;
-  const stock = p.stock != null ? p.stock : 0;
-  const leadDays = p.leadDays != null ? p.leadDays : 0;
+  const num = (v, d) => (Number.isFinite(+v) ? +v : d);
+  const f = {
+    sku: p.sku || null,
+    name: p.name,
+    category: p.category || null,
+    species: p.species || null,
+    strain: p.strain || null,
+    active: p.active === 0 ? 0 : 1,
+    notes: p.notes || '',
+    stock: num(p.stock, 0),
+    leadDays: num(p.leadDays, 0),
+    prodType: p.prodType || 'buy',
+    prodSpecies: p.prodSpecies || null,
+    prodStrain: p.prodStrain || null,
+    prodDays: num(p.prodDays, 14),
+    prodBagKg: num(p.prodBagKg, 0),
+    prodSubstrate: p.prodSubstrate || null,
+    prodHardwoodPct: num(p.prodHardwoodPct, 0),
+    prodWheatbranPct: num(p.prodWheatbranPct, 0),
+    prodCoirPct: num(p.prodCoirPct, 0),
+    prodGypsum: p.prodGypsum ? 1 : 0,
+    prodRhPct: num(p.prodRhPct, 0),
+    prodGrainKg: num(p.prodGrainKg, 0),
+    prodGrainRhPct: num(p.prodGrainRhPct, 52)
+  };
+  const vals = [
+    f.sku,
+    f.name,
+    f.category,
+    f.species,
+    f.strain,
+    f.active,
+    f.notes,
+    f.stock,
+    f.leadDays,
+    f.prodType,
+    f.prodSpecies,
+    f.prodStrain,
+    f.prodDays,
+    f.prodBagKg,
+    f.prodSubstrate,
+    f.prodHardwoodPct,
+    f.prodWheatbranPct,
+    f.prodCoirPct,
+    f.prodGypsum,
+    f.prodRhPct,
+    f.prodGrainKg,
+    f.prodGrainRhPct
+  ];
   if (id) {
     db.prepare(
-      `UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?,
-        notes = ?, stock = ?, lead_days = ?, producible = ? WHERE id = ?`
-    ).run(
-      p.sku || null,
-      p.name,
-      p.category || null,
-      p.species || null,
-      p.strain || null,
-      active,
-      p.notes || '',
-      stock,
-      leadDays,
-      producible,
-      id
-    );
+      `UPDATE products SET sku=?, name=?, category=?, species=?, strain=?, active=?, notes=?, stock=?, lead_days=?,
+        prod_type=?, prod_species=?, prod_strain=?, prod_days=?, prod_bag_kg=?, prod_substrate=?,
+        prod_hardwood_pct=?, prod_wheatbran_pct=?, prod_coir_pct=?, prod_gypsum=?, prod_rh_pct=?,
+        prod_grain_kg=?, prod_grain_rh_pct=? WHERE id=?`
+    ).run(...vals, id);
   } else {
     const info = db
       .prepare(
-        `INSERT INTO products(sku, name, category, species, strain, active, notes, stock, lead_days, producible, created)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO products(sku,name,category,species,strain,active,notes,stock,lead_days,
+          prod_type,prod_species,prod_strain,prod_days,prod_bag_kg,prod_substrate,
+          prod_hardwood_pct,prod_wheatbran_pct,prod_coir_pct,prod_gypsum,prod_rh_pct,
+          prod_grain_kg,prod_grain_rh_pct,created)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
-      .run(
-        p.sku || null,
-        p.name,
-        p.category || null,
-        p.species || null,
-        p.strain || null,
-        active,
-        p.notes || '',
-        stock,
-        leadDays,
-        producible,
-        now
-      );
+      .run(...vals, now);
     id = info.lastInsertRowid;
-  }
-  // One-level bill of materials: [{ materialId, qtyPerUnit, notes }]
-  if (Array.isArray(p.bom)) {
-    db.prepare('DELETE FROM product_bom WHERE product_id = ?').run(id);
-    const ins = db.prepare('INSERT INTO product_bom(product_id, material_id, qty_per_unit, notes) VALUES(?,?,?,?)');
-    for (const c of p.bom) {
-      if (!c.materialId) continue;
-      ins.run(id, c.materialId, c.qtyPerUnit != null ? c.qtyPerUnit : 1, c.notes || '');
-    }
   }
   incrementDataVersion(db);
   return id;
@@ -5486,42 +5548,36 @@ function deleteProduct(db, id) {
   return info.changes;
 }
 
-// ── Materials (raw materials / consumables for the BOM) ──
-function listMaterials(db) {
-  return db
-    .prepare('SELECT id, name, unit, stock, threshold, notes, created FROM materials ORDER BY name COLLATE NOCASE')
-    .all();
-}
-
-function upsertMaterial(db, m) {
-  if (!m || !m.name) throw new Error('upsertMaterial: name required');
-  const now = new Date().toISOString();
-  const stock = m.stock != null ? m.stock : 0;
-  const threshold = m.threshold != null ? m.threshold : 0;
-  let id = m.id;
-  if (id) {
-    db.prepare('UPDATE materials SET name = ?, unit = ?, stock = ?, threshold = ?, notes = ? WHERE id = ?').run(
-      m.name,
-      m.unit || 'Stk',
-      stock,
-      threshold,
-      m.notes || '',
-      id
-    );
-  } else {
-    const info = db
-      .prepare('INSERT INTO materials(name, unit, stock, threshold, notes, created) VALUES(?,?,?,?,?,?)')
-      .run(m.name, m.unit || 'Stk', stock, threshold, m.notes || '', now);
-    id = info.lastInsertRowid;
+// ── Per-product production spec → raw-material need ──────────
+// Returns dry-kg consumed per ONE unit, keyed to the shared inventory ledger
+// (grain/hardwood/wheatbran/gypsum/coir). Mirrors the batch (charge) hydration
+// math in computeBatchMaterialDeltas so the order-hub and the Chargen agree.
+function computeProductMaterialNeed(p) {
+  const need = { grain: 0, hardwood: 0, wheatbran: 0, gypsum: 0, coir: 0 };
+  if (!p) return need;
+  const num = (v) => (Number.isFinite(+v) ? +v : 0);
+  const type = p.prodType || 'buy';
+  // Substrate part (block + all-in-one)
+  if (type === 'block' || type === 'allinone') {
+    const bagKg = num(p.prodBagKg);
+    const rh = num(p.prodRhPct);
+    const dry = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    if ((p.prodSubstrate || 'holzkleie') === 'cvg') {
+      const coirPct = num(p.prodCoirPct) || 100;
+      need.coir += dry * (coirPct / 100);
+    } else {
+      need.hardwood += dry * (num(p.prodHardwoodPct) / 100);
+      need.wheatbran += dry * (num(p.prodWheatbranPct) / 100);
+    }
+    if (p.prodGypsum) need.gypsum += dry * 0.01;
   }
-  incrementDataVersion(db);
-  return id;
-}
-
-function deleteMaterial(db, id) {
-  const info = db.prepare('DELETE FROM materials WHERE id = ?').run(id);
-  incrementDataVersion(db);
-  return info.changes;
+  // Grain spawn part (grain + all-in-one)
+  if (type === 'grain' || type === 'allinone') {
+    const gKg = num(p.prodGrainKg);
+    const gRh = p.prodGrainRhPct != null ? num(p.prodGrainRhPct) : 52;
+    need.grain += gRh > 0 ? gKg * (1 - gRh / 100) : gKg;
+  }
+  return need;
 }
 
 // ── Channel ↔ product mapping ──
@@ -5831,11 +5887,17 @@ function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
 
 function computeProductionDemand(db) {
   // MRP rollup per product:
-  //   open demand → reserve from finished stock first → shortfall = produce
-  //   for the produce shortfall, explode the one-level BOM and check material stock.
+  //   open demand → reserve from finished stock first → shortfall = produce.
+  //   For the produce shortfall, explode the product's production spec into raw
+  //   materials (grain/hardwood/wheatbran/gypsum/coir) via the same hydration
+  //   math as the batch engine, and check the shared `inventory` ledger.
   const rows = db
     .prepare(
-      `SELECT p.id AS productId, p.name, p.category, p.stock, p.lead_days AS leadDays, p.producible,
+      `SELECT p.id AS productId, p.name, p.category, p.stock, p.lead_days AS leadDays,
+              p.prod_type AS prodType, p.prod_bag_kg AS prodBagKg, p.prod_substrate AS prodSubstrate,
+              p.prod_hardwood_pct AS prodHardwoodPct, p.prod_wheatbran_pct AS prodWheatbranPct,
+              p.prod_coir_pct AS prodCoirPct, p.prod_gypsum AS prodGypsum, p.prod_rh_pct AS prodRhPct,
+              p.prod_grain_kg AS prodGrainKg, p.prod_grain_rh_pct AS prodGrainRhPct,
               SUM(oi.qty) AS demand, MIN(o.ship_by) AS earliestShipBy,
               COALESCE((SELECT SUM(a.qty) FROM order_allocations a
                           JOIN order_items oi2 ON oi2.id = a.order_item_id
@@ -5848,18 +5910,23 @@ function computeProductionDemand(db) {
     )
     .all();
 
-  const bomStmt = db.prepare(
-    `SELECT m.id AS materialId, m.name AS materialName, m.unit, m.stock AS materialStock, b.qty_per_unit AS qtyPerUnit
-     FROM product_bom b JOIN materials m ON m.id = b.material_id WHERE b.product_id = ?`
-  );
+  const inv = db.prepare('SELECT * FROM inventory WHERE id = 1').get() || {};
+  const stockByMat = {
+    grain: inv.stock_grain || 0,
+    hardwood: inv.stock_hardwood || 0,
+    wheatbran: inv.stock_wheatbran || 0,
+    gypsum: inv.stock_gypsum || 0,
+    coir: inv.stock_coir || 0
+  };
 
   return rows
     .map((r) => {
+      const producible = (r.prodType || 'buy') !== 'buy';
       const openDemand = Math.max(0, (r.demand || 0) - (r.reserved || 0));
       const fromStock = Math.min(openDemand, Math.max(0, r.stock || 0));
       const remaining = openDemand - fromStock;
-      const toProduce = r.producible ? remaining : 0;
-      const backorder = r.producible ? 0 : remaining; // non-producible & out of stock → must restock
+      const toProduce = producible ? remaining : 0;
+      const backorder = producible ? 0 : remaining; // bought-in & out of stock → must restock
       let startBy = null;
       if (toProduce > 0 && r.earliestShipBy) {
         // Date-only ship_by treated as UTC midnight so lead-time subtraction is timezone-safe.
@@ -5870,25 +5937,22 @@ function computeProductionDemand(db) {
           startBy = d.toISOString().slice(0, 10);
         }
       }
-      const components =
-        toProduce > 0
-          ? bomStmt.all(r.productId).map((c) => {
-              const need = toProduce * (c.qtyPerUnit || 0);
-              const have = c.materialStock || 0;
-              return {
-                materialId: c.materialId,
-                materialName: c.materialName,
-                unit: c.unit,
-                need,
-                have,
-                short: Math.max(0, need - have)
-              };
-            })
-          : [];
+      let components = [];
+      if (toProduce > 0) {
+        const per = computeProductMaterialNeed(r);
+        components = Object.keys(per)
+          .filter((mat) => per[mat] > 0)
+          .map((mat) => {
+            const need = per[mat] * toProduce;
+            const have = stockByMat[mat] || 0;
+            return { mat, unit: 'kg', need, have, short: Math.max(0, need - have) };
+          });
+      }
       return {
         productId: r.productId,
         product: r.name,
         category: r.category,
+        prodType: r.prodType || 'buy',
         demand: r.demand || 0,
         reserved: r.reserved || 0,
         fromStock,
@@ -5921,9 +5985,7 @@ module.exports = {
   mergeCustomers,
   reserveDemand,
   computeProductionDemand,
-  listMaterials,
-  upsertMaterial,
-  deleteMaterial,
+  computeProductMaterialNeed,
   openDb,
   readAll,
   writeAll,

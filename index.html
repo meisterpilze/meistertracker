@@ -2333,28 +2333,103 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px">
                   <input id="oh-p-name" data-i18n-placeholder="orders.p.name" placeholder="Produktname" />
                   <input id="oh-p-sku" data-i18n-placeholder="orders.p.sku" placeholder="SKU (optional)" />
-                  <select id="oh-p-category">
-                    <option value="all-in-one" data-i18n="orders.cat.allinone">All-in-One</option>
-                    <option value="substrat" data-i18n="orders.cat.substrat">Substrat</option>
-                    <option value="koernerbrut" data-i18n="orders.cat.koernerbrut">Körnerbrut</option>
-                    <option value="kultur" data-i18n="orders.cat.kultur">Kultur</option>
-                    <option value="zuchtset" data-i18n="orders.cat.zuchtset">Zuchtset</option>
-                    <option value="zubehoer" data-i18n="orders.cat.zubehoer">Zubehör</option>
-                  </select>
-                  <input id="oh-p-stock" type="number" min="0" step="1" data-i18n-placeholder="orders.p.stock" placeholder="Fertigbestand" />
-                  <input id="oh-p-lead" type="number" min="0" step="1" data-i18n-placeholder="orders.p.lead" placeholder="Vorlauf (Tage)" />
-                  <label style="display: flex; align-items: center; gap: 6px; font-size: 13px">
-                    <input type="checkbox" id="oh-p-producible" checked style="width: auto" />
-                    <span data-i18n="orders.p.producible">herstellbar (sonst Zukauf/Lager)</span>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.th.category">Kategorie</span>
+                    <select id="oh-p-category">
+                      <option value="all-in-one" data-i18n="orders.cat.allinone">All-in-One</option>
+                      <option value="substrat" data-i18n="orders.cat.substrat">Substrat</option>
+                      <option value="koernerbrut" data-i18n="orders.cat.koernerbrut">Körnerbrut</option>
+                      <option value="kultur" data-i18n="orders.cat.kultur">Kultur</option>
+                      <option value="zuchtset" data-i18n="orders.cat.zuchtset">Zuchtset</option>
+                      <option value="zubehoer" data-i18n="orders.cat.zubehoer">Zubehör</option>
+                    </select>
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.prodType">Produktionsart</span>
+                    <select id="oh-p-prodtype">
+                      <option value="allinone" data-i18n="orders.pt.allinone">All-in-One (Grain + Substrat)</option>
+                      <option value="block" data-i18n="orders.pt.block">Substrat-Block</option>
+                      <option value="grain" data-i18n="orders.pt.grain">Körnerbrut (Grain)</option>
+                      <option value="buy" data-i18n="orders.pt.buy">Zukauf / nur Lager</option>
+                    </select>
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.stock">Fertigbestand</span>
+                    <input id="oh-p-stock" type="number" min="0" step="1" value="0" />
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.lead">Vorlauf (Tage)</span>
+                    <input id="oh-p-lead" type="number" min="0" step="1" value="0" />
                   </label>
                 </div>
-                <div class="muted" style="font-size: 12px; margin: 6px 0" data-i18n="orders.bomTitle">
-                  Stückliste — Material × Menge pro Stück
+
+                <div
+                  id="oh-p-subgroup"
+                  style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
+                >
+                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.subTitle">
+                    Substrat pro Stück
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.substrate">Substrat-Art</span>
+                      <select id="oh-p-substrate">
+                        <option value="holzkleie" data-i18n="orders.sub.holzkleie">Holz + Weizenkleie</option>
+                        <option value="cvg" data-i18n="orders.sub.cvg">Kokos / CVG</option>
+                      </select>
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.bagKg">Beutel kg (nass)</span>
+                      <input id="oh-p-bagkg" type="number" min="0" step="0.1" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.rh">Hydration %</span>
+                      <input id="oh-p-rh" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                  </div>
+                  <div id="oh-p-holzgroup" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.hw">Hartholz %</span>
+                      <input id="oh-p-hw" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.wb">Weizenkleie %</span>
+                      <input id="oh-p-wb" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                  </div>
+                  <div id="oh-p-coirgroup" style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.coir">Kokos %</span>
+                      <input id="oh-p-coir" type="number" min="0" max="100" step="1" value="100" />
+                    </label>
+                  </div>
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 8px">
+                    <input type="checkbox" id="oh-p-gyp" style="width: auto" />
+                    <span data-i18n="orders.p.gypsum">Gips (~1%)</span>
+                  </label>
                 </div>
-                <div id="oh-p-components"></div>
-                <button class="btn btn-sm" data-action="oh-comp-add" style="margin-top: 6px" data-i18n="orders.addComponent">
-                  + Komponente
-                </button>
+
+                <div
+                  id="oh-p-graingroup"
+                  style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
+                >
+                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.grainTitle">
+                    Körnerbrut pro Stück
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.grainKg">Grain kg (nass)</span>
+                      <input id="oh-p-grainkg" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
+                      <input id="oh-p-grainrh" type="number" min="0" max="100" step="1" value="52" />
+                    </label>
+                  </div>
+                </div>
+
+                <div id="oh-p-need" class="muted" style="font-size: 12px; margin: 6px 0"></div>
+
                 <div style="display: flex; gap: 6px; margin-top: 10px">
                   <button class="btn btn-p btn-sm" data-action="oh-prod-save" data-i18n="common.save">Speichern</button>
                   <button class="btn btn-sm" data-action="oh-prod-cancel" data-i18n="common.cancel">Abbrechen</button>
@@ -2386,46 +2461,20 @@
             </div>
 
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="orders.materials">Material / Lager</div>
-                <button class="btn btn-sm btn-p" data-action="oh-mat-new" data-i18n="orders.newMaterial">+ Material</button>
-              </div>
-              <div id="orders-mat-form" class="oh-manual" style="display: none">
-                <input type="hidden" id="oh-mat-id" />
-                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px">
-                  <input id="oh-mat-name" data-i18n-placeholder="orders.mat.name" placeholder="Material" />
-                  <select id="oh-mat-unit">
-                    <option value="Stk">Stk</option>
-                    <option value="kg">kg</option>
-                    <option value="L">L</option>
-                  </select>
-                  <input id="oh-mat-stock" type="number" min="0" step="0.1" data-i18n-placeholder="orders.mat.stock" placeholder="Bestand" />
-                </div>
-                <div style="display: flex; gap: 6px; margin-top: 8px">
-                  <button class="btn btn-p btn-sm" data-action="oh-mat-save" data-i18n="common.save">Speichern</button>
-                  <button class="btn btn-sm" data-action="oh-mat-cancel" data-i18n="common.cancel">Abbrechen</button>
-                  <button
-                    class="btn btn-sm"
-                    data-action="oh-mat-delete"
-                    id="oh-mat-delete"
-                    style="display: none; margin-left: auto; color: var(--c-red-dark)"
-                    data-i18n="common.delete"
-                  >
-                    Löschen
-                  </button>
-                </div>
+              <div class="sec" data-i18n="orders.rawStock">Lager — Rohstoffe</div>
+              <div class="muted" style="font-size: 12px; margin-bottom: 8px" data-i18n="orders.rawStockHint">
+                Bestände aus dem zentralen Lager. Hier gesetzt wirkt überall (Chargen + Bedarf).
               </div>
               <div style="overflow-x: auto">
-                <table id="t-materials">
+                <table id="t-rawstock">
                   <thead>
                     <tr>
                       <th data-i18n="orders.mat.name">Material</th>
-                      <th data-i18n="orders.mat.unit">Einheit</th>
-                      <th data-i18n="orders.mat.stock">Bestand</th>
+                      <th data-i18n="orders.rawStockKg">Bestand (kg)</th>
                       <th></th>
                     </tr>
                   </thead>
-                  <tbody id="orders-mat-body"></tbody>
+                  <tbody id="orders-rawstock-body"></tbody>
                 </table>
               </div>
             </div>

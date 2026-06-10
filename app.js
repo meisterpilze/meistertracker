@@ -1015,7 +1015,9 @@ function _renderOrdersInbox() {
 
 function setOrdersFilter(f) {
   _ordersFilter = f;
-  document.querySelectorAll('#sp-orders-inbox .oh-fchip').forEach((c) => c.classList.toggle('active', (c.dataset.filter || '') === f));
+  document
+    .querySelectorAll('#sp-orders-inbox .oh-fchip')
+    .forEach((c) => c.classList.toggle('active', (c.dataset.filter || '') === f));
   _renderOrdersInbox();
 }
 
@@ -1037,7 +1039,7 @@ function renderOrdersDemand() {
                 .map(
                   (c) =>
                     `<span style="display:inline-block;margin-right:10px;${c.short > 0 ? 'color:var(--c-red-dark);font-weight:600' : 'color:var(--c-text-muted)'}">` +
-                    `${esc(c.materialName)} ${_ohN(c.need)}${esc(c.unit || '')}${c.short > 0 ? ' (−' + _ohN(c.short) + ')' : ' ✓'}</span>`
+                    `${esc(_ohMatName(c.mat))} ${_ohN(c.need)}${esc(c.unit || '')}${c.short > 0 ? ' (−' + _ohN(c.short) + ')' : ' ✓'}</span>`
                 )
                 .join('')
             : '<span class="muted">—</span>';
@@ -1062,7 +1064,7 @@ function renderOrdersDemand() {
 }
 
 function renderOrdersMapping() {
-  _ohLoadMaterials();
+  renderInventoryCard();
   const left = $('orders-unmapped-list');
   if (!left) return;
   Promise.all([apiGet('/api/products/unmapped'), apiGet('/api/products')])
@@ -1115,11 +1117,7 @@ function renderOrdersCustomers() {
       }
       body.innerHTML = rows
         .map((c) => {
-          const chans = (c.channels || '')
-            .split(',')
-            .filter(Boolean)
-            .map(_ohChannel)
-            .join(' ');
+          const chans = (c.channels || '').split(',').filter(Boolean).map(_ohChannel).join(' ');
           const ltv = c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00';
           return (
             `<tr><td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
@@ -1182,26 +1180,28 @@ function ordersActionHandler(e) {
     apiGet('/api/products/' + btn.dataset.id)
       .then((p) => _ohProductForm(p))
       .catch(() => setFb('err', t('common.error')));
-  } else if (action === 'oh-comp-add') {
-    _ohAddComponentRow();
-  } else if (action === 'oh-comp-del') {
-    const row = btn.closest('.oh-comp-row');
-    if (row) row.remove();
   } else if (action === 'oh-prod-save') {
     _ohProductSave();
   } else if (action === 'oh-prod-delete') {
     _ohProductDelete();
-  } else if (action === 'oh-mat-new') {
-    _ohMatForm(null);
-  } else if (action === 'oh-mat-edit') {
-    _ohMatForm((_ohMaterials || []).find((x) => String(x.id) === btn.dataset.id));
-  } else if (action === 'oh-mat-cancel') {
-    const f = $('orders-mat-form');
-    if (f) f.style.display = 'none';
-  } else if (action === 'oh-mat-save') {
-    _ohMatSave();
-  } else if (action === 'oh-mat-delete') {
-    _ohMatDelete();
+  } else if (action === 'oh-inv-set') {
+    const row = btn.closest('tr');
+    const inp = row && row.querySelector('.oh-inv-input');
+    if (!inp) return;
+    const val = parseFloat(inp.value);
+    if (!(val >= 0)) {
+      setFb('err', t('orders.invBadValue'));
+      return;
+    }
+    invSetAbsolute(btn.dataset.mat, val, 'manual', 'order-hub').then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.invSaved'));
+      if (inventory && inventory.stock) inventory.stock[btn.dataset.mat] = val;
+      renderInventoryCard();
+    });
   }
 }
 
@@ -1319,25 +1319,85 @@ function _ordersImportCsv(file) {
 }
 
 // ── Product catalog editor ──
-function _ohCompRow(c) {
-  c = c || {};
-  const opts = (_ohMaterials || [])
-    .map(
-      (m) =>
-        `<option value="${m.id}"${c.materialId === m.id ? ' selected' : ''}>${esc(m.name)}${m.unit ? ' (' + esc(m.unit) + ')' : ''}</option>`
-    )
-    .join('');
-  return (
-    `<div class="oh-comp-row" style="grid-template-columns:1fr 0.6fr auto">` +
-    `<select class="ohc-material"><option value="">— ${esc(t('orders.comp.material'))} —</option>${opts}</select>` +
-    `<input class="ohc-qty" type="number" min="0" step="0.1" placeholder="${esc(t('orders.comp.qty'))}" value="${c.qtyPerUnit != null ? c.qtyPerUnit : 1}" />` +
-    `<button class="btn btn-sm" data-action="oh-comp-del">✕</button></div>`
-  );
+const _OH_MAT_KEY = {
+  grain: 'inv.grain',
+  hardwood: 'inv.hardwood',
+  wheatbran: 'inv.wheatBran',
+  gypsum: 'inv.gypsum',
+  coir: 'inv.coir'
+};
+function _ohMatName(mat) {
+  return t(_OH_MAT_KEY[mat] || mat);
 }
-function _ohAddComponentRow(c) {
-  const cont = $('oh-p-components');
-  if (cont) cont.insertAdjacentHTML('beforeend', _ohCompRow(c));
+function _ohN(x) {
+  return Math.round((x || 0) * 100) / 100;
 }
+
+// Per-unit raw-material need (dry kg) — mirrors db.computeProductMaterialNeed
+// so the editor preview matches the demand board exactly.
+function _ohProdNeedCompute(spec) {
+  const need = { grain: 0, hardwood: 0, wheatbran: 0, gypsum: 0, coir: 0 };
+  const num = (v) => (isFinite(+v) ? +v : 0);
+  const type = spec.prodType || 'buy';
+  if (type === 'block' || type === 'allinone') {
+    const bagKg = num(spec.prodBagKg);
+    const rh = num(spec.prodRhPct);
+    const dry = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    if ((spec.prodSubstrate || 'holzkleie') === 'cvg') {
+      need.coir += dry * ((num(spec.prodCoirPct) || 100) / 100);
+    } else {
+      need.hardwood += dry * (num(spec.prodHardwoodPct) / 100);
+      need.wheatbran += dry * (num(spec.prodWheatbranPct) / 100);
+    }
+    if (spec.prodGypsum) need.gypsum += dry * 0.01;
+  }
+  if (type === 'grain' || type === 'allinone') {
+    const gKg = num(spec.prodGrainKg);
+    const gRh = spec.prodGrainRhPct != null && spec.prodGrainRhPct !== '' ? num(spec.prodGrainRhPct) : 52;
+    need.grain += gRh > 0 ? gKg * (1 - gRh / 100) : gKg;
+  }
+  return need;
+}
+
+function _ohReadProdForm() {
+  return {
+    prodType: $('oh-p-prodtype').value || 'buy',
+    prodSubstrate: $('oh-p-substrate').value || 'holzkleie',
+    prodBagKg: $('oh-p-bagkg').value,
+    prodRhPct: $('oh-p-rh').value,
+    prodHardwoodPct: $('oh-p-hw').value,
+    prodWheatbranPct: $('oh-p-wb').value,
+    prodCoirPct: $('oh-p-coir').value,
+    prodGypsum: $('oh-p-gyp').checked ? 1 : 0,
+    prodGrainKg: $('oh-p-grainkg').value,
+    prodGrainRhPct: $('oh-p-grainrh').value
+  };
+}
+
+function _ohProdTypeChange() {
+  const type = $('oh-p-prodtype').value || 'buy';
+  const sub = $('oh-p-substrate').value || 'holzkleie';
+  const set = (id, disp) => {
+    const el = $(id);
+    if (el) el.style.display = disp;
+  };
+  set('oh-p-subgroup', type === 'block' || type === 'allinone' ? 'block' : 'none');
+  set('oh-p-graingroup', type === 'grain' || type === 'allinone' ? 'block' : 'none');
+  set('oh-p-holzgroup', sub === 'holzkleie' ? 'grid' : 'none');
+  set('oh-p-coirgroup', sub === 'cvg' ? 'grid' : 'none');
+  _ohProdNeed();
+}
+
+function _ohProdNeed() {
+  const el = $('oh-p-need');
+  if (!el) return;
+  const need = _ohProdNeedCompute(_ohReadProdForm());
+  const parts = Object.keys(need)
+    .filter((m) => need[m] > 0)
+    .map((m) => `${esc(_ohMatName(m))} ${_ohN(need[m])} kg`);
+  el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+}
+
 function _ohProductForm(p) {
   const f = $('orders-prod-form');
   if (!f) return;
@@ -1348,26 +1408,31 @@ function _ohProductForm(p) {
   $('oh-p-category').value = p ? p.category || 'all-in-one' : 'all-in-one';
   $('oh-p-stock').value = p && p.stock != null ? p.stock : 0;
   $('oh-p-lead').value = p && p.leadDays != null ? p.leadDays : 0;
-  $('oh-p-producible').checked = p ? p.producible !== 0 : true;
-  const cont = $('oh-p-components');
-  if (cont) cont.innerHTML = '';
-  const bom = p && p.bom && p.bom.length ? p.bom : [{}];
-  bom.forEach((c) => _ohAddComponentRow(c));
+  $('oh-p-prodtype').value = (p && p.prodType) || 'buy';
+  $('oh-p-substrate').value = (p && p.prodSubstrate) || 'holzkleie';
+  $('oh-p-bagkg').value = p && p.prodBagKg != null ? p.prodBagKg : 0;
+  $('oh-p-rh').value = p && p.prodRhPct != null ? p.prodRhPct : 0;
+  $('oh-p-hw').value = p && p.prodHardwoodPct != null ? p.prodHardwoodPct : 0;
+  $('oh-p-wb').value = p && p.prodWheatbranPct != null ? p.prodWheatbranPct : 0;
+  $('oh-p-coir').value = p && p.prodCoirPct != null ? p.prodCoirPct : 100;
+  $('oh-p-gyp').checked = !!(p && p.prodGypsum);
+  $('oh-p-grainkg').value = p && p.prodGrainKg != null ? p.prodGrainKg : 0;
+  $('oh-p-grainrh').value = p && p.prodGrainRhPct != null ? p.prodGrainRhPct : 52;
+  $('oh-p-prodtype').onchange = _ohProdTypeChange;
+  $('oh-p-substrate').onchange = _ohProdTypeChange;
+  f.oninput = _ohProdNeed;
+  _ohProdTypeChange();
   const del = $('oh-p-delete');
   if (del) del.style.display = p && p.id ? 'inline-flex' : 'none';
 }
+
 function _ohProductSave() {
   const name = ($('oh-p-name').value || '').trim();
   if (!name) {
     setFb('err', t('orders.needName'));
     return;
   }
-  const bom = [...document.querySelectorAll('#oh-p-components .oh-comp-row')]
-    .map((row) => ({
-      materialId: parseInt(row.querySelector('.ohc-material').value, 10) || null,
-      qtyPerUnit: parseFloat(row.querySelector('.ohc-qty').value) || 1
-    }))
-    .filter((c) => c.materialId);
+  const spec = _ohReadProdForm();
   const id = $('oh-p-id').value;
   const payload = {
     name,
@@ -1375,8 +1440,16 @@ function _ohProductSave() {
     category: $('oh-p-category').value || null,
     stock: parseFloat($('oh-p-stock').value) || 0,
     leadDays: parseInt($('oh-p-lead').value, 10) || 0,
-    producible: $('oh-p-producible').checked ? 1 : 0,
-    bom
+    prodType: spec.prodType,
+    prodSubstrate: spec.prodSubstrate,
+    prodBagKg: parseFloat(spec.prodBagKg) || 0,
+    prodRhPct: parseFloat(spec.prodRhPct) || 0,
+    prodHardwoodPct: parseFloat(spec.prodHardwoodPct) || 0,
+    prodWheatbranPct: parseFloat(spec.prodWheatbranPct) || 0,
+    prodCoirPct: parseFloat(spec.prodCoirPct) || 0,
+    prodGypsum: spec.prodGypsum,
+    prodGrainKg: parseFloat(spec.prodGrainKg) || 0,
+    prodGrainRhPct: parseFloat(spec.prodGrainRhPct) || 52
   };
   const req = id ? apiPatch('/api/products/' + id, payload) : apiPost('/api/products', payload);
   req.then((r) => {
@@ -1391,77 +1464,26 @@ function _ohProductSave() {
   });
 }
 
-// ── Materials / stock (BOM components) ──
-let _ohMaterials = [];
-function _ohN(x) {
-  return Math.round((x || 0) * 100) / 100;
-}
-function _ohLoadMaterials() {
-  apiGet('/api/materials')
-    .then((d) => {
-      _ohMaterials = d.items || [];
-      renderMaterialsCard();
-    })
-    .catch(() => {});
-}
-function renderMaterialsCard() {
-  const body = $('orders-mat-body');
+// ── Raw-material inventory (shared ledger) ──
+function renderInventoryCard() {
+  const body = $('orders-rawstock-body');
   if (!body) return;
-  body.innerHTML = _ohMaterials.length
-    ? _ohMaterials
-        .map(
-          (m) =>
-            `<tr><td><strong>${esc(m.name)}</strong></td><td>${esc(m.unit || '')}</td>` +
-            `<td>${_ohN(m.stock)}${m.threshold && m.stock <= m.threshold ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
-            `<td><button class="btn btn-sm" data-action="oh-mat-edit" data-id="${m.id}">${esc(t('orders.edit'))}</button></td></tr>`
-        )
-        .join('')
-    : _ohEmpty(4, '—');
-}
-function _ohMatForm(m) {
-  const f = $('orders-mat-form');
-  if (!f) return;
-  f.style.display = 'block';
-  $('oh-mat-id').value = m && m.id ? m.id : '';
-  $('oh-mat-name').value = m ? m.name || '' : '';
-  $('oh-mat-unit').value = m ? m.unit || 'Stk' : 'Stk';
-  $('oh-mat-stock').value = m && m.stock != null ? m.stock : 0;
-  const del = $('oh-mat-delete');
-  if (del) del.style.display = m && m.id ? 'inline-flex' : 'none';
-}
-function _ohMatSave() {
-  const name = ($('oh-mat-name').value || '').trim();
-  if (!name) {
-    setFb('err', t('orders.needMatName'));
-    return;
-  }
-  const id = $('oh-mat-id').value;
-  const payload = { name, unit: $('oh-mat-unit').value || 'Stk', stock: parseFloat($('oh-mat-stock').value) || 0 };
-  const req = id ? apiPatch('/api/materials/' + id, payload) : apiPost('/api/materials', payload);
-  req.then((r) => {
-    if (r && r.error) {
-      setFb('err', r.error);
-      return;
-    }
-    setFb('ok', t('orders.matSaved'));
-    const f = $('orders-mat-form');
-    if (f) f.style.display = 'none';
-    _ohLoadMaterials();
-  });
-}
-function _ohMatDelete() {
-  const id = $('oh-mat-id').value;
-  if (!id) return;
-  apiDelete('/api/materials/' + id).then((r) => {
-    if (r && r.error) {
-      setFb('err', r.error);
-      return;
-    }
-    setFb('ok', t('orders.matDeleted'));
-    const f = $('orders-mat-form');
-    if (f) f.style.display = 'none';
-    _ohLoadMaterials();
-  });
+  const stock = (inventory && inventory.stock) || {};
+  const thr = (inventory && inventory.thresholds) || {};
+  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir'];
+  body.innerHTML = mats
+    .map((m) => {
+      const have = stock[m] || 0;
+      const min = (thr[m] && thr[m].minKg) || 0;
+      const low = min > 0 && have <= min;
+      return (
+        `<tr><td><strong>${esc(_ohMatName(m))}</strong></td>` +
+        `<td>${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
+        `<td style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
+        `<button class="btn btn-sm" data-action="oh-inv-set" data-mat="${m}">${esc(t('orders.set'))}</button></td></tr>`
+      );
+    })
+    .join('');
 }
 function _ohProductDelete() {
   const id = $('oh-p-id').value;
@@ -5821,16 +5843,19 @@ function renderCameraFlags(flags) {
   const el = document.getElementById('cam-flags');
   if (!el) return;
   if (!flags || ((!flags.harvest || !flags.harvest.length) && (!flags.fruiting || !flags.fruiting.length))) {
-    el.innerHTML =
-      '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
+    el.innerHTML = '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
     return;
   }
   const row = (kind, f) => {
     const ago = f.flaggedAt ? new Date(f.flaggedAt).toLocaleString(loc()) : '—';
     const extra =
       kind === 'harvest'
-        ? (f.predictedHarvestAt ? esc(t('cam.predicted')) + ': ' + new Date(f.predictedHarvestAt).toLocaleString(loc()) : '')
-        : (f.peakScore != null ? esc(t('cam.peakScore')) + ': ' + Number(f.peakScore).toFixed(2) : '');
+        ? f.predictedHarvestAt
+          ? esc(t('cam.predicted')) + ': ' + new Date(f.predictedHarvestAt).toLocaleString(loc())
+          : ''
+        : f.peakScore != null
+          ? esc(t('cam.peakScore')) + ': ' + Number(f.peakScore).toFixed(2)
+          : '';
     return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--c-border)">
         <div style="flex:1;min-width:180px">
           <div><b>${esc(f.bagId)}</b> <span style="color:var(--c-text-muted)">${esc(f.batchId || '')}</span></div>
@@ -5842,12 +5867,16 @@ function renderCameraFlags(flags) {
   let html = '';
   if (flags.harvest && flags.harvest.length) {
     html +=
-      '<div style="font-weight:600;margin-bottom:4px">' + esc(t('cam.harvestFlags')) + '</div>' +
+      '<div style="font-weight:600;margin-bottom:4px">' +
+      esc(t('cam.harvestFlags')) +
+      '</div>' +
       flags.harvest.map((f) => row('harvest', f)).join('');
   }
   if (flags.fruiting && flags.fruiting.length) {
     html +=
-      '<div style="font-weight:600;margin:10px 0 4px">' + esc(t('cam.fruitingFlags')) + '</div>' +
+      '<div style="font-weight:600;margin:10px 0 4px">' +
+      esc(t('cam.fruitingFlags')) +
+      '</div>' +
       flags.fruiting.map((f) => row('fruiting', f)).join('');
   }
   el.innerHTML = html;
@@ -5870,8 +5899,7 @@ function renderCameraRecent(rows) {
   const el = document.getElementById('cam-recent');
   if (!el) return;
   if (!rows.length) {
-    el.innerHTML =
-      '<div style="color:var(--c-text-muted)">' + esc(t('cam.noRecent')) + '</div>';
+    el.innerHTML = '<div style="color:var(--c-text-muted)">' + esc(t('cam.noRecent')) + '</div>';
     return;
   }
   const head = `<thead><tr>
@@ -5946,7 +5974,7 @@ async function saveCameraEdit() {
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      document.getElementById('cam-edit-status').textContent = err.error || ('HTTP ' + r.status);
+      document.getElementById('cam-edit-status').textContent = err.error || 'HTTP ' + r.status;
       return;
     }
     closeCameraEdit();
@@ -6074,8 +6102,9 @@ function initCameraPxCalib() {
     if (inp) {
       inp.value = ratio.toFixed(3);
       inp.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      document.getElementById('cam-calib-status').textContent =
-        t('cam.calibratedFromImage', { ratio: ratio.toFixed(3) });
+      document.getElementById('cam-calib-status').textContent = t('cam.calibratedFromImage', {
+        ratio: ratio.toFixed(3)
+      });
     }
   });
 }
@@ -8006,8 +8035,7 @@ function renderAssets() {
   // Table
   const body = document.getElementById('assets-body');
   if (!rows.length) {
-    body.innerHTML =
-      '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
     return;
   }
   body.innerHTML = rows
@@ -11594,9 +11622,10 @@ function newScanUuid() {
   // Fallback: 16 random bytes formatted as UUID v4. Not cryptographically
   // strong, but the only consumer is the unique index; sufficient for dedup.
   const r = Math.random;
-  const hex = (n) => Math.floor(r() * 16 ** n)
-    .toString(16)
-    .padStart(n, '0');
+  const hex = (n) =>
+    Math.floor(r() * 16 ** n)
+      .toString(16)
+      .padStart(n, '0');
   return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(r() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
 }
 
