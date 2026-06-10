@@ -1,7 +1,14 @@
 // Cache version — bump this when deploying new static assets
-// The SW uses network-first so cached assets only serve as offline fallback.
-// Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meistertracker-v24';
+// Prod uses stale-while-revalidate (instant nav + offline fallback); the
+// worktree/test instance (port 3001) is forced network-first below so code
+// changes always show on reload. Bumping this version evicts the old cache.
+const CACHE = 'meistertracker-v25';
+
+// Test/worktree instance detection. The worktree server runs on port 3001
+// (prod is 3000 / 443). On the worktree we never serve static assets from
+// cache — otherwise a code change requires SW-unregister gymnastics to show
+// up. self.location is the SW script URL, so .port is reliable here.
+const IS_WORKTREE = self.location.port === '3001';
 const ASSETS = [
   '/',
   '/styles.css',
@@ -316,6 +323,14 @@ self.addEventListener('fetch', (e) => {
         () => new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
       )
     );
+    return;
+  }
+  // Worktree/test instance: network-first for every non-API request so a code
+  // change always shows up on a plain reload. Falls back to cache only when
+  // truly offline (localhost rarely is). Prod keeps stale-while-revalidate
+  // below for fast navigation + offline PWA use.
+  if (IS_WORKTREE) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
   // Login page: network only — never serve stale login form from cache
