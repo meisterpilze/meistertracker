@@ -1417,6 +1417,17 @@ body.has-worktree-banner .mobile-topbar {
   color: var(--c-amber-dark);
   cursor: help;
 }
+.oh-comp-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 1fr 0.8fr 0.6fr auto;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.oh-comp-row input,
+.oh-comp-row select {
+  font-size: 12px;
+}
 
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
