@@ -1,7 +1,9 @@
 // Cache version — bump this when deploying new static assets
-// The SW uses network-first so cached assets only serve as offline fallback.
-// Changing this version forces the old cache to be evicted on activation.
-const CACHE = 'meistertracker-v22';
+// The SW is stale-while-revalidate: cached assets serve instantly, then a
+// background fetch refreshes them. Changing this version forces the old cache
+// to be evicted on activation — also the recovery path if a cache entry ever
+// got poisoned (see the res.redirected guards in install + fetch below).
+const CACHE = 'meistertracker-v23';
 const ASSETS = [
   '/',
   '/styles.css',
@@ -240,10 +242,28 @@ function notifyClients() {
 // ── Service Worker lifecycle ────────────────────────────────
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.addAll(ASSETS))
-      .catch(() => {})
+    caches.open(CACHE).then((cache) =>
+      // Precache each asset independently rather than via the atomic
+      // cache.addAll(): one missing asset (e.g. a 404 icon) shouldn't drop the
+      // whole set. Critically, skip any response that came via a redirect.
+      // The app shell (/, /app.js, /styles.css, /lang/de.js) sits behind the
+      // session auth gate; if install runs while the session is invalid those
+      // requests 302 to /login.html, which fetch() transparently follows to a
+      // 200. Caching that login HTML under an asset key poisons the cache —
+      // the browser then parses the login page as CSS (unstyled UI) and as a
+      // script (i18n dictionary never loads → raw keys like dash.zoneTent1).
+      // res.redirected is true for exactly that followed-302 case, so it's the
+      // precise guard. A poisoned entry only clears on a CACHE version bump.
+      Promise.all(
+        ASSETS.map((url) =>
+          fetch(url, { credentials: 'same-origin' })
+            .then((res) => {
+              if (res.ok && !res.redirected) return cache.put(url, res);
+            })
+            .catch(() => {})
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -332,7 +352,12 @@ self.addEventListener('fetch', (e) => {
     caches.match(e.request).then((cached) => {
       const networked = fetch(e.request)
         .then((res) => {
-          if (res && res.ok) {
+          // !res.redirected: never overwrite a real asset with a followed
+          // auth redirect. When the session lapses, an asset fetch 302s to
+          // /login.html and fetch() follows it to a 200 — caching that under
+          // the asset key would serve login HTML as CSS/JS (unstyled UI +
+          // untranslated i18n keys) until the next CACHE bump.
+          if (res && res.ok && !res.redirected) {
             const clone = res.clone();
             caches.open(CACHE).then((c) => c.put(e.request, clone));
           }
