@@ -1022,7 +1022,7 @@ function setOrdersFilter(f) {
 function renderOrdersDemand() {
   const body = $('demand-body');
   if (!body) return;
-  body.innerHTML = _ohEmpty(5, t('common.loading'));
+  body.innerHTML = _ohEmpty(6, t('common.loading'));
   apiGet('/api/orders/demand')
     .then((d) => {
       const rows = d.items || [];
@@ -1031,13 +1031,29 @@ function renderOrdersDemand() {
         return;
       }
       body.innerHTML = rows
-        .map(
-          (r) =>
-            `<tr><td><strong>${esc(r.species || '—')}</strong> ${esc(r.strain || '')} ` +
-            `<span class="muted" style="font-size:11px">${esc(r.batchType || '')}</span></td>` +
-            `<td>${r.gross}</td><td>${r.reserved}</td><td><strong>${r.netToStart}</strong></td>` +
-            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td></tr>`
-        )
+        .map((r) => {
+          const comps = (r.components || []).length
+            ? r.components
+                .map(
+                  (c) =>
+                    `<span style="display:inline-block;margin-right:10px;${c.short > 0 ? 'color:var(--c-red-dark);font-weight:600' : 'color:var(--c-text-muted)'}">` +
+                    `${esc(c.materialName)} ${_ohN(c.need)}${esc(c.unit || '')}${c.short > 0 ? ' (−' + _ohN(c.short) + ')' : ' ✓'}</span>`
+                )
+                .join('')
+            : '<span class="muted">—</span>';
+          const produce =
+            r.toProduce > 0
+              ? `<strong>${r.toProduce}</strong>${r.componentsShort ? ` <span class="oh-warn" title="${esc(t('orders.componentsShort'))}">⚠︎</span>` : ''}`
+              : r.backorder > 0
+                ? `<span class="oh-st oh-st-cancelled">${r.backorder} ${esc(t('orders.backorder'))}</span>`
+                : '<span class="muted">0</span>';
+          return (
+            `<tr><td><strong>${esc(r.product)}</strong> <span class="muted" style="font-size:11px">${esc(r.category || '')}</span></td>` +
+            `<td>${r.demand}</td><td>${r.fromStock}</td><td>${produce}</td>` +
+            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td>` +
+            `<td style="font-size:11px">${comps}</td></tr>`
+          );
+        })
         .join('');
     })
     .catch(() => {
@@ -1046,6 +1062,7 @@ function renderOrdersDemand() {
 }
 
 function renderOrdersMapping() {
+  _ohLoadMaterials();
   const left = $('orders-unmapped-list');
   if (!left) return;
   Promise.all([apiGet('/api/products/unmapped'), apiGet('/api/products')])
@@ -1174,6 +1191,17 @@ function ordersActionHandler(e) {
     _ohProductSave();
   } else if (action === 'oh-prod-delete') {
     _ohProductDelete();
+  } else if (action === 'oh-mat-new') {
+    _ohMatForm(null);
+  } else if (action === 'oh-mat-edit') {
+    _ohMatForm((_ohMaterials || []).find((x) => String(x.id) === btn.dataset.id));
+  } else if (action === 'oh-mat-cancel') {
+    const f = $('orders-mat-form');
+    if (f) f.style.display = 'none';
+  } else if (action === 'oh-mat-save') {
+    _ohMatSave();
+  } else if (action === 'oh-mat-delete') {
+    _ohMatDelete();
   }
 }
 
@@ -1293,18 +1321,16 @@ function _ordersImportCsv(file) {
 // ── Product catalog editor ──
 function _ohCompRow(c) {
   c = c || {};
-  const sel = (cls, opts, val) =>
-    `<select class="${cls}">` +
-    opts.map((o) => `<option value="${o[0]}"${val === o[0] ? ' selected' : ''}>${esc(o[1])}</option>`).join('') +
-    '</select>';
+  const opts = (_ohMaterials || [])
+    .map(
+      (m) =>
+        `<option value="${m.id}"${c.materialId === m.id ? ' selected' : ''}>${esc(m.name)}${m.unit ? ' (' + esc(m.unit) + ')' : ''}</option>`
+    )
+    .join('');
   return (
-    `<div class="oh-comp-row">` +
-    sel('ohc-fulfill', [['produce', t('orders.comp.produce')], ['stock', t('orders.comp.stock')]], c.fulfillType || 'produce') +
-    sel('ohc-batchtype', [['block', t('orders.comp.block')], ['grain', t('orders.comp.grain')]], c.batchType || 'block') +
-    `<input class="ohc-species" placeholder="${esc(t('orders.comp.species'))}" value="${esc(c.species || '')}" />` +
-    `<input class="ohc-strain" placeholder="${esc(t('orders.comp.strain'))}" value="${esc(c.strain || '')}" />` +
-    `<input class="ohc-lead" type="number" min="0" placeholder="${esc(t('orders.comp.lead'))}" value="${c.leadDays != null ? c.leadDays : ''}" />` +
-    `<input class="ohc-qty" type="number" min="0" step="0.5" value="${c.qtyPerUnit != null ? c.qtyPerUnit : 1}" />` +
+    `<div class="oh-comp-row" style="grid-template-columns:1fr 0.6fr auto">` +
+    `<select class="ohc-material"><option value="">— ${esc(t('orders.comp.material'))} —</option>${opts}</select>` +
+    `<input class="ohc-qty" type="number" min="0" step="0.1" placeholder="${esc(t('orders.comp.qty'))}" value="${c.qtyPerUnit != null ? c.qtyPerUnit : 1}" />` +
     `<button class="btn btn-sm" data-action="oh-comp-del">✕</button></div>`
   );
 }
@@ -1319,12 +1345,14 @@ function _ohProductForm(p) {
   $('oh-p-id').value = p && p.id ? p.id : '';
   $('oh-p-name').value = p ? p.name || '' : '';
   $('oh-p-sku').value = p ? p.sku || '' : '';
-  $('oh-p-category').value = p ? p.category || 'growkit' : 'growkit';
-  $('oh-p-species').value = p ? p.species || '' : '';
+  $('oh-p-category').value = p ? p.category || 'all-in-one' : 'all-in-one';
+  $('oh-p-stock').value = p && p.stock != null ? p.stock : 0;
+  $('oh-p-lead').value = p && p.leadDays != null ? p.leadDays : 0;
+  $('oh-p-producible').checked = p ? p.producible !== 0 : true;
   const cont = $('oh-p-components');
   if (cont) cont.innerHTML = '';
-  const comps = p && p.components && p.components.length ? p.components : [{}];
-  comps.forEach((c) => _ohAddComponentRow(c));
+  const bom = p && p.bom && p.bom.length ? p.bom : [{}];
+  bom.forEach((c) => _ohAddComponentRow(c));
   const del = $('oh-p-delete');
   if (del) del.style.display = p && p.id ? 'inline-flex' : 'none';
 }
@@ -1334,21 +1362,21 @@ function _ohProductSave() {
     setFb('err', t('orders.needName'));
     return;
   }
-  const components = [...document.querySelectorAll('#oh-p-components .oh-comp-row')].map((row) => ({
-    fulfillType: row.querySelector('.ohc-fulfill').value,
-    batchType: row.querySelector('.ohc-batchtype').value,
-    species: (row.querySelector('.ohc-species').value || '').trim() || null,
-    strain: (row.querySelector('.ohc-strain').value || '').trim() || null,
-    leadDays: parseInt(row.querySelector('.ohc-lead').value, 10) || 0,
-    qtyPerUnit: parseFloat(row.querySelector('.ohc-qty').value) || 1
-  }));
+  const bom = [...document.querySelectorAll('#oh-p-components .oh-comp-row')]
+    .map((row) => ({
+      materialId: parseInt(row.querySelector('.ohc-material').value, 10) || null,
+      qtyPerUnit: parseFloat(row.querySelector('.ohc-qty').value) || 1
+    }))
+    .filter((c) => c.materialId);
   const id = $('oh-p-id').value;
   const payload = {
     name,
     sku: ($('oh-p-sku').value || '').trim() || null,
     category: $('oh-p-category').value || null,
-    species: ($('oh-p-species').value || '').trim() || null,
-    components
+    stock: parseFloat($('oh-p-stock').value) || 0,
+    leadDays: parseInt($('oh-p-lead').value, 10) || 0,
+    producible: $('oh-p-producible').checked ? 1 : 0,
+    bom
   };
   const req = id ? apiPatch('/api/products/' + id, payload) : apiPost('/api/products', payload);
   req.then((r) => {
@@ -1360,6 +1388,79 @@ function _ohProductSave() {
     const f = $('orders-prod-form');
     if (f) f.style.display = 'none';
     renderOrdersMapping();
+  });
+}
+
+// ── Materials / stock (BOM components) ──
+let _ohMaterials = [];
+function _ohN(x) {
+  return Math.round((x || 0) * 100) / 100;
+}
+function _ohLoadMaterials() {
+  apiGet('/api/materials')
+    .then((d) => {
+      _ohMaterials = d.items || [];
+      renderMaterialsCard();
+    })
+    .catch(() => {});
+}
+function renderMaterialsCard() {
+  const body = $('orders-mat-body');
+  if (!body) return;
+  body.innerHTML = _ohMaterials.length
+    ? _ohMaterials
+        .map(
+          (m) =>
+            `<tr><td><strong>${esc(m.name)}</strong></td><td>${esc(m.unit || '')}</td>` +
+            `<td>${_ohN(m.stock)}${m.threshold && m.stock <= m.threshold ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
+            `<td><button class="btn btn-sm" data-action="oh-mat-edit" data-id="${m.id}">${esc(t('orders.edit'))}</button></td></tr>`
+        )
+        .join('')
+    : _ohEmpty(4, '—');
+}
+function _ohMatForm(m) {
+  const f = $('orders-mat-form');
+  if (!f) return;
+  f.style.display = 'block';
+  $('oh-mat-id').value = m && m.id ? m.id : '';
+  $('oh-mat-name').value = m ? m.name || '' : '';
+  $('oh-mat-unit').value = m ? m.unit || 'Stk' : 'Stk';
+  $('oh-mat-stock').value = m && m.stock != null ? m.stock : 0;
+  const del = $('oh-mat-delete');
+  if (del) del.style.display = m && m.id ? 'inline-flex' : 'none';
+}
+function _ohMatSave() {
+  const name = ($('oh-mat-name').value || '').trim();
+  if (!name) {
+    setFb('err', t('orders.needMatName'));
+    return;
+  }
+  const id = $('oh-mat-id').value;
+  const payload = { name, unit: $('oh-mat-unit').value || 'Stk', stock: parseFloat($('oh-mat-stock').value) || 0 };
+  const req = id ? apiPatch('/api/materials/' + id, payload) : apiPost('/api/materials', payload);
+  req.then((r) => {
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('orders.matSaved'));
+    const f = $('orders-mat-form');
+    if (f) f.style.display = 'none';
+    _ohLoadMaterials();
+  });
+}
+function _ohMatDelete() {
+  const id = $('oh-mat-id').value;
+  if (!id) return;
+  apiDelete('/api/materials/' + id).then((r) => {
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('orders.matDeleted'));
+    const f = $('orders-mat-form');
+    if (f) f.style.display = 'none';
+    _ohLoadMaterials();
   });
 }
 function _ohProductDelete() {
