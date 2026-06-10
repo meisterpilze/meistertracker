@@ -1,8 +1,6 @@
 // Cache version — bump this when deploying new static assets
-// The SW is stale-while-revalidate: cached assets serve instantly, then a
-// background fetch refreshes them. Changing this version forces the old cache
-// to be evicted on activation — also the recovery path if a cache entry ever
-// got poisoned (see the res.redirected guards in install + fetch below).
+// The SW uses network-first so cached assets only serve as offline fallback.
+// Changing this version forces the old cache to be evicted on activation.
 const CACHE = 'meistertracker-v23';
 const ASSETS = [
   '/',
