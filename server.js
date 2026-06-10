@@ -6403,6 +6403,267 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Order hub (Phase 0): orders, products, demand, customers ──────────────
+  // Auth is enforced by the global gate above (req.authUser is always set here).
+  // Operational reads/writes = any authed user; catalog/mapping/merge = admin.
+
+  // Orders — list (?status= &channel= &limit=)
+  if (req.method === 'GET' && url === '/api/orders') {
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, {
+        items: db.listOrders(database, {
+          status: params.get('status') || undefined,
+          channel: params.get('channel') || undefined,
+          limit: parseInt(params.get('limit'), 10) || 200
+        })
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Orders — production-demand rollup (must precede /api/orders/:id)
+  if (req.method === 'GET' && url === '/api/orders/demand') {
+    try {
+      jsonOk(res, { items: db.computeProductionDemand(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Orders — manual / CSV import (single object, or {orders:[...]}, or [...])
+  if (req.method === 'POST' && url === '/api/orders/import') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const incoming = Array.isArray(data) ? data : Array.isArray(data && data.orders) ? data.orders : [data];
+        const ids = [];
+        for (const o of incoming) {
+          if (!o || !o.channel || o.channelOrderId == null) {
+            jsonErr(res, 400, 'each order needs channel + channelOrderId');
+            return;
+          }
+          ids.push(db.upsertOrder(database, o));
+        }
+        broadcastSSE(res);
+        jsonOk(res, { imported: ids.length, ids });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Orders — reserve demand against a batch ({batchId, allocations:[{orderItemId, qty}]})
+  if (req.method === 'POST' && url === '/api/orders/reserve') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.reserveDemand(database, { batchId: data.batchId || null, allocations: data.allocations || [] });
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Orders — detail / set status
+  const orderMatch = url.match(/^\/api\/orders\/(\d+)$/);
+  if (req.method === 'GET' && orderMatch) {
+    try {
+      const o = db.getOrder(database, parseInt(orderMatch[1], 10));
+      if (!o) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, o);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && orderMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const allowed = ['new', 'in_production', 'ready', 'shipped', 'cancelled'];
+      if (!allowed.includes(data.status)) {
+        jsonErr(res, 400, 'invalid status');
+        return;
+      }
+      try {
+        const changed = db.setOrderStatus(database, parseInt(orderMatch[1], 10), data.status);
+        broadcastSSE(res);
+        jsonOk(res, { changed });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — unmapped queue (must precede /api/products/:id) + list
+  if (req.method === 'GET' && url === '/api/products/unmapped') {
+    try {
+      jsonOk(res, { items: db.listUnmappedItems(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/products') {
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, { items: db.listProducts(database, { activeOnly: params.get('active') === '1' }) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Products — create (admin)
+  if (req.method === 'POST' && url === '/api/products') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertProduct(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — map a channel listing → internal product (admin)
+  if (req.method === 'POST' && url === '/api/products/map') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['channel', 'productId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        db.mapListing(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — detail (authed) / update + delete (admin)
+  const productMatch = url.match(/^\/api\/products\/(\d+)$/);
+  if (req.method === 'GET' && productMatch) {
+    try {
+      const p = db.getProduct(database, parseInt(productMatch[1], 10));
+      if (!p) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, p);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && productMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertProduct(database, { ...data, id: parseInt(productMatch[1], 10) });
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && productMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const deleted = db.deleteProduct(database, parseInt(productMatch[1], 10));
+      broadcastSSE(res);
+      jsonOk(res, { deleted });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Customers — list (authed) / merge two records (admin)
+  if (req.method === 'GET' && url === '/api/customers') {
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, { items: db.listCustomers(database, { limit: parseInt(params.get('limit'), 10) || 200 }) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/customers/merge') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['primaryId', 'secondaryId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        db.mergeCustomers(database, data.primaryId, data.secondaryId);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Tasks --
   if (req.method === 'POST' && req.url === '/api/tasks') {
     jsonBody(req, res, (e, data) => {
