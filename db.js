@@ -1091,6 +1091,152 @@ const MIGRATIONS = [
         INSERT OR IGNORE INTO camera_calibration (id) VALUES (1);
       `);
     }
+  },
+  {
+    version: 42,
+    description: 'Order hub (Phase 0): sales channels, products, orders, customers, allocations',
+    fn(db) {
+      // Sales-side layer on top of the production tables. See ORDERS_HUB_DESIGN.md.
+      // Tables are created in FK-dependency order. Channel-credential and sync-log
+      // tables are created here for schema completeness; their helper functions
+      // arrive with the live-channel work (Phase 1+).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sales_channel_config (
+          channel        TEXT PRIMARY KEY,            -- 'wix' | 'etsy' | 'ebay'
+          enabled        INTEGER DEFAULT 0,
+          api_key        TEXT DEFAULT '',
+          site_id        TEXT DEFAULT '',
+          client_id      TEXT DEFAULT '',
+          client_secret  TEXT DEFAULT '',
+          access_token   TEXT DEFAULT '',
+          refresh_token  TEXT DEFAULT '',
+          token_expires  TEXT,
+          webhook_secret TEXT DEFAULT '',
+          last_sync      TEXT,
+          last_cursor    TEXT,
+          last_error     TEXT,
+          created        TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS products (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          sku       TEXT UNIQUE,
+          name      TEXT NOT NULL,
+          category  TEXT,                              -- growkit|spawn|culture|fresh|supply
+          species   TEXT,
+          strain    TEXT,
+          active    INTEGER DEFAULT 1,
+          notes     TEXT DEFAULT '',
+          created   TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS product_components (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          fulfill_type TEXT NOT NULL DEFAULT 'produce', -- produce|harvest|stock
+          batch_type   TEXT,                            -- block|grain (matches batches.batch_type)
+          species      TEXT,
+          strain       TEXT,
+          recipe_id    INTEGER REFERENCES recipes(id),
+          lead_days    INTEGER DEFAULT 0,
+          grams        REAL,
+          qty_per_unit REAL NOT NULL DEFAULT 1,
+          notes        TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_prodcomp_product ON product_components(product_id);
+
+        CREATE TABLE IF NOT EXISTS product_channel_map (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel     TEXT NOT NULL,
+          channel_sku TEXT,
+          listing_id  TEXT,
+          product_id  INTEGER REFERENCES products(id) ON DELETE CASCADE,
+          created     TEXT NOT NULL,
+          UNIQUE (channel, channel_sku, listing_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS customers (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          email         TEXT UNIQUE,                   -- lowercased; primary dedup key
+          name          TEXT,
+          country       TEXT,
+          first_channel TEXT,
+          first_order   TEXT,
+          last_order    TEXT,
+          order_count   INTEGER DEFAULT 0,
+          total_spent   REAL DEFAULT 0,
+          currency      TEXT,
+          notes         TEXT DEFAULT '',
+          created       TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS customer_identities (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          channel     TEXT NOT NULL,
+          handle      TEXT NOT NULL,                   -- email, eBay username, Etsy buyer id
+          created     TEXT NOT NULL,
+          UNIQUE (channel, handle)
+        );
+
+        CREATE TABLE IF NOT EXISTS orders (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel          TEXT NOT NULL,
+          channel_order_id TEXT NOT NULL,
+          status           TEXT NOT NULL DEFAULT 'new', -- new|in_production|ready|shipped|cancelled
+          order_date       TEXT,
+          ship_by          TEXT,
+          customer_id      INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+          customer_name    TEXT,
+          customer_email   TEXT,
+          ship_country     TEXT,
+          total_amount     REAL,
+          currency         TEXT,
+          raw_json         TEXT,
+          imported         TEXT NOT NULL,
+          updated          TEXT NOT NULL,
+          UNIQUE (channel, channel_order_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+        CREATE INDEX IF NOT EXISTS idx_orders_channel ON orders(channel);
+        CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+
+        CREATE TABLE IF NOT EXISTS order_items (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          channel_sku TEXT,
+          listing_id  TEXT,
+          title       TEXT,
+          qty         INTEGER NOT NULL DEFAULT 1,
+          product_id  INTEGER REFERENCES products(id) ON DELETE SET NULL,
+          unit_price  REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_orderitems_order ON order_items(order_id);
+        CREATE INDEX IF NOT EXISTS idx_orderitems_product ON order_items(product_id);
+
+        CREATE TABLE IF NOT EXISTS order_allocations (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+          batch_id      TEXT REFERENCES batches(batch_id) ON DELETE SET NULL,
+          qty           REAL NOT NULL,
+          status        TEXT NOT NULL DEFAULT 'reserved', -- reserved|produced|shipped
+          created       TEXT NOT NULL,
+          UNIQUE (order_item_id, batch_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_alloc_batch ON order_allocations(batch_id);
+        CREATE INDEX IF NOT EXISTS idx_alloc_item ON order_allocations(order_item_id);
+
+        CREATE TABLE IF NOT EXISTS order_sync_log (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          time      TEXT NOT NULL,
+          channel   TEXT NOT NULL,
+          ok        INTEGER NOT NULL,
+          fetched   INTEGER DEFAULT 0,
+          upserted  INTEGER DEFAULT 0,
+          message   TEXT
+        );
+      `);
+    }
   }
 ];
 
@@ -5193,7 +5339,456 @@ function isSafeError(msg) {
   return SAFE_ERROR_PREFIXES.some((p) => s.startsWith(p));
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Order hub (Phase 0) — sales channels → products → production demand.
+// See ORDERS_HUB_DESIGN.md. All timestamps are ISO-8601 TEXT; booleans INTEGER.
+// ════════════════════════════════════════════════════════════════════
+
+function _lcEmail(s) {
+  const e = (s == null ? '' : String(s)).trim().toLowerCase();
+  return e || null;
+}
+
+// ── Products + components ──
+function listProducts(db, { activeOnly = false } = {}) {
+  const where = activeOnly ? 'WHERE active = 1' : '';
+  return db
+    .prepare(
+      `SELECT id, sku, name, category, species, strain, active, notes, created
+       FROM products ${where} ORDER BY name COLLATE NOCASE`
+    )
+    .all();
+}
+
+function getProduct(db, id) {
+  const p = db
+    .prepare('SELECT id, sku, name, category, species, strain, active, notes, created FROM products WHERE id = ?')
+    .get(id);
+  if (!p) return null;
+  p.components = db
+    .prepare(
+      `SELECT id, fulfill_type AS fulfillType, batch_type AS batchType, species, strain,
+              recipe_id AS recipeId, lead_days AS leadDays, grams, qty_per_unit AS qtyPerUnit, notes
+       FROM product_components WHERE product_id = ? ORDER BY id`
+    )
+    .all(id);
+  return p;
+}
+
+function upsertProduct(db, p) {
+  if (!p || !p.name) throw new Error('upsertProduct: name required');
+  const now = new Date().toISOString();
+  let id = p.id;
+  const active = p.active === 0 ? 0 : 1;
+  if (id) {
+    db.prepare(
+      'UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?, notes = ? WHERE id = ?'
+    ).run(p.sku || null, p.name, p.category || null, p.species || null, p.strain || null, active, p.notes || '', id);
+  } else {
+    const info = db
+      .prepare(
+        'INSERT INTO products(sku, name, category, species, strain, active, notes, created) VALUES(?,?,?,?,?,?,?,?)'
+      )
+      .run(p.sku || null, p.name, p.category || null, p.species || null, p.strain || null, active, p.notes || '', now);
+    id = info.lastInsertRowid;
+  }
+  if (Array.isArray(p.components)) {
+    db.prepare('DELETE FROM product_components WHERE product_id = ?').run(id);
+    const ins = db.prepare(
+      `INSERT INTO product_components(product_id, fulfill_type, batch_type, species, strain, recipe_id, lead_days, grams, qty_per_unit, notes)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`
+    );
+    for (const c of p.components) {
+      ins.run(
+        id,
+        c.fulfillType || 'produce',
+        c.batchType || null,
+        c.species || null,
+        c.strain || null,
+        c.recipeId || null,
+        c.leadDays || 0,
+        c.grams != null ? c.grams : null,
+        c.qtyPerUnit != null ? c.qtyPerUnit : 1,
+        c.notes || ''
+      );
+    }
+  }
+  incrementDataVersion(db);
+  return id;
+}
+
+function deleteProduct(db, id) {
+  const info = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  incrementDataVersion(db);
+  return info.changes;
+}
+
+// ── Channel ↔ product mapping ──
+function resolveProductId(db, channel, channelSku, listingId) {
+  const row = db
+    .prepare(
+      `SELECT product_id AS productId FROM product_channel_map
+       WHERE channel = ? AND product_id IS NOT NULL
+         AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
+       LIMIT 1`
+    )
+    .get(channel, channelSku || null, listingId || null);
+  return row ? row.productId : null;
+}
+
+function mapListing(db, { channel, channelSku, listingId, productId } = {}) {
+  if (!channel) throw new Error('mapListing: channel required');
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+     VALUES(?,?,?,?,?)
+     ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+  ).run(channel, channelSku || null, listingId || null, productId || null, now);
+  // Back-resolve already-imported, still-unmapped order items for this listing.
+  if (productId) {
+    db.prepare(
+      `UPDATE order_items SET product_id = ?
+       WHERE product_id IS NULL
+         AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
+         AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
+    ).run(productId, channelSku || null, listingId || null, channel);
+  }
+  incrementDataVersion(db);
+}
+
+function listUnmappedItems(db) {
+  return db
+    .prepare(
+      `SELECT o.channel, oi.channel_sku AS channelSku, oi.listing_id AS listingId, oi.title,
+              SUM(oi.qty) AS qty, COUNT(*) AS lines
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+       WHERE oi.product_id IS NULL AND o.status NOT IN ('shipped','cancelled')
+       GROUP BY o.channel, oi.channel_sku, oi.listing_id, oi.title
+       ORDER BY qty DESC`
+    )
+    .all();
+}
+
+// ── Customers (dedup + rolled-up stats) ──
+function upsertCustomerFromOrder(db, o) {
+  const email = _lcEmail(o.customerEmail);
+  const handle = o.buyerHandle ? String(o.buyerHandle).trim() : email; // eBay masks email → username fallback
+  const now = new Date().toISOString();
+  let customerId = null;
+  if (handle) {
+    const idn = db
+      .prepare('SELECT customer_id AS id FROM customer_identities WHERE channel = ? AND handle = ?')
+      .get(o.channel, handle);
+    if (idn) customerId = idn.id;
+  }
+  if (!customerId && email) {
+    const c = db.prepare('SELECT id FROM customers WHERE email = ?').get(email);
+    if (c) customerId = c.id;
+  }
+  if (!customerId) {
+    const info = db
+      .prepare(
+        `INSERT INTO customers(email, name, country, first_channel, first_order, last_order, order_count, total_spent, currency, notes, created)
+         VALUES(?,?,?,?,?,?,0,0,?,?,?)`
+      )
+      .run(
+        email,
+        o.customerName || null,
+        o.shipCountry || null,
+        o.channel,
+        o.orderDate || now,
+        o.orderDate || now,
+        o.currency || null,
+        '',
+        now
+      );
+    customerId = info.lastInsertRowid;
+  }
+  if (handle) {
+    db.prepare('INSERT OR IGNORE INTO customer_identities(customer_id, channel, handle, created) VALUES(?,?,?,?)').run(
+      customerId,
+      o.channel,
+      handle,
+      now
+    );
+  }
+  return customerId;
+}
+
+function recomputeCustomerStats(db, customerId) {
+  if (!customerId) return;
+  const agg = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0) AS spent,
+              MIN(order_date) AS first, MAX(order_date) AS last
+       FROM orders WHERE customer_id = ? AND status != 'cancelled'`
+    )
+    .get(customerId);
+  db.prepare(
+    'UPDATE customers SET order_count = ?, total_spent = ?, first_order = COALESCE(?, first_order), last_order = COALESCE(?, last_order) WHERE id = ?'
+  ).run(agg.cnt, agg.spent, agg.first, agg.last, customerId);
+}
+
+function listCustomers(db, { limit = 200 } = {}) {
+  const lim = Math.max(1, Math.min(1000, parseInt(limit, 10) || 200));
+  return db
+    .prepare(
+      `SELECT c.id, c.email, c.name, c.country, c.first_channel AS firstChannel,
+              c.first_order AS firstOrder, c.last_order AS lastOrder,
+              c.order_count AS orderCount, c.total_spent AS totalSpent, c.currency,
+              (SELECT GROUP_CONCAT(DISTINCT ci.channel) FROM customer_identities ci WHERE ci.customer_id = c.id) AS channels
+       FROM customers c ORDER BY c.total_spent DESC, c.order_count DESC LIMIT ?`
+    )
+    .all(lim);
+}
+
+function mergeCustomers(db, primaryId, secondaryId) {
+  if (!primaryId || !secondaryId || primaryId === secondaryId) return;
+  db.prepare('UPDATE orders SET customer_id = ? WHERE customer_id = ?').run(primaryId, secondaryId);
+  db.prepare('UPDATE OR IGNORE customer_identities SET customer_id = ? WHERE customer_id = ?').run(
+    primaryId,
+    secondaryId
+  );
+  db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(secondaryId);
+  db.prepare('DELETE FROM customers WHERE id = ?').run(secondaryId);
+  recomputeCustomerStats(db, primaryId);
+  incrementDataVersion(db);
+}
+
+// ── Orders (idempotent ingestion) ──
+function _insertOrderItems(db, orderId, channel, items) {
+  const ins = db.prepare(
+    'INSERT INTO order_items(order_id, channel_sku, listing_id, title, qty, product_id, unit_price) VALUES(?,?,?,?,?,?,?)'
+  );
+  for (const it of items || []) {
+    const productId = it.productId || resolveProductId(db, channel, it.channelSku, it.listingId);
+    ins.run(
+      orderId,
+      it.channelSku || null,
+      it.listingId || null,
+      it.title || null,
+      it.qty || 1,
+      productId || null,
+      it.unitPrice != null ? it.unitPrice : null
+    );
+  }
+}
+
+function upsertOrder(db, o) {
+  if (!o || !o.channel || o.channelOrderId == null) throw new Error('upsertOrder: channel + channelOrderId required');
+  const now = new Date().toISOString();
+  const coid = String(o.channelOrderId);
+  const customerId = upsertCustomerFromOrder(db, o);
+  const existing = db.prepare('SELECT id FROM orders WHERE channel = ? AND channel_order_id = ?').get(o.channel, coid);
+  let orderId;
+  const raw = o.raw != null ? JSON.stringify(o.raw) : null;
+  if (existing) {
+    orderId = existing.id;
+    db.prepare(
+      `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
+        customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?, updated = ?
+       WHERE id = ?`
+    ).run(
+      o.status || null,
+      o.orderDate || null,
+      o.shipBy || null,
+      customerId,
+      o.customerName || null,
+      o.customerEmail || null,
+      o.shipCountry || null,
+      o.totalAmount != null ? o.totalAmount : null,
+      o.currency || null,
+      raw,
+      now,
+      orderId
+    );
+    if (Array.isArray(o.items)) {
+      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+      _insertOrderItems(db, orderId, o.channel, o.items);
+    }
+  } else {
+    const info = db
+      .prepare(
+        `INSERT INTO orders(channel, channel_order_id, status, order_date, ship_by, customer_id,
+           customer_name, customer_email, ship_country, total_amount, currency, raw_json, imported, updated)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        o.channel,
+        coid,
+        o.status || 'new',
+        o.orderDate || now,
+        o.shipBy || null,
+        customerId,
+        o.customerName || null,
+        o.customerEmail || null,
+        o.shipCountry || null,
+        o.totalAmount != null ? o.totalAmount : null,
+        o.currency || null,
+        raw,
+        now,
+        now
+      );
+    orderId = info.lastInsertRowid;
+    _insertOrderItems(db, orderId, o.channel, o.items);
+  }
+  recomputeCustomerStats(db, customerId);
+  incrementDataVersion(db);
+  return orderId;
+}
+
+function listOrders(db, { status, channel, limit = 200 } = {}) {
+  const lim = Math.max(1, Math.min(1000, parseInt(limit, 10) || 200));
+  const conds = [];
+  const args = [];
+  if (status) {
+    conds.push('o.status = ?');
+    args.push(status);
+  }
+  if (channel) {
+    conds.push('o.channel = ?');
+    args.push(channel);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  args.push(lim);
+  return db
+    .prepare(
+      `SELECT o.id, o.channel, o.channel_order_id AS channelOrderId, o.status, o.order_date AS orderDate,
+              o.ship_by AS shipBy, o.customer_name AS customerName, o.ship_country AS shipCountry,
+              o.total_amount AS totalAmount, o.currency,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itemCount,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id IS NULL) AS unmappedCount
+       FROM orders o ${where}
+       ORDER BY (o.ship_by IS NULL), o.ship_by ASC, o.order_date DESC
+       LIMIT ?`
+    )
+    .all(...args);
+}
+
+function getOrder(db, id) {
+  const o = db
+    .prepare(
+      `SELECT id, channel, channel_order_id AS channelOrderId, status, order_date AS orderDate, ship_by AS shipBy,
+              customer_id AS customerId, customer_name AS customerName, customer_email AS customerEmail,
+              ship_country AS shipCountry, total_amount AS totalAmount, currency, imported, updated
+       FROM orders WHERE id = ?`
+    )
+    .get(id);
+  if (!o) return null;
+  o.items = db
+    .prepare(
+      `SELECT oi.id, oi.channel_sku AS channelSku, oi.listing_id AS listingId, oi.title, oi.qty,
+              oi.product_id AS productId, oi.unit_price AS unitPrice, p.name AS productName
+       FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id = ? ORDER BY oi.id`
+    )
+    .all(id);
+  return o;
+}
+
+function setOrderStatus(db, id, status) {
+  const allowed = ['new', 'in_production', 'ready', 'shipped', 'cancelled'];
+  if (!allowed.includes(status)) throw new Error('setOrderStatus: invalid status');
+  const info = db
+    .prepare('UPDATE orders SET status = ?, updated = ? WHERE id = ?')
+    .run(status, new Date().toISOString(), id);
+  incrementDataVersion(db);
+  return info.changes;
+}
+
+// ── Reservation + production-demand engine ──
+function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
+  const now = new Date().toISOString();
+  const ins = db.prepare(
+    `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created)
+     VALUES(?,?,?,'reserved',?)
+     ON CONFLICT(order_item_id, batch_id) DO UPDATE SET qty = excluded.qty`
+  );
+  const orderIds = new Set();
+  for (const a of allocations) {
+    ins.run(a.orderItemId, batchId, a.qty || 0, now);
+    const row = db.prepare('SELECT order_id AS oid FROM order_items WHERE id = ?').get(a.orderItemId);
+    if (row) orderIds.add(row.oid);
+  }
+  for (const oid of orderIds) {
+    db.prepare("UPDATE orders SET status = 'in_production', updated = ? WHERE id = ? AND status = 'new'").run(now, oid);
+  }
+  incrementDataVersion(db);
+}
+
+function computeProductionDemand(db) {
+  const gross = db
+    .prepare(
+      `SELECT pc.batch_type AS batchType, pc.species, pc.strain, pc.recipe_id AS recipeId, pc.lead_days AS leadDays,
+              SUM(oi.qty * pc.qty_per_unit) AS gross, MIN(o.ship_by) AS earliestShipBy
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       JOIN product_components pc ON pc.product_id = oi.product_id
+       WHERE o.status IN ('new','in_production') AND pc.fulfill_type = 'produce'
+       GROUP BY pc.batch_type, pc.species, pc.strain, pc.recipe_id, pc.lead_days`
+    )
+    .all();
+  const reserved = db
+    .prepare(
+      `SELECT pc.batch_type AS batchType, pc.species, pc.strain, pc.recipe_id AS recipeId, COALESCE(SUM(a.qty), 0) AS reserved
+       FROM order_allocations a
+       JOIN order_items oi ON oi.id = a.order_item_id
+       JOIN orders o ON o.id = oi.order_id
+       JOIN product_components pc ON pc.product_id = oi.product_id
+       WHERE o.status IN ('new','in_production') AND pc.fulfill_type = 'produce' AND a.status = 'reserved'
+       GROUP BY pc.batch_type, pc.species, pc.strain, pc.recipe_id`
+    )
+    .all();
+  const key = (r) =>
+    [r.batchType || '', r.species || '', r.strain || '', r.recipeId == null ? '' : r.recipeId].join('|');
+  const resMap = new Map(reserved.map((r) => [key(r), r.reserved]));
+  return gross
+    .map((r) => {
+      const res = resMap.get(key(r)) || 0;
+      const netToStart = Math.max(0, (r.gross || 0) - res);
+      let startBy = null;
+      if (r.earliestShipBy) {
+        // Date-only ship_by is treated as UTC midnight so lead-time subtraction is timezone-safe.
+        const base = String(r.earliestShipBy);
+        const d = new Date(base.length === 10 ? base + 'T00:00:00Z' : base);
+        if (!isNaN(d.getTime())) {
+          d.setUTCDate(d.getUTCDate() - (r.leadDays || 0));
+          startBy = d.toISOString().slice(0, 10);
+        }
+      }
+      return {
+        batchType: r.batchType,
+        species: r.species,
+        strain: r.strain,
+        recipeId: r.recipeId,
+        leadDays: r.leadDays || 0,
+        gross: r.gross || 0,
+        reserved: res,
+        netToStart,
+        startBy
+      };
+    })
+    .filter((r) => r.netToStart > 0 || r.reserved > 0)
+    .sort((a, b) => (a.startBy || '9999-99-99').localeCompare(b.startBy || '9999-99-99'));
+}
+
 module.exports = {
+  // ── Order hub (Phase 0) ──
+  listProducts,
+  getProduct,
+  upsertProduct,
+  deleteProduct,
+  mapListing,
+  resolveProductId,
+  listUnmappedItems,
+  upsertOrder,
+  listOrders,
+  getOrder,
+  setOrderStatus,
+  listCustomers,
+  mergeCustomers,
+  reserveDemand,
+  computeProductionDemand,
   openDb,
   readAll,
   writeAll,
