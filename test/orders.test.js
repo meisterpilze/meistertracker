@@ -11,7 +11,7 @@ function tmpDb() {
   return { path: p, db: db.openDb(p) };
 }
 
-describe('order hub – schema (migration v42)', () => {
+describe('order hub – schema', () => {
   let d, p;
   before(() => {
     ({ db: d, path: p } = tmpDb());
@@ -21,7 +21,7 @@ describe('order hub – schema (migration v42)', () => {
     fs.unlinkSync(p);
   });
 
-  it('creates all order-hub tables', () => {
+  it('creates the order-hub tables', () => {
     const tables = d
       .prepare("SELECT name FROM sqlite_master WHERE type='table'")
       .all()
@@ -36,17 +36,85 @@ describe('order hub – schema (migration v42)', () => {
       'orders',
       'order_items',
       'order_allocations',
-      'order_sync_log',
-      'materials',
-      'product_bom'
+      'order_sync_log'
     ]) {
       assert.ok(tables.includes(t), `missing table ${t}`);
     }
   });
 
-  it('records migrations v42 + v43 as applied', () => {
+  it('drops the obsolete v2 materials/product_bom tables (v44)', () => {
+    const tables = d
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all()
+      .map((r) => r.name);
+    assert.ok(!tables.includes('materials'), 'materials should be dropped');
+    assert.ok(!tables.includes('product_bom'), 'product_bom should be dropped');
+  });
+
+  it('adds production-spec columns to products and coir to inventory', () => {
+    const pcols = d
+      .prepare("SELECT name FROM pragma_table_info('products')")
+      .all()
+      .map((r) => r.name);
+    for (const c of ['prod_type', 'prod_bag_kg', 'prod_substrate', 'prod_grain_kg', 'prod_grain_rh_pct']) {
+      assert.ok(pcols.includes(c), `products.${c} missing`);
+    }
+    const icols = d
+      .prepare("SELECT name FROM pragma_table_info('inventory')")
+      .all()
+      .map((r) => r.name);
+    assert.ok(icols.includes('stock_coir'), 'inventory.stock_coir missing');
+  });
+
+  it('records migrations v42 + v43 + v44 as applied', () => {
     assert.ok(d.prepare('SELECT version FROM schema_version WHERE version = 42').get(), 'v42 applied');
     assert.ok(d.prepare('SELECT version FROM schema_version WHERE version = 43').get(), 'v43 applied');
+    assert.ok(d.prepare('SELECT version FROM schema_version WHERE version = 44').get(), 'v44 applied');
+  });
+});
+
+describe('order hub – production spec → material need', () => {
+  it('all-in-one explodes into grain + coir (CVG)', () => {
+    const need = db.computeProductMaterialNeed({
+      prodType: 'allinone',
+      prodSubstrate: 'cvg',
+      prodBagKg: 3,
+      prodRhPct: 0,
+      prodCoirPct: 100,
+      prodGrainKg: 0.5,
+      prodGrainRhPct: 0
+    });
+    assert.equal(need.coir, 3);
+    assert.equal(need.grain, 0.5);
+    assert.equal(need.hardwood, 0);
+  });
+
+  it('block holzkleie applies hydration + hw/wb split + gypsum 1%', () => {
+    const need = db.computeProductMaterialNeed({
+      prodType: 'block',
+      prodSubstrate: 'holzkleie',
+      prodBagKg: 3,
+      prodRhPct: 65, // dry = 3 * 0.35 = 1.05
+      prodHardwoodPct: 70,
+      prodWheatbranPct: 30,
+      prodGypsum: 1
+    });
+    assert.ok(Math.abs(need.hardwood - 0.735) < 1e-9, 'hardwood 1.05*0.70');
+    assert.ok(Math.abs(need.wheatbran - 0.315) < 1e-9, 'wheatbran 1.05*0.30');
+    assert.ok(Math.abs(need.gypsum - 0.0105) < 1e-9, 'gypsum 1% of dry');
+    assert.equal(need.coir, 0);
+  });
+
+  it('grain spawn uses grain hydration (52% default)', () => {
+    const need = db.computeProductMaterialNeed({ prodType: 'grain', prodGrainKg: 1, prodGrainRhPct: 52 });
+    assert.ok(Math.abs(need.grain - 0.48) < 1e-9, '1kg wet @52% → 0.48kg dry');
+  });
+
+  it('bought-in products need no raw materials', () => {
+    const need = db.computeProductMaterialNeed({ prodType: 'buy', prodBagKg: 99, prodGrainKg: 99 });
+    assert.equal(need.grain, 0);
+    assert.equal(need.coir, 0);
+    assert.equal(need.hardwood, 0);
   });
 });
 
@@ -60,53 +128,59 @@ describe('order hub – products & mapping', () => {
     fs.unlinkSync(p);
   });
 
-  it('creates materials + a product with stock and a BOM, reads it back', () => {
-    const grain = db.upsertMaterial(d, { name: 'Roggen', unit: 'kg', stock: 10 });
-    const bag = db.upsertMaterial(d, { name: 'Filterbeutel', unit: 'Stk', stock: 50 });
+  it('creates a product with a production spec and reads it back with materialNeed', () => {
     const id = db.upsertProduct(d, {
       sku: 'AIO-3',
       name: 'All-in-One 3kg',
       category: 'all-in-one',
       stock: 4,
       leadDays: 18,
-      bom: [
-        { materialId: grain, qtyPerUnit: 1.5 },
-        { materialId: bag, qtyPerUnit: 1 }
-      ]
+      prodType: 'grain',
+      prodGrainKg: 1.5,
+      prodGrainRhPct: 0
     });
     assert.ok(id > 0);
     const prod = db.getProduct(d, id);
     assert.equal(prod.name, 'All-in-One 3kg');
     assert.equal(prod.stock, 4);
-    assert.equal(prod.producible, 1);
-    assert.equal(prod.bom.length, 2);
-    const g = prod.bom.find((b) => b.materialName === 'Roggen');
-    assert.equal(g.qtyPerUnit, 1.5);
-    assert.equal(g.unit, 'kg');
+    assert.equal(prod.prodType, 'grain');
+    assert.equal(prod.prodGrainKg, 1.5);
+    assert.ok(prod.materialNeed, 'materialNeed present');
+    assert.equal(prod.materialNeed.grain, 1.5);
   });
 
-  it('updating a product replaces its BOM', () => {
-    const cvg = db.upsertMaterial(d, { name: 'CVG', unit: 'L', stock: 30 });
+  it('updating a product replaces its production spec', () => {
     const id = db.upsertProduct(d, {
       name: 'Substrat CVG',
       category: 'substrat',
-      bom: [{ materialId: cvg, qtyPerUnit: 3 }]
+      prodType: 'block',
+      prodSubstrate: 'cvg',
+      prodBagKg: 3,
+      prodCoirPct: 100
     });
-    db.upsertProduct(d, { id, name: 'Substrat CVG 3L', category: 'substrat', bom: [{ materialId: cvg, qtyPerUnit: 3.2 }] });
+    db.upsertProduct(d, {
+      id,
+      name: 'Substrat CVG 3.2',
+      category: 'substrat',
+      prodType: 'block',
+      prodSubstrate: 'cvg',
+      prodBagKg: 3.2,
+      prodCoirPct: 100
+    });
     const prod = db.getProduct(d, id);
-    assert.equal(prod.name, 'Substrat CVG 3L');
-    assert.equal(prod.bom.length, 1);
-    assert.equal(prod.bom[0].qtyPerUnit, 3.2);
+    assert.equal(prod.name, 'Substrat CVG 3.2');
+    assert.equal(prod.prodBagKg, 3.2);
+    assert.equal(prod.materialNeed.coir, 3.2);
   });
 
   it('maps a channel listing and back-resolves already-imported items', () => {
     const id = db.upsertProduct(d, {
       sku: 'SPAWN-RYE',
       name: 'Körnerbrut Roggen 1kg',
-      category: 'spawn',
-      components: [{ fulfillType: 'produce', batchType: 'grain', species: 'oyster', qtyPerUnit: 1 }]
+      category: 'koernerbrut',
+      prodType: 'grain',
+      prodGrainKg: 1
     });
-    // Import an order whose line is not yet mapped to any product.
     db.upsertOrder(d, {
       channel: 'etsy',
       channelOrderId: 'E-1',
@@ -127,8 +201,13 @@ describe('order hub – products & mapping', () => {
   it('maps a manual title-only line (no SKU) by title', () => {
     const id = db.upsertProduct(d, {
       name: 'Austern Growkit',
-      category: 'growkit',
-      components: [{ fulfillType: 'produce', batchType: 'block', species: 'oyster', qtyPerUnit: 1 }]
+      category: 'all-in-one',
+      prodType: 'allinone',
+      prodSubstrate: 'holzkleie',
+      prodBagKg: 3,
+      prodHardwoodPct: 70,
+      prodWheatbranPct: 30,
+      prodGrainKg: 0.5
     });
     db.upsertOrder(d, {
       channel: 'manual',
@@ -237,18 +316,17 @@ describe('order hub – demand engine & reservation', () => {
     fs.unlinkSync(p);
   });
 
-  it('reserves from finished stock first, then produces the shortfall + checks components', () => {
-    const grain = db.upsertMaterial(d, { name: 'Roggen', unit: 'kg', stock: 4 }); // only 4 kg on hand
-    const bag = db.upsertMaterial(d, { name: 'Beutel', unit: 'Stk', stock: 100 });
+  it('reserves from finished stock first, then produces the shortfall + checks the shared inventory', () => {
+    // Only 4 kg grain on hand in the shared inventory ledger.
+    db.setInventoryAbsolute(d, 'grain', 4, 'seed', 'test');
     const pid = db.upsertProduct(d, {
       name: 'All-in-One',
       category: 'all-in-one',
       stock: 2,
       leadDays: 7,
-      bom: [
-        { materialId: grain, qtyPerUnit: 1.5 },
-        { materialId: bag, qtyPerUnit: 1 }
-      ]
+      prodType: 'grain', // grain-only spec → 1.5 kg dry grain per unit
+      prodGrainKg: 1.5,
+      prodGrainRhPct: 0
     });
     db.mapListing(d, { channel: 'wix', channelSku: 'WX-AIO', productId: pid });
     db.upsertOrder(d, {
@@ -265,7 +343,8 @@ describe('order hub – demand engine & reservation', () => {
     assert.equal(row.fromStock, 2, '2 reserved from finished stock');
     assert.equal(row.toProduce, 3, 'produce the remaining 3');
     assert.equal(row.startBy, '2026-06-13', 'ship 06-20 minus 7 lead days');
-    const g = row.components.find((c) => c.materialName === 'Roggen');
+    const g = row.components.find((c) => c.mat === 'grain');
+    assert.ok(g, 'grain component present');
     assert.equal(g.need, 4.5); // 3 × 1.5 kg
     assert.ok(Math.abs(g.short - 0.5) < 1e-9, 'short 0.5 kg grain (have 4, need 4.5)');
     assert.equal(row.componentsShort, true);
@@ -277,11 +356,11 @@ describe('order hub – demand engine & reservation', () => {
     db.reserveDemand(d, { allocations: [{ orderItemId: item.id, qty: 2 }] });
     const row2 = db.computeProductionDemand(d).find((r) => r.productId === pid);
     assert.equal(row2.reserved, 2);
-    assert.equal(row2.toProduce, 1, 'open 3 − 2 from stock = 1 to produce');
+    assert.equal(row2.toProduce, 1, 'open 3 − 2 reserved = 1 to produce');
   });
 
-  it('non-producible items (Zubehör) become backorder when out of stock, not production', () => {
-    const sid = db.upsertProduct(d, { name: 'Spritzenfilter', category: 'zubehoer', stock: 1, producible: 0 });
+  it('bought-in items (Zubehör) become backorder when out of stock, not production', () => {
+    const sid = db.upsertProduct(d, { name: 'Spritzenfilter', category: 'zubehoer', stock: 1, prodType: 'buy' });
     db.mapListing(d, { channel: 'ebay', channelSku: 'EB-FILT', productId: sid });
     db.upsertOrder(d, {
       channel: 'ebay',
@@ -291,7 +370,7 @@ describe('order hub – demand engine & reservation', () => {
     });
     const row = db.computeProductionDemand(d).find((r) => r.productId === sid);
     assert.equal(row.fromStock, 1);
-    assert.equal(row.toProduce, 0, 'not producible → never "produce"');
+    assert.equal(row.toProduce, 0, 'bought-in → never "produce"');
     assert.equal(row.backorder, 2, '3 − 1 in stock = 2 to restock');
     assert.equal(row.components.length, 0);
   });
