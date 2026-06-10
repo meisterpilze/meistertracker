@@ -8780,7 +8780,11 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   // Cache immutable vendor libs and per-locale lang files aggressively;
   // cache HTML/CSS/SW short-term.
-  if (url === '/sw.js') {
+  if (WORKTREE_MODE) {
+    // Test/worktree instance: never cache static assets, so code changes show
+    // up on a plain reload without service-worker / HTTP-cache gymnastics.
+    headers['Cache-Control'] = 'no-store';
+  } else if (url === '/sw.js') {
     // The service worker is the killswitch path — must always revalidate
     // so a bad SW build can be rolled back within one navigation rather
     // than waiting up to 5 min + the browser's own 24 h SW-bypass cache.
