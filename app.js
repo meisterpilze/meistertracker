@@ -1060,7 +1060,7 @@ function renderOrdersMapping() {
                 `<div class="oh-maprow">${_ohChannel(it.channel)}` +
                 `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
                 `<div class="muted" style="font-size:11px;font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
-                `<select class="oh-mapsel" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" style="width:auto;font-size:12px">` +
+                `<select class="oh-mapsel" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" data-title="${esc(it.title || '')}" style="width:auto;font-size:12px">` +
                 `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}</select>` +
                 `<button class="btn btn-sm btn-p" data-action="oh-map">${esc(t('orders.assign'))}</button></div>`
             )
@@ -1146,6 +1146,7 @@ function ordersActionHandler(e) {
       channel: sel.dataset.channel,
       channelSku: sel.dataset.sku || null,
       listingId: sel.dataset.listing || null,
+      title: sel.dataset.title || null,
       productId: parseInt(sel.value, 10)
     }).then((r) => {
       if (r && r.error) {

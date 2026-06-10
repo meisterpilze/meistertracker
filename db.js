@@ -5436,22 +5436,34 @@ function resolveProductId(db, channel, channelSku, listingId) {
   return row ? row.productId : null;
 }
 
-function mapListing(db, { channel, channelSku, listingId, productId } = {}) {
+function mapListing(db, { channel, channelSku, listingId, productId, title } = {}) {
   if (!channel) throw new Error('mapListing: channel required');
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
-     VALUES(?,?,?,?,?)
-     ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
-  ).run(channel, channelSku || null, listingId || null, productId || null, now);
-  // Back-resolve already-imported, still-unmapped order items for this listing.
-  if (productId) {
+  // Remember the mapping for future auto-resolution — only meaningful when a
+  // sku or listing id is present (manual/title-only lines have neither).
+  if (channelSku || listingId) {
+    db.prepare(
+      `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+       VALUES(?,?,?,?,?)
+       ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+    ).run(channel, channelSku || null, listingId || null, productId || null, now);
+  }
+  // Back-resolve currently-unmapped order items for this listing group.
+  if (productId && (channelSku || listingId)) {
+    // Identified by sku/listing → resolve all matching lines in the channel.
     db.prepare(
       `UPDATE order_items SET product_id = ?
        WHERE product_id IS NULL
          AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
          AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
     ).run(productId, channelSku || null, listingId || null, channel);
+  } else if (productId && title) {
+    // No sku/listing (e.g. a manual entry) → resolve by exact title in the channel.
+    db.prepare(
+      `UPDATE order_items SET product_id = ?
+       WHERE product_id IS NULL AND channel_sku IS NULL AND listing_id IS NULL AND title IS ?
+         AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
+    ).run(productId, title, channel);
   }
   incrementDataVersion(db);
 }
