@@ -120,6 +120,31 @@ describe('order hub – products & mapping', () => {
     unmapped = db.listUnmappedItems(d);
     assert.ok(!unmapped.find((u) => u.channelSku === 'ETSY-RYE'), 'item should be resolved after mapping');
   });
+
+  it('maps a manual title-only line (no SKU) by title', () => {
+    const id = db.upsertProduct(d, {
+      name: 'Austern Growkit',
+      category: 'growkit',
+      components: [{ fulfillType: 'produce', batchType: 'block', species: 'oyster', qtyPerUnit: 1 }]
+    });
+    db.upsertOrder(d, {
+      channel: 'manual',
+      channelOrderId: 'M-1',
+      customerEmail: 'x@y.de',
+      items: [{ title: 'Austern Growkit', qty: 3 }] // no sku, no listing id
+    });
+    let unmapped = db.listUnmappedItems(d);
+    assert.ok(
+      unmapped.find((u) => u.title === 'Austern Growkit' && !u.channelSku),
+      'title-only line should start unmapped'
+    );
+    db.mapListing(d, { channel: 'manual', title: 'Austern Growkit', productId: id });
+    unmapped = db.listUnmappedItems(d);
+    assert.ok(
+      !unmapped.find((u) => u.title === 'Austern Growkit'),
+      'title-only line should resolve after mapping by title'
+    );
+  });
 });
 
 describe('order hub – idempotent ingestion & customers', () => {
