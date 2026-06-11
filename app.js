@@ -873,6 +873,7 @@ function openStab(page, sub) {
   const spEl = document.getElementById(`sp-${page}-${sub}`);
   if (spEl) spEl.classList.add('active');
   if (page === 'batch' && sub === 'list') renderBatches();
+  if (page === 'batch' && sub === 'new') _fillNbProducts();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
@@ -4217,6 +4218,52 @@ function setBagWeight(kg) {
   });
   nbPreview();
 }
+// Charge form ← product: fill the substrate/grain fields from a saved product
+// spec so a charge can be made straight from "what was ordered". The product
+// drives an internally-block batch that also deducts coir + raw grain.
+let _nbProducts = [];
+function _fillNbProducts() {
+  const sel = document.getElementById('nb-product');
+  if (!sel) return;
+  apiGet('/api/products?active=1')
+    .then((d) => {
+      _nbProducts = (d.items || []).filter((p) => (p.prodType || 'buy') !== 'buy');
+      const cur = sel.value;
+      sel.innerHTML =
+        `<option value="">${esc(t('batch.noProduct'))}</option>` +
+        _nbProducts.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+      sel.value = cur;
+    })
+    .catch(() => {});
+}
+function _nbProductChanged() {
+  const sel = document.getElementById('nb-product');
+  const id = sel && sel.value ? parseInt(sel.value, 10) : null;
+  if (!id) {
+    nbPreview();
+    return;
+  }
+  apiGet('/api/products/' + id)
+    .then((p) => {
+      if (!p || p.error) return;
+      const set = (eid, val) => {
+        const el = document.getElementById(eid);
+        if (el) el.value = val;
+      };
+      const isCvg = (p.prodSubstrate || 'holzkleie') === 'cvg';
+      if (p.prodBagKg != null) set('nb-weight', p.prodBagKg);
+      set('nb-rh', p.prodRhPct != null ? p.prodRhPct : 0);
+      set('nb-hw', isCvg ? 0 : p.prodHardwoodPct || 0);
+      set('nb-wb', isCvg ? 0 : p.prodWheatbranPct || 0);
+      set('nb-coir', isCvg ? p.prodCoirPct || 100 : 0);
+      set('nb-grainkg', p.prodGrainKg || 0);
+      set('nb-grainrh', p.prodGrainRhPct != null ? p.prodGrainRhPct : 52);
+      const gyp = document.getElementById('nb-gyp');
+      if (gyp) gyp.checked = !!p.prodGypsum;
+      nbSubSum();
+    })
+    .catch(() => {});
+}
 function nbPreview() {
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
@@ -4234,17 +4281,22 @@ function nbPreview() {
   {
     const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
     const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+    const coir = parseDecimal((document.getElementById('nb-coir') || {}).value) || 0;
     const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const gyp = document.getElementById('nb-gyp').checked;
-    if (hw || wb) {
+    const grainKg = parseDecimal((document.getElementById('nb-grainkg') || {}).value) || 0;
+    const grainRh = parseDecimal((document.getElementById('nb-grainrh') || {}).value) || 0;
+    if (hw || wb || coir) {
       // Correct calculation: subtract water first, then split dry matter
       // dryKg = bagKg × (1 - rh/100)
       const dryKg = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
       const hwKg = qty * dryKg * (hw / 100);
       const wbKg = qty * dryKg * (wb / 100);
+      const coirKg = qty * dryKg * (coir / 100);
       const gypKg = gyp ? qty * dryKg * 0.01 : 0;
       const hwStock = inventory.stock?.hardwood || 0;
       const wbStock = inventory.stock?.wheatbran || 0;
+      const coirStock = inventory.stock?.coir || 0;
       const gypStock = inventory.stock?.gypsum || 0;
       if (rh > 0)
         lines.push(
@@ -4258,11 +4310,22 @@ function nbPreview() {
         lines.push(
           `<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock >= wbKg ? '✓' : '⚠ short by ' + (wbKg - wbStock).toFixed(2) + 'kg'}`
         );
+      if (coir)
+        lines.push(
+          `<strong>Kokos/CVG (${coir}%):</strong> ${coirKg.toFixed(3)} kg needed — ${coirStock.toFixed(2)} kg in stock ${coirStock >= coirKg ? '✓' : '⚠ short by ' + (coirKg - coirStock).toFixed(2) + 'kg'}`
+        );
       if (gyp)
         lines.push(
           `<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock >= gypKg ? '✓' : '⚠'}`
         );
       lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
+    }
+    if (grainKg > 0) {
+      const grainUsed = qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1);
+      const grainStock = inventory.stock?.grain || 0;
+      lines.push(
+        `<strong>Grain:</strong> ${grainUsed.toFixed(3)} kg needed — ${grainStock.toFixed(2)} kg in stock ${grainStock >= grainUsed ? '✓' : '⚠ short by ' + (grainUsed - grainStock).toFixed(2) + 'kg'}`
+      );
     }
   }
   const el = document.getElementById('nb-mat-preview');
@@ -4307,6 +4370,10 @@ function createBatch() {
   }
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
     wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+  // All-in-One / CVG fields (0 for plain holz+kleie blocks → no effect).
+  const coir = parseDecimal((document.getElementById('nb-coir') || {}).value) || 0;
+  const grainKg = parseDecimal((document.getElementById('nb-grainkg') || {}).value) || 0;
+  const grainRh = parseDecimal((document.getElementById('nb-grainrh') || {}).value) || 0;
   // I-19: substrate must total exactly 100% (within rounding). Previously the
   // check only fired on > 100; a 70/20 split silently consumed 90% of the dry
   // mass and the remaining 10% went unaccounted. Now we reject any drift in
@@ -4317,10 +4384,11 @@ function createBatch() {
     return;
   }
   const substrate =
-    hw || wb
+    hw || wb || coir
       ? {
           hardwood: hw,
           wheatbran: wb,
+          coir,
           rh: parseDecimal(document.getElementById('nb-rh').value) || null,
           gypsum: document.getElementById('nb-gyp').checked
         }
@@ -4330,12 +4398,14 @@ function createBatch() {
   // over-commit silently clamps to zero with no signal to the worker. They
   // walk away thinking everything's fine, then run out mid-week. Prompt
   // first so they can either top up before submitting or knowingly proceed.
-  if (substrate) {
-    const _rhPct = substrate.rh || 0;
+  {
+    const _rhPct = (substrate && substrate.rh) || 0;
     const _dryKg = _rhPct > 0 ? bagKg * (1 - _rhPct / 100) : bagKg;
     const _hwUsed = qty * _dryKg * (hw / 100);
     const _wbUsed = qty * _dryKg * (wb / 100);
-    const _gypUsed = substrate.gypsum ? qty * _dryKg * 0.01 : 0;
+    const _coirUsed = qty * _dryKg * (coir / 100);
+    const _gypUsed = substrate && substrate.gypsum ? qty * _dryKg * 0.01 : 0;
+    const _grainUsed = grainKg > 0 ? qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1) : 0;
     const _stock = inventory.stock || {};
     const _shortages = [];
     if (_hwUsed > (_stock.hardwood || 0))
@@ -4346,9 +4416,17 @@ function createBatch() {
       _shortages.push(
         'Wheat bran: ' + (_stock.wheatbran || 0).toFixed(1) + ' kg vorhanden, ' + _wbUsed.toFixed(1) + ' kg nötig'
       );
+    if (_coirUsed > (_stock.coir || 0))
+      _shortages.push(
+        'Kokos/CVG: ' + (_stock.coir || 0).toFixed(1) + ' kg vorhanden, ' + _coirUsed.toFixed(1) + ' kg nötig'
+      );
     if (_gypUsed > (_stock.gypsum || 0))
       _shortages.push(
         'Gypsum: ' + (_stock.gypsum || 0).toFixed(1) + ' kg vorhanden, ' + _gypUsed.toFixed(1) + ' kg nötig'
+      );
+    if (_grainUsed > (_stock.grain || 0))
+      _shortages.push(
+        'Grain: ' + (_stock.grain || 0).toFixed(1) + ' kg vorhanden, ' + _grainUsed.toFixed(1) + ' kg nötig'
       );
     if (
       _shortages.length &&
@@ -4375,6 +4453,8 @@ function createBatch() {
     substrate,
     bagKg,
     batchType,
+    grainKg,
+    grainRh,
     sourceId: document.getElementById('nb-culture').value || null,
     notes: document.getElementById('nb-notes').value.trim(),
     strainText,
@@ -4385,7 +4465,7 @@ function createBatch() {
 
   // Compute inventory deltas up front so they can travel with the POST and be
   // applied atomically on the server (I-02).
-  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0, coir: 0 };
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
   if (substrate) {
@@ -4393,6 +4473,7 @@ function createBatch() {
     const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
     const hwUsed = qty * dryKgPerBag * (hw / 100);
     const wbUsed = qty * dryKgPerBag * (wb / 100);
+    const coirUsed = qty * dryKgPerBag * (coir / 100);
     if (hwUsed > 0) {
       inventory.stock.hardwood = Math.max(0, inventory.stock.hardwood - hwUsed);
       deltas.push({ mat: 'hardwood', deltaKg: -hwUsed, type: 'batch', ref: batchId });
@@ -4401,10 +4482,22 @@ function createBatch() {
       inventory.stock.wheatbran = Math.max(0, inventory.stock.wheatbran - wbUsed);
       deltas.push({ mat: 'wheatbran', deltaKg: -wbUsed, type: 'batch', ref: batchId });
     }
+    if (coirUsed > 0) {
+      inventory.stock.coir = Math.max(0, (inventory.stock.coir || 0) - coirUsed);
+      deltas.push({ mat: 'coir', deltaKg: -coirUsed, type: 'batch', ref: batchId });
+    }
     if (substrate.gypsum) {
       const gypUsed = qty * dryKgPerBag * 0.01;
       inventory.stock.gypsum = Math.max(0, inventory.stock.gypsum - gypUsed);
       deltas.push({ mat: 'gypsum', deltaKg: -gypUsed, type: 'batch', ref: batchId });
+    }
+  }
+  // All-in-One raw-grain portion mixed into the block (independent of substrate).
+  if (grainKg > 0) {
+    const grainUsed = qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1);
+    if (grainUsed > 0) {
+      inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
+      deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
     }
   }
 
@@ -5071,7 +5164,14 @@ function delBatch(id) {
           inventory.stock.hardwood = (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
         if (b.substrate.wheatbran)
           inventory.stock.wheatbran = (inventory.stock.wheatbran || 0) + totalDryKg * (b.substrate.wheatbran / 100);
+        if (b.substrate.coir)
+          inventory.stock.coir = (inventory.stock.coir || 0) + totalDryKg * (b.substrate.coir / 100);
         if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + totalDryKg * 0.01;
+      }
+      // All-in-One raw-grain portion mixed into a block batch (credit it back too).
+      if (b.batchType !== 'grain' && b.grainKg) {
+        const grh = b.grainRh || 0;
+        inventory.stock.grain = (inventory.stock.grain || 0) + b.qty * b.grainKg * (grh > 0 ? 1 - grh / 100 : 1);
       }
     }
     batches = batches.filter((x) => x.batchId !== id);
