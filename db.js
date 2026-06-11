@@ -1318,6 +1318,22 @@ const MIGRATIONS = [
       db.exec('DROP TABLE IF EXISTS product_bom');
       db.exec('DROP TABLE IF EXISTS materials');
     }
+  },
+  {
+    version: 45,
+    description: 'All-in-One/CVG batches: coir substrate % + raw-grain portion on block batches',
+    fn(db) {
+      // An "All-in-One" charge is internally a block batch that also carries a
+      // coir/CVG fraction (sub_coir %) and a raw-grain portion (grain_kg wet per
+      // bag, hydrated by grain_rh). computeBatchMaterialDeltas reads these to
+      // deduct/credit grain + coir alongside the usual hardwood/wheatbran/gypsum.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('batches')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('sub_coir')) db.exec('ALTER TABLE batches ADD COLUMN sub_coir REAL DEFAULT 0');
+      if (!cols.includes('grain_kg')) db.exec('ALTER TABLE batches ADD COLUMN grain_kg REAL DEFAULT 0');
+    }
   }
 ];
 
@@ -1529,12 +1545,14 @@ function readAll(db, opts = {}) {
       substrate: {
         hardwood: r.sub_hardwood,
         wheatbran: r.sub_wheatbran,
+        coir: r.sub_coir || 0,
         rh: r.sub_rh,
         gypsum: r.sub_gypsum === 1 ? true : false
       },
       bagKg: r.bag_kg,
       batchType: r.batch_type,
       grainRh: r.grain_rh || 0,
+      grainKg: r.grain_kg || 0,
       sourceId: r.source_id,
       notes: r.notes,
       strainText: r.strain_text || '',
@@ -1921,8 +1939,8 @@ function writeAll(db, incoming) {
       }
 
       const upsertBatch = db.prepare(`
-        INSERT INTO batches(batch_id, species, strain, strain_id, strain_text, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO batches(batch_id, species, strain, strain_id, strain_text, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh, sub_coir, grain_kg)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(batch_id) DO UPDATE SET
           species=excluded.species, strain=excluded.strain,
           strain_id=excluded.strain_id, strain_text=excluded.strain_text,
@@ -1932,7 +1950,7 @@ function writeAll(db, incoming) {
           bag_kg=excluded.bag_kg, batch_type=excluded.batch_type,
           source_id=excluded.source_id, notes=excluded.notes,
           created=excluded.created, due=excluded.due,
-          grain_rh=excluded.grain_rh
+          grain_rh=excluded.grain_rh, sub_coir=excluded.sub_coir, grain_kg=excluded.grain_kg
       `);
       const deleteBags = db.prepare('DELETE FROM bags WHERE batch_id = ?');
       const insertBag = db.prepare('INSERT INTO bags(bag_id, batch_id, bag_kg) VALUES(?, ?, ?)');
@@ -1957,7 +1975,9 @@ function writeAll(db, incoming) {
           b.notes || '',
           b.created,
           b.due,
-          b.batchType === 'grain' && Number.isFinite(b.grainRh) ? b.grainRh : 0
+          Number.isFinite(b.grainRh) ? b.grainRh : 0,
+          sub.coir || 0,
+          b.grainKg || 0
         );
         deleteBags.run(b.batchId);
         const bagIds = [];
@@ -2650,9 +2670,11 @@ function insertBatch(db, b, deltas, userId) {
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
-    const grainRh = b.batchType === 'grain' ? (Number.isFinite(b.grainRh) ? b.grainRh : 0) : 0;
+    // grain_rh applies to any batch with a grain portion (pure grain batches and
+    // all-in-one block batches alike); pure block batches simply pass nothing.
+    const grainRh = Number.isFinite(b.grainRh) ? b.grainRh : 0;
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh,sub_coir,grain_kg) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
       species,
@@ -2671,7 +2693,9 @@ function insertBatch(db, b, deltas, userId) {
       b.strainText || '',
       b.created,
       b.due,
-      grainRh
+      grainRh,
+      sub.coir || 0,
+      b.grainKg || 0
     );
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const item of b.bags || []) {
@@ -2855,7 +2879,7 @@ function deleteBatchById(db, batchId, userId) {
     // Read batch before deleting so we can reverse inventory deductions
     const row = db
       .prepare(
-        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh FROM batches WHERE batch_id=?'
+        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh, sub_coir, grain_kg FROM batches WHERE batch_id=?'
       )
       .get(batchId);
     if (row) {
@@ -2927,9 +2951,10 @@ function computeBatchMaterialDeltas(db, row) {
   } else {
     const hw = row.sub_hardwood || 0;
     const wb = row.sub_wheatbran || 0;
+    const coir = row.sub_coir || 0;
     const rh = row.sub_rh || 0;
     const gyp = row.sub_gypsum;
-    if (hw || wb) {
+    if (hw || wb || coir) {
       let totalDryKg = 0;
       if (bagWeightRows.length) {
         for (const b of bagWeightRows) {
@@ -2942,9 +2967,20 @@ function computeBatchMaterialDeltas(db, row) {
       }
       const hwUsed = totalDryKg * (hw / 100);
       const wbUsed = totalDryKg * (wb / 100);
+      const coirUsed = totalDryKg * (coir / 100);
       if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
       if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+      if (coirUsed > 0) deltas.push({ mat: 'coir', deltaKg: coirUsed });
       if (gyp) deltas.push({ mat: 'gypsum', deltaKg: totalDryKg * 0.01 });
+    }
+    // All-in-One raw-grain portion mixed into the block (grain_kg wet per bag).
+    const grainKg = row.grain_kg || 0;
+    if (grainKg > 0) {
+      const grh = row.grain_rh || 0;
+      const bagCount = bagWeightRows.length || row.qty;
+      const grainDryPerBag = grh > 0 ? grainKg * (1 - grh / 100) : grainKg;
+      const grainTotal = bagCount * grainDryPerBag;
+      if (grainTotal > 0) deltas.push({ mat: 'grain', deltaKg: grainTotal });
     }
   }
   return deltas;
@@ -2970,14 +3006,27 @@ function computeBatchMaterialDeltasForKg(batch, addedWetKg) {
   }
   const hw = batch.sub_hardwood || 0;
   const wb = batch.sub_wheatbran || 0;
-  if (!hw && !wb) return deltas;
+  const coir = batch.sub_coir || 0;
+  const grainKg = batch.grain_kg || 0;
+  if (!hw && !wb && !coir && !grainKg) return deltas;
   const rh = batch.sub_rh || 0;
   const dryKg = rh > 0 ? addedWetKg * (1 - rh / 100) : addedWetKg;
   const hwUsed = dryKg * (hw / 100);
   const wbUsed = dryKg * (wb / 100);
+  const coirUsed = dryKg * (coir / 100);
   if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
   if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+  if (coirUsed > 0) deltas.push({ mat: 'coir', deltaKg: coirUsed });
   if (batch.sub_gypsum) deltas.push({ mat: 'gypsum', deltaKg: dryKg * 0.01 });
+  // All-in-One grain portion scales with the number of added bags
+  // (addedWetKg of substrate / substrate bag_kg).
+  if (grainKg > 0 && batch.bag_kg > 0) {
+    const grh = batch.grain_rh || 0;
+    const bags = addedWetKg / batch.bag_kg;
+    const grainDryPerBag = grh > 0 ? grainKg * (1 - grh / 100) : grainKg;
+    const grainTotal = bags * grainDryPerBag;
+    if (grainTotal > 0) deltas.push({ mat: 'grain', deltaKg: grainTotal });
+  }
   return deltas;
 }
 
@@ -4512,10 +4561,17 @@ function mapBatchRow(r, bagRows, db, msById) {
     strainKuerzel,
     qty: r.qty,
     days: r.days,
-    substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
+    substrate: {
+      hardwood: r.sub_hardwood,
+      wheatbran: r.sub_wheatbran,
+      coir: r.sub_coir || 0,
+      rh: r.sub_rh,
+      gypsum: r.sub_gypsum === 1
+    },
     bagKg: r.bag_kg,
     batchType: r.batch_type,
     grainRh: r.grain_rh || 0,
+    grainKg: r.grain_kg || 0,
     sourceId: r.source_id,
     notes: r.notes,
     strainText: r.strain_text || '',
