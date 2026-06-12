@@ -27,6 +27,11 @@ window.LANG['de'] = {
   'nav.admin': 'Admin',
   'nav.calendar': 'Kalender',
   'nav.orders': 'Bestellungen',
+  'nav.sales': 'Verkauf',
+  'nav.ordersInbox': 'Bestellungen',
+  'nav.ordersDemand': 'Was muss ich machen',
+  'nav.ordersMapping': 'Produkte',
+  'nav.ordersCustomers': 'Kunden',
   // Order hub (Phase 0)
   'orders.inbox': 'Bestellungen',
   'orders.tomake': 'Was muss ich machen',

@@ -824,7 +824,7 @@ const PAGES = {
   cal: 'n-cal',
   settings: 'n-settings',
   strains: 'n-strains',
-  orders: 'n-orders'
+  orders: 'n-orders-inbox'
 };
 function go(page, btnId) {
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
@@ -15116,8 +15116,23 @@ function initEventListeners() {
     go('strains', 'n-strains');
     renderStrains();
   });
-  $('n-orders').addEventListener('click', () => {
-    go('orders', 'n-orders');
+  // "Verkauf" group: four top-level entries that open the orders page at the
+  // matching view (the sub-tab bar is hidden; openStab still fires the render).
+  $('n-orders-inbox').addEventListener('click', () => {
+    go('orders', 'n-orders-inbox');
+    openStab('orders', 'inbox');
+  });
+  $('n-orders-demand').addEventListener('click', () => {
+    go('orders', 'n-orders-demand');
+    openStab('orders', 'tomake');
+  });
+  $('n-orders-mapping').addEventListener('click', () => {
+    go('orders', 'n-orders-mapping');
+    openStab('orders', 'mapping');
+  });
+  $('n-orders-customers').addEventListener('click', () => {
+    go('orders', 'n-orders-customers');
+    openStab('orders', 'customers');
   });
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
   $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
