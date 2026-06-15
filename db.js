@@ -1334,6 +1334,35 @@ const MIGRATIONS = [
       if (!cols.includes('sub_coir')) db.exec('ALTER TABLE batches ADD COLUMN sub_coir REAL DEFAULT 0');
       if (!cols.includes('grain_kg')) db.exec('ALTER TABLE batches ADD COLUMN grain_kg REAL DEFAULT 0');
     }
+  },
+  {
+    version: 46,
+    description: 'Sorte production recipe defaults on mushroom_strains (rec_* columns)',
+    fn(db) {
+      // Each Pilzsorte can carry a default production recipe so a Charge or a
+      // Laborarbeit can be spun up from the Sorte without re-entering substrate,
+      // grain and hydration every time. Columns mirror the batch (sub_*) and
+      // product (prod_*) shapes so the same charge math applies. rec_batch_type
+      // '' = no recipe defined yet.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('mushroom_strains')")
+        .all()
+        .map((r) => r.name);
+      const add = (name, ddl) => {
+        if (!cols.includes(name)) db.exec('ALTER TABLE mushroom_strains ADD COLUMN ' + ddl);
+      };
+      add('rec_batch_type', "rec_batch_type TEXT DEFAULT ''");
+      add('rec_substrate', "rec_substrate TEXT DEFAULT 'holzkleie'");
+      add('rec_bag_kg', 'rec_bag_kg REAL DEFAULT 0');
+      add('rec_hardwood_pct', 'rec_hardwood_pct REAL DEFAULT 0');
+      add('rec_wheatbran_pct', 'rec_wheatbran_pct REAL DEFAULT 0');
+      add('rec_coir_pct', 'rec_coir_pct REAL DEFAULT 0');
+      add('rec_rh_pct', 'rec_rh_pct REAL DEFAULT 0');
+      add('rec_gypsum', 'rec_gypsum INTEGER DEFAULT 0');
+      add('rec_grain_kg', 'rec_grain_kg REAL DEFAULT 0');
+      add('rec_grain_rh_pct', 'rec_grain_rh_pct REAL DEFAULT 52');
+      add('rec_inc_days', 'rec_inc_days INTEGER DEFAULT 14');
+    }
   }
 ];
 
@@ -4460,6 +4489,25 @@ function verifyOAuthClientSecret(db, clientId, secret) {
 }
 
 // ── Mushroom Strains CRUD ────────────────────────────────────
+// Extract the per-Sorte recipe defaults (rec_* columns) from an API payload.
+// Keys are column-named so they drop straight into INSERT/UPDATE builders.
+function _strainRecipeFields(d) {
+  const num = (v, def) => (Number.isFinite(+v) ? +v : def);
+  return {
+    rec_batch_type: typeof d.recBatchType === 'string' ? d.recBatchType : '',
+    rec_substrate: typeof d.recSubstrate === 'string' && d.recSubstrate ? d.recSubstrate : 'holzkleie',
+    rec_bag_kg: num(d.recBagKg, 0),
+    rec_hardwood_pct: num(d.recHardwoodPct, 0),
+    rec_wheatbran_pct: num(d.recWheatbranPct, 0),
+    rec_coir_pct: num(d.recCoirPct, 0),
+    rec_rh_pct: num(d.recRhPct, 0),
+    rec_gypsum: d.recGypsum ? 1 : 0,
+    rec_grain_kg: num(d.recGrainKg, 0),
+    rec_grain_rh_pct: num(d.recGrainRhPct, 52),
+    rec_inc_days: num(d.recIncDays, 14)
+  };
+}
+
 function listMushroomStrains(db) {
   return db
     .prepare('SELECT * FROM mushroom_strains ORDER BY name')
@@ -4470,18 +4518,34 @@ function listMushroomStrains(db) {
       kuerzel: r.kuerzel,
       description: r.description || '',
       created: r.created,
-      updated: r.updated || null
+      updated: r.updated || null,
+      // Production recipe defaults (v46) — drive the Charge/Labor quick-create.
+      recBatchType: r.rec_batch_type || '',
+      recSubstrate: r.rec_substrate || 'holzkleie',
+      recBagKg: r.rec_bag_kg || 0,
+      recHardwoodPct: r.rec_hardwood_pct || 0,
+      recWheatbranPct: r.rec_wheatbran_pct || 0,
+      recCoirPct: r.rec_coir_pct || 0,
+      recRhPct: r.rec_rh_pct || 0,
+      recGypsum: r.rec_gypsum === 1,
+      recGrainKg: r.rec_grain_kg || 0,
+      recGrainRhPct: r.rec_grain_rh_pct != null ? r.rec_grain_rh_pct : 52,
+      recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14
     }));
 }
 
-function createMushroomStrain(db, { name, kuerzel, description }) {
+function createMushroomStrain(db, data) {
+  const { name, kuerzel, description } = data || {};
   if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
+  const rec = _strainRecipeFields(data);
+  const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
+  const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
     const result = db
-      .prepare('INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)')
-      .run(name.trim(), kuerzel.trim(), description || '', now);
+      .prepare(`INSERT INTO mushroom_strains(${cols.join(',')}) VALUES(${cols.map(() => '?').join(',')})`)
+      .run(...vals);
     incrementDataVersion(db);
     return result.lastInsertRowid;
   } catch (e) {
@@ -4492,12 +4556,29 @@ function createMushroomStrain(db, { name, kuerzel, description }) {
   }
 }
 
-function updateMushroomStrain(db, id, { name, kuerzel, description }) {
+function updateMushroomStrain(db, id, data) {
+  const { name, kuerzel, description } = data || {};
   const now = new Date().toISOString();
   const fields = {};
   if (name !== undefined) fields.name = name.trim();
   if (kuerzel !== undefined) fields.kuerzel = kuerzel.trim();
   if (description !== undefined) fields.description = description;
+  // Recipe defaults — write all rec_* columns when the payload carries any of
+  // them (the Sorte editor always sends the full set).
+  const recKeys = [
+    'recBatchType',
+    'recSubstrate',
+    'recBagKg',
+    'recHardwoodPct',
+    'recWheatbranPct',
+    'recCoirPct',
+    'recRhPct',
+    'recGypsum',
+    'recGrainKg',
+    'recGrainRhPct',
+    'recIncDays'
+  ];
+  if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   if (!Object.keys(fields).length) return;
   fields.updated = now;
   const cols = Object.keys(fields);

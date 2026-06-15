@@ -738,6 +738,27 @@ async function pollSync() {
   }
 }
 
+// Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
+// broadcasts a data-changed event; without coalescing, a burst of scans fires
+// one full /api/data refetch per scan — the dominant cause of scan sluggishness
+// as history grows. The scanning client already applies its own scan locally
+// (optimistic update), so the authoritative reconcile can be deferred and
+// folded into a single poll per window.
+let _ssePollTimer = null;
+function scheduleSsePoll() {
+  if (_ssePollTimer) return; // a poll is already queued — fold this event into it
+  _ssePollTimer = setTimeout(function () {
+    _ssePollTimer = null;
+    // If a local mutation is mid-flight, its own flow keeps the UI correct;
+    // retry shortly so we still pick up other clients' interleaved changes.
+    if (_mutating > 0 || _polling) {
+      scheduleSsePoll();
+      return;
+    }
+    pollSync();
+  }, 500);
+}
+
 // ── SSE real-time sync (replaces 5s polling for connected clients) ──
 let _sse = null;
 let _sseReconnectTimer = null;
@@ -753,7 +774,7 @@ function connectSSE() {
     _sse.onmessage = function (ev) {
       try {
         const msg = JSON.parse(ev.data);
-        if (msg.type === 'data-changed' && _mutating === 0) pollSync();
+        if (msg.type === 'data-changed') scheduleSsePoll();
         if (msg.type === 'connected') setSyncStatus('ok', 'Connected');
       } catch (e) {
         /* ignore parse errors */
@@ -8531,7 +8552,7 @@ function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
   if (!mushroomStrains.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">' + t('strains.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
   }
   // Count usage
@@ -8546,12 +8567,19 @@ function renderStrains() {
       if (bc > 0) usageParts.push(bc + ' ' + t('strains.batches'));
       if (cc > 0) usageParts.push(cc + ' ' + t('strains.cultures'));
       const usageText = usageParts.join(', ') || '—';
+      // Quick-create straight from this Sorte. "+ Charge" needs a recipe;
+      // "+ Labor" only needs the Sorte (cultures carry no substrate recipe).
+      const chargeBtn = ms.recBatchType
+        ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
+        : '';
       return `<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td style="font-size:12px;color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${msRecipeSummary(ms)}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
+        ${chargeBtn}<button class="btn btn-sm" onclick="msQuickLabor(${ms.id})" style="padding:2px 7px" title="${t('strains.addLaborHint')}">${t('strains.addLabor')}</button>
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('assets.editBtn')}</button>
         <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse ? 'disabled title="' + t('strains.deleteProtected') + '"' : ''} style="padding:2px 7px">&#x2715;</button>
       </td>
@@ -8573,7 +8601,22 @@ function saveMStrain() {
     alert(t('strains.kuerzelLength'));
     return;
   }
-  const payload = { name, kuerzel, description: desc };
+  const rec = _msReadRecipe();
+  const payload = { name, kuerzel, description: desc, ...rec };
+  const num = (v, d) => (isFinite(parseFloat(v)) ? parseFloat(v) : d);
+  const recLocal = {
+    recBatchType: rec.recBatchType || '',
+    recSubstrate: rec.recSubstrate || 'holzkleie',
+    recBagKg: num(rec.recBagKg, 0),
+    recRhPct: num(rec.recRhPct, 0),
+    recHardwoodPct: num(rec.recHardwoodPct, 0),
+    recWheatbranPct: num(rec.recWheatbranPct, 0),
+    recCoirPct: num(rec.recCoirPct, 0),
+    recGypsum: !!rec.recGypsum,
+    recGrainKg: num(rec.recGrainKg, 0),
+    recGrainRhPct: num(rec.recGrainRhPct, 52),
+    recIncDays: num(rec.recIncDays, 14)
+  };
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
     if (r && r.error) {
@@ -8581,13 +8624,21 @@ function saveMStrain() {
       return;
     }
     if (!editId && r && r.id) {
-      mushroomStrains.push({ id: r.id, name, kuerzel, description: desc, created: new Date().toISOString() });
+      mushroomStrains.push({
+        id: r.id,
+        name,
+        kuerzel,
+        description: desc,
+        created: new Date().toISOString(),
+        ...recLocal
+      });
     } else if (editId) {
       const ms = mushroomStrains.find((x) => x.id === parseInt(editId));
       if (ms) {
         ms.name = name;
         ms.kuerzel = kuerzel;
         ms.description = desc;
+        Object.assign(ms, recLocal);
       }
     }
     mushroomStrains.sort((a, b) => a.name.localeCompare(b.name));
@@ -8604,6 +8655,23 @@ function editMStrain(id) {
   document.getElementById('ms-kuerzel').value = ms.kuerzel;
   document.getElementById('ms-desc').value = ms.description || '';
   document.getElementById('ms-edit-id').value = id;
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', ms.recBatchType || '');
+  sv('ms-rec-substrate', ms.recSubstrate || 'holzkleie');
+  sv('ms-rec-bagkg', ms.recBagKg || 0);
+  sv('ms-rec-rh', ms.recRhPct || 0);
+  sv('ms-rec-hw', ms.recHardwoodPct || 0);
+  sv('ms-rec-wb', ms.recWheatbranPct || 0);
+  sv('ms-rec-coir', ms.recCoirPct || 0);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = !!ms.recGypsum;
+  sv('ms-rec-grainkg', ms.recGrainKg || 0);
+  sv('ms-rec-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+  sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
+  msRecTypeChange();
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
   document.getElementById('ms-cancel-btn').style.display = '';
   document.getElementById('ms-name').focus();
@@ -8617,6 +8685,23 @@ function cancelMStrain() {
   document.getElementById('ms-save-btn').setAttribute('data-i18n', 'strains.save');
   document.getElementById('ms-save-btn').textContent = t('strains.save');
   document.getElementById('ms-cancel-btn').style.display = 'none';
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', '');
+  sv('ms-rec-substrate', 'holzkleie');
+  sv('ms-rec-bagkg', 0);
+  sv('ms-rec-rh', 0);
+  sv('ms-rec-hw', 75);
+  sv('ms-rec-wb', 25);
+  sv('ms-rec-coir', 100);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = false;
+  sv('ms-rec-grainkg', 0);
+  sv('ms-rec-grainrh', 52);
+  sv('ms-rec-days', 14);
+  msRecTypeChange();
 }
 
 function deleteMStrain(id) {
@@ -8633,6 +8718,251 @@ function deleteMStrain(id) {
       renderStrains();
     });
   });
+}
+
+// ── Sorte production recipe (rec_*) — editor toggle + per-bag need preview ───
+function _msReadRecipe() {
+  const v = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value : '';
+  };
+  const chk = (id) => {
+    const el = document.getElementById(id);
+    return el && el.checked ? 1 : 0;
+  };
+  return {
+    recBatchType: v('ms-rec-type') || '',
+    recSubstrate: v('ms-rec-substrate') || 'holzkleie',
+    recBagKg: v('ms-rec-bagkg'),
+    recRhPct: v('ms-rec-rh'),
+    recHardwoodPct: v('ms-rec-hw'),
+    recWheatbranPct: v('ms-rec-wb'),
+    recCoirPct: v('ms-rec-coir'),
+    recGypsum: chk('ms-rec-gyp'),
+    recGrainKg: v('ms-rec-grainkg'),
+    recGrainRhPct: v('ms-rec-grainrh'),
+    recIncDays: v('ms-rec-days')
+  };
+}
+// Map a recipe (rec_*) onto the product spec shape so we can reuse the shared
+// _ohProdNeedCompute charge math (same hydration formula as the Charge form).
+function _msRecipeToProd(rec) {
+  return {
+    prodType: rec.recBatchType || 'buy',
+    prodSubstrate: rec.recSubstrate,
+    prodBagKg: rec.recBagKg,
+    prodRhPct: rec.recRhPct,
+    prodHardwoodPct: rec.recHardwoodPct,
+    prodWheatbranPct: rec.recWheatbranPct,
+    prodCoirPct: rec.recCoirPct,
+    prodGypsum: rec.recGypsum,
+    prodGrainKg: rec.recGrainKg,
+    prodGrainRhPct: rec.recGrainRhPct
+  };
+}
+function _msStrainToRecipe(ms) {
+  return {
+    recBatchType: ms.recBatchType,
+    recSubstrate: ms.recSubstrate,
+    recBagKg: ms.recBagKg,
+    recRhPct: ms.recRhPct,
+    recHardwoodPct: ms.recHardwoodPct,
+    recWheatbranPct: ms.recWheatbranPct,
+    recCoirPct: ms.recCoirPct,
+    recGypsum: ms.recGypsum,
+    recGrainKg: ms.recGrainKg,
+    recGrainRhPct: ms.recGrainRhPct
+  };
+}
+const _MS_MAT_KEY = {
+  grain: 'inv.grain',
+  hardwood: 'inv.hardwood',
+  wheatbran: 'inv.wheatBran',
+  gypsum: 'inv.gypsum',
+  coir: 'inv.coir'
+};
+function _msNeedParts(rec, mult) {
+  const fmt = (n) => (Math.round(n * 1000) / 1000).toString();
+  const need = _ohProdNeedCompute(_msRecipeToProd(rec));
+  const m = mult || 1;
+  return Object.keys(need)
+    .filter((k) => need[k] > 0)
+    .map((k) => `${esc(t(_MS_MAT_KEY[k] || k))} ${fmt(need[k] * m)} kg`);
+}
+function msRecTypeChange() {
+  const type = (document.getElementById('ms-rec-type') || {}).value || '';
+  const sub = (document.getElementById('ms-rec-substrate') || {}).value || 'holzkleie';
+  const set = (id, disp) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = disp;
+  };
+  set('ms-rec-subgroup', type === 'block' || type === 'allinone' ? 'block' : 'none');
+  set('ms-rec-graingroup', type === 'grain' || type === 'allinone' ? 'block' : 'none');
+  set('ms-rec-holzgroup', sub === 'holzkleie' ? 'grid' : 'none');
+  set('ms-rec-coirgroup', sub === 'cvg' ? 'grid' : 'none');
+  set('ms-rec-daysrow', type ? 'block' : 'none');
+  msRecNeed();
+}
+function msRecNeed() {
+  const el = document.getElementById('ms-rec-need');
+  if (!el) return;
+  const rec = _msReadRecipe();
+  if (!rec.recBatchType) {
+    el.textContent = '';
+    return;
+  }
+  const parts = _msNeedParts(rec, 1);
+  el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+}
+function msRecipeSummary(ms) {
+  const type = ms.recBatchType || '';
+  if (!type) return '<span style="color:var(--c-text-muted)">—</span>';
+  const typeLabel =
+    { block: t('strains.recBlock'), allinone: t('strains.recAllinone'), grain: t('strains.recGrain') }[type] || type;
+  const parts = [esc(typeLabel)];
+  if (type === 'block' || type === 'allinone') {
+    if ((ms.recSubstrate || 'holzkleie') === 'cvg') parts.push(esc(t('orders.sub.cvg')));
+    else parts.push('HW' + (ms.recHardwoodPct || 0) + '/WB' + (ms.recWheatbranPct || 0));
+    if (ms.recBagKg) parts.push((ms.recBagKg || 0) + ' kg');
+  }
+  if ((type === 'allinone' || type === 'grain') && ms.recGrainKg) parts.push('Grain ' + ms.recGrainKg + ' kg');
+  return '<span style="font-size:11px">' + parts.join(' · ') + '</span>';
+}
+function msRecipeSummaryText(ms) {
+  // Plain-text variant of msRecipeSummary for the quick-create modal subtitle.
+  const div = document.createElement('div');
+  div.innerHTML = msRecipeSummary(ms);
+  return div.textContent || '';
+}
+
+// ── Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe ──
+let _msQuickCtx = null;
+function msQuickCharge(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  if (!ms.recBatchType) {
+    alert(t('msq.noRecipe'));
+    return;
+  }
+  _msQuickCtx = { mode: 'charge', ms };
+  document.getElementById('ms-q-title').textContent = t('msq.chargeTitle');
+  document.getElementById('ms-q-sub').textContent = ms.name + ' (' + ms.kuerzel + ') — ' + msRecipeSummaryText(ms);
+  document.getElementById('ms-q-labtype-wrap').style.display = 'none';
+  document.getElementById('ms-q-days-wrap').style.display = '';
+  document.getElementById('ms-q-days').value = ms.recIncDays || 14;
+  document.getElementById('ms-q-qty').value = 1;
+  document.getElementById('ms-q-strain').value = '';
+  document.getElementById('ms-quick-modal').style.display = 'flex';
+  msQuickPreview();
+}
+function msQuickLabor(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  _msQuickCtx = { mode: 'labor', ms };
+  document.getElementById('ms-q-title').textContent = t('msq.laborTitle');
+  document.getElementById('ms-q-sub').textContent = ms.name + ' (' + ms.kuerzel + ')';
+  document.getElementById('ms-q-labtype-wrap').style.display = '';
+  document.getElementById('ms-q-days-wrap').style.display = 'none';
+  document.getElementById('ms-q-qty').value = 1;
+  document.getElementById('ms-q-strain').value = '';
+  document.getElementById('ms-quick-modal').style.display = 'flex';
+  msQuickPreview();
+}
+function msQuickClose() {
+  _msQuickCtx = null;
+  const m = document.getElementById('ms-quick-modal');
+  if (m) m.style.display = 'none';
+}
+function msQuickPreview() {
+  const el = document.getElementById('ms-q-preview');
+  if (!el) return;
+  if (!_msQuickCtx) {
+    el.textContent = '';
+    return;
+  }
+  const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+  if (_msQuickCtx.mode === 'charge') {
+    const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
+    el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+  } else {
+    el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
+  }
+}
+function msQuickConfirm() {
+  if (!_msQuickCtx) return;
+  const ms = _msQuickCtx.ms;
+  const mode = _msQuickCtx.mode;
+  const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+  if (qty < 1) {
+    alert(t('batch.fillQty'));
+    return;
+  }
+  const strainText = (document.getElementById('ms-q-strain').value || '').trim();
+  const setv = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  const setchk = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
+  if (mode === 'labor') {
+    setv('lw-type', document.getElementById('ms-q-labtype').value || 'MC');
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', strainText);
+    setv('lw-qty', qty);
+    setv('lw-source', '');
+    setv('lw-notes', '');
+    const parent = document.getElementById('lw-parent');
+    if (parent) parent.value = '';
+    msQuickClose();
+    go('lab', 'n-lab');
+    openStab('lab', 'work');
+    logLabWork();
+    return;
+  }
+  // Charge: prefill the existing Charge form from the recipe and reuse its
+  // create logic (validation, inventory deduction, zone picker, barcodes).
+  const days = parseInt(document.getElementById('ms-q-days').value) || ms.recIncDays || 14;
+  if (ms.recBatchType === 'grain') {
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', strainText);
+    if (typeof gsResetLines === 'function') gsResetLines();
+    const row = document.querySelector('.gs-wline');
+    if (row) {
+      const kgEl = row.querySelector('.gs-line-kg');
+      const qtyEl = row.querySelector('.gs-line-qty');
+      if (kgEl) kgEl.value = ms.recGrainKg || 1;
+      if (qtyEl) qtyEl.value = qty;
+    }
+    setv('gs-days', days);
+    setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+    const gsc = document.getElementById('gs-culture');
+    if (gsc) gsc.value = '';
+    setv('lw-notes', '');
+    msQuickClose();
+    createGrainBatch();
+    return;
+  }
+  // block / all-in-one
+  const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
+  setv('nb-strain-sel', ms.id);
+  setv('nb-strain-text', strainText);
+  setv('nb-qty', qty);
+  setv('nb-days', days);
+  setv('nb-weight', ms.recBagKg || 0);
+  setv('nb-rh', ms.recRhPct || 0);
+  setv('nb-hw', isCvg ? 0 : ms.recHardwoodPct || 0);
+  setv('nb-wb', isCvg ? 0 : ms.recWheatbranPct || 0);
+  setv('nb-coir', isCvg ? ms.recCoirPct || 100 : 0);
+  setv('nb-grainkg', ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0);
+  setv('nb-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+  setchk('nb-gyp', ms.recGypsum);
+  const nbc = document.getElementById('nb-culture');
+  if (nbc) nbc.value = '';
+  setv('nb-notes', '');
+  msQuickClose();
+  createBatch();
 }
 
 function nbStrainChanged() {
