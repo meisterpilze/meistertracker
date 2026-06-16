@@ -925,6 +925,7 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'versand') loadShipSettings();
+  if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
   if (page === 'settings' && sub === 'log') renderLog();
   if (page === 'orders' && sub === 'inbox') renderOrders();
@@ -5831,6 +5832,80 @@ async function testShipConnection() {
     if (el) el.textContent = '✓ ' + t('versand.connected', { account: d.account || 'ok' }) + (carriers ? ' — ' + carriers : '');
   } catch (e) {
     if (el) el.textContent = '⚠ ' + t('common.error');
+  }
+}
+
+// ── Sales channels (Admin → Settings → Kanäle) ──
+async function loadChannelsSettings() {
+  try {
+    const r = await authFetch('/api/channels');
+    const d = await r.json();
+    const wix = (d.channels || []).find((c) => c.channel === 'wix') || {};
+    const en = document.getElementById('wix-enabled');
+    if (en) en.checked = !!wix.enabled;
+    const sid = document.getElementById('wix-siteid');
+    if (sid) sid.value = wix.siteId || '';
+    const ak = document.getElementById('wix-apikey');
+    if (ak) {
+      ak.value = '';
+      ak.placeholder = wix.hasApiKey ? t('channels.keySet') : 'API-Key';
+    }
+    const st = document.getElementById('wix-status');
+    if (st && wix.lastSync) {
+      st.style.display = 'block';
+      st.textContent = wix.lastError ? '⚠ ' + wix.lastError : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
+    }
+  } catch (e) {
+    /* not configured yet */
+  }
+}
+async function saveChannel(channel) {
+  const body = {
+    enabled: document.getElementById(channel + '-enabled').checked,
+    apiKey: (document.getElementById(channel + '-apikey').value || '').trim(),
+    siteId: (document.getElementById(channel + '-siteid').value || '').trim()
+  };
+  try {
+    const r = await apiPatch('/api/channels/' + channel, body);
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('channels.saved'));
+    loadChannelsSettings();
+  } catch (e) {
+    setFb('err', t('common.error'));
+  }
+}
+async function testChannel(channel) {
+  const st = document.getElementById(channel + '-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('common.loading');
+  }
+  try {
+    const r = await apiPost('/api/channels/' + channel + '/test', {});
+    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected');
+  } catch (e) {
+    if (st) st.textContent = '⚠ ' + t('common.error');
+  }
+}
+async function syncChannel(channel) {
+  const st = document.getElementById(channel + '-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('channels.syncing');
+  }
+  try {
+    const r = await apiPost('/api/channels/' + channel + '/sync', {});
+    if (r && r.error) {
+      if (st) st.textContent = '⚠ ' + r.error;
+      return;
+    }
+    if (st) st.textContent = '✓ ' + t('channels.synced', { n: r.imported || 0 });
+    setFb('ok', t('channels.synced', { n: r.imported || 0 }));
+  } catch (e) {
+    if (st) st.textContent = '⚠ ' + t('common.error');
   }
 }
 
@@ -16107,6 +16182,13 @@ function initEventListeners() {
   });
   $('versand-save-btn').addEventListener('click', saveShipSettings);
   $('versand-test-btn').addEventListener('click', testShipConnection);
+  $('st-settings-channels').addEventListener('click', () => {
+    openStab('settings', 'channels');
+    loadChannelsSettings();
+  });
+  $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
+  $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
+  $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));
   $('printer-save-btn').addEventListener('click', savePrinterSettings);
   $('printer-test-btn').addEventListener('click', testPrintBridge);
   $('printer-refresh-btn').addEventListener('click', () => {

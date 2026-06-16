@@ -238,6 +238,27 @@ window.LANG['en'] = {
   'versand.bought': 'Label bought',
   'versand.openLabel': 'Open label (PDF)',
   'versand.buyBtn': 'Buy label',
+  // Channels (live sync)
+  'settings.tabChannels': 'Channels',
+  'channels.wixTitle': 'Wix',
+  'channels.ebayTitle': 'eBay',
+  'channels.etsyTitle': 'Etsy',
+  'channels.wixDesc':
+    'Pull orders automatically from Wix. API key: Wix dashboard → Settings → API Keys (with Stores/Orders read access). Site ID is in the dashboard URL.',
+  'channels.oauthSoon':
+    'Needs a developer app + OAuth login on the public instance (meistertracker.com). Set up next.',
+  'channels.enable': 'Enable',
+  'channels.apiKey': 'API key',
+  'channels.siteId': 'Site ID',
+  'channels.secretPlaceholder': '(leave blank = unchanged)',
+  'channels.keySet': '•••••••• (saved)',
+  'channels.test': 'Test connection',
+  'channels.syncNow': 'Sync now',
+  'channels.saved': 'Channel saved',
+  'channels.connected': 'Connection OK',
+  'channels.syncing': 'Syncing …',
+  'channels.synced': '{n} orders synced',
+  'channels.lastSync': 'Last: {time}',
   // Scan strip
   'scan.action': 'Action',
   'scan.from': 'From',

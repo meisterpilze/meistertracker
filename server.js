@@ -9,6 +9,7 @@ const zlib = require('zlib');
 const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
 const ship = require('./shipping.js');
+const channels = require('./channels.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
@@ -7314,6 +7315,91 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // -- Sales channels (live order sync) --
+  if (req.method === 'GET' && req.url === '/api/channels') {
+    if (requireAdmin(req, res)) return;
+    try {
+      jsonOk(res, { channels: db.listChannelConfigs(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const chanCfgMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)$/);
+  if (req.method === 'PATCH' && chanCfgMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        // Blank secret fields = keep the stored value (list view never reveals them).
+        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken'].forEach((k) => {
+          if (data[k] === '' || data[k] == null) delete data[k];
+        });
+        db.updateChannelConfig(database, chanCfgMatch[1], data);
+        broadcastSSE(res);
+        jsonOk(res, { channels: db.listChannelConfigs(database) });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const chanTestMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/test$/);
+  if (req.method === 'POST' && chanTestMatch) {
+    if (requireAdmin(req, res)) return;
+    (async () => {
+      try {
+        const cfg = db.getChannelConfig(database, chanTestMatch[1]);
+        const r = await channels.getChannelProvider(chanTestMatch[1]).testConnection(cfg);
+        jsonOk(res, r);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'test failed');
+      }
+    })();
+    return;
+  }
+  const chanSyncMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/sync$/);
+  if (req.method === 'POST' && chanSyncMatch) {
+    if (requireAdmin(req, res)) return;
+    const channel = chanSyncMatch[1];
+    (async () => {
+      try {
+        const cfg = db.getChannelConfig(database, channel);
+        const prov = channels.getChannelProvider(channel);
+        let imported = 0;
+        let cursor = null;
+        let pages = 0;
+        // Page through results; upsertOrder dedupes by (channel, channelOrderId).
+        do {
+          const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
+          for (const o of orders) {
+            try {
+              db.upsertOrder(database, o);
+              imported++;
+            } catch (e2) {
+              /* skip a malformed order, keep importing the rest */
+            }
+          }
+          cursor = nextCursor;
+          pages++;
+        } while (cursor && pages < 20);
+        db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: null });
+        broadcastSSE(res);
+        jsonOk(res, { imported });
+      } catch (err) {
+        db.setChannelSyncState(database, channel, {
+          lastSync: new Date().toISOString(),
+          lastError: err.message || 'sync failed'
+        });
+        jsonErr(res, 502, err.message || 'sync failed');
+      }
+    })();
     return;
   }
 

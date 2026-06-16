@@ -238,6 +238,27 @@ window.LANG['de'] = {
   'versand.bought': 'Label gekauft',
   'versand.openLabel': 'Label öffnen (PDF)',
   'versand.buyBtn': 'Label kaufen',
+  // Kanäle (live sync)
+  'settings.tabChannels': 'Kanäle',
+  'channels.wixTitle': 'Wix',
+  'channels.ebayTitle': 'eBay',
+  'channels.etsyTitle': 'Etsy',
+  'channels.wixDesc':
+    'Bestellungen automatisch aus Wix holen. API-Key: Wix-Dashboard → Einstellungen → API-Keys (mit Stores/Orders-Leserecht). Site-ID steht in der Dashboard-URL.',
+  'channels.oauthSoon':
+    'Braucht eine Developer-App + OAuth-Anmeldung auf der öffentlichen Instanz (meistertracker.com). Wird als Nächstes eingerichtet.',
+  'channels.enable': 'Aktivieren',
+  'channels.apiKey': 'API-Key',
+  'channels.siteId': 'Site-ID',
+  'channels.secretPlaceholder': '(leer lassen = unverändert)',
+  'channels.keySet': '•••••••• (gespeichert)',
+  'channels.test': 'Verbindung testen',
+  'channels.syncNow': 'Jetzt synchronisieren',
+  'channels.saved': 'Kanal gespeichert',
+  'channels.connected': 'Verbindung OK',
+  'channels.syncing': 'Synchronisiere …',
+  'channels.synced': '{n} Bestellungen synchronisiert',
+  'channels.lastSync': 'Zuletzt: {time}',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',

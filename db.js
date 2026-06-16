@@ -6139,11 +6139,26 @@ function upsertOrder(db, o) {
   const existing = db.prepare('SELECT id FROM orders WHERE channel = ? AND channel_order_id = ?').get(o.channel, coid);
   let orderId;
   const raw = o.raw != null ? JSON.stringify(o.raw) : null;
+  // Structured ship-to address from the channel, so synced orders are ready to
+  // label without manual entry. null values preserve any existing/edited value.
+  const sName = o.shipName || null,
+    sCompany = o.shipCompany || null,
+    sStreet = o.shipStreet || null,
+    sHouse = o.shipHouse || null,
+    sAddr2 = o.shipAddress2 || null,
+    sCity = o.shipCity || null,
+    sPostal = o.shipPostal || null,
+    sPhone = o.shipPhone || null,
+    sWeight = o.shipWeightG != null && o.shipWeightG !== '' ? o.shipWeightG : null;
   if (existing) {
     orderId = existing.id;
     db.prepare(
       `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
-        customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?, updated = ?
+        customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?,
+        ship_name = COALESCE(?, ship_name), ship_company = COALESCE(?, ship_company), ship_street = COALESCE(?, ship_street),
+        ship_house = COALESCE(?, ship_house), ship_address2 = COALESCE(?, ship_address2), ship_city = COALESCE(?, ship_city),
+        ship_postal = COALESCE(?, ship_postal), ship_phone = COALESCE(?, ship_phone), ship_weight_g = COALESCE(?, ship_weight_g),
+        updated = ?
        WHERE id = ?`
     ).run(
       o.status || null,
@@ -6156,6 +6171,15 @@ function upsertOrder(db, o) {
       o.totalAmount != null ? o.totalAmount : null,
       o.currency || null,
       raw,
+      sName,
+      sCompany,
+      sStreet,
+      sHouse,
+      sAddr2,
+      sCity,
+      sPostal,
+      sPhone,
+      sWeight,
       now,
       orderId
     );
@@ -6167,8 +6191,10 @@ function upsertOrder(db, o) {
     const info = db
       .prepare(
         `INSERT INTO orders(channel, channel_order_id, status, order_date, ship_by, customer_id,
-           customer_name, customer_email, ship_country, total_amount, currency, raw_json, imported, updated)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           customer_name, customer_email, ship_country, total_amount, currency, raw_json,
+           ship_name, ship_company, ship_street, ship_house, ship_address2, ship_city, ship_postal, ship_phone, ship_weight_g,
+           imported, updated)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
         o.channel,
@@ -6183,6 +6209,15 @@ function upsertOrder(db, o) {
         o.totalAmount != null ? o.totalAmount : null,
         o.currency || null,
         raw,
+        sName,
+        sCompany,
+        sStreet,
+        sHouse,
+        sAddr2,
+        sCity,
+        sPostal,
+        sPhone,
+        sWeight,
         now,
         now
       );
@@ -6220,6 +6255,85 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
        LIMIT ?`
     )
     .all(...args);
+}
+
+// -- Sales channel config (live order sync: Wix / Etsy / eBay) --
+// Reuses the sales_channel_config table (v42). Rows are created lazily.
+const SALES_CHANNELS = ['wix', 'etsy', 'ebay'];
+function _ensureChannelRow(db, channel) {
+  db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
+    channel,
+    new Date().toISOString()
+  );
+}
+function getChannelConfig(db, channel) {
+  _ensureChannelRow(db, channel);
+  const r = db.prepare('SELECT * FROM sales_channel_config WHERE channel = ?').get(channel) || {};
+  return {
+    channel,
+    enabled: r.enabled === 1,
+    apiKey: r.api_key || '',
+    siteId: r.site_id || '',
+    clientId: r.client_id || '',
+    clientSecret: r.client_secret || '',
+    accessToken: r.access_token || '',
+    refreshToken: r.refresh_token || '',
+    tokenExpires: r.token_expires || null,
+    webhookSecret: r.webhook_secret || '',
+    lastSync: r.last_sync || null,
+    lastCursor: r.last_cursor || null,
+    lastError: r.last_error || null
+  };
+}
+// Client-facing list — secrets are reduced to "is set" flags, never exposed.
+function listChannelConfigs(db) {
+  return SALES_CHANNELS.map((c) => {
+    const cfg = getChannelConfig(db, c);
+    return {
+      channel: c,
+      enabled: cfg.enabled,
+      siteId: cfg.siteId,
+      clientId: cfg.clientId,
+      hasApiKey: !!cfg.apiKey,
+      hasClientSecret: !!cfg.clientSecret,
+      connected: c === 'wix' ? !!cfg.apiKey && !!cfg.siteId : !!cfg.accessToken,
+      tokenExpires: cfg.tokenExpires,
+      lastSync: cfg.lastSync,
+      lastError: cfg.lastError
+    };
+  });
+}
+function updateChannelConfig(db, channel, f) {
+  if (!SALES_CHANNELS.includes(channel)) throw new Error('unknown channel: ' + channel);
+  _ensureChannelRow(db, channel);
+  const cur = getChannelConfig(db, channel);
+  const cols = {
+    enabled: f.enabled !== undefined ? (f.enabled ? 1 : 0) : cur.enabled ? 1 : 0,
+    api_key: f.apiKey !== undefined ? f.apiKey : cur.apiKey,
+    site_id: f.siteId !== undefined ? f.siteId : cur.siteId,
+    client_id: f.clientId !== undefined ? f.clientId : cur.clientId,
+    client_secret: f.clientSecret !== undefined ? f.clientSecret : cur.clientSecret,
+    access_token: f.accessToken !== undefined ? f.accessToken : cur.accessToken,
+    refresh_token: f.refreshToken !== undefined ? f.refreshToken : cur.refreshToken,
+    token_expires: f.tokenExpires !== undefined ? f.tokenExpires : cur.tokenExpires,
+    webhook_secret: f.webhookSecret !== undefined ? f.webhookSecret : cur.webhookSecret
+  };
+  const keys = Object.keys(cols);
+  db.prepare(`UPDATE sales_channel_config SET ${keys.map((k) => k + '=?').join(',')} WHERE channel=?`).run(
+    ...keys.map((k) => cols[k]),
+    channel
+  );
+  incrementDataVersion(db);
+}
+function setChannelSyncState(db, channel, s) {
+  _ensureChannelRow(db, channel);
+  db.prepare('UPDATE sales_channel_config SET last_sync=?, last_cursor=?, last_error=? WHERE channel=?').run(
+    s.lastSync !== undefined ? s.lastSync : null,
+    s.lastCursor !== undefined ? s.lastCursor : null,
+    s.lastError !== undefined ? s.lastError : null,
+    channel
+  );
+  incrementDataVersion(db);
 }
 
 function getOrder(db, id) {
@@ -6367,6 +6481,10 @@ module.exports = {
   listUnmappedItems,
   upsertOrder,
   listOrders,
+  getChannelConfig,
+  listChannelConfigs,
+  updateChannelConfig,
+  setChannelSyncState,
   getOrder,
   setOrderStatus,
   listCustomers,
