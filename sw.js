@@ -2,7 +2,7 @@
 // Prod uses stale-while-revalidate (instant nav + offline fallback); the
 // worktree/test instance (port 3001) is forced network-first below so code
 // changes always show on reload. Bumping this version evicts the old cache.
-const CACHE = 'meistertracker-v30';
+const CACHE = 'meistertracker-v31';
 
 // Test/worktree instance detection. The worktree server runs on port 3001
 // (prod is 3000 / 443). On the worktree we never serve static assets from

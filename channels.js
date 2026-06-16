@@ -67,13 +67,17 @@ function _normalizeWix(o) {
 }
 
 async function _wixSearch(cfg, cursorPaging) {
+  const headers = {
+    Authorization: cfg.apiKey,
+    'wix-site-id': cfg.siteId,
+    'Content-Type': 'application/json'
+  };
+  // API-key calls to Wix usually also require the account id. For Wix we store it
+  // in the (otherwise-unused) client_id column.
+  if (cfg.clientId) headers['wix-account-id'] = cfg.clientId;
   const res = await fetch(WIX_BASE + '/ecom/v1/orders/search', {
     method: 'POST',
-    headers: {
-      Authorization: cfg.apiKey,
-      'wix-site-id': cfg.siteId,
-      'Content-Type': 'application/json'
-    },
+    headers,
     body: JSON.stringify({ search: { cursorPaging } })
   });
   const text = await res.text();

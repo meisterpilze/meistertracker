@@ -5845,6 +5845,8 @@ async function loadChannelsSettings() {
     if (en) en.checked = !!wix.enabled;
     const sid = document.getElementById('wix-siteid');
     if (sid) sid.value = wix.siteId || '';
+    const aid = document.getElementById('wix-accountid');
+    if (aid) aid.value = wix.clientId || '';
     const ak = document.getElementById('wix-apikey');
     if (ak) {
       ak.value = '';
@@ -5860,10 +5862,12 @@ async function loadChannelsSettings() {
   }
 }
 async function saveChannel(channel) {
+  const aidEl = document.getElementById(channel + '-accountid');
   const body = {
     enabled: document.getElementById(channel + '-enabled').checked,
     apiKey: (document.getElementById(channel + '-apikey').value || '').trim(),
-    siteId: (document.getElementById(channel + '-siteid').value || '').trim()
+    siteId: (document.getElementById(channel + '-siteid').value || '').trim(),
+    clientId: aidEl ? (aidEl.value || '').trim() : undefined
   };
   try {
     const r = await apiPatch('/api/channels/' + channel, body);

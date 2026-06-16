@@ -250,6 +250,7 @@ window.LANG['en'] = {
   'channels.enable': 'Enable',
   'channels.apiKey': 'API key',
   'channels.siteId': 'Site ID',
+  'channels.accountId': 'Account ID (if required)',
   'channels.secretPlaceholder': '(leave blank = unchanged)',
   'channels.keySet': '•••••••• (saved)',
   'channels.test': 'Test connection',
