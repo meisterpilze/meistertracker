@@ -3861,6 +3861,35 @@ function updateShipmentStatus(db, id, fields) {
   incrementDataVersion(db);
 }
 
+function getShipmentById(db, id) {
+  const r = db.prepare('SELECT * FROM shipments WHERE id = ?').get(id);
+  return r ? _mapShipment(r) : null;
+}
+
+// Order fields (camelCase) needed to build a shipping label.
+function getOrderForShipping(db, id) {
+  const r = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!r) return null;
+  return {
+    id: r.id,
+    channel: r.channel,
+    channelOrderId: r.channel_order_id,
+    status: r.status,
+    customerName: r.customer_name,
+    customerEmail: r.customer_email,
+    shipName: r.ship_name,
+    shipCompany: r.ship_company,
+    shipStreet: r.ship_street,
+    shipHouse: r.ship_house,
+    shipAddress2: r.ship_address2,
+    shipCity: r.ship_city,
+    shipPostal: r.ship_postal,
+    shipCountry: r.ship_country,
+    shipPhone: r.ship_phone,
+    shipWeightG: r.ship_weight_g
+  };
+}
+
 // -- Inventory Delta --
 const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'];
 
@@ -6420,6 +6449,8 @@ module.exports = {
   insertShipment,
   listShipments,
   updateShipmentStatus,
+  getShipmentById,
+  getOrderForShipping,
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,

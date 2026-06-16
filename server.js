@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
+const ship = require('./shipping.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
@@ -7120,6 +7121,184 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         safeErr(res, err);
       }
     });
+    return;
+  }
+
+  // -- Shipping (Versand / Phase 4) --
+  // Config (provider keys + defaults) is admin-only; the secret is masked on GET
+  // and preserved on PATCH when the field is left blank (mirrors DuckDNS).
+  if (req.method === 'GET' && req.url === '/api/ship/config') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const cfg = db.getShippingConfig(database);
+      jsonOk(res, {
+        provider: cfg.provider,
+        enabled: cfg.enabled,
+        mode: cfg.mode,
+        publicKey: cfg.publicKey,
+        hasSecret: !!cfg.secretKey,
+        senderAddressId: cfg.senderAddressId,
+        defaultMethod: cfg.defaultMethod,
+        defaultWeightG: cfg.defaultWeightG
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && req.url === '/api/ship/config') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        // Blank secret = keep the stored one (GET never reveals it).
+        if (data.secretKey === '' || data.secretKey == null) delete data.secretKey;
+        db.updateShippingConfig(database, data);
+        broadcastSSE(res);
+        const cfg = db.getShippingConfig(database);
+        jsonOk(res, {
+          provider: cfg.provider,
+          enabled: cfg.enabled,
+          mode: cfg.mode,
+          publicKey: cfg.publicKey,
+          hasSecret: !!cfg.secretKey,
+          defaultMethod: cfg.defaultMethod,
+          defaultWeightG: cfg.defaultWeightG
+        });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'GET' && req.url === '/api/ship/test') {
+    if (requireAdmin(req, res)) return;
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        if (!cfg.publicKey || !cfg.secretKey) {
+          jsonErr(res, 400, 'Keine API-Keys konfiguriert');
+          return;
+        }
+        const r = await ship.getProvider(cfg).testConnection(cfg);
+        jsonOk(res, r);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'connection failed');
+      }
+    })();
+    return;
+  }
+  // GET /api/ship/methods?country=DE&weight=1000
+  if (req.method === 'GET' && req.url.startsWith('/api/ship/methods')) {
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        if (!cfg.publicKey || !cfg.secretKey) {
+          jsonErr(res, 400, 'Versand nicht konfiguriert');
+          return;
+        }
+        const q = new URL(req.url, 'http://x').searchParams;
+        const toCountry = (q.get('country') || 'DE').toUpperCase();
+        const weightG = parseInt(q.get('weight') || '', 10) || undefined;
+        const methods = await ship.getProvider(cfg).listMethods(cfg, { toCountry, weightG });
+        jsonOk(res, { methods });
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'methods failed');
+      }
+    })();
+    return;
+  }
+  // POST /api/ship/label { orderId, methodId, weightG, address:{...} } — buys a label.
+  if (req.method === 'POST' && req.url === '/api/ship/label') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      (async () => {
+        try {
+          const cfg = db.getShippingConfig(database);
+          if (!cfg.publicKey || !cfg.secretKey) {
+            jsonErr(res, 400, 'Versand nicht konfiguriert');
+            return;
+          }
+          const orderId = parseInt(data.orderId, 10);
+          if (!orderId) {
+            jsonErr(res, 400, 'orderId required');
+            return;
+          }
+          if (!data.methodId) {
+            jsonErr(res, 400, 'methodId required');
+            return;
+          }
+          if (data.address && typeof data.address === 'object') {
+            db.updateOrderShipAddress(database, orderId, data.address);
+          }
+          const order = db.getOrderForShipping(database, orderId);
+          if (!order) {
+            jsonErr(res, 404, 'order not found');
+            return;
+          }
+          const weightG = parseInt(data.weightG, 10) || order.shipWeightG || cfg.defaultWeightG;
+          const result = await ship.getProvider(cfg).buyLabel(cfg, { order, methodId: data.methodId, weightG });
+          const id = db.insertShipment(database, {
+            orderId,
+            provider: cfg.provider,
+            methodId: data.methodId,
+            ...result
+          });
+          // Buying a label = the order is going out.
+          try {
+            database
+              .prepare("UPDATE orders SET status='shipped', updated=? WHERE id=?")
+              .run(new Date().toISOString(), orderId);
+          } catch (e2) {
+            /* status is best-effort */
+          }
+          broadcastSSE(res);
+          jsonOk(res, { id, ...result });
+        } catch (err) {
+          jsonErr(res, 502, err.message || 'label failed');
+        }
+      })();
+    });
+    return;
+  }
+  // GET /api/ship/shipments?orderId=
+  if (req.method === 'GET' && req.url.startsWith('/api/ship/shipments')) {
+    try {
+      const orderId = new URL(req.url, 'http://x').searchParams.get('orderId');
+      const shipments = db.listShipments(database, orderId ? { orderId: parseInt(orderId, 10) } : {});
+      jsonOk(res, { shipments });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // GET /api/ship/label/:id/pdf — proxy the carrier label PDF (keeps API keys server-side).
+  const shipPdfMatch = req.url.match(/^\/api\/ship\/label\/(\d+)\/pdf$/);
+  if (req.method === 'GET' && shipPdfMatch) {
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        const sh = db.getShipmentById(database, parseInt(shipPdfMatch[1], 10));
+        if (!sh || !sh.labelUrl) {
+          jsonErr(res, 404, 'label not found');
+          return;
+        }
+        const buf = await ship.getProvider(cfg).fetchLabelPdf(cfg, sh.labelUrl);
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="label-' + sh.id + '.pdf"'
+        });
+        res.end(buf);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'pdf failed');
+      }
+    })();
     return;
   }
 
