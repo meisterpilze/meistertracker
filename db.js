@@ -1363,6 +1363,74 @@ const MIGRATIONS = [
       add('rec_grain_rh_pct', 'rec_grain_rh_pct REAL DEFAULT 52');
       add('rec_inc_days', 'rec_inc_days INTEGER DEFAULT 14');
     }
+  },
+  {
+    version: 47,
+    description: 'Phase 4 Versand: shipments + shipping_config + structured ship-to address on orders',
+    fn(db) {
+      // Structured shipping address on orders. Channel sync (Phase 1+) fills these
+      // from raw_json; until then the Versand UI lets the user enter/confirm them.
+      // ship_country already exists from v42.
+      const ocols = db
+        .prepare("SELECT name FROM pragma_table_info('orders')")
+        .all()
+        .map((r) => r.name);
+      const addOrderCol = (name, ddl) => {
+        if (!ocols.includes(name)) db.exec('ALTER TABLE orders ADD COLUMN ' + ddl);
+      };
+      addOrderCol('ship_name', 'ship_name TEXT');
+      addOrderCol('ship_company', 'ship_company TEXT');
+      addOrderCol('ship_street', 'ship_street TEXT');
+      addOrderCol('ship_house', 'ship_house TEXT');
+      addOrderCol('ship_address2', 'ship_address2 TEXT');
+      addOrderCol('ship_city', 'ship_city TEXT');
+      addOrderCol('ship_postal', 'ship_postal TEXT');
+      addOrderCol('ship_phone', 'ship_phone TEXT');
+      addOrderCol('ship_weight_g', 'ship_weight_g INTEGER');
+
+      // One row per bought label.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS shipments (
+          id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id           INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+          provider           TEXT NOT NULL DEFAULT 'sendcloud',
+          provider_parcel_id TEXT,
+          carrier            TEXT,
+          method_id          TEXT,
+          method_name        TEXT,
+          tracking_number    TEXT,
+          tracking_url       TEXT,
+          label_url          TEXT,
+          label_format       TEXT,                 -- pdf_a6 | pdf_a4 | zpl
+          cost               REAL,
+          currency           TEXT,
+          status             TEXT NOT NULL DEFAULT 'created', -- created|announced|in_transit|delivered|cancelled|error
+          channel_pushed     INTEGER DEFAULT 0,
+          error              TEXT,
+          created            TEXT NOT NULL,
+          updated            TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_shipments_order ON shipments(order_id);
+      `);
+
+      // Provider credentials + defaults (Admin -> Versand). Secrets live here like
+      // sales_channel_config / mcp_config, never in code.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS shipping_config (
+          id                INTEGER PRIMARY KEY CHECK (id = 1),
+          provider          TEXT DEFAULT 'sendcloud',
+          enabled           INTEGER DEFAULT 0,
+          public_key        TEXT DEFAULT '',
+          secret_key        TEXT DEFAULT '',
+          mode              TEXT DEFAULT 'test',   -- test | live
+          sender_address_id TEXT DEFAULT '',
+          default_method    TEXT DEFAULT '',
+          default_weight_g  INTEGER DEFAULT 1000,
+          created           TEXT
+        );
+      `);
+      db.prepare('INSERT OR IGNORE INTO shipping_config(id, created) VALUES(1, ?)').run(new Date().toISOString());
+    }
   }
 ];
 
@@ -3636,6 +3704,160 @@ function updatePrintBridgeCfg(db, cfg) {
     cfg.url || '',
     cfg.token || ''
   );
+  incrementDataVersion(db);
+}
+
+// -- Shipping (Phase 4 Versand) --
+// Provider credentials + defaults. Secrets are returned only to admin-gated
+// endpoints (mirrors print_bridge_config / sales_channel_config), never via readAll.
+function getShippingConfig(db) {
+  const row = db.prepare('SELECT * FROM shipping_config WHERE id = 1').get() || {};
+  return {
+    provider: row.provider || 'sendcloud',
+    enabled: row.enabled === 1,
+    publicKey: row.public_key || '',
+    secretKey: row.secret_key || '',
+    mode: row.mode || 'test',
+    senderAddressId: row.sender_address_id || '',
+    defaultMethod: row.default_method || '',
+    defaultWeightG: row.default_weight_g != null ? row.default_weight_g : 1000
+  };
+}
+
+function updateShippingConfig(db, cfg) {
+  const cur = getShippingConfig(db);
+  const pick = (k, d) => (cfg[k] !== undefined ? cfg[k] : d);
+  const w = +pick('defaultWeightG', cur.defaultWeightG);
+  db.prepare(
+    `UPDATE shipping_config SET provider=?, enabled=?, public_key=?, secret_key=?, mode=?,
+       sender_address_id=?, default_method=?, default_weight_g=? WHERE id=1`
+  ).run(
+    pick('provider', cur.provider) || 'sendcloud',
+    pick('enabled', cur.enabled) ? 1 : 0,
+    pick('publicKey', cur.publicKey) || '',
+    pick('secretKey', cur.secretKey) || '',
+    pick('mode', cur.mode) || 'test',
+    pick('senderAddressId', cur.senderAddressId) || '',
+    pick('defaultMethod', cur.defaultMethod) || '',
+    Number.isFinite(w) ? w : 1000
+  );
+  incrementDataVersion(db);
+}
+
+// Structured ship-to address on an order (filled by channel sync later; editable
+// in the Versand UI now). camelCase keys -> ship_* columns.
+function updateOrderShipAddress(db, orderId, a) {
+  const map = {
+    shipName: 'ship_name',
+    shipCompany: 'ship_company',
+    shipStreet: 'ship_street',
+    shipHouse: 'ship_house',
+    shipAddress2: 'ship_address2',
+    shipCity: 'ship_city',
+    shipPostal: 'ship_postal',
+    shipCountry: 'ship_country',
+    shipPhone: 'ship_phone',
+    shipWeightG: 'ship_weight_g'
+  };
+  const cols = [];
+  const vals = [];
+  for (const k in map) {
+    if (a[k] === undefined) continue;
+    cols.push(map[k] + '=?');
+    vals.push(a[k]);
+  }
+  if (!cols.length) return;
+  db.prepare(`UPDATE orders SET ${cols.join(',')}, updated=? WHERE id=?`).run(
+    ...vals,
+    new Date().toISOString(),
+    orderId
+  );
+  incrementDataVersion(db);
+}
+
+function _mapShipment(r) {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    provider: r.provider,
+    providerParcelId: r.provider_parcel_id,
+    carrier: r.carrier,
+    methodId: r.method_id,
+    methodName: r.method_name,
+    trackingNumber: r.tracking_number,
+    trackingUrl: r.tracking_url,
+    labelUrl: r.label_url,
+    labelFormat: r.label_format,
+    cost: r.cost,
+    currency: r.currency,
+    status: r.status,
+    channelPushed: r.channel_pushed === 1,
+    error: r.error,
+    created: r.created,
+    updated: r.updated
+  };
+}
+
+function insertShipment(db, s) {
+  const info = db
+    .prepare(
+      `INSERT INTO shipments(order_id, provider, provider_parcel_id, carrier, method_id, method_name,
+         tracking_number, tracking_url, label_url, label_format, cost, currency, status, channel_pushed, error, created)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      s.orderId != null ? s.orderId : null,
+      s.provider || 'sendcloud',
+      s.providerParcelId || null,
+      s.carrier || null,
+      s.methodId != null ? String(s.methodId) : null,
+      s.methodName || null,
+      s.trackingNumber || null,
+      s.trackingUrl || null,
+      s.labelUrl || null,
+      s.labelFormat || null,
+      Number.isFinite(+s.cost) ? +s.cost : null,
+      s.currency || null,
+      s.status || 'created',
+      s.channelPushed ? 1 : 0,
+      s.error || null,
+      new Date().toISOString()
+    );
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+
+function listShipments(db, opts = {}) {
+  if (opts.orderId != null) {
+    return db
+      .prepare('SELECT * FROM shipments WHERE order_id = ? ORDER BY id DESC')
+      .all(opts.orderId)
+      .map(_mapShipment);
+  }
+  const lim = Number.isFinite(+opts.limit) ? +opts.limit : 200;
+  return db.prepare('SELECT * FROM shipments ORDER BY id DESC LIMIT ?').all(lim).map(_mapShipment);
+}
+
+function updateShipmentStatus(db, id, fields) {
+  const map = {
+    status: 'status',
+    trackingNumber: 'tracking_number',
+    trackingUrl: 'tracking_url',
+    labelUrl: 'label_url',
+    channelPushed: 'channel_pushed',
+    error: 'error'
+  };
+  const sets = [];
+  const vals = [];
+  for (const k in map) {
+    if (fields[k] === undefined) continue;
+    sets.push(map[k] + '=?');
+    vals.push(k === 'channelPushed' ? (fields[k] ? 1 : 0) : fields[k]);
+  }
+  if (!sets.length) return;
+  sets.push('updated=?');
+  vals.push(new Date().toISOString());
+  db.prepare(`UPDATE shipments SET ${sets.join(',')} WHERE id=?`).run(...vals, id);
   incrementDataVersion(db);
 }
 
@@ -6192,6 +6414,12 @@ module.exports = {
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
+  getShippingConfig,
+  updateShippingConfig,
+  updateOrderShipAddress,
+  insertShipment,
+  listShipments,
+  updateShipmentStatus,
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,
