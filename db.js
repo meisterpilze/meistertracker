@@ -1140,7 +1140,7 @@ const MIGRATIONS = [
           recipe_id    INTEGER REFERENCES recipes(id),
           lead_days    INTEGER DEFAULT 0,
           grams        REAL,
-          qty_per_unit REAL NOT NULL DEFAULT 1,
+          qty_per_unit REAL NOT NULL DEFAULT 1 CHECK (qty_per_unit >= 0),
           notes        TEXT DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_prodcomp_product ON product_components(product_id);
@@ -1154,6 +1154,8 @@ const MIGRATIONS = [
           created     TEXT NOT NULL,
           UNIQUE (channel, channel_sku, listing_id)
         );
+        CREATE INDEX IF NOT EXISTS idx_pcm_channel_sku ON product_channel_map(channel, channel_sku);
+        CREATE INDEX IF NOT EXISTS idx_pcm_listing ON product_channel_map(channel, listing_id);
 
         CREATE TABLE IF NOT EXISTS customers (
           id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1207,7 +1209,7 @@ const MIGRATIONS = [
           channel_sku TEXT,
           listing_id  TEXT,
           title       TEXT,
-          qty         INTEGER NOT NULL DEFAULT 1,
+          qty         INTEGER NOT NULL DEFAULT 1 CHECK (qty > 0),
           product_id  INTEGER REFERENCES products(id) ON DELETE SET NULL,
           unit_price  REAL
         );
@@ -1218,7 +1220,7 @@ const MIGRATIONS = [
           id            INTEGER PRIMARY KEY AUTOINCREMENT,
           order_item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
           batch_id      TEXT REFERENCES batches(batch_id) ON DELETE SET NULL,
-          qty           REAL NOT NULL,
+          qty           REAL NOT NULL CHECK (qty > 0),
           status        TEXT NOT NULL DEFAULT 'reserved', -- reserved|produced|shipped
           created       TEXT NOT NULL,
           UNIQUE (order_item_id, batch_id)
@@ -5439,21 +5441,29 @@ function resolveProductId(db, channel, channelSku, listingId) {
 function mapListing(db, { channel, channelSku, listingId, productId } = {}) {
   if (!channel) throw new Error('mapListing: channel required');
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
-     VALUES(?,?,?,?,?)
-     ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
-  ).run(channel, channelSku || null, listingId || null, productId || null, now);
-  // Back-resolve already-imported, still-unmapped order items for this listing.
-  if (productId) {
+  // Atomic: the mapping upsert and the back-resolve UPDATE must commit together.
+  db.exec('BEGIN');
+  try {
     db.prepare(
-      `UPDATE order_items SET product_id = ?
-       WHERE product_id IS NULL
-         AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
-         AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
-    ).run(productId, channelSku || null, listingId || null, channel);
+      `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+       VALUES(?,?,?,?,?)
+       ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+    ).run(channel, channelSku || null, listingId || null, productId || null, now);
+    // Back-resolve already-imported, still-unmapped order items for this listing.
+    if (productId) {
+      db.prepare(
+        `UPDATE order_items SET product_id = ?
+         WHERE product_id IS NULL
+           AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
+           AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
+      ).run(productId, channelSku || null, listingId || null, channel);
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  incrementDataVersion(db);
 }
 
 function listUnmappedItems(db) {
@@ -5543,16 +5553,24 @@ function listCustomers(db, { limit = 200 } = {}) {
 }
 
 function mergeCustomers(db, primaryId, secondaryId) {
-  if (!primaryId || !secondaryId || primaryId === secondaryId) return;
-  db.prepare('UPDATE orders SET customer_id = ? WHERE customer_id = ?').run(primaryId, secondaryId);
-  db.prepare('UPDATE OR IGNORE customer_identities SET customer_id = ? WHERE customer_id = ?').run(
-    primaryId,
-    secondaryId
-  );
-  db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(secondaryId);
-  db.prepare('DELETE FROM customers WHERE id = ?').run(secondaryId);
-  recomputeCustomerStats(db, primaryId);
-  incrementDataVersion(db);
+  // Coerce to integers and compare numerically: a string/number mismatch (e.g. 5 vs "5")
+  // would slip past === and then DELETE the very record just kept as primary.
+  const pid = parseInt(primaryId, 10);
+  const sid = parseInt(secondaryId, 10);
+  if (!Number.isInteger(pid) || !Number.isInteger(sid) || pid === sid) return;
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE orders SET customer_id = ? WHERE customer_id = ?').run(pid, sid);
+    db.prepare('UPDATE OR IGNORE customer_identities SET customer_id = ? WHERE customer_id = ?').run(pid, sid);
+    db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(sid);
+    db.prepare('DELETE FROM customers WHERE id = ?').run(sid);
+    recomputeCustomerStats(db, pid);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 // ── Orders (idempotent ingestion) ──
@@ -5562,12 +5580,16 @@ function _insertOrderItems(db, orderId, channel, items) {
   );
   for (const it of items || []) {
     const productId = it.productId || resolveProductId(db, channel, it.channelSku, it.listingId);
+    // qty defaults to 1 when absent, but a provided value must be a positive integer
+    // (the old `it.qty || 1` silently turned a literal 0 into 1 and let negatives through).
+    const qty = it.qty == null ? 1 : Number(it.qty);
+    if (!Number.isInteger(qty) || qty < 1) throw new Error('order item qty must be a positive integer');
     ins.run(
       orderId,
       it.channelSku || null,
       it.listingId || null,
       it.title || null,
-      it.qty || 1,
+      qty,
       productId || null,
       it.unitPrice != null ? it.unitPrice : null
     );
@@ -5578,46 +5600,25 @@ function upsertOrder(db, o) {
   if (!o || !o.channel || o.channelOrderId == null) throw new Error('upsertOrder: channel + channelOrderId required');
   const now = new Date().toISOString();
   const coid = String(o.channelOrderId);
-  const customerId = upsertCustomerFromOrder(db, o);
-  const existing = db.prepare('SELECT id FROM orders WHERE channel = ? AND channel_order_id = ?').get(o.channel, coid);
-  let orderId;
   const raw = o.raw != null ? JSON.stringify(o.raw) : null;
-  if (existing) {
-    orderId = existing.id;
-    db.prepare(
-      `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
-        customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?, updated = ?
-       WHERE id = ?`
-    ).run(
-      o.status || null,
-      o.orderDate || null,
-      o.shipBy || null,
-      customerId,
-      o.customerName || null,
-      o.customerEmail || null,
-      o.shipCountry || null,
-      o.totalAmount != null ? o.totalAmount : null,
-      o.currency || null,
-      raw,
-      now,
-      orderId
-    );
-    if (Array.isArray(o.items)) {
-      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
-      _insertOrderItems(db, orderId, o.channel, o.items);
-    }
-  } else {
-    const info = db
-      .prepare(
-        `INSERT INTO orders(channel, channel_order_id, status, order_date, ship_by, customer_id,
-           customer_name, customer_email, ship_country, total_amount, currency, raw_json, imported, updated)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      )
-      .run(
-        o.channel,
-        coid,
-        o.status || 'new',
-        o.orderDate || now,
+  // Atomic: customer upsert + order write + item replace + stats rollup must commit together,
+  // else a mid-write failure leaves the order with zero/partial items and stale customer stats.
+  db.exec('BEGIN');
+  try {
+    const customerId = upsertCustomerFromOrder(db, o);
+    const existing = db
+      .prepare('SELECT id FROM orders WHERE channel = ? AND channel_order_id = ?')
+      .get(o.channel, coid);
+    let orderId;
+    if (existing) {
+      orderId = existing.id;
+      db.prepare(
+        `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
+          customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?, updated = ?
+         WHERE id = ?`
+      ).run(
+        o.status || null,
+        o.orderDate || null,
         o.shipBy || null,
         customerId,
         o.customerName || null,
@@ -5627,14 +5628,46 @@ function upsertOrder(db, o) {
         o.currency || null,
         raw,
         now,
-        now
+        orderId
       );
-    orderId = info.lastInsertRowid;
-    _insertOrderItems(db, orderId, o.channel, o.items);
+      if (Array.isArray(o.items)) {
+        db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+        _insertOrderItems(db, orderId, o.channel, o.items);
+      }
+    } else {
+      const info = db
+        .prepare(
+          `INSERT INTO orders(channel, channel_order_id, status, order_date, ship_by, customer_id,
+             customer_name, customer_email, ship_country, total_amount, currency, raw_json, imported, updated)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run(
+          o.channel,
+          coid,
+          o.status || 'new',
+          o.orderDate || now,
+          o.shipBy || null,
+          customerId,
+          o.customerName || null,
+          o.customerEmail || null,
+          o.shipCountry || null,
+          o.totalAmount != null ? o.totalAmount : null,
+          o.currency || null,
+          raw,
+          now,
+          now
+        );
+      orderId = info.lastInsertRowid;
+      _insertOrderItems(db, orderId, o.channel, o.items);
+    }
+    recomputeCustomerStats(db, customerId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return orderId;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  recomputeCustomerStats(db, customerId);
-  incrementDataVersion(db);
-  return orderId;
 }
 
 function listOrders(db, { status, channel, limit = 200 } = {}) {
@@ -5699,21 +5732,53 @@ function setOrderStatus(db, id, status) {
 // ── Reservation + production-demand engine ──
 function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
   const now = new Date().toISOString();
+  // Validate up front so one bad allocation aborts before any write (and rejects qty <= 0).
+  const valid = [];
+  for (const a of allocations || []) {
+    if (!a || a.orderItemId == null) throw new Error('reserveDemand: orderItemId required');
+    const qty = Number(a.qty);
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('reserveDemand: qty must be > 0');
+    valid.push({ orderItemId: a.orderItemId, qty });
+  }
   const ins = db.prepare(
     `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created)
      VALUES(?,?,?,'reserved',?)
      ON CONFLICT(order_item_id, batch_id) DO UPDATE SET qty = excluded.qty`
   );
-  const orderIds = new Set();
-  for (const a of allocations) {
-    ins.run(a.orderItemId, batchId, a.qty || 0, now);
-    const row = db.prepare('SELECT order_id AS oid FROM order_items WHERE id = ?').get(a.orderItemId);
-    if (row) orderIds.add(row.oid);
+  // SQLite treats NULL as distinct in a UNIQUE index, so ON CONFLICT(order_item_id, batch_id)
+  // never fires when batch_id IS NULL (stock-source reservations). Upsert those by hand so a
+  // repeat reserve updates the row instead of inserting a duplicate (which would double-count demand).
+  const findNull = db.prepare('SELECT id FROM order_allocations WHERE order_item_id = ? AND batch_id IS NULL');
+  const updNull = db.prepare("UPDATE order_allocations SET qty = ?, status = 'reserved' WHERE id = ?");
+  const insNull = db.prepare(
+    "INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created) VALUES(?, NULL, ?, 'reserved', ?)"
+  );
+  db.exec('BEGIN');
+  try {
+    const orderIds = new Set();
+    for (const a of valid) {
+      if (batchId == null) {
+        const ex = findNull.get(a.orderItemId);
+        if (ex) updNull.run(a.qty, ex.id);
+        else insNull.run(a.orderItemId, a.qty, now);
+      } else {
+        ins.run(a.orderItemId, batchId, a.qty, now);
+      }
+      const row = db.prepare('SELECT order_id AS oid FROM order_items WHERE id = ?').get(a.orderItemId);
+      if (row) orderIds.add(row.oid);
+    }
+    for (const oid of orderIds) {
+      db.prepare("UPDATE orders SET status = 'in_production', updated = ? WHERE id = ? AND status = 'new'").run(
+        now,
+        oid
+      );
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  for (const oid of orderIds) {
-    db.prepare("UPDATE orders SET status = 'in_production', updated = ? WHERE id = ? AND status = 'new'").run(now, oid);
-  }
-  incrementDataVersion(db);
 }
 
 function computeProductionDemand(db) {
