@@ -1137,6 +1137,23 @@
             <path d="M16 3.13a4 4 0 010 7.75" /></svg
           ><span data-i18n="nav.ordersCustomers">Kunden</span>
         </button>
+        <button class="sb-btn" id="n-orders-versand">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="1" y="3" width="15" height="13" />
+            <path d="M16 8h4l3 3v5h-7V8z" />
+            <circle cx="5.5" cy="18.5" r="2.5" />
+            <circle cx="18.5" cy="18.5" r="2.5" /></svg
+          ><span data-i18n="nav.ordersVersand">Versand</span>
+        </button>
       </nav>
       <div class="sb-footer">
         <button class="sb-btn" id="n-settings" style="display: none">
@@ -2420,6 +2437,7 @@
             <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
             <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
+            <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versand</button>
           </div>
 
           <!-- Inbox -->
@@ -2703,6 +2721,107 @@
                   </thead>
                   <tbody id="orders-customers-body"></tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+          <!-- Versand: buy carrier labels per order -->
+          <div class="sp" id="sp-orders-versand">
+            <div class="card">
+              <div class="sec" data-i18n="versand.ordersTitle">Versand — Etiketten</div>
+              <div
+                id="versand-config-warn"
+                style="display: none; font-size: 12px; color: var(--c-red-dark); margin-bottom: 8px"
+                data-i18n="versand.notConfigured"
+              >
+                Versand ist noch nicht eingerichtet — Admin → Einstellungen → Versand.
+              </div>
+              <div style="overflow-x: auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.channel">Kanal</th>
+                      <th data-i18n="orders.th.orderId">Bestell-ID</th>
+                      <th data-i18n="orders.th.customer">Kunde</th>
+                      <th data-i18n="orders.th.status">Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="versand-orders-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- Buy-label modal -->
+          <div
+            id="ship-modal"
+            style="
+              display: none;
+              position: fixed;
+              inset: 0;
+              background: rgba(0, 0, 0, 0.45);
+              z-index: 1200;
+              align-items: center;
+              justify-content: center;
+              padding: 12px;
+            "
+            onclick="if(event.target===this)shipModalClose()"
+          >
+            <div class="card" style="max-width: 480px; width: 100%; margin: 0; max-height: 92vh; overflow: auto">
+              <div class="sec" data-i18n="versand.modalTitle">Label kaufen</div>
+              <div id="ship-m-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+              <input type="hidden" id="ship-m-orderid" />
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.name">Name</span><input id="ship-m-name"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.company">Firma</span><input id="ship-m-company"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.street">Straße</span><input id="ship-m-street"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.house">Nr.</span><input id="ship-m-house"
+                /></label>
+              </div>
+              <label style="font-size: 12px; color: var(--c-text-muted); display: block; margin-top: 8px"
+                ><span data-i18n="versand.f.address2">Zusatz</span><input id="ship-m-address2"
+              /></label>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.postal">PLZ</span><input id="ship-m-postal"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.city">Ort</span><input id="ship-m-city"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.country">Land</span
+                  ><input id="ship-m-country" value="DE" maxlength="2" style="text-transform: uppercase" onchange="shipLoadMethods()"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.phone">Telefon</span><input id="ship-m-phone"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.weight">Gewicht (g)</span
+                  ><input type="number" id="ship-m-weight" min="1" step="10" value="1000" onchange="shipLoadMethods()"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.method">Versandart</span>
+                  <select id="ship-m-method">
+                    <option value="" data-i18n="versand.loadingMethods">…</option>
+                  </select>
+                </label>
+              </div>
+              <div id="ship-m-result" class="muted" style="font-size: 12px; margin-top: 10px"></div>
+              <div style="display: flex; gap: 8px; margin-top: 12px">
+                <button class="btn btn-p" data-action="oh-ship-buy" data-i18n="versand.buyBtn">Label kaufen</button>
+                <button class="btn" data-action="oh-ship-close" data-i18n="strains.cancel">Abbrechen</button>
               </div>
             </div>
           </div>
@@ -3324,6 +3443,84 @@
               Server
             </button>
             <button class="stab" id="st-settings-growth">Growth</button>
+            <button class="stab" id="st-settings-versand" data-i18n="settings.tabVersand">Versand</button>
+          </div>
+          <!-- Versand (Sendcloud shipping) config -->
+          <div class="sp" id="sp-settings-versand">
+            <div class="card">
+              <div class="sec" data-i18n="versand.title">Versand (Sendcloud)</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="versand.desc"
+              >
+                Versandetiketten direkt aus dem Order-Hub kaufen. API-Keys: Sendcloud → Einstellungen → Integrationen →
+                Sendcloud API.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="versand-enabled" style="width: auto" />
+                  <span data-i18n="versand.enable">Versand aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="versand.publicKey"
+                    >Public Key</label
+                  >
+                  <input type="text" id="versand-public" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%" />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="versand.secretKey"
+                    >Secret Key</label
+                  >
+                  <input
+                    type="password"
+                    id="versand-secret"
+                    data-i18n-placeholder="versand.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap">
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="versand.mode"
+                      >Modus</label
+                    >
+                    <select id="versand-mode">
+                      <option value="test" data-i18n="versand.modeTest">Test</option>
+                      <option value="live" data-i18n="versand.modeLive">Live</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="versand.defWeight"
+                      >Standardgewicht (g)</label
+                    >
+                    <input type="number" id="versand-weight" min="1" step="10" value="1000" style="width: 120px" />
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="versand-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
+                  <button id="versand-test-btn" class="btn btn-sm" data-i18n="versand.test">Verbindung testen</button>
+                </div>
+                <div
+                  id="versand-test-result"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
+            </div>
           </div>
           <!-- Scan log -->
           <div class="sp active" id="sp-settings-log">

@@ -7301,6 +7301,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     })();
     return;
   }
+  // GET /api/ship/order/:id — order ship-to fields (prefills the buy-label modal).
+  const shipOrderMatch = req.url.match(/^\/api\/ship\/order\/(\d+)$/);
+  if (req.method === 'GET' && shipOrderMatch) {
+    try {
+      const o = db.getOrderForShipping(database, parseInt(shipOrderMatch[1], 10));
+      if (!o) {
+        jsonErr(res, 404, 'order not found');
+        return;
+      }
+      jsonOk(res, o);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
 
   // -- DuckDNS Config --
   if (req.method === 'POST' && req.url === '/api/duckdns/config') {

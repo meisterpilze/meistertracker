@@ -924,12 +924,14 @@ function openStab(page, sub) {
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
+  if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
   if (page === 'settings' && sub === 'log') renderLog();
   if (page === 'orders' && sub === 'inbox') renderOrders();
   if (page === 'orders' && sub === 'tomake') renderOrdersDemand();
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
+  if (page === 'orders' && sub === 'versand') renderOrdersVersand();
 }
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -989,6 +991,7 @@ function _refreshOrdersActive() {
   if (id === 'sp-orders-tomake') renderOrdersDemand();
   else if (id === 'sp-orders-mapping') renderOrdersMapping();
   else if (id === 'sp-orders-customers') renderOrdersCustomers();
+  else if (id === 'sp-orders-versand') renderOrdersVersand();
   else renderOrders();
 }
 
@@ -1156,6 +1159,142 @@ function renderOrdersCustomers() {
     });
 }
 
+// ── Versand: order list + buy-label modal ──
+function renderOrdersVersand() {
+  const body = $('versand-orders-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(5, t('common.loading'));
+  authFetch('/api/ship/config')
+    .then((r) => r.json())
+    .then((cfg) => {
+      const warn = $('versand-config-warn');
+      if (warn) warn.style.display = cfg && cfg.enabled && cfg.publicKey ? 'none' : 'block';
+    })
+    .catch(() => {});
+  apiGet('/api/orders?limit=500')
+    .then((d) => {
+      const rows = (d.items || []).filter((o) => o.status !== 'cancelled');
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(5, t('orders.none'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((o) => {
+          const btn =
+            o.status === 'shipped'
+              ? `<button class="btn btn-sm" data-action="oh-ship-open" data-order-id="${o.id}">${t('versand.relabel')}</button>`
+              : `<button class="btn btn-sm btn-p" data-action="oh-ship-open" data-order-id="${o.id}">${t('versand.shipBtn')}</button>`;
+          return (
+            `<tr><td>${_ohChannel(o.channel)}</td>` +
+            `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+            `<td>${esc(o.customerName || '—')}</td>` +
+            `<td>${_ohStatus(o.status)}</td>` +
+            `<td style="white-space:nowrap">${btn}</td></tr>`
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(5, t('common.error'));
+    });
+}
+
+function shipModalClose() {
+  const m = $('ship-modal');
+  if (m) m.style.display = 'none';
+}
+function shipModalOpen(orderId) {
+  if (!orderId) return;
+  const m = $('ship-modal');
+  if (!m) return;
+  $('ship-m-orderid').value = orderId;
+  $('ship-m-result').textContent = '';
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v == null ? '' : v;
+  };
+  // Prefill from the stored order (ship_* filled by a prior label or channel sync).
+  apiGet('/api/ship/order/' + orderId)
+    .then((o) => {
+      if (!o || o.error) o = {};
+      $('ship-m-sub').textContent = (o.channel ? o.channel + ' · ' : '') + (o.channelOrderId || '#' + orderId);
+      set('ship-m-name', o.shipName || o.customerName || '');
+      set('ship-m-company', o.shipCompany);
+      set('ship-m-street', o.shipStreet);
+      set('ship-m-house', o.shipHouse);
+      set('ship-m-address2', o.shipAddress2);
+      set('ship-m-postal', o.shipPostal);
+      set('ship-m-city', o.shipCity);
+      set('ship-m-country', (o.shipCountry || 'DE').toUpperCase());
+      set('ship-m-phone', o.shipPhone);
+      set('ship-m-weight', o.shipWeightG || 1000);
+      shipLoadMethods();
+    })
+    .catch(() => shipLoadMethods());
+  m.style.display = 'flex';
+}
+function shipLoadMethods() {
+  const sel = $('ship-m-method');
+  if (!sel) return;
+  const country = ($('ship-m-country').value || 'DE').toUpperCase();
+  const weight = parseInt($('ship-m-weight').value, 10) || 1000;
+  sel.innerHTML = `<option value="">${esc(t('versand.loadingMethods'))}</option>`;
+  apiGet('/api/ship/methods?country=' + encodeURIComponent(country) + '&weight=' + weight)
+    .then((d) => {
+      const methods = (d && d.methods) || [];
+      sel.innerHTML = methods.length
+        ? methods.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+        : `<option value="">${esc(t('versand.noMethods'))}</option>`;
+    })
+    .catch(() => {
+      sel.innerHTML = `<option value="">${esc(t('common.error'))}</option>`;
+    });
+}
+function shipBuyLabel() {
+  const orderId = parseInt($('ship-m-orderid').value, 10);
+  const methodId = $('ship-m-method').value;
+  if (!orderId) return;
+  if (!methodId) {
+    setFb('err', t('versand.pickMethod'));
+    return;
+  }
+  const v = (id) => ($(id) ? $(id).value.trim() : '');
+  const weightG = parseInt($('ship-m-weight').value, 10) || 1000;
+  const address = {
+    shipName: v('ship-m-name'),
+    shipCompany: v('ship-m-company'),
+    shipStreet: v('ship-m-street'),
+    shipHouse: v('ship-m-house'),
+    shipAddress2: v('ship-m-address2'),
+    shipPostal: v('ship-m-postal'),
+    shipCity: v('ship-m-city'),
+    shipCountry: (v('ship-m-country') || 'DE').toUpperCase(),
+    shipPhone: v('ship-m-phone'),
+    shipWeightG: weightG
+  };
+  const res = $('ship-m-result');
+  if (res) res.textContent = t('common.loading');
+  apiPost('/api/ship/label', { orderId, methodId, weightG, address })
+    .then((r) => {
+      if (!r || r.error) {
+        if (res) res.textContent = '⚠ ' + ((r && r.error) || t('common.error'));
+        return;
+      }
+      const pdf = '/api/ship/label/' + r.id + '/pdf';
+      if (res)
+        res.innerHTML =
+          '✓ ' +
+          esc(t('versand.bought')) +
+          (r.trackingNumber ? ' · ' + esc(r.trackingNumber) : '') +
+          ` · <a href="${pdf}" target="_blank" rel="noopener">${esc(t('versand.openLabel'))}</a>`;
+      setFb('ok', t('versand.bought'));
+      renderOrdersVersand();
+    })
+    .catch(() => {
+      if (res) res.textContent = '⚠ ' + t('common.error');
+    });
+}
+
 function ordersActionHandler(e) {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -1224,6 +1363,12 @@ function ordersActionHandler(e) {
       if (inventory && inventory.stock) inventory.stock[btn.dataset.mat] = val;
       renderInventoryCard();
     });
+  } else if (action === 'oh-ship-open') {
+    shipModalOpen(parseInt(btn.dataset.orderId, 10));
+  } else if (action === 'oh-ship-buy') {
+    shipBuyLabel();
+  } else if (action === 'oh-ship-close') {
+    shipModalClose();
   }
 }
 
@@ -5621,6 +5766,74 @@ async function pushTaskCaldav(task) {
 }
 
 // ─── DUCKDNS ────────────────────────────────────────────────
+// ── Versand (Sendcloud) config (Admin → Settings → Versand) ──
+async function loadShipSettings() {
+  try {
+    const r = await authFetch('/api/ship/config');
+    const cfg = await r.json();
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+    const en = document.getElementById('versand-enabled');
+    if (en) en.checked = !!cfg.enabled;
+    set('versand-public', cfg.publicKey || '');
+    set('versand-secret', '');
+    const sec = document.getElementById('versand-secret');
+    if (sec) sec.placeholder = cfg.hasSecret ? t('versand.secretSet') : 'Secret Key';
+    set('versand-mode', cfg.mode || 'test');
+    set('versand-weight', cfg.defaultWeightG != null ? cfg.defaultWeightG : 1000);
+  } catch (e) {
+    /* not configured yet */
+  }
+}
+async function saveShipSettings() {
+  const cfg = {
+    enabled: document.getElementById('versand-enabled').checked,
+    publicKey: (document.getElementById('versand-public').value || '').trim(),
+    secretKey: (document.getElementById('versand-secret').value || '').trim(),
+    mode: document.getElementById('versand-mode').value || 'test',
+    defaultWeightG: parseInt(document.getElementById('versand-weight').value, 10) || 1000
+  };
+  try {
+    const r = await apiPatch('/api/ship/config', cfg);
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('versand.saved'));
+    loadShipSettings();
+  } catch (e) {
+    setFb('err', t('common.error'));
+  }
+}
+async function testShipConnection() {
+  const el = document.getElementById('versand-test-result');
+  if (el) {
+    el.style.display = 'block';
+    el.textContent = t('common.loading');
+  }
+  try {
+    const r = await authFetch('/api/ship/test');
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      if (el) el.textContent = '⚠ ' + (d.error || 'HTTP ' + r.status);
+      return;
+    }
+    let carriers = '';
+    try {
+      const mr = await authFetch('/api/ship/methods');
+      const md = await mr.json();
+      if (mr.ok && md.methods) carriers = [...new Set(md.methods.map((m) => m.carrier))].join(', ');
+    } catch (e2) {
+      /* methods are a bonus */
+    }
+    if (el) el.textContent = '✓ ' + t('versand.connected', { account: d.account || 'ok' }) + (carriers ? ' — ' + carriers : '');
+  } catch (e) {
+    if (el) el.textContent = '⚠ ' + t('common.error');
+  }
+}
+
 async function loadDuckdnsSettings() {
   try {
     const r = await authFetch('/api/duckdns/config');
@@ -15464,10 +15677,15 @@ function initEventListeners() {
     go('orders', 'n-orders-customers');
     openStab('orders', 'customers');
   });
+  $('n-orders-versand').addEventListener('click', () => {
+    go('orders', 'n-orders-versand');
+    openStab('orders', 'versand');
+  });
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
   $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
   $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
   $('st-orders-customers').addEventListener('click', () => openStab('orders', 'customers'));
+  $('st-orders-versand').addEventListener('click', () => openStab('orders', 'versand'));
   $('p-orders').addEventListener('click', ordersActionHandler);
   const _ohCsv = $('orders-csv-file');
   if (_ohCsv)
@@ -15883,6 +16101,12 @@ function initEventListeners() {
     openStab('settings', 'printer');
     renderPrinterSettings();
   });
+  $('st-settings-versand').addEventListener('click', () => {
+    openStab('settings', 'versand');
+    loadShipSettings();
+  });
+  $('versand-save-btn').addEventListener('click', saveShipSettings);
+  $('versand-test-btn').addEventListener('click', testShipConnection);
   $('printer-save-btn').addEventListener('click', savePrinterSettings);
   $('printer-test-btn').addEventListener('click', testPrintBridge);
   $('printer-refresh-btn').addEventListener('click', () => {
