@@ -31,8 +31,17 @@ function _normalizeWix(o) {
     o.priceSummary && o.priceSummary.total && o.priceSummary.total.amount != null
       ? parseFloat(o.priceSummary.total.amount)
       : null;
-  const street = addr.streetAddress ? addr.streetAddress.name : addr.addressLine1 || addr.addressLine || null;
-  const house = addr.streetAddress ? addr.streetAddress.number : null;
+  let street = addr.streetAddress ? addr.streetAddress.name : addr.addressLine1 || addr.addressLine || null;
+  let house = addr.streetAddress && addr.streetAddress.number ? addr.streetAddress.number : null;
+  // Wix sometimes embeds the house number in the street line ("Markgrafenallee 18")
+  // and leaves number empty — split it off so labels get a clean house_number.
+  if (street && !house) {
+    const m = street.match(/^(.*\S)\s+(\d+\s*[a-zA-Z]?)$/);
+    if (m) {
+      street = m[1];
+      house = m[2].replace(/\s+/g, '');
+    }
+  }
   const items = (o.lineItems || []).map((li) => ({
     channelSku:
       (li.physicalProperties && li.physicalProperties.sku) ||

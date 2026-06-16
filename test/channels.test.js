@@ -119,4 +119,18 @@ describe('Wix order normalization', () => {
     const list = db.listOrders(d, { channel: 'wix' });
     assert.equal(list.length, 1);
   });
+
+  it('splits an embedded house number out of the Wix street line', () => {
+    const o = channels._normalizeWix({
+      number: 10001,
+      createdDate: '2025-08-12T00:00:00Z',
+      recipientInfo: {
+        contactDetails: { firstName: 'Cam', lastName: 'Ortiz' },
+        address: { streetAddress: { name: 'Markgrafenallee 18' }, city: 'Bayreuth', postalCode: '95448', country: 'DE' }
+      },
+      lineItems: []
+    });
+    assert.equal(o.shipStreet, 'Markgrafenallee');
+    assert.equal(o.shipHouse, '18');
+  });
 });
