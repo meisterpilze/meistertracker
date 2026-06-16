@@ -6443,6 +6443,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const incoming = Array.isArray(data) ? data : Array.isArray(data && data.orders) ? data.orders : [data];
+        if (incoming.length > 1000) {
+          jsonErr(res, 400, 'too many orders (max 1000 per request)');
+          return;
+        }
         const ids = [];
         for (const o of incoming) {
           if (!o || !o.channel || o.channelOrderId == null) {
@@ -6468,7 +6472,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.reserveDemand(database, { batchId: data.batchId || null, allocations: data.allocations || [] });
+        const allocations = Array.isArray(data.allocations) ? data.allocations : [];
+        if (allocations.length > 1000) {
+          jsonErr(res, 400, 'too many allocations (max 1000 per request)');
+          return;
+        }
+        db.reserveDemand(database, { batchId: data.batchId || null, allocations });
         broadcastSSE(res);
         jsonOk(res, { ok: true });
       } catch (err) {
@@ -6506,6 +6515,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const changed = db.setOrderStatus(database, parseInt(orderMatch[1], 10), data.status);
+        if (!changed) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
         broadcastSSE(res);
         jsonOk(res, { changed });
       } catch (err) {
@@ -6566,7 +6579,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['channel', 'productId']);
+      const vr = validateRequired(data, ['channel', 'productId']) || validateTypes(data, { productId: 'number' });
       if (vr) {
         jsonErr(res, 400, vr);
         return;
@@ -6610,7 +6623,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.upsertProduct(database, { ...data, id: parseInt(productMatch[1], 10) });
+        const pid = parseInt(productMatch[1], 10);
+        if (!db.getProduct(database, pid)) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        const id = db.upsertProduct(database, { ...data, id: pid });
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -6623,6 +6641,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       const deleted = db.deleteProduct(database, parseInt(productMatch[1], 10));
+      if (!deleted) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
       broadcastSSE(res);
       jsonOk(res, { deleted });
     } catch (err) {
@@ -6648,7 +6670,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['primaryId', 'secondaryId']);
+      const vr =
+        validateRequired(data, ['primaryId', 'secondaryId']) ||
+        validateTypes(data, { primaryId: 'number', secondaryId: 'number' });
       if (vr) {
         jsonErr(res, 400, vr);
         return;
