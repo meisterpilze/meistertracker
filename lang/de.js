@@ -246,7 +246,7 @@ window.LANG['de'] = {
   'channels.wixDesc':
     'Bestellungen automatisch aus Wix holen. API-Key: Wix-Dashboard → Einstellungen → API-Keys (mit Stores/Orders-Leserecht). Site-ID steht in der Dashboard-URL.',
   'channels.oauthSoon':
-    'Braucht eine Developer-App + OAuth-Anmeldung auf der öffentlichen Instanz (meistertracker.com). Wird als Nächstes eingerichtet.',
+    'eBay- und Etsy-Bestellungen werden automatisch über Wix importiert (Herkunft wird erkannt). Eine direkte API-Anbindung ist optional.',
   'channels.enable': 'Aktivieren',
   'channels.apiKey': 'API-Key',
   'channels.siteId': 'Site-ID',

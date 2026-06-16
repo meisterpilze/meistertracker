@@ -16,6 +16,16 @@ function _wixStatus(o) {
   return 'new';
 }
 
+// Wix aggregates orders from connected channels; channelInfo.type carries the
+// true origin (WEB / EBAY / ETSY / AMAZON / POS …). Attribute the order to it so
+// the hub shows the real channel — a single Wix key then covers all of them.
+function _wixOriginChannel(o) {
+  const t = ((o.channelInfo && (o.channelInfo.type || o.channelInfo.channelType)) || '').toUpperCase();
+  if (t === 'EBAY') return 'ebay';
+  if (t === 'ETSY') return 'etsy';
+  return 'wix';
+}
+
 // Map one Wix eCommerce order (ecom/v1) to the upsertOrder shape. Field paths are
 // best-effort against the documented API; verify against a real order and adjust.
 function _normalizeWix(o) {
@@ -53,7 +63,7 @@ function _normalizeWix(o) {
     unitPrice: li.price && li.price.amount != null ? parseFloat(li.price.amount) : null
   }));
   return {
-    channel: 'wix',
+    channel: _wixOriginChannel(o),
     channelOrderId: o.number != null ? String(o.number) : String(o.id),
     status: _wixStatus(o),
     orderDate: o.createdDate || o._createdDate || o.dateCreated || null,

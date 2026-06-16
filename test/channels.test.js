@@ -133,4 +133,18 @@ describe('Wix order normalization', () => {
     assert.equal(o.shipStreet, 'Markgrafenallee');
     assert.equal(o.shipHouse, '18');
   });
+
+  it('attributes the order to its true origin (Wix aggregates eBay/Etsy)', () => {
+    const mk = (type) =>
+      channels._normalizeWix({
+        number: 1,
+        channelInfo: type ? { type } : undefined,
+        recipientInfo: { contactDetails: {}, address: {} },
+        lineItems: []
+      });
+    assert.equal(mk('EBAY').channel, 'ebay');
+    assert.equal(mk('ETSY').channel, 'etsy');
+    assert.equal(mk('WEB').channel, 'wix');
+    assert.equal(mk(undefined).channel, 'wix');
+  });
 });
