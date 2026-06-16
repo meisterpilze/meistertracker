@@ -5431,30 +5431,15 @@ function upsertProduct(db, p) {
   const producible = p.producible === 0 ? 0 : 1;
   const stock = p.stock != null ? p.stock : 0;
   const leadDays = p.leadDays != null ? p.leadDays : 0;
-  if (id) {
-    db.prepare(
-      `UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?,
-        notes = ?, stock = ?, lead_days = ?, producible = ? WHERE id = ?`
-    ).run(
-      p.sku || null,
-      p.name,
-      p.category || null,
-      p.species || null,
-      p.strain || null,
-      active,
-      p.notes || '',
-      stock,
-      leadDays,
-      producible,
-      id
-    );
-  } else {
-    const info = db
-      .prepare(
-        `INSERT INTO products(sku, name, category, species, strain, active, notes, stock, lead_days, producible, created)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?)`
-      )
-      .run(
+  // Atomic: the product row write and its BOM replace must commit together,
+  // else a failed component insert leaves the product with a half-rebuilt BOM.
+  db.exec('BEGIN');
+  try {
+    if (id) {
+      db.prepare(
+        `UPDATE products SET sku = ?, name = ?, category = ?, species = ?, strain = ?, active = ?,
+          notes = ?, stock = ?, lead_days = ?, producible = ? WHERE id = ?`
+      ).run(
         p.sku || null,
         p.name,
         p.category || null,
@@ -5465,21 +5450,45 @@ function upsertProduct(db, p) {
         stock,
         leadDays,
         producible,
-        now
+        id
       );
-    id = info.lastInsertRowid;
-  }
-  // One-level bill of materials: [{ materialId, qtyPerUnit, notes }]
-  if (Array.isArray(p.bom)) {
-    db.prepare('DELETE FROM product_bom WHERE product_id = ?').run(id);
-    const ins = db.prepare('INSERT INTO product_bom(product_id, material_id, qty_per_unit, notes) VALUES(?,?,?,?)');
-    for (const c of p.bom) {
-      if (!c.materialId) continue;
-      ins.run(id, c.materialId, c.qtyPerUnit != null ? c.qtyPerUnit : 1, c.notes || '');
+    } else {
+      const info = db
+        .prepare(
+          `INSERT INTO products(sku, name, category, species, strain, active, notes, stock, lead_days, producible, created)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?)`
+        )
+        .run(
+          p.sku || null,
+          p.name,
+          p.category || null,
+          p.species || null,
+          p.strain || null,
+          active,
+          p.notes || '',
+          stock,
+          leadDays,
+          producible,
+          now
+        );
+      id = info.lastInsertRowid;
     }
+    // One-level bill of materials: [{ materialId, qtyPerUnit, notes }]
+    if (Array.isArray(p.bom)) {
+      db.prepare('DELETE FROM product_bom WHERE product_id = ?').run(id);
+      const ins = db.prepare('INSERT INTO product_bom(product_id, material_id, qty_per_unit, notes) VALUES(?,?,?,?)');
+      for (const c of p.bom) {
+        if (!c.materialId) continue;
+        ins.run(id, c.materialId, c.qtyPerUnit != null ? c.qtyPerUnit : 1, c.notes || '');
+      }
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return id;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
   }
-  incrementDataVersion(db);
-  return id;
 }
 
 function deleteProduct(db, id) {
@@ -5524,6 +5533,12 @@ function deleteMaterial(db, id) {
   const info = db.prepare('DELETE FROM materials WHERE id = ?').run(id);
   incrementDataVersion(db);
   return info.changes;
+}
+
+function getMaterial(db, id) {
+  return (
+    db.prepare('SELECT id, name, unit, stock, threshold, notes, created FROM materials WHERE id = ?').get(id) || null
+  );
 }
 
 // ── Channel ↔ product mapping ──
@@ -5904,7 +5919,9 @@ function computeProductionDemand(db) {
               SUM(oi.qty) AS demand, MIN(o.ship_by) AS earliestShipBy,
               COALESCE((SELECT SUM(a.qty) FROM order_allocations a
                           JOIN order_items oi2 ON oi2.id = a.order_item_id
-                         WHERE oi2.product_id = p.id AND a.status = 'reserved'), 0) AS reserved
+                          JOIN orders o2 ON o2.id = oi2.order_id
+                         WHERE oi2.product_id = p.id AND a.status = 'reserved'
+                           AND o2.status IN ('new','in_production')), 0) AS reserved
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
        JOIN products p ON p.id = oi.product_id
@@ -5987,6 +6004,7 @@ module.exports = {
   reserveDemand,
   computeProductionDemand,
   listMaterials,
+  getMaterial,
   upsertMaterial,
   deleteMaterial,
   openDb,

@@ -1027,7 +1027,7 @@ function renderOrdersDemand() {
     .then((d) => {
       const rows = d.items || [];
       if (!rows.length) {
-        body.innerHTML = _ohEmpty(5, t('orders.demandNone'));
+        body.innerHTML = _ohEmpty(6, t('orders.demandNone'));
         return;
       }
       body.innerHTML = rows
@@ -1057,7 +1057,7 @@ function renderOrdersDemand() {
         .join('');
     })
     .catch(() => {
-      body.innerHTML = _ohEmpty(5, t('common.error'));
+      body.innerHTML = _ohEmpty(6, t('common.error'));
     });
 }
 
@@ -1363,10 +1363,14 @@ function _ohProductSave() {
     return;
   }
   const bom = [...document.querySelectorAll('#oh-p-components .oh-comp-row')]
-    .map((row) => ({
-      materialId: parseInt(row.querySelector('.ohc-material').value, 10) || null,
-      qtyPerUnit: parseFloat(row.querySelector('.ohc-qty').value) || 1
-    }))
+    .map((row) => {
+      // A component qty of 0 is valid (the input has min="0"); only fall back to 1 for blank/NaN/negative.
+      const q = parseFloat(row.querySelector('.ohc-qty').value);
+      return {
+        materialId: parseInt(row.querySelector('.ohc-material').value, 10) || null,
+        qtyPerUnit: Number.isFinite(q) && q >= 0 ? q : 1
+      };
+    })
     .filter((c) => c.materialId);
   const id = $('oh-p-id').value;
   const payload = {

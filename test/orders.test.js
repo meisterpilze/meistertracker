@@ -92,7 +92,12 @@ describe('order hub – products & mapping', () => {
       category: 'substrat',
       bom: [{ materialId: cvg, qtyPerUnit: 3 }]
     });
-    db.upsertProduct(d, { id, name: 'Substrat CVG 3L', category: 'substrat', bom: [{ materialId: cvg, qtyPerUnit: 3.2 }] });
+    db.upsertProduct(d, {
+      id,
+      name: 'Substrat CVG 3L',
+      category: 'substrat',
+      bom: [{ materialId: cvg, qtyPerUnit: 3.2 }]
+    });
     const prod = db.getProduct(d, id);
     assert.equal(prod.name, 'Substrat CVG 3L');
     assert.equal(prod.bom.length, 1);

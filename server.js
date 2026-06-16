@@ -6733,7 +6733,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.upsertMaterial(database, { ...data, id: parseInt(materialMatch[1], 10) });
+        const mid = parseInt(materialMatch[1], 10);
+        if (!db.getMaterial(database, mid)) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        const id = db.upsertMaterial(database, { ...data, id: mid });
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -6746,6 +6751,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       const deleted = db.deleteMaterial(database, parseInt(materialMatch[1], 10));
+      if (!deleted) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
       broadcastSSE(res);
       jsonOk(res, { deleted });
     } catch (err) {
