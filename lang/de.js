@@ -238,6 +238,8 @@ window.LANG['de'] = {
   'versand.bought': 'Label gekauft',
   'versand.openLabel': 'Label öffnen (PDF)',
   'versand.buyBtn': 'Label kaufen',
+  'versand.pushedToChannel': 'Sendungsnummer an den Verkaufskanal übermittelt',
+  'versand.pushFailed': 'Tracking-Übermittlung fehlgeschlagen',
   // Kanäle (live sync)
   'settings.tabChannels': 'Kanäle',
   'channels.wixTitle': 'Wix',

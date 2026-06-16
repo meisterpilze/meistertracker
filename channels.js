@@ -113,9 +113,43 @@ const wix = {
   async fetchOrders(cfg, { cursor } = {}) {
     if (!cfg.apiKey || !cfg.siteId) throw new Error('API-Key + Site-ID erforderlich');
     const j = await _wixSearch(cfg, cursor ? { cursor } : { limit: 50 });
-    const orders = (j.orders || []).map(_normalizeWix);
+    // Import only Wix-website (WEB) orders — eBay/Etsy are pulled from their own
+    // APIs directly, so we skip Wix's (now-stale) aggregated copies of them.
+    const orders = (j.orders || []).map(_normalizeWix).filter((o) => o.channel === 'wix');
     const nextCursor = (j.metadata && j.metadata.cursors && j.metadata.cursors.next) || null;
     return { orders, nextCursor };
+  },
+  // Push the Sendungsnummer back onto the Wix order (creates a fulfillment with
+  // tracking). Same API key — no OAuth. Best-effort; the caller records the
+  // outcome and never fails the label purchase over a write-back error.
+  async pushTracking(cfg, { raw, trackingNumber, trackingUrl, carrier }) {
+    if (!cfg.apiKey || !cfg.siteId) throw new Error('Wix nicht konfiguriert');
+    const wixOrderId = raw && raw.id;
+    if (!wixOrderId) throw new Error('Wix-Order-ID fehlt');
+    const lineItems = (raw.lineItems || []).map((li) => ({ id: li.id, quantity: li.quantity || 1 }));
+    const headers = {
+      Authorization: cfg.apiKey,
+      'wix-site-id': cfg.siteId,
+      'Content-Type': 'application/json'
+    };
+    if (cfg.clientId) headers['wix-account-id'] = cfg.clientId;
+    const body = {
+      fulfillment: {
+        lineItems,
+        trackingInfo: {
+          trackingNumber: trackingNumber || '',
+          shippingProvider: carrier || 'other',
+          trackingLink: trackingUrl || undefined
+        }
+      }
+    };
+    const res = await fetch(
+      WIX_BASE + '/ecom/v1/fulfillments/orders/' + encodeURIComponent(wixOrderId) + '/create-fulfillment',
+      { method: 'POST', headers, body: JSON.stringify(body) }
+    );
+    const text = await res.text();
+    if (!res.ok) throw new Error('Wix fulfillment HTTP ' + res.status + (text ? ': ' + text.slice(0, 200) : ''));
+    return { ok: true };
   }
 };
 
@@ -125,6 +159,9 @@ const ebay = {
   },
   async fetchOrders() {
     throw new Error('eBay benötigt OAuth — Developer-App + Anmeldung folgt');
+  },
+  async pushTracking() {
+    throw new Error('eBay benötigt OAuth — folgt');
   }
 };
 const etsy = {
@@ -133,6 +170,9 @@ const etsy = {
   },
   async fetchOrders() {
     throw new Error('Etsy benötigt OAuth — Developer-App + Anmeldung folgt');
+  },
+  async pushTracking() {
+    throw new Error('Etsy benötigt OAuth — folgt');
   }
 };
 

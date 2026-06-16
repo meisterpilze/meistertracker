@@ -148,3 +148,83 @@ describe('Wix order normalization', () => {
     assert.equal(mk(undefined).channel, 'wix');
   });
 });
+
+describe('Wix write-back + WEB-only sync', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body)
+  });
+  const cfg = { apiKey: 'KEY', siteId: 'SITE', clientId: 'ACC' };
+
+  it('fetchOrders imports only WEB-origin orders', async () => {
+    const restore = mockFetch(async () =>
+      jsonRes(200, {
+        orders: [
+          {
+            id: 'a',
+            number: 1,
+            channelInfo: { type: 'WEB' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          },
+          {
+            id: 'b',
+            number: 2,
+            channelInfo: { type: 'EBAY' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          },
+          {
+            id: 'c',
+            number: 3,
+            channelInfo: { type: 'ETSY' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          }
+        ],
+        metadata: { cursors: {} }
+      })
+    );
+    try {
+      const { orders } = await channels.wix.fetchOrders(cfg, {});
+      assert.equal(orders.length, 1);
+      assert.equal(orders[0].channel, 'wix');
+      assert.equal(orders[0].channelOrderId, '1');
+    } finally {
+      restore();
+    }
+  });
+
+  it('pushTracking posts a Wix fulfillment with the tracking number', async () => {
+    let sent = null;
+    const restore = mockFetch(async (url, opts) => {
+      sent = { url, body: JSON.parse(opts.body), headers: opts.headers };
+      return jsonRes(200, { fulfillment: { id: 'f1' } });
+    });
+    try {
+      const r = await channels.wix.pushTracking(cfg, {
+        raw: { id: 'ORDER-GUID', lineItems: [{ id: 'li1', quantity: 2 }] },
+        trackingNumber: 'TRK123',
+        trackingUrl: 'http://t/123',
+        carrier: 'dhl_de'
+      });
+      assert.equal(r.ok, true);
+      assert.ok(sent.url.includes('/fulfillments/orders/ORDER-GUID/create-fulfillment'), 'create-fulfillment endpoint');
+      assert.equal(sent.headers['wix-account-id'], 'ACC');
+      assert.equal(sent.body.fulfillment.trackingInfo.trackingNumber, 'TRK123');
+      assert.equal(sent.body.fulfillment.trackingInfo.shippingProvider, 'dhl_de');
+      assert.equal(sent.body.fulfillment.lineItems[0].id, 'li1');
+      assert.equal(sent.body.fulfillment.lineItems[0].quantity, 2);
+    } finally {
+      restore();
+    }
+  });
+});

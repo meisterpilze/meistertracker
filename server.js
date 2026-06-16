@@ -7251,6 +7251,37 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             methodId: data.methodId,
             ...result
           });
+          // Push the Sendungsnummer back onto the order's sales channel. Best-effort:
+          // a write-back failure never fails the (already-bought) label — we record
+          // it on the shipment and report it so the user can retry/fix.
+          let channelPushed = false;
+          let pushError = null;
+          if (['wix', 'ebay', 'etsy'].includes(order.channel)) {
+            try {
+              const chanCfg = db.getChannelConfig(database, order.channel);
+              const prov = channels.getChannelProvider(order.channel);
+              if (chanCfg.enabled && typeof prov.pushTracking === 'function') {
+                const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
+                const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
+                await prov.pushTracking(chanCfg, {
+                  order,
+                  raw,
+                  trackingNumber: result.trackingNumber,
+                  trackingUrl: result.trackingUrl,
+                  carrier: result.carrier
+                });
+                channelPushed = true;
+                db.updateShipmentStatus(database, id, { channelPushed: true });
+              }
+            } catch (e3) {
+              pushError = e3.message || 'tracking push failed';
+              try {
+                db.updateShipmentStatus(database, id, { error: 'tracking push: ' + pushError });
+              } catch (e4) {
+                /* ignore */
+              }
+            }
+          }
           // Buying a label = the order is going out.
           try {
             database
@@ -7260,7 +7291,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             /* status is best-effort */
           }
           broadcastSSE(res);
-          jsonOk(res, { id, ...result });
+          jsonOk(res, { id, ...result, channelPushed, pushError });
         } catch (err) {
           jsonErr(res, 502, err.message || 'label failed');
         }

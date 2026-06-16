@@ -238,6 +238,8 @@ window.LANG['en'] = {
   'versand.bought': 'Label bought',
   'versand.openLabel': 'Open label (PDF)',
   'versand.buyBtn': 'Buy label',
+  'versand.pushedToChannel': 'Tracking sent to the sales channel',
+  'versand.pushFailed': 'Tracking push failed',
   // Channels (live sync)
   'settings.tabChannels': 'Channels',
   'channels.wixTitle': 'Wix',

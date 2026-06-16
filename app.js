@@ -1282,12 +1282,18 @@ function shipBuyLabel() {
         return;
       }
       const pdf = '/api/ship/label/' + r.id + '/pdf';
+      const pushMsg = r.channelPushed
+        ? '<br>↪ ' + esc(t('versand.pushedToChannel'))
+        : r.pushError
+          ? '<br>⚠ ' + esc(t('versand.pushFailed')) + ': ' + esc(r.pushError)
+          : '';
       if (res)
         res.innerHTML =
           '✓ ' +
           esc(t('versand.bought')) +
           (r.trackingNumber ? ' · ' + esc(r.trackingNumber) : '') +
-          ` · <a href="${pdf}" target="_blank" rel="noopener">${esc(t('versand.openLabel'))}</a>`;
+          ` · <a href="${pdf}" target="_blank" rel="noopener">${esc(t('versand.openLabel'))}</a>` +
+          pushMsg;
       setFb('ok', t('versand.bought'));
       renderOrdersVersand();
     })
