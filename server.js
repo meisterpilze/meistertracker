@@ -666,8 +666,11 @@ function _oauthGc() {
 async function withFreshChannelToken(channel) {
   let cfg = db.getChannelConfig(database, channel);
   const prov = channels.getChannelProvider(channel);
-  const exp = cfg.tokenExpires ? Date.parse(cfg.tokenExpires) : 0;
-  if (typeof prov.refreshAccessToken === 'function' && cfg.refreshToken && exp && exp - Date.now() < 120000) {
+  // Treat a missing/unparseable expiry as "needs refresh" so a stale token is never
+  // used — a NaN must not silently skip the refresh (which would 401 the provider call).
+  const exp = Date.parse(cfg.tokenExpires || '');
+  const needsRefresh = isNaN(exp) || exp - Date.now() < 120000;
+  if (typeof prov.refreshAccessToken === 'function' && cfg.refreshToken && needsRefresh) {
     const tok = await prov.refreshAccessToken(cfg);
     db.updateChannelConfig(database, channel, tok);
     cfg = db.getChannelConfig(database, channel);
@@ -678,7 +681,10 @@ function _oauthResultHtml(channel, ok, msg) {
   const label = channel === 'etsy' ? 'Etsy' : 'eBay';
   const icon = ok ? '✓' : '⚠';
   const color = ok ? '#16a34a' : '#dc2626';
-  const safe = String(msg).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+  const safe = String(msg).replace(
+    /[<>&"']/g,
+    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c]
+  );
   const redirect = ok ? '<script>setTimeout(function(){location.href="/"},2500)</script>' : '';
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label}</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f14;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:24px"><div style="font-size:48px;color:${color}">${icon}</div><p style="font-size:16px;line-height:1.5">${safe}</p><p style="margin-top:18px"><a href="/" style="color:#60a5fa">Zurück zur App</a></p>${redirect}</div></body></html>`;
 }
@@ -7474,8 +7480,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        // Blank secret fields = keep the stored value (list view never reveals them).
-        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken'].forEach((k) => {
+        // Blank fields = keep the stored value, so a save with an empty input (e.g.
+        // after a failed config load) can't wipe stored creds; secrets are never
+        // revealed in the list view anyway.
+        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken', 'clientId', 'siteId'].forEach((k) => {
           if (data[k] === '' || data[k] == null) delete data[k];
         });
         db.updateChannelConfig(database, chanCfgMatch[1], data);
@@ -7566,6 +7574,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         codeChallenge = p.challenge;
       }
       _channelOAuth.set(state, { channel, codeVerifier, created: Date.now() });
+      // Bind the callback to THIS browser: a SameSite=Lax cookie rides along on the
+      // provider's top-level redirect back (unlike the Strict session cookie), so a
+      // leaked `state` alone can't complete the connect from another browser/account.
+      res.setHeader(
+        'Set-Cookie',
+        'mt_oauth=' + state + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=900' + (protocol === 'https' ? '; Secure' : '')
+      );
       const url = channels.buildAuthorizeUrl(channel, cfg, {
         redirectUri: _channelCallbackUrl(channel),
         state,
@@ -7583,7 +7598,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && chanOAuthCb) {
     const channel = chanOAuthCb[1];
     const sendHtml = (ok, msg) => {
-      res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(ok ? 200 : 400, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Set-Cookie': 'mt_oauth=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' + (protocol === 'https' ? '; Secure' : '')
+      });
       res.end(_oauthResultHtml(channel, ok, msg));
     };
     (async () => {
@@ -7595,8 +7613,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         const code = q.get('code');
         const state = q.get('state');
+        // The mt_oauth cookie (set in /oauth/start) must match the state — proves the
+        // same browser initiated this flow, not someone replaying a stolen state.
+        const cookieMatch = (req.headers.cookie || '').match(/(?:^|;\s*)mt_oauth=([a-f0-9]+)/);
         const pending = state ? _channelOAuth.get(state) : null;
-        if (!code || !pending || pending.channel !== channel) {
+        if (!code || !pending || pending.channel !== channel || !cookieMatch || cookieMatch[1] !== state) {
           sendHtml(false, 'Ungültiger oder abgelaufener Login-Status. Bitte erneut „Verbinden".');
           return;
         }

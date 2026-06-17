@@ -21,6 +21,9 @@ const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token';
 const EBAY_API = 'https://api.ebay.com/sell/fulfillment/v1';
 const EBAY_SCOPES = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment';
 const EBAY_MARKETPLACE = 'EBAY_DE';
+// Cache the Etsy shop id per access token — avoids an extra /users/{id}/shops call
+// on every sync page and every write-back (Etsy's rate limit is tight, ~10/s).
+const _etsyShopCache = new Map();
 
 function _wixStatus(o) {
   const s = String(o.status || '').toUpperCase();
@@ -277,11 +280,15 @@ function _etsyUserId(cfg) {
 async function _etsyShopId(cfg) {
   const uid = _etsyUserId(cfg);
   if (!uid) throw new Error('Etsy nicht verbunden');
+  const cached = _etsyShopCache.get(cfg.accessToken);
+  if (cached) return cached;
   const res = await fetch(ETSY_API + '/users/' + encodeURIComponent(uid) + '/shops', { headers: _etsyHeaders(cfg) });
   const j = await _json(res, 'Etsy shop');
   const shop = Array.isArray(j.results) ? j.results[0] : j;
   const shopId = shop && (shop.shop_id || shop.shopId);
   if (!shopId) throw new Error('Etsy Shop-ID nicht gefunden');
+  if (_etsyShopCache.size > 50) _etsyShopCache.clear();
+  _etsyShopCache.set(cfg.accessToken, shopId);
   return shopId;
 }
 // Etsy money is { amount, divisor, currency_code } (amount is in minor units).
@@ -383,7 +390,13 @@ const etsy = {
       body: _form({ grant_type: 'refresh_token', client_id: cfg.clientId, refresh_token: cfg.refreshToken })
     });
     const j = await _json(res, 'Etsy refresh');
-    return { accessToken: j.access_token, refreshToken: j.refresh_token, tokenExpires: _expiryIso(j.expires_in) };
+    // Etsy rotates the refresh token; keep the stored one if the response omits it
+    // (a null/empty value would otherwise brick all future refreshes).
+    return {
+      accessToken: j.access_token,
+      refreshToken: j.refresh_token || cfg.refreshToken,
+      tokenExpires: _expiryIso(j.expires_in)
+    };
   }
 };
 
