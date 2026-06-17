@@ -1514,6 +1514,19 @@ function _ohN(x) {
   return Math.round((x || 0) * 100) / 100;
 }
 
+// ── Hydration math: the ONE client-side source of truth ──────────────────────
+// "Wet" substrate/grain weights include soak water; raw-material need is the dry
+// matter left after removing rh% water. The SERVER (db.js computeBatchMaterialDeltas
+// / computeProductMaterialNeed) is authoritative for inventory — these mirror it,
+// so if the formula ever changes, KEEP db.js AND this in sync.
+function mtGrainFactor(rhPct) {
+  const rh = Number(rhPct) || 0;
+  return rh > 0 ? 1 - rh / 100 : 1;
+}
+function mtDryKg(wetKg, rhPct) {
+  return (Number(wetKg) || 0) * mtGrainFactor(rhPct);
+}
+
 // Per-unit raw-material need (dry kg) — mirrors db.computeProductMaterialNeed
 // so the editor preview matches the demand board exactly.
 function _ohProdNeedCompute(spec) {
@@ -1523,7 +1536,7 @@ function _ohProdNeedCompute(spec) {
   if (type === 'block' || type === 'allinone') {
     const bagKg = num(spec.prodBagKg);
     const rh = num(spec.prodRhPct);
-    const dry = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    const dry = mtDryKg(bagKg, rh);
     if ((spec.prodSubstrate || 'holzkleie') === 'cvg') {
       need.coir += dry * ((num(spec.prodCoirPct) || 100) / 100);
     } else {
@@ -1535,7 +1548,7 @@ function _ohProdNeedCompute(spec) {
   if (type === 'grain' || type === 'allinone') {
     const gKg = num(spec.prodGrainKg);
     const gRh = spec.prodGrainRhPct != null && spec.prodGrainRhPct !== '' ? num(spec.prodGrainRhPct) : 52;
-    need.grain += gRh > 0 ? gKg * (1 - gRh / 100) : gKg;
+    need.grain += mtDryKg(gKg, gRh);
   }
   return need;
 }
@@ -4469,7 +4482,7 @@ function nbPreview() {
     if (hw || wb || coir) {
       // Correct calculation: subtract water first, then split dry matter
       // dryKg = bagKg × (1 - rh/100)
-      const dryKg = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+      const dryKg = mtDryKg(bagKg, rh);
       const hwKg = qty * dryKg * (hw / 100);
       const wbKg = qty * dryKg * (wb / 100);
       const coirKg = qty * dryKg * (coir / 100);
@@ -4501,7 +4514,7 @@ function nbPreview() {
       lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
     }
     if (grainKg > 0) {
-      const grainUsed = qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1);
+      const grainUsed = qty * mtDryKg(grainKg, grainRh);
       const grainStock = inventory.stock?.grain || 0;
       lines.push(
         `<strong>Grain:</strong> ${grainUsed.toFixed(3)} kg needed — ${grainStock.toFixed(2)} kg in stock ${grainStock >= grainUsed ? '✓' : '⚠ short by ' + (grainUsed - grainStock).toFixed(2) + 'kg'}`
@@ -4580,12 +4593,12 @@ function createBatch() {
   // first so they can either top up before submitting or knowingly proceed.
   {
     const _rhPct = (substrate && substrate.rh) || 0;
-    const _dryKg = _rhPct > 0 ? bagKg * (1 - _rhPct / 100) : bagKg;
+    const _dryKg = mtDryKg(bagKg, _rhPct);
     const _hwUsed = qty * _dryKg * (hw / 100);
     const _wbUsed = qty * _dryKg * (wb / 100);
     const _coirUsed = qty * _dryKg * (coir / 100);
     const _gypUsed = substrate && substrate.gypsum ? qty * _dryKg * 0.01 : 0;
-    const _grainUsed = grainKg > 0 ? qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1) : 0;
+    const _grainUsed = grainKg > 0 ? qty * mtDryKg(grainKg, grainRh) : 0;
     const _stock = inventory.stock || {};
     const _shortages = [];
     if (_hwUsed > (_stock.hardwood || 0))
@@ -4650,7 +4663,7 @@ function createBatch() {
   const stockSnapshot = { ...inventory.stock };
   if (substrate) {
     const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
-    const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    const dryKgPerBag = mtDryKg(bagKg, rh);
     const hwUsed = qty * dryKgPerBag * (hw / 100);
     const wbUsed = qty * dryKgPerBag * (wb / 100);
     const coirUsed = qty * dryKgPerBag * (coir / 100);
@@ -4674,7 +4687,7 @@ function createBatch() {
   }
   // All-in-One raw-grain portion mixed into the block (independent of substrate).
   if (grainKg > 0) {
-    const grainUsed = qty * grainKg * (grainRh > 0 ? 1 - grainRh / 100 : 1);
+    const grainUsed = qty * mtDryKg(grainKg, grainRh);
     if (grainUsed > 0) {
       inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
       deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
@@ -5339,7 +5352,7 @@ function delBatch(id) {
         inventory.stock.grain = (inventory.stock.grain || 0) + totalBagKg;
       } else if (b.substrate) {
         const rh = b.substrate.rh || 0;
-        const totalDryKg = rh > 0 ? totalBagKg * (1 - rh / 100) : totalBagKg;
+        const totalDryKg = mtDryKg(totalBagKg, rh);
         if (b.substrate.hardwood)
           inventory.stock.hardwood = (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
         if (b.substrate.wheatbran)
@@ -7382,7 +7395,7 @@ function estBagsFromMat(mat, stockKg) {
       isGrain: true
     };
   }
-  const dryPerBag = c.bagKg * (1 - c.rhPct / 100); // dry matter per bag
+  const dryPerBag = mtDryKg(c.bagKg, c.rhPct); // dry matter per bag
   let matPerBag = 0;
   if (mat === 'hardwood') matPerBag = dryPerBag * (c.hwPct / 100);
   if (mat === 'wheatbran') matPerBag = dryPerBag * (c.wbPct / 100);
@@ -7494,7 +7507,7 @@ function renderThresholds() {
         <input type="text" inputmode="decimal" value="${esc(c.grainRhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainRhPct',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
-      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg * (1 - c.rhPct / 100) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(c.bagKg * (1 - c.rhPct / 100) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(c.grainBagKg * (1 - c.grainRhPct / 100)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
+      With these settings: 1 × ${c.bagKg}kg block uses ~${(mtDryKg(c.bagKg, c.rhPct) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(mtDryKg(c.bagKg, c.rhPct) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(mtDryKg(c.grainBagKg, c.grainRhPct)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
     </div>
   </div>`;
 
@@ -9865,7 +9878,7 @@ function gsPreview() {
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
   const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
-  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const hydrationFactor = mtGrainFactor(grainRh);
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   document.getElementById('gs-prev').textContent = sp
@@ -9973,7 +9986,7 @@ function createGrainBatch() {
   // Deduct grain from inventory — apply hydration so only dry grain is subtracted
   // (wet bag weight includes water added during soaking, typically ~52% for wheat)
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const hydrationFactor = mtGrainFactor(grainRh);
   const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
   inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
   invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
