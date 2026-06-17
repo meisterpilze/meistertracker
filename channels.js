@@ -187,7 +187,12 @@ function pkcePair() {
   return { verifier, challenge };
 }
 function _expiryIso(expiresInSec) {
-  return new Date(Date.now() + Number(expiresInSec || 0) * 1000).toISOString();
+  // OAuth token lifetime (seconds). A missing or non-numeric value must NOT be
+  // treated as 0 — that stamps the token as already-expired, forcing a refresh
+  // before every single call (and `new Date(NaN)` would throw). Fall back to 1h.
+  const n = Number(expiresInSec);
+  const secs = Number.isFinite(n) && n > 0 ? n : 3600;
+  return new Date(Date.now() + secs * 1000).toISOString();
 }
 async function _json(res, label) {
   const text = await res.text();
@@ -252,6 +257,7 @@ async function exchangeCode(channel, cfg, { code, redirectUri, codeVerifier }) {
       })
     });
     const j = await _json(res, 'Etsy token');
+    if (!j.access_token) throw new Error('Etsy token: kein access_token in der Antwort');
     return { accessToken: j.access_token, refreshToken: j.refresh_token, tokenExpires: _expiryIso(j.expires_in) };
   }
   if (channel === 'ebay') {
@@ -262,6 +268,7 @@ async function exchangeCode(channel, cfg, { code, redirectUri, codeVerifier }) {
       body: _form({ grant_type: 'authorization_code', code, redirect_uri: cfg.siteId })
     });
     const j = await _json(res, 'eBay token');
+    if (!j.access_token) throw new Error('eBay token: kein access_token in der Antwort');
     return { accessToken: j.access_token, refreshToken: j.refresh_token, tokenExpires: _expiryIso(j.expires_in) };
   }
   throw new Error('OAuth not supported for channel: ' + channel);
@@ -325,6 +332,8 @@ function _normalizeEtsy(r) {
     orderDate: created != null ? new Date(created * 1000).toISOString() : null,
     customerName: r.name || null,
     customerEmail: r.buyer_email || null,
+    // Stable Etsy buyer id → dedup key when the email is absent (see upsertCustomerFromOrder).
+    buyerHandle: r.buyer_user_id != null ? String(r.buyer_user_id) : null,
     shipCountry: r.country_iso || null,
     totalAmount: _etsyMoney(r.grandtotal),
     currency: (r.grandtotal && r.grandtotal.currency_code) || null,
@@ -363,7 +372,10 @@ const etsy = {
     const results = j.results || [];
     const orders = results.map(_normalizeEtsy);
     const got = offset + results.length;
-    const nextCursor = j.count != null && got < j.count && results.length === limit ? String(got) : null;
+    // Page by Etsy's reported total, not page-fullness: a short page that is still
+    // below `count` must not stop paging early (which would silently drop orders).
+    // results.length > 0 guards against an infinite loop on an unexpected empty page.
+    const nextCursor = j.count != null && got < j.count && results.length > 0 ? String(got) : null;
     return { orders, nextCursor };
   },
   // Write the Sendungsnummer back via createReceiptShipment. Best-effort.
@@ -390,6 +402,9 @@ const etsy = {
       body: _form({ grant_type: 'refresh_token', client_id: cfg.clientId, refresh_token: cfg.refreshToken })
     });
     const j = await _json(res, 'Etsy refresh');
+    // A 2xx body without an access_token must not be persisted — it would wipe the
+    // working token and brick every later call. Surface it as an error instead.
+    if (!j.access_token) throw new Error('Etsy refresh: kein access_token in der Antwort');
     // Etsy rotates the refresh token; keep the stored one if the response omits it
     // (a null/empty value would otherwise brick all future refreshes).
     return {
@@ -439,6 +454,9 @@ function _normalizeEbay(o) {
     orderDate: o.creationDate || null,
     customerName: shipTo.fullName || (o.buyer && o.buyer.username) || null,
     customerEmail: shipTo.email || null,
+    // eBay usually masks the buyer email; the username is the stable dedup key
+    // (see upsertCustomerFromOrder), otherwise every sync creates a new customer.
+    buyerHandle: (o.buyer && o.buyer.username) || null,
     shipCountry: addr.countryCode || null,
     totalAmount: total && total.value != null ? parseFloat(total.value) : null,
     currency: (total && total.currency) || null,
@@ -506,6 +524,7 @@ const ebay = {
       body: _form({ grant_type: 'refresh_token', refresh_token: cfg.refreshToken, scope: EBAY_SCOPES })
     });
     const j = await _json(res, 'eBay refresh');
+    if (!j.access_token) throw new Error('eBay refresh: kein access_token in der Antwort');
     // The refresh response renews the access token only; keep the existing refresh token.
     return { accessToken: j.access_token, tokenExpires: _expiryIso(j.expires_in) };
   }

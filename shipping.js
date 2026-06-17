@@ -8,6 +8,110 @@
 
 const SENDCLOUD_BASE = 'https://panel.sendcloud.sc/api/v2';
 
+// Meisterpilze ships within the EU only (no UK, no Switzerland). A destination is
+// resolved to an ISO-3166 alpha-2 code and then checked against this EU-27
+// allowlist; anything else is refused before a billable label is ever bought.
+const _EU_ISO2 = new Set([
+  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE',
+  'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
+]);
+
+// Common country names (DE/EN) → ISO-3166 alpha-2, so a channel that sends a full
+// name (notably Wix) still resolves. Non-EU names are listed too, only so the
+// EU-only guard can reject them with a clear message instead of "unknown country".
+const _COUNTRY_ISO2 = {
+  germany: 'DE',
+  deutschland: 'DE',
+  austria: 'AT',
+  österreich: 'AT',
+  oesterreich: 'AT',
+  france: 'FR',
+  frankreich: 'FR',
+  italy: 'IT',
+  italien: 'IT',
+  spain: 'ES',
+  spanien: 'ES',
+  portugal: 'PT',
+  netherlands: 'NL',
+  niederlande: 'NL',
+  'the netherlands': 'NL',
+  holland: 'NL',
+  belgium: 'BE',
+  belgien: 'BE',
+  belgique: 'BE',
+  luxembourg: 'LU',
+  luxemburg: 'LU',
+  denmark: 'DK',
+  dänemark: 'DK',
+  daenemark: 'DK',
+  sweden: 'SE',
+  schweden: 'SE',
+  finland: 'FI',
+  finnland: 'FI',
+  poland: 'PL',
+  polen: 'PL',
+  'czech republic': 'CZ',
+  czechia: 'CZ',
+  tschechien: 'CZ',
+  slovakia: 'SK',
+  slowakei: 'SK',
+  slovenia: 'SI',
+  slowenien: 'SI',
+  hungary: 'HU',
+  ungarn: 'HU',
+  croatia: 'HR',
+  kroatien: 'HR',
+  romania: 'RO',
+  rumänien: 'RO',
+  rumaenien: 'RO',
+  bulgaria: 'BG',
+  bulgarien: 'BG',
+  greece: 'GR',
+  griechenland: 'GR',
+  ireland: 'IE',
+  irland: 'IE',
+  estonia: 'EE',
+  estland: 'EE',
+  latvia: 'LV',
+  lettland: 'LV',
+  lithuania: 'LT',
+  litauen: 'LT',
+  cyprus: 'CY',
+  zypern: 'CY',
+  malta: 'MT',
+  // Non-EU — listed only so the EU-only guard rejects them clearly (we do not ship here).
+  switzerland: 'CH',
+  schweiz: 'CH',
+  suisse: 'CH',
+  'united kingdom': 'GB',
+  'great britain': 'GB',
+  uk: 'GB',
+  england: 'GB',
+  grossbritannien: 'GB',
+  großbritannien: 'GB',
+  norway: 'NO',
+  norwegen: 'NO',
+  'united states': 'US',
+  'united states of america': 'US',
+  usa: 'US',
+  canada: 'CA',
+  kanada: 'CA'
+};
+
+// Resolve a destination to an EU ISO-3166 alpha-2 code, or throw. EU-only, so a
+// non-EU destination (UK, Switzerland, …) is refused here rather than buying a
+// label that should never go out.
+function _iso2Country(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 'DE';
+  const code = /^[A-Za-z]{2}$/.test(s) ? s.toUpperCase() : _COUNTRY_ISO2[s.toLowerCase()];
+  if (!code) throw new Error('Unbekanntes Zielland: "' + s + '" — bitte ISO-Ländercode verwenden (z. B. DE).');
+  if (!_EU_ISO2.has(code)) {
+    throw new Error('Versand nur innerhalb der EU — "' + s + '" (' + code + ') ist ausgeschlossen.');
+  }
+  return code;
+}
+
 function scAuth(cfg) {
   return 'Basic ' + Buffer.from((cfg.publicKey || '') + ':' + (cfg.secretKey || '')).toString('base64');
 }
@@ -81,7 +185,7 @@ const sendcloud = {
       address_2: order.shipAddress2 || '',
       city: order.shipCity || '',
       postal_code: order.shipPostal || '',
-      country: (order.shipCountry || 'DE').toUpperCase(),
+      country: _iso2Country(order.shipCountry),
       telephone: order.shipPhone || '',
       email: order.customerEmail || '',
       order_number: order.channel ? order.channel + '-' + (order.channelOrderId || order.id) : String(order.id || ''),

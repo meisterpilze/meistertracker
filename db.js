@@ -3843,6 +3843,23 @@ function insertShipment(db, s) {
   return info.lastInsertRowid;
 }
 
+// True iff the order already has a really-bought (billable, non-cancelled) label.
+// Lets the buy route block a *sequential* second purchase after the in-memory
+// in-flight guard has already cleared (a retry / replay / double-submit). An
+// announced test parcel is not billable, so it does not block a later live buy.
+function getBilledShipment(db, orderId) {
+  const r = db
+    .prepare(
+      `SELECT * FROM shipments
+        WHERE order_id = ?
+          AND status NOT IN ('announced', 'cancelled', 'error')
+          AND (provider_parcel_id IS NOT NULL OR tracking_number IS NOT NULL)
+        ORDER BY id DESC LIMIT 1`
+    )
+    .get(orderId);
+  return r ? _mapShipment(r) : null;
+}
+
 function listShipments(db, opts = {}) {
   if (opts.orderId != null) {
     return db
@@ -6152,7 +6169,9 @@ function upsertOrder(db, o) {
   const now = new Date().toISOString();
   const coid = String(o.channelOrderId);
   const customerId = upsertCustomerFromOrder(db, o);
-  const existing = db.prepare('SELECT id FROM orders WHERE channel = ? AND channel_order_id = ?').get(o.channel, coid);
+  const existing = db
+    .prepare('SELECT id, status FROM orders WHERE channel = ? AND channel_order_id = ?')
+    .get(o.channel, coid);
   let orderId;
   const raw = o.raw != null ? JSON.stringify(o.raw) : null;
   // Structured ship-to address from the channel, so synced orders are ready to
@@ -6168,6 +6187,17 @@ function upsertOrder(db, o) {
     sWeight = o.shipWeightG != null && o.shipWeightG !== '' ? o.shipWeightG : null;
   if (existing) {
     orderId = existing.id;
+    // Don't let a channel re-sync downgrade locally-advanced progress. Channels
+    // only emit 'new' (unshipped) or the terminal 'shipped'/'cancelled'; a local
+    // 'in_production'/'ready'/'shipped' must survive the next sync. Terminal
+    // channel states stay authoritative; an incoming 'new' never overwrites a
+    // higher local rank (null → COALESCE keeps the current status).
+    const _rank = { new: 0, in_production: 1, ready: 2, shipped: 3, cancelled: 3 };
+    const _incoming = o.status || null;
+    let _nextStatus;
+    if (_incoming === 'shipped' || _incoming === 'cancelled') _nextStatus = _incoming;
+    else if (_incoming && (_rank[_incoming] || 0) >= (_rank[existing.status] || 0)) _nextStatus = _incoming;
+    else _nextStatus = null;
     db.prepare(
       `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
         customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?,
@@ -6177,7 +6207,7 @@ function upsertOrder(db, o) {
         updated = ?
        WHERE id = ?`
     ).run(
-      o.status || null,
+      _nextStatus,
       o.orderDate || null,
       o.shipBy || null,
       customerId,
@@ -6386,14 +6416,29 @@ function setOrderStatus(db, id, status) {
 // ── Reservation + production-demand engine ──
 function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
   const now = new Date().toISOString();
-  const ins = db.prepare(
+  // For a concrete batch the UNIQUE(order_item_id, batch_id) upsert works. But SQLite
+  // treats NULLs as DISTINCT, so ON CONFLICT never fires when batch_id IS NULL — a
+  // re-reserve against finished stock (no batch) would insert a duplicate 'reserved'
+  // row and double-count demand. Handle the NULL-batch case with update-then-insert.
+  const insBatch = db.prepare(
     `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created)
      VALUES(?,?,?,'reserved',?)
      ON CONFLICT(order_item_id, batch_id) DO UPDATE SET qty = excluded.qty`
   );
+  const updNull = db.prepare(
+    "UPDATE order_allocations SET qty = ? WHERE order_item_id = ? AND batch_id IS NULL AND status = 'reserved'"
+  );
+  const insNull = db.prepare(
+    `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created) VALUES(?,NULL,?,'reserved',?)`
+  );
   const orderIds = new Set();
   for (const a of allocations) {
-    ins.run(a.orderItemId, batchId, a.qty || 0, now);
+    if (batchId == null) {
+      const r = updNull.run(a.qty || 0, a.orderItemId);
+      if (r.changes === 0) insNull.run(a.orderItemId, a.qty || 0, now);
+    } else {
+      insBatch.run(a.orderItemId, batchId, a.qty || 0, now);
+    }
     const row = db.prepare('SELECT order_id AS oid FROM order_items WHERE id = ?').get(a.orderItemId);
     if (row) orderIds.add(row.oid);
   }
@@ -6419,7 +6464,9 @@ function computeProductionDemand(db) {
               SUM(oi.qty) AS demand, MIN(o.ship_by) AS earliestShipBy,
               COALESCE((SELECT SUM(a.qty) FROM order_allocations a
                           JOIN order_items oi2 ON oi2.id = a.order_item_id
-                         WHERE oi2.product_id = p.id AND a.status = 'reserved'), 0) AS reserved
+                          JOIN orders o2 ON o2.id = oi2.order_id
+                         WHERE oi2.product_id = p.id AND a.status = 'reserved'
+                           AND o2.status IN ('new','in_production')), 0) AS reserved
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
        JOIN products p ON p.id = oi.product_id
@@ -6582,6 +6629,7 @@ module.exports = {
   updateShippingConfig,
   updateOrderShipAddress,
   insertShipment,
+  getBilledShipment,
   listShipments,
   updateShipmentStatus,
   getShipmentById,
