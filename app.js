@@ -5863,28 +5863,88 @@ async function loadChannelsSettings() {
       st.style.display = 'block';
       st.textContent = wix.lastError ? '⚠ ' + wix.lastError : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
     }
+    // eBay + Etsy (OAuth): client_id / secret / RuName + connection status.
+    const fillOauth = (prefix, ch) => {
+      const en = document.getElementById(prefix + '-enabled');
+      if (en) en.checked = !!ch.enabled;
+      const cid = document.getElementById(prefix + '-clientid');
+      if (cid) cid.value = ch.clientId || '';
+      const sid = document.getElementById(prefix + '-siteid');
+      if (sid) sid.value = ch.siteId || '';
+      const sec = document.getElementById(prefix + '-secret');
+      if (sec) {
+        sec.value = '';
+        sec.placeholder = ch.hasClientSecret ? t('channels.keySet') : 'Cert-ID';
+      }
+      const st2 = document.getElementById(prefix + '-status');
+      if (st2) {
+        const bits = [ch.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
+        if (ch.lastError) bits.push('⚠ ' + ch.lastError);
+        else if (ch.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(ch.lastSync) }));
+        st2.style.display = 'block';
+        st2.textContent = bits.join(' · ');
+      }
+    };
+    fillOauth('ebay', (d.channels || []).find((c) => c.channel === 'ebay') || {});
+    fillOauth('etsy', (d.channels || []).find((c) => c.channel === 'etsy') || {});
   } catch (e) {
     /* not configured yet */
   }
 }
 async function saveChannel(channel) {
-  const aidEl = document.getElementById(channel + '-accountid');
-  const body = {
-    enabled: document.getElementById(channel + '-enabled').checked,
-    apiKey: (document.getElementById(channel + '-apikey').value || '').trim(),
-    siteId: (document.getElementById(channel + '-siteid').value || '').trim(),
-    clientId: aidEl ? (aidEl.value || '').trim() : undefined
-  };
+  let body;
+  if (channel === 'wix') {
+    body = {
+      enabled: document.getElementById('wix-enabled').checked,
+      apiKey: (document.getElementById('wix-apikey').value || '').trim(),
+      siteId: (document.getElementById('wix-siteid').value || '').trim(),
+      clientId: (document.getElementById('wix-accountid').value || '').trim()
+    };
+  } else if (channel === 'ebay') {
+    body = {
+      enabled: document.getElementById('ebay-enabled').checked,
+      clientId: (document.getElementById('ebay-clientid').value || '').trim(), // App-ID
+      clientSecret: (document.getElementById('ebay-secret').value || '').trim(), // Cert-ID (blank = keep)
+      siteId: (document.getElementById('ebay-siteid').value || '').trim() // RuName
+    };
+  } else if (channel === 'etsy') {
+    body = {
+      enabled: document.getElementById('etsy-enabled').checked,
+      clientId: (document.getElementById('etsy-clientid').value || '').trim() // Keystring
+    };
+  } else {
+    return false;
+  }
   try {
     const r = await apiPatch('/api/channels/' + channel, body);
     if (r && r.error) {
       setFb('err', r.error);
-      return;
+      return false;
     }
     setFb('ok', t('channels.saved'));
     loadChannelsSettings();
+    return true;
   } catch (e) {
     setFb('err', t('common.error'));
+    return false;
+  }
+}
+// Start the OAuth login: persist creds first (so the server has client_id / RuName),
+// then redirect the browser to the provider's authorize page. The provider sends the
+// user back to the public callback, which stores the tokens.
+async function connectChannel(channel) {
+  const ok = await saveChannel(channel);
+  if (ok === false) return;
+  try {
+    const r = await authFetch('/api/channels/' + channel + '/oauth/start');
+    const d = await r.json();
+    if (d && d.url) {
+      window.location.href = d.url;
+      return;
+    }
+    setFb('err', (d && d.error) || t('common.error'));
+  } catch (e) {
+    if (e.message !== 'unauthorized') setFb('err', t('common.error'));
   }
 }
 async function testChannel(channel) {
@@ -16199,6 +16259,14 @@ function initEventListeners() {
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
   $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));
+  $('ebay-save-btn').addEventListener('click', () => saveChannel('ebay'));
+  $('ebay-connect-btn').addEventListener('click', () => connectChannel('ebay'));
+  $('ebay-test-btn').addEventListener('click', () => testChannel('ebay'));
+  $('ebay-sync-btn').addEventListener('click', () => syncChannel('ebay'));
+  $('etsy-save-btn').addEventListener('click', () => saveChannel('etsy'));
+  $('etsy-connect-btn').addEventListener('click', () => connectChannel('etsy'));
+  $('etsy-test-btn').addEventListener('click', () => testChannel('etsy'));
+  $('etsy-sync-btn').addEventListener('click', () => syncChannel('etsy'));
   $('printer-save-btn').addEventListener('click', savePrinterSettings);
   $('printer-test-btn').addEventListener('click', testPrintBridge);
   $('printer-refresh-btn').addEventListener('click', () => {

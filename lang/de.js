@@ -247,8 +247,17 @@ window.LANG['de'] = {
   'channels.etsyTitle': 'Etsy',
   'channels.wixDesc':
     'Bestellungen automatisch aus Wix holen. API-Key: Wix-Dashboard → Einstellungen → API-Keys (mit Stores/Orders-Leserecht). Site-ID steht in der Dashboard-URL.',
-  'channels.oauthSoon':
-    'eBay- und Etsy-Bestellungen werden automatisch über Wix importiert (Herkunft wird erkannt). Eine direkte API-Anbindung ist optional.',
+  'channels.ebayDesc':
+    'Direkte eBay-Anbindung (Sell Fulfillment). App-ID, Cert-ID und RuName aus dem eBay-Developer-Portal eintragen, speichern, dann „Verbinden". Der Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.',
+  'channels.etsyDesc':
+    'Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden". Der Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.',
+  'channels.appId': 'App-ID (Client-ID)',
+  'channels.certId': 'Cert-ID (Client-Secret)',
+  'channels.ruName': 'RuName (Redirect-URL-Name)',
+  'channels.keystring': 'Keystring (API-Key)',
+  'channels.connect': 'Verbinden',
+  'channels.linked': 'Verbunden',
+  'channels.notLinked': 'Nicht verbunden',
   'channels.enable': 'Aktivieren',
   'channels.apiKey': 'API-Key',
   'channels.siteId': 'Site-ID',

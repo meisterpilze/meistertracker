@@ -3589,17 +3589,108 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="channels.ebayTitle">eBay</div>
-              <p style="font-size: 12px; color: var(--c-text-muted); line-height: 1.6" data-i18n="channels.oauthSoon">
-                Braucht eine Developer-App + OAuth-Anmeldung auf der öffentlichen Instanz (meistertracker.com). Wird als
-                Nächstes eingerichtet.
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.ebayDesc"
+              >
+                Direkte eBay-Anbindung (Sell Fulfillment). App-ID, Cert-ID und RuName aus dem eBay-Developer-Portal
+                eintragen, speichern, dann „Verbinden". Der Login schließt nur auf der öffentlichen Instanz
+                (meistertracker.com) ab.
               </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="ebay-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.appId"
+                    >App-ID (Client-ID)</label
+                  >
+                  <input type="text" id="ebay-clientid" style="width: 100%" />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.certId"
+                    >Cert-ID (Client-Secret)</label
+                  >
+                  <input
+                    type="password"
+                    id="ebay-secret"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.ruName"
+                    >RuName (Redirect-URL-Name)</label
+                  >
+                  <input type="text" id="ebay-siteid" style="width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="ebay-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
+                  <button id="ebay-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
+                  <button id="ebay-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="ebay-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                </div>
+                <div
+                  id="ebay-status"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="channels.etsyTitle">Etsy</div>
-              <p style="font-size: 12px; color: var(--c-text-muted); line-height: 1.6" data-i18n="channels.oauthSoon">
-                Braucht eine Developer-App + OAuth-Anmeldung auf der öffentlichen Instanz (meistertracker.com). Wird als
-                Nächstes eingerichtet.
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.etsyDesc"
+              >
+                Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden". Der
+                Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.
               </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="etsy-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.keystring"
+                    >Keystring (API-Key)</label
+                  >
+                  <input type="text" id="etsy-clientid" style="width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="etsy-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
+                  <button id="etsy-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
+                  <button id="etsy-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="etsy-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                </div>
+                <div
+                  id="etsy-status"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
             </div>
           </div>
           <!-- Scan log -->
