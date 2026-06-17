@@ -4939,8 +4939,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // handler verifies GITHUB_WEBHOOK_SECRET + signature and refuses in worktree
   // mode, so it is safe to exempt here.
   const isWebhook = req.method === 'POST' && url === '/api/webhook/github';
+  // The eBay/Etsy OAuth callback arrives as a cross-site top-level redirect from the
+  // provider, so the SameSite=Strict session cookie isn't sent and it can't pass the
+  // session gate. Its handler authenticates via the one-time `state` we minted in the
+  // admin-only /oauth/start, so it's safe to exempt here like the GitHub webhook.
+  const isChannelOAuthCb = req.method === 'GET' && /^\/api\/channels\/(etsy|ebay)\/oauth\/callback(?:\?|$)/.test(url);
 
-  if (!isLoginPage && !isPublicAsset && !isWebhook) {
+  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
