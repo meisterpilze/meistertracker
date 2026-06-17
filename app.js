@@ -15977,12 +15977,12 @@ function initEventListeners() {
     goToBatch(el.dataset.batch);
   });
   $('dash-act-newbatch').addEventListener('click', () => {
-    go('batch', 'n-batch');
-    openStab('batch', 'new');
+    // Old New-batch form is hidden; funnel to the Sorte list (+ Charge per Sorte).
+    go('strains', 'n-strains');
   });
   $('dash-act-labwork').addEventListener('click', () => {
-    go('lab', 'n-lab');
-    openStab('lab', 'work');
+    // Old Log-work form is hidden; funnel to the Sorte list (+ Labor per Sorte).
+    go('strains', 'n-strains');
   });
   $('dash-act-harvest').addEventListener('click', () => {
     const card = document.getElementById('dash-harvest-tasks-card');
@@ -16443,8 +16443,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (actionParam === 'scan') {
           if (typeof openCamScan === 'function') openCamScan();
         } else if (actionParam === 'newbatch') {
-          if (typeof go === 'function') go('batch', 'n-batch');
-          if (typeof openStab === 'function') openStab('batch', 'new');
+          // Old New-batch form is hidden; funnel to the Sorte list (+ Charge per Sorte).
+          if (typeof go === 'function') go('strains', 'n-strains');
         } else if (actionParam === 'dash') {
           if (typeof go === 'function') go('dash', 'n-dash');
         }
