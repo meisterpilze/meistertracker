@@ -111,4 +111,41 @@ describe('sendcloud adapter', () => {
       restore();
     }
   });
+
+  it('#10 maps a full country name to its ISO-3166 alpha-2 code', async () => {
+    let sent = null;
+    const restore = mockFetch(async (url, opts) => {
+      sent = JSON.parse(opts.body);
+      return jsonRes(200, { parcel: { id: 1, label: {} } });
+    });
+    try {
+      await ship.sendcloud.buyLabel(cfg, {
+        order: { id: 1, shipCountry: 'Germany' },
+        methodId: 1,
+        weightG: 1000,
+        requestLabel: false
+      });
+      assert.equal(sent.parcel.country, 'DE', 'full name "Germany" → DE');
+    } finally {
+      restore();
+    }
+  });
+
+  it('#10 rejects an unmappable country instead of buying an invalid label', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { parcel: { id: 1, label: {} } }));
+    try {
+      await assert.rejects(
+        () =>
+          ship.sendcloud.buyLabel(cfg, {
+            order: { id: 1, shipCountry: 'Atlantis' },
+            methodId: 1,
+            weightG: 1000,
+            requestLabel: false
+          }),
+        /Ungültiges Zielland/
+      );
+    } finally {
+      restore();
+    }
+  });
 });

@@ -375,3 +375,139 @@ describe('order hub – demand engine & reservation', () => {
     assert.equal(row.components.length, 0);
   });
 });
+
+describe('order hub – review fixes (recall pass)', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('#3 eBay orders with no email dedup by buyerHandle across re-syncs', () => {
+    const o = {
+      channel: 'ebay',
+      channelOrderId: 'EB-77',
+      customerEmail: null,
+      customerName: 'pilzfan',
+      buyerHandle: 'pilzfan', // eBay username — the dedup key when email is masked
+      totalAmount: 12,
+      items: []
+    };
+    const id1 = db.upsertOrder(d, o);
+    const id2 = db.upsertOrder(d, o); // re-sync of the same unshipped order
+    assert.equal(id1, id2, 'same order row on re-sync');
+    assert.equal(
+      d.prepare("SELECT COUNT(*) AS c FROM customer_identities WHERE channel='ebay' AND handle='pilzfan'").get().c,
+      1,
+      'one identity row for the buyer'
+    );
+    assert.equal(
+      d.prepare('SELECT COUNT(*) AS c FROM customers WHERE email IS NULL').get().c,
+      1,
+      'no duplicate null-email customer created per sync'
+    );
+  });
+
+  it('#4 a channel re-sync does not downgrade a locally-advanced status', () => {
+    const o = {
+      channel: 'ebay',
+      channelOrderId: 'EB-STAT',
+      customerEmail: 'st@ex.de',
+      status: 'new',
+      items: [{ channelSku: 'S', title: 'S', qty: 1 }]
+    };
+    const oid = db.upsertOrder(d, o);
+    db.setOrderStatus(d, oid, 'in_production');
+    db.upsertOrder(d, o); // channel re-sends it as 'new' (still unshipped)
+    assert.equal(
+      d.prepare('SELECT status FROM orders WHERE id=?').get(oid).status,
+      'in_production',
+      'local progress survives the sync'
+    );
+    db.upsertOrder(d, { ...o, status: 'cancelled' }); // terminal channel state is authoritative
+    assert.equal(d.prepare('SELECT status FROM orders WHERE id=?').get(oid).status, 'cancelled');
+  });
+
+  it('#5 re-reserving with no batch updates the row, never duplicates it', () => {
+    const pid = db.upsertProduct(d, {
+      name: 'AIO5',
+      category: 'all-in-one',
+      stock: 0,
+      prodType: 'grain',
+      prodGrainKg: 1,
+      prodGrainRhPct: 0
+    });
+    db.mapListing(d, { channel: 'wix', channelSku: 'WX-5', productId: pid });
+    db.upsertOrder(d, {
+      channel: 'wix',
+      channelOrderId: 'O-5',
+      customerEmail: 'r5@ex.de',
+      items: [{ channelSku: 'WX-5', title: 'AIO', qty: 4 }]
+    });
+    const item = d
+      .prepare("SELECT oi.id FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.channel_order_id='O-5'")
+      .get();
+    db.reserveDemand(d, { allocations: [{ orderItemId: item.id, qty: 2 }] });
+    db.reserveDemand(d, { allocations: [{ orderItemId: item.id, qty: 2 }] }); // re-reserve, NOT additive
+    const agg = d
+      .prepare('SELECT COUNT(*) AS c, COALESCE(SUM(qty),0) AS q FROM order_allocations WHERE order_item_id=?')
+      .get(item.id);
+    assert.equal(agg.c, 1, 'one allocation row (NULL batch no longer inserts a dupe)');
+    assert.equal(agg.q, 2, 'qty updated to 2, not summed to 4');
+    const row = db.computeProductionDemand(d).find((r) => r.productId === pid);
+    assert.equal(row.reserved, 2);
+  });
+
+  it('#6 a reservation on a shipped order no longer cancels new demand', () => {
+    const pid = db.upsertProduct(d, {
+      name: 'AIO6',
+      category: 'all-in-one',
+      stock: 0,
+      prodType: 'grain',
+      prodGrainKg: 1,
+      prodGrainRhPct: 0
+    });
+    db.mapListing(d, { channel: 'wix', channelSku: 'WX-6', productId: pid });
+    const oldId = db.upsertOrder(d, {
+      channel: 'wix',
+      channelOrderId: 'O-6OLD',
+      customerEmail: 'o6@ex.de',
+      items: [{ channelSku: 'WX-6', title: 'AIO', qty: 5 }]
+    });
+    const oldItem = d
+      .prepare("SELECT oi.id FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.channel_order_id='O-6OLD'")
+      .get();
+    db.reserveDemand(d, { allocations: [{ orderItemId: oldItem.id, qty: 5 }] });
+    db.setOrderStatus(d, oldId, 'shipped'); // ship it — its reservation must stop counting
+    db.upsertOrder(d, {
+      channel: 'wix',
+      channelOrderId: 'O-6NEW',
+      customerEmail: 'o6b@ex.de',
+      items: [{ channelSku: 'WX-6', title: 'AIO', qty: 3 }]
+    });
+    const row = db.computeProductionDemand(d).find((r) => r.productId === pid);
+    assert.ok(row, 'new demand row present (was silently dropped before the fix)');
+    assert.equal(row.demand, 3);
+    assert.equal(row.reserved, 0, 'shipped order reservation excluded from the rollup');
+    assert.equal(row.toProduce, 3);
+  });
+
+  it('#1 getBilledShipment flags a billable label and ignores a test announce', () => {
+    const oid = db.upsertOrder(d, { channel: 'wix', channelOrderId: 'O-SHIP', customerEmail: 'sh@ex.de', items: [] });
+    assert.equal(db.getBilledShipment(d, oid), null, 'none yet → first buy allowed');
+    db.insertShipment(d, { orderId: oid, provider: 'sendcloud', providerParcelId: 'P1', status: 'announced' });
+    assert.equal(db.getBilledShipment(d, oid), null, 'a test announce is not billable');
+    const sid = db.insertShipment(d, {
+      orderId: oid,
+      provider: 'sendcloud',
+      providerParcelId: 'P2',
+      trackingNumber: 'T2',
+      status: 'created'
+    });
+    const billed = db.getBilledShipment(d, oid);
+    assert.ok(billed && billed.id === sid, 'a real bought label is detected → blocks a second buy');
+  });
+});

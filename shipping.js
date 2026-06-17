@@ -8,6 +8,93 @@
 
 const SENDCLOUD_BASE = 'https://panel.sendcloud.sc/api/v2';
 
+// Common country names (DE/EN) → ISO-3166 alpha-2. A channel (notably Wix) can
+// hand us a full country name; Sendcloud requires the 2-letter code or it
+// rejects the parcel. Codes pass through untouched.
+const _COUNTRY_ISO2 = {
+  germany: 'DE',
+  deutschland: 'DE',
+  austria: 'AT',
+  österreich: 'AT',
+  oesterreich: 'AT',
+  switzerland: 'CH',
+  schweiz: 'CH',
+  suisse: 'CH',
+  france: 'FR',
+  frankreich: 'FR',
+  italy: 'IT',
+  italien: 'IT',
+  spain: 'ES',
+  spanien: 'ES',
+  portugal: 'PT',
+  netherlands: 'NL',
+  niederlande: 'NL',
+  'the netherlands': 'NL',
+  holland: 'NL',
+  belgium: 'BE',
+  belgien: 'BE',
+  belgique: 'BE',
+  luxembourg: 'LU',
+  luxemburg: 'LU',
+  denmark: 'DK',
+  dänemark: 'DK',
+  daenemark: 'DK',
+  sweden: 'SE',
+  schweden: 'SE',
+  finland: 'FI',
+  finnland: 'FI',
+  norway: 'NO',
+  norwegen: 'NO',
+  poland: 'PL',
+  polen: 'PL',
+  'czech republic': 'CZ',
+  czechia: 'CZ',
+  tschechien: 'CZ',
+  slovakia: 'SK',
+  slowakei: 'SK',
+  slovenia: 'SI',
+  slowenien: 'SI',
+  hungary: 'HU',
+  ungarn: 'HU',
+  croatia: 'HR',
+  kroatien: 'HR',
+  romania: 'RO',
+  rumänien: 'RO',
+  rumaenien: 'RO',
+  bulgaria: 'BG',
+  bulgarien: 'BG',
+  greece: 'GR',
+  griechenland: 'GR',
+  ireland: 'IE',
+  irland: 'IE',
+  estonia: 'EE',
+  estland: 'EE',
+  latvia: 'LV',
+  lettland: 'LV',
+  lithuania: 'LT',
+  litauen: 'LT',
+  'united kingdom': 'GB',
+  'great britain': 'GB',
+  uk: 'GB',
+  england: 'GB',
+  grossbritannien: 'GB',
+  großbritannien: 'GB',
+  'united states': 'US',
+  'united states of america': 'US',
+  usa: 'US',
+  canada: 'CA',
+  kanada: 'CA'
+};
+
+function _iso2Country(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 'DE';
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  const hit = _COUNTRY_ISO2[s.toLowerCase()];
+  if (hit) return hit;
+  throw new Error('Ungültiges Zielland: "' + s + '" — bitte ISO-Ländercode verwenden (z. B. DE).');
+}
+
 function scAuth(cfg) {
   return 'Basic ' + Buffer.from((cfg.publicKey || '') + ':' + (cfg.secretKey || '')).toString('base64');
 }
@@ -81,7 +168,7 @@ const sendcloud = {
       address_2: order.shipAddress2 || '',
       city: order.shipCity || '',
       postal_code: order.shipPostal || '',
-      country: (order.shipCountry || 'DE').toUpperCase(),
+      country: _iso2Country(order.shipCountry),
       telephone: order.shipPhone || '',
       email: order.customerEmail || '',
       order_number: order.channel ? order.channel + '-' + (order.channelOrderId || order.id) : String(order.id || ''),

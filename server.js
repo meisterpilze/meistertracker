@@ -6570,6 +6570,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // Orders — detail / set status
   const orderMatch = url.match(/^\/api\/orders\/(\d+)$/);
   if (req.method === 'GET' && orderMatch) {
+    // Order detail carries customer name + email (PII) — gate like the ship routes.
+    if (requireShipping(req, res)) return;
     try {
       const o = db.getOrder(database, parseInt(orderMatch[1], 10));
       if (!o) {
@@ -6720,8 +6722,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // Customers — list (authed) / merge two records (admin)
+  // Customers — list (admin or shipping) / merge two records (admin). Names,
+  // emails and spend are PII, so the list is gated like the other ship routes.
   if (req.method === 'GET' && url === '/api/customers') {
+    if (requireShipping(req, res)) return;
     try {
       const params = new URL(req.url, 'http://x').searchParams;
       jsonOk(res, { items: db.listCustomers(database, { limit: parseInt(params.get('limit'), 10) || 200 }) });
@@ -7341,6 +7345,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               jsonErr(res, 404, 'order not found');
               return;
             }
+            // Idempotency across requests: if a real (billable) label already exists
+            // for this order, never buy a second one. _labelBuysInFlight only blocks
+            // truly concurrent requests; a later retry / replay / double-submit would
+            // otherwise bill the owner twice. (A test announce is not billable.)
+            if (live && db.getBilledShipment(database, orderId)) {
+              jsonErr(res, 409, 'Für diese Bestellung wurde bereits ein Label gekauft');
+              return;
+            }
             // Reject non-positive / garbage weights before they reach the carrier.
             const reqW = parseInt(data.weightG, 10);
             const weightG =
@@ -7524,20 +7536,44 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         let imported = 0;
         let cursor = null;
         let pages = 0;
-        // Page through results; upsertOrder dedupes by (channel, channelOrderId).
+        // Fetch every page first (network I/O), then commit them in ONE transaction:
+        // one fsync instead of one per order, and no write-lock held across the
+        // network round-trips. upsertOrder dedupes by (channel, channelOrderId).
+        const collected = [];
         do {
           const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
-          for (const o of orders) {
-            try {
-              db.upsertOrder(database, o);
-              imported++;
-            } catch (e2) {
-              /* skip a malformed order, keep importing the rest */
-            }
-          }
+          for (const o of orders) collected.push(o);
           cursor = nextCursor;
           pages++;
         } while (cursor && pages < 20);
+        database.exec('BEGIN');
+        try {
+          for (const o of collected) {
+            // A SAVEPOINT per order keeps a malformed one from poisoning the batch:
+            // it rolls back just that order, and the rest still commit together.
+            try {
+              database.exec('SAVEPOINT mt_order');
+              db.upsertOrder(database, o);
+              database.exec('RELEASE mt_order');
+              imported++;
+            } catch (e2) {
+              try {
+                database.exec('ROLLBACK TO mt_order');
+                database.exec('RELEASE mt_order');
+              } catch (e3) {
+                /* ignore */
+              }
+            }
+          }
+          database.exec('COMMIT');
+        } catch (eTx) {
+          try {
+            database.exec('ROLLBACK');
+          } catch (e4) {
+            /* ignore */
+          }
+          throw eTx;
+        }
         db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: null });
         broadcastSSE(res);
         jsonOk(res, { imported });

@@ -228,3 +228,73 @@ describe('Wix write-back + WEB-only sync', () => {
     }
   });
 });
+
+describe('channel review fixes (recall pass)', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body)
+  });
+
+  it('#3 eBay normalizer sets buyerHandle from the username (email is masked)', () => {
+    const o = channels._normalizeEbay({ orderId: '1', buyer: { username: 'pilzfan' }, lineItems: [] });
+    assert.equal(o.buyerHandle, 'pilzfan');
+    assert.equal(o.customerEmail, null, 'eBay does not expose the buyer email');
+  });
+
+  it('#3 Etsy normalizer sets buyerHandle from buyer_user_id', () => {
+    const o = channels._normalizeEtsy({ receipt_id: 5, buyer_user_id: 42, transactions: [] });
+    assert.equal(o.buyerHandle, '42');
+  });
+
+  it('#7 Etsy refresh: a missing expires_in yields a ~1h expiry, not expire-now', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { access_token: 'NEW' })); // no expires_in
+    try {
+      const tok = await channels.etsy.refreshAccessToken({ clientId: 'K', refreshToken: 'R' });
+      assert.equal(tok.accessToken, 'NEW');
+      assert.equal(tok.refreshToken, 'R', 'keeps the stored refresh token when omitted');
+      const ms = Date.parse(tok.tokenExpires) - Date.now();
+      assert.ok(ms > 3000 * 1000 && ms <= 3600 * 1000 + 1000, 'expiry ~1h out, not now (' + ms + 'ms)');
+    } finally {
+      restore();
+    }
+  });
+
+  it('#8 Etsy refresh: a 2xx body without access_token throws (never persists an empty token)', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { error: 'invalid_grant' }));
+    try {
+      await assert.rejects(
+        () => channels.etsy.refreshAccessToken({ clientId: 'K', refreshToken: 'R' }),
+        /access_token/
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('#9 Etsy fetchOrders keeps paging on a short page that is still below the total', async () => {
+    const cfg = { clientId: 'K', accessToken: 'u1.tok-' + Math.random().toString(36).slice(2) };
+    const restore = mockFetch(async (url) => {
+      // The receipts URL also contains '/shops/', so match the receipts call first.
+      if (url.includes('/receipts')) {
+        // 80 results (< limit 100) but count says 150 → must NOT stop paging here.
+        return jsonRes(200, { count: 150, results: Array.from({ length: 80 }, (_, i) => ({ receipt_id: i + 1 })) });
+      }
+      return jsonRes(200, { results: [{ shop_id: 99 }] }); // /users/<uid>/shops
+    });
+    try {
+      const { orders, nextCursor } = await channels.etsy.fetchOrders(cfg, {});
+      assert.equal(orders.length, 80);
+      assert.equal(nextCursor, '80', 'short page below the reported count still advances the cursor');
+    } finally {
+      restore();
+    }
+  });
+});
