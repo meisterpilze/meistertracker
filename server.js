@@ -7361,10 +7361,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             // back failure never fails the (already-bought) label.
             let channelPushed = false;
             let pushError = null;
-            if (live && ['wix', 'ebay', 'etsy'].includes(order.channel)) {
+            if (
+              live &&
+              ['wix', 'ebay', 'etsy'].includes(order.channel) &&
+              db.getChannelConfig(database, order.channel).enabled
+            ) {
               try {
+                // enabled is checked above, so a disabled channel skips the token refresh.
                 const { cfg: chanCfg, prov } = await withFreshChannelToken(order.channel);
-                if (chanCfg.enabled && typeof prov.pushTracking === 'function') {
+                if (typeof prov.pushTracking === 'function') {
                   const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
                   const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
                   await prov.pushTracking(chanCfg, {

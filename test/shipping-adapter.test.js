@@ -87,6 +87,22 @@ describe('sendcloud adapter', () => {
     }
   });
 
+  it('announces only (no billable label) when requestLabel is false (test mode)', async () => {
+    let sent = null;
+    const restore = mockFetch(async (url, opts) => {
+      sent = JSON.parse(opts.body);
+      return jsonRes(200, { parcel: { id: 556, label: {} } });
+    });
+    try {
+      const order = { id: 8, channel: 'wix', channelOrderId: 'W-8', shipCountry: 'de' };
+      const r = await ship.sendcloud.buyLabel(cfg, { order, methodId: 8, weightG: 1000, requestLabel: false });
+      assert.equal(sent.parcel.request_label, false, 'test mode must NOT request a billable label');
+      assert.equal(r.status, 'announced');
+    } finally {
+      restore();
+    }
+  });
+
   it('throws on a Sendcloud error response', async () => {
     const restore = mockFetch(async () => jsonRes(400, { error: { message: 'bad address' } }));
     try {
