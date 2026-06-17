@@ -643,6 +643,42 @@ function validateScanEntries(entries) {
   }
   return null;
 }
+// ── Sales-channel OAuth (eBay auth-code, Etsy PKCE) ──────────────────────────
+// The login round-trip must hit the public callback registered with the provider
+// (https://meistertracker.com/api/channels/<ch>/oauth/callback), so it only
+// completes on prod or a tunnel that serves that host. PUBLIC_BASE_URL lets a
+// tunnel override the host. State is held in memory for the brief authorize→
+// callback window — a server restart mid-login just means clicking "Verbinden" again.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://meistertracker.com').replace(/\/+$/, '');
+const _channelOAuth = new Map(); // state -> { channel, codeVerifier, created }
+function _channelCallbackUrl(channel) {
+  return PUBLIC_BASE_URL + '/api/channels/' + channel + '/oauth/callback';
+}
+function _oauthGc() {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  for (const [k, v] of _channelOAuth) if (v.created < cutoff) _channelOAuth.delete(k);
+}
+// Refresh a channel's OAuth access token if it's within 2 min of expiry, persist the
+// new token, and return the fresh config + provider. No-op for API-key channels (Wix).
+async function withFreshChannelToken(channel) {
+  let cfg = db.getChannelConfig(database, channel);
+  const prov = channels.getChannelProvider(channel);
+  const exp = cfg.tokenExpires ? Date.parse(cfg.tokenExpires) : 0;
+  if (typeof prov.refreshAccessToken === 'function' && cfg.refreshToken && exp && exp - Date.now() < 120000) {
+    const tok = await prov.refreshAccessToken(cfg);
+    db.updateChannelConfig(database, channel, tok);
+    cfg = db.getChannelConfig(database, channel);
+  }
+  return { cfg, prov };
+}
+function _oauthResultHtml(channel, ok, msg) {
+  const label = channel === 'etsy' ? 'Etsy' : 'eBay';
+  const icon = ok ? '✓' : '⚠';
+  const color = ok ? '#16a34a' : '#dc2626';
+  const safe = String(msg).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+  const redirect = ok ? '<script>setTimeout(function(){location.href="/"},2500)</script>' : '';
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label}</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f14;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:24px"><div style="font-size:48px;color:${color}">${icon}</div><p style="font-size:16px;line-height:1.5">${safe}</p><p style="margin-top:18px"><a href="/" style="color:#60a5fa">Zurück zur App</a></p>${redirect}</div></body></html>`;
+}
 // Admin-only guard — returns true if blocked (response already sent)
 function requireAdmin(req, res) {
   if (!req.authUser || req.authUser.role !== 'admin') {
@@ -7258,8 +7294,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           let pushError = null;
           if (['wix', 'ebay', 'etsy'].includes(order.channel)) {
             try {
-              const chanCfg = db.getChannelConfig(database, order.channel);
-              const prov = channels.getChannelProvider(order.channel);
+              const { cfg: chanCfg, prov } = await withFreshChannelToken(order.channel);
               if (chanCfg.enabled && typeof prov.pushTracking === 'function') {
                 const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
                 const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
@@ -7386,8 +7421,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     (async () => {
       try {
-        const cfg = db.getChannelConfig(database, chanTestMatch[1]);
-        const r = await channels.getChannelProvider(chanTestMatch[1]).testConnection(cfg);
+        const { cfg, prov } = await withFreshChannelToken(chanTestMatch[1]);
+        const r = await prov.testConnection(cfg);
         jsonOk(res, r);
       } catch (err) {
         jsonErr(res, 502, err.message || 'test failed');
@@ -7401,8 +7436,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const channel = chanSyncMatch[1];
     (async () => {
       try {
-        const cfg = db.getChannelConfig(database, channel);
-        const prov = channels.getChannelProvider(channel);
+        const { cfg, prov } = await withFreshChannelToken(channel);
         let imported = 0;
         let cursor = null;
         let pages = 0;
@@ -7429,6 +7463,92 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           lastError: err.message || 'sync failed'
         });
         jsonErr(res, 502, err.message || 'sync failed');
+      }
+    })();
+    return;
+  }
+
+  // -- Sales-channel OAuth (connect eBay / Etsy) --
+  // Admin starts the login; we return the provider's authorize URL for the browser
+  // to open. (Token-based admin auth means we can't just 302 the top-level nav.)
+  const chanOAuthStart = req.url.match(/^\/api\/channels\/(etsy|ebay)\/oauth\/start$/);
+  if (req.method === 'GET' && chanOAuthStart) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const channel = chanOAuthStart[1];
+      const cfg = db.getChannelConfig(database, channel);
+      if (!cfg.clientId) {
+        jsonErr(res, 400, channel === 'etsy' ? 'Etsy Keystring fehlt' : 'eBay App-ID fehlt');
+        return;
+      }
+      if (channel === 'ebay' && (!cfg.clientSecret || !cfg.siteId)) {
+        jsonErr(res, 400, 'eBay Cert-ID + RuName erforderlich');
+        return;
+      }
+      _oauthGc();
+      const state = crypto.randomBytes(16).toString('hex');
+      let codeVerifier = null;
+      let codeChallenge = null;
+      if (channel === 'etsy') {
+        const p = channels.pkcePair();
+        codeVerifier = p.verifier;
+        codeChallenge = p.challenge;
+      }
+      _channelOAuth.set(state, { channel, codeVerifier, created: Date.now() });
+      const url = channels.buildAuthorizeUrl(channel, cfg, {
+        redirectUri: _channelCallbackUrl(channel),
+        state,
+        codeChallenge
+      });
+      jsonOk(res, { url });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // The provider redirects the browser here after consent. Public (a top-level
+  // redirect carries no admin token) — CSRF-protected by the one-time `state`.
+  const chanOAuthCb = req.url.match(/^\/api\/channels\/(etsy|ebay)\/oauth\/callback(?:\?|$)/);
+  if (req.method === 'GET' && chanOAuthCb) {
+    const channel = chanOAuthCb[1];
+    const sendHtml = (ok, msg) => {
+      res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(_oauthResultHtml(channel, ok, msg));
+    };
+    (async () => {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        if (q.get('error')) {
+          sendHtml(false, 'Login abgebrochen: ' + q.get('error'));
+          return;
+        }
+        const code = q.get('code');
+        const state = q.get('state');
+        const pending = state ? _channelOAuth.get(state) : null;
+        if (!code || !pending || pending.channel !== channel) {
+          sendHtml(false, 'Ungültiger oder abgelaufener Login-Status. Bitte erneut „Verbinden".');
+          return;
+        }
+        _channelOAuth.delete(state);
+        const cfg = db.getChannelConfig(database, channel);
+        const tok = await channels.exchangeCode(channel, cfg, {
+          code,
+          redirectUri: _channelCallbackUrl(channel),
+          codeVerifier: pending.codeVerifier
+        });
+        db.updateChannelConfig(database, channel, {
+          accessToken: tok.accessToken,
+          refreshToken: tok.refreshToken,
+          tokenExpires: tok.tokenExpires,
+          enabled: true
+        });
+        broadcastSSE(res);
+        sendHtml(
+          true,
+          (channel === 'etsy' ? 'Etsy' : 'eBay') + ' erfolgreich verbunden. Du kannst dieses Fenster schließen.'
+        );
+      } catch (err) {
+        sendHtml(false, (err && err.message) || 'Login fehlgeschlagen');
       }
     })();
     return;
