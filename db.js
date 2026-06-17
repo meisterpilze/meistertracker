@@ -1431,6 +1431,16 @@ const MIGRATIONS = [
       `);
       db.prepare('INSERT OR IGNORE INTO shipping_config(id, created) VALUES(1, ?)').run(new Date().toISOString());
     }
+  },
+  {
+    version: 48,
+    description: 'Shipping permission: per-user can_ship capability (label buying + ship PII)',
+    fn(db) {
+      const cols = db.prepare('PRAGMA table_info(users)').all();
+      if (!cols.some((c) => c.name === 'can_ship')) {
+        db.exec('ALTER TABLE users ADD COLUMN can_ship INTEGER DEFAULT 0');
+      }
+    }
   }
 ];
 
@@ -2615,7 +2625,7 @@ function createSession(db, userId) {
 function getSession(db, token) {
   return db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires, u.username, u.role
+      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
@@ -2699,7 +2709,7 @@ function countUsers(db) {
 }
 
 function listUsers(db) {
-  return db.prepare('SELECT id, username, role, created FROM users ORDER BY id').all();
+  return db.prepare('SELECT id, username, role, can_ship, created FROM users ORDER BY id').all();
 }
 
 function deleteUser(db, userId) {
@@ -2722,6 +2732,12 @@ function deleteUser(db, userId) {
 
 function updateUserPassword(db, userId, hash, salt) {
   db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+}
+
+// Grant/revoke the per-user shipping capability (admins always qualify regardless).
+function setUserCanShip(db, userId, canShip) {
+  db.prepare('UPDATE users SET can_ship = ? WHERE id = ?').run(canShip ? 1 : 0, userId);
+  incrementDataVersion(db);
 }
 
 function resetUserPassword(db, userId, newPassword) {
@@ -6525,6 +6541,7 @@ module.exports = {
   deleteUser,
   SESSION_TTL_MS,
   updateUserPassword,
+  setUserCanShip,
   resetUserPassword,
   insertBatch,
   updateBatchField,

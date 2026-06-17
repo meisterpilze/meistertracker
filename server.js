@@ -687,6 +687,17 @@ function requireAdmin(req, res) {
   }
   return false;
 }
+// Shipping guard — billable label purchase + customer-PII ship routes. Admins
+// always qualify; other users need the per-user can_ship capability (granted by
+// an admin). Prevents any logged-in non-admin from spending the owner's postage
+// balance or harvesting customer addresses.
+function requireShipping(req, res) {
+  if (!req.authUser || (req.authUser.role !== 'admin' && req.authUser.can_ship !== 1)) {
+    jsonErr(res, 403, 'shipping permission required');
+    return true;
+  }
+  return false;
+}
 
 // ── Contamination-photo storage ─────────────────────────────
 // The client compresses photos to ~200 KB JPEGs (canvas re-encode at 1280 px /
@@ -5034,6 +5045,32 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // PATCH /api/users/:id — admin sets per-user capabilities (currently can_ship)
+  if (url.match(/^\/api\/users\/\d+$/) && req.method === 'PATCH') {
+    if (requireAdmin(req, res)) return;
+    const userId = parseInt(url.split('/').pop(), 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        if (data && data.canShip !== undefined) {
+          db.setUserCanShip(database, userId, !!data.canShip);
+          log('info', 'User shipping permission updated', {
+            actor: req.authUser.username,
+            userId,
+            canShip: !!data.canShip
+          });
+        }
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // PATCH /api/auth/password — change own password (any authenticated user)
   if (url === '/api/auth/password' && req.method === 'PATCH') {
     const session = checkAuth(req);
@@ -7235,6 +7272,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   // GET /api/ship/methods?country=DE&weight=1000
   if (req.method === 'GET' && req.url.startsWith('/api/ship/methods')) {
+    if (requireShipping(req, res)) return;
     (async () => {
       try {
         const cfg = db.getShippingConfig(database);
@@ -7255,6 +7293,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   // POST /api/ship/label { orderId, methodId, weightG, address:{...} } — buys a label.
   if (req.method === 'POST' && req.url === '/api/ship/label') {
+    if (requireShipping(req, res)) return;
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
@@ -7341,6 +7380,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   // GET /api/ship/shipments?orderId=
   if (req.method === 'GET' && req.url.startsWith('/api/ship/shipments')) {
+    if (requireShipping(req, res)) return;
     try {
       const orderId = new URL(req.url, 'http://x').searchParams.get('orderId');
       const shipments = db.listShipments(database, orderId ? { orderId: parseInt(orderId, 10) } : {});
@@ -7353,6 +7393,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/ship/label/:id/pdf — proxy the carrier label PDF (keeps API keys server-side).
   const shipPdfMatch = req.url.match(/^\/api\/ship\/label\/(\d+)\/pdf$/);
   if (req.method === 'GET' && shipPdfMatch) {
+    if (requireShipping(req, res)) return;
     (async () => {
       try {
         const cfg = db.getShippingConfig(database);
@@ -7376,6 +7417,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // GET /api/ship/order/:id — order ship-to fields (prefills the buy-label modal).
   const shipOrderMatch = req.url.match(/^\/api\/ship\/order\/(\d+)$/);
   if (req.method === 'GET' && shipOrderMatch) {
+    if (requireShipping(req, res)) return;
     try {
       const o = db.getOrderForShipping(database, parseInt(shipOrderMatch[1], 10));
       if (!o) {

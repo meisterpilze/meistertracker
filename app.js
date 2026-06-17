@@ -12979,11 +12979,11 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
@@ -12994,10 +12994,34 @@ async function loadUsersTab() {
 }
 
 function onUsersTableClick(e) {
+  const ship = e.target.closest('input[data-action="toggle-ship"]');
+  if (ship) {
+    const sid = parseInt(ship.dataset.userId, 10);
+    if (Number.isFinite(sid)) toggleUserShip(sid, ship.checked);
+    return;
+  }
   const btn = e.target.closest('button[data-action="delete-user"]');
   if (!btn) return;
   const id = parseInt(btn.dataset.userId, 10);
   if (Number.isFinite(id)) deleteUser(id);
+}
+// Grant/revoke the shipping capability for a non-admin user. Reloads to reflect
+// the server's truth (and revert the checkbox if the PATCH failed).
+async function toggleUserShip(id, canShip) {
+  try {
+    const r = await authFetch('/api/users/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canShip })
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+  loadUsersTab();
 }
 
 async function addUser() {
