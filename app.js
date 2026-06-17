@@ -16119,9 +16119,7 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
-  $('st-batch-new').addEventListener('click', () => {
-    openStab('batch', 'new');
-  });
+  $('st-batch-new').addEventListener('click', () => msQuickChargeNew());
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });
@@ -16159,9 +16157,7 @@ function initEventListeners() {
   $('st-lab-cultures').addEventListener('click', () => {
     openStab('lab', 'cultures');
   });
-  $('st-lab-work').addEventListener('click', () => {
-    openStab('lab', 'work');
-  });
+  $('st-lab-work').addEventListener('click', () => msQuickLaborNew());
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
   });
