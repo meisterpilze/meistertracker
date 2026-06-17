@@ -1281,6 +1281,13 @@ function shipBuyLabel() {
         if (res) res.textContent = '⚠ ' + ((r && r.error) || t('common.error'));
         return;
       }
+      if (r.test) {
+        // Test mode announced the parcel without buying a billable label.
+        if (res) res.textContent = '✓ ' + t('versand.testAnnounced');
+        setFb('ok', t('versand.testAnnounced'));
+        renderOrdersVersand();
+        return;
+      }
       const pdf = '/api/ship/label/' + r.id + '/pdf';
       const pushMsg = r.channelPushed
         ? '<br>↪ ' + esc(t('versand.pushedToChannel'))

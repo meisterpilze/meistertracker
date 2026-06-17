@@ -71,7 +71,7 @@ const sendcloud = {
     }));
   },
 
-  async buyLabel(cfg, { order, methodId, weightG }) {
+  async buyLabel(cfg, { order, methodId, weightG, requestLabel }) {
     const weightKg = ((weightG || cfg.defaultWeightG || 1000) / 1000).toFixed(3);
     const parcel = {
       name: order.shipName || order.customerName || 'Customer',
@@ -86,7 +86,8 @@ const sendcloud = {
       email: order.customerEmail || '',
       order_number: order.channel ? order.channel + '-' + (order.channelOrderId || order.id) : String(order.id || ''),
       weight: weightKg,
-      request_label: true,
+      // request_label:false = announce only (no billable label) — used for test mode.
+      request_label: requestLabel !== false,
       shipment: { id: Number(methodId) }
     };
     if (cfg.senderAddressId) parcel.sender_address = Number(cfg.senderAddressId);
@@ -104,7 +105,7 @@ const sendcloud = {
       trackingUrl: p.tracking_url || null,
       labelUrl,
       labelFormat: label.label_printer ? 'pdf_a6' : 'pdf_a4',
-      status: 'created'
+      status: requestLabel === false ? 'announced' : 'created'
     };
   },
 

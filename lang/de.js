@@ -237,6 +237,7 @@ window.LANG['de'] = {
   'versand.noMethods': 'Keine Versandart verfügbar',
   'versand.pickMethod': 'Bitte Versandart wählen',
   'versand.bought': 'Label gekauft',
+  'versand.testAnnounced': 'Test-Modus: Paket angekündigt (kein echtes Label gekauft)',
   'versand.openLabel': 'Label öffnen (PDF)',
   'versand.buyBtn': 'Label kaufen',
   'versand.pushedToChannel': 'Sendungsnummer an den Verkaufskanal übermittelt',

@@ -651,6 +651,9 @@ function validateScanEntries(entries) {
 // callback window — a server restart mid-login just means clicking "Verbinden" again.
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://meistertracker.com').replace(/\/+$/, '');
 const _channelOAuth = new Map(); // state -> { channel, codeVerifier, created }
+// Order ids with a label purchase currently in flight — blocks a concurrent second
+// buy (double-click / retry / replay) from billing the owner twice for one order.
+const _labelBuysInFlight = new Set();
 function _channelCallbackUrl(channel) {
   return PUBLIC_BASE_URL + '/api/channels/' + channel + '/oauth/callback';
 }
@@ -7306,6 +7309,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             jsonErr(res, 400, 'Versand nicht konfiguriert');
             return;
           }
+          const live = cfg.mode === 'live';
           const orderId = parseInt(data.orderId, 10);
           if (!orderId) {
             jsonErr(res, 400, 'orderId required');
@@ -7315,62 +7319,82 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             jsonErr(res, 400, 'methodId required');
             return;
           }
-          if (data.address && typeof data.address === 'object') {
-            db.updateOrderShipAddress(database, orderId, data.address);
-          }
-          const order = db.getOrderForShipping(database, orderId);
-          if (!order) {
-            jsonErr(res, 404, 'order not found');
+          // Idempotency: block a concurrent second buy for the same order so a
+          // double-click / retry / replay can't bill the owner twice.
+          if (_labelBuysInFlight.has(orderId)) {
+            jsonErr(res, 409, 'Label-Kauf läuft bereits für diese Bestellung');
             return;
           }
-          const weightG = parseInt(data.weightG, 10) || order.shipWeightG || cfg.defaultWeightG;
-          const result = await ship.getProvider(cfg).buyLabel(cfg, { order, methodId: data.methodId, weightG });
-          const id = db.insertShipment(database, {
-            orderId,
-            provider: cfg.provider,
-            methodId: data.methodId,
-            ...result
-          });
-          // Push the Sendungsnummer back onto the order's sales channel. Best-effort:
-          // a write-back failure never fails the (already-bought) label — we record
-          // it on the shipment and report it so the user can retry/fix.
-          let channelPushed = false;
-          let pushError = null;
-          if (['wix', 'ebay', 'etsy'].includes(order.channel)) {
-            try {
-              const { cfg: chanCfg, prov } = await withFreshChannelToken(order.channel);
-              if (chanCfg.enabled && typeof prov.pushTracking === 'function') {
-                const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
-                const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
-                await prov.pushTracking(chanCfg, {
-                  order,
-                  raw,
-                  trackingNumber: result.trackingNumber,
-                  trackingUrl: result.trackingUrl,
-                  carrier: result.carrier
-                });
-                channelPushed = true;
-                db.updateShipmentStatus(database, id, { channelPushed: true });
-              }
-            } catch (e3) {
-              pushError = e3.message || 'tracking push failed';
+          _labelBuysInFlight.add(orderId);
+          try {
+            if (data.address && typeof data.address === 'object') {
+              db.updateOrderShipAddress(database, orderId, data.address);
+            }
+            const order = db.getOrderForShipping(database, orderId);
+            if (!order) {
+              jsonErr(res, 404, 'order not found');
+              return;
+            }
+            // Reject non-positive / garbage weights before they reach the carrier.
+            const reqW = parseInt(data.weightG, 10);
+            const weightG =
+              (Number.isFinite(reqW) && reqW > 0 ? reqW : null) || order.shipWeightG || cfg.defaultWeightG || 1000;
+            // In test mode only ANNOUNCE the parcel (request_label:false) — no
+            // billable label is bought, so a misread "test" toggle never charges.
+            const result = await ship
+              .getProvider(cfg)
+              .buyLabel(cfg, { order, methodId: data.methodId, weightG, requestLabel: live });
+            const id = db.insertShipment(database, {
+              orderId,
+              provider: cfg.provider,
+              methodId: data.methodId,
+              ...result
+            });
+            // Push the Sendungsnummer back onto the order's sales channel (live only;
+            // an announced test parcel has no real tracking). Best-effort: a write-
+            // back failure never fails the (already-bought) label.
+            let channelPushed = false;
+            let pushError = null;
+            if (live && ['wix', 'ebay', 'etsy'].includes(order.channel)) {
               try {
-                db.updateShipmentStatus(database, id, { error: 'tracking push: ' + pushError });
-              } catch (e4) {
-                /* ignore */
+                const { cfg: chanCfg, prov } = await withFreshChannelToken(order.channel);
+                if (chanCfg.enabled && typeof prov.pushTracking === 'function') {
+                  const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
+                  const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
+                  await prov.pushTracking(chanCfg, {
+                    order,
+                    raw,
+                    trackingNumber: result.trackingNumber,
+                    trackingUrl: result.trackingUrl,
+                    carrier: result.carrier
+                  });
+                  channelPushed = true;
+                  db.updateShipmentStatus(database, id, { channelPushed: true });
+                }
+              } catch (e3) {
+                pushError = e3.message || 'tracking push failed';
+                try {
+                  db.updateShipmentStatus(database, id, { error: 'tracking push: ' + pushError });
+                } catch (e4) {
+                  /* ignore */
+                }
               }
             }
+            // A bought (live) label means the order is going out; a test announce does not.
+            if (live) {
+              try {
+                database
+                  .prepare("UPDATE orders SET status='shipped', updated=? WHERE id=?")
+                  .run(new Date().toISOString(), orderId);
+              } catch (e2) {
+                /* status is best-effort */
+              }
+            }
+            broadcastSSE(res);
+            jsonOk(res, { id, ...result, channelPushed, pushError, test: !live });
+          } finally {
+            _labelBuysInFlight.delete(orderId);
           }
-          // Buying a label = the order is going out.
-          try {
-            database
-              .prepare("UPDATE orders SET status='shipped', updated=? WHERE id=?")
-              .run(new Date().toISOString(), orderId);
-          } catch (e2) {
-            /* status is best-effort */
-          }
-          broadcastSSE(res);
-          jsonOk(res, { id, ...result, channelPushed, pushError });
         } catch (err) {
           jsonErr(res, 502, err.message || 'label failed');
         }

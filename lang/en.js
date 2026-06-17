@@ -237,6 +237,7 @@ window.LANG['en'] = {
   'versand.noMethods': 'No service available',
   'versand.pickMethod': 'Please pick a service',
   'versand.bought': 'Label bought',
+  'versand.testAnnounced': 'Test mode: parcel announced (no real label bought)',
   'versand.openLabel': 'Open label (PDF)',
   'versand.buyBtn': 'Buy label',
   'versand.pushedToChannel': 'Tracking sent to the sales channel',
