@@ -195,6 +195,62 @@
         </div>
       </div>
     </div>
+    <!-- Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe.
+         Global modal (not inside a page) so it can open from the dashboard too. -->
+    <div
+      id="ms-quick-modal"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 1200;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+      "
+      onclick="if(event.target===this)msQuickClose()"
+    >
+      <div class="card" style="max-width: 380px; width: 100%; margin: 0">
+        <div class="sec" id="ms-q-title">—</div>
+        <div id="ms-q-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+        <div id="ms-q-sorte-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="msq.pickSorte">Pilzsorte</label>
+          <select id="ms-q-sorte" onchange="msQuickSorteChanged()"></select>
+        </div>
+        <div id="ms-q-labtype-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="msq.labType">Art</label>
+          <select id="ms-q-labtype" onchange="msQuickFillCulture()">
+            <option value="MC">MC — Master Culture</option>
+            <option value="PD">PD — Petri</option>
+            <option value="LC">LC — Liquid Culture</option>
+          </select>
+        </div>
+        <div class="g2">
+          <div>
+            <label data-i18n="msq.qty">Anzahl</label>
+            <input type="number" id="ms-q-qty" min="1" value="1" oninput="msQuickPreview()" />
+          </div>
+          <div id="ms-q-days-wrap">
+            <label data-i18n="batch.incDays">Inkubationstage</label>
+            <input type="number" id="ms-q-days" min="1" value="14" />
+          </div>
+        </div>
+        <div style="margin-top: 8px">
+          <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
+          <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
+        </div>
+        <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
+          <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
+          <select id="ms-q-culture"></select>
+        </div>
+        <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
+        <div style="display: flex; gap: 8px; margin-top: 12px">
+          <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
+          <button class="btn" onclick="msQuickClose()" data-i18n="strains.cancel">Abbrechen</button>
+        </div>
+      </div>
+    </div>
     <!-- Change password modal -->
     <div
       class="modal-bg"
@@ -2377,57 +2433,6 @@
                   </thead>
                   <tbody id="strains-body"></tbody>
                 </table>
-              </div>
-            </div>
-          </div>
-          <!-- Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe -->
-          <div
-            id="ms-quick-modal"
-            style="
-              display: none;
-              position: fixed;
-              inset: 0;
-              background: rgba(0, 0, 0, 0.45);
-              z-index: 1200;
-              align-items: center;
-              justify-content: center;
-              padding: 12px;
-            "
-            onclick="if(event.target===this)msQuickClose()"
-          >
-            <div class="card" style="max-width: 380px; width: 100%; margin: 0">
-              <div class="sec" id="ms-q-title">—</div>
-              <div id="ms-q-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
-              <div id="ms-q-labtype-wrap" style="display: none; margin-bottom: 8px">
-                <label data-i18n="msq.labType">Art</label>
-                <select id="ms-q-labtype" onchange="msQuickFillCulture()">
-                  <option value="MC">MC — Master Culture</option>
-                  <option value="PD">PD — Petri</option>
-                  <option value="LC">LC — Liquid Culture</option>
-                </select>
-              </div>
-              <div class="g2">
-                <div>
-                  <label data-i18n="msq.qty">Anzahl</label>
-                  <input type="number" id="ms-q-qty" min="1" value="1" oninput="msQuickPreview()" />
-                </div>
-                <div id="ms-q-days-wrap">
-                  <label data-i18n="batch.incDays">Inkubationstage</label>
-                  <input type="number" id="ms-q-days" min="1" value="14" />
-                </div>
-              </div>
-              <div style="margin-top: 8px">
-                <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
-                <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
-              </div>
-              <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
-                <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
-                <select id="ms-q-culture"></select>
-              </div>
-              <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
-              <div style="display: flex; gap: 8px; margin-top: 12px">
-                <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
-                <button class="btn" onclick="msQuickClose()" data-i18n="strains.cancel">Abbrechen</button>
               </div>
             </div>
           </div>

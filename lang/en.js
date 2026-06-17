@@ -195,6 +195,8 @@ window.LANG['en'] = {
   'msq.strainPlaceholder': 'e.g. BHA-1',
   'msq.sourceCulture': 'Source culture (optional)',
   'msq.create': 'Create',
+  'msq.pickSorte': 'Mushroom strain',
+  'msq.pickSortePrompt': 'Choose a strain…',
   'msq.noRecipe': 'This strain has no recipe yet. Please save a recipe first.',
   'msq.laborPreview': '{n} culture(s) will be created.',
   // Versand (Phase 4)

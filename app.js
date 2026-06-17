@@ -9209,31 +9209,89 @@ function msQuickCharge(id) {
     alert(t('msq.noRecipe'));
     return;
   }
-  _msQuickCtx = { mode: 'charge', ms };
-  document.getElementById('ms-q-title').textContent = t('msq.chargeTitle');
-  document.getElementById('ms-q-sub').textContent = ms.name + ' (' + ms.kuerzel + ') — ' + msRecipeSummaryText(ms);
-  document.getElementById('ms-q-labtype-wrap').style.display = 'none';
-  document.getElementById('ms-q-days-wrap').style.display = '';
-  document.getElementById('ms-q-days').value = ms.recIncDays || 14;
-  document.getElementById('ms-q-qty').value = 1;
-  document.getElementById('ms-q-strain').value = '';
-  document.getElementById('ms-quick-modal').style.display = 'flex';
-  msQuickPreview();
-  msQuickFillCulture();
+  msQuickOpen('charge', ms);
 }
 function msQuickLabor(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
-  _msQuickCtx = { mode: 'labor', ms };
-  document.getElementById('ms-q-title').textContent = t('msq.laborTitle');
-  document.getElementById('ms-q-sub').textContent = ms.name + ' (' + ms.kuerzel + ')';
-  document.getElementById('ms-q-labtype-wrap').style.display = '';
-  document.getElementById('ms-q-days-wrap').style.display = 'none';
-  document.getElementById('ms-q-qty').value = 1;
-  document.getElementById('ms-q-strain').value = '';
+  msQuickOpen('labor', ms);
+}
+// Dashboard entry points: open the dialog with a Sorte dropdown (none preselected),
+// so "Neue Charge" / "Laborarbeit" go straight to the create dialog instead of the
+// Pilzsorten list. The recipe still comes from whichever Sorte is then chosen.
+function msQuickChargeNew() {
+  msQuickOpen('charge', null);
+}
+function msQuickLaborNew() {
+  msQuickOpen('labor', null);
+}
+// Shared opener. ms === null → show the Sorte picker (charge mode lists only Sorten
+// that have a recipe, since a Charge needs one).
+function msQuickOpen(mode, ms) {
+  _msQuickCtx = { mode, ms: ms || null };
+  const wrap = document.getElementById('ms-q-sorte-wrap');
+  const sel = document.getElementById('ms-q-sorte');
+  if (!ms && wrap && sel) {
+    let list = mushroomStrains.slice();
+    if (mode === 'charge') list = list.filter((x) => x.recBatchType);
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    sel.innerHTML =
+      '<option value="">' +
+      esc(t('msq.pickSortePrompt')) +
+      '</option>' +
+      list.map((x) => `<option value="${x.id}">${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`).join('');
+    sel.value = '';
+    wrap.style.display = '';
+  } else if (wrap) {
+    wrap.style.display = 'none';
+  }
+  // qty/strain reset only on open (not when the Sorte changes).
+  const qtyEl = document.getElementById('ms-q-qty');
+  if (qtyEl) qtyEl.value = 1;
+  const strainEl = document.getElementById('ms-q-strain');
+  if (strainEl) strainEl.value = '';
+  msQuickRender();
   document.getElementById('ms-quick-modal').style.display = 'flex';
+}
+// Render the modal for the current ctx. Safe when no Sorte is chosen yet (picker
+// mode): shows a prompt and disables "Anlegen" until one is selected.
+function msQuickRender() {
+  if (!_msQuickCtx) return;
+  const mode = _msQuickCtx.mode;
+  const ms = _msQuickCtx.ms;
+  const titleEl = document.getElementById('ms-q-title');
+  const subEl = document.getElementById('ms-q-sub');
+  const goEl = document.getElementById('ms-q-go');
+  if (titleEl) titleEl.textContent = mode === 'charge' ? t('msq.chargeTitle') : t('msq.laborTitle');
+  const lt = document.getElementById('ms-q-labtype-wrap');
+  if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
+  const dw = document.getElementById('ms-q-days-wrap');
+  if (dw) dw.style.display = mode === 'charge' ? '' : 'none';
+  if (!ms) {
+    if (subEl) subEl.textContent = t('msq.pickSortePrompt');
+    if (goEl) goEl.disabled = true;
+    const prev = document.getElementById('ms-q-preview');
+    if (prev) prev.textContent = '';
+    const cw = document.getElementById('ms-q-culture-wrap');
+    if (cw) cw.style.display = 'none';
+    return;
+  }
+  if (goEl) goEl.disabled = false;
+  if (subEl)
+    subEl.textContent =
+      ms.name + (ms.kuerzel ? ' (' + ms.kuerzel + ')' : '') + (mode === 'charge' ? ' — ' + msRecipeSummaryText(ms) : '');
+  if (mode === 'charge') {
+    const d = document.getElementById('ms-q-days');
+    if (d) d.value = ms.recIncDays || 14;
+  }
   msQuickPreview();
   msQuickFillCulture();
+}
+function msQuickSorteChanged() {
+  if (!_msQuickCtx) return;
+  const id = parseInt(document.getElementById('ms-q-sorte').value, 10);
+  _msQuickCtx.ms = mushroomStrains.find((x) => x.id === id) || null;
+  msQuickRender();
 }
 function msQuickClose() {
   _msQuickCtx = null;
@@ -9243,7 +9301,7 @@ function msQuickClose() {
 function msQuickPreview() {
   const el = document.getElementById('ms-q-preview');
   if (!el) return;
-  if (!_msQuickCtx) {
+  if (!_msQuickCtx || !_msQuickCtx.ms) {
     el.textContent = '';
     return;
   }
@@ -9260,7 +9318,10 @@ function msQuickPreview() {
 function msQuickFillCulture() {
   const wrap = document.getElementById('ms-q-culture-wrap');
   const sel = document.getElementById('ms-q-culture');
-  if (!wrap || !sel || !_msQuickCtx) return;
+  if (!wrap || !sel || !_msQuickCtx || !_msQuickCtx.ms) {
+    if (wrap) wrap.style.display = 'none';
+    return;
+  }
   let types;
   if (_msQuickCtx.mode === 'charge') {
     types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC'] : ['PD', 'LC', 'G2G', 'GS'];
@@ -9278,6 +9339,10 @@ function msQuickFillCulture() {
 }
 function msQuickConfirm() {
   if (!_msQuickCtx) return;
+  if (!_msQuickCtx.ms) {
+    alert(t('msq.pickSortePrompt'));
+    return;
+  }
   const ms = _msQuickCtx.ms;
   const mode = _msQuickCtx.mode;
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
@@ -16007,14 +16072,8 @@ function initEventListeners() {
     if (!el) return;
     goToBatch(el.dataset.batch);
   });
-  $('dash-act-newbatch').addEventListener('click', () => {
-    // Old New-batch form is hidden; funnel to the Sorte list (+ Charge per Sorte).
-    go('strains', 'n-strains');
-  });
-  $('dash-act-labwork').addEventListener('click', () => {
-    // Old Log-work form is hidden; funnel to the Sorte list (+ Labor per Sorte).
-    go('strains', 'n-strains');
-  });
+  $('dash-act-newbatch').addEventListener('click', () => msQuickChargeNew());
+  $('dash-act-labwork').addEventListener('click', () => msQuickLaborNew());
   $('dash-act-harvest').addEventListener('click', () => {
     const card = document.getElementById('dash-harvest-tasks-card');
     if (!card || card.style.display === 'none') {
@@ -16474,8 +16533,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (actionParam === 'scan') {
           if (typeof openCamScan === 'function') openCamScan();
         } else if (actionParam === 'newbatch') {
-          // Old New-batch form is hidden; funnel to the Sorte list (+ Charge per Sorte).
-          if (typeof go === 'function') go('strains', 'n-strains');
+          // Old New-batch form is hidden; open the Sorte-driven create dialog directly.
+          if (typeof msQuickChargeNew === 'function') msQuickChargeNew();
         } else if (actionParam === 'dash') {
           if (typeof go === 'function') go('dash', 'n-dash');
         }
