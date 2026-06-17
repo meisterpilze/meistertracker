@@ -9212,6 +9212,7 @@ function msQuickCharge(id) {
   document.getElementById('ms-q-strain').value = '';
   document.getElementById('ms-quick-modal').style.display = 'flex';
   msQuickPreview();
+  msQuickFillCulture();
 }
 function msQuickLabor(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
@@ -9225,6 +9226,7 @@ function msQuickLabor(id) {
   document.getElementById('ms-q-strain').value = '';
   document.getElementById('ms-quick-modal').style.display = 'flex';
   msQuickPreview();
+  msQuickFillCulture();
 }
 function msQuickClose() {
   _msQuickCtx = null;
@@ -9246,6 +9248,27 @@ function msQuickPreview() {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
 }
+// Populate the modal's source-culture select, reusing the same culture filter the
+// old forms use (none for a new MC isolation). Re-runs when the lab type changes.
+function msQuickFillCulture() {
+  const wrap = document.getElementById('ms-q-culture-wrap');
+  const sel = document.getElementById('ms-q-culture');
+  if (!wrap || !sel || !_msQuickCtx) return;
+  let types;
+  if (_msQuickCtx.mode === 'charge') {
+    types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC'] : ['PD', 'LC', 'G2G', 'GS'];
+  } else {
+    const lt = document.getElementById('ms-q-labtype').value;
+    types = lt === 'PD' ? ['MC', 'PD', 'LC'] : lt === 'LC' ? ['MC', 'PD'] : null; // MC = new isolation
+  }
+  if (!types) {
+    sel.value = '';
+    wrap.style.display = 'none';
+    return;
+  }
+  fillCultureSelect('ms-q-culture', types);
+  wrap.style.display = '';
+}
 function msQuickConfirm() {
   if (!_msQuickCtx) return;
   const ms = _msQuickCtx.ms;
@@ -9264,6 +9287,8 @@ function msQuickConfirm() {
     const el = document.getElementById(id);
     if (el) el.checked = !!val;
   };
+  const sourceCulture =
+    (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || '';
   if (mode === 'labor') {
     setv('lw-type', document.getElementById('ms-q-labtype').value || 'MC');
     setv('lw-st', ms.id);
@@ -9271,11 +9296,11 @@ function msQuickConfirm() {
     setv('lw-qty', qty);
     setv('lw-source', '');
     setv('lw-notes', '');
-    const parent = document.getElementById('lw-parent');
-    if (parent) parent.value = '';
     msQuickClose();
     go('lab', 'n-lab');
-    openStab('lab', 'work');
+    openStab('lab', 'work'); // populates lw-parent via lwUpdate()
+    const parent = document.getElementById('lw-parent');
+    if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
     logLabWork();
     return;
   }
@@ -9295,8 +9320,9 @@ function msQuickConfirm() {
     }
     setv('gs-days', days);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+    fillCultureSelect('gs-culture', ['PD', 'LC']);
     const gsc = document.getElementById('gs-culture');
-    if (gsc) gsc.value = '';
+    if (gsc) gsc.value = sourceCulture;
     setv('lw-notes', '');
     msQuickClose();
     createGrainBatch();
@@ -9316,8 +9342,9 @@ function msQuickConfirm() {
   setv('nb-grainkg', ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0);
   setv('nb-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
   setchk('nb-gyp', ms.recGypsum);
+  fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   const nbc = document.getElementById('nb-culture');
-  if (nbc) nbc.value = '';
+  if (nbc) nbc.value = sourceCulture;
   setv('nb-notes', '');
   msQuickClose();
   createBatch();

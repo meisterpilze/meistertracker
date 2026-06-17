@@ -193,6 +193,7 @@ window.LANG['en'] = {
   'msq.labType': 'Type',
   'msq.strainText': 'Strain/genetics (optional)',
   'msq.strainPlaceholder': 'e.g. BHA-1',
+  'msq.sourceCulture': 'Source culture (optional)',
   'msq.create': 'Create',
   'msq.noRecipe': 'This strain has no recipe yet. Please save a recipe first.',
   'msq.laborPreview': '{n} culture(s) will be created.',

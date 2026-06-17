@@ -193,6 +193,7 @@ window.LANG['de'] = {
   'msq.labType': 'Art',
   'msq.strainText': 'Stamm/Genetik (optional)',
   'msq.strainPlaceholder': 'z. B. BHA-1',
+  'msq.sourceCulture': 'Quellkultur (optional)',
   'msq.create': 'Anlegen',
   'msq.noRecipe': 'Diese Sorte hat noch kein Rezept. Bitte zuerst ein Rezept speichern.',
   'msq.laborPreview': '{n} Kultur(en) werden angelegt.',

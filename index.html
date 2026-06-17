@@ -2398,7 +2398,7 @@
               <div id="ms-q-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
               <div id="ms-q-labtype-wrap" style="display: none; margin-bottom: 8px">
                 <label data-i18n="msq.labType">Art</label>
-                <select id="ms-q-labtype">
+                <select id="ms-q-labtype" onchange="msQuickFillCulture()">
                   <option value="MC">MC — Master Culture</option>
                   <option value="PD">PD — Petri</option>
                   <option value="LC">LC — Liquid Culture</option>
@@ -2417,6 +2417,10 @@
               <div style="margin-top: 8px">
                 <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
                 <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
+              </div>
+              <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
+                <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
+                <select id="ms-q-culture"></select>
               </div>
               <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
               <div style="display: flex; gap: 8px; margin-top: 12px">
