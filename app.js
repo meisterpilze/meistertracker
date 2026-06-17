@@ -8916,6 +8916,7 @@ function goCreateStrain() {
 function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
+  _msFillRecCopyOptions(parseInt((document.getElementById('ms-edit-id') || {}).value, 10) || null);
   if (!mushroomStrains.length) {
     body.innerHTML = '<tr><td colspan="6" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
@@ -9037,6 +9038,7 @@ function editMStrain(id) {
   sv('ms-rec-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
   sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
   msRecTypeChange();
+  _msFillRecCopyOptions(id);
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
   document.getElementById('ms-cancel-btn').style.display = '';
   document.getElementById('ms-name').focus();
@@ -9067,6 +9069,7 @@ function cancelMStrain() {
   sv('ms-rec-grainrh', 52);
   sv('ms-rec-days', 14);
   msRecTypeChange();
+  _msFillRecCopyOptions(null);
 }
 
 function deleteMStrain(id) {
@@ -9178,6 +9181,46 @@ function msRecNeed() {
   }
   const parts = _msNeedParts(rec, 1);
   el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+}
+// Populate the "copy recipe from another Sorte" dropdown with Sorten that have a
+// recipe (excluding the one being edited).
+function _msFillRecCopyOptions(excludeId) {
+  const sel = document.getElementById('ms-rec-copy');
+  if (!sel) return;
+  const list = mushroomStrains
+    .filter((x) => x.recBatchType && x.id !== excludeId)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  sel.innerHTML =
+    '<option value="">' +
+    esc(t('strains.recCopyNone')) +
+    '</option>' +
+    list.map((x) => `<option value="${x.id}">${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`).join('');
+  sel.value = '';
+}
+// Copy another Sorte's recipe into the form (most Sorten share the same recipe).
+function msRecCopyFrom() {
+  const sel = document.getElementById('ms-rec-copy');
+  if (!sel || !sel.value) return;
+  const src = mushroomStrains.find((x) => x.id === parseInt(sel.value, 10));
+  if (!src) return;
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', src.recBatchType || '');
+  sv('ms-rec-substrate', src.recSubstrate || 'holzkleie');
+  sv('ms-rec-bagkg', src.recBagKg || 0);
+  sv('ms-rec-rh', src.recRhPct || 0);
+  sv('ms-rec-hw', src.recHardwoodPct || 0);
+  sv('ms-rec-wb', src.recWheatbranPct || 0);
+  sv('ms-rec-coir', src.recCoirPct || 0);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = !!src.recGypsum;
+  sv('ms-rec-grainkg', src.recGrainKg || 0);
+  sv('ms-rec-grainrh', src.recGrainRhPct != null ? src.recGrainRhPct : 52);
+  sv('ms-rec-days', src.recIncDays != null ? src.recIncDays : 14);
+  sel.value = '';
+  msRecTypeChange();
 }
 function msRecipeSummary(ms) {
   const type = ms.recBatchType || '';

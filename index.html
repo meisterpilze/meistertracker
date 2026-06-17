@@ -2329,9 +2329,22 @@
                     placeholder="z. B. Amazing, Top Genetics, …"
                   />
                 </div>
-                <div style="border-top: 1px solid var(--c-border); padding-top: 8px">
+                <div style="border-top: 1px solid var(--c-border); padding-top: 10px; margin-top: 4px">
+                  <div style="font-size: 13px; font-weight: 600; color: var(--c-text-sec)" data-i18n="strains.recHeader">
+                    Standard-Anbau (optional)
+                  </div>
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin: 2px 0 8px"
+                    data-i18n="strains.recHint"
+                  >
+                    Vorlage, die neue Chargen automatisch vorausfüllt. Kann leer bleiben — nur nötig, damit „+ Charge"
+                    diese Sorte anbietet.
+                  </div>
+                  <select id="ms-rec-copy" onchange="msRecCopyFrom()" style="width: 100%; margin-bottom: 8px">
+                    <option value="" data-i18n="strains.recCopyNone">— Rezept von anderer Sorte übernehmen —</option>
+                  </select>
                   <label style="font-size: 12px; color: var(--c-text-muted)">
-                    <span data-i18n="strains.recipe">Rezept (füllt Charge &amp; Labor automatisch)</span>
+                    <span data-i18n="strains.recType">Anbau-Art</span>
                     <select id="ms-rec-type" onchange="msRecTypeChange()">
                       <option value="" data-i18n="strains.recNone">Kein Rezept</option>
                       <option value="block" data-i18n="strains.recBlock">Substrat-Block</option>
