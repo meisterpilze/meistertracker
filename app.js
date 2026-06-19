@@ -738,6 +738,27 @@ async function pollSync() {
   }
 }
 
+// Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
+// broadcasts a data-changed event; without coalescing, a burst of scans fires
+// one full /api/data refetch per scan — the dominant cause of scan sluggishness
+// as history grows. The scanning client already applies its own scan locally
+// (optimistic update), so the authoritative reconcile can be deferred and
+// folded into a single poll per window.
+let _ssePollTimer = null;
+function scheduleSsePoll() {
+  if (_ssePollTimer) return; // a poll is already queued — fold this event into it
+  _ssePollTimer = setTimeout(function () {
+    _ssePollTimer = null;
+    // If a local mutation is mid-flight, its own flow keeps the UI correct;
+    // retry shortly so we still pick up other clients' interleaved changes.
+    if (_mutating > 0 || _polling) {
+      scheduleSsePoll();
+      return;
+    }
+    pollSync();
+  }, 500);
+}
+
 // ── SSE real-time sync (replaces 5s polling for connected clients) ──
 let _sse = null;
 let _sseReconnectTimer = null;
@@ -753,7 +774,7 @@ function connectSSE() {
     _sse.onmessage = function (ev) {
       try {
         const msg = JSON.parse(ev.data);
-        if (msg.type === 'data-changed' && _mutating === 0) pollSync();
+        if (msg.type === 'data-changed') scheduleSsePoll();
         if (msg.type === 'connected') setSyncStatus('ok', 'Connected');
       } catch (e) {
         /* ignore parse errors */
@@ -823,7 +844,8 @@ const PAGES = {
   print: 'n-print',
   cal: 'n-cal',
   settings: 'n-settings',
-  strains: 'n-strains'
+  strains: 'n-strains',
+  orders: 'n-orders-inbox'
 };
 function go(page, btnId) {
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
@@ -860,6 +882,7 @@ function go(page, btnId) {
   }
   if (page === 'settings') renderLog();
   if (page === 'strains') renderStrains();
+  if (page === 'orders') renderOrders();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -871,6 +894,7 @@ function openStab(page, sub) {
   const spEl = document.getElementById(`sp-${page}-${sub}`);
   if (spEl) spEl.classList.add('active');
   if (page === 'batch' && sub === 'list') renderBatches();
+  if (page === 'batch' && sub === 'new') _fillNbProducts();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
@@ -900,8 +924,15 @@ function openStab(page, sub) {
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
+  if (page === 'settings' && sub === 'versand') loadShipSettings();
+  if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
   if (page === 'settings' && sub === 'log') renderLog();
+  if (page === 'orders' && sub === 'inbox') renderOrders();
+  if (page === 'orders' && sub === 'tomake') renderOrdersDemand();
+  if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
+  if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
+  if (page === 'orders' && sub === 'versand') renderOrdersVersand();
 }
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -929,7 +960,740 @@ function refresh() {
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
+  if (id === 'orders') _refreshOrdersActive();
   updateTodoBadge();
+}
+
+// ═══ ORDER HUB (Phase 0) ═══════════════════════════════════════════════════
+// Sales orders → products → production demand. Fetched on demand from the
+// dedicated /api/orders, /api/products, /api/customers endpoints (not the
+// /api/data full-state blob). See ORDERS_HUB_DESIGN.md.
+//
+// Module-level DOM helper: the app's main `$` is declared local to
+// initEventListeners, so these top-level render functions need their own.
+const $ = (id) => document.getElementById(id);
+let _ordersCache = [];
+let _ordersFilter = '';
+
+function _ohEmpty(cols, msg) {
+  return `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
+}
+function _ohChannel(ch) {
+  const label =
+    ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
+  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(label)}</span>`;
+}
+function _ohStatus(st) {
+  return `<span class="oh-st oh-st-${esc(st)}">${esc(t('orders.status.' + st))}</span>`;
+}
+function _refreshOrdersActive() {
+  const active = document.querySelector('#p-orders .sp.active');
+  const id = active ? active.id : 'sp-orders-inbox';
+  if (id === 'sp-orders-tomake') renderOrdersDemand();
+  else if (id === 'sp-orders-mapping') renderOrdersMapping();
+  else if (id === 'sp-orders-customers') renderOrdersCustomers();
+  else if (id === 'sp-orders-versand') renderOrdersVersand();
+  else renderOrders();
+}
+
+function renderOrders() {
+  const body = $('orders-body');
+  if (!body) return;
+  apiGet('/api/orders?limit=500')
+    .then((d) => {
+      _ordersCache = d.items || [];
+      _renderOrdersInbox();
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(6, t('common.error'));
+    });
+  apiGet('/api/products/unmapped')
+    .then((d) => {
+      const items = d.items || [];
+      const banner = $('orders-unmapped-banner');
+      if (banner) banner.style.display = items.length ? 'flex' : 'none';
+      const cnt = $('orders-unmapped-count');
+      if (cnt) cnt.textContent = items.length;
+    })
+    .catch(() => {});
+}
+
+function _renderOrdersInbox() {
+  const body = $('orders-body');
+  if (!body) return;
+  const rows = _ordersCache.filter((o) => !_ordersFilter || o.status === _ordersFilter);
+  if (!rows.length) {
+    body.innerHTML = _ohEmpty(6, t('orders.none'));
+    return;
+  }
+  body.innerHTML = rows
+    .map(
+      (o) =>
+        `<tr><td>${_ohChannel(o.channel)}</td>` +
+        `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+        `<td>${esc(o.customerName || '—')}</td>` +
+        `<td>${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
+        `<td style="font-size:11px">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
+        `<td>${_ohStatus(o.status)}</td></tr>`
+    )
+    .join('');
+}
+
+function setOrdersFilter(f) {
+  _ordersFilter = f;
+  document
+    .querySelectorAll('#sp-orders-inbox .oh-fchip')
+    .forEach((c) => c.classList.toggle('active', (c.dataset.filter || '') === f));
+  _renderOrdersInbox();
+}
+
+function renderOrdersDemand() {
+  const body = $('demand-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(6, t('common.loading'));
+  apiGet('/api/orders/demand')
+    .then((d) => {
+      const rows = d.items || [];
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(5, t('orders.demandNone'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((r) => {
+          const comps = (r.components || []).length
+            ? r.components
+                .map(
+                  (c) =>
+                    `<span style="display:inline-block;margin-right:10px;${c.short > 0 ? 'color:var(--c-red-dark);font-weight:600' : 'color:var(--c-text-muted)'}">` +
+                    `${esc(_ohMatName(c.mat))} ${_ohN(c.need)}${esc(c.unit || '')}${c.short > 0 ? ' (−' + _ohN(c.short) + ')' : ' ✓'}</span>`
+                )
+                .join('')
+            : '<span class="muted">—</span>';
+          const produce =
+            r.toProduce > 0
+              ? `<strong>${r.toProduce}</strong>${r.componentsShort ? ` <span class="oh-warn" title="${esc(t('orders.componentsShort'))}">⚠︎</span>` : ''}`
+              : r.backorder > 0
+                ? `<span class="oh-st oh-st-cancelled">${r.backorder} ${esc(t('orders.backorder'))}</span>`
+                : '<span class="muted">0</span>';
+          return (
+            `<tr><td><strong>${esc(r.product)}</strong> <span class="muted" style="font-size:11px">${esc(r.category || '')}</span></td>` +
+            `<td>${r.demand}</td><td>${r.fromStock}</td><td>${produce}</td>` +
+            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td>` +
+            `<td style="font-size:11px">${comps}</td></tr>`
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(5, t('common.error'));
+    });
+}
+
+function renderOrdersMapping() {
+  renderInventoryCard();
+  const left = $('orders-unmapped-list');
+  if (!left) return;
+  Promise.all([apiGet('/api/products/unmapped'), apiGet('/api/products')])
+    .then(([u, p]) => {
+      const products = p.items || [];
+      const opts = products.map((pr) => `<option value="${pr.id}">${esc(pr.name)}</option>`).join('');
+      const items = u.items || [];
+      left.innerHTML = items.length
+        ? items
+            .map(
+              (it) =>
+                `<div class="oh-maprow">${_ohChannel(it.channel)}` +
+                `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
+                `<div class="muted" style="font-size:11px;font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
+                `<select class="oh-mapsel" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" data-title="${esc(it.title || '')}" style="width:auto;font-size:12px">` +
+                `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}</select>` +
+                `<button class="btn btn-sm btn-p" data-action="oh-map">${esc(t('orders.assign'))}</button></div>`
+            )
+            .join('')
+        : `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('orders.allMapped'))}</div>`;
+      const cat = $('orders-catalog-body');
+      if (cat) {
+        cat.innerHTML = products.length
+          ? products
+              .map(
+                (pr) =>
+                  `<tr><td><strong>${esc(pr.name)}</strong></td><td>${esc(pr.category || '—')}</td>` +
+                  `<td class="muted" style="font-size:11px">${esc(pr.sku || '')}</td>` +
+                  `<td><button class="btn btn-sm" data-action="oh-prod-edit" data-id="${pr.id}">${esc(t('orders.edit'))}</button></td></tr>`
+              )
+              .join('')
+          : _ohEmpty(4, t('orders.noProducts'));
+      }
+    })
+    .catch(() => {
+      left.innerHTML = `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('common.error'))}</div>`;
+    });
+}
+
+function renderOrdersCustomers() {
+  const body = $('orders-customers-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(6, t('common.loading'));
+  apiGet('/api/customers')
+    .then((d) => {
+      const rows = d.items || [];
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(6, t('orders.noCustomers'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((c) => {
+          const chans = (c.channels || '').split(',').filter(Boolean).map(_ohChannel).join(' ');
+          const ltv = c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00';
+          return (
+            `<tr><td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
+            `<td>${chans}</td><td>${c.orderCount || 0}</td>` +
+            `<td><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
+            `<td style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
+            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td></tr>`
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(6, t('common.error'));
+    });
+}
+
+// ── Versand: order list + buy-label modal ──
+function renderOrdersVersand() {
+  const body = $('versand-orders-body');
+  if (!body) return;
+  body.innerHTML = _ohEmpty(5, t('common.loading'));
+  authFetch('/api/ship/config')
+    .then((r) => r.json())
+    .then((cfg) => {
+      const warn = $('versand-config-warn');
+      if (warn) warn.style.display = cfg && cfg.enabled && cfg.publicKey ? 'none' : 'block';
+    })
+    .catch(() => {});
+  apiGet('/api/orders?limit=500')
+    .then((d) => {
+      const rows = (d.items || []).filter((o) => o.status !== 'cancelled');
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(5, t('orders.none'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((o) => {
+          const btn =
+            o.status === 'shipped'
+              ? `<button class="btn btn-sm" data-action="oh-ship-open" data-order-id="${o.id}">${t('versand.relabel')}</button>`
+              : `<button class="btn btn-sm btn-p" data-action="oh-ship-open" data-order-id="${o.id}">${t('versand.shipBtn')}</button>`;
+          return (
+            `<tr><td>${_ohChannel(o.channel)}</td>` +
+            `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+            `<td>${esc(o.customerName || '—')}</td>` +
+            `<td>${_ohStatus(o.status)}</td>` +
+            `<td style="white-space:nowrap">${btn}</td></tr>`
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(5, t('common.error'));
+    });
+}
+
+function shipModalClose() {
+  const m = $('ship-modal');
+  if (m) m.style.display = 'none';
+}
+function shipModalOpen(orderId) {
+  if (!orderId) return;
+  const m = $('ship-modal');
+  if (!m) return;
+  $('ship-m-orderid').value = orderId;
+  $('ship-m-result').textContent = '';
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v == null ? '' : v;
+  };
+  // Prefill from the stored order (ship_* filled by a prior label or channel sync).
+  apiGet('/api/ship/order/' + orderId)
+    .then((o) => {
+      if (!o || o.error) o = {};
+      $('ship-m-sub').textContent = (o.channel ? o.channel + ' · ' : '') + (o.channelOrderId || '#' + orderId);
+      set('ship-m-name', o.shipName || o.customerName || '');
+      set('ship-m-company', o.shipCompany);
+      set('ship-m-street', o.shipStreet);
+      set('ship-m-house', o.shipHouse);
+      set('ship-m-address2', o.shipAddress2);
+      set('ship-m-postal', o.shipPostal);
+      set('ship-m-city', o.shipCity);
+      set('ship-m-country', (o.shipCountry || 'DE').toUpperCase());
+      set('ship-m-phone', o.shipPhone);
+      set('ship-m-weight', o.shipWeightG || 1000);
+      shipLoadMethods();
+    })
+    .catch(() => shipLoadMethods());
+  m.style.display = 'flex';
+}
+function shipLoadMethods() {
+  const sel = $('ship-m-method');
+  if (!sel) return;
+  const country = ($('ship-m-country').value || 'DE').toUpperCase();
+  const weight = parseInt($('ship-m-weight').value, 10) || 1000;
+  sel.innerHTML = `<option value="">${esc(t('versand.loadingMethods'))}</option>`;
+  apiGet('/api/ship/methods?country=' + encodeURIComponent(country) + '&weight=' + weight)
+    .then((d) => {
+      const methods = (d && d.methods) || [];
+      sel.innerHTML = methods.length
+        ? methods.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+        : `<option value="">${esc(t('versand.noMethods'))}</option>`;
+    })
+    .catch(() => {
+      sel.innerHTML = `<option value="">${esc(t('common.error'))}</option>`;
+    });
+}
+function shipBuyLabel() {
+  const orderId = parseInt($('ship-m-orderid').value, 10);
+  const methodId = $('ship-m-method').value;
+  if (!orderId) return;
+  if (!methodId) {
+    setFb('err', t('versand.pickMethod'));
+    return;
+  }
+  const v = (id) => ($(id) ? $(id).value.trim() : '');
+  const weightG = parseInt($('ship-m-weight').value, 10) || 1000;
+  const address = {
+    shipName: v('ship-m-name'),
+    shipCompany: v('ship-m-company'),
+    shipStreet: v('ship-m-street'),
+    shipHouse: v('ship-m-house'),
+    shipAddress2: v('ship-m-address2'),
+    shipPostal: v('ship-m-postal'),
+    shipCity: v('ship-m-city'),
+    shipCountry: (v('ship-m-country') || 'DE').toUpperCase(),
+    shipPhone: v('ship-m-phone'),
+    shipWeightG: weightG
+  };
+  const res = $('ship-m-result');
+  if (res) res.textContent = t('common.loading');
+  apiPost('/api/ship/label', { orderId, methodId, weightG, address })
+    .then((r) => {
+      if (!r || r.error) {
+        if (res) res.textContent = '⚠ ' + ((r && r.error) || t('common.error'));
+        return;
+      }
+      if (r.test) {
+        // Test mode announced the parcel without buying a billable label.
+        if (res) res.textContent = '✓ ' + t('versand.testAnnounced');
+        setFb('ok', t('versand.testAnnounced'));
+        renderOrdersVersand();
+        return;
+      }
+      const pdf = '/api/ship/label/' + r.id + '/pdf';
+      const pushMsg = r.channelPushed
+        ? '<br>↪ ' + esc(t('versand.pushedToChannel'))
+        : r.pushError
+          ? '<br>⚠ ' + esc(t('versand.pushFailed')) + ': ' + esc(r.pushError)
+          : '';
+      if (res)
+        res.innerHTML =
+          '✓ ' +
+          esc(t('versand.bought')) +
+          (r.trackingNumber ? ' · ' + esc(r.trackingNumber) : '') +
+          ` · <a href="${pdf}" target="_blank" rel="noopener">${esc(t('versand.openLabel'))}</a>` +
+          pushMsg;
+      setFb('ok', t('versand.bought'));
+      renderOrdersVersand();
+    })
+    .catch(() => {
+      if (res) res.textContent = '⚠ ' + t('common.error');
+    });
+}
+
+function ordersActionHandler(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'oh-filter') {
+    setOrdersFilter(btn.dataset.filter || '');
+  } else if (action === 'oh-goto-mapping') {
+    openStab('orders', 'mapping');
+  } else if (action === 'oh-manual-toggle') {
+    const p = $('orders-manual-panel');
+    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  } else if (action === 'oh-import-csv') {
+    const f = $('orders-csv-file');
+    if (f) f.click();
+  } else if (action === 'oh-manual-submit') {
+    _ordersManualSubmit();
+  } else if (action === 'oh-map') {
+    const row = btn.closest('.oh-maprow');
+    const sel = row && row.querySelector('.oh-mapsel');
+    if (!sel || !sel.value) {
+      setFb('err', t('orders.choose'));
+      return;
+    }
+    apiPost('/api/products/map', {
+      channel: sel.dataset.channel,
+      channelSku: sel.dataset.sku || null,
+      listingId: sel.dataset.listing || null,
+      title: sel.dataset.title || null,
+      productId: parseInt(sel.value, 10)
+    }).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.mapped'));
+      renderOrdersMapping();
+    });
+  } else if (action === 'oh-prod-new') {
+    _ohProductForm(null);
+  } else if (action === 'oh-prod-cancel') {
+    const f = $('orders-prod-form');
+    if (f) f.style.display = 'none';
+  } else if (action === 'oh-prod-edit') {
+    apiGet('/api/products/' + btn.dataset.id)
+      .then((p) => _ohProductForm(p))
+      .catch(() => setFb('err', t('common.error')));
+  } else if (action === 'oh-prod-save') {
+    _ohProductSave();
+  } else if (action === 'oh-prod-delete') {
+    _ohProductDelete();
+  } else if (action === 'oh-inv-set') {
+    const row = btn.closest('tr');
+    const inp = row && row.querySelector('.oh-inv-input');
+    if (!inp) return;
+    const val = parseFloat(inp.value);
+    if (!(val >= 0)) {
+      setFb('err', t('orders.invBadValue'));
+      return;
+    }
+    invSetAbsolute(btn.dataset.mat, val, 'manual', 'order-hub').then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.invSaved'));
+      if (inventory && inventory.stock) inventory.stock[btn.dataset.mat] = val;
+      renderInventoryCard();
+    });
+  } else if (action === 'oh-ship-open') {
+    shipModalOpen(parseInt(btn.dataset.orderId, 10));
+  } else if (action === 'oh-ship-buy') {
+    shipBuyLabel();
+  } else if (action === 'oh-ship-close') {
+    shipModalClose();
+  }
+}
+
+function _ordersManualSubmit() {
+  const oid = ($('oh-m-oid').value || '').trim();
+  if (!oid) {
+    setFb('err', t('orders.needOrderId'));
+    return;
+  }
+  const order = {
+    channel: $('oh-m-channel').value || 'manual',
+    channelOrderId: oid,
+    customerName: ($('oh-m-cust').value || '').trim() || null,
+    customerEmail: ($('oh-m-email').value || '').trim() || null,
+    shipBy: $('oh-m-shipby').value || null,
+    items: [
+      {
+        channelSku: ($('oh-m-sku').value || '').trim() || null,
+        title: ($('oh-m-title').value || '').trim() || null,
+        qty: parseInt($('oh-m-qty').value, 10) || 1
+      }
+    ]
+  };
+  apiPost('/api/orders/import', order).then((r) => {
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('orders.added'));
+    ['oh-m-oid', 'oh-m-cust', 'oh-m-email', 'oh-m-sku', 'oh-m-title', 'oh-m-shipby'].forEach((id) => {
+      const el = $(id);
+      if (el) el.value = '';
+    });
+    const q = $('oh-m-qty');
+    if (q) q.value = '1';
+    renderOrders();
+  });
+}
+
+function _ordersImportCsv(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const lines = String(reader.result || '')
+        .split(/\r?\n/)
+        .filter((l) => l.trim());
+      if (lines.length < 2) {
+        setFb('err', t('orders.csvEmpty'));
+        return;
+      }
+      const splitRow = (l) => l.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, ''));
+      const head = splitRow(lines[0]).map((h) => h.toLowerCase());
+      const col = (names) => {
+        for (const n of names) {
+          const i = head.indexOf(n);
+          if (i >= 0) return i;
+        }
+        return -1;
+      };
+      const ci = {
+        channel: col(['channel', 'kanal']),
+        oid: col(['order_id', 'order id', 'channel_order_id', 'bestellnummer', 'order']),
+        name: col(['customer_name', 'customer', 'name', 'kunde']),
+        email: col(['customer_email', 'email', 'e-mail']),
+        shipby: col(['ship_by', 'ship by', 'liefern bis', 'deliver_by']),
+        sku: col(['sku', 'channel_sku', 'artikelnummer']),
+        title: col(['title', 'item', 'artikel', 'produkt']),
+        qty: col(['qty', 'quantity', 'menge', 'anzahl'])
+      };
+      if (ci.oid < 0) {
+        setFb('err', t('orders.csvNoOrderId'));
+        return;
+      }
+      const byId = new Map();
+      for (let i = 1; i < lines.length; i++) {
+        const cells = splitRow(lines[i]);
+        const oid = cells[ci.oid];
+        if (!oid) continue;
+        const channel = (ci.channel >= 0 && cells[ci.channel]) || 'manual';
+        const key = channel + '|' + oid;
+        if (!byId.has(key)) {
+          byId.set(key, {
+            channel,
+            channelOrderId: oid,
+            customerName: ci.name >= 0 ? cells[ci.name] || null : null,
+            customerEmail: ci.email >= 0 ? cells[ci.email] || null : null,
+            shipBy: ci.shipby >= 0 ? cells[ci.shipby] || null : null,
+            items: []
+          });
+        }
+        byId.get(key).items.push({
+          channelSku: ci.sku >= 0 ? cells[ci.sku] || null : null,
+          title: ci.title >= 0 ? cells[ci.title] || null : null,
+          qty: ci.qty >= 0 ? parseInt(cells[ci.qty], 10) || 1 : 1
+        });
+      }
+      const orders = [...byId.values()];
+      if (!orders.length) {
+        setFb('err', t('orders.csvEmpty'));
+        return;
+      }
+      apiPost('/api/orders/import', { orders }).then((r) => {
+        if (r && r.error) {
+          setFb('err', r.error);
+          return;
+        }
+        setFb('ok', t('orders.imported', { n: r.imported != null ? r.imported : orders.length }));
+        renderOrders();
+      });
+    } catch (err) {
+      setFb('err', t('common.error'));
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Product catalog editor ──
+const _OH_MAT_KEY = {
+  grain: 'inv.grain',
+  hardwood: 'inv.hardwood',
+  wheatbran: 'inv.wheatBran',
+  gypsum: 'inv.gypsum',
+  coir: 'inv.coir'
+};
+function _ohMatName(mat) {
+  return t(_OH_MAT_KEY[mat] || mat);
+}
+function _ohN(x) {
+  return Math.round((x || 0) * 100) / 100;
+}
+
+// ── Hydration math: the ONE client-side source of truth ──────────────────────
+// "Wet" substrate/grain weights include soak water; raw-material need is the dry
+// matter left after removing rh% water. The SERVER (db.js computeBatchMaterialDeltas
+// / computeProductMaterialNeed) is authoritative for inventory — these mirror it,
+// so if the formula ever changes, KEEP db.js AND this in sync.
+function mtGrainFactor(rhPct) {
+  const rh = Number(rhPct) || 0;
+  return rh > 0 ? 1 - rh / 100 : 1;
+}
+function mtDryKg(wetKg, rhPct) {
+  return (Number(wetKg) || 0) * mtGrainFactor(rhPct);
+}
+
+// Per-unit raw-material need (dry kg) — mirrors db.computeProductMaterialNeed
+// so the editor preview matches the demand board exactly.
+function _ohProdNeedCompute(spec) {
+  const need = { grain: 0, hardwood: 0, wheatbran: 0, gypsum: 0, coir: 0 };
+  const num = (v) => (isFinite(+v) ? +v : 0);
+  const type = spec.prodType || 'buy';
+  if (type === 'block' || type === 'allinone') {
+    const bagKg = num(spec.prodBagKg);
+    const rh = num(spec.prodRhPct);
+    const dry = mtDryKg(bagKg, rh);
+    if ((spec.prodSubstrate || 'holzkleie') === 'cvg') {
+      need.coir += dry * ((num(spec.prodCoirPct) || 100) / 100);
+    } else {
+      need.hardwood += dry * (num(spec.prodHardwoodPct) / 100);
+      need.wheatbran += dry * (num(spec.prodWheatbranPct) / 100);
+    }
+    if (spec.prodGypsum) need.gypsum += dry * 0.01;
+  }
+  if (type === 'grain' || type === 'allinone') {
+    const gKg = num(spec.prodGrainKg);
+    const gRh = spec.prodGrainRhPct != null && spec.prodGrainRhPct !== '' ? num(spec.prodGrainRhPct) : 52;
+    need.grain += mtDryKg(gKg, gRh);
+  }
+  return need;
+}
+
+function _ohReadProdForm() {
+  return {
+    prodType: $('oh-p-prodtype').value || 'buy',
+    prodSubstrate: $('oh-p-substrate').value || 'holzkleie',
+    prodBagKg: $('oh-p-bagkg').value,
+    prodRhPct: $('oh-p-rh').value,
+    prodHardwoodPct: $('oh-p-hw').value,
+    prodWheatbranPct: $('oh-p-wb').value,
+    prodCoirPct: $('oh-p-coir').value,
+    prodGypsum: $('oh-p-gyp').checked ? 1 : 0,
+    prodGrainKg: $('oh-p-grainkg').value,
+    prodGrainRhPct: $('oh-p-grainrh').value
+  };
+}
+
+function _ohProdTypeChange() {
+  const type = $('oh-p-prodtype').value || 'buy';
+  const sub = $('oh-p-substrate').value || 'holzkleie';
+  const set = (id, disp) => {
+    const el = $(id);
+    if (el) el.style.display = disp;
+  };
+  set('oh-p-subgroup', type === 'block' || type === 'allinone' ? 'block' : 'none');
+  set('oh-p-graingroup', type === 'grain' || type === 'allinone' ? 'block' : 'none');
+  set('oh-p-holzgroup', sub === 'holzkleie' ? 'grid' : 'none');
+  set('oh-p-coirgroup', sub === 'cvg' ? 'grid' : 'none');
+  _ohProdNeed();
+}
+
+function _ohProdNeed() {
+  const el = $('oh-p-need');
+  if (!el) return;
+  const need = _ohProdNeedCompute(_ohReadProdForm());
+  const parts = Object.keys(need)
+    .filter((m) => need[m] > 0)
+    .map((m) => `${esc(_ohMatName(m))} ${_ohN(need[m])} kg`);
+  el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+}
+
+function _ohProductForm(p) {
+  const f = $('orders-prod-form');
+  if (!f) return;
+  f.style.display = 'block';
+  $('oh-p-id').value = p && p.id ? p.id : '';
+  $('oh-p-name').value = p ? p.name || '' : '';
+  $('oh-p-sku').value = p ? p.sku || '' : '';
+  $('oh-p-category').value = p ? p.category || 'all-in-one' : 'all-in-one';
+  $('oh-p-stock').value = p && p.stock != null ? p.stock : 0;
+  $('oh-p-lead').value = p && p.leadDays != null ? p.leadDays : 0;
+  $('oh-p-prodtype').value = (p && p.prodType) || 'buy';
+  $('oh-p-substrate').value = (p && p.prodSubstrate) || 'holzkleie';
+  $('oh-p-bagkg').value = p && p.prodBagKg != null ? p.prodBagKg : 0;
+  $('oh-p-rh').value = p && p.prodRhPct != null ? p.prodRhPct : 0;
+  $('oh-p-hw').value = p && p.prodHardwoodPct != null ? p.prodHardwoodPct : 0;
+  $('oh-p-wb').value = p && p.prodWheatbranPct != null ? p.prodWheatbranPct : 0;
+  $('oh-p-coir').value = p && p.prodCoirPct != null ? p.prodCoirPct : 100;
+  $('oh-p-gyp').checked = !!(p && p.prodGypsum);
+  $('oh-p-grainkg').value = p && p.prodGrainKg != null ? p.prodGrainKg : 0;
+  $('oh-p-grainrh').value = p && p.prodGrainRhPct != null ? p.prodGrainRhPct : 52;
+  $('oh-p-prodtype').onchange = _ohProdTypeChange;
+  $('oh-p-substrate').onchange = _ohProdTypeChange;
+  f.oninput = _ohProdNeed;
+  _ohProdTypeChange();
+  const del = $('oh-p-delete');
+  if (del) del.style.display = p && p.id ? 'inline-flex' : 'none';
+}
+
+function _ohProductSave() {
+  const name = ($('oh-p-name').value || '').trim();
+  if (!name) {
+    setFb('err', t('orders.needName'));
+    return;
+  }
+  const spec = _ohReadProdForm();
+  const id = $('oh-p-id').value;
+  const payload = {
+    name,
+    sku: ($('oh-p-sku').value || '').trim() || null,
+    category: $('oh-p-category').value || null,
+    stock: parseFloat($('oh-p-stock').value) || 0,
+    leadDays: parseInt($('oh-p-lead').value, 10) || 0,
+    prodType: spec.prodType,
+    prodSubstrate: spec.prodSubstrate,
+    prodBagKg: parseFloat(spec.prodBagKg) || 0,
+    prodRhPct: parseFloat(spec.prodRhPct) || 0,
+    prodHardwoodPct: parseFloat(spec.prodHardwoodPct) || 0,
+    prodWheatbranPct: parseFloat(spec.prodWheatbranPct) || 0,
+    prodCoirPct: parseFloat(spec.prodCoirPct) || 0,
+    prodGypsum: spec.prodGypsum,
+    prodGrainKg: parseFloat(spec.prodGrainKg) || 0,
+    prodGrainRhPct: parseFloat(spec.prodGrainRhPct) || 52
+  };
+  const req = id ? apiPatch('/api/products/' + id, payload) : apiPost('/api/products', payload);
+  req.then((r) => {
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('orders.productSaved'));
+    const f = $('orders-prod-form');
+    if (f) f.style.display = 'none';
+    renderOrdersMapping();
+  });
+}
+
+// ── Raw-material inventory (shared ledger) ──
+function renderInventoryCard() {
+  const body = $('orders-rawstock-body');
+  if (!body) return;
+  const stock = (inventory && inventory.stock) || {};
+  const thr = (inventory && inventory.thresholds) || {};
+  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir'];
+  body.innerHTML = mats
+    .map((m) => {
+      const have = stock[m] || 0;
+      const min = (thr[m] && thr[m].minKg) || 0;
+      const low = min > 0 && have <= min;
+      return (
+        `<tr><td><strong>${esc(_ohMatName(m))}</strong></td>` +
+        `<td>${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
+        `<td style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
+        `<button class="btn btn-sm" data-action="oh-inv-set" data-mat="${m}">${esc(t('orders.set'))}</button></td></tr>`
+      );
+    })
+    .join('');
+}
+function _ohProductDelete() {
+  const id = $('oh-p-id').value;
+  if (!id) return;
+  confirm2(t('common.delete'), t('orders.confirmDelete'), t('common.delete'), () => {
+    apiDelete('/api/products/' + id).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.productDeleted'));
+      const f = $('orders-prod-form');
+      if (f) f.style.display = 'none';
+      renderOrdersMapping();
+    });
+  });
 }
 
 // ─── MODALS ──────────────────────────────────────────────────
@@ -3647,6 +4411,52 @@ function setBagWeight(kg) {
   });
   nbPreview();
 }
+// Charge form ← product: fill the substrate/grain fields from a saved product
+// spec so a charge can be made straight from "what was ordered". The product
+// drives an internally-block batch that also deducts coir + raw grain.
+let _nbProducts = [];
+function _fillNbProducts() {
+  const sel = document.getElementById('nb-product');
+  if (!sel) return;
+  apiGet('/api/products?active=1')
+    .then((d) => {
+      _nbProducts = (d.items || []).filter((p) => (p.prodType || 'buy') !== 'buy');
+      const cur = sel.value;
+      sel.innerHTML =
+        `<option value="">${esc(t('batch.noProduct'))}</option>` +
+        _nbProducts.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+      sel.value = cur;
+    })
+    .catch(() => {});
+}
+function _nbProductChanged() {
+  const sel = document.getElementById('nb-product');
+  const id = sel && sel.value ? parseInt(sel.value, 10) : null;
+  if (!id) {
+    nbPreview();
+    return;
+  }
+  apiGet('/api/products/' + id)
+    .then((p) => {
+      if (!p || p.error) return;
+      const set = (eid, val) => {
+        const el = document.getElementById(eid);
+        if (el) el.value = val;
+      };
+      const isCvg = (p.prodSubstrate || 'holzkleie') === 'cvg';
+      if (p.prodBagKg != null) set('nb-weight', p.prodBagKg);
+      set('nb-rh', p.prodRhPct != null ? p.prodRhPct : 0);
+      set('nb-hw', isCvg ? 0 : p.prodHardwoodPct || 0);
+      set('nb-wb', isCvg ? 0 : p.prodWheatbranPct || 0);
+      set('nb-coir', isCvg ? p.prodCoirPct || 100 : 0);
+      set('nb-grainkg', p.prodGrainKg || 0);
+      set('nb-grainrh', p.prodGrainRhPct != null ? p.prodGrainRhPct : 52);
+      const gyp = document.getElementById('nb-gyp');
+      if (gyp) gyp.checked = !!p.prodGypsum;
+      nbSubSum();
+    })
+    .catch(() => {});
+}
 function nbPreview() {
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
@@ -3664,17 +4474,22 @@ function nbPreview() {
   {
     const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
     const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+    const coir = parseDecimal((document.getElementById('nb-coir') || {}).value) || 0;
     const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const gyp = document.getElementById('nb-gyp').checked;
-    if (hw || wb) {
+    const grainKg = parseDecimal((document.getElementById('nb-grainkg') || {}).value) || 0;
+    const grainRh = parseDecimal((document.getElementById('nb-grainrh') || {}).value) || 0;
+    if (hw || wb || coir) {
       // Correct calculation: subtract water first, then split dry matter
       // dryKg = bagKg × (1 - rh/100)
-      const dryKg = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+      const dryKg = mtDryKg(bagKg, rh);
       const hwKg = qty * dryKg * (hw / 100);
       const wbKg = qty * dryKg * (wb / 100);
+      const coirKg = qty * dryKg * (coir / 100);
       const gypKg = gyp ? qty * dryKg * 0.01 : 0;
       const hwStock = inventory.stock?.hardwood || 0;
       const wbStock = inventory.stock?.wheatbran || 0;
+      const coirStock = inventory.stock?.coir || 0;
       const gypStock = inventory.stock?.gypsum || 0;
       if (rh > 0)
         lines.push(
@@ -3688,11 +4503,22 @@ function nbPreview() {
         lines.push(
           `<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock >= wbKg ? '✓' : '⚠ short by ' + (wbKg - wbStock).toFixed(2) + 'kg'}`
         );
+      if (coir)
+        lines.push(
+          `<strong>Kokos/CVG (${coir}%):</strong> ${coirKg.toFixed(3)} kg needed — ${coirStock.toFixed(2)} kg in stock ${coirStock >= coirKg ? '✓' : '⚠ short by ' + (coirKg - coirStock).toFixed(2) + 'kg'}`
+        );
       if (gyp)
         lines.push(
           `<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock >= gypKg ? '✓' : '⚠'}`
         );
       lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
+    }
+    if (grainKg > 0) {
+      const grainUsed = qty * mtDryKg(grainKg, grainRh);
+      const grainStock = inventory.stock?.grain || 0;
+      lines.push(
+        `<strong>Grain:</strong> ${grainUsed.toFixed(3)} kg needed — ${grainStock.toFixed(2)} kg in stock ${grainStock >= grainUsed ? '✓' : '⚠ short by ' + (grainUsed - grainStock).toFixed(2) + 'kg'}`
+      );
     }
   }
   const el = document.getElementById('nb-mat-preview');
@@ -3737,6 +4563,10 @@ function createBatch() {
   }
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
     wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
+  // All-in-One / CVG fields (0 for plain holz+kleie blocks → no effect).
+  const coir = parseDecimal((document.getElementById('nb-coir') || {}).value) || 0;
+  const grainKg = parseDecimal((document.getElementById('nb-grainkg') || {}).value) || 0;
+  const grainRh = parseDecimal((document.getElementById('nb-grainrh') || {}).value) || 0;
   // I-19: substrate must total exactly 100% (within rounding). Previously the
   // check only fired on > 100; a 70/20 split silently consumed 90% of the dry
   // mass and the remaining 10% went unaccounted. Now we reject any drift in
@@ -3747,10 +4577,11 @@ function createBatch() {
     return;
   }
   const substrate =
-    hw || wb
+    hw || wb || coir
       ? {
           hardwood: hw,
           wheatbran: wb,
+          coir,
           rh: parseDecimal(document.getElementById('nb-rh').value) || null,
           gypsum: document.getElementById('nb-gyp').checked
         }
@@ -3760,12 +4591,14 @@ function createBatch() {
   // over-commit silently clamps to zero with no signal to the worker. They
   // walk away thinking everything's fine, then run out mid-week. Prompt
   // first so they can either top up before submitting or knowingly proceed.
-  if (substrate) {
-    const _rhPct = substrate.rh || 0;
-    const _dryKg = _rhPct > 0 ? bagKg * (1 - _rhPct / 100) : bagKg;
+  {
+    const _rhPct = (substrate && substrate.rh) || 0;
+    const _dryKg = mtDryKg(bagKg, _rhPct);
     const _hwUsed = qty * _dryKg * (hw / 100);
     const _wbUsed = qty * _dryKg * (wb / 100);
-    const _gypUsed = substrate.gypsum ? qty * _dryKg * 0.01 : 0;
+    const _coirUsed = qty * _dryKg * (coir / 100);
+    const _gypUsed = substrate && substrate.gypsum ? qty * _dryKg * 0.01 : 0;
+    const _grainUsed = grainKg > 0 ? qty * mtDryKg(grainKg, grainRh) : 0;
     const _stock = inventory.stock || {};
     const _shortages = [];
     if (_hwUsed > (_stock.hardwood || 0))
@@ -3776,9 +4609,17 @@ function createBatch() {
       _shortages.push(
         'Wheat bran: ' + (_stock.wheatbran || 0).toFixed(1) + ' kg vorhanden, ' + _wbUsed.toFixed(1) + ' kg nötig'
       );
+    if (_coirUsed > (_stock.coir || 0))
+      _shortages.push(
+        'Kokos/CVG: ' + (_stock.coir || 0).toFixed(1) + ' kg vorhanden, ' + _coirUsed.toFixed(1) + ' kg nötig'
+      );
     if (_gypUsed > (_stock.gypsum || 0))
       _shortages.push(
         'Gypsum: ' + (_stock.gypsum || 0).toFixed(1) + ' kg vorhanden, ' + _gypUsed.toFixed(1) + ' kg nötig'
+      );
+    if (_grainUsed > (_stock.grain || 0))
+      _shortages.push(
+        'Grain: ' + (_stock.grain || 0).toFixed(1) + ' kg vorhanden, ' + _grainUsed.toFixed(1) + ' kg nötig'
       );
     if (
       _shortages.length &&
@@ -3805,6 +4646,8 @@ function createBatch() {
     substrate,
     bagKg,
     batchType,
+    grainKg,
+    grainRh,
     sourceId: document.getElementById('nb-culture').value || null,
     notes: document.getElementById('nb-notes').value.trim(),
     strainText,
@@ -3815,14 +4658,15 @@ function createBatch() {
 
   // Compute inventory deltas up front so they can travel with the POST and be
   // applied atomically on the server (I-02).
-  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0, coir: 0 };
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
   if (substrate) {
     const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
-    const dryKgPerBag = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    const dryKgPerBag = mtDryKg(bagKg, rh);
     const hwUsed = qty * dryKgPerBag * (hw / 100);
     const wbUsed = qty * dryKgPerBag * (wb / 100);
+    const coirUsed = qty * dryKgPerBag * (coir / 100);
     if (hwUsed > 0) {
       inventory.stock.hardwood = Math.max(0, inventory.stock.hardwood - hwUsed);
       deltas.push({ mat: 'hardwood', deltaKg: -hwUsed, type: 'batch', ref: batchId });
@@ -3831,10 +4675,22 @@ function createBatch() {
       inventory.stock.wheatbran = Math.max(0, inventory.stock.wheatbran - wbUsed);
       deltas.push({ mat: 'wheatbran', deltaKg: -wbUsed, type: 'batch', ref: batchId });
     }
+    if (coirUsed > 0) {
+      inventory.stock.coir = Math.max(0, (inventory.stock.coir || 0) - coirUsed);
+      deltas.push({ mat: 'coir', deltaKg: -coirUsed, type: 'batch', ref: batchId });
+    }
     if (substrate.gypsum) {
       const gypUsed = qty * dryKgPerBag * 0.01;
       inventory.stock.gypsum = Math.max(0, inventory.stock.gypsum - gypUsed);
       deltas.push({ mat: 'gypsum', deltaKg: -gypUsed, type: 'batch', ref: batchId });
+    }
+  }
+  // All-in-One raw-grain portion mixed into the block (independent of substrate).
+  if (grainKg > 0) {
+    const grainUsed = qty * mtDryKg(grainKg, grainRh);
+    if (grainUsed > 0) {
+      inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
+      deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
     }
   }
 
@@ -4496,12 +5352,19 @@ function delBatch(id) {
         inventory.stock.grain = (inventory.stock.grain || 0) + totalBagKg;
       } else if (b.substrate) {
         const rh = b.substrate.rh || 0;
-        const totalDryKg = rh > 0 ? totalBagKg * (1 - rh / 100) : totalBagKg;
+        const totalDryKg = mtDryKg(totalBagKg, rh);
         if (b.substrate.hardwood)
           inventory.stock.hardwood = (inventory.stock.hardwood || 0) + totalDryKg * (b.substrate.hardwood / 100);
         if (b.substrate.wheatbran)
           inventory.stock.wheatbran = (inventory.stock.wheatbran || 0) + totalDryKg * (b.substrate.wheatbran / 100);
+        if (b.substrate.coir)
+          inventory.stock.coir = (inventory.stock.coir || 0) + totalDryKg * (b.substrate.coir / 100);
         if (b.substrate.gypsum) inventory.stock.gypsum = (inventory.stock.gypsum || 0) + totalDryKg * 0.01;
+      }
+      // All-in-One raw-grain portion mixed into a block batch (credit it back too).
+      if (b.batchType !== 'grain' && b.grainKg) {
+        const grh = b.grainRh || 0;
+        inventory.stock.grain = (inventory.stock.grain || 0) + b.qty * b.grainKg * (grh > 0 ? 1 - grh / 100 : 1);
       }
     }
     batches = batches.filter((x) => x.batchId !== id);
@@ -4930,6 +5793,212 @@ async function pushTaskCaldav(task) {
 }
 
 // ─── DUCKDNS ────────────────────────────────────────────────
+// ── Versand (Sendcloud) config (Admin → Settings → Versand) ──
+async function loadShipSettings() {
+  try {
+    const r = await authFetch('/api/ship/config');
+    const cfg = await r.json();
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+    const en = document.getElementById('versand-enabled');
+    if (en) en.checked = !!cfg.enabled;
+    set('versand-public', cfg.publicKey || '');
+    set('versand-secret', '');
+    const sec = document.getElementById('versand-secret');
+    if (sec) sec.placeholder = cfg.hasSecret ? t('versand.secretSet') : 'Secret Key';
+    set('versand-mode', cfg.mode || 'test');
+    set('versand-weight', cfg.defaultWeightG != null ? cfg.defaultWeightG : 1000);
+  } catch (e) {
+    /* not configured yet */
+  }
+}
+async function saveShipSettings() {
+  const cfg = {
+    enabled: document.getElementById('versand-enabled').checked,
+    publicKey: (document.getElementById('versand-public').value || '').trim(),
+    secretKey: (document.getElementById('versand-secret').value || '').trim(),
+    mode: document.getElementById('versand-mode').value || 'test',
+    defaultWeightG: parseInt(document.getElementById('versand-weight').value, 10) || 1000
+  };
+  try {
+    const r = await apiPatch('/api/ship/config', cfg);
+    if (r && r.error) {
+      setFb('err', r.error);
+      return;
+    }
+    setFb('ok', t('versand.saved'));
+    loadShipSettings();
+  } catch (e) {
+    setFb('err', t('common.error'));
+  }
+}
+async function testShipConnection() {
+  const el = document.getElementById('versand-test-result');
+  if (el) {
+    el.style.display = 'block';
+    el.textContent = t('common.loading');
+  }
+  try {
+    const r = await authFetch('/api/ship/test');
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      if (el) el.textContent = '⚠ ' + (d.error || 'HTTP ' + r.status);
+      return;
+    }
+    let carriers = '';
+    try {
+      const mr = await authFetch('/api/ship/methods');
+      const md = await mr.json();
+      if (mr.ok && md.methods) carriers = [...new Set(md.methods.map((m) => m.carrier))].join(', ');
+    } catch (e2) {
+      /* methods are a bonus */
+    }
+    if (el) el.textContent = '✓ ' + t('versand.connected', { account: d.account || 'ok' }) + (carriers ? ' — ' + carriers : '');
+  } catch (e) {
+    if (el) el.textContent = '⚠ ' + t('common.error');
+  }
+}
+
+// ── Sales channels (Admin → Settings → Kanäle) ──
+async function loadChannelsSettings() {
+  try {
+    const r = await authFetch('/api/channels');
+    const d = await r.json();
+    const wix = (d.channels || []).find((c) => c.channel === 'wix') || {};
+    const en = document.getElementById('wix-enabled');
+    if (en) en.checked = !!wix.enabled;
+    const sid = document.getElementById('wix-siteid');
+    if (sid) sid.value = wix.siteId || '';
+    const aid = document.getElementById('wix-accountid');
+    if (aid) aid.value = wix.clientId || '';
+    const ak = document.getElementById('wix-apikey');
+    if (ak) {
+      ak.value = '';
+      ak.placeholder = wix.hasApiKey ? t('channels.keySet') : 'API-Key';
+    }
+    const st = document.getElementById('wix-status');
+    if (st && wix.lastSync) {
+      st.style.display = 'block';
+      st.textContent = wix.lastError ? '⚠ ' + wix.lastError : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
+    }
+    // eBay + Etsy (OAuth): client_id / secret / RuName + connection status.
+    const fillOauth = (prefix, ch) => {
+      const en = document.getElementById(prefix + '-enabled');
+      if (en) en.checked = !!ch.enabled;
+      const cid = document.getElementById(prefix + '-clientid');
+      if (cid) cid.value = ch.clientId || '';
+      const sid = document.getElementById(prefix + '-siteid');
+      if (sid) sid.value = ch.siteId || '';
+      const sec = document.getElementById(prefix + '-secret');
+      if (sec) {
+        sec.value = '';
+        sec.placeholder = ch.hasClientSecret ? t('channels.keySet') : 'Cert-ID';
+      }
+      const st2 = document.getElementById(prefix + '-status');
+      if (st2) {
+        const bits = [ch.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
+        if (ch.lastError) bits.push('⚠ ' + ch.lastError);
+        else if (ch.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(ch.lastSync) }));
+        st2.style.display = 'block';
+        st2.textContent = bits.join(' · ');
+      }
+    };
+    fillOauth('ebay', (d.channels || []).find((c) => c.channel === 'ebay') || {});
+    fillOauth('etsy', (d.channels || []).find((c) => c.channel === 'etsy') || {});
+  } catch (e) {
+    /* not configured yet */
+  }
+}
+async function saveChannel(channel) {
+  let body;
+  if (channel === 'wix') {
+    body = {
+      enabled: document.getElementById('wix-enabled').checked,
+      apiKey: (document.getElementById('wix-apikey').value || '').trim(),
+      siteId: (document.getElementById('wix-siteid').value || '').trim(),
+      clientId: (document.getElementById('wix-accountid').value || '').trim()
+    };
+  } else if (channel === 'ebay') {
+    body = {
+      enabled: document.getElementById('ebay-enabled').checked,
+      clientId: (document.getElementById('ebay-clientid').value || '').trim(), // App-ID
+      clientSecret: (document.getElementById('ebay-secret').value || '').trim(), // Cert-ID (blank = keep)
+      siteId: (document.getElementById('ebay-siteid').value || '').trim() // RuName
+    };
+  } else if (channel === 'etsy') {
+    body = {
+      enabled: document.getElementById('etsy-enabled').checked,
+      clientId: (document.getElementById('etsy-clientid').value || '').trim() // Keystring
+    };
+  } else {
+    return false;
+  }
+  try {
+    const r = await apiPatch('/api/channels/' + channel, body);
+    if (r && r.error) {
+      setFb('err', r.error);
+      return false;
+    }
+    setFb('ok', t('channels.saved'));
+    loadChannelsSettings();
+    return true;
+  } catch (e) {
+    setFb('err', t('common.error'));
+    return false;
+  }
+}
+// Start the OAuth login: persist creds first (so the server has client_id / RuName),
+// then redirect the browser to the provider's authorize page. The provider sends the
+// user back to the public callback, which stores the tokens.
+async function connectChannel(channel) {
+  const ok = await saveChannel(channel);
+  if (ok === false) return;
+  try {
+    const r = await authFetch('/api/channels/' + channel + '/oauth/start');
+    const d = await r.json();
+    if (d && d.url) {
+      window.location.href = d.url;
+      return;
+    }
+    setFb('err', (d && d.error) || t('common.error'));
+  } catch (e) {
+    if (e.message !== 'unauthorized') setFb('err', t('common.error'));
+  }
+}
+async function testChannel(channel) {
+  const st = document.getElementById(channel + '-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('common.loading');
+  }
+  try {
+    const r = await apiPost('/api/channels/' + channel + '/test', {});
+    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected');
+  } catch (e) {
+    if (st) st.textContent = '⚠ ' + t('common.error');
+  }
+}
+async function syncChannel(channel) {
+  const st = document.getElementById(channel + '-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('channels.syncing');
+  }
+  try {
+    const r = await apiPost('/api/channels/' + channel + '/sync', {});
+    if (r && r.error) {
+      if (st) st.textContent = '⚠ ' + r.error;
+      return;
+    }
+    if (st) st.textContent = '✓ ' + t('channels.synced', { n: r.imported || 0 });
+    setFb('ok', t('channels.synced', { n: r.imported || 0 }));
+  } catch (e) {
+    if (st) st.textContent = '⚠ ' + t('common.error');
+  }
+}
+
 async function loadDuckdnsSettings() {
   try {
     const r = await authFetch('/api/duckdns/config');
@@ -5273,16 +6342,19 @@ function renderCameraFlags(flags) {
   const el = document.getElementById('cam-flags');
   if (!el) return;
   if (!flags || ((!flags.harvest || !flags.harvest.length) && (!flags.fruiting || !flags.fruiting.length))) {
-    el.innerHTML =
-      '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
+    el.innerHTML = '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
     return;
   }
   const row = (kind, f) => {
     const ago = f.flaggedAt ? new Date(f.flaggedAt).toLocaleString(loc()) : '—';
     const extra =
       kind === 'harvest'
-        ? (f.predictedHarvestAt ? esc(t('cam.predicted')) + ': ' + new Date(f.predictedHarvestAt).toLocaleString(loc()) : '')
-        : (f.peakScore != null ? esc(t('cam.peakScore')) + ': ' + Number(f.peakScore).toFixed(2) : '');
+        ? f.predictedHarvestAt
+          ? esc(t('cam.predicted')) + ': ' + new Date(f.predictedHarvestAt).toLocaleString(loc())
+          : ''
+        : f.peakScore != null
+          ? esc(t('cam.peakScore')) + ': ' + Number(f.peakScore).toFixed(2)
+          : '';
     return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--c-border)">
         <div style="flex:1;min-width:180px">
           <div><b>${esc(f.bagId)}</b> <span style="color:var(--c-text-muted)">${esc(f.batchId || '')}</span></div>
@@ -5294,12 +6366,16 @@ function renderCameraFlags(flags) {
   let html = '';
   if (flags.harvest && flags.harvest.length) {
     html +=
-      '<div style="font-weight:600;margin-bottom:4px">' + esc(t('cam.harvestFlags')) + '</div>' +
+      '<div style="font-weight:600;margin-bottom:4px">' +
+      esc(t('cam.harvestFlags')) +
+      '</div>' +
       flags.harvest.map((f) => row('harvest', f)).join('');
   }
   if (flags.fruiting && flags.fruiting.length) {
     html +=
-      '<div style="font-weight:600;margin:10px 0 4px">' + esc(t('cam.fruitingFlags')) + '</div>' +
+      '<div style="font-weight:600;margin:10px 0 4px">' +
+      esc(t('cam.fruitingFlags')) +
+      '</div>' +
       flags.fruiting.map((f) => row('fruiting', f)).join('');
   }
   el.innerHTML = html;
@@ -5322,8 +6398,7 @@ function renderCameraRecent(rows) {
   const el = document.getElementById('cam-recent');
   if (!el) return;
   if (!rows.length) {
-    el.innerHTML =
-      '<div style="color:var(--c-text-muted)">' + esc(t('cam.noRecent')) + '</div>';
+    el.innerHTML = '<div style="color:var(--c-text-muted)">' + esc(t('cam.noRecent')) + '</div>';
     return;
   }
   const head = `<thead><tr>
@@ -5398,7 +6473,7 @@ async function saveCameraEdit() {
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      document.getElementById('cam-edit-status').textContent = err.error || ('HTTP ' + r.status);
+      document.getElementById('cam-edit-status').textContent = err.error || 'HTTP ' + r.status;
       return;
     }
     closeCameraEdit();
@@ -5526,8 +6601,9 @@ function initCameraPxCalib() {
     if (inp) {
       inp.value = ratio.toFixed(3);
       inp.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      document.getElementById('cam-calib-status').textContent =
-        t('cam.calibratedFromImage', { ratio: ratio.toFixed(3) });
+      document.getElementById('cam-calib-status').textContent = t('cam.calibratedFromImage', {
+        ratio: ratio.toFixed(3)
+      });
     }
   });
 }
@@ -6319,7 +7395,7 @@ function estBagsFromMat(mat, stockKg) {
       isGrain: true
     };
   }
-  const dryPerBag = c.bagKg * (1 - c.rhPct / 100); // dry matter per bag
+  const dryPerBag = mtDryKg(c.bagKg, c.rhPct); // dry matter per bag
   let matPerBag = 0;
   if (mat === 'hardwood') matPerBag = dryPerBag * (c.hwPct / 100);
   if (mat === 'wheatbran') matPerBag = dryPerBag * (c.wbPct / 100);
@@ -6431,7 +7507,7 @@ function renderThresholds() {
         <input type="text" inputmode="decimal" value="${esc(c.grainRhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainRhPct',this.value)" /></div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
-      With these settings: 1 × ${c.bagKg}kg block uses ~${(c.bagKg * (1 - c.rhPct / 100) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(c.bagKg * (1 - c.rhPct / 100) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(c.grainBagKg * (1 - c.grainRhPct / 100)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
+      With these settings: 1 × ${c.bagKg}kg block uses ~${(mtDryKg(c.bagKg, c.rhPct) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(mtDryKg(c.bagKg, c.rhPct) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(mtDryKg(c.grainBagKg, c.grainRhPct)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
     </div>
   </div>`;
 
@@ -7458,8 +8534,7 @@ function renderAssets() {
   // Table
   const body = document.getElementById('assets-body');
   if (!rows.length) {
-    body.innerHTML =
-      '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
     return;
   }
   body.innerHTML = rows
@@ -7854,8 +8929,9 @@ function goCreateStrain() {
 function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
+  _msFillRecCopyOptions(parseInt((document.getElementById('ms-edit-id') || {}).value, 10) || null);
   if (!mushroomStrains.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">' + t('strains.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
   }
   // Count usage
@@ -7870,12 +8946,19 @@ function renderStrains() {
       if (bc > 0) usageParts.push(bc + ' ' + t('strains.batches'));
       if (cc > 0) usageParts.push(cc + ' ' + t('strains.cultures'));
       const usageText = usageParts.join(', ') || '—';
+      // Quick-create straight from this Sorte. "+ Charge" needs a recipe;
+      // "+ Labor" only needs the Sorte (cultures carry no substrate recipe).
+      const chargeBtn = ms.recBatchType
+        ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
+        : '';
       return `<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td style="font-size:12px;color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${msRecipeSummary(ms)}</td>
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
+        ${chargeBtn}<button class="btn btn-sm" onclick="msQuickLabor(${ms.id})" style="padding:2px 7px" title="${t('strains.addLaborHint')}">${t('strains.addLabor')}</button>
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('assets.editBtn')}</button>
         <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse ? 'disabled title="' + t('strains.deleteProtected') + '"' : ''} style="padding:2px 7px">&#x2715;</button>
       </td>
@@ -7897,7 +8980,22 @@ function saveMStrain() {
     alert(t('strains.kuerzelLength'));
     return;
   }
-  const payload = { name, kuerzel, description: desc };
+  const rec = _msReadRecipe();
+  const payload = { name, kuerzel, description: desc, ...rec };
+  const num = (v, d) => (isFinite(parseFloat(v)) ? parseFloat(v) : d);
+  const recLocal = {
+    recBatchType: rec.recBatchType || '',
+    recSubstrate: rec.recSubstrate || 'holzkleie',
+    recBagKg: num(rec.recBagKg, 0),
+    recRhPct: num(rec.recRhPct, 0),
+    recHardwoodPct: num(rec.recHardwoodPct, 0),
+    recWheatbranPct: num(rec.recWheatbranPct, 0),
+    recCoirPct: num(rec.recCoirPct, 0),
+    recGypsum: !!rec.recGypsum,
+    recGrainKg: num(rec.recGrainKg, 0),
+    recGrainRhPct: num(rec.recGrainRhPct, 52),
+    recIncDays: num(rec.recIncDays, 14)
+  };
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
     if (r && r.error) {
@@ -7905,13 +9003,21 @@ function saveMStrain() {
       return;
     }
     if (!editId && r && r.id) {
-      mushroomStrains.push({ id: r.id, name, kuerzel, description: desc, created: new Date().toISOString() });
+      mushroomStrains.push({
+        id: r.id,
+        name,
+        kuerzel,
+        description: desc,
+        created: new Date().toISOString(),
+        ...recLocal
+      });
     } else if (editId) {
       const ms = mushroomStrains.find((x) => x.id === parseInt(editId));
       if (ms) {
         ms.name = name;
         ms.kuerzel = kuerzel;
         ms.description = desc;
+        Object.assign(ms, recLocal);
       }
     }
     mushroomStrains.sort((a, b) => a.name.localeCompare(b.name));
@@ -7928,6 +9034,24 @@ function editMStrain(id) {
   document.getElementById('ms-kuerzel').value = ms.kuerzel;
   document.getElementById('ms-desc').value = ms.description || '';
   document.getElementById('ms-edit-id').value = id;
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', ms.recBatchType || '');
+  sv('ms-rec-substrate', ms.recSubstrate || 'holzkleie');
+  sv('ms-rec-bagkg', ms.recBagKg || 0);
+  sv('ms-rec-rh', ms.recRhPct || 0);
+  sv('ms-rec-hw', ms.recHardwoodPct || 0);
+  sv('ms-rec-wb', ms.recWheatbranPct || 0);
+  sv('ms-rec-coir', ms.recCoirPct || 0);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = !!ms.recGypsum;
+  sv('ms-rec-grainkg', ms.recGrainKg || 0);
+  sv('ms-rec-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+  sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
+  msRecTypeChange();
+  _msFillRecCopyOptions(id);
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
   document.getElementById('ms-cancel-btn').style.display = '';
   document.getElementById('ms-name').focus();
@@ -7941,6 +9065,24 @@ function cancelMStrain() {
   document.getElementById('ms-save-btn').setAttribute('data-i18n', 'strains.save');
   document.getElementById('ms-save-btn').textContent = t('strains.save');
   document.getElementById('ms-cancel-btn').style.display = 'none';
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', '');
+  sv('ms-rec-substrate', 'holzkleie');
+  sv('ms-rec-bagkg', 0);
+  sv('ms-rec-rh', 0);
+  sv('ms-rec-hw', 75);
+  sv('ms-rec-wb', 25);
+  sv('ms-rec-coir', 100);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = false;
+  sv('ms-rec-grainkg', 0);
+  sv('ms-rec-grainrh', 52);
+  sv('ms-rec-days', 14);
+  msRecTypeChange();
+  _msFillRecCopyOptions(null);
 }
 
 function deleteMStrain(id) {
@@ -7957,6 +9099,383 @@ function deleteMStrain(id) {
       renderStrains();
     });
   });
+}
+
+// ── Sorte production recipe (rec_*) — editor toggle + per-bag need preview ───
+function _msReadRecipe() {
+  const v = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value : '';
+  };
+  const chk = (id) => {
+    const el = document.getElementById(id);
+    return el && el.checked ? 1 : 0;
+  };
+  return {
+    recBatchType: v('ms-rec-type') || '',
+    recSubstrate: v('ms-rec-substrate') || 'holzkleie',
+    recBagKg: v('ms-rec-bagkg'),
+    recRhPct: v('ms-rec-rh'),
+    recHardwoodPct: v('ms-rec-hw'),
+    recWheatbranPct: v('ms-rec-wb'),
+    recCoirPct: v('ms-rec-coir'),
+    recGypsum: chk('ms-rec-gyp'),
+    recGrainKg: v('ms-rec-grainkg'),
+    recGrainRhPct: v('ms-rec-grainrh'),
+    recIncDays: v('ms-rec-days')
+  };
+}
+// Map a recipe (rec_*) onto the product spec shape so we can reuse the shared
+// _ohProdNeedCompute charge math (same hydration formula as the Charge form).
+function _msRecipeToProd(rec) {
+  return {
+    prodType: rec.recBatchType || 'buy',
+    prodSubstrate: rec.recSubstrate,
+    prodBagKg: rec.recBagKg,
+    prodRhPct: rec.recRhPct,
+    prodHardwoodPct: rec.recHardwoodPct,
+    prodWheatbranPct: rec.recWheatbranPct,
+    prodCoirPct: rec.recCoirPct,
+    prodGypsum: rec.recGypsum,
+    prodGrainKg: rec.recGrainKg,
+    prodGrainRhPct: rec.recGrainRhPct
+  };
+}
+function _msStrainToRecipe(ms) {
+  return {
+    recBatchType: ms.recBatchType,
+    recSubstrate: ms.recSubstrate,
+    recBagKg: ms.recBagKg,
+    recRhPct: ms.recRhPct,
+    recHardwoodPct: ms.recHardwoodPct,
+    recWheatbranPct: ms.recWheatbranPct,
+    recCoirPct: ms.recCoirPct,
+    recGypsum: ms.recGypsum,
+    recGrainKg: ms.recGrainKg,
+    recGrainRhPct: ms.recGrainRhPct
+  };
+}
+const _MS_MAT_KEY = {
+  grain: 'inv.grain',
+  hardwood: 'inv.hardwood',
+  wheatbran: 'inv.wheatBran',
+  gypsum: 'inv.gypsum',
+  coir: 'inv.coir'
+};
+function _msNeedParts(rec, mult) {
+  const fmt = (n) => (Math.round(n * 1000) / 1000).toString();
+  const need = _ohProdNeedCompute(_msRecipeToProd(rec));
+  const m = mult || 1;
+  return Object.keys(need)
+    .filter((k) => need[k] > 0)
+    .map((k) => `${esc(t(_MS_MAT_KEY[k] || k))} ${fmt(need[k] * m)} kg`);
+}
+function msRecTypeChange() {
+  const type = (document.getElementById('ms-rec-type') || {}).value || '';
+  const sub = (document.getElementById('ms-rec-substrate') || {}).value || 'holzkleie';
+  const set = (id, disp) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = disp;
+  };
+  set('ms-rec-subgroup', type === 'block' || type === 'allinone' ? 'block' : 'none');
+  set('ms-rec-graingroup', type === 'grain' || type === 'allinone' ? 'block' : 'none');
+  set('ms-rec-holzgroup', sub === 'holzkleie' ? 'grid' : 'none');
+  set('ms-rec-coirgroup', sub === 'cvg' ? 'grid' : 'none');
+  set('ms-rec-daysrow', type ? 'block' : 'none');
+  msRecNeed();
+}
+function msRecNeed() {
+  const el = document.getElementById('ms-rec-need');
+  if (!el) return;
+  const rec = _msReadRecipe();
+  if (!rec.recBatchType) {
+    el.textContent = '';
+    return;
+  }
+  const parts = _msNeedParts(rec, 1);
+  el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+}
+// Populate the "copy recipe from another Sorte" dropdown with Sorten that have a
+// recipe (excluding the one being edited).
+function _msFillRecCopyOptions(excludeId) {
+  const sel = document.getElementById('ms-rec-copy');
+  if (!sel) return;
+  const list = mushroomStrains
+    .filter((x) => x.recBatchType && x.id !== excludeId)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  sel.innerHTML =
+    '<option value="">' +
+    esc(t('strains.recCopyNone')) +
+    '</option>' +
+    list.map((x) => `<option value="${x.id}">${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`).join('');
+  sel.value = '';
+}
+// Copy another Sorte's recipe into the form (most Sorten share the same recipe).
+function msRecCopyFrom() {
+  const sel = document.getElementById('ms-rec-copy');
+  if (!sel || !sel.value) return;
+  const src = mushroomStrains.find((x) => x.id === parseInt(sel.value, 10));
+  if (!src) return;
+  const sv = (eid, val) => {
+    const el = document.getElementById(eid);
+    if (el) el.value = val;
+  };
+  sv('ms-rec-type', src.recBatchType || '');
+  sv('ms-rec-substrate', src.recSubstrate || 'holzkleie');
+  sv('ms-rec-bagkg', src.recBagKg || 0);
+  sv('ms-rec-rh', src.recRhPct || 0);
+  sv('ms-rec-hw', src.recHardwoodPct || 0);
+  sv('ms-rec-wb', src.recWheatbranPct || 0);
+  sv('ms-rec-coir', src.recCoirPct || 0);
+  const gyp = document.getElementById('ms-rec-gyp');
+  if (gyp) gyp.checked = !!src.recGypsum;
+  sv('ms-rec-grainkg', src.recGrainKg || 0);
+  sv('ms-rec-grainrh', src.recGrainRhPct != null ? src.recGrainRhPct : 52);
+  sv('ms-rec-days', src.recIncDays != null ? src.recIncDays : 14);
+  sel.value = '';
+  msRecTypeChange();
+}
+function msRecipeSummary(ms) {
+  const type = ms.recBatchType || '';
+  if (!type) return '<span style="color:var(--c-text-muted)">—</span>';
+  const typeLabel =
+    { block: t('strains.recBlock'), allinone: t('strains.recAllinone'), grain: t('strains.recGrain') }[type] || type;
+  const parts = [esc(typeLabel)];
+  if (type === 'block' || type === 'allinone') {
+    if ((ms.recSubstrate || 'holzkleie') === 'cvg') parts.push(esc(t('orders.sub.cvg')));
+    else parts.push('HW' + (ms.recHardwoodPct || 0) + '/WB' + (ms.recWheatbranPct || 0));
+    if (ms.recBagKg) parts.push((ms.recBagKg || 0) + ' kg');
+  }
+  if ((type === 'allinone' || type === 'grain') && ms.recGrainKg) parts.push('Grain ' + ms.recGrainKg + ' kg');
+  return '<span style="font-size:11px">' + parts.join(' · ') + '</span>';
+}
+function msRecipeSummaryText(ms) {
+  // Plain-text variant of msRecipeSummary for the quick-create modal subtitle.
+  const div = document.createElement('div');
+  div.innerHTML = msRecipeSummary(ms);
+  return div.textContent || '';
+}
+
+// ── Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe ──
+let _msQuickCtx = null;
+function msQuickCharge(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  if (!ms.recBatchType) {
+    alert(t('msq.noRecipe'));
+    return;
+  }
+  msQuickOpen('charge', ms);
+}
+function msQuickLabor(id) {
+  const ms = mushroomStrains.find((x) => x.id === id);
+  if (!ms) return;
+  msQuickOpen('labor', ms);
+}
+// Dashboard entry points: open the dialog with a Sorte dropdown (none preselected),
+// so "Neue Charge" / "Laborarbeit" go straight to the create dialog instead of the
+// Pilzsorten list. The recipe still comes from whichever Sorte is then chosen.
+function msQuickChargeNew() {
+  msQuickOpen('charge', null);
+}
+function msQuickLaborNew() {
+  msQuickOpen('labor', null);
+}
+// Shared opener. ms === null → show the Sorte picker (charge mode lists only Sorten
+// that have a recipe, since a Charge needs one).
+function msQuickOpen(mode, ms) {
+  _msQuickCtx = { mode, ms: ms || null };
+  const wrap = document.getElementById('ms-q-sorte-wrap');
+  const sel = document.getElementById('ms-q-sorte');
+  if (!ms && wrap && sel) {
+    let list = mushroomStrains.slice();
+    if (mode === 'charge') list = list.filter((x) => x.recBatchType);
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    sel.innerHTML =
+      '<option value="">' +
+      esc(t('msq.pickSortePrompt')) +
+      '</option>' +
+      list.map((x) => `<option value="${x.id}">${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`).join('');
+    sel.value = '';
+    wrap.style.display = '';
+  } else if (wrap) {
+    wrap.style.display = 'none';
+  }
+  // qty/strain reset only on open (not when the Sorte changes).
+  const qtyEl = document.getElementById('ms-q-qty');
+  if (qtyEl) qtyEl.value = 1;
+  const strainEl = document.getElementById('ms-q-strain');
+  if (strainEl) strainEl.value = '';
+  msQuickRender();
+  document.getElementById('ms-quick-modal').style.display = 'flex';
+}
+// Render the modal for the current ctx. Safe when no Sorte is chosen yet (picker
+// mode): shows a prompt and disables "Anlegen" until one is selected.
+function msQuickRender() {
+  if (!_msQuickCtx) return;
+  const mode = _msQuickCtx.mode;
+  const ms = _msQuickCtx.ms;
+  const titleEl = document.getElementById('ms-q-title');
+  const subEl = document.getElementById('ms-q-sub');
+  const goEl = document.getElementById('ms-q-go');
+  if (titleEl) titleEl.textContent = mode === 'charge' ? t('msq.chargeTitle') : t('msq.laborTitle');
+  const lt = document.getElementById('ms-q-labtype-wrap');
+  if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
+  const dw = document.getElementById('ms-q-days-wrap');
+  if (dw) dw.style.display = mode === 'charge' ? '' : 'none';
+  if (!ms) {
+    if (subEl) subEl.textContent = t('msq.pickSortePrompt');
+    if (goEl) goEl.disabled = true;
+    const prev = document.getElementById('ms-q-preview');
+    if (prev) prev.textContent = '';
+    const cw = document.getElementById('ms-q-culture-wrap');
+    if (cw) cw.style.display = 'none';
+    return;
+  }
+  if (goEl) goEl.disabled = false;
+  if (subEl)
+    subEl.textContent =
+      ms.name + (ms.kuerzel ? ' (' + ms.kuerzel + ')' : '') + (mode === 'charge' ? ' — ' + msRecipeSummaryText(ms) : '');
+  if (mode === 'charge') {
+    const d = document.getElementById('ms-q-days');
+    if (d) d.value = ms.recIncDays || 14;
+  }
+  msQuickPreview();
+  msQuickFillCulture();
+}
+function msQuickSorteChanged() {
+  if (!_msQuickCtx) return;
+  const id = parseInt(document.getElementById('ms-q-sorte').value, 10);
+  _msQuickCtx.ms = mushroomStrains.find((x) => x.id === id) || null;
+  msQuickRender();
+}
+function msQuickClose() {
+  _msQuickCtx = null;
+  const m = document.getElementById('ms-quick-modal');
+  if (m) m.style.display = 'none';
+}
+function msQuickPreview() {
+  const el = document.getElementById('ms-q-preview');
+  if (!el) return;
+  if (!_msQuickCtx || !_msQuickCtx.ms) {
+    el.textContent = '';
+    return;
+  }
+  const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+  if (_msQuickCtx.mode === 'charge') {
+    const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
+    el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+  } else {
+    el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
+  }
+}
+// Populate the modal's source-culture select, reusing the same culture filter the
+// old forms use (none for a new MC isolation). Re-runs when the lab type changes.
+function msQuickFillCulture() {
+  const wrap = document.getElementById('ms-q-culture-wrap');
+  const sel = document.getElementById('ms-q-culture');
+  if (!wrap || !sel || !_msQuickCtx || !_msQuickCtx.ms) {
+    if (wrap) wrap.style.display = 'none';
+    return;
+  }
+  let types;
+  if (_msQuickCtx.mode === 'charge') {
+    types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC'] : ['PD', 'LC', 'G2G', 'GS'];
+  } else {
+    const lt = document.getElementById('ms-q-labtype').value;
+    types = lt === 'PD' ? ['MC', 'PD', 'LC'] : lt === 'LC' ? ['MC', 'PD'] : null; // MC = new isolation
+  }
+  if (!types) {
+    sel.value = '';
+    wrap.style.display = 'none';
+    return;
+  }
+  fillCultureSelect('ms-q-culture', types);
+  wrap.style.display = '';
+}
+function msQuickConfirm() {
+  if (!_msQuickCtx) return;
+  if (!_msQuickCtx.ms) {
+    alert(t('msq.pickSortePrompt'));
+    return;
+  }
+  const ms = _msQuickCtx.ms;
+  const mode = _msQuickCtx.mode;
+  const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+  if (qty < 1) {
+    alert(t('batch.fillQty'));
+    return;
+  }
+  const strainText = (document.getElementById('ms-q-strain').value || '').trim();
+  const setv = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  const setchk = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
+  const sourceCulture =
+    (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || '';
+  if (mode === 'labor') {
+    setv('lw-type', document.getElementById('ms-q-labtype').value || 'MC');
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', strainText);
+    setv('lw-qty', qty);
+    setv('lw-source', '');
+    setv('lw-notes', '');
+    msQuickClose();
+    go('lab', 'n-lab');
+    openStab('lab', 'work'); // populates lw-parent via lwUpdate()
+    const parent = document.getElementById('lw-parent');
+    if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
+    logLabWork();
+    return;
+  }
+  // Charge: prefill the existing Charge form from the recipe and reuse its
+  // create logic (validation, inventory deduction, zone picker, barcodes).
+  const days = parseInt(document.getElementById('ms-q-days').value) || ms.recIncDays || 14;
+  if (ms.recBatchType === 'grain') {
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', strainText);
+    if (typeof gsResetLines === 'function') gsResetLines();
+    const row = document.querySelector('.gs-wline');
+    if (row) {
+      const kgEl = row.querySelector('.gs-line-kg');
+      const qtyEl = row.querySelector('.gs-line-qty');
+      if (kgEl) kgEl.value = ms.recGrainKg || 1;
+      if (qtyEl) qtyEl.value = qty;
+    }
+    setv('gs-days', days);
+    setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+    fillCultureSelect('gs-culture', ['PD', 'LC']);
+    const gsc = document.getElementById('gs-culture');
+    if (gsc) gsc.value = sourceCulture;
+    setv('lw-notes', '');
+    msQuickClose();
+    createGrainBatch();
+    return;
+  }
+  // block / all-in-one
+  const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
+  setv('nb-strain-sel', ms.id);
+  setv('nb-strain-text', strainText);
+  setv('nb-qty', qty);
+  setv('nb-days', days);
+  setv('nb-weight', ms.recBagKg || 0);
+  setv('nb-rh', ms.recRhPct || 0);
+  setv('nb-hw', isCvg ? 0 : ms.recHardwoodPct || 0);
+  setv('nb-wb', isCvg ? 0 : ms.recWheatbranPct || 0);
+  setv('nb-coir', isCvg ? ms.recCoirPct || 100 : 0);
+  setv('nb-grainkg', ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0);
+  setv('nb-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+  setchk('nb-gyp', ms.recGypsum);
+  fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
+  const nbc = document.getElementById('nb-culture');
+  if (nbc) nbc.value = sourceCulture;
+  setv('nb-notes', '');
+  msQuickClose();
+  createBatch();
 }
 
 function nbStrainChanged() {
@@ -8359,7 +9878,7 @@ function gsPreview() {
   const grainRhInput = document.getElementById('gs-rh');
   const defaultGrainRh = getAvgComp().grainRhPct;
   const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
-  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const hydrationFactor = mtGrainFactor(grainRh);
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   document.getElementById('gs-prev').textContent = sp
@@ -8467,7 +9986,7 @@ function createGrainBatch() {
   // Deduct grain from inventory — apply hydration so only dry grain is subtracted
   // (wet bag weight includes water added during soaking, typically ~52% for wheat)
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  const hydrationFactor = grainRh > 0 ? 1 - grainRh / 100 : 1;
+  const hydrationFactor = mtGrainFactor(grainRh);
   const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
   inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
   invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
@@ -11046,9 +12565,10 @@ function newScanUuid() {
   // Fallback: 16 random bytes formatted as UUID v4. Not cryptographically
   // strong, but the only consumer is the unique index; sufficient for dedup.
   const r = Math.random;
-  const hex = (n) => Math.floor(r() * 16 ** n)
-    .toString(16)
-    .padStart(n, '0');
+  const hex = (n) =>
+    Math.floor(r() * 16 ** n)
+      .toString(16)
+      .padStart(n, '0');
   return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(r() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
 }
 
@@ -11587,11 +13107,11 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
@@ -11602,10 +13122,34 @@ async function loadUsersTab() {
 }
 
 function onUsersTableClick(e) {
+  const ship = e.target.closest('input[data-action="toggle-ship"]');
+  if (ship) {
+    const sid = parseInt(ship.dataset.userId, 10);
+    if (Number.isFinite(sid)) toggleUserShip(sid, ship.checked);
+    return;
+  }
   const btn = e.target.closest('button[data-action="delete-user"]');
   if (!btn) return;
   const id = parseInt(btn.dataset.userId, 10);
   if (Number.isFinite(id)) deleteUser(id);
+}
+// Grant/revoke the shipping capability for a non-admin user. Reloads to reflect
+// the server's truth (and revert the checkbox if the PATCH failed).
+async function toggleUserShip(id, canShip) {
+  try {
+    const r = await authFetch('/api/users/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canShip })
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+  loadUsersTab();
 }
 
 async function addUser() {
@@ -14439,6 +15983,41 @@ function initEventListeners() {
     go('strains', 'n-strains');
     renderStrains();
   });
+  // "Verkauf" group: four top-level entries that open the orders page at the
+  // matching view (the sub-tab bar is hidden; openStab still fires the render).
+  $('n-orders-inbox').addEventListener('click', () => {
+    go('orders', 'n-orders-inbox');
+    openStab('orders', 'inbox');
+  });
+  $('n-orders-demand').addEventListener('click', () => {
+    go('orders', 'n-orders-demand');
+    openStab('orders', 'tomake');
+  });
+  $('n-orders-mapping').addEventListener('click', () => {
+    go('orders', 'n-orders-mapping');
+    openStab('orders', 'mapping');
+  });
+  $('n-orders-customers').addEventListener('click', () => {
+    go('orders', 'n-orders-customers');
+    openStab('orders', 'customers');
+  });
+  $('n-orders-versand').addEventListener('click', () => {
+    go('orders', 'n-orders-versand');
+    openStab('orders', 'versand');
+  });
+  $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
+  $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
+  $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
+  $('st-orders-customers').addEventListener('click', () => openStab('orders', 'customers'));
+  $('st-orders-versand').addEventListener('click', () => openStab('orders', 'versand'));
+  $('p-orders').addEventListener('click', ordersActionHandler);
+  const _ohCsv = $('orders-csv-file');
+  if (_ohCsv)
+    _ohCsv.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) _ordersImportCsv(f);
+      e.target.value = '';
+    });
   $('btn-add-zone').addEventListener('click', addZone);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
@@ -14549,14 +16128,8 @@ function initEventListeners() {
     if (!el) return;
     goToBatch(el.dataset.batch);
   });
-  $('dash-act-newbatch').addEventListener('click', () => {
-    go('batch', 'n-batch');
-    openStab('batch', 'new');
-  });
-  $('dash-act-labwork').addEventListener('click', () => {
-    go('lab', 'n-lab');
-    openStab('lab', 'work');
-  });
+  $('dash-act-newbatch').addEventListener('click', () => msQuickChargeNew());
+  $('dash-act-labwork').addEventListener('click', () => msQuickLaborNew());
   $('dash-act-harvest').addEventListener('click', () => {
     const card = document.getElementById('dash-harvest-tasks-card');
     if (!card || card.style.display === 'none') {
@@ -14602,9 +16175,7 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
-  $('st-batch-new').addEventListener('click', () => {
-    openStab('batch', 'new');
-  });
+  $('st-batch-new').addEventListener('click', () => msQuickChargeNew());
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });
@@ -14642,9 +16213,7 @@ function initEventListeners() {
   $('st-lab-cultures').addEventListener('click', () => {
     openStab('lab', 'cultures');
   });
-  $('st-lab-work').addEventListener('click', () => {
-    openStab('lab', 'work');
-  });
+  $('st-lab-work').addEventListener('click', () => msQuickLaborNew());
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
   });
@@ -14846,6 +16415,27 @@ function initEventListeners() {
     openStab('settings', 'printer');
     renderPrinterSettings();
   });
+  $('st-settings-versand').addEventListener('click', () => {
+    openStab('settings', 'versand');
+    loadShipSettings();
+  });
+  $('versand-save-btn').addEventListener('click', saveShipSettings);
+  $('versand-test-btn').addEventListener('click', testShipConnection);
+  $('st-settings-channels').addEventListener('click', () => {
+    openStab('settings', 'channels');
+    loadChannelsSettings();
+  });
+  $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
+  $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
+  $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));
+  $('ebay-save-btn').addEventListener('click', () => saveChannel('ebay'));
+  $('ebay-connect-btn').addEventListener('click', () => connectChannel('ebay'));
+  $('ebay-test-btn').addEventListener('click', () => testChannel('ebay'));
+  $('ebay-sync-btn').addEventListener('click', () => syncChannel('ebay'));
+  $('etsy-save-btn').addEventListener('click', () => saveChannel('etsy'));
+  $('etsy-connect-btn').addEventListener('click', () => connectChannel('etsy'));
+  $('etsy-test-btn').addEventListener('click', () => testChannel('etsy'));
+  $('etsy-sync-btn').addEventListener('click', () => syncChannel('etsy'));
   $('printer-save-btn').addEventListener('click', savePrinterSettings);
   $('printer-test-btn').addEventListener('click', testPrintBridge);
   $('printer-refresh-btn').addEventListener('click', () => {
@@ -14995,8 +16585,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (actionParam === 'scan') {
           if (typeof openCamScan === 'function') openCamScan();
         } else if (actionParam === 'newbatch') {
-          if (typeof go === 'function') go('batch', 'n-batch');
-          if (typeof openStab === 'function') openStab('batch', 'new');
+          // Old New-batch form is hidden; open the Sorte-driven create dialog directly.
+          if (typeof msQuickChargeNew === 'function') msQuickChargeNew();
         } else if (actionParam === 'dash') {
           if (typeof go === 'function') go('dash', 'n-dash');
         }
