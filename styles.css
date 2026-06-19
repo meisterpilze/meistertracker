@@ -1315,6 +1315,120 @@ body.has-worktree-banner .mobile-topbar {
   display: block;
 }
 
+/* ═══ ORDER HUB ═════════════════════════════════════════════════ */
+.oh-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-amber-light);
+  border: 1px solid var(--c-amber-border);
+  color: var(--c-amber-dark);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.oh-ch {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.oh-ch-wix {
+  background: var(--c-blue-light);
+  color: var(--c-blue-dark);
+}
+.oh-ch-etsy {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.oh-ch-ebay {
+  background: var(--c-indigo-light);
+  color: var(--c-indigo-dark);
+}
+.oh-ch-manual {
+  background: var(--c-border-light);
+  color: var(--c-text-sec);
+}
+.oh-st {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+.oh-st-new {
+  background: var(--c-blue-light);
+  color: var(--c-blue-dark);
+}
+.oh-st-in_production {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.oh-st-ready {
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+}
+.oh-st-shipped {
+  background: var(--c-border-light);
+  color: var(--c-text-muted);
+}
+.oh-st-cancelled {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
+.oh-fchip {
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--c-text-sec);
+}
+.oh-fchip.active {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+}
+.oh-manual {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.oh-maprow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.oh-maprow:last-child {
+  border-bottom: none;
+}
+.oh-warn {
+  color: var(--c-amber-dark);
+  cursor: help;
+}
+.oh-comp-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 1fr 0.8fr 0.6fr auto;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.oh-comp-row input,
+.oh-comp-row select {
+  font-size: 12px;
+}
+
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
   font-size: 12px;

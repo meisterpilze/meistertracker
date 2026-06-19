@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
+const ship = require('./shipping.js');
+const channels = require('./channels.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
@@ -641,10 +643,66 @@ function validateScanEntries(entries) {
   }
   return null;
 }
+// ── Sales-channel OAuth (eBay auth-code, Etsy PKCE) ──────────────────────────
+// The login round-trip must hit the public callback registered with the provider
+// (https://meistertracker.com/api/channels/<ch>/oauth/callback), so it only
+// completes on prod or a tunnel that serves that host. PUBLIC_BASE_URL lets a
+// tunnel override the host. State is held in memory for the brief authorize→
+// callback window — a server restart mid-login just means clicking "Verbinden" again.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://meistertracker.com').replace(/\/+$/, '');
+const _channelOAuth = new Map(); // state -> { channel, codeVerifier, created }
+// Order ids with a label purchase currently in flight — blocks a concurrent second
+// buy (double-click / retry / replay) from billing the owner twice for one order.
+const _labelBuysInFlight = new Set();
+function _channelCallbackUrl(channel) {
+  return PUBLIC_BASE_URL + '/api/channels/' + channel + '/oauth/callback';
+}
+function _oauthGc() {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  for (const [k, v] of _channelOAuth) if (v.created < cutoff) _channelOAuth.delete(k);
+}
+// Refresh a channel's OAuth access token if it's within 2 min of expiry, persist the
+// new token, and return the fresh config + provider. No-op for API-key channels (Wix).
+async function withFreshChannelToken(channel) {
+  let cfg = db.getChannelConfig(database, channel);
+  const prov = channels.getChannelProvider(channel);
+  // Treat a missing/unparseable expiry as "needs refresh" so a stale token is never
+  // used — a NaN must not silently skip the refresh (which would 401 the provider call).
+  const exp = Date.parse(cfg.tokenExpires || '');
+  const needsRefresh = isNaN(exp) || exp - Date.now() < 120000;
+  if (typeof prov.refreshAccessToken === 'function' && cfg.refreshToken && needsRefresh) {
+    const tok = await prov.refreshAccessToken(cfg);
+    db.updateChannelConfig(database, channel, tok);
+    cfg = db.getChannelConfig(database, channel);
+  }
+  return { cfg, prov };
+}
+function _oauthResultHtml(channel, ok, msg) {
+  const label = channel === 'etsy' ? 'Etsy' : 'eBay';
+  const icon = ok ? '✓' : '⚠';
+  const color = ok ? '#16a34a' : '#dc2626';
+  const safe = String(msg).replace(
+    /[<>&"']/g,
+    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c]
+  );
+  const redirect = ok ? '<script>setTimeout(function(){location.href="/"},2500)</script>' : '';
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label}</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f14;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:24px"><div style="font-size:48px;color:${color}">${icon}</div><p style="font-size:16px;line-height:1.5">${safe}</p><p style="margin-top:18px"><a href="/" style="color:#60a5fa">Zurück zur App</a></p>${redirect}</div></body></html>`;
+}
 // Admin-only guard — returns true if blocked (response already sent)
 function requireAdmin(req, res) {
   if (!req.authUser || req.authUser.role !== 'admin') {
     jsonErr(res, 403, 'admin required');
+    return true;
+  }
+  return false;
+}
+// Shipping guard — billable label purchase + customer-PII ship routes. Admins
+// always qualify; other users need the per-user can_ship capability (granted by
+// an admin). Prevents any logged-in non-admin from spending the owner's postage
+// balance or harvesting customer addresses.
+function requireShipping(req, res) {
+  if (!req.authUser || (req.authUser.role !== 'admin' && req.authUser.can_ship !== 1)) {
+    jsonErr(res, 403, 'shipping permission required');
     return true;
   }
   return false;
@@ -4901,8 +4959,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // handler verifies GITHUB_WEBHOOK_SECRET + signature and refuses in worktree
   // mode, so it is safe to exempt here.
   const isWebhook = req.method === 'POST' && url === '/api/webhook/github';
+  // The eBay/Etsy OAuth callback arrives as a cross-site top-level redirect from the
+  // provider, so the SameSite=Strict session cookie isn't sent and it can't pass the
+  // session gate. Its handler authenticates via the one-time `state` we minted in the
+  // admin-only /oauth/start, so it's safe to exempt here like the GitHub webhook.
+  const isChannelOAuthCb = req.method === 'GET' && /^\/api\/channels\/(etsy|ebay)\/oauth\/callback(?:\?|$)/.test(url);
 
-  if (!isLoginPage && !isPublicAsset && !isWebhook) {
+  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -4988,6 +5051,32 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     log('info', 'User deleted', { actor: req.authUser.username, deletedUserId: userId });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // PATCH /api/users/:id — admin sets per-user capabilities (currently can_ship)
+  if (url.match(/^\/api\/users\/\d+$/) && req.method === 'PATCH') {
+    if (requireAdmin(req, res)) return;
+    const userId = parseInt(url.split('/').pop(), 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        if (data && data.canShip !== undefined) {
+          db.setUserCanShip(database, userId, !!data.canShip);
+          log('info', 'User shipping permission updated', {
+            actor: req.authUser.username,
+            userId,
+            canShip: !!data.canShip
+          });
+        }
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
 
@@ -5749,8 +5838,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             jsonErr(res, 400, 'deltas entries must be objects');
             return;
           }
-          if (!['hardwood', 'wheatbran', 'gypsum', 'grain'].includes(d.mat)) {
-            jsonErr(res, 400, 'deltas[].mat must be hardwood/wheatbran/gypsum/grain');
+          if (!['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'].includes(d.mat)) {
+            jsonErr(res, 400, 'deltas[].mat must be hardwood/wheatbran/gypsum/grain/coir');
             return;
           }
           if (typeof d.deltaKg !== 'number' || !Number.isFinite(d.deltaKg)) {
@@ -6403,6 +6492,271 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Order hub (Phase 0): orders, products, demand, customers ──────────────
+  // Auth is enforced by the global gate above (req.authUser is always set here).
+  // Operational reads/writes = any authed user; catalog/mapping/merge = admin.
+
+  // Orders — list (?status= &channel= &limit=)
+  if (req.method === 'GET' && url === '/api/orders') {
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, {
+        items: db.listOrders(database, {
+          status: params.get('status') || undefined,
+          channel: params.get('channel') || undefined,
+          limit: parseInt(params.get('limit'), 10) || 200
+        })
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Orders — production-demand rollup (must precede /api/orders/:id)
+  if (req.method === 'GET' && url === '/api/orders/demand') {
+    try {
+      jsonOk(res, { items: db.computeProductionDemand(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Orders — manual / CSV import (single object, or {orders:[...]}, or [...])
+  if (req.method === 'POST' && url === '/api/orders/import') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const incoming = Array.isArray(data) ? data : Array.isArray(data && data.orders) ? data.orders : [data];
+        const ids = [];
+        for (const o of incoming) {
+          if (!o || !o.channel || o.channelOrderId == null) {
+            jsonErr(res, 400, 'each order needs channel + channelOrderId');
+            return;
+          }
+          ids.push(db.upsertOrder(database, o));
+        }
+        broadcastSSE(res);
+        jsonOk(res, { imported: ids.length, ids });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Orders — reserve demand against a batch ({batchId, allocations:[{orderItemId, qty}]})
+  if (req.method === 'POST' && url === '/api/orders/reserve') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.reserveDemand(database, { batchId: data.batchId || null, allocations: data.allocations || [] });
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Orders — detail / set status
+  const orderMatch = url.match(/^\/api\/orders\/(\d+)$/);
+  if (req.method === 'GET' && orderMatch) {
+    // Order detail carries customer name + email (PII) — gate like the ship routes.
+    if (requireShipping(req, res)) return;
+    try {
+      const o = db.getOrder(database, parseInt(orderMatch[1], 10));
+      if (!o) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, o);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && orderMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const allowed = ['new', 'in_production', 'ready', 'shipped', 'cancelled'];
+      if (!allowed.includes(data.status)) {
+        jsonErr(res, 400, 'invalid status');
+        return;
+      }
+      try {
+        const changed = db.setOrderStatus(database, parseInt(orderMatch[1], 10), data.status);
+        broadcastSSE(res);
+        jsonOk(res, { changed });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — unmapped queue (must precede /api/products/:id) + list
+  if (req.method === 'GET' && url === '/api/products/unmapped') {
+    try {
+      jsonOk(res, { items: db.listUnmappedItems(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/products') {
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, { items: db.listProducts(database, { activeOnly: params.get('active') === '1' }) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Products — create (admin)
+  if (req.method === 'POST' && url === '/api/products') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertProduct(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — map a channel listing → internal product (admin)
+  if (req.method === 'POST' && url === '/api/products/map') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['channel', 'productId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        db.mapListing(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Products — detail (authed) / update + delete (admin)
+  const productMatch = url.match(/^\/api\/products\/(\d+)$/);
+  if (req.method === 'GET' && productMatch) {
+    try {
+      const p = db.getProduct(database, parseInt(productMatch[1], 10));
+      if (!p) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, p);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && productMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const id = db.upsertProduct(database, { ...data, id: parseInt(productMatch[1], 10) });
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && productMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const deleted = db.deleteProduct(database, parseInt(productMatch[1], 10));
+      broadcastSSE(res);
+      jsonOk(res, { deleted });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Customers — list (admin or shipping) / merge two records (admin). Names,
+  // emails and spend are PII, so the list is gated like the other ship routes.
+  if (req.method === 'GET' && url === '/api/customers') {
+    if (requireShipping(req, res)) return;
+    try {
+      const params = new URL(req.url, 'http://x').searchParams;
+      jsonOk(res, { items: db.listCustomers(database, { limit: parseInt(params.get('limit'), 10) || 200 }) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/customers/merge') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['primaryId', 'secondaryId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        db.mergeCustomers(database, data.primaryId, data.secondaryId);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Tasks --
   if (req.method === 'POST' && req.url === '/api/tasks') {
     jsonBody(req, res, (e, data) => {
@@ -6859,6 +7213,477 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         safeErr(res, err);
       }
     });
+    return;
+  }
+
+  // -- Shipping (Versand / Phase 4) --
+  // Config (provider keys + defaults) is admin-only; the secret is masked on GET
+  // and preserved on PATCH when the field is left blank (mirrors DuckDNS).
+  if (req.method === 'GET' && req.url === '/api/ship/config') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const cfg = db.getShippingConfig(database);
+      jsonOk(res, {
+        provider: cfg.provider,
+        enabled: cfg.enabled,
+        mode: cfg.mode,
+        publicKey: cfg.publicKey,
+        hasSecret: !!cfg.secretKey,
+        senderAddressId: cfg.senderAddressId,
+        defaultMethod: cfg.defaultMethod,
+        defaultWeightG: cfg.defaultWeightG
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && req.url === '/api/ship/config') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        // Blank secret = keep the stored one (GET never reveals it).
+        if (data.secretKey === '' || data.secretKey == null) delete data.secretKey;
+        db.updateShippingConfig(database, data);
+        broadcastSSE(res);
+        const cfg = db.getShippingConfig(database);
+        jsonOk(res, {
+          provider: cfg.provider,
+          enabled: cfg.enabled,
+          mode: cfg.mode,
+          publicKey: cfg.publicKey,
+          hasSecret: !!cfg.secretKey,
+          defaultMethod: cfg.defaultMethod,
+          defaultWeightG: cfg.defaultWeightG
+        });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'GET' && req.url === '/api/ship/test') {
+    if (requireAdmin(req, res)) return;
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        if (!cfg.publicKey || !cfg.secretKey) {
+          jsonErr(res, 400, 'Keine API-Keys konfiguriert');
+          return;
+        }
+        const r = await ship.getProvider(cfg).testConnection(cfg);
+        jsonOk(res, r);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'connection failed');
+      }
+    })();
+    return;
+  }
+  // GET /api/ship/methods?country=DE&weight=1000
+  if (req.method === 'GET' && req.url.startsWith('/api/ship/methods')) {
+    if (requireShipping(req, res)) return;
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        if (!cfg.publicKey || !cfg.secretKey) {
+          jsonErr(res, 400, 'Versand nicht konfiguriert');
+          return;
+        }
+        const q = new URL(req.url, 'http://x').searchParams;
+        const toCountry = (q.get('country') || 'DE').toUpperCase();
+        const weightG = parseInt(q.get('weight') || '', 10) || undefined;
+        const methods = await ship.getProvider(cfg).listMethods(cfg, { toCountry, weightG });
+        jsonOk(res, { methods });
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'methods failed');
+      }
+    })();
+    return;
+  }
+  // POST /api/ship/label { orderId, methodId, weightG, address:{...} } — buys a label.
+  if (req.method === 'POST' && req.url === '/api/ship/label') {
+    if (requireShipping(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      (async () => {
+        try {
+          const cfg = db.getShippingConfig(database);
+          if (!cfg.publicKey || !cfg.secretKey) {
+            jsonErr(res, 400, 'Versand nicht konfiguriert');
+            return;
+          }
+          const live = cfg.mode === 'live';
+          const orderId = parseInt(data.orderId, 10);
+          if (!orderId) {
+            jsonErr(res, 400, 'orderId required');
+            return;
+          }
+          if (!data.methodId) {
+            jsonErr(res, 400, 'methodId required');
+            return;
+          }
+          // Idempotency: block a concurrent second buy for the same order so a
+          // double-click / retry / replay can't bill the owner twice.
+          if (_labelBuysInFlight.has(orderId)) {
+            jsonErr(res, 409, 'Label-Kauf läuft bereits für diese Bestellung');
+            return;
+          }
+          _labelBuysInFlight.add(orderId);
+          try {
+            if (data.address && typeof data.address === 'object') {
+              db.updateOrderShipAddress(database, orderId, data.address);
+            }
+            const order = db.getOrderForShipping(database, orderId);
+            if (!order) {
+              jsonErr(res, 404, 'order not found');
+              return;
+            }
+            // Idempotency across requests: if a real (billable) label already exists
+            // for this order, never buy a second one. _labelBuysInFlight only blocks
+            // truly concurrent requests; a later retry / replay / double-submit would
+            // otherwise bill the owner twice. (A test announce is not billable.)
+            if (live && db.getBilledShipment(database, orderId)) {
+              jsonErr(res, 409, 'Für diese Bestellung wurde bereits ein Label gekauft');
+              return;
+            }
+            // Reject non-positive / garbage weights before they reach the carrier.
+            const reqW = parseInt(data.weightG, 10);
+            const weightG =
+              (Number.isFinite(reqW) && reqW > 0 ? reqW : null) || order.shipWeightG || cfg.defaultWeightG || 1000;
+            // In test mode only ANNOUNCE the parcel (request_label:false) — no
+            // billable label is bought, so a misread "test" toggle never charges.
+            const result = await ship
+              .getProvider(cfg)
+              .buyLabel(cfg, { order, methodId: data.methodId, weightG, requestLabel: live });
+            const id = db.insertShipment(database, {
+              orderId,
+              provider: cfg.provider,
+              methodId: data.methodId,
+              ...result
+            });
+            // Push the Sendungsnummer back onto the order's sales channel (live only;
+            // an announced test parcel has no real tracking). Best-effort: a write-
+            // back failure never fails the (already-bought) label.
+            let channelPushed = false;
+            let pushError = null;
+            if (
+              live &&
+              ['wix', 'ebay', 'etsy'].includes(order.channel) &&
+              db.getChannelConfig(database, order.channel).enabled
+            ) {
+              try {
+                // enabled is checked above, so a disabled channel skips the token refresh.
+                const { cfg: chanCfg, prov } = await withFreshChannelToken(order.channel);
+                if (typeof prov.pushTracking === 'function') {
+                  const rawRow = database.prepare('SELECT raw_json FROM orders WHERE id = ?').get(orderId);
+                  const raw = rawRow && rawRow.raw_json ? JSON.parse(rawRow.raw_json) : null;
+                  await prov.pushTracking(chanCfg, {
+                    order,
+                    raw,
+                    trackingNumber: result.trackingNumber,
+                    trackingUrl: result.trackingUrl,
+                    carrier: result.carrier
+                  });
+                  channelPushed = true;
+                  db.updateShipmentStatus(database, id, { channelPushed: true });
+                }
+              } catch (e3) {
+                pushError = e3.message || 'tracking push failed';
+                try {
+                  db.updateShipmentStatus(database, id, { error: 'tracking push: ' + pushError });
+                } catch (e4) {
+                  /* ignore */
+                }
+              }
+            }
+            // A bought (live) label means the order is going out; a test announce does not.
+            if (live) {
+              try {
+                database
+                  .prepare("UPDATE orders SET status='shipped', updated=? WHERE id=?")
+                  .run(new Date().toISOString(), orderId);
+              } catch (e2) {
+                /* status is best-effort */
+              }
+            }
+            broadcastSSE(res);
+            jsonOk(res, { id, ...result, channelPushed, pushError, test: !live });
+          } finally {
+            _labelBuysInFlight.delete(orderId);
+          }
+        } catch (err) {
+          jsonErr(res, 502, err.message || 'label failed');
+        }
+      })();
+    });
+    return;
+  }
+  // GET /api/ship/shipments?orderId=
+  if (req.method === 'GET' && req.url.startsWith('/api/ship/shipments')) {
+    if (requireShipping(req, res)) return;
+    try {
+      const orderId = new URL(req.url, 'http://x').searchParams.get('orderId');
+      const shipments = db.listShipments(database, orderId ? { orderId: parseInt(orderId, 10) } : {});
+      jsonOk(res, { shipments });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // GET /api/ship/label/:id/pdf — proxy the carrier label PDF (keeps API keys server-side).
+  const shipPdfMatch = req.url.match(/^\/api\/ship\/label\/(\d+)\/pdf$/);
+  if (req.method === 'GET' && shipPdfMatch) {
+    if (requireShipping(req, res)) return;
+    (async () => {
+      try {
+        const cfg = db.getShippingConfig(database);
+        const sh = db.getShipmentById(database, parseInt(shipPdfMatch[1], 10));
+        if (!sh || !sh.labelUrl) {
+          jsonErr(res, 404, 'label not found');
+          return;
+        }
+        const buf = await ship.getProvider(cfg).fetchLabelPdf(cfg, sh.labelUrl);
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="label-' + sh.id + '.pdf"'
+        });
+        res.end(buf);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'pdf failed');
+      }
+    })();
+    return;
+  }
+  // GET /api/ship/order/:id — order ship-to fields (prefills the buy-label modal).
+  const shipOrderMatch = req.url.match(/^\/api\/ship\/order\/(\d+)$/);
+  if (req.method === 'GET' && shipOrderMatch) {
+    if (requireShipping(req, res)) return;
+    try {
+      const o = db.getOrderForShipping(database, parseInt(shipOrderMatch[1], 10));
+      if (!o) {
+        jsonErr(res, 404, 'order not found');
+        return;
+      }
+      jsonOk(res, o);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // -- Sales channels (live order sync) --
+  if (req.method === 'GET' && req.url === '/api/channels') {
+    if (requireAdmin(req, res)) return;
+    try {
+      jsonOk(res, { channels: db.listChannelConfigs(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const chanCfgMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)$/);
+  if (req.method === 'PATCH' && chanCfgMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        // Blank fields = keep the stored value, so a save with an empty input (e.g.
+        // after a failed config load) can't wipe stored creds; secrets are never
+        // revealed in the list view anyway.
+        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken', 'clientId', 'siteId'].forEach((k) => {
+          if (data[k] === '' || data[k] == null) delete data[k];
+        });
+        db.updateChannelConfig(database, chanCfgMatch[1], data);
+        broadcastSSE(res);
+        jsonOk(res, { channels: db.listChannelConfigs(database) });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const chanTestMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/test$/);
+  if (req.method === 'POST' && chanTestMatch) {
+    if (requireAdmin(req, res)) return;
+    (async () => {
+      try {
+        const { cfg, prov } = await withFreshChannelToken(chanTestMatch[1]);
+        const r = await prov.testConnection(cfg);
+        jsonOk(res, r);
+      } catch (err) {
+        jsonErr(res, 502, err.message || 'test failed');
+      }
+    })();
+    return;
+  }
+  const chanSyncMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/sync$/);
+  if (req.method === 'POST' && chanSyncMatch) {
+    if (requireAdmin(req, res)) return;
+    const channel = chanSyncMatch[1];
+    (async () => {
+      try {
+        const { cfg, prov } = await withFreshChannelToken(channel);
+        let imported = 0;
+        let cursor = null;
+        let pages = 0;
+        // Fetch every page first (network I/O), then commit them in ONE transaction:
+        // one fsync instead of one per order, and no write-lock held across the
+        // network round-trips. upsertOrder dedupes by (channel, channelOrderId).
+        const collected = [];
+        do {
+          const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
+          for (const o of orders) collected.push(o);
+          cursor = nextCursor;
+          pages++;
+        } while (cursor && pages < 20);
+        database.exec('BEGIN');
+        try {
+          for (const o of collected) {
+            // A SAVEPOINT per order keeps a malformed one from poisoning the batch:
+            // it rolls back just that order, and the rest still commit together.
+            try {
+              database.exec('SAVEPOINT mt_order');
+              db.upsertOrder(database, o);
+              database.exec('RELEASE mt_order');
+              imported++;
+            } catch (e2) {
+              try {
+                database.exec('ROLLBACK TO mt_order');
+                database.exec('RELEASE mt_order');
+              } catch (e3) {
+                /* ignore */
+              }
+            }
+          }
+          database.exec('COMMIT');
+        } catch (eTx) {
+          try {
+            database.exec('ROLLBACK');
+          } catch (e4) {
+            /* ignore */
+          }
+          throw eTx;
+        }
+        db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: null });
+        broadcastSSE(res);
+        jsonOk(res, { imported });
+      } catch (err) {
+        db.setChannelSyncState(database, channel, {
+          lastSync: new Date().toISOString(),
+          lastError: err.message || 'sync failed'
+        });
+        jsonErr(res, 502, err.message || 'sync failed');
+      }
+    })();
+    return;
+  }
+
+  // -- Sales-channel OAuth (connect eBay / Etsy) --
+  // Admin starts the login; we return the provider's authorize URL for the browser
+  // to open. (Token-based admin auth means we can't just 302 the top-level nav.)
+  const chanOAuthStart = req.url.match(/^\/api\/channels\/(etsy|ebay)\/oauth\/start$/);
+  if (req.method === 'GET' && chanOAuthStart) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const channel = chanOAuthStart[1];
+      const cfg = db.getChannelConfig(database, channel);
+      if (!cfg.clientId) {
+        jsonErr(res, 400, channel === 'etsy' ? 'Etsy Keystring fehlt' : 'eBay App-ID fehlt');
+        return;
+      }
+      if (channel === 'ebay' && (!cfg.clientSecret || !cfg.siteId)) {
+        jsonErr(res, 400, 'eBay Cert-ID + RuName erforderlich');
+        return;
+      }
+      _oauthGc();
+      const state = crypto.randomBytes(16).toString('hex');
+      let codeVerifier = null;
+      let codeChallenge = null;
+      if (channel === 'etsy') {
+        const p = channels.pkcePair();
+        codeVerifier = p.verifier;
+        codeChallenge = p.challenge;
+      }
+      _channelOAuth.set(state, { channel, codeVerifier, created: Date.now() });
+      // Bind the callback to THIS browser: a SameSite=Lax cookie rides along on the
+      // provider's top-level redirect back (unlike the Strict session cookie), so a
+      // leaked `state` alone can't complete the connect from another browser/account.
+      res.setHeader(
+        'Set-Cookie',
+        'mt_oauth=' + state + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=900' + (protocol === 'https' ? '; Secure' : '')
+      );
+      const url = channels.buildAuthorizeUrl(channel, cfg, {
+        redirectUri: _channelCallbackUrl(channel),
+        state,
+        codeChallenge
+      });
+      jsonOk(res, { url });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // The provider redirects the browser here after consent. Public (a top-level
+  // redirect carries no admin token) — CSRF-protected by the one-time `state`.
+  const chanOAuthCb = req.url.match(/^\/api\/channels\/(etsy|ebay)\/oauth\/callback(?:\?|$)/);
+  if (req.method === 'GET' && chanOAuthCb) {
+    const channel = chanOAuthCb[1];
+    const sendHtml = (ok, msg) => {
+      res.writeHead(ok ? 200 : 400, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Set-Cookie': 'mt_oauth=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' + (protocol === 'https' ? '; Secure' : '')
+      });
+      res.end(_oauthResultHtml(channel, ok, msg));
+    };
+    (async () => {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        if (q.get('error')) {
+          sendHtml(false, 'Login abgebrochen: ' + q.get('error'));
+          return;
+        }
+        const code = q.get('code');
+        const state = q.get('state');
+        // The mt_oauth cookie (set in /oauth/start) must match the state — proves the
+        // same browser initiated this flow, not someone replaying a stolen state.
+        const cookieMatch = (req.headers.cookie || '').match(/(?:^|;\s*)mt_oauth=([a-f0-9]+)/);
+        const pending = state ? _channelOAuth.get(state) : null;
+        if (!code || !pending || pending.channel !== channel || !cookieMatch || cookieMatch[1] !== state) {
+          sendHtml(false, 'Ungültiger oder abgelaufener Login-Status. Bitte erneut „Verbinden".');
+          return;
+        }
+        _channelOAuth.delete(state);
+        const cfg = db.getChannelConfig(database, channel);
+        const tok = await channels.exchangeCode(channel, cfg, {
+          code,
+          redirectUri: _channelCallbackUrl(channel),
+          codeVerifier: pending.codeVerifier
+        });
+        db.updateChannelConfig(database, channel, {
+          accessToken: tok.accessToken,
+          refreshToken: tok.refreshToken,
+          tokenExpires: tok.tokenExpires,
+          enabled: true
+        });
+        broadcastSSE(res);
+        sendHtml(
+          true,
+          (channel === 'etsy' ? 'Etsy' : 'eBay') + ' erfolgreich verbunden. Du kannst dieses Fenster schließen.'
+        );
+      } catch (err) {
+        sendHtml(false, (err && err.message) || 'Login fehlgeschlagen');
+      }
+    })();
     return;
   }
 
@@ -8519,7 +9344,11 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   // Cache immutable vendor libs and per-locale lang files aggressively;
   // cache HTML/CSS/SW short-term.
-  if (url === '/sw.js') {
+  if (WORKTREE_MODE) {
+    // Test/worktree instance: never cache static assets, so code changes show
+    // up on a plain reload without service-worker / HTTP-cache gymnastics.
+    headers['Cache-Control'] = 'no-store';
+  } else if (url === '/sw.js') {
     // The service worker is the killswitch path — must always revalidate
     // so a bad SW build can be rolled back within one navigation rather
     // than waiting up to 5 min + the browser's own 24 h SW-bypass cache.

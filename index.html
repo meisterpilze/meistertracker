@@ -195,6 +195,62 @@
         </div>
       </div>
     </div>
+    <!-- Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe.
+         Global modal (not inside a page) so it can open from the dashboard too. -->
+    <div
+      id="ms-quick-modal"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 1200;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+      "
+      onclick="if(event.target===this)msQuickClose()"
+    >
+      <div class="card" style="max-width: 380px; width: 100%; margin: 0">
+        <div class="sec" id="ms-q-title">—</div>
+        <div id="ms-q-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+        <div id="ms-q-sorte-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="msq.pickSorte">Pilzsorte</label>
+          <select id="ms-q-sorte" onchange="msQuickSorteChanged()"></select>
+        </div>
+        <div id="ms-q-labtype-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="msq.labType">Art</label>
+          <select id="ms-q-labtype" onchange="msQuickFillCulture()">
+            <option value="MC">MC — Master Culture</option>
+            <option value="PD">PD — Petri</option>
+            <option value="LC">LC — Liquid Culture</option>
+          </select>
+        </div>
+        <div class="g2">
+          <div>
+            <label data-i18n="msq.qty">Anzahl</label>
+            <input type="number" id="ms-q-qty" min="1" value="1" oninput="msQuickPreview()" />
+          </div>
+          <div id="ms-q-days-wrap">
+            <label data-i18n="batch.incDays">Inkubationstage</label>
+            <input type="number" id="ms-q-days" min="1" value="14" />
+          </div>
+        </div>
+        <div style="margin-top: 8px">
+          <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
+          <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
+        </div>
+        <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
+          <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
+          <select id="ms-q-culture"></select>
+        </div>
+        <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
+        <div style="display: flex; gap: 8px; margin-top: 12px">
+          <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
+          <button class="btn" onclick="msQuickClose()" data-i18n="strains.cancel">Abbrechen</button>
+        </div>
+      </div>
+    </div>
     <!-- Change password modal -->
     <div
       class="modal-bg"
@@ -1070,6 +1126,90 @@
             <path d="M12 8v1m0 6v1m-4-4h1m6 0h1" /></svg
           ><span data-i18n="nav.strains">Pilzsorten</span>
         </button>
+        <div class="sb-group-label" data-i18n="nav.sales">Verkauf</div>
+        <button class="sb-btn" id="n-orders-inbox">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+            <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg
+          ><span data-i18n="nav.ordersInbox">Bestellungen</span>
+        </button>
+        <button class="sb-btn" id="n-orders-demand">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" /></svg
+          ><span data-i18n="nav.ordersDemand">Was muss ich machen</span>
+        </button>
+        <button class="sb-btn" id="n-orders-mapping">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+            <line x1="7" y1="7" x2="7.01" y2="7" /></svg
+          ><span data-i18n="nav.ordersMapping">Produkte</span>
+        </button>
+        <button class="sb-btn" id="n-orders-customers">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" /></svg
+          ><span data-i18n="nav.ordersCustomers">Kunden</span>
+        </button>
+        <button class="sb-btn" id="n-orders-versand">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="1" y="3" width="15" height="13" />
+            <path d="M16 8h4l3 3v5h-7V8z" />
+            <circle cx="5.5" cy="18.5" r="2.5" />
+            <circle cx="18.5" cy="18.5" r="2.5" /></svg
+          ><span data-i18n="nav.ordersVersand">Versand</span>
+        </button>
       </nav>
       <div class="sb-footer">
         <button class="sb-btn" id="n-settings" style="display: none">
@@ -1827,7 +1967,9 @@
         <div class="page" id="p-batch">
           <div class="stabs">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
-            <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">New batch</button>
+            <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
+                 sp-batch-new panel stays in the DOM as that dialog's backing form. -->
+            <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
             <button class="stab" id="st-batch-harvest" data-i18n="batch.harvests">Harvests</button>
           </div>
           <!-- All batches -->
@@ -1958,6 +2100,19 @@
                       autocomplete="off"
                     />
                   </div>
+                  <div>
+                    <label data-i18n="batch.fromProduct">Aus Produkt (optional)</label>
+                    <select id="nb-product" onchange="_nbProductChanged()">
+                      <option value="" data-i18n="batch.noProduct">— ohne Produkt —</option>
+                    </select>
+                    <div
+                      id="nb-product-hint"
+                      style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                      data-i18n="batch.fromProductHint"
+                    >
+                      Produkt wählen → Substrat, Kokos & Grain werden automatisch berechnet.
+                    </div>
+                  </div>
                   <div class="g2">
                     <div>
                       <label data-i18n="batch.qty">Qty (bags)</label
@@ -1999,6 +2154,23 @@
                             data-i18n="batch.gypsumAdded"
                             >Gypsum added</label
                           >
+                        </div>
+                      </div>
+                      <div class="g2">
+                        <div>
+                          <label data-i18n="batch.coir">Kokos / CVG %</label
+                          ><input type="number" id="nb-coir" placeholder="0" min="0" max="100" />
+                        </div>
+                        <div></div>
+                      </div>
+                      <div class="g2">
+                        <div>
+                          <label data-i18n="batch.grainKg">Grain kg/Beutel</label
+                          ><input type="number" id="nb-grainkg" placeholder="0" min="0" step="0.01" />
+                        </div>
+                        <div>
+                          <label data-i18n="batch.grainRh">Grain Hydration %</label
+                          ><input type="number" id="nb-grainrh" placeholder="52" min="0" max="100" />
                         </div>
                       </div>
                       <div id="nb-subsum" style="font-size: 11px; color: var(--c-text-muted)"></div>
@@ -2157,6 +2329,91 @@
                     placeholder="z. B. Amazing, Top Genetics, …"
                   />
                 </div>
+                <div style="border-top: 1px solid var(--c-border); padding-top: 10px; margin-top: 4px">
+                  <div style="font-size: 13px; font-weight: 600; color: var(--c-text-sec)" data-i18n="strains.recHeader">
+                    Standard-Anbau (optional)
+                  </div>
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin: 2px 0 8px"
+                    data-i18n="strains.recHint"
+                  >
+                    Vorlage, die neue Chargen automatisch vorausfüllt. Kann leer bleiben — nur nötig, damit „+ Charge"
+                    diese Sorte anbietet.
+                  </div>
+                  <select id="ms-rec-copy" onchange="msRecCopyFrom()" style="width: 100%; margin-bottom: 8px">
+                    <option value="" data-i18n="strains.recCopyNone">— Rezept von anderer Sorte übernehmen —</option>
+                  </select>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="strains.recType">Anbau-Art</span>
+                    <select id="ms-rec-type" onchange="msRecTypeChange()">
+                      <option value="" data-i18n="strains.recNone">Kein Rezept</option>
+                      <option value="block" data-i18n="strains.recBlock">Substrat-Block</option>
+                      <option value="allinone" data-i18n="strains.recAllinone">All-in-One (Grain + Substrat)</option>
+                      <option value="grain" data-i18n="strains.recGrain">Körnerbrut (Grain)</option>
+                    </select>
+                  </label>
+                  <div id="ms-rec-subgroup" style="display: none; margin-top: 8px">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.substrate">Substrat-Art</span>
+                        <select id="ms-rec-substrate" onchange="msRecTypeChange()">
+                          <option value="holzkleie" data-i18n="orders.sub.holzkleie">Holz + Weizenkleie</option>
+                          <option value="cvg" data-i18n="orders.sub.cvg">Kokos / CVG</option>
+                        </select>
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.bagKg">Beutel kg (nass)</span>
+                        <input id="ms-rec-bagkg" type="number" min="0" step="0.1" value="0" oninput="msRecNeed()" />
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.rh">Hydration %</span>
+                        <input id="ms-rec-rh" type="number" min="0" max="100" step="1" value="0" oninput="msRecNeed()" />
+                      </label>
+                    </div>
+                    <div
+                      id="ms-rec-holzgroup"
+                      style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px"
+                    >
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.hw">Hartholz %</span>
+                        <input id="ms-rec-hw" type="number" min="0" max="100" step="1" value="75" oninput="msRecNeed()" />
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.wb">Weizenkleie %</span>
+                        <input id="ms-rec-wb" type="number" min="0" max="100" step="1" value="25" oninput="msRecNeed()" />
+                      </label>
+                    </div>
+                    <div id="ms-rec-coirgroup" style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px">
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.coir">Kokos %</span>
+                        <input id="ms-rec-coir" type="number" min="0" max="100" step="1" value="100" oninput="msRecNeed()" />
+                      </label>
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 8px">
+                      <input type="checkbox" id="ms-rec-gyp" style="width: auto" oninput="msRecNeed()" />
+                      <span data-i18n="orders.p.gypsum">Gips (~1%)</span>
+                    </label>
+                  </div>
+                  <div id="ms-rec-graingroup" style="display: none; margin-top: 8px">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.grainKg">Grain kg (nass)</span>
+                        <input id="ms-rec-grainkg" type="number" min="0" step="0.01" value="0" oninput="msRecNeed()" />
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
+                        <input id="ms-rec-grainrh" type="number" min="0" max="100" step="1" value="52" oninput="msRecNeed()" />
+                      </label>
+                    </div>
+                  </div>
+                  <div id="ms-rec-daysrow" style="display: none; margin-top: 8px; max-width: 160px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="batch.incDays">Inkubationstage</span>
+                      <input id="ms-rec-days" type="number" min="1" step="1" value="14" />
+                    </label>
+                  </div>
+                  <div id="ms-rec-need" class="muted" style="font-size: 12px; margin-top: 6px"></div>
+                </div>
                 <div style="display: flex; gap: 8px">
                   <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>
                   <button class="btn" id="ms-cancel-btn" style="display: none" data-i18n="strains.cancel">
@@ -2182,6 +2439,7 @@
                       <th data-i18n="strains.name">Name</th>
                       <th data-i18n="strains.kuerzel">Kürzel</th>
                       <th data-i18n="strains.descriptor">Genetik</th>
+                      <th data-i18n="strains.recipe">Rezept</th>
                       <th data-i18n="strains.inUse">Verwendung</th>
                       <th></th>
                     </tr>
@@ -2194,9 +2452,410 @@
         </div>
 
         <!-- ══ LAB ══ -->
+        <div class="page" id="p-orders">
+          <!-- Sub-tab bar hidden: the four views are now top-level "Verkauf" sidebar entries
+               that deep-link via openStab. The stab buttons stay in the DOM (their render
+               hooks fire through openStab) but are not shown. -->
+          <div class="stabs" style="display: none">
+            <button class="stab active" id="st-orders-inbox" data-i18n="orders.inbox">Bestellungen</button>
+            <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
+            <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
+            <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
+            <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versand</button>
+          </div>
+
+          <!-- Inbox -->
+          <div class="sp active" id="sp-orders-inbox">
+            <div id="orders-unmapped-banner" class="oh-banner" style="display: none">
+              <span
+                >⚠️ <strong id="orders-unmapped-count">0</strong>
+                <span data-i18n="orders.unmappedBanner">Positionen ohne Produktzuordnung</span></span
+              >
+              <button class="btn btn-sm" data-action="oh-goto-mapping" data-i18n="orders.mapNow">Jetzt zuordnen</button>
+            </div>
+            <div class="card">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 8px;
+                  flex-wrap: wrap;
+                  margin-bottom: 10px;
+                "
+              >
+                <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                  <button class="oh-fchip active" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">Alle</button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="new" data-i18n="orders.status.new">Neu</button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="in_production" data-i18n="orders.status.in_production">
+                    In Produktion
+                  </button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="ready" data-i18n="orders.status.ready">Versandbereit</button>
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                  <button class="btn btn-sm" data-action="oh-manual-toggle" data-i18n="orders.addManual">+ Manuell</button>
+                  <button class="btn btn-sm" data-action="oh-import-csv" data-i18n="orders.importCsv">CSV importieren</button>
+                  <input type="file" id="orders-csv-file" accept=".csv,text/csv" style="display: none" />
+                </div>
+              </div>
+
+              <div id="orders-manual-panel" class="oh-manual" style="display: none">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px">
+                  <select id="oh-m-channel">
+                    <option value="manual">Manuell</option>
+                    <option value="wix">Wix</option>
+                    <option value="etsy">Etsy</option>
+                    <option value="ebay">eBay</option>
+                  </select>
+                  <input id="oh-m-oid" data-i18n-placeholder="orders.f.orderId" placeholder="Bestell-Nr." />
+                  <input id="oh-m-shipby" type="date" />
+                  <input id="oh-m-cust" data-i18n-placeholder="orders.f.customer" placeholder="Kunde" />
+                  <input id="oh-m-email" data-i18n-placeholder="orders.f.email" placeholder="E-Mail" />
+                  <input id="oh-m-sku" data-i18n-placeholder="orders.f.sku" placeholder="SKU" />
+                  <input id="oh-m-title" data-i18n-placeholder="orders.f.item" placeholder="Artikel" />
+                  <input id="oh-m-qty" type="number" min="1" value="1" />
+                  <button class="btn btn-p btn-sm" data-action="oh-manual-submit" data-i18n="orders.add">Hinzufügen</button>
+                </div>
+              </div>
+
+              <div style="overflow-x: auto">
+                <table id="t-orders">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.channel">Kanal</th>
+                      <th data-i18n="orders.th.order">Bestellung</th>
+                      <th data-i18n="orders.th.customer">Kunde</th>
+                      <th data-i18n="orders.th.items">Artikel</th>
+                      <th data-i18n="orders.th.shipBy">Liefern bis</th>
+                      <th data-i18n="orders.th.status">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- To-Make -->
+          <div class="sp" id="sp-orders-tomake">
+            <div class="card">
+              <div class="sec" data-i18n="orders.demandTitle">Netto-Produktionsbedarf</div>
+              <div class="muted" style="font-size: 12px; margin-bottom: 8px" data-i18n="orders.demandHint">
+                Offene Bestellungen minus reserviert. „Start bis" = frühestes Lieferdatum minus Vorlaufzeit.
+              </div>
+              <div style="overflow-x: auto">
+                <table id="t-demand">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.product">Produkt</th>
+                      <th data-i18n="orders.th.demand">Bedarf</th>
+                      <th data-i18n="orders.th.fromStock">vom Lager</th>
+                      <th data-i18n="orders.th.toProduce">produzieren</th>
+                      <th data-i18n="orders.th.startBy">Start bis</th>
+                      <th data-i18n="orders.th.components">Komponenten</th>
+                    </tr>
+                  </thead>
+                  <tbody id="demand-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mapping -->
+          <div class="sp" id="sp-orders-mapping">
+            <div class="card">
+              <div class="sec" data-i18n="orders.unmappedTitle">Noch zuzuordnen</div>
+              <div id="orders-unmapped-list"></div>
+            </div>
+            <div class="card">
+              <div
+                style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px"
+              >
+                <div class="sec" style="margin: 0" data-i18n="orders.catalog">Produktkatalog</div>
+                <button class="btn btn-sm btn-p" data-action="oh-prod-new" data-i18n="orders.newProduct">+ Neues Produkt</button>
+              </div>
+
+              <div id="orders-prod-form" class="oh-manual" style="display: none">
+                <input type="hidden" id="oh-p-id" />
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px">
+                  <input id="oh-p-name" data-i18n-placeholder="orders.p.name" placeholder="Produktname" />
+                  <input id="oh-p-sku" data-i18n-placeholder="orders.p.sku" placeholder="SKU (optional)" />
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.th.category">Kategorie</span>
+                    <select id="oh-p-category">
+                      <option value="all-in-one" data-i18n="orders.cat.allinone">All-in-One</option>
+                      <option value="substrat" data-i18n="orders.cat.substrat">Substrat</option>
+                      <option value="koernerbrut" data-i18n="orders.cat.koernerbrut">Körnerbrut</option>
+                      <option value="kultur" data-i18n="orders.cat.kultur">Kultur</option>
+                      <option value="zuchtset" data-i18n="orders.cat.zuchtset">Zuchtset</option>
+                      <option value="zubehoer" data-i18n="orders.cat.zubehoer">Zubehör</option>
+                    </select>
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.prodType">Produktionsart</span>
+                    <select id="oh-p-prodtype">
+                      <option value="allinone" data-i18n="orders.pt.allinone">All-in-One (Grain + Substrat)</option>
+                      <option value="block" data-i18n="orders.pt.block">Substrat-Block</option>
+                      <option value="grain" data-i18n="orders.pt.grain">Körnerbrut (Grain)</option>
+                      <option value="buy" data-i18n="orders.pt.buy">Zukauf / nur Lager</option>
+                    </select>
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.stock">Fertigbestand</span>
+                    <input id="oh-p-stock" type="number" min="0" step="1" value="0" />
+                  </label>
+                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <span data-i18n="orders.p.lead">Vorlauf (Tage)</span>
+                    <input id="oh-p-lead" type="number" min="0" step="1" value="0" />
+                  </label>
+                </div>
+
+                <div
+                  id="oh-p-subgroup"
+                  style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
+                >
+                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.subTitle">
+                    Substrat pro Stück
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.substrate">Substrat-Art</span>
+                      <select id="oh-p-substrate">
+                        <option value="holzkleie" data-i18n="orders.sub.holzkleie">Holz + Weizenkleie</option>
+                        <option value="cvg" data-i18n="orders.sub.cvg">Kokos / CVG</option>
+                      </select>
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.bagKg">Beutel kg (nass)</span>
+                      <input id="oh-p-bagkg" type="number" min="0" step="0.1" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.rh">Hydration %</span>
+                      <input id="oh-p-rh" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                  </div>
+                  <div id="oh-p-holzgroup" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.hw">Hartholz %</span>
+                      <input id="oh-p-hw" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.wb">Weizenkleie %</span>
+                      <input id="oh-p-wb" type="number" min="0" max="100" step="1" value="0" />
+                    </label>
+                  </div>
+                  <div id="oh-p-coirgroup" style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.coir">Kokos %</span>
+                      <input id="oh-p-coir" type="number" min="0" max="100" step="1" value="100" />
+                    </label>
+                  </div>
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 8px">
+                    <input type="checkbox" id="oh-p-gyp" style="width: auto" />
+                    <span data-i18n="orders.p.gypsum">Gips (~1%)</span>
+                  </label>
+                </div>
+
+                <div
+                  id="oh-p-graingroup"
+                  style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
+                >
+                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.grainTitle">
+                    Körnerbrut pro Stück
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.grainKg">Grain kg (nass)</span>
+                      <input id="oh-p-grainkg" type="number" min="0" step="0.01" value="0" />
+                    </label>
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
+                      <input id="oh-p-grainrh" type="number" min="0" max="100" step="1" value="52" />
+                    </label>
+                  </div>
+                </div>
+
+                <div id="oh-p-need" class="muted" style="font-size: 12px; margin: 6px 0"></div>
+
+                <div style="display: flex; gap: 6px; margin-top: 10px">
+                  <button class="btn btn-p btn-sm" data-action="oh-prod-save" data-i18n="common.save">Speichern</button>
+                  <button class="btn btn-sm" data-action="oh-prod-cancel" data-i18n="common.cancel">Abbrechen</button>
+                  <button
+                    class="btn btn-sm"
+                    data-action="oh-prod-delete"
+                    id="oh-p-delete"
+                    style="display: none; margin-left: auto; color: var(--c-red-dark)"
+                    data-i18n="common.delete"
+                  >
+                    Löschen
+                  </button>
+                </div>
+              </div>
+
+              <div style="overflow-x: auto">
+                <table id="t-catalog">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.product">Produkt</th>
+                      <th data-i18n="orders.th.category">Kategorie</th>
+                      <th data-i18n="orders.th.sku">SKU</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-catalog-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="sec" data-i18n="orders.rawStock">Lager — Rohstoffe</div>
+              <div class="muted" style="font-size: 12px; margin-bottom: 8px" data-i18n="orders.rawStockHint">
+                Bestände aus dem zentralen Lager. Hier gesetzt wirkt überall (Chargen + Bedarf).
+              </div>
+              <div style="overflow-x: auto">
+                <table id="t-rawstock">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.mat.name">Material</th>
+                      <th data-i18n="orders.rawStockKg">Bestand (kg)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-rawstock-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customers -->
+          <div class="sp" id="sp-orders-customers">
+            <div class="card">
+              <div class="sec" data-i18n="orders.customersTitle">Kunden</div>
+              <div style="overflow-x: auto">
+                <table id="t-customers">
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.customer">Kunde</th>
+                      <th data-i18n="orders.th.channels">Kanäle</th>
+                      <th data-i18n="orders.th.orders">Bestellungen</th>
+                      <th data-i18n="orders.th.ltv">Umsatz</th>
+                      <th data-i18n="orders.th.last">Letzte</th>
+                      <th data-i18n="orders.th.type">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="orders-customers-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- Versand: buy carrier labels per order -->
+          <div class="sp" id="sp-orders-versand">
+            <div class="card">
+              <div class="sec" data-i18n="versand.ordersTitle">Versand — Etiketten</div>
+              <div
+                id="versand-config-warn"
+                style="display: none; font-size: 12px; color: var(--c-red-dark); margin-bottom: 8px"
+                data-i18n="versand.notConfigured"
+              >
+                Versand ist noch nicht eingerichtet — Admin → Einstellungen → Versand.
+              </div>
+              <div style="overflow-x: auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th data-i18n="orders.th.channel">Kanal</th>
+                      <th data-i18n="orders.th.orderId">Bestell-ID</th>
+                      <th data-i18n="orders.th.customer">Kunde</th>
+                      <th data-i18n="orders.th.status">Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="versand-orders-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- Buy-label modal -->
+          <div
+            id="ship-modal"
+            style="
+              display: none;
+              position: fixed;
+              inset: 0;
+              background: rgba(0, 0, 0, 0.45);
+              z-index: 1200;
+              align-items: center;
+              justify-content: center;
+              padding: 12px;
+            "
+            onclick="if(event.target===this)shipModalClose()"
+          >
+            <div class="card" style="max-width: 480px; width: 100%; margin: 0; max-height: 92vh; overflow: auto">
+              <div class="sec" data-i18n="versand.modalTitle">Label kaufen</div>
+              <div id="ship-m-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+              <input type="hidden" id="ship-m-orderid" />
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.name">Name</span><input id="ship-m-name"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.company">Firma</span><input id="ship-m-company"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.street">Straße</span><input id="ship-m-street"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.house">Nr.</span><input id="ship-m-house"
+                /></label>
+              </div>
+              <label style="font-size: 12px; color: var(--c-text-muted); display: block; margin-top: 8px"
+                ><span data-i18n="versand.f.address2">Zusatz</span><input id="ship-m-address2"
+              /></label>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.postal">PLZ</span><input id="ship-m-postal"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.city">Ort</span><input id="ship-m-city"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.country">Land</span
+                  ><input id="ship-m-country" value="DE" maxlength="2" style="text-transform: uppercase" onchange="shipLoadMethods()"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.phone">Telefon</span><input id="ship-m-phone"
+                /></label>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.weight">Gewicht (g)</span
+                  ><input type="number" id="ship-m-weight" min="1" step="10" value="1000" onchange="shipLoadMethods()"
+                /></label>
+                <label style="font-size: 12px; color: var(--c-text-muted)"
+                  ><span data-i18n="versand.f.method">Versandart</span>
+                  <select id="ship-m-method">
+                    <option value="" data-i18n="versand.loadingMethods">…</option>
+                  </select>
+                </label>
+              </div>
+              <div id="ship-m-result" class="muted" style="font-size: 12px; margin-top: 10px"></div>
+              <div style="display: flex; gap: 8px; margin-top: 12px">
+                <button class="btn btn-p" data-action="oh-ship-buy" data-i18n="versand.buyBtn">Label kaufen</button>
+                <button class="btn" data-action="oh-ship-close" data-i18n="strains.cancel">Abbrechen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="page" id="p-lab">
           <div class="stabs">
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
+            <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
+                 sp-lab-work panel stays in the DOM as that dialog's backing form. -->
             <button class="stab" id="st-lab-work" data-i18n="lab.logWork">Log work</button>
             <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
             <button class="stab" id="st-lab-contam" data-i18n="lab.contam">Kontaminationen</button>
@@ -2810,6 +3469,255 @@
               Server
             </button>
             <button class="stab" id="st-settings-growth">Growth</button>
+            <button class="stab" id="st-settings-versand" data-i18n="settings.tabVersand">Versand</button>
+            <button class="stab" id="st-settings-channels" data-i18n="settings.tabChannels">Kanäle</button>
+          </div>
+          <!-- Versand (Sendcloud shipping) config -->
+          <div class="sp" id="sp-settings-versand">
+            <div class="card">
+              <div class="sec" data-i18n="versand.title">Versand (Sendcloud)</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="versand.desc"
+              >
+                Versandetiketten direkt aus dem Order-Hub kaufen. API-Keys: Sendcloud → Einstellungen → Integrationen →
+                Sendcloud API.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="versand-enabled" style="width: auto" />
+                  <span data-i18n="versand.enable">Versand aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="versand.publicKey"
+                    >Public Key</label
+                  >
+                  <input type="text" id="versand-public" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%" />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="versand.secretKey"
+                    >Secret Key</label
+                  >
+                  <input
+                    type="password"
+                    id="versand-secret"
+                    data-i18n-placeholder="versand.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap">
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="versand.mode"
+                      >Modus</label
+                    >
+                    <select id="versand-mode">
+                      <option value="test" data-i18n="versand.modeTest">Test</option>
+                      <option value="live" data-i18n="versand.modeLive">Live</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="versand.defWeight"
+                      >Standardgewicht (g)</label
+                    >
+                    <input type="number" id="versand-weight" min="1" step="10" value="1000" style="width: 120px" />
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="versand-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
+                  <button id="versand-test-btn" class="btn btn-sm" data-i18n="versand.test">Verbindung testen</button>
+                </div>
+                <div
+                  id="versand-test-result"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
+            </div>
+          </div>
+          <!-- Sales channels (live order sync) -->
+          <div class="sp" id="sp-settings-channels">
+            <div class="card">
+              <div class="sec" data-i18n="channels.wixTitle">Wix</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.wixDesc"
+              >
+                Bestellungen automatisch aus Wix holen. API-Key: Wix-Dashboard → Einstellungen → API-Keys (mit
+                Stores/Orders-Leserecht). Site-ID steht in der Dashboard-URL.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="wix-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.apiKey"
+                    >API-Key</label
+                  >
+                  <input
+                    type="password"
+                    id="wix-apikey"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.siteId"
+                    >Site-ID</label
+                  >
+                  <input type="text" id="wix-siteid" style="width: 100%" />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.accountId"
+                    >Account-ID (falls erforderlich)</label
+                  >
+                  <input type="text" id="wix-accountid" style="width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="wix-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
+                  <button id="wix-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="wix-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                </div>
+                <div
+                  id="wix-status"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="channels.ebayTitle">eBay</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.ebayDesc"
+              >
+                Direkte eBay-Anbindung (Sell Fulfillment). App-ID, Cert-ID und RuName aus dem eBay-Developer-Portal
+                eintragen, speichern, dann „Verbinden". Der Login schließt nur auf der öffentlichen Instanz
+                (meistertracker.com) ab.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="ebay-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.appId"
+                    >App-ID (Client-ID)</label
+                  >
+                  <input type="text" id="ebay-clientid" style="width: 100%" />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.certId"
+                    >Cert-ID (Client-Secret)</label
+                  >
+                  <input
+                    type="password"
+                    id="ebay-secret"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.ruName"
+                    >RuName (Redirect-URL-Name)</label
+                  >
+                  <input type="text" id="ebay-siteid" style="width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="ebay-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
+                  <button id="ebay-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
+                  <button id="ebay-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="ebay-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                </div>
+                <div
+                  id="ebay-status"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="channels.etsyTitle">Etsy</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.etsyDesc"
+              >
+                Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden". Der
+                Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="etsy-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.keystring"
+                    >Keystring (API-Key)</label
+                  >
+                  <input type="text" id="etsy-clientid" style="width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="etsy-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
+                  <button id="etsy-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
+                  <button id="etsy-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="etsy-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                </div>
+                <div
+                  id="etsy-status"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+              </div>
+            </div>
           </div>
           <!-- Scan log -->
           <div class="sp active" id="sp-settings-log">

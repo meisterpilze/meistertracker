@@ -1091,6 +1091,356 @@ const MIGRATIONS = [
         INSERT OR IGNORE INTO camera_calibration (id) VALUES (1);
       `);
     }
+  },
+  {
+    version: 42,
+    description: 'Order hub (Phase 0): sales channels, products, orders, customers, allocations',
+    fn(db) {
+      // Sales-side layer on top of the production tables. See ORDERS_HUB_DESIGN.md.
+      // Tables are created in FK-dependency order. Channel-credential and sync-log
+      // tables are created here for schema completeness; their helper functions
+      // arrive with the live-channel work (Phase 1+).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sales_channel_config (
+          channel        TEXT PRIMARY KEY,            -- 'wix' | 'etsy' | 'ebay'
+          enabled        INTEGER DEFAULT 0,
+          api_key        TEXT DEFAULT '',
+          site_id        TEXT DEFAULT '',
+          client_id      TEXT DEFAULT '',
+          client_secret  TEXT DEFAULT '',
+          access_token   TEXT DEFAULT '',
+          refresh_token  TEXT DEFAULT '',
+          token_expires  TEXT,
+          webhook_secret TEXT DEFAULT '',
+          last_sync      TEXT,
+          last_cursor    TEXT,
+          last_error     TEXT,
+          created        TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS products (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          sku       TEXT UNIQUE,
+          name      TEXT NOT NULL,
+          category  TEXT,                              -- growkit|spawn|culture|fresh|supply
+          species   TEXT,
+          strain    TEXT,
+          active    INTEGER DEFAULT 1,
+          notes     TEXT DEFAULT '',
+          created   TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS product_components (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          fulfill_type TEXT NOT NULL DEFAULT 'produce', -- produce|harvest|stock
+          batch_type   TEXT,                            -- block|grain (matches batches.batch_type)
+          species      TEXT,
+          strain       TEXT,
+          recipe_id    INTEGER REFERENCES recipes(id),
+          lead_days    INTEGER DEFAULT 0,
+          grams        REAL,
+          qty_per_unit REAL NOT NULL DEFAULT 1,
+          notes        TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_prodcomp_product ON product_components(product_id);
+
+        CREATE TABLE IF NOT EXISTS product_channel_map (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel     TEXT NOT NULL,
+          channel_sku TEXT,
+          listing_id  TEXT,
+          product_id  INTEGER REFERENCES products(id) ON DELETE CASCADE,
+          created     TEXT NOT NULL,
+          UNIQUE (channel, channel_sku, listing_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS customers (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          email         TEXT UNIQUE,                   -- lowercased; primary dedup key
+          name          TEXT,
+          country       TEXT,
+          first_channel TEXT,
+          first_order   TEXT,
+          last_order    TEXT,
+          order_count   INTEGER DEFAULT 0,
+          total_spent   REAL DEFAULT 0,
+          currency      TEXT,
+          notes         TEXT DEFAULT '',
+          created       TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS customer_identities (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          channel     TEXT NOT NULL,
+          handle      TEXT NOT NULL,                   -- email, eBay username, Etsy buyer id
+          created     TEXT NOT NULL,
+          UNIQUE (channel, handle)
+        );
+
+        CREATE TABLE IF NOT EXISTS orders (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel          TEXT NOT NULL,
+          channel_order_id TEXT NOT NULL,
+          status           TEXT NOT NULL DEFAULT 'new', -- new|in_production|ready|shipped|cancelled
+          order_date       TEXT,
+          ship_by          TEXT,
+          customer_id      INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+          customer_name    TEXT,
+          customer_email   TEXT,
+          ship_country     TEXT,
+          total_amount     REAL,
+          currency         TEXT,
+          raw_json         TEXT,
+          imported         TEXT NOT NULL,
+          updated          TEXT NOT NULL,
+          UNIQUE (channel, channel_order_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+        CREATE INDEX IF NOT EXISTS idx_orders_channel ON orders(channel);
+        CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+
+        CREATE TABLE IF NOT EXISTS order_items (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          channel_sku TEXT,
+          listing_id  TEXT,
+          title       TEXT,
+          qty         INTEGER NOT NULL DEFAULT 1,
+          product_id  INTEGER REFERENCES products(id) ON DELETE SET NULL,
+          unit_price  REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_orderitems_order ON order_items(order_id);
+        CREATE INDEX IF NOT EXISTS idx_orderitems_product ON order_items(product_id);
+
+        CREATE TABLE IF NOT EXISTS order_allocations (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+          batch_id      TEXT REFERENCES batches(batch_id) ON DELETE SET NULL,
+          qty           REAL NOT NULL,
+          status        TEXT NOT NULL DEFAULT 'reserved', -- reserved|produced|shipped
+          created       TEXT NOT NULL,
+          UNIQUE (order_item_id, batch_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_alloc_batch ON order_allocations(batch_id);
+        CREATE INDEX IF NOT EXISTS idx_alloc_item ON order_allocations(order_item_id);
+
+        CREATE TABLE IF NOT EXISTS order_sync_log (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          time      TEXT NOT NULL,
+          channel   TEXT NOT NULL,
+          ok        INTEGER NOT NULL,
+          fetched   INTEGER DEFAULT 0,
+          upserted  INTEGER DEFAULT 0,
+          message   TEXT
+        );
+      `);
+    }
+  },
+  {
+    version: 43,
+    description: 'Order hub v2: finished-goods stock, materials + BOM, MRP fields',
+    fn(db) {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('products')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('stock')) db.exec('ALTER TABLE products ADD COLUMN stock REAL DEFAULT 0');
+      if (!cols.includes('lead_days')) db.exec('ALTER TABLE products ADD COLUMN lead_days INTEGER DEFAULT 0');
+      if (!cols.includes('producible')) db.exec('ALTER TABLE products ADD COLUMN producible INTEGER DEFAULT 1');
+      const allocCols = db
+        .prepare("SELECT name FROM pragma_table_info('order_allocations')")
+        .all()
+        .map((r) => r.name);
+      if (!allocCols.includes('source')) {
+        db.exec("ALTER TABLE order_allocations ADD COLUMN source TEXT DEFAULT 'batch'");
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS materials (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          name      TEXT NOT NULL,
+          unit      TEXT DEFAULT 'Stk',          -- 'kg' | 'L' | 'Stk'
+          stock     REAL DEFAULT 0,
+          threshold REAL DEFAULT 0,
+          notes     TEXT DEFAULT '',
+          created   TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS product_bom (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          material_id  INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+          qty_per_unit REAL NOT NULL DEFAULT 1,
+          notes        TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_bom_product ON product_bom(product_id);
+        CREATE INDEX IF NOT EXISTS idx_bom_material ON product_bom(material_id);
+      `);
+    }
+  },
+  {
+    version: 44,
+    description:
+      'Order hub v3: per-product production spec on products, coir in inventory, drop v2 materials/product_bom',
+    fn(db) {
+      // The order-hub no longer keeps its own materials/BOM tables. Instead each
+      // product carries a production spec mirroring the batch (charge) form, and
+      // the demand engine consumes the shared `inventory` ledger (grain/hardwood/
+      // wheatbran/gypsum/coir) via the same hydration math as batches.
+      const pcols = db
+        .prepare("SELECT name FROM pragma_table_info('products')")
+        .all()
+        .map((r) => r.name);
+      const addP = (name, ddl) => {
+        if (!pcols.includes(name)) db.exec('ALTER TABLE products ADD COLUMN ' + ddl);
+      };
+      addP('prod_type', "prod_type TEXT DEFAULT 'buy'"); // allinone|block|grain|buy
+      addP('prod_species', 'prod_species TEXT');
+      addP('prod_strain', 'prod_strain TEXT');
+      addP('prod_days', 'prod_days INTEGER DEFAULT 14');
+      addP('prod_bag_kg', 'prod_bag_kg REAL DEFAULT 0'); // substrate wet kg / unit
+      addP('prod_substrate', 'prod_substrate TEXT'); // holzkleie|cvg
+      addP('prod_hardwood_pct', 'prod_hardwood_pct REAL DEFAULT 0');
+      addP('prod_wheatbran_pct', 'prod_wheatbran_pct REAL DEFAULT 0');
+      addP('prod_coir_pct', 'prod_coir_pct REAL DEFAULT 0');
+      addP('prod_gypsum', 'prod_gypsum INTEGER DEFAULT 0');
+      addP('prod_rh_pct', 'prod_rh_pct REAL DEFAULT 0'); // substrate hydration %
+      addP('prod_grain_kg', 'prod_grain_kg REAL DEFAULT 0'); // grain spawn wet kg / unit
+      addP('prod_grain_rh_pct', 'prod_grain_rh_pct REAL DEFAULT 52');
+      // Coir/CVG raw material in the shared inventory ledger
+      const icols = db
+        .prepare("SELECT name FROM pragma_table_info('inventory')")
+        .all()
+        .map((r) => r.name);
+      if (!icols.includes('stock_coir')) db.exec('ALTER TABLE inventory ADD COLUMN stock_coir REAL DEFAULT 0');
+      if (!icols.includes('thresh_coir')) db.exec('ALTER TABLE inventory ADD COLUMN thresh_coir REAL DEFAULT 0');
+      // Drop the v2 order-hub BOM tables — superseded by the per-product spec.
+      db.exec('DROP TABLE IF EXISTS product_bom');
+      db.exec('DROP TABLE IF EXISTS materials');
+    }
+  },
+  {
+    version: 45,
+    description: 'All-in-One/CVG batches: coir substrate % + raw-grain portion on block batches',
+    fn(db) {
+      // An "All-in-One" charge is internally a block batch that also carries a
+      // coir/CVG fraction (sub_coir %) and a raw-grain portion (grain_kg wet per
+      // bag, hydrated by grain_rh). computeBatchMaterialDeltas reads these to
+      // deduct/credit grain + coir alongside the usual hardwood/wheatbran/gypsum.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('batches')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('sub_coir')) db.exec('ALTER TABLE batches ADD COLUMN sub_coir REAL DEFAULT 0');
+      if (!cols.includes('grain_kg')) db.exec('ALTER TABLE batches ADD COLUMN grain_kg REAL DEFAULT 0');
+    }
+  },
+  {
+    version: 46,
+    description: 'Sorte production recipe defaults on mushroom_strains (rec_* columns)',
+    fn(db) {
+      // Each Pilzsorte can carry a default production recipe so a Charge or a
+      // Laborarbeit can be spun up from the Sorte without re-entering substrate,
+      // grain and hydration every time. Columns mirror the batch (sub_*) and
+      // product (prod_*) shapes so the same charge math applies. rec_batch_type
+      // '' = no recipe defined yet.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('mushroom_strains')")
+        .all()
+        .map((r) => r.name);
+      const add = (name, ddl) => {
+        if (!cols.includes(name)) db.exec('ALTER TABLE mushroom_strains ADD COLUMN ' + ddl);
+      };
+      add('rec_batch_type', "rec_batch_type TEXT DEFAULT ''");
+      add('rec_substrate', "rec_substrate TEXT DEFAULT 'holzkleie'");
+      add('rec_bag_kg', 'rec_bag_kg REAL DEFAULT 0');
+      add('rec_hardwood_pct', 'rec_hardwood_pct REAL DEFAULT 0');
+      add('rec_wheatbran_pct', 'rec_wheatbran_pct REAL DEFAULT 0');
+      add('rec_coir_pct', 'rec_coir_pct REAL DEFAULT 0');
+      add('rec_rh_pct', 'rec_rh_pct REAL DEFAULT 0');
+      add('rec_gypsum', 'rec_gypsum INTEGER DEFAULT 0');
+      add('rec_grain_kg', 'rec_grain_kg REAL DEFAULT 0');
+      add('rec_grain_rh_pct', 'rec_grain_rh_pct REAL DEFAULT 52');
+      add('rec_inc_days', 'rec_inc_days INTEGER DEFAULT 14');
+    }
+  },
+  {
+    version: 47,
+    description: 'Phase 4 Versand: shipments + shipping_config + structured ship-to address on orders',
+    fn(db) {
+      // Structured shipping address on orders. Channel sync (Phase 1+) fills these
+      // from raw_json; until then the Versand UI lets the user enter/confirm them.
+      // ship_country already exists from v42.
+      const ocols = db
+        .prepare("SELECT name FROM pragma_table_info('orders')")
+        .all()
+        .map((r) => r.name);
+      const addOrderCol = (name, ddl) => {
+        if (!ocols.includes(name)) db.exec('ALTER TABLE orders ADD COLUMN ' + ddl);
+      };
+      addOrderCol('ship_name', 'ship_name TEXT');
+      addOrderCol('ship_company', 'ship_company TEXT');
+      addOrderCol('ship_street', 'ship_street TEXT');
+      addOrderCol('ship_house', 'ship_house TEXT');
+      addOrderCol('ship_address2', 'ship_address2 TEXT');
+      addOrderCol('ship_city', 'ship_city TEXT');
+      addOrderCol('ship_postal', 'ship_postal TEXT');
+      addOrderCol('ship_phone', 'ship_phone TEXT');
+      addOrderCol('ship_weight_g', 'ship_weight_g INTEGER');
+
+      // One row per bought label.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS shipments (
+          id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id           INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+          provider           TEXT NOT NULL DEFAULT 'sendcloud',
+          provider_parcel_id TEXT,
+          carrier            TEXT,
+          method_id          TEXT,
+          method_name        TEXT,
+          tracking_number    TEXT,
+          tracking_url       TEXT,
+          label_url          TEXT,
+          label_format       TEXT,                 -- pdf_a6 | pdf_a4 | zpl
+          cost               REAL,
+          currency           TEXT,
+          status             TEXT NOT NULL DEFAULT 'created', -- created|announced|in_transit|delivered|cancelled|error
+          channel_pushed     INTEGER DEFAULT 0,
+          error              TEXT,
+          created            TEXT NOT NULL,
+          updated            TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_shipments_order ON shipments(order_id);
+      `);
+
+      // Provider credentials + defaults (Admin -> Versand). Secrets live here like
+      // sales_channel_config / mcp_config, never in code.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS shipping_config (
+          id                INTEGER PRIMARY KEY CHECK (id = 1),
+          provider          TEXT DEFAULT 'sendcloud',
+          enabled           INTEGER DEFAULT 0,
+          public_key        TEXT DEFAULT '',
+          secret_key        TEXT DEFAULT '',
+          mode              TEXT DEFAULT 'test',   -- test | live
+          sender_address_id TEXT DEFAULT '',
+          default_method    TEXT DEFAULT '',
+          default_weight_g  INTEGER DEFAULT 1000,
+          created           TEXT
+        );
+      `);
+      db.prepare('INSERT OR IGNORE INTO shipping_config(id, created) VALUES(1, ?)').run(new Date().toISOString());
+    }
+  },
+  {
+    version: 48,
+    description: 'Shipping permission: per-user can_ship capability (label buying + ship PII)',
+    fn(db) {
+      const cols = db.prepare('PRAGMA table_info(users)').all();
+      if (!cols.some((c) => c.name === 'can_ship')) {
+        db.exec('ALTER TABLE users ADD COLUMN can_ship INTEGER DEFAULT 0');
+      }
+    }
   }
 ];
 
@@ -1302,12 +1652,14 @@ function readAll(db, opts = {}) {
       substrate: {
         hardwood: r.sub_hardwood,
         wheatbran: r.sub_wheatbran,
+        coir: r.sub_coir || 0,
         rh: r.sub_rh,
         gypsum: r.sub_gypsum === 1 ? true : false
       },
       bagKg: r.bag_kg,
       batchType: r.batch_type,
       grainRh: r.grain_rh || 0,
+      grainKg: r.grain_kg || 0,
       sourceId: r.source_id,
       notes: r.notes,
       strainText: r.strain_text || '',
@@ -1433,13 +1785,15 @@ function readAll(db, opts = {}) {
       hardwood: inv.stock_hardwood,
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
-      grain: inv.stock_grain
+      grain: inv.stock_grain,
+      coir: inv.stock_coir || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
-      grain: { minKg: inv.thresh_grain }
+      grain: { minKg: inv.thresh_grain },
+      coir: { minKg: inv.thresh_coir || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -1692,8 +2046,8 @@ function writeAll(db, incoming) {
       }
 
       const upsertBatch = db.prepare(`
-        INSERT INTO batches(batch_id, species, strain, strain_id, strain_text, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO batches(batch_id, species, strain, strain_id, strain_text, qty, days, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, bag_kg, batch_type, source_id, notes, created, due, grain_rh, sub_coir, grain_kg)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(batch_id) DO UPDATE SET
           species=excluded.species, strain=excluded.strain,
           strain_id=excluded.strain_id, strain_text=excluded.strain_text,
@@ -1703,7 +2057,7 @@ function writeAll(db, incoming) {
           bag_kg=excluded.bag_kg, batch_type=excluded.batch_type,
           source_id=excluded.source_id, notes=excluded.notes,
           created=excluded.created, due=excluded.due,
-          grain_rh=excluded.grain_rh
+          grain_rh=excluded.grain_rh, sub_coir=excluded.sub_coir, grain_kg=excluded.grain_kg
       `);
       const deleteBags = db.prepare('DELETE FROM bags WHERE batch_id = ?');
       const insertBag = db.prepare('INSERT INTO bags(bag_id, batch_id, bag_kg) VALUES(?, ?, ?)');
@@ -1728,7 +2082,9 @@ function writeAll(db, incoming) {
           b.notes || '',
           b.created,
           b.due,
-          b.batchType === 'grain' && Number.isFinite(b.grainRh) ? b.grainRh : 0
+          Number.isFinite(b.grainRh) ? b.grainRh : 0,
+          sub.coir || 0,
+          b.grainKg || 0
         );
         deleteBags.run(b.batchId);
         const bagIds = [];
@@ -2269,7 +2625,7 @@ function createSession(db, userId) {
 function getSession(db, token) {
   return db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires, u.username, u.role
+      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
@@ -2353,7 +2709,7 @@ function countUsers(db) {
 }
 
 function listUsers(db) {
-  return db.prepare('SELECT id, username, role, created FROM users ORDER BY id').all();
+  return db.prepare('SELECT id, username, role, can_ship, created FROM users ORDER BY id').all();
 }
 
 function deleteUser(db, userId) {
@@ -2376,6 +2732,12 @@ function deleteUser(db, userId) {
 
 function updateUserPassword(db, userId, hash, salt) {
   db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+}
+
+// Grant/revoke the per-user shipping capability (admins always qualify regardless).
+function setUserCanShip(db, userId, canShip) {
+  db.prepare('UPDATE users SET can_ship = ? WHERE id = ?').run(canShip ? 1 : 0, userId);
+  incrementDataVersion(db);
 }
 
 function resetUserPassword(db, userId, newPassword) {
@@ -2421,9 +2783,11 @@ function insertBatch(db, b, deltas, userId) {
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
-    const grainRh = b.batchType === 'grain' ? (Number.isFinite(b.grainRh) ? b.grainRh : 0) : 0;
+    // grain_rh applies to any batch with a grain portion (pure grain batches and
+    // all-in-one block batches alike); pure block batches simply pass nothing.
+    const grainRh = Number.isFinite(b.grainRh) ? b.grainRh : 0;
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh,sub_coir,grain_kg) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
       species,
@@ -2442,7 +2806,9 @@ function insertBatch(db, b, deltas, userId) {
       b.strainText || '',
       b.created,
       b.due,
-      grainRh
+      grainRh,
+      sub.coir || 0,
+      b.grainKg || 0
     );
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const item of b.bags || []) {
@@ -2626,7 +2992,7 @@ function deleteBatchById(db, batchId, userId) {
     // Read batch before deleting so we can reverse inventory deductions
     const row = db
       .prepare(
-        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh FROM batches WHERE batch_id=?'
+        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh, sub_coir, grain_kg FROM batches WHERE batch_id=?'
       )
       .get(batchId);
     if (row) {
@@ -2698,9 +3064,10 @@ function computeBatchMaterialDeltas(db, row) {
   } else {
     const hw = row.sub_hardwood || 0;
     const wb = row.sub_wheatbran || 0;
+    const coir = row.sub_coir || 0;
     const rh = row.sub_rh || 0;
     const gyp = row.sub_gypsum;
-    if (hw || wb) {
+    if (hw || wb || coir) {
       let totalDryKg = 0;
       if (bagWeightRows.length) {
         for (const b of bagWeightRows) {
@@ -2713,9 +3080,20 @@ function computeBatchMaterialDeltas(db, row) {
       }
       const hwUsed = totalDryKg * (hw / 100);
       const wbUsed = totalDryKg * (wb / 100);
+      const coirUsed = totalDryKg * (coir / 100);
       if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
       if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+      if (coirUsed > 0) deltas.push({ mat: 'coir', deltaKg: coirUsed });
       if (gyp) deltas.push({ mat: 'gypsum', deltaKg: totalDryKg * 0.01 });
+    }
+    // All-in-One raw-grain portion mixed into the block (grain_kg wet per bag).
+    const grainKg = row.grain_kg || 0;
+    if (grainKg > 0) {
+      const grh = row.grain_rh || 0;
+      const bagCount = bagWeightRows.length || row.qty;
+      const grainDryPerBag = grh > 0 ? grainKg * (1 - grh / 100) : grainKg;
+      const grainTotal = bagCount * grainDryPerBag;
+      if (grainTotal > 0) deltas.push({ mat: 'grain', deltaKg: grainTotal });
     }
   }
   return deltas;
@@ -2741,14 +3119,27 @@ function computeBatchMaterialDeltasForKg(batch, addedWetKg) {
   }
   const hw = batch.sub_hardwood || 0;
   const wb = batch.sub_wheatbran || 0;
-  if (!hw && !wb) return deltas;
+  const coir = batch.sub_coir || 0;
+  const grainKg = batch.grain_kg || 0;
+  if (!hw && !wb && !coir && !grainKg) return deltas;
   const rh = batch.sub_rh || 0;
   const dryKg = rh > 0 ? addedWetKg * (1 - rh / 100) : addedWetKg;
   const hwUsed = dryKg * (hw / 100);
   const wbUsed = dryKg * (wb / 100);
+  const coirUsed = dryKg * (coir / 100);
   if (hwUsed > 0) deltas.push({ mat: 'hardwood', deltaKg: hwUsed });
   if (wbUsed > 0) deltas.push({ mat: 'wheatbran', deltaKg: wbUsed });
+  if (coirUsed > 0) deltas.push({ mat: 'coir', deltaKg: coirUsed });
   if (batch.sub_gypsum) deltas.push({ mat: 'gypsum', deltaKg: dryKg * 0.01 });
+  // All-in-One grain portion scales with the number of added bags
+  // (addedWetKg of substrate / substrate bag_kg).
+  if (grainKg > 0 && batch.bag_kg > 0) {
+    const grh = batch.grain_rh || 0;
+    const bags = addedWetKg / batch.bag_kg;
+    const grainDryPerBag = grh > 0 ? grainKg * (1 - grh / 100) : grainKg;
+    const grainTotal = bags * grainDryPerBag;
+    if (grainTotal > 0) deltas.push({ mat: 'grain', deltaKg: grainTotal });
+  }
   return deltas;
 }
 
@@ -3332,8 +3723,208 @@ function updatePrintBridgeCfg(db, cfg) {
   incrementDataVersion(db);
 }
 
+// -- Shipping (Phase 4 Versand) --
+// Provider credentials + defaults. Secrets are returned only to admin-gated
+// endpoints (mirrors print_bridge_config / sales_channel_config), never via readAll.
+function getShippingConfig(db) {
+  const row = db.prepare('SELECT * FROM shipping_config WHERE id = 1').get() || {};
+  return {
+    provider: row.provider || 'sendcloud',
+    enabled: row.enabled === 1,
+    publicKey: row.public_key || '',
+    secretKey: row.secret_key || '',
+    mode: row.mode || 'test',
+    senderAddressId: row.sender_address_id || '',
+    defaultMethod: row.default_method || '',
+    defaultWeightG: row.default_weight_g != null ? row.default_weight_g : 1000
+  };
+}
+
+function updateShippingConfig(db, cfg) {
+  const cur = getShippingConfig(db);
+  const pick = (k, d) => (cfg[k] !== undefined ? cfg[k] : d);
+  const w = +pick('defaultWeightG', cur.defaultWeightG);
+  db.prepare(
+    `UPDATE shipping_config SET provider=?, enabled=?, public_key=?, secret_key=?, mode=?,
+       sender_address_id=?, default_method=?, default_weight_g=? WHERE id=1`
+  ).run(
+    pick('provider', cur.provider) || 'sendcloud',
+    pick('enabled', cur.enabled) ? 1 : 0,
+    pick('publicKey', cur.publicKey) || '',
+    pick('secretKey', cur.secretKey) || '',
+    pick('mode', cur.mode) || 'test',
+    pick('senderAddressId', cur.senderAddressId) || '',
+    pick('defaultMethod', cur.defaultMethod) || '',
+    Number.isFinite(w) ? w : 1000
+  );
+  incrementDataVersion(db);
+}
+
+// Structured ship-to address on an order (filled by channel sync later; editable
+// in the Versand UI now). camelCase keys -> ship_* columns.
+function updateOrderShipAddress(db, orderId, a) {
+  const map = {
+    shipName: 'ship_name',
+    shipCompany: 'ship_company',
+    shipStreet: 'ship_street',
+    shipHouse: 'ship_house',
+    shipAddress2: 'ship_address2',
+    shipCity: 'ship_city',
+    shipPostal: 'ship_postal',
+    shipCountry: 'ship_country',
+    shipPhone: 'ship_phone',
+    shipWeightG: 'ship_weight_g'
+  };
+  const cols = [];
+  const vals = [];
+  for (const k in map) {
+    if (a[k] === undefined) continue;
+    cols.push(map[k] + '=?');
+    vals.push(a[k]);
+  }
+  if (!cols.length) return;
+  db.prepare(`UPDATE orders SET ${cols.join(',')}, updated=? WHERE id=?`).run(
+    ...vals,
+    new Date().toISOString(),
+    orderId
+  );
+  incrementDataVersion(db);
+}
+
+function _mapShipment(r) {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    provider: r.provider,
+    providerParcelId: r.provider_parcel_id,
+    carrier: r.carrier,
+    methodId: r.method_id,
+    methodName: r.method_name,
+    trackingNumber: r.tracking_number,
+    trackingUrl: r.tracking_url,
+    labelUrl: r.label_url,
+    labelFormat: r.label_format,
+    cost: r.cost,
+    currency: r.currency,
+    status: r.status,
+    channelPushed: r.channel_pushed === 1,
+    error: r.error,
+    created: r.created,
+    updated: r.updated
+  };
+}
+
+function insertShipment(db, s) {
+  const info = db
+    .prepare(
+      `INSERT INTO shipments(order_id, provider, provider_parcel_id, carrier, method_id, method_name,
+         tracking_number, tracking_url, label_url, label_format, cost, currency, status, channel_pushed, error, created)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      s.orderId != null ? s.orderId : null,
+      s.provider || 'sendcloud',
+      s.providerParcelId || null,
+      s.carrier || null,
+      s.methodId != null ? String(s.methodId) : null,
+      s.methodName || null,
+      s.trackingNumber || null,
+      s.trackingUrl || null,
+      s.labelUrl || null,
+      s.labelFormat || null,
+      Number.isFinite(+s.cost) ? +s.cost : null,
+      s.currency || null,
+      s.status || 'created',
+      s.channelPushed ? 1 : 0,
+      s.error || null,
+      new Date().toISOString()
+    );
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+
+// True iff the order already has a really-bought (billable, non-cancelled) label.
+// Lets the buy route block a *sequential* second purchase after the in-memory
+// in-flight guard has already cleared (a retry / replay / double-submit). An
+// announced test parcel is not billable, so it does not block a later live buy.
+function getBilledShipment(db, orderId) {
+  const r = db
+    .prepare(
+      `SELECT * FROM shipments
+        WHERE order_id = ?
+          AND status NOT IN ('announced', 'cancelled', 'error')
+          AND (provider_parcel_id IS NOT NULL OR tracking_number IS NOT NULL)
+        ORDER BY id DESC LIMIT 1`
+    )
+    .get(orderId);
+  return r ? _mapShipment(r) : null;
+}
+
+function listShipments(db, opts = {}) {
+  if (opts.orderId != null) {
+    return db
+      .prepare('SELECT * FROM shipments WHERE order_id = ? ORDER BY id DESC')
+      .all(opts.orderId)
+      .map(_mapShipment);
+  }
+  const lim = Number.isFinite(+opts.limit) ? +opts.limit : 200;
+  return db.prepare('SELECT * FROM shipments ORDER BY id DESC LIMIT ?').all(lim).map(_mapShipment);
+}
+
+function updateShipmentStatus(db, id, fields) {
+  const map = {
+    status: 'status',
+    trackingNumber: 'tracking_number',
+    trackingUrl: 'tracking_url',
+    labelUrl: 'label_url',
+    channelPushed: 'channel_pushed',
+    error: 'error'
+  };
+  const sets = [];
+  const vals = [];
+  for (const k in map) {
+    if (fields[k] === undefined) continue;
+    sets.push(map[k] + '=?');
+    vals.push(k === 'channelPushed' ? (fields[k] ? 1 : 0) : fields[k]);
+  }
+  if (!sets.length) return;
+  sets.push('updated=?');
+  vals.push(new Date().toISOString());
+  db.prepare(`UPDATE shipments SET ${sets.join(',')} WHERE id=?`).run(...vals, id);
+  incrementDataVersion(db);
+}
+
+function getShipmentById(db, id) {
+  const r = db.prepare('SELECT * FROM shipments WHERE id = ?').get(id);
+  return r ? _mapShipment(r) : null;
+}
+
+// Order fields (camelCase) needed to build a shipping label.
+function getOrderForShipping(db, id) {
+  const r = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!r) return null;
+  return {
+    id: r.id,
+    channel: r.channel,
+    channelOrderId: r.channel_order_id,
+    status: r.status,
+    customerName: r.customer_name,
+    customerEmail: r.customer_email,
+    shipName: r.ship_name,
+    shipCompany: r.ship_company,
+    shipStreet: r.ship_street,
+    shipHouse: r.ship_house,
+    shipAddress2: r.ship_address2,
+    shipCity: r.ship_city,
+    shipPostal: r.ship_postal,
+    shipCountry: r.ship_country,
+    shipPhone: r.ship_phone,
+    shipWeightG: r.ship_weight_g
+  };
+}
+
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -3404,12 +3995,13 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   const t = thresholds || {};
   const a = avgComposition || {};
   db.prepare(
-    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
+    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,thresh_coir=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
   ).run(
     (t.hardwood && t.hardwood.minKg) ?? 50,
     (t.wheatbran && t.wheatbran.minKg) ?? 20,
     (t.gypsum && t.gypsum.minKg) ?? 5,
     (t.grain && t.grain.minKg) ?? 10,
+    (t.coir && t.coir.minKg) ?? 0,
     a.hwPct ?? 75,
     a.wbPct ?? 25,
     a.rhPct ?? 63,
@@ -4181,6 +4773,25 @@ function verifyOAuthClientSecret(db, clientId, secret) {
 }
 
 // ── Mushroom Strains CRUD ────────────────────────────────────
+// Extract the per-Sorte recipe defaults (rec_* columns) from an API payload.
+// Keys are column-named so they drop straight into INSERT/UPDATE builders.
+function _strainRecipeFields(d) {
+  const num = (v, def) => (Number.isFinite(+v) ? +v : def);
+  return {
+    rec_batch_type: typeof d.recBatchType === 'string' ? d.recBatchType : '',
+    rec_substrate: typeof d.recSubstrate === 'string' && d.recSubstrate ? d.recSubstrate : 'holzkleie',
+    rec_bag_kg: num(d.recBagKg, 0),
+    rec_hardwood_pct: num(d.recHardwoodPct, 0),
+    rec_wheatbran_pct: num(d.recWheatbranPct, 0),
+    rec_coir_pct: num(d.recCoirPct, 0),
+    rec_rh_pct: num(d.recRhPct, 0),
+    rec_gypsum: d.recGypsum ? 1 : 0,
+    rec_grain_kg: num(d.recGrainKg, 0),
+    rec_grain_rh_pct: num(d.recGrainRhPct, 52),
+    rec_inc_days: num(d.recIncDays, 14)
+  };
+}
+
 function listMushroomStrains(db) {
   return db
     .prepare('SELECT * FROM mushroom_strains ORDER BY name')
@@ -4191,18 +4802,34 @@ function listMushroomStrains(db) {
       kuerzel: r.kuerzel,
       description: r.description || '',
       created: r.created,
-      updated: r.updated || null
+      updated: r.updated || null,
+      // Production recipe defaults (v46) — drive the Charge/Labor quick-create.
+      recBatchType: r.rec_batch_type || '',
+      recSubstrate: r.rec_substrate || 'holzkleie',
+      recBagKg: r.rec_bag_kg || 0,
+      recHardwoodPct: r.rec_hardwood_pct || 0,
+      recWheatbranPct: r.rec_wheatbran_pct || 0,
+      recCoirPct: r.rec_coir_pct || 0,
+      recRhPct: r.rec_rh_pct || 0,
+      recGypsum: r.rec_gypsum === 1,
+      recGrainKg: r.rec_grain_kg || 0,
+      recGrainRhPct: r.rec_grain_rh_pct != null ? r.rec_grain_rh_pct : 52,
+      recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14
     }));
 }
 
-function createMushroomStrain(db, { name, kuerzel, description }) {
+function createMushroomStrain(db, data) {
+  const { name, kuerzel, description } = data || {};
   if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
+  const rec = _strainRecipeFields(data);
+  const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
+  const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
     const result = db
-      .prepare('INSERT INTO mushroom_strains(name,kuerzel,description,created) VALUES(?,?,?,?)')
-      .run(name.trim(), kuerzel.trim(), description || '', now);
+      .prepare(`INSERT INTO mushroom_strains(${cols.join(',')}) VALUES(${cols.map(() => '?').join(',')})`)
+      .run(...vals);
     incrementDataVersion(db);
     return result.lastInsertRowid;
   } catch (e) {
@@ -4213,12 +4840,29 @@ function createMushroomStrain(db, { name, kuerzel, description }) {
   }
 }
 
-function updateMushroomStrain(db, id, { name, kuerzel, description }) {
+function updateMushroomStrain(db, id, data) {
+  const { name, kuerzel, description } = data || {};
   const now = new Date().toISOString();
   const fields = {};
   if (name !== undefined) fields.name = name.trim();
   if (kuerzel !== undefined) fields.kuerzel = kuerzel.trim();
   if (description !== undefined) fields.description = description;
+  // Recipe defaults — write all rec_* columns when the payload carries any of
+  // them (the Sorte editor always sends the full set).
+  const recKeys = [
+    'recBatchType',
+    'recSubstrate',
+    'recBagKg',
+    'recHardwoodPct',
+    'recWheatbranPct',
+    'recCoirPct',
+    'recRhPct',
+    'recGypsum',
+    'recGrainKg',
+    'recGrainRhPct',
+    'recIncDays'
+  ];
+  if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   if (!Object.keys(fields).length) return;
   fields.updated = now;
   const cols = Object.keys(fields);
@@ -4282,10 +4926,17 @@ function mapBatchRow(r, bagRows, db, msById) {
     strainKuerzel,
     qty: r.qty,
     days: r.days,
-    substrate: { hardwood: r.sub_hardwood, wheatbran: r.sub_wheatbran, rh: r.sub_rh, gypsum: r.sub_gypsum === 1 },
+    substrate: {
+      hardwood: r.sub_hardwood,
+      wheatbran: r.sub_wheatbran,
+      coir: r.sub_coir || 0,
+      rh: r.sub_rh,
+      gypsum: r.sub_gypsum === 1
+    },
     bagKg: r.bag_kg,
     batchType: r.batch_type,
     grainRh: r.grain_rh || 0,
+    grainKg: r.grain_kg || 0,
     sourceId: r.source_id,
     notes: r.notes,
     strainText: r.strain_text || '',
@@ -4443,13 +5094,15 @@ function getInventory(db, logLimit) {
       hardwood: inv.stock_hardwood,
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
-      grain: inv.stock_grain
+      grain: inv.stock_grain,
+      coir: inv.stock_coir || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
-      grain: { minKg: inv.thresh_grain }
+      grain: { minKg: inv.thresh_grain },
+      coir: { minKg: inv.thresh_coir || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -5193,7 +5846,715 @@ function isSafeError(msg) {
   return SAFE_ERROR_PREFIXES.some((p) => s.startsWith(p));
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Order hub (Phase 0) — sales channels → products → production demand.
+// See ORDERS_HUB_DESIGN.md. All timestamps are ISO-8601 TEXT; booleans INTEGER.
+// ════════════════════════════════════════════════════════════════════
+
+function _lcEmail(s) {
+  const e = (s == null ? '' : String(s)).trim().toLowerCase();
+  return e || null;
+}
+
+// ── Products + components ──
+function listProducts(db, { activeOnly = false } = {}) {
+  const where = activeOnly ? 'WHERE active = 1' : '';
+  return db
+    .prepare(
+      `SELECT id, sku, name, category, species, strain, active, notes, created,
+              stock, lead_days AS leadDays, prod_type AS prodType
+       FROM products ${where} ORDER BY name COLLATE NOCASE`
+    )
+    .all();
+}
+
+function getProduct(db, id) {
+  const p = db
+    .prepare(
+      `SELECT id, sku, name, category, species, strain, active, notes, created,
+              stock, lead_days AS leadDays,
+              prod_type AS prodType, prod_species AS prodSpecies, prod_strain AS prodStrain,
+              prod_days AS prodDays, prod_bag_kg AS prodBagKg, prod_substrate AS prodSubstrate,
+              prod_hardwood_pct AS prodHardwoodPct, prod_wheatbran_pct AS prodWheatbranPct,
+              prod_coir_pct AS prodCoirPct, prod_gypsum AS prodGypsum, prod_rh_pct AS prodRhPct,
+              prod_grain_kg AS prodGrainKg, prod_grain_rh_pct AS prodGrainRhPct
+       FROM products WHERE id = ?`
+    )
+    .get(id);
+  if (!p) return null;
+  // Per-unit raw-material need (dry kg) so the catalog/editor can preview it.
+  p.materialNeed = computeProductMaterialNeed(p);
+  return p;
+}
+
+function upsertProduct(db, p) {
+  if (!p || !p.name) throw new Error('upsertProduct: name required');
+  const now = new Date().toISOString();
+  let id = p.id;
+  const num = (v, d) => (Number.isFinite(+v) ? +v : d);
+  const f = {
+    sku: p.sku || null,
+    name: p.name,
+    category: p.category || null,
+    species: p.species || null,
+    strain: p.strain || null,
+    active: p.active === 0 ? 0 : 1,
+    notes: p.notes || '',
+    stock: num(p.stock, 0),
+    leadDays: num(p.leadDays, 0),
+    prodType: p.prodType || 'buy',
+    prodSpecies: p.prodSpecies || null,
+    prodStrain: p.prodStrain || null,
+    prodDays: num(p.prodDays, 14),
+    prodBagKg: num(p.prodBagKg, 0),
+    prodSubstrate: p.prodSubstrate || null,
+    prodHardwoodPct: num(p.prodHardwoodPct, 0),
+    prodWheatbranPct: num(p.prodWheatbranPct, 0),
+    prodCoirPct: num(p.prodCoirPct, 0),
+    prodGypsum: p.prodGypsum ? 1 : 0,
+    prodRhPct: num(p.prodRhPct, 0),
+    prodGrainKg: num(p.prodGrainKg, 0),
+    prodGrainRhPct: num(p.prodGrainRhPct, 52)
+  };
+  const vals = [
+    f.sku,
+    f.name,
+    f.category,
+    f.species,
+    f.strain,
+    f.active,
+    f.notes,
+    f.stock,
+    f.leadDays,
+    f.prodType,
+    f.prodSpecies,
+    f.prodStrain,
+    f.prodDays,
+    f.prodBagKg,
+    f.prodSubstrate,
+    f.prodHardwoodPct,
+    f.prodWheatbranPct,
+    f.prodCoirPct,
+    f.prodGypsum,
+    f.prodRhPct,
+    f.prodGrainKg,
+    f.prodGrainRhPct
+  ];
+  if (id) {
+    db.prepare(
+      `UPDATE products SET sku=?, name=?, category=?, species=?, strain=?, active=?, notes=?, stock=?, lead_days=?,
+        prod_type=?, prod_species=?, prod_strain=?, prod_days=?, prod_bag_kg=?, prod_substrate=?,
+        prod_hardwood_pct=?, prod_wheatbran_pct=?, prod_coir_pct=?, prod_gypsum=?, prod_rh_pct=?,
+        prod_grain_kg=?, prod_grain_rh_pct=? WHERE id=?`
+    ).run(...vals, id);
+  } else {
+    const info = db
+      .prepare(
+        `INSERT INTO products(sku,name,category,species,strain,active,notes,stock,lead_days,
+          prod_type,prod_species,prod_strain,prod_days,prod_bag_kg,prod_substrate,
+          prod_hardwood_pct,prod_wheatbran_pct,prod_coir_pct,prod_gypsum,prod_rh_pct,
+          prod_grain_kg,prod_grain_rh_pct,created)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(...vals, now);
+    id = info.lastInsertRowid;
+  }
+  incrementDataVersion(db);
+  return id;
+}
+
+function deleteProduct(db, id) {
+  const info = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  incrementDataVersion(db);
+  return info.changes;
+}
+
+// ── Per-product production spec → raw-material need ──────────
+// Returns dry-kg consumed per ONE unit, keyed to the shared inventory ledger
+// (grain/hardwood/wheatbran/gypsum/coir). Mirrors the batch (charge) hydration
+// math in computeBatchMaterialDeltas so the order-hub and the Chargen agree.
+function computeProductMaterialNeed(p) {
+  const need = { grain: 0, hardwood: 0, wheatbran: 0, gypsum: 0, coir: 0 };
+  if (!p) return need;
+  const num = (v) => (Number.isFinite(+v) ? +v : 0);
+  const type = p.prodType || 'buy';
+  // Substrate part (block + all-in-one)
+  if (type === 'block' || type === 'allinone') {
+    const bagKg = num(p.prodBagKg);
+    const rh = num(p.prodRhPct);
+    const dry = rh > 0 ? bagKg * (1 - rh / 100) : bagKg;
+    if ((p.prodSubstrate || 'holzkleie') === 'cvg') {
+      const coirPct = num(p.prodCoirPct) || 100;
+      need.coir += dry * (coirPct / 100);
+    } else {
+      need.hardwood += dry * (num(p.prodHardwoodPct) / 100);
+      need.wheatbran += dry * (num(p.prodWheatbranPct) / 100);
+    }
+    if (p.prodGypsum) need.gypsum += dry * 0.01;
+  }
+  // Grain spawn part (grain + all-in-one)
+  if (type === 'grain' || type === 'allinone') {
+    const gKg = num(p.prodGrainKg);
+    const gRh = p.prodGrainRhPct != null ? num(p.prodGrainRhPct) : 52;
+    need.grain += gRh > 0 ? gKg * (1 - gRh / 100) : gKg;
+  }
+  return need;
+}
+
+// ── Channel ↔ product mapping ──
+function resolveProductId(db, channel, channelSku, listingId) {
+  const row = db
+    .prepare(
+      `SELECT product_id AS productId FROM product_channel_map
+       WHERE channel = ? AND product_id IS NOT NULL
+         AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
+       LIMIT 1`
+    )
+    .get(channel, channelSku || null, listingId || null);
+  return row ? row.productId : null;
+}
+
+function mapListing(db, { channel, channelSku, listingId, productId, title } = {}) {
+  if (!channel) throw new Error('mapListing: channel required');
+  const now = new Date().toISOString();
+  // Remember the mapping for future auto-resolution — only meaningful when a
+  // sku or listing id is present (manual/title-only lines have neither).
+  if (channelSku || listingId) {
+    db.prepare(
+      `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+       VALUES(?,?,?,?,?)
+       ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+    ).run(channel, channelSku || null, listingId || null, productId || null, now);
+  }
+  // Back-resolve currently-unmapped order items for this listing group.
+  if (productId && (channelSku || listingId)) {
+    // Identified by sku/listing → resolve all matching lines in the channel.
+    db.prepare(
+      `UPDATE order_items SET product_id = ?
+       WHERE product_id IS NULL
+         AND ( (channel_sku IS NOT NULL AND channel_sku = ?) OR (listing_id IS NOT NULL AND listing_id = ?) )
+         AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
+    ).run(productId, channelSku || null, listingId || null, channel);
+  } else if (productId && title) {
+    // No sku/listing (e.g. a manual entry) → resolve by exact title in the channel.
+    db.prepare(
+      `UPDATE order_items SET product_id = ?
+       WHERE product_id IS NULL AND channel_sku IS NULL AND listing_id IS NULL AND title IS ?
+         AND order_id IN (SELECT id FROM orders WHERE channel = ?)`
+    ).run(productId, title, channel);
+  }
+  incrementDataVersion(db);
+}
+
+function listUnmappedItems(db) {
+  return db
+    .prepare(
+      `SELECT o.channel, oi.channel_sku AS channelSku, oi.listing_id AS listingId, oi.title,
+              SUM(oi.qty) AS qty, COUNT(*) AS lines
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id
+       WHERE oi.product_id IS NULL AND o.status NOT IN ('shipped','cancelled')
+       GROUP BY o.channel, oi.channel_sku, oi.listing_id, oi.title
+       ORDER BY qty DESC`
+    )
+    .all();
+}
+
+// ── Customers (dedup + rolled-up stats) ──
+function upsertCustomerFromOrder(db, o) {
+  const email = _lcEmail(o.customerEmail);
+  const handle = o.buyerHandle ? String(o.buyerHandle).trim() : email; // eBay masks email → username fallback
+  const now = new Date().toISOString();
+  let customerId = null;
+  if (handle) {
+    const idn = db
+      .prepare('SELECT customer_id AS id FROM customer_identities WHERE channel = ? AND handle = ?')
+      .get(o.channel, handle);
+    if (idn) customerId = idn.id;
+  }
+  if (!customerId && email) {
+    const c = db.prepare('SELECT id FROM customers WHERE email = ?').get(email);
+    if (c) customerId = c.id;
+  }
+  if (!customerId) {
+    const info = db
+      .prepare(
+        `INSERT INTO customers(email, name, country, first_channel, first_order, last_order, order_count, total_spent, currency, notes, created)
+         VALUES(?,?,?,?,?,?,0,0,?,?,?)`
+      )
+      .run(
+        email,
+        o.customerName || null,
+        o.shipCountry || null,
+        o.channel,
+        o.orderDate || now,
+        o.orderDate || now,
+        o.currency || null,
+        '',
+        now
+      );
+    customerId = info.lastInsertRowid;
+  }
+  if (handle) {
+    db.prepare('INSERT OR IGNORE INTO customer_identities(customer_id, channel, handle, created) VALUES(?,?,?,?)').run(
+      customerId,
+      o.channel,
+      handle,
+      now
+    );
+  }
+  return customerId;
+}
+
+function recomputeCustomerStats(db, customerId) {
+  if (!customerId) return;
+  const agg = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0) AS spent,
+              MIN(order_date) AS first, MAX(order_date) AS last
+       FROM orders WHERE customer_id = ? AND status != 'cancelled'`
+    )
+    .get(customerId);
+  db.prepare(
+    'UPDATE customers SET order_count = ?, total_spent = ?, first_order = COALESCE(?, first_order), last_order = COALESCE(?, last_order) WHERE id = ?'
+  ).run(agg.cnt, agg.spent, agg.first, agg.last, customerId);
+}
+
+function listCustomers(db, { limit = 200 } = {}) {
+  const lim = Math.max(1, Math.min(1000, parseInt(limit, 10) || 200));
+  return db
+    .prepare(
+      `SELECT c.id, c.email, c.name, c.country, c.first_channel AS firstChannel,
+              c.first_order AS firstOrder, c.last_order AS lastOrder,
+              c.order_count AS orderCount, c.total_spent AS totalSpent, c.currency,
+              (SELECT GROUP_CONCAT(DISTINCT ci.channel) FROM customer_identities ci WHERE ci.customer_id = c.id) AS channels
+       FROM customers c ORDER BY c.total_spent DESC, c.order_count DESC LIMIT ?`
+    )
+    .all(lim);
+}
+
+function mergeCustomers(db, primaryId, secondaryId) {
+  if (!primaryId || !secondaryId || primaryId === secondaryId) return;
+  db.prepare('UPDATE orders SET customer_id = ? WHERE customer_id = ?').run(primaryId, secondaryId);
+  db.prepare('UPDATE OR IGNORE customer_identities SET customer_id = ? WHERE customer_id = ?').run(
+    primaryId,
+    secondaryId
+  );
+  db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(secondaryId);
+  db.prepare('DELETE FROM customers WHERE id = ?').run(secondaryId);
+  recomputeCustomerStats(db, primaryId);
+  incrementDataVersion(db);
+}
+
+// ── Orders (idempotent ingestion) ──
+function _insertOrderItems(db, orderId, channel, items) {
+  const ins = db.prepare(
+    'INSERT INTO order_items(order_id, channel_sku, listing_id, title, qty, product_id, unit_price) VALUES(?,?,?,?,?,?,?)'
+  );
+  for (const it of items || []) {
+    const productId = it.productId || resolveProductId(db, channel, it.channelSku, it.listingId);
+    ins.run(
+      orderId,
+      it.channelSku || null,
+      it.listingId || null,
+      it.title || null,
+      it.qty || 1,
+      productId || null,
+      it.unitPrice != null ? it.unitPrice : null
+    );
+  }
+}
+
+function upsertOrder(db, o) {
+  if (!o || !o.channel || o.channelOrderId == null) throw new Error('upsertOrder: channel + channelOrderId required');
+  const now = new Date().toISOString();
+  const coid = String(o.channelOrderId);
+  const customerId = upsertCustomerFromOrder(db, o);
+  const existing = db
+    .prepare('SELECT id, status FROM orders WHERE channel = ? AND channel_order_id = ?')
+    .get(o.channel, coid);
+  let orderId;
+  const raw = o.raw != null ? JSON.stringify(o.raw) : null;
+  // Structured ship-to address from the channel, so synced orders are ready to
+  // label without manual entry. null values preserve any existing/edited value.
+  const sName = o.shipName || null,
+    sCompany = o.shipCompany || null,
+    sStreet = o.shipStreet || null,
+    sHouse = o.shipHouse || null,
+    sAddr2 = o.shipAddress2 || null,
+    sCity = o.shipCity || null,
+    sPostal = o.shipPostal || null,
+    sPhone = o.shipPhone || null,
+    sWeight = o.shipWeightG != null && o.shipWeightG !== '' ? o.shipWeightG : null;
+  if (existing) {
+    orderId = existing.id;
+    // Don't let a channel re-sync downgrade locally-advanced progress. Channels
+    // only emit 'new' (unshipped) or the terminal 'shipped'/'cancelled'; a local
+    // 'in_production'/'ready'/'shipped' must survive the next sync. Terminal
+    // channel states stay authoritative; an incoming 'new' never overwrites a
+    // higher local rank (null → COALESCE keeps the current status).
+    const _rank = { new: 0, in_production: 1, ready: 2, shipped: 3, cancelled: 3 };
+    const _incoming = o.status || null;
+    let _nextStatus;
+    if (_incoming === 'shipped' || _incoming === 'cancelled') _nextStatus = _incoming;
+    else if (_incoming && (_rank[_incoming] || 0) >= (_rank[existing.status] || 0)) _nextStatus = _incoming;
+    else _nextStatus = null;
+    db.prepare(
+      `UPDATE orders SET status = COALESCE(?, status), order_date = ?, ship_by = ?, customer_id = ?,
+        customer_name = ?, customer_email = ?, ship_country = ?, total_amount = ?, currency = ?, raw_json = ?,
+        ship_name = COALESCE(?, ship_name), ship_company = COALESCE(?, ship_company), ship_street = COALESCE(?, ship_street),
+        ship_house = COALESCE(?, ship_house), ship_address2 = COALESCE(?, ship_address2), ship_city = COALESCE(?, ship_city),
+        ship_postal = COALESCE(?, ship_postal), ship_phone = COALESCE(?, ship_phone), ship_weight_g = COALESCE(?, ship_weight_g),
+        updated = ?
+       WHERE id = ?`
+    ).run(
+      _nextStatus,
+      o.orderDate || null,
+      o.shipBy || null,
+      customerId,
+      o.customerName || null,
+      o.customerEmail || null,
+      o.shipCountry || null,
+      o.totalAmount != null ? o.totalAmount : null,
+      o.currency || null,
+      raw,
+      sName,
+      sCompany,
+      sStreet,
+      sHouse,
+      sAddr2,
+      sCity,
+      sPostal,
+      sPhone,
+      sWeight,
+      now,
+      orderId
+    );
+    if (Array.isArray(o.items)) {
+      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+      _insertOrderItems(db, orderId, o.channel, o.items);
+    }
+  } else {
+    const info = db
+      .prepare(
+        `INSERT INTO orders(channel, channel_order_id, status, order_date, ship_by, customer_id,
+           customer_name, customer_email, ship_country, total_amount, currency, raw_json,
+           ship_name, ship_company, ship_street, ship_house, ship_address2, ship_city, ship_postal, ship_phone, ship_weight_g,
+           imported, updated)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        o.channel,
+        coid,
+        o.status || 'new',
+        o.orderDate || now,
+        o.shipBy || null,
+        customerId,
+        o.customerName || null,
+        o.customerEmail || null,
+        o.shipCountry || null,
+        o.totalAmount != null ? o.totalAmount : null,
+        o.currency || null,
+        raw,
+        sName,
+        sCompany,
+        sStreet,
+        sHouse,
+        sAddr2,
+        sCity,
+        sPostal,
+        sPhone,
+        sWeight,
+        now,
+        now
+      );
+    orderId = info.lastInsertRowid;
+    _insertOrderItems(db, orderId, o.channel, o.items);
+  }
+  recomputeCustomerStats(db, customerId);
+  incrementDataVersion(db);
+  return orderId;
+}
+
+function listOrders(db, { status, channel, limit = 200 } = {}) {
+  const lim = Math.max(1, Math.min(1000, parseInt(limit, 10) || 200));
+  const conds = [];
+  const args = [];
+  if (status) {
+    conds.push('o.status = ?');
+    args.push(status);
+  }
+  if (channel) {
+    conds.push('o.channel = ?');
+    args.push(channel);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  args.push(lim);
+  return db
+    .prepare(
+      `SELECT o.id, o.channel, o.channel_order_id AS channelOrderId, o.status, o.order_date AS orderDate,
+              o.ship_by AS shipBy, o.customer_name AS customerName, o.ship_country AS shipCountry,
+              o.total_amount AS totalAmount, o.currency,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itemCount,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id IS NULL) AS unmappedCount
+       FROM orders o ${where}
+       ORDER BY (o.ship_by IS NULL), o.ship_by ASC, o.order_date DESC
+       LIMIT ?`
+    )
+    .all(...args);
+}
+
+// -- Sales channel config (live order sync: Wix / Etsy / eBay) --
+// Reuses the sales_channel_config table (v42). Rows are created lazily.
+const SALES_CHANNELS = ['wix', 'etsy', 'ebay'];
+function _ensureChannelRow(db, channel) {
+  db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
+    channel,
+    new Date().toISOString()
+  );
+}
+function getChannelConfig(db, channel) {
+  _ensureChannelRow(db, channel);
+  const r = db.prepare('SELECT * FROM sales_channel_config WHERE channel = ?').get(channel) || {};
+  return {
+    channel,
+    enabled: r.enabled === 1,
+    apiKey: r.api_key || '',
+    siteId: r.site_id || '',
+    clientId: r.client_id || '',
+    clientSecret: r.client_secret || '',
+    accessToken: r.access_token || '',
+    refreshToken: r.refresh_token || '',
+    tokenExpires: r.token_expires || null,
+    webhookSecret: r.webhook_secret || '',
+    lastSync: r.last_sync || null,
+    lastCursor: r.last_cursor || null,
+    lastError: r.last_error || null
+  };
+}
+// Client-facing list — secrets are reduced to "is set" flags, never exposed.
+function listChannelConfigs(db) {
+  return SALES_CHANNELS.map((c) => {
+    const cfg = getChannelConfig(db, c);
+    return {
+      channel: c,
+      enabled: cfg.enabled,
+      siteId: cfg.siteId,
+      clientId: cfg.clientId,
+      hasApiKey: !!cfg.apiKey,
+      hasClientSecret: !!cfg.clientSecret,
+      connected: c === 'wix' ? !!cfg.apiKey && !!cfg.siteId : !!cfg.accessToken,
+      tokenExpires: cfg.tokenExpires,
+      lastSync: cfg.lastSync,
+      lastError: cfg.lastError
+    };
+  });
+}
+function updateChannelConfig(db, channel, f) {
+  if (!SALES_CHANNELS.includes(channel)) throw new Error('unknown channel: ' + channel);
+  _ensureChannelRow(db, channel);
+  const cur = getChannelConfig(db, channel);
+  const cols = {
+    enabled: f.enabled !== undefined ? (f.enabled ? 1 : 0) : cur.enabled ? 1 : 0,
+    api_key: f.apiKey !== undefined ? f.apiKey : cur.apiKey,
+    site_id: f.siteId !== undefined ? f.siteId : cur.siteId,
+    client_id: f.clientId !== undefined ? f.clientId : cur.clientId,
+    client_secret: f.clientSecret !== undefined ? f.clientSecret : cur.clientSecret,
+    access_token: f.accessToken !== undefined ? f.accessToken : cur.accessToken,
+    refresh_token: f.refreshToken !== undefined ? f.refreshToken : cur.refreshToken,
+    token_expires: f.tokenExpires !== undefined ? f.tokenExpires : cur.tokenExpires,
+    webhook_secret: f.webhookSecret !== undefined ? f.webhookSecret : cur.webhookSecret
+  };
+  const keys = Object.keys(cols);
+  db.prepare(`UPDATE sales_channel_config SET ${keys.map((k) => k + '=?').join(',')} WHERE channel=?`).run(
+    ...keys.map((k) => cols[k]),
+    channel
+  );
+  incrementDataVersion(db);
+}
+function setChannelSyncState(db, channel, s) {
+  _ensureChannelRow(db, channel);
+  db.prepare('UPDATE sales_channel_config SET last_sync=?, last_cursor=?, last_error=? WHERE channel=?').run(
+    s.lastSync !== undefined ? s.lastSync : null,
+    s.lastCursor !== undefined ? s.lastCursor : null,
+    s.lastError !== undefined ? s.lastError : null,
+    channel
+  );
+  incrementDataVersion(db);
+}
+
+function getOrder(db, id) {
+  const o = db
+    .prepare(
+      `SELECT id, channel, channel_order_id AS channelOrderId, status, order_date AS orderDate, ship_by AS shipBy,
+              customer_id AS customerId, customer_name AS customerName, customer_email AS customerEmail,
+              ship_country AS shipCountry, total_amount AS totalAmount, currency, imported, updated
+       FROM orders WHERE id = ?`
+    )
+    .get(id);
+  if (!o) return null;
+  o.items = db
+    .prepare(
+      `SELECT oi.id, oi.channel_sku AS channelSku, oi.listing_id AS listingId, oi.title, oi.qty,
+              oi.product_id AS productId, oi.unit_price AS unitPrice, p.name AS productName
+       FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id = ? ORDER BY oi.id`
+    )
+    .all(id);
+  return o;
+}
+
+function setOrderStatus(db, id, status) {
+  const allowed = ['new', 'in_production', 'ready', 'shipped', 'cancelled'];
+  if (!allowed.includes(status)) throw new Error('setOrderStatus: invalid status');
+  const info = db
+    .prepare('UPDATE orders SET status = ?, updated = ? WHERE id = ?')
+    .run(status, new Date().toISOString(), id);
+  incrementDataVersion(db);
+  return info.changes;
+}
+
+// ── Reservation + production-demand engine ──
+function reserveDemand(db, { batchId = null, allocations = [] } = {}) {
+  const now = new Date().toISOString();
+  // For a concrete batch the UNIQUE(order_item_id, batch_id) upsert works. But SQLite
+  // treats NULLs as DISTINCT, so ON CONFLICT never fires when batch_id IS NULL — a
+  // re-reserve against finished stock (no batch) would insert a duplicate 'reserved'
+  // row and double-count demand. Handle the NULL-batch case with update-then-insert.
+  const insBatch = db.prepare(
+    `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created)
+     VALUES(?,?,?,'reserved',?)
+     ON CONFLICT(order_item_id, batch_id) DO UPDATE SET qty = excluded.qty`
+  );
+  const updNull = db.prepare(
+    "UPDATE order_allocations SET qty = ? WHERE order_item_id = ? AND batch_id IS NULL AND status = 'reserved'"
+  );
+  const insNull = db.prepare(
+    `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created) VALUES(?,NULL,?,'reserved',?)`
+  );
+  const orderIds = new Set();
+  for (const a of allocations) {
+    if (batchId == null) {
+      const r = updNull.run(a.qty || 0, a.orderItemId);
+      if (r.changes === 0) insNull.run(a.orderItemId, a.qty || 0, now);
+    } else {
+      insBatch.run(a.orderItemId, batchId, a.qty || 0, now);
+    }
+    const row = db.prepare('SELECT order_id AS oid FROM order_items WHERE id = ?').get(a.orderItemId);
+    if (row) orderIds.add(row.oid);
+  }
+  for (const oid of orderIds) {
+    db.prepare("UPDATE orders SET status = 'in_production', updated = ? WHERE id = ? AND status = 'new'").run(now, oid);
+  }
+  incrementDataVersion(db);
+}
+
+function computeProductionDemand(db) {
+  // MRP rollup per product:
+  //   open demand → reserve from finished stock first → shortfall = produce.
+  //   For the produce shortfall, explode the product's production spec into raw
+  //   materials (grain/hardwood/wheatbran/gypsum/coir) via the same hydration
+  //   math as the batch engine, and check the shared `inventory` ledger.
+  const rows = db
+    .prepare(
+      `SELECT p.id AS productId, p.name, p.category, p.stock, p.lead_days AS leadDays,
+              p.prod_type AS prodType, p.prod_bag_kg AS prodBagKg, p.prod_substrate AS prodSubstrate,
+              p.prod_hardwood_pct AS prodHardwoodPct, p.prod_wheatbran_pct AS prodWheatbranPct,
+              p.prod_coir_pct AS prodCoirPct, p.prod_gypsum AS prodGypsum, p.prod_rh_pct AS prodRhPct,
+              p.prod_grain_kg AS prodGrainKg, p.prod_grain_rh_pct AS prodGrainRhPct,
+              SUM(oi.qty) AS demand, MIN(o.ship_by) AS earliestShipBy,
+              COALESCE((SELECT SUM(a.qty) FROM order_allocations a
+                          JOIN order_items oi2 ON oi2.id = a.order_item_id
+                          JOIN orders o2 ON o2.id = oi2.order_id
+                         WHERE oi2.product_id = p.id AND a.status = 'reserved'
+                           AND o2.status IN ('new','in_production')), 0) AS reserved
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       JOIN products p ON p.id = oi.product_id
+       WHERE o.status IN ('new','in_production')
+       GROUP BY p.id`
+    )
+    .all();
+
+  const inv = db.prepare('SELECT * FROM inventory WHERE id = 1').get() || {};
+  const stockByMat = {
+    grain: inv.stock_grain || 0,
+    hardwood: inv.stock_hardwood || 0,
+    wheatbran: inv.stock_wheatbran || 0,
+    gypsum: inv.stock_gypsum || 0,
+    coir: inv.stock_coir || 0
+  };
+
+  return rows
+    .map((r) => {
+      const producible = (r.prodType || 'buy') !== 'buy';
+      const openDemand = Math.max(0, (r.demand || 0) - (r.reserved || 0));
+      const fromStock = Math.min(openDemand, Math.max(0, r.stock || 0));
+      const remaining = openDemand - fromStock;
+      const toProduce = producible ? remaining : 0;
+      const backorder = producible ? 0 : remaining; // bought-in & out of stock → must restock
+      let startBy = null;
+      if (toProduce > 0 && r.earliestShipBy) {
+        // Date-only ship_by treated as UTC midnight so lead-time subtraction is timezone-safe.
+        const base = String(r.earliestShipBy);
+        const d = new Date(base.length === 10 ? base + 'T00:00:00Z' : base);
+        if (!isNaN(d.getTime())) {
+          d.setUTCDate(d.getUTCDate() - (r.leadDays || 0));
+          startBy = d.toISOString().slice(0, 10);
+        }
+      }
+      let components = [];
+      if (toProduce > 0) {
+        const per = computeProductMaterialNeed(r);
+        components = Object.keys(per)
+          .filter((mat) => per[mat] > 0)
+          .map((mat) => {
+            const need = per[mat] * toProduce;
+            const have = stockByMat[mat] || 0;
+            return { mat, unit: 'kg', need, have, short: Math.max(0, need - have) };
+          });
+      }
+      return {
+        productId: r.productId,
+        product: r.name,
+        category: r.category,
+        prodType: r.prodType || 'buy',
+        demand: r.demand || 0,
+        reserved: r.reserved || 0,
+        fromStock,
+        toProduce,
+        backorder,
+        leadDays: r.leadDays || 0,
+        startBy,
+        components,
+        componentsShort: components.some((c) => c.short > 0)
+      };
+    })
+    .filter((r) => r.toProduce > 0 || r.fromStock > 0 || r.backorder > 0)
+    .sort((a, b) => (a.startBy || '9999-99-99').localeCompare(b.startBy || '9999-99-99'));
+}
+
 module.exports = {
+  // ── Order hub (Phase 0) ──
+  listProducts,
+  getProduct,
+  upsertProduct,
+  deleteProduct,
+  mapListing,
+  resolveProductId,
+  listUnmappedItems,
+  upsertOrder,
+  listOrders,
+  getChannelConfig,
+  listChannelConfigs,
+  updateChannelConfig,
+  setChannelSyncState,
+  getOrder,
+  setOrderStatus,
+  listCustomers,
+  mergeCustomers,
+  reserveDemand,
+  computeProductionDemand,
+  computeProductMaterialNeed,
   openDb,
   readAll,
   writeAll,
@@ -5227,6 +6588,7 @@ module.exports = {
   deleteUser,
   SESSION_TTL_MS,
   updateUserPassword,
+  setUserCanShip,
   resetUserPassword,
   insertBatch,
   updateBatchField,
@@ -5263,6 +6625,15 @@ module.exports = {
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
+  getShippingConfig,
+  updateShippingConfig,
+  updateOrderShipAddress,
+  insertShipment,
+  getBilledShipment,
+  listShipments,
+  updateShipmentStatus,
+  getShipmentById,
+  getOrderForShipping,
   applyInventoryDelta,
   setInventoryAbsolute,
   updateInventoryConfig,

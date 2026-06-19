@@ -1,0 +1,300 @@
+'use strict';
+// Live channel sync: sales_channel_config round-trip (+ secret masking) and Wix
+// order normalization, including end-to-end ingest via upsertOrder with the
+// structured ship-to address.
+const { describe, it, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const db = require('../db.js');
+const channels = require('../channels.js');
+
+function tmpDb() {
+  const p = path.join(os.tmpdir(), 'mt_chan_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
+  return { path: p, db: db.openDb(p) };
+}
+
+describe('sales channel config', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('defaults to disabled with empty creds', () => {
+    const cfg = db.getChannelConfig(d, 'wix');
+    assert.equal(cfg.enabled, false);
+    assert.equal(cfg.apiKey, '');
+    assert.equal(cfg.siteId, '');
+  });
+
+  it('round-trips config and masks secrets in the list', () => {
+    db.updateChannelConfig(d, 'wix', { enabled: true, apiKey: 'KEY123', siteId: 'site-abc' });
+    const cfg = db.getChannelConfig(d, 'wix');
+    assert.equal(cfg.enabled, true);
+    assert.equal(cfg.apiKey, 'KEY123');
+    assert.equal(cfg.siteId, 'site-abc');
+    const list = db.listChannelConfigs(d);
+    const wix = list.find((c) => c.channel === 'wix');
+    assert.equal(wix.hasApiKey, true);
+    assert.equal(wix.apiKey, undefined, 'raw apiKey never leaves the server');
+    assert.equal(wix.connected, true, 'wix connected = apiKey + siteId set');
+    assert.equal(list.length, 3, 'wix/etsy/ebay');
+  });
+
+  it('records sync state', () => {
+    db.setChannelSyncState(d, 'wix', { lastSync: '2026-06-16T00:00:00Z', lastError: null });
+    const cfg = db.getChannelConfig(d, 'wix');
+    assert.equal(cfg.lastSync, '2026-06-16T00:00:00Z');
+    assert.equal(cfg.lastError, null);
+  });
+});
+
+describe('Wix order normalization', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('normalizes a Wix order and ingests it with the ship address', () => {
+    const wixOrder = {
+      id: 'abc-1',
+      number: 1007,
+      status: 'APPROVED',
+      fulfillmentStatus: 'NOT_FULFILLED',
+      createdDate: '2026-06-15T10:00:00Z',
+      currency: 'EUR',
+      priceSummary: { total: { amount: '24.90', currency: 'EUR' } },
+      buyerInfo: { email: 'kunde@example.de' },
+      recipientInfo: {
+        contactDetails: { firstName: 'Max', lastName: 'Mustermann', phone: '+4915112345678', company: 'Pilz GmbH' },
+        address: {
+          streetAddress: { name: 'Hauptstr', number: '5' },
+          city: 'Erlangen',
+          postalCode: '91054',
+          country: 'DE'
+        }
+      },
+      lineItems: [
+        {
+          quantity: 2,
+          productName: { original: "Lion's Mane Kit" },
+          price: { amount: '12.45' },
+          physicalProperties: { sku: 'LM-KIT' },
+          catalogReference: { catalogItemId: 'cat-1' }
+        }
+      ]
+    };
+    const o = channels._normalizeWix(wixOrder);
+    assert.equal(o.channel, 'wix');
+    assert.equal(o.channelOrderId, '1007');
+    assert.equal(o.status, 'new');
+    assert.equal(o.customerName, 'Max Mustermann');
+    assert.equal(o.customerEmail, 'kunde@example.de');
+    assert.equal(o.totalAmount, 24.9);
+    assert.equal(o.shipStreet, 'Hauptstr');
+    assert.equal(o.shipHouse, '5');
+    assert.equal(o.shipPostal, '91054');
+    assert.equal(o.shipCity, 'Erlangen');
+    assert.equal(o.items.length, 1);
+    assert.equal(o.items[0].channelSku, 'LM-KIT');
+    assert.equal(o.items[0].qty, 2);
+
+    const orderId = db.upsertOrder(d, o);
+    const stored = db.getOrderForShipping(d, orderId);
+    assert.equal(stored.shipPostal, '91054');
+    assert.equal(stored.shipName, 'Max Mustermann');
+    assert.equal(stored.shipCity, 'Erlangen');
+
+    // Re-sync is idempotent (dedupe by channel + channelOrderId).
+    db.upsertOrder(d, o);
+    const list = db.listOrders(d, { channel: 'wix' });
+    assert.equal(list.length, 1);
+  });
+
+  it('splits an embedded house number out of the Wix street line', () => {
+    const o = channels._normalizeWix({
+      number: 10001,
+      createdDate: '2025-08-12T00:00:00Z',
+      recipientInfo: {
+        contactDetails: { firstName: 'Cam', lastName: 'Ortiz' },
+        address: { streetAddress: { name: 'Markgrafenallee 18' }, city: 'Bayreuth', postalCode: '95448', country: 'DE' }
+      },
+      lineItems: []
+    });
+    assert.equal(o.shipStreet, 'Markgrafenallee');
+    assert.equal(o.shipHouse, '18');
+  });
+
+  it('attributes the order to its true origin (Wix aggregates eBay/Etsy)', () => {
+    const mk = (type) =>
+      channels._normalizeWix({
+        number: 1,
+        channelInfo: type ? { type } : undefined,
+        recipientInfo: { contactDetails: {}, address: {} },
+        lineItems: []
+      });
+    assert.equal(mk('EBAY').channel, 'ebay');
+    assert.equal(mk('ETSY').channel, 'etsy');
+    assert.equal(mk('WEB').channel, 'wix');
+    assert.equal(mk(undefined).channel, 'wix');
+  });
+});
+
+describe('Wix write-back + WEB-only sync', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body)
+  });
+  const cfg = { apiKey: 'KEY', siteId: 'SITE', clientId: 'ACC' };
+
+  it('fetchOrders imports only WEB-origin orders', async () => {
+    const restore = mockFetch(async () =>
+      jsonRes(200, {
+        orders: [
+          {
+            id: 'a',
+            number: 1,
+            channelInfo: { type: 'WEB' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          },
+          {
+            id: 'b',
+            number: 2,
+            channelInfo: { type: 'EBAY' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          },
+          {
+            id: 'c',
+            number: 3,
+            channelInfo: { type: 'ETSY' },
+            recipientInfo: { contactDetails: {}, address: {} },
+            lineItems: []
+          }
+        ],
+        metadata: { cursors: {} }
+      })
+    );
+    try {
+      const { orders } = await channels.wix.fetchOrders(cfg, {});
+      assert.equal(orders.length, 1);
+      assert.equal(orders[0].channel, 'wix');
+      assert.equal(orders[0].channelOrderId, '1');
+    } finally {
+      restore();
+    }
+  });
+
+  it('pushTracking posts a Wix fulfillment with the tracking number', async () => {
+    let sent = null;
+    const restore = mockFetch(async (url, opts) => {
+      sent = { url, body: JSON.parse(opts.body), headers: opts.headers };
+      return jsonRes(200, { fulfillment: { id: 'f1' } });
+    });
+    try {
+      const r = await channels.wix.pushTracking(cfg, {
+        raw: { id: 'ORDER-GUID', lineItems: [{ id: 'li1', quantity: 2 }] },
+        trackingNumber: 'TRK123',
+        trackingUrl: 'http://t/123',
+        carrier: 'dhl_de'
+      });
+      assert.equal(r.ok, true);
+      assert.ok(sent.url.includes('/fulfillments/orders/ORDER-GUID/create-fulfillment'), 'create-fulfillment endpoint');
+      assert.equal(sent.headers['wix-account-id'], 'ACC');
+      assert.equal(sent.body.fulfillment.trackingInfo.trackingNumber, 'TRK123');
+      assert.equal(sent.body.fulfillment.trackingInfo.shippingProvider, 'dhl_de');
+      assert.equal(sent.body.fulfillment.lineItems[0].id, 'li1');
+      assert.equal(sent.body.fulfillment.lineItems[0].quantity, 2);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('channel review fixes (recall pass)', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body)
+  });
+
+  it('#3 eBay normalizer sets buyerHandle from the username (email is masked)', () => {
+    const o = channels._normalizeEbay({ orderId: '1', buyer: { username: 'pilzfan' }, lineItems: [] });
+    assert.equal(o.buyerHandle, 'pilzfan');
+    assert.equal(o.customerEmail, null, 'eBay does not expose the buyer email');
+  });
+
+  it('#3 Etsy normalizer sets buyerHandle from buyer_user_id', () => {
+    const o = channels._normalizeEtsy({ receipt_id: 5, buyer_user_id: 42, transactions: [] });
+    assert.equal(o.buyerHandle, '42');
+  });
+
+  it('#7 Etsy refresh: a missing expires_in yields a ~1h expiry, not expire-now', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { access_token: 'NEW' })); // no expires_in
+    try {
+      const tok = await channels.etsy.refreshAccessToken({ clientId: 'K', refreshToken: 'R' });
+      assert.equal(tok.accessToken, 'NEW');
+      assert.equal(tok.refreshToken, 'R', 'keeps the stored refresh token when omitted');
+      const ms = Date.parse(tok.tokenExpires) - Date.now();
+      assert.ok(ms > 3000 * 1000 && ms <= 3600 * 1000 + 1000, 'expiry ~1h out, not now (' + ms + 'ms)');
+    } finally {
+      restore();
+    }
+  });
+
+  it('#8 Etsy refresh: a 2xx body without access_token throws (never persists an empty token)', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { error: 'invalid_grant' }));
+    try {
+      await assert.rejects(
+        () => channels.etsy.refreshAccessToken({ clientId: 'K', refreshToken: 'R' }),
+        /access_token/
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('#9 Etsy fetchOrders keeps paging on a short page that is still below the total', async () => {
+    const cfg = { clientId: 'K', accessToken: 'u1.tok-' + Math.random().toString(36).slice(2) };
+    const restore = mockFetch(async (url) => {
+      // The receipts URL also contains '/shops/', so match the receipts call first.
+      if (url.includes('/receipts')) {
+        // 80 results (< limit 100) but count says 150 → must NOT stop paging here.
+        return jsonRes(200, { count: 150, results: Array.from({ length: 80 }, (_, i) => ({ receipt_id: i + 1 })) });
+      }
+      return jsonRes(200, { results: [{ shop_id: 99 }] }); // /users/<uid>/shops
+    });
+    try {
+      const { orders, nextCursor } = await channels.etsy.fetchOrders(cfg, {});
+      assert.equal(orders.length, 80);
+      assert.equal(nextCursor, '80', 'short page below the reported count still advances the cursor');
+    } finally {
+      restore();
+    }
+  });
+});
