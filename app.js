@@ -16128,7 +16128,10 @@ function initEventListeners() {
     if (!el) return;
     goToBatch(el.dataset.batch);
   });
-  $('dash-act-newbatch').addEventListener('click', () => msQuickChargeNew());
+  $('dash-act-newbatch').addEventListener('click', () => {
+    go('batch', 'n-batch');
+    openStab('batch', 'new');
+  });
   $('dash-act-labwork').addEventListener('click', () => msQuickLaborNew());
   $('dash-act-harvest').addEventListener('click', () => {
     const card = document.getElementById('dash-harvest-tasks-card');
@@ -16175,7 +16178,7 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
-  $('st-batch-new').addEventListener('click', () => msQuickChargeNew());
+  $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });
