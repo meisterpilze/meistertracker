@@ -383,6 +383,7 @@ window.LANG['de'] = {
   'dash.zoneTent3': 'Zelt 3',
   'dash.zoneContam': 'Kontaminiert',
   'dash.racks': 'Regale',
+  'dash.recentDests': 'Zuletzt verwendet',
   'dash.moveBags': '{n} Beutel verschieben',
   'dash.fruitingTents': 'Fruchtzelte',
   'dash.overdue': '\u00dcberf\u00e4llig',
