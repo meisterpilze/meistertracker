@@ -383,6 +383,7 @@ window.LANG['en'] = {
   'dash.zoneTent3': 'Tent 3',
   'dash.zoneContam': 'Contaminated',
   'dash.racks': 'Racks',
+  'dash.recentDests': 'Recently used',
   'dash.moveBags': 'Move {n} bag(s)',
   'dash.fruitingTents': 'Fruiting Tents',
   'dash.overdue': 'Overdue',

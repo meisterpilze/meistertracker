@@ -150,6 +150,7 @@ window.LANG['pt'] = {
   'dash.zoneTent3': 'Tenda 3',
   'dash.zoneContam': 'Contaminado',
   'dash.racks': 'Estantes',
+  'dash.recentDests': 'Usado recentemente',
   'dash.moveBags': 'Mover {n} saco(s)',
   'dash.fruitingTents': 'Tendas de Frutifica\u00e7\u00e3o',
   'dash.overdue': 'Atrasado',

@@ -76,10 +76,6 @@ function fmtDtShort(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
 }
-function localDateStr(d) {
-  if (!(d instanceof Date)) d = new Date(d);
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
 function isoWeekNumber(d) {
   if (!(d instanceof Date)) d = new Date(d);
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -4167,11 +4163,6 @@ function getRackBags(rackId) {
   });
   return bags;
 }
-function renderRacks() {
-  renderStatus();
-}
-function showRack() {}
-
 // ─── LOCATION BAG INTERACTIONS ──────────────────────────────
 const selectedLocBags = new Map(); // bagId → {batchId, loc}
 function getZoneBags(zone) {
@@ -4189,9 +4180,6 @@ function getZoneBags(zone) {
   });
   return bags;
 }
-function renderLocTabs() {
-  renderStatus();
-}
 function toggleLocBag(bagId, batchId, loc) {
   if (selectedLocBags.has(bagId)) selectedLocBags.delete(bagId);
   else selectedLocBags.set(bagId, { batchId, loc });
@@ -4202,6 +4190,45 @@ function toggleLocBag(bagId, batchId, loc) {
 }
 function locSelectAll() {
   locSelectAllVisible();
+}
+// Most-recently-used move/placement destinations, newest-first and de-duped,
+// so the common moves (Inkubation → Fruchtung / Kontamination) are one tap
+// instead of a scroll through every zone + rack. Sourced from scanLog, which
+// already records every move — no schema change or extra request. The last
+// pick is persisted so it survives a reload and leads even on a fresh log.
+function recentDestinations(limit) {
+  limit = limit || 4;
+  const seen = new Set();
+  const out = [];
+  let last = null;
+  try {
+    last = localStorage.getItem('mp-last-dest');
+  } catch (e) {
+    /* storage disabled (private mode) — fall back to scanLog only */
+  }
+  if (last && LOCS.includes(last)) {
+    seen.add(last);
+    out.push(last);
+  }
+  for (let i = scanLog.length - 1; i >= 0 && out.length < limit; i--) {
+    const e = scanLog[i];
+    // Only actual relocations — ADD is initial placement (nearly always
+    // Inkubation) and would bury the real move targets (Fruchtung / Kontam).
+    if (e.action !== 'MOVE' && e.action !== 'MOVE_BATCH') continue;
+    const to = e.to;
+    if (!to || seen.has(to) || !LOCS.includes(to)) continue;
+    seen.add(to);
+    out.push(to);
+  }
+  return out;
+}
+function rememberDest(loc) {
+  if (!loc) return;
+  try {
+    localStorage.setItem('mp-last-dest', loc);
+  } catch (e) {
+    /* storage disabled — recents still work from scanLog */
+  }
 }
 function openLocMovePopup() {
   if (!selectedLocBags.size) return;
@@ -4216,7 +4243,25 @@ function openLocMovePopup() {
   document.getElementById('lm-confirm').style.display = 'none';
   const grid = document.getElementById('lm-grid');
   grid.style.display = 'flex';
+  // Shortcut row: where these bags most likely go, so the frequent moves skip
+  // the full zone/rack scroll. Drop any destination a selected bag is already
+  // at (that move would be a no-op).
+  const srcLocs = new Set([...selectedLocBags.values()].map((d) => d.loc));
+  const recents = recentDestinations(4).filter((loc) => !srcLocs.has(loc));
+  const recentHtml = recents.length
+    ? '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">' +
+      t('dash.recentDests') +
+      '</div>' +
+      recents
+        .map((loc) => {
+          const col = (ZONE_BY_ID[toZone(loc)] && ZONE_BY_ID[toZone(loc)].color) || '#888';
+          return `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(loc)}" style="font-size:12px;font-weight:600;padding:8px 12px;border-left:3px solid ${col};background:var(--c-bg)">★ ${esc(zoneDisplayName(loc))}</button>`;
+        })
+        .join('') +
+      '<div style="width:100%;height:1px;background:var(--c-border);margin:6px 0"></div>'
+    : '';
   grid.innerHTML =
+    recentHtml +
     '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">' +
     t('dash.zones') +
     '</div>' +
@@ -4264,9 +4309,6 @@ function locPreConfirm(toLoc) {
     </div>
   </div>`;
 }
-function renderLocBody() {
-  renderStatus();
-}
 // Event delegation for bag chip clicks
 document.getElementById('dash-locations').addEventListener('click', function (e) {
   const chip = e.target.closest('.bag-chip[data-bag]');
@@ -4278,6 +4320,7 @@ document.getElementById('dash-locations').addEventListener('click', function (e)
 let lastLocUndoEntries = [];
 function locMoveTo(toLoc) {
   if (!selectedLocBags.size) return;
+  rememberDest(toLoc);
   const now = new Date().toISOString();
   const n = selectedLocBags.size;
   const entries = [];
@@ -4771,6 +4814,7 @@ function goToPrintBatch() {
 // Skips bags that are unplaced, removed, or already at the destination.
 // Calls back with (movedCount, skippedCount) when done.
 function moveBagsTo(batch, bagIds, dest, cb) {
+  rememberDest(dest);
   const now = new Date().toISOString();
   const entries = [];
   let skipped = 0;
@@ -4941,6 +4985,32 @@ function _openZonePicker(title, onPick) {
   document.getElementById('mb-title').textContent = title;
   const container = document.getElementById('mb-zones');
   container.innerHTML = '';
+  // Shortcut row: most-recent destinations first, one tap each. moveBagsTo
+  // already skips bags that are already at the chosen destination.
+  const _recents = recentDestinations(4);
+  if (_recents.length) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText =
+      'font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 10px 2px';
+    hdr.textContent = t('dash.recentDests');
+    container.appendChild(hdr);
+    _recents.forEach((loc) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.style.cssText =
+        'display:block;width:100%;text-align:left;background:var(--c-bg);border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;margin-bottom:2px;border-left:3px solid ' +
+        ((ZONE_BY_ID[toZone(loc)] && ZONE_BY_ID[toZone(loc)].color) || '#888');
+      row.textContent = '★ ' + zoneDisplayName(loc);
+      row.addEventListener('click', () => {
+        m.classList.remove('open');
+        onPick(loc);
+      });
+      container.appendChild(row);
+    });
+    const sep = document.createElement('div');
+    sep.style.cssText = 'height:1px;background:var(--c-border);margin:6px 0';
+    container.appendChild(sep);
+  }
   if (!zones.length) {
     container.innerHTML =
       '<div style="padding:8px 0;color:var(--c-text-muted);font-style:italic">' +
