@@ -3853,8 +3853,11 @@ function renderDashBatchTasks() {
     const id = esc(tk.batchId);
     if (tk.taskAction === 'move') {
       // One-tap → Fruchtung (the dominant move) as the primary action; the
-      // Verschieben picker stays for any other destination.
-      const toFruiting = zones.some((z) => z.role === 'fruiting')
+      // Verschieben picker stays for any other destination. Only offer it for
+      // batches actually in incubation — never for SPAWN RUN, where jumping
+      // grain spawn straight to a fruiting tent skips a whole growth stage.
+      const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
+      const toFruiting = canFruit
         ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
         : '';
       return (
