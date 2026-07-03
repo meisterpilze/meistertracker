@@ -3793,6 +3793,47 @@ function renderDashSplitBatches() {
     })
     .join('');
 }
+// Preferred one-tap fruiting destination: the most recently used fruiting
+// zone/rack (matches how it's actually done — nearly always the same tent),
+// else the first zone tagged role 'fruiting'. Null if no fruiting zone exists.
+function _fruitingDest() {
+  const isFruiting = (id) => {
+    const z = ZONE_BY_ID[toZone(id)];
+    return z && z.role === 'fruiting';
+  };
+  for (let i = scanLog.length - 1; i >= 0; i--) {
+    const e = scanLog[i];
+    if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && e.to && isFruiting(e.to)) return e.to;
+  }
+  const first = zones.find((z) => z.role === 'fruiting');
+  return first ? first.id : null;
+}
+// One-tap whole-batch move to fruiting for the dashboard "needs to move" cards.
+// Same move semantics as the Verschieben picker (moveBatchTo skips bags that
+// are unplaced/removed or already there) — just with the destination preset.
+function moveBatchToFruiting(batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return;
+  const dest = _fruitingDest();
+  if (!dest) {
+    setFb('err', t('dash.noFruitingZone'));
+    return;
+  }
+  moveBatchTo(b, dest, function (moved, skipped) {
+    if (!moved) {
+      setFb(
+        'ok',
+        skipped ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }) : t('batch.noBagsToMove')
+      );
+    } else {
+      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + zoneDisplayName(dest));
+    }
+    updateSD();
+    renderBatches();
+    renderStatus();
+    renderDashBatchTasks();
+  });
+}
 function renderDashBatchTasks() {
   const filter = document.getElementById('dash-batch-filter')?.value || 'all';
   const tasks = buildAutoTasks();
@@ -3808,8 +3849,17 @@ function renderDashBatchTasks() {
   }
   function taskBtn(tk) {
     const id = esc(tk.batchId);
-    if (tk.taskAction === 'move')
-      return `<button class="btn btn-sm btn-p" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.move')}</button>`;
+    if (tk.taskAction === 'move') {
+      // One-tap → Fruchtung (the dominant move) as the primary action; the
+      // Verschieben picker stays for any other destination.
+      const toFruiting = zones.some((z) => z.role === 'fruiting')
+        ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+        : '';
+      return (
+        toFruiting +
+        `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+      );
+    }
     return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
   }
   el.innerHTML = shown.length
@@ -16106,6 +16156,9 @@ function initEventListeners() {
         break;
       case 'open-move-modal':
         openMoveBatchModal(batch);
+        break;
+      case 'move-to-fruiting':
+        moveBatchToFruiting(batch);
         break;
     }
   }
