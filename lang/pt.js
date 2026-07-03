@@ -65,6 +65,7 @@ window.LANG['pt'] = {
   'scan.audioToggle': '\u00c1udio lig./desl.',
   // Harvest panel
   'harvest.logHarvest': 'Registrar colheita',
+  'harvest.logNext': 'Salvar & escanear próximo',
   'harvest.readyToHarvest': 'Prontos para colheita',
   'harvest.daysFruiting.one': '{n} dia em frutifica\u00e7\u00e3o',
   'harvest.daysFruiting.other': '{n} dias em frutifica\u00e7\u00e3o',

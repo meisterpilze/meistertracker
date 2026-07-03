@@ -5520,7 +5520,7 @@ function showHarvestPanel(bagId, batchId) {
   setTimeout(() => document.getElementById('hp-grams').focus(), 80);
   setFb('harvest', t('harvest.bagScanned', { bag: bagId }), { noModal: true });
 }
-function confirmHarvest() {
+function confirmHarvest(keepScanning) {
   const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
@@ -5570,6 +5570,10 @@ function confirmHarvest() {
   document.getElementById('harvest-panel').style.display = 'none';
   setFb('ok', t('harvest.logged', { bag: p.bagId, g: g, f: f }), sEntry);
   updateSD();
+  // Chain: reopen the scanner so the next bag flows straight into a fresh
+  // harvest panel (scan.action stays HARVEST) instead of ejecting the worker
+  // and making them re-open the scanner between every bag.
+  if (keepScanning) openScanModal();
 }
 function cancelHarvest() {
   scan.harvestBag = null;
@@ -16220,7 +16224,8 @@ function initEventListeners() {
   });
 
   // Harvest panel
-  $('act-21').addEventListener('click', confirmHarvest);
+  $('act-21').addEventListener('click', () => confirmHarvest(false));
+  $('hp-next').addEventListener('click', () => confirmHarvest(true));
   $('btn-22').addEventListener('click', cancelHarvest);
 
   // Dashboard
