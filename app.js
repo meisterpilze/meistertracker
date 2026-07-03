@@ -10497,6 +10497,11 @@ let _crBatchId = null;
 let _crZoneId = null;
 let _crTypes = null; // lazily loaded from /api/contamination-types
 let _crSelectedTypeId = null;
+// Last type reported this session — pre-selected on the next report so a whole
+// shelf of the same contamination (e.g. a Trichoderma row) is just tap-Senden
+// per bag. Session-scoped (resets on reload) to avoid carrying a stale type
+// across days. Pairs with the scanner's "stay in CONTAM mode" chaining.
+let _crLastTypeId = null;
 let _crSeverity = 'minor';
 let _crPhotos = []; // [{ data_url, thumb_data_url, width, height }]
 const CR_MAX_PHOTOS = 4;
@@ -10511,7 +10516,7 @@ function openContamReport(bagId, batchId, zoneId) {
   _crBagId = bagId || null;
   _crBatchId = batchId || null;
   _crZoneId = zoneId || null;
-  _crSelectedTypeId = null;
+  _crSelectedTypeId = _crLastTypeId;
   _crSeverity = 'minor';
   _crPhotos = [];
   // Reset form
@@ -10533,6 +10538,8 @@ function openContamReport(bagId, batchId, zoneId) {
   apiGet('/api/contamination-types')
     .then((types) => {
       _crTypes = Array.isArray(types) ? types : [];
+      // Drop a remembered pre-selection if that type was since deleted/renamed.
+      if (_crSelectedTypeId != null && !_crTypes.some((tp) => tp.id === _crSelectedTypeId)) _crSelectedTypeId = null;
       _renderCrTypeGrid();
     })
     .catch(() => {
@@ -10852,6 +10859,7 @@ async function _crSubmit() {
       setFb('err', t('contam.errSave', { err: r.error }));
       return;
     }
+    _crLastTypeId = _crSelectedTypeId; // pre-select this type on the next report
     closeContamReport();
     if (r && r.queued) {
       // Service worker queued the report because the network was unreachable.
