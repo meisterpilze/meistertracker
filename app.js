@@ -890,7 +890,13 @@ function openStab(page, sub) {
   const spEl = document.getElementById(`sp-${page}-${sub}`);
   if (spEl) spEl.classList.add('active');
   if (page === 'batch' && sub === 'list') renderBatches();
-  if (page === 'batch' && sub === 'new') _fillNbProducts();
+  if (page === 'batch' && sub === 'new') {
+    _fillNbProducts();
+    if (!_nbDefaultsApplied) {
+      nbApplyDefaults();
+      _nbDefaultsApplied = true;
+    }
+  }
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
@@ -4578,6 +4584,61 @@ function nbSubSum() {
     hw || wb ? 'Total: ' + s + '%' + (s !== 100 ? ' — should add up to 100%' : '') : '';
   nbPreview();
 }
+// Remember the reusable new-batch inputs across batches and reloads, so a
+// Charge opens with the same bag count / incubation days / weight / substrate
+// mix instead of retyping them. Strain, culture and notes are intentionally
+// NOT remembered — they are per-batch decisions and a stale strain carried
+// over would be a silent mislabel.
+let _nbDefaultsApplied = false;
+function nbSaveDefaults() {
+  try {
+    const g = (id) => (document.getElementById(id) || {}).value;
+    localStorage.setItem(
+      'mp-nb-defaults',
+      JSON.stringify({
+        qty: g('nb-qty'),
+        days: g('nb-days'),
+        weight: g('nb-weight'),
+        hw: g('nb-hw'),
+        wb: g('nb-wb'),
+        coir: g('nb-coir'),
+        rh: g('nb-rh'),
+        grainkg: g('nb-grainkg'),
+        grainrh: g('nb-grainrh'),
+        gyp: !!(document.getElementById('nb-gyp') || {}).checked
+      })
+    );
+  } catch (e) {
+    /* storage disabled — nothing persisted, form just keeps HTML defaults */
+  }
+}
+function nbApplyDefaults() {
+  let d = null;
+  try {
+    d = JSON.parse(localStorage.getItem('mp-nb-defaults') || 'null');
+  } catch (e) {
+    d = null;
+  }
+  if (!d) return;
+  const put = (id, v) => {
+    if (v === undefined || v === null || v === '') return;
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+  put('nb-qty', d.qty);
+  put('nb-days', d.days);
+  put('nb-weight', d.weight);
+  put('nb-hw', d.hw);
+  put('nb-wb', d.wb);
+  put('nb-coir', d.coir);
+  put('nb-rh', d.rh);
+  put('nb-grainkg', d.grainkg);
+  put('nb-grainrh', d.grainrh);
+  const gyp = document.getElementById('nb-gyp');
+  if (gyp) gyp.checked = !!d.gyp;
+  renderNbGrainBanner();
+  nbPreview();
+}
 function createBatch() {
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
@@ -4772,14 +4833,15 @@ function createBatch() {
     .finally(() => {
       if (createBtn) createBtn.disabled = false;
     });
+  nbSaveDefaults();
   if (document.getElementById('nb-strain-sel')) document.getElementById('nb-strain-sel').value = '';
   const nbStrainTextEl = document.getElementById('nb-strain-text');
   if (nbStrainTextEl) nbStrainTextEl.value = '';
   const nbCultureEl = document.getElementById('nb-culture');
   if (nbCultureEl) nbCultureEl.value = '';
   renderNbGrainBanner();
-  document.getElementById('nb-qty').value = '10';
-  document.getElementById('nb-days').value = '14';
+  // qty/days/weight/substrate intentionally kept (persisted via nbSaveDefaults
+  // above) so the next batch reuses them; only per-batch fields are cleared.
   document.getElementById('nb-notes').value = '';
   document.getElementById('nb-mat-preview').style.display = 'none';
   nbPreview();
