@@ -141,6 +141,8 @@ window.LANG['pt'] = {
   'dash.selectAll': 'Selecionar todos',
   'dash.clear': 'Limpar',
   'dash.move': 'Mover',
+  'dash.toFruiting': 'Frutificação',
+  'dash.noFruitingZone': 'Nenhuma zona de frutificação definida',
   'dash.remove': 'Remover',
   'dash.currentlyIn': 'Atualmente em {loc}',
   'dash.zones': 'Zonas',

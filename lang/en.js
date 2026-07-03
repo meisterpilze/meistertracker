@@ -374,6 +374,8 @@ window.LANG['en'] = {
   'dash.selectAll': 'Select all',
   'dash.clear': 'Clear',
   'dash.move': 'Move',
+  'dash.toFruiting': 'Fruiting',
+  'dash.noFruitingZone': 'No fruiting zone defined',
   'dash.remove': 'Remove',
   'dash.currentlyIn': 'Currently in {loc}',
   'dash.zones': 'Zones',
