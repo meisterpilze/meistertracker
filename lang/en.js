@@ -298,6 +298,7 @@ window.LANG['en'] = {
   'scan.audioToggle': 'Audio on/off',
   // Harvest panel
   'harvest.logHarvest': 'Log harvest',
+  'harvest.logNext': 'Save & scan next',
   'harvest.readyToHarvest': 'Ready to harvest',
   'harvest.daysFruiting.one': '{n} day fruiting',
   'harvest.daysFruiting.other': '{n} days fruiting',
