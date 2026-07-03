@@ -4255,25 +4255,33 @@ function locSelectAll() {
 // instead of a scroll through every zone + rack. Sourced from scanLog, which
 // already records every move — no schema change or extra request. The last
 // pick is persisted so it survives a reload and leads even on a fresh log.
-function recentDestinations(limit) {
+// Recent destinations for the picker shortcut row. Defaults to actual moves
+// (MOVE/MOVE_BATCH), seeded by the persisted last move destination — ADD is
+// excluded there because initial placement is nearly always Inkubation and
+// would bury the real move targets (Fruchtung / Kontam). The placement picker
+// passes { actions: ['ADD'], lastKey: null } to get placement history instead.
+function recentDestinations(limit, opts) {
   limit = limit || 4;
+  opts = opts || {};
+  const actions = opts.actions || ['MOVE', 'MOVE_BATCH'];
+  const lastKey = 'lastKey' in opts ? opts.lastKey : 'mp-last-dest';
   const seen = new Set();
   const out = [];
-  let last = null;
-  try {
-    last = localStorage.getItem('mp-last-dest');
-  } catch (e) {
-    /* storage disabled (private mode) — fall back to scanLog only */
-  }
-  if (last && LOCS.includes(last)) {
-    seen.add(last);
-    out.push(last);
+  if (lastKey) {
+    let last = null;
+    try {
+      last = localStorage.getItem(lastKey);
+    } catch (e) {
+      /* storage disabled (private mode) — fall back to scanLog only */
+    }
+    if (last && LOCS.includes(last)) {
+      seen.add(last);
+      out.push(last);
+    }
   }
   for (let i = scanLog.length - 1; i >= 0 && out.length < limit; i--) {
     const e = scanLog[i];
-    // Only actual relocations — ADD is initial placement (nearly always
-    // Inkubation) and would bury the real move targets (Fruchtung / Kontam).
-    if (e.action !== 'MOVE' && e.action !== 'MOVE_BATCH') continue;
+    if (!actions.includes(e.action)) continue;
     const to = e.to;
     if (!to || seen.has(to) || !LOCS.includes(to)) continue;
     seen.add(to);
@@ -5037,72 +5045,40 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
 
 // Zone picker modal — shown after batch creation, user must pick a destination.
 // onDone() is called after a zone is picked so the caller can show print panel.
+// After batch creation: pick where the new bags go. Delegates to the shared
+// zone picker so placement uses the exact same flat zone/rack list as moving,
+// with placement (ADD) history as the shortcut row (new batches nearly always
+// go to Inkubation). Replaces the old bespoke zone-buttons + rack-dropdown UI;
+// the m-zone-pick modal is now unused.
 function openZonePickModal(batch, bags, onDone) {
-  const m = document.getElementById('m-zone-pick');
-  if (!m) return;
-  document.getElementById('zp-title').textContent = t('batch.whereGo');
-  document.getElementById('zp-info').textContent = t('batch.whereGoInfo', { id: batch.batchId, n: bags.length });
-  const container = document.getElementById('zp-zones');
-  container.innerHTML = '';
-  if (!zones.length) {
-    container.innerHTML =
-      '<div style="color:var(--c-text-muted);font-style:italic;font-size:13px">' +
-      esc(t('batch.noLocations')) +
-      '</div>';
-  } else {
-    zones.forEach((z) => {
-      const wrap = document.createElement('div');
-      wrap.style.cssText =
-        'display:flex;align-items:center;gap:8px;background:var(--c-bg);border-radius:8px;padding:10px 12px';
-      // Zone button
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-p';
-      btn.textContent = z.name || z.id;
-      btn.style.cssText = 'flex:1;min-width:0;text-align:left;font-weight:600';
-      // Optional rack selector
-      let rackSel = null;
-      if (z.racks && z.racks.length) {
-        rackSel = document.createElement('select');
-        rackSel.style.cssText = 'font-size:12px;max-width:120px';
-        rackSel.innerHTML =
-          '<option value="">\u2014 ' +
-          esc(t('zones.noRacks')) +
-          ' \u2014</option>' +
-          z.racks
-            .map((r) => `<option value="${esc(r.id)}">${esc(r.id.slice(z.id.length + 1) || r.id)}</option>`)
-            .join('');
-        wrap.appendChild(rackSel);
-      }
-      btn.addEventListener('click', function () {
-        const dest = rackSel && rackSel.value ? rackSel.value : z.id;
-        m.style.display = 'none';
-        addBagsToLocation(batch, bags, dest, function (added) {
-          setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest), { noModal: true });
-          updateSD();
-          renderBatches();
-          renderStatus();
-        });
-        if (onDone) onDone();
+  _openZonePicker(
+    t('batch.whereGoInfo', { id: batch.batchId, n: bags.length }),
+    function (dest) {
+      addBagsToLocation(batch, bags, dest, function (added) {
+        setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest), { noModal: true });
+        updateSD();
+        renderBatches();
+        renderStatus();
       });
-      wrap.insertBefore(btn, wrap.firstChild);
-      container.appendChild(wrap);
-    });
-  }
-  m.style.display = 'flex';
+      if (onDone) onDone();
+    },
+    { recentOpts: { actions: ['ADD'], lastKey: null } }
+  );
 }
 
 // Render zone/rack picker inside the m-move-batch modal.
 // title: string shown at the top; onPick(destId): called when a zone or rack is chosen.
-function _openZonePicker(title, onPick) {
+function _openZonePicker(title, onPick, opts) {
+  opts = opts || {};
   const m = document.getElementById('m-move-batch');
   if (!m) return;
   document.getElementById('mb-title').textContent = title;
   const container = document.getElementById('mb-zones');
   container.innerHTML = '';
   // Shortcut row: most-recent destinations first, one tap each. moveBagsTo
-  // already skips bags that are already at the chosen destination.
-  const _recents = recentDestinations(4);
+  // already skips bags that are already at the chosen destination. The
+  // placement caller passes recentOpts to surface ADD (placement) history.
+  const _recents = recentDestinations(4, opts.recentOpts);
   if (_recents.length) {
     const hdr = document.createElement('div');
     hdr.style.cssText =
