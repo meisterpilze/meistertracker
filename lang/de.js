@@ -451,6 +451,8 @@ window.LANG['de'] = {
   'batch.create': 'Charge erstellen',
   'batch.generatedIds': 'Generierte Beutel-IDs',
   'batch.printLabels': 'Etiketten f\u00fcr diese Charge drucken',
+  'batch.printOptions': 'Druckoptionen\u2026',
+  'print.printedBatch': '{n} Etiketten gedruckt: {id}',
   'batch.addNote': 'Notiz hinzuf\u00fcgen',
   'batch.addBags': '+Beutel',
   'batch.del': 'L\u00f6schen',

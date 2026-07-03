@@ -4907,9 +4907,43 @@ function createBatch() {
           `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
       )
       .join('');
-    document.getElementById('nb-result').style.display = 'block';
-    goToPrintBatch();
+    const _res = document.getElementById('nb-result');
+    _res.dataset.batchId = batchObj.batchId;
+    _res.style.display = 'block';
+    _res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
+}
+// Print all labels for the just-created batch straight from the success panel,
+// so the common "create → print everything" path skips the hop to the Print
+// page. Uses the current default label mode + QR from the Print controls; the
+// "Druckoptionen…" button still opens the full Print page for ranges/formats.
+// Falls back to a ZPL download (same as printBagLabels) when the printer is
+// unreachable.
+async function printBatchLabelsInline() {
+  const res = document.getElementById('nb-result');
+  const id = res ? res.dataset.batchId : null;
+  const b = batches.find((x) => x.batchId === id) || batches[batches.length - 1];
+  if (!b) {
+    alert(t('print.selectBatchFirst'));
+    return;
+  }
+  const modeEl = document.getElementById('print-mode');
+  const qrEl = document.getElementById('bag-qr');
+  const zpl = makeBagZPL(b.bags, b, modeEl ? modeEl.value : 'full', qrEl ? qrEl.checked : true);
+  if (!zpl || !zpl.includes('^XA')) {
+    alert(t('print.noLabels'));
+    return;
+  }
+  const err = await sendToPrinter(zpl);
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = b.batchId + '_labels.zpl';
+    a.click();
+  } else {
+    setFb('ok', t('print.printedBatch', { n: b.bags.length, id: b.batchId }));
+  }
 }
 function goToPrintBatch() {
   go('print', 'n-print');
@@ -16417,7 +16451,8 @@ function initEventListeners() {
   $('btn-24').addEventListener('click', createBatch);
   const strainShortcut = document.getElementById('nb-create-strain-btn');
   if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
-  $('prt-25').addEventListener('click', goToPrintBatch);
+  $('prt-25').addEventListener('click', printBatchLabelsInline);
+  $('prt-25-opts').addEventListener('click', goToPrintBatch);
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
