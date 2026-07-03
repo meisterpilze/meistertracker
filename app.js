@@ -5200,7 +5200,17 @@ function openMoveBatchModal(batchId) {
   });
 }
 
-const tableSort = { batches: null, cultures: null };
+// Persisted so a chosen column/direction survives a reload instead of
+// resetting every time the batches (or cultures) list is reopened.
+const tableSort = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem('mp-table-sort') || 'null');
+    if (s && typeof s === 'object') return { batches: s.batches || null, cultures: s.cultures || null };
+  } catch (e) {
+    /* storage disabled — fall back to no saved sort */
+  }
+  return { batches: null, cultures: null };
+})();
 function sortCmp(a, b) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -5216,6 +5226,11 @@ function applyTableSort(rows, state, keyFn) {
 function cycleTableSort(table, key) {
   const cur = tableSort[table];
   tableSort[table] = !cur || cur.key !== key ? { key, dir: 'asc' } : cur.dir === 'asc' ? { key, dir: 'desc' } : null;
+  try {
+    localStorage.setItem('mp-table-sort', JSON.stringify(tableSort));
+  } catch (e) {
+    /* storage disabled — sort still works for this session */
+  }
 }
 function updateSortIndicators(table, activeState) {
   const bodyId = table === 'batches' ? 'batches-body' : 'cultures-body';
