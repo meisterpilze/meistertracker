@@ -450,6 +450,8 @@ window.LANG['en'] = {
   'batch.create': 'Create batch',
   'batch.generatedIds': 'Generated bag IDs',
   'batch.printLabels': 'Print labels for this batch',
+  'batch.printOptions': 'Print options…',
+  'print.printedBatch': 'Printed {n} labels: {id}',
   'batch.addNote': 'Add note',
   'batch.addBags': '+Bags',
   'batch.del': 'Del',
