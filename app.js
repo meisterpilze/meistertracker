@@ -859,6 +859,7 @@ function go(page, btnId) {
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
+    renderDashSummary();
   }
   if (page === 'batch') renderBatches();
   if (page === 'lab') renderCultures();
@@ -954,6 +955,7 @@ function refresh() {
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
+    renderDashSummary();
   }
   if (id === 'batch') renderBatches();
   if (id === 'lab') renderCultures();
@@ -3638,6 +3640,40 @@ function applyOvPeriod() {
   });
 }
 
+// Compact "today at a glance" strip above the stacked cards, so the day's
+// actionable work is visible without scrolling. Counts reuse the same builders
+// the cards use (buildAutoTasks / buildHarvestTasks) so they can't drift; the
+// alert count is read from the already-rendered alerts card (this runs last).
+// Each chip scrolls to + flashes the card that lists those items.
+function renderDashSummary() {
+  const el = document.getElementById('dash-summary');
+  if (!el) return;
+  const moveCount = buildAutoTasks().filter((tk) => tk.taskAction === 'move').length;
+  const harvestCount = buildHarvestTasks().length;
+  const alertsCard = document.getElementById('dash-alerts-card');
+  const alertsEl = document.getElementById('dash-alerts');
+  const alertCount = alertsCard && alertsCard.style.display !== 'none' && alertsEl ? alertsEl.children.length : 0;
+  if (!moveCount && !harvestCount && !alertCount) {
+    el.innerHTML = '';
+    return;
+  }
+  const chips = [
+    { n: moveCount, label: t('dash.sumMove'), color: '#0ea5e9', target: 'dash-batch-tasks-card' },
+    { n: harvestCount, label: t('dash.sumHarvest'), color: '#d97706', target: 'dash-harvest-tasks-card' },
+    { n: alertCount, label: t('dash.sumAlerts'), color: '#ef4444', target: 'dash-alerts-card' }
+  ];
+  el.innerHTML = chips
+    .map((c) => {
+      const active = c.n > 0;
+      return (
+        `<button type="button" data-flash="${c.target}"${active ? '' : ' disabled'} style="flex:1;min-width:110px;display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-card);cursor:${active ? 'pointer' : 'default'};opacity:${active ? '1' : '0.45'}">` +
+        `<span style="font-size:22px;font-weight:700;color:${c.color};min-width:1.1em;text-align:center">${c.n}</span>` +
+        `<span style="font-size:12px;font-weight:600;color:var(--c-text-sec);text-align:left;line-height:1.15">${esc(c.label)}</span>` +
+        `</button>`
+      );
+    })
+    .join('');
+}
 function renderDashAlerts() {
   const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
   // Overdue batches
@@ -16319,6 +16355,19 @@ function initEventListeners() {
   }
   $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
   $('dash-harvest-tasks').addEventListener('click', dashTaskCardClick);
+  $('dash-summary').addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-flash]');
+    if (!btn) return;
+    const card = document.getElementById(btn.dataset.flash);
+    if (!card || card.style.display === 'none') return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const prev = card.style.boxShadow;
+    card.style.transition = 'box-shadow 0.3s ease';
+    card.style.boxShadow = '0 0 0 3px var(--c-accent, #0ea5e9)';
+    setTimeout(() => {
+      card.style.boxShadow = prev || '';
+    }, 1500);
+  });
   $('dash-alerts').addEventListener('click', function (e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
