@@ -10424,6 +10424,7 @@ function openBagInfo(bagId, batchId, batch) {
   const el = document.getElementById('bi-body');
   if (!b) {
     el.innerHTML = '<p style="color:var(--c-red-dark)">' + t('batch.notFound') + ': ' + esc(batchId) + '</p>';
+    document.getElementById('bi-actions').innerHTML = '';
     document.getElementById('m-baginfo').classList.add('open');
     return;
   }
@@ -10467,8 +10468,100 @@ function openBagInfo(bagId, batchId, batch) {
   `;
   closeCamScan();
   closeScanModal();
+  biWholeBatch = false;
+  renderBiActions();
   document.getElementById('m-baginfo').classList.add('open');
   setFb('info', t('scanFb.bagInfo', { bag: bagId }), { noModal: true });
+}
+// Scope of a sheet move action: false = just the scanned bag, true = whole batch.
+let biWholeBatch = false;
+// Where is the scanned bag right now, and is it still placed?
+function _biBagCurrentLoc() {
+  const logs = scanLog.filter((e) => (e.bag || '').toUpperCase() === (biBagId || '').toUpperCase());
+  if (!logs.length) return { loc: null, removed: false };
+  const last = logs[logs.length - 1];
+  if (last.action === 'REMOVE') return { loc: null, removed: true };
+  if (last.action === 'ADD' || last.action === 'MOVE') return { loc: last.to || null, removed: false };
+  return { loc: null, removed: false };
+}
+// The heart of the idiot-proof flow: render big, context-aware action buttons
+// for the scanned bag. The primary action follows where the bag is now — in
+// incubation/spawn it's "→ Fruchtung", in a fruiting tent it's "Ernten" — so
+// the worker never picks a mode. Everything else (move elsewhere, contam,
+// discard) is one tap below. The move actions honour the single/whole-batch
+// toggle.
+function renderBiActions() {
+  const el = document.getElementById('bi-actions');
+  if (!el) return;
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  if (!b) {
+    el.innerHTML = '';
+    return;
+  }
+  const cur = _biBagCurrentLoc();
+  const role = cur.loc && ZONE_BY_ID[toZone(cur.loc)] ? ZONE_BY_ID[toZone(cur.loc)].role : null;
+  const nBags = (b.bags || []).length;
+  const hasFruiting = !!_fruitingDest();
+  const big =
+    'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-size:17px;font-weight:600;margin-bottom:8px;cursor:pointer';
+  let html = '';
+  if (nBags > 1) {
+    const seg = 'flex:1;text-align:center;padding:10px;font-size:13px;cursor:pointer;border:0';
+    html +=
+      '<div style="display:flex;border:1px solid var(--c-border);border-radius:10px;overflow:hidden;margin-bottom:10px">' +
+      `<button type="button" data-bi="scope-single" style="${seg};${!biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeSingle'))}</button>` +
+      `<button type="button" data-bi="scope-batch" style="${seg};border-left:1px solid var(--c-border);${biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeBatch', { n: nBags }))}</button>` +
+      '</div>';
+  }
+  if (!cur.removed && (role === 'incubation' || role === 'spawn') && hasFruiting) {
+    html += `<button type="button" data-bi="fruchtung" style="${big};background:var(--c-primary);color:#fff">→ ${esc(t('dash.toFruiting'))}</button>`;
+  } else if (!cur.removed && role === 'fruiting') {
+    html += `<button type="button" data-bi="harvest" style="${big};background:var(--c-amber-dark);color:#fff">✂ ${esc(t('bagInfo.harvest'))}</button>`;
+  }
+  const sec =
+    'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;font-size:15px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
+  html +=
+    '<div style="display:flex;gap:8px;margin-bottom:8px">' +
+    `<button type="button" data-bi="move" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
+    `<button type="button" data-bi="remove" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
+    '</div>';
+  html += `<button type="button" data-bi="contam" style="${big};font-size:15px;padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">⚠ ${esc(t('bagInfo.reportContam'))}</button>`;
+  el.innerHTML = html;
+}
+// Move the scanned bag (or whole batch, per the toggle) to dest, then drop the
+// worker straight back into the camera for the next bag. moveBagsTo/moveBatchTo
+// call back synchronously, so re-opening the camera stays inside the tap
+// gesture (iOS requires that to start the camera).
+function biMoveTo(dest) {
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  if (!b || !dest) return;
+  document.getElementById('m-baginfo').classList.remove('open');
+  const cb = function (moved, skipped) {
+    if (!moved) {
+      setFb(
+        'ok',
+        skipped ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }) : t('batch.noBagsToMove')
+      );
+    } else {
+      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + zoneDisplayName(dest));
+    }
+    updateSD();
+    renderBatches();
+    renderStatus();
+  };
+  if (biWholeBatch) moveBatchTo(b, dest, cb);
+  else moveBagsTo(b, [biBagId], dest, cb);
+  biRearmScanner();
+}
+// Return to a clean scan state and re-open the camera, so scanning the next bag
+// opens its sheet again (no action armed).
+function biRearmScanner() {
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  scan.harvestBag = null;
+  updateSD();
+  openCamScan();
 }
 function biOpenHarvest() {
   if (!biBagId || !biBatchId) return;
@@ -16084,24 +16177,36 @@ function initEventListeners() {
   $('cls-11').addEventListener('click', () => {
     document.getElementById('m-baginfo').classList.remove('open');
   });
-  $('set-selectmove').addEventListener('click', () => {
+  $('bi-actions').addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-bi]');
+    if (!btn) return;
+    const a = btn.dataset.bi;
+    if (a === 'scope-single') {
+      biWholeBatch = false;
+      renderBiActions();
+      return;
+    }
+    if (a === 'scope-batch') {
+      biWholeBatch = true;
+      renderBiActions();
+      return;
+    }
     if (!biBatchId) return;
-    openBagSelectModal(biBagId, biBatchId);
-  });
-  $('set-movebatch').addEventListener('click', () => {
-    if (!biBatchId) return;
-    const b = batches.find((x) => x.batchId.toUpperCase() === biBatchId.toUpperCase());
-    if (!b) return;
-    document.getElementById('m-baginfo').classList.remove('open');
-    openMoveBatchModal(b.batchId);
+    if (a === 'harvest') return biOpenHarvest();
+    if (a === 'contam') return biReportContam();
+    if (a === 'remove') return biConfirmRemove();
+    if (a === 'fruchtung') return biMoveTo(_fruitingDest());
+    if (a === 'move') {
+      document.getElementById('m-baginfo').classList.remove('open');
+      _openZonePicker(t('batch.moveTo') + ' — ' + biBagId, function (dest) {
+        biMoveTo(dest);
+      });
+    }
   });
   $('bs-cancel').addEventListener('click', bsClose);
   $('bs-continue').addEventListener('click', () => {
     bsConfirm();
   });
-  $('set-14').addEventListener('click', biOpenHarvest);
-  $('set-15').addEventListener('click', biConfirmRemove);
-  $('set-contam').addEventListener('click', biReportContam);
 
   // Contamination report modal wiring
   $('cls-cr').addEventListener('click', closeContamReport);
