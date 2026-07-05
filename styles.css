@@ -1451,8 +1451,6 @@ textarea {
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
-}
-textarea {
   resize: vertical;
   min-height: 64px;
   line-height: 1.5;
@@ -3666,6 +3664,7 @@ tr:hover td {
   border-radius: 8px;
   background: var(--c-surface);
   margin-bottom: 8px;
+  position: relative;
 }
 .zone-row-header {
   display: flex;
@@ -3711,9 +3710,6 @@ tr:hover td {
 }
 .zone-group-header:first-child {
   padding-top: 4px;
-}
-.zone-row {
-  position: relative;
 }
 .zone-drag-handle {
   display: inline-flex;
