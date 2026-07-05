@@ -16957,7 +16957,17 @@ function initEventListeners() {
 // when initEventListeners() runs. Bind it once the full DOM is ready.
 document.addEventListener('DOMContentLoaded', function () {
   var fab = document.getElementById('cam-fab');
-  if (fab) fab.addEventListener('click', openCamScan);
+  if (fab)
+    fab.addEventListener('click', function () {
+      // Front-door scan: always start neutral so scanning a bag opens its
+      // action sheet, never a leftover armed mode from an earlier session.
+      scan.action = null;
+      scan.to = null;
+      scan.from = null;
+      scan.harvestBag = null;
+      updateSD();
+      openCamScan();
+    });
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
   // Wait until the rest of the app has had a chance to fetch data + render

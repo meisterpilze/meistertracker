@@ -1210,6 +1210,7 @@ window.LANG['de'] = {
   'aria.searchHarvests': 'Ernten durchsuchen',
   'aria.searchLog': 'Log durchsuchen',
   'aria.openCameraScanner': 'Kamera-Scanner \u00f6ffnen',
+  'scan.fabLabel': 'Scannen',
   'aria.actionSpeedDial': 'Schnellaktionen',
   'aria.clickToSync': 'Klicken zum Synchronisieren',
   // Placeholders

@@ -1113,12 +1113,15 @@ body.has-worktree-banner .mobile-topbar {
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   right: calc(24px + env(safe-area-inset-right, 0px));
   z-index: 850;
-  width: 56px;
+  gap: 9px;
   height: 56px;
-  border-radius: 50%;
+  padding: 0 22px;
+  border-radius: 28px;
   border: none;
   background: var(--c-primary, #16a34a);
   color: #fff;
+  font-size: 16px;
+  font-weight: 600;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   align-items: center;
@@ -1127,6 +1130,9 @@ body.has-worktree-banner .mobile-topbar {
     transform 0.15s,
     box-shadow 0.15s;
   -webkit-tap-highlight-color: transparent;
+}
+.cam-fab-label {
+  white-space: nowrap;
 }
 .cam-fab:active {
   transform: scale(0.92);

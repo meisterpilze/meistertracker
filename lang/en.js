@@ -1200,6 +1200,7 @@ window.LANG['en'] = {
   'aria.searchHarvests': 'Search harvests',
   'aria.searchLog': 'Search log',
   'aria.openCameraScanner': 'Open camera scanner',
+  'scan.fabLabel': 'Scan',
   'aria.actionSpeedDial': 'Quick actions',
   'aria.clickToSync': 'Click to sync',
   'harvest.gramsPlaceholder': 'e.g. 245',
