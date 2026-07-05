@@ -9604,6 +9604,12 @@ function msQuickClose() {
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
 }
+function msqQtyStep(d) {
+  const el = document.getElementById('ms-q-qty');
+  if (!el) return;
+  el.value = Math.max(1, (parseInt(el.value, 10) || 0) + d);
+  msQuickPreview();
+}
 function msQuickPreview() {
   const el = document.getElementById('ms-q-preview');
   if (!el) return;
@@ -16509,8 +16515,10 @@ function initEventListeners() {
     goToBatch(el.dataset.batch);
   });
   $('dash-act-newbatch').addEventListener('click', () => {
-    go('batch', 'n-batch');
-    openStab('batch', 'new');
+    // Guided, recipe-driven create dialog (pick Sorte → substrate auto-filled
+    // from its recipe → zone pick → print). The old full form is still reachable
+    // via Chargen → Neue Charge for advanced/recipe-less cases.
+    msQuickChargeNew();
   });
   $('dash-act-labwork').addEventListener('click', () => msQuickLaborNew());
   $('dash-act-harvest').addEventListener('click', () => {

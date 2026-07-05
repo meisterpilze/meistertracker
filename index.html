@@ -229,7 +229,33 @@
         <div class="g2">
           <div>
             <label data-i18n="msq.qty">Anzahl</label>
-            <input type="number" id="ms-q-qty" min="1" value="1" oninput="msQuickPreview()" />
+            <div style="display: flex; align-items: center; gap: 8px">
+              <button
+                type="button"
+                aria-label="weniger"
+                onclick="msqQtyStep(-1)"
+                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                id="ms-q-qty"
+                min="1"
+                value="1"
+                inputmode="numeric"
+                oninput="msQuickPreview()"
+                style="flex: 1; text-align: center; font-size: 18px"
+              />
+              <button
+                type="button"
+                aria-label="mehr"
+                onclick="msqQtyStep(1)"
+                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+              >
+                +
+              </button>
+            </div>
           </div>
           <div id="ms-q-days-wrap">
             <label data-i18n="batch.incDays">Inkubationstage</label>
