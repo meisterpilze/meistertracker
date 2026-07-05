@@ -215,6 +215,8 @@ window.LANG['pt'] = {
   'batch.create': 'Criar lote',
   'batch.generatedIds': 'IDs de sacos gerados',
   'batch.printLabels': 'Imprimir etiquetas para este lote',
+  'batch.printOptions': 'Opções de impressão…',
+  'print.printedBatch': '{n} etiquetas impressas: {id}',
   'batch.addNote': 'Adicionar nota',
   'batch.addBags': '+Sacos',
   'batch.del': 'Excluir',
