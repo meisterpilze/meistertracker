@@ -229,7 +229,33 @@
         <div class="g2">
           <div>
             <label data-i18n="msq.qty">Anzahl</label>
-            <input type="number" id="ms-q-qty" min="1" value="1" oninput="msQuickPreview()" />
+            <div style="display: flex; align-items: center; gap: 8px">
+              <button
+                type="button"
+                aria-label="weniger"
+                onclick="msqQtyStep(-1)"
+                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                id="ms-q-qty"
+                min="1"
+                value="1"
+                inputmode="numeric"
+                oninput="msQuickPreview()"
+                style="flex: 1; text-align: center; font-size: 18px"
+              />
+              <button
+                type="button"
+                aria-label="mehr"
+                onclick="msqQtyStep(1)"
+                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+              >
+                +
+              </button>
+            </div>
           </div>
           <div id="ms-q-days-wrap">
             <label data-i18n="batch.incDays">Inkubationstage</label>
@@ -662,12 +688,34 @@
           </button>
         </div>
         <div id="bi-body"></div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px">
-          <button id="set-selectmove" class="btn btn-sm btn-p" data-i18n="bagInfo.moveBags">Move bags…</button>
-          <button id="set-movebatch" class="btn btn-sm btn-p" data-i18n="bagInfo.moveAll">Move all</button>
-          <button id="set-14" class="btn btn-sm btn-p" data-i18n="bagInfo.harvest">Harvest</button>
-          <button id="set-15" class="btn btn-sm btn-r" data-i18n="bagInfo.remove">Remove</button>
-          <button id="set-contam" class="btn btn-sm btn-r" data-i18n="bagInfo.reportContam">⚠ Kontamination</button>
+        <div id="bi-actions" style="margin-top: 14px"></div>
+      </div>
+    </div>
+
+    <!-- Work list: findable, printable pick/walk sheet from the dashboard chips -->
+    <div class="modal-bg" id="m-worklist" role="dialog" aria-modal="true" aria-labelledby="wl-title" hidden>
+      <div class="modal" style="max-width: 560px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
+          <h3 id="wl-title">Liste</h3>
+          <button id="wl-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="wl-body" style="max-height: 60vh; overflow-y: auto"></div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 14px">
+          <button id="wl-print" class="btn btn-p" data-i18n="worklist.print">Drucken</button>
         </div>
       </div>
     </div>
@@ -784,7 +832,7 @@
             cursor: pointer;
           "
         >
-          <input type="checkbox" id="cr-auto-move" style="width: 20px; height: 20px; cursor: pointer" />
+          <input type="checkbox" id="cr-auto-move" style="width: 24px; height: 24px; cursor: pointer" />
           <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
         </label>
 
@@ -2150,7 +2198,7 @@
                           ><input type="number" id="nb-rh" placeholder="65" min="0" max="100" />
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px; padding-top: 18px">
-                          <input type="checkbox" id="nb-gyp" style="width: 16px; height: 16px; margin: 0" />
+                          <input type="checkbox" id="nb-gyp" style="width: 22px; height: 22px; margin: 0" />
                           <label
                             style="margin: 0; font-size: 13px; color: var(--c-text); cursor: pointer"
                             for="nb-gyp"
@@ -5263,6 +5311,7 @@
         <circle cx="12" cy="13" r="4" />
         <path d="M8 5l1-2h6l1 2" />
       </svg>
+      <span class="cam-fab-label" data-i18n="scan.fabLabel">Scannen</span>
     </button>
 
     <script src="/app.js" defer></script>
