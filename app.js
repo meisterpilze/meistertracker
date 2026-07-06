@@ -10542,6 +10542,11 @@ function biMoveTo(dest) {
   const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
   if (!b || !dest) return;
   document.getElementById('m-baginfo').classList.remove('open');
+  // Re-open the camera BEFORE the move so its confirmation shows as a brief,
+  // auto-dismissing toast over the live camera (setFb routes to the camera HUD
+  // when the scanner is active). If we moved first, setFb would instead pop the
+  // scan-log overlay, which the worker then has to close before scanning again.
+  biRearmScanner();
   const cb = function (moved, skipped) {
     if (!moved) {
       setFb(
@@ -10557,7 +10562,6 @@ function biMoveTo(dest) {
   };
   if (biWholeBatch) moveBatchTo(b, dest, cb);
   else moveBagsTo(b, [biBagId], dest, cb);
-  biRearmScanner();
 }
 // Return to a clean scan state and re-open the camera, so scanning the next bag
 // opens its sheet again (no action armed).
