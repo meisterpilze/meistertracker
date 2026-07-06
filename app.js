@@ -3658,21 +3658,151 @@ function renderDashSummary() {
     return;
   }
   const chips = [
-    { n: moveCount, label: t('dash.sumMove'), color: '#0ea5e9', target: 'dash-batch-tasks-card' },
-    { n: harvestCount, label: t('dash.sumHarvest'), color: '#d97706', target: 'dash-harvest-tasks-card' },
-    { n: alertCount, label: t('dash.sumAlerts'), color: '#ef4444', target: 'dash-alerts-card' }
+    { n: moveCount, label: t('dash.sumMove'), color: '#0ea5e9', target: 'dash-batch-tasks-card', kind: 'move' },
+    { n: harvestCount, label: t('dash.sumHarvest'), color: '#d97706', target: 'dash-harvest-tasks-card', kind: 'harvest' },
+    { n: alertCount, label: t('dash.sumAlerts'), color: '#ef4444', target: 'dash-alerts-card', kind: '' }
   ];
   el.innerHTML = chips
     .map((c) => {
       const active = c.n > 0;
       return (
-        `<button type="button" data-flash="${c.target}"${active ? '' : ' disabled'} style="flex:1;min-width:110px;display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-card);cursor:${active ? 'pointer' : 'default'};opacity:${active ? '1' : '0.45'}">` +
+        `<button type="button" data-flash="${c.target}" data-worklist="${c.kind}"${active ? '' : ' disabled'} style="flex:1;min-width:110px;display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-card);cursor:${active ? 'pointer' : 'default'};opacity:${active ? '1' : '0.45'}">` +
         `<span style="font-size:22px;font-weight:700;color:${c.color};min-width:1.1em;text-align:center">${c.n}</span>` +
         `<span style="font-size:12px;font-weight:600;color:var(--c-text-sec);text-align:left;line-height:1.15">${esc(c.label)}</span>` +
         `</button>`
       );
     })
     .join('');
+}
+// ─── WORK LIST (pick / walk sheet) ──────────────────────────
+// Tapping a summary chip opens a findable, printable list of the batches that
+// need moving / harvesting, grouped by their CURRENT location so a worker can
+// walk zone by zone. Print goes to a normal browser printer (e.g. a Canon),
+// separate from the Zebra label printer.
+let _workListData = null;
+function _batchZoneCounts(batch, lastByBag) {
+  const counts = {};
+  (batch.bags || []).forEach((bag) => {
+    const last = lastByBag.get(bag.toUpperCase());
+    if (!last || last.action === 'REMOVE' || !last.to) return;
+    const z = toZone(last.to);
+    counts[z] = (counts[z] || 0) + 1;
+  });
+  return counts;
+}
+function buildWorkList(kind) {
+  const lastByBag = buildLastScanByBag();
+  const groups = {};
+  const add = (loc, row) => (groups[loc] = groups[loc] || []).push(row);
+  const rowsFor = (batchId, species, strain, note) => {
+    const b = batches.find((x) => x.batchId === batchId);
+    if (!b) return;
+    const counts = _batchZoneCounts(b, lastByBag);
+    Object.keys(counts).forEach((z) =>
+      add(z, { batchId, species: species || b.species, strain: (strain || '').trim(), count: counts[z], note: note || '' })
+    );
+  };
+  if (kind === 'move') {
+    buildAutoTasks()
+      .filter((tk) => tk.taskAction === 'move')
+      .forEach((tk) => {
+        const b = batches.find((x) => x.batchId === tk.batchId);
+        rowsFor(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
+      });
+  } else if (kind === 'harvest') {
+    buildHarvestTasks().forEach((tk) => rowsFor(tk.batchId, tk.species, tk.strain, tp('harvest.daysFruiting', tk.daysFruiting)));
+  }
+  const locs = Object.keys(groups).sort((a, b) => zoneDisplayName(a).localeCompare(zoneDisplayName(b)));
+  const groupList = locs.map((loc) => ({
+    loc,
+    locName: zoneDisplayName(loc),
+    bags: groups[loc].reduce((s, r) => s + r.count, 0),
+    items: groups[loc].sort((a, b) => a.batchId.localeCompare(b.batchId))
+  }));
+  return {
+    kind,
+    title: kind === 'move' ? t('dash.sumMove') : t('dash.sumHarvest'),
+    groups: groupList,
+    total: groupList.reduce((s, g) => s + g.items.length, 0)
+  };
+}
+function openWorkList(kind) {
+  const data = buildWorkList(kind);
+  _workListData = data;
+  document.getElementById('wl-title').textContent = data.title + ' (' + data.total + ')';
+  const body = document.getElementById('wl-body');
+  if (!data.groups.length) {
+    body.innerHTML =
+      '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t('worklist.empty')) + '</div>';
+  } else {
+    body.innerHTML = data.groups
+      .map((g) => {
+        const rows = g.items
+          .map(
+            (it) =>
+              `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
+              `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
+              `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
+              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${esc(t('worklist.bags'))}</span>` +
+              `</div>`
+          )
+          .join('');
+        return (
+          '<div style="margin-bottom:14px">' +
+          `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.locName)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${esc(t('worklist.bags'))}</span></div>` +
+          rows +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+  document.getElementById('m-worklist').classList.add('open');
+}
+function printWorkList() {
+  const d = _workListData;
+  if (!d) return;
+  const rows = d.groups
+    .map((g) =>
+      g.items
+        .map(
+          (it) =>
+            `<tr><td class="c">&#9744;</td><td>${esc(g.locName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
+        )
+        .join('')
+    )
+    .join('');
+  const html =
+    '<!doctype html><html><head><meta charset="utf-8"><title>' +
+    esc(d.title) +
+    '</title><style>body{font-family:Arial,Helvetica,sans-serif;margin:18px;color:#000}h1{font-size:18px;margin:0 0 2px}.s{color:#555;font-size:12px;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ccc}th{border-bottom:2px solid #000;font-size:11px;text-transform:uppercase}.c{width:22px;font-size:16px}.m{font-family:monospace}.n{text-align:right;width:56px;font-weight:bold}</style></head><body>' +
+    '<h1>' +
+    esc(d.title) +
+    '</h1><div class="s">' +
+    esc(localDateStr(new Date())) +
+    ' · ' +
+    d.total +
+    ' ' +
+    esc(t('worklist.batches')) +
+    '</div><table><thead><tr><th></th><th>' +
+    esc(t('worklist.location')) +
+    '</th><th>' +
+    esc(t('worklist.batchCol')) +
+    '</th><th>' +
+    esc(t('batch.species')) +
+    '</th><th style="text-align:right">' +
+    esc(t('worklist.bags')) +
+    '</th></tr></thead><tbody>' +
+    rows +
+    '</tbody></table><scr' +
+    'ipt>window.onload=function(){window.print()}<\/scr' +
+    'ipt></body></html>';
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert(t('worklist.popupBlocked'));
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
 }
 function renderDashAlerts() {
   const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
@@ -16489,8 +16619,14 @@ function initEventListeners() {
   $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
   $('dash-harvest-tasks').addEventListener('click', dashTaskCardClick);
   $('dash-summary').addEventListener('click', function (e) {
-    const btn = e.target.closest('[data-flash]');
-    if (!btn) return;
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    // Move / harvest chips open a findable, printable work list; the alerts
+    // chip keeps its scroll-to-card behaviour.
+    if (btn.dataset.worklist) {
+      openWorkList(btn.dataset.worklist);
+      return;
+    }
     const card = document.getElementById(btn.dataset.flash);
     if (!card || card.style.display === 'none') return;
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -16500,6 +16636,16 @@ function initEventListeners() {
     setTimeout(() => {
       card.style.boxShadow = prev || '';
     }, 1500);
+  });
+  $('wl-close').addEventListener('click', () => document.getElementById('m-worklist').classList.remove('open'));
+  $('wl-print').addEventListener('click', printWorkList);
+  $('m-worklist').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('open');
+    const row = e.target.closest('[data-wl-batch]');
+    if (row) {
+      this.classList.remove('open');
+      goToBatch(row.dataset.wlBatch);
+    }
   });
   $('dash-alerts').addEventListener('click', function (e) {
     const el = e.target.closest('[data-action]');

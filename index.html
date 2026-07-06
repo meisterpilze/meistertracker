@@ -692,6 +692,34 @@
       </div>
     </div>
 
+    <!-- Work list: findable, printable pick/walk sheet from the dashboard chips -->
+    <div class="modal-bg" id="m-worklist" role="dialog" aria-modal="true" aria-labelledby="wl-title" hidden>
+      <div class="modal" style="max-width: 560px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
+          <h3 id="wl-title">Liste</h3>
+          <button id="wl-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="wl-body" style="max-height: 60vh; overflow-y: auto"></div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 14px">
+          <button id="wl-print" class="btn btn-p" data-i18n="worklist.print">Drucken</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Contamination report drill-down — full-size photos + delete -->
     <div class="modal-bg" id="m-contam-detail" role="dialog" aria-modal="true" aria-labelledby="cd-title" hidden>
       <div class="modal" style="max-width: 720px">
