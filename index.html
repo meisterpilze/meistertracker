@@ -713,6 +713,26 @@
             </svg>
           </button>
         </div>
+        <div id="wl-group" style="display: flex; gap: 8px; margin-bottom: 12px">
+          <button
+            type="button"
+            data-wl-group="location"
+            aria-pressed="true"
+            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            data-i18n="worklist.byLocation"
+          >
+            Nach Ort
+          </button>
+          <button
+            type="button"
+            data-wl-group="batch"
+            aria-pressed="false"
+            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            data-i18n="worklist.byBatch"
+          >
+            Nach Charge
+          </button>
+        </div>
         <div id="wl-body" style="max-height: 60vh; overflow-y: auto"></div>
         <div style="display: flex; justify-content: flex-end; margin-top: 14px">
           <button id="wl-print" class="btn btn-p" data-i18n="worklist.print">Drucken</button>

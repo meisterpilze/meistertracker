@@ -3680,6 +3680,7 @@ function renderDashSummary() {
 // walk zone by zone. Print goes to a normal browser printer (e.g. a Canon),
 // separate from the Zebra label printer.
 let _workListData = null;
+let _workListMode = localStorage.getItem('mp-wl-group') === 'batch' ? 'batch' : 'location';
 function _batchZoneCounts(batch, lastByBag) {
   const counts = {};
   (batch.bags || []).forEach((bag) => {
@@ -3690,16 +3691,26 @@ function _batchZoneCounts(batch, lastByBag) {
   });
   return counts;
 }
+// Flattens the move/harvest tasks into (batch, zone, count) rows. The same rows
+// then group either by zone or by batch (see _groupWorkList). total is the
+// distinct batch count, so the title matches the dashboard summary chip.
 function buildWorkList(kind) {
   const lastByBag = buildLastScanByBag();
-  const groups = {};
-  const add = (loc, row) => (groups[loc] = groups[loc] || []).push(row);
-  const rowsFor = (batchId, species, strain, note) => {
+  const rows = [];
+  const pushRows = (batchId, species, strain, note) => {
     const b = batches.find((x) => x.batchId === batchId);
     if (!b) return;
     const counts = _batchZoneCounts(b, lastByBag);
     Object.keys(counts).forEach((z) =>
-      add(z, { batchId, species: species || b.species, strain: (strain || '').trim(), count: counts[z], note: note || '' })
+      rows.push({
+        batchId,
+        species: species || b.species,
+        strain: (strain || '').trim(),
+        zone: z,
+        zoneName: zoneDisplayName(z),
+        count: counts[z],
+        note: note || ''
+      })
     );
   };
   if (kind === 'move') {
@@ -3707,68 +3718,129 @@ function buildWorkList(kind) {
       .filter((tk) => tk.taskAction === 'move')
       .forEach((tk) => {
         const b = batches.find((x) => x.batchId === tk.batchId);
-        rowsFor(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
+        pushRows(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
       });
   } else if (kind === 'harvest') {
-    buildHarvestTasks().forEach((tk) => rowsFor(tk.batchId, tk.species, tk.strain, tp('harvest.daysFruiting', tk.daysFruiting)));
+    buildHarvestTasks().forEach((tk) => pushRows(tk.batchId, tk.species, tk.strain, tp('harvest.daysFruiting', tk.daysFruiting)));
   }
-  const locs = Object.keys(groups).sort((a, b) => zoneDisplayName(a).localeCompare(zoneDisplayName(b)));
-  const groupList = locs.map((loc) => ({
-    loc,
-    locName: zoneDisplayName(loc),
-    bags: groups[loc].reduce((s, r) => s + r.count, 0),
-    items: groups[loc].sort((a, b) => a.batchId.localeCompare(b.batchId))
-  }));
   return {
     kind,
     title: kind === 'move' ? t('dash.sumMove') : t('dash.sumHarvest'),
-    groups: groupList,
-    total: groupList.reduce((s, g) => s + g.items.length, 0)
+    rows,
+    total: new Set(rows.map((r) => r.batchId)).size
   };
 }
+// Groups the flat rows for one of the two views. 'location' → a card per zone
+// listing its batches (walk the room zone by zone); 'batch' → a card per batch
+// listing where that batch's bags currently sit.
+function _groupWorkList(rows, mode) {
+  const byKey = new Map();
+  rows.forEach((r) => {
+    const key = mode === 'batch' ? r.batchId : r.zone;
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        batchId: r.batchId,
+        name: mode === 'batch' ? r.batchId : r.zoneName,
+        sub: mode === 'batch' ? r.species + (r.strain ? ' · ' + r.strain : '') : '',
+        bags: 0,
+        items: []
+      });
+    }
+    const g = byKey.get(key);
+    g.items.push(r);
+    g.bags += r.count;
+  });
+  const list = [...byKey.values()];
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  list.forEach((g) =>
+    g.items.sort((a, b) => (mode === 'batch' ? a.zoneName.localeCompare(b.zoneName) : a.batchId.localeCompare(b.batchId)))
+  );
+  return list;
+}
 function openWorkList(kind) {
-  const data = buildWorkList(kind);
-  _workListData = data;
+  _workListData = buildWorkList(kind);
+  renderWorkList();
+  document.getElementById('m-worklist').classList.add('open');
+}
+// Renders the open work list for the current _workListMode: title count, the
+// Ort/Charge toggle's active state, and the grouped body. Split from
+// openWorkList so flipping the toggle can re-render without rebuilding tasks.
+function renderWorkList() {
+  const data = _workListData;
+  if (!data) return;
+  const mode = _workListMode;
+  const bags = esc(t('worklist.bags'));
   document.getElementById('wl-title').textContent = data.title + ' (' + data.total + ')';
+  document.querySelectorAll('#wl-group [data-wl-group]').forEach((b) => {
+    const on = b.dataset.wlGroup === mode;
+    b.style.background = on ? 'var(--c-primary, #16a34a)' : 'transparent';
+    b.style.color = on ? '#fff' : 'var(--c-text-sec)';
+    b.style.borderColor = on ? 'var(--c-primary, #16a34a)' : 'var(--c-border)';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   const body = document.getElementById('wl-body');
-  if (!data.groups.length) {
+  const groups = _groupWorkList(data.rows, mode);
+  if (!groups.length) {
     body.innerHTML =
       '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t('worklist.empty')) + '</div>';
-  } else {
-    body.innerHTML = data.groups
-      .map((g) => {
-        const rows = g.items
+    return;
+  }
+  body.innerHTML = groups
+    .map((g) => {
+      if (mode === 'batch') {
+        const zoneRows = g.items
           .map(
             (it) =>
-              `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
-              `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
-              `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
-              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${esc(t('worklist.bags'))}</span>` +
+              `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px 8px 14px;border-bottom:0.5px solid var(--c-border)">` +
+              `<span style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.zoneName)}</span>` +
+              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
               `</div>`
           )
           .join('');
         return (
-          '<div style="margin-bottom:14px">' +
-          `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.locName)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${esc(t('worklist.bags'))}</span></div>` +
-          rows +
-          '</div>'
+          `<div data-wl-batch="${esc(g.batchId)}" style="margin-bottom:14px;cursor:pointer">` +
+          `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 4px;border-bottom:2px solid var(--c-border)">` +
+          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:monospace;font-size:13px;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span style="font-size:12px;color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
+          `<span style="font-size:12px;color:var(--c-text-muted);white-space:nowrap">${g.bags} ${bags}</span></div>` +
+          zoneRows +
+          `</div>`
         );
-      })
-      .join('');
-  }
-  document.getElementById('m-worklist').classList.add('open');
+      }
+      const batchRows = g.items
+        .map(
+          (it) =>
+            `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
+            `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
+            `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
+            `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
+            `</div>`
+        )
+        .join('');
+      return (
+        '<div style="margin-bottom:14px">' +
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.name)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
+        batchRows +
+        '</div>'
+      );
+    })
+    .join('');
+}
+function setWorkListMode(mode) {
+  const m = mode === 'batch' ? 'batch' : 'location';
+  if (m === _workListMode) return;
+  _workListMode = m;
+  localStorage.setItem('mp-wl-group', m);
+  renderWorkList();
 }
 function printWorkList() {
   const d = _workListData;
   if (!d) return;
-  const rows = d.groups
-    .map((g) =>
-      g.items
-        .map(
-          (it) =>
-            `<tr><td class="c">&#9744;</td><td>${esc(g.locName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
-        )
-        .join('')
+  const rows = _groupWorkList(d.rows, _workListMode)
+    .flatMap((g) => g.items)
+    .map(
+      (it) =>
+        `<tr><td class="c">&#9744;</td><td>${esc(it.zoneName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
     )
     .join('');
   const html =
@@ -16641,6 +16713,11 @@ function initEventListeners() {
   $('wl-print').addEventListener('click', printWorkList);
   $('m-worklist').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
+    const seg = e.target.closest('[data-wl-group]');
+    if (seg) {
+      setWorkListMode(seg.dataset.wlGroup);
+      return;
+    }
     const row = e.target.closest('[data-wl-batch]');
     if (row) {
       this.classList.remove('open');

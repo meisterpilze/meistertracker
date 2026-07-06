@@ -396,6 +396,8 @@ window.LANG['de'] = {
   'worklist.location': 'Ort',
   'worklist.batchCol': 'Charge',
   'worklist.batches': 'Chargen',
+  'worklist.byLocation': 'Nach Ort',
+  'worklist.byBatch': 'Nach Charge',
   'worklist.popupBlocked': 'Pop-up blockiert — bitte im Browser erlauben, dann erneut drucken.',
   'dash.moveBags': '{n} Beutel verschieben',
   'dash.fruitingTents': 'Fruchtzelte',

@@ -396,6 +396,8 @@ window.LANG['en'] = {
   'worklist.location': 'Location',
   'worklist.batchCol': 'Batch',
   'worklist.batches': 'batches',
+  'worklist.byLocation': 'By location',
+  'worklist.byBatch': 'By batch',
   'worklist.popupBlocked': 'Pop-up blocked — allow it in your browser, then print again.',
   'dash.moveBags': 'Move {n} bag(s)',
   'dash.fruitingTents': 'Fruiting Tents',

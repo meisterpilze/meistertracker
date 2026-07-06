@@ -163,6 +163,8 @@ window.LANG['pt'] = {
   'worklist.location': 'Local',
   'worklist.batchCol': 'Lote',
   'worklist.batches': 'lotes',
+  'worklist.byLocation': 'Por local',
+  'worklist.byBatch': 'Por lote',
   'worklist.popupBlocked': 'Pop-up bloqueado — permita no navegador e imprima de novo.',
   'dash.moveBags': 'Mover {n} saco(s)',
   'dash.fruitingTents': 'Tendas de Frutifica\u00e7\u00e3o',
