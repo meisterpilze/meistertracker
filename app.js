@@ -5485,10 +5485,25 @@ function moveBagsTo(batch, bagIds, dest, cb) {
     );
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (handleZoneMismatch(r, entries)) return; // I-12
-    if (r && r.ids)
+    if (r && r.ids) {
       entries.forEach((e, i) => {
         setEntryServerId(e, r.ids[i]);
       });
+      return;
+    }
+    if (r && r.error) {
+      // Retry once after 3s on server error — same idempotent retry as the
+      // single-scan path. Each entry carries a stable client_uuid and the
+      // server upserts on the unique index, so replaying the POST is safe.
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then(function (r2) {
+          if (handleZoneMismatch(r2, entries)) return;
+          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
+          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
+        });
+      }, 3000);
+    }
   });
   if (cb) cb(entries.length, skipped);
 }
@@ -5533,10 +5548,25 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
       scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
     );
   apiPost('/api/scan-log', { entries }).then(function (r) {
-    if (r && r.ids)
+    if (r && r.ids) {
       entries.forEach((e, i) => {
         setEntryServerId(e, r.ids[i]);
       });
+      return;
+    }
+    if (r && r.error) {
+      // Retry once after 3s on server error — same idempotent retry as the
+      // single-scan path. Each entry carries a stable client_uuid and the
+      // server upserts on the unique index, so replaying the POST is safe.
+      // ADD never triggers a zone_mismatch (from=null), so no 409 handling here.
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then(function (r2) {
+          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
+          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
+        });
+      }, 3000);
+    }
   });
   if (cb) cb(entries.length);
 }
@@ -11429,7 +11459,8 @@ async function _crSubmit() {
       severity: _crSeverity,
       notes: document.getElementById('cr-notes').value.trim(),
       photos: _crPhotos,
-      auto_move: !!document.getElementById('cr-auto-move')?.checked
+      auto_move: !!document.getElementById('cr-auto-move')?.checked,
+      report_uuid: newScanUuid()
     };
     const r = await apiPost('/api/contamination-reports', body);
     if (r && r.error) {
