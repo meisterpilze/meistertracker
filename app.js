@@ -4074,70 +4074,194 @@ function moveBatchToFruiting(batchId) {
     renderDashBatchTasks();
   });
 }
+// One-tap action button(s) for a single batch-tasks row.
+function dashTaskBtn(tk) {
+  const id = esc(tk.batchId);
+  if (tk.taskAction === 'move') {
+    // One-tap → Fruchtung (the dominant move) as the primary action; the
+    // Verschieben picker stays for any other destination. Only offer it for
+    // batches actually in incubation — never for SPAWN RUN, where jumping
+    // grain spawn straight to a fruiting tent skips a whole growth stage.
+    const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
+    const toFruiting = canFruit
+      ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+      : '';
+    return (
+      toFruiting +
+      `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+    );
+  }
+  return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+}
+function dashTaskRowHtml(tk) {
+  const parts = tk.text.split(tk.batchId);
+  const textWithLink =
+    esc(parts[0] || '') +
+    `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
+    esc(parts.slice(1).join(tk.batchId) || '');
+  return (
+    '<div class="todo-row ' +
+    (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
+    '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+    spColor(tk.species) +
+    '">' +
+    (tk.urgent
+      ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
+      : tk.warn
+        ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
+        : '') +
+    '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
+    textWithLink +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
+    esc(tk.detail) +
+    '</div></div>' +
+    dashTaskBtn(tk) +
+    '</div>'
+  );
+}
+// Per-zone collapse state for the batch-tasks list, persisted so a worker's
+// expand/collapse choices survive reloads. No override → zones with an overdue
+// batch open, calmer zones collapsed (see renderDashBatchTasks).
+let _dashZoneOverride = null;
+function _dashZones() {
+  if (!_dashZoneOverride) {
+    try {
+      _dashZoneOverride = JSON.parse(localStorage.getItem('mp-dash-zones') || '{}') || {};
+    } catch (e) {
+      _dashZoneOverride = {};
+    }
+  }
+  return _dashZoneOverride;
+}
+function toggleDashZone(zoneId) {
+  const sel = '.dash-zone-head[data-zone="' + (window.CSS && CSS.escape ? CSS.escape(zoneId) : zoneId) + '"]';
+  const head = document.querySelector(sel);
+  const nowOpen = head ? head.getAttribute('aria-expanded') === 'true' : false;
+  const ov = _dashZones();
+  ov[zoneId] = nowOpen ? 'closed' : 'open';
+  localStorage.setItem('mp-dash-zones', JSON.stringify(ov));
+  renderDashBatchTasks();
+}
+// Groups the "needs to move" tasks by each batch's current zone into collapsible
+// cards, so a big cohort reads as a few zone lines instead of one long flat list.
+// A zone whose batches are all incubation-ready gets a one-tap "Alle → Fruchtung".
 function renderDashBatchTasks() {
   const filter = document.getElementById('dash-batch-filter')?.value || 'all';
-  const tasks = buildAutoTasks();
-  const shown = filter === 'urgent' ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
+  const empty =
+    '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+    t('dash.noUrgent') +
+    '</div>';
+  const tasks = buildAutoTasks();
   if (!tasks.length) {
-    el.innerHTML =
-      '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
-      t('dash.noUrgent') +
-      '</div>';
+    el.innerHTML = empty;
     return;
   }
-  function taskBtn(tk) {
-    const id = esc(tk.batchId);
-    if (tk.taskAction === 'move') {
-      // One-tap → Fruchtung (the dominant move) as the primary action; the
-      // Verschieben picker stays for any other destination. Only offer it for
-      // batches actually in incubation — never for SPAWN RUN, where jumping
-      // grain spawn straight to a fruiting tent skips a whole growth stage.
-      const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
-      const toFruiting = canFruit
-        ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+  const urgentOnly = filter === 'urgent';
+  const shown = urgentOnly ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
+  if (!shown.length) {
+    el.innerHTML = empty;
+    return;
+  }
+  const lastByBag = buildLastScanByBag();
+  const fruitingExists = zones.some((z) => z.role === 'fruiting');
+  const groups = new Map();
+  shown.forEach((tk) => {
+    const b = batches.find((x) => x.batchId === tk.batchId);
+    const counts = b ? _batchZoneCounts(b, lastByBag) : {};
+    const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
+    const zid = zoneIds[0] || '__none';
+    if (!groups.has(zid)) {
+      groups.set(zid, {
+        zoneId: zid,
+        name: zid === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zid),
+        tasks: [],
+        bags: 0,
+        urgent: false,
+        allFruit: true
+      });
+    }
+    const g = groups.get(zid);
+    g.tasks.push(tk);
+    g.bags += counts[zid] || 0;
+    if (tk.urgent) g.urgent = true;
+    const canFruit = tk.taskAction === 'move' && fruitingExists && getStatus(tk.batchId).status === 'INCUBATING';
+    if (!canFruit) g.allFruit = false;
+  });
+  const list = [...groups.values()].sort((a, b) => b.urgent - a.urgent || a.name.localeCompare(b.name));
+  const ov = _dashZones();
+  const bagsLbl = esc(t('worklist.bags'));
+  el.innerHTML = list
+    .map((g) => {
+      const override = ov[g.zoneId];
+      const open = override === 'open' ? true : override === 'closed' ? false : g.urgent || urgentOnly;
+      const bulk =
+        g.allFruit && g.tasks.length > 1
+          ? `<span class="dash-zone-bulk" data-action="bulk-fruiting" data-zone="${esc(g.zoneId)}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:4px 10px;white-space:nowrap;flex-shrink:0;margin-left:8px;cursor:pointer">→ ${esc(t('dash.bulkFruiting'))}</span>`
+          : '';
+      const head =
+        `<div class="dash-zone-head" data-action="toggle-zone" data-zone="${esc(g.zoneId)}" aria-expanded="${open}" style="display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer;user-select:none">` +
+        `<span style="color:var(--c-text-muted);font-size:10px;width:9px;flex:none">${open ? '▾' : '▸'}</span>` +
+        `<span style="font-size:13px;font-weight:640;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.name)}</span>` +
+        (g.urgent ? '<span class="pdot high" style="flex:none"></span>' : '') +
+        `<span style="flex:1"></span>` +
+        `<span style="font-size:11px;color:var(--c-text-muted);font-family:monospace;white-space:nowrap">${g.bags} ${bagsLbl}</span>` +
+        bulk +
+        '</div>';
+      const body = open
+        ? '<div style="padding:4px 8px 8px;border-top:1px solid var(--c-border)">' + g.tasks.map(dashTaskRowHtml).join('') + '</div>'
         : '';
       return (
-        toFruiting +
-        `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+        '<div class="dash-zone" style="background:var(--c-card);border:1px solid var(--c-border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+        head +
+        body +
+        '</div>'
       );
-    }
-    return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+    })
+    .join('');
+}
+// One-tap: move every incubation-ready batch currently in a zone to fruiting.
+// Confirms once, then reuses the same moveBatchTo path as the per-row button.
+function bulkZoneToFruiting(zoneId) {
+  const dest = _fruitingDest();
+  if (!dest) {
+    setFb('err', t('dash.noFruitingZone'));
+    return;
   }
-  el.innerHTML = shown.length
-    ? shown
-        .map((tk) => {
-          const parts = tk.text.split(tk.batchId);
-          const textWithLink =
-            esc(parts[0] || '') +
-            `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
-            esc(parts.slice(1).join(tk.batchId) || '');
-          return (
-            '<div class="todo-row ' +
-            (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
-            '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
-            spColor(tk.species) +
-            '">' +
-            (tk.urgent
-              ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
-              : tk.warn
-                ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
-                : '') +
-            '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
-            textWithLink +
-            '</div>' +
-            '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
-            esc(tk.detail) +
-            '</div></div>' +
-            taskBtn(tk) +
-            '</div>'
-          );
-        })
-        .join('')
-    : '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
-      t('dash.noUrgent') +
-      '</div>';
+  const lastByBag = buildLastScanByBag();
+  const targets = [];
+  let bags = 0;
+  buildAutoTasks()
+    .filter((tk) => tk.taskAction === 'move')
+    .forEach((tk) => {
+      const b = batches.find((x) => x.batchId === tk.batchId);
+      if (!b) return;
+      const counts = _batchZoneCounts(b, lastByBag);
+      const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
+      if ((zoneIds[0] || '__none') !== zoneId) return;
+      if (getStatus(tk.batchId).status !== 'INCUBATING') return;
+      targets.push(b);
+      bags += counts[zoneId] || 0;
+    });
+  if (!targets.length) return;
+  const zName = zoneId === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zoneId);
+  confirm2(
+    t('dash.bulkFruitingTitle'),
+    t('dash.bulkFruitingMsg', { n: bags, zone: zName, dest: zoneDisplayName(dest) }),
+    t('dash.move'),
+    () => {
+      let moved = 0;
+      targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
+      setFb('ok', t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }));
+      updateSD();
+      renderBatches();
+      renderStatus();
+      renderDashSummary();
+      renderDashBatchTasks();
+    }
+  );
 }
 
 // Attention filter: temporarily restrict the batches list to a subset (due today, overdue, ...)
@@ -16674,9 +16798,18 @@ function initEventListeners() {
   function dashTaskCardClick(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
+    const action = el.dataset.action;
+    if (action === 'toggle-zone') {
+      toggleDashZone(el.dataset.zone);
+      return;
+    }
+    if (action === 'bulk-fruiting') {
+      bulkZoneToFruiting(el.dataset.zone);
+      return;
+    }
     const batch = el.dataset.batch;
     if (!batch) return;
-    switch (el.dataset.action) {
+    switch (action) {
       case 'go-to-batch':
         goToBatch(batch);
         break;
