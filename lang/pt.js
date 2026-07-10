@@ -148,6 +148,8 @@ window.LANG['pt'] = {
   'dash.bulkFruitingTitle': 'Mover para frutificação?',
   'dash.bulkFruitingMsg': 'Mover todos os {n} sacos em {zone} para {dest}?',
   'dash.bulkFruitingDone': '{n} sacos → {dest}',
+  'dash.undo': 'Desfazer',
+  'dash.undone': '{n} sacos de volta',
   'dash.remove': 'Remover',
   'dash.currentlyIn': 'Atualmente em {loc}',
   'dash.zones': 'Zonas',

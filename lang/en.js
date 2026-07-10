@@ -381,6 +381,8 @@ window.LANG['en'] = {
   'dash.bulkFruitingTitle': 'Move to fruiting?',
   'dash.bulkFruitingMsg': 'Move all {n} bags in {zone} to {dest}?',
   'dash.bulkFruitingDone': '{n} bags → {dest}',
+  'dash.undo': 'Undo',
+  'dash.undone': '{n} bags moved back',
   'dash.remove': 'Remove',
   'dash.currentlyIn': 'Currently in {loc}',
   'dash.zones': 'Zones',

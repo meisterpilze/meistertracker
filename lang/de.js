@@ -381,6 +381,8 @@ window.LANG['de'] = {
   'dash.bulkFruitingTitle': 'Auf Fruchtung verschieben?',
   'dash.bulkFruitingMsg': 'Alle {n} Beutel in {zone} nach {dest} verschieben?',
   'dash.bulkFruitingDone': '{n} Beutel → {dest}',
+  'dash.undo': 'Rückgängig',
+  'dash.undone': '{n} Beutel zurück',
   'dash.remove': 'Entfernen',
   'dash.currentlyIn': 'Aktuell in {loc}',
   'dash.zones': 'Zonen',

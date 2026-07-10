@@ -4051,6 +4051,70 @@ function _fruitingDest() {
 // One-tap whole-batch move to fruiting for the dashboard "needs to move" cards.
 // Same move semantics as the Verschieben picker (moveBatchTo skips bags that
 // are unplaced/removed or already there) — just with the destination preset.
+// ── Undo for → Fruchtung moves ──────────────────────────────
+// A "Rückgängig" snackbar reverses a one-tap or bulk move to fruiting: we
+// snapshot each bag's location before the move, then move the exact same bags
+// back on undo (a compensating MOVE, so the scan history stays honest).
+let _undoTimer = null;
+function showUndoBar(msg, undoCb) {
+  const bar = document.getElementById('undo-bar');
+  if (!bar) return;
+  document.getElementById('undo-msg').textContent = msg;
+  const btn = document.getElementById('undo-btn');
+  btn.textContent = t('dash.undo');
+  btn.style.display = '';
+  btn.onclick = () => {
+    clearTimeout(_undoTimer);
+    hideUndoBar();
+    if (undoCb) undoCb();
+  };
+  bar.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndoBar, 8000);
+}
+function flashUndoBar(msg) {
+  const bar = document.getElementById('undo-bar');
+  if (!bar) return;
+  document.getElementById('undo-msg').textContent = msg;
+  document.getElementById('undo-btn').style.display = 'none';
+  bar.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndoBar, 2500);
+}
+function hideUndoBar() {
+  const bar = document.getElementById('undo-bar');
+  if (bar) bar.classList.remove('show');
+}
+function _snapshotBeforeMove(batchList, dest, lastByBag) {
+  const snap = [];
+  const d = dest.toUpperCase();
+  batchList.forEach((b) => {
+    (b.bags || []).forEach((bag) => {
+      const last = lastByBag.get(bag.toUpperCase());
+      if (!last || last.action === 'REMOVE' || !last.to) return;
+      if (last.to.toUpperCase() === d) return; // already there → won't move
+      snap.push({ batch: b, bag, from: last.to });
+    });
+  });
+  return snap;
+}
+function _undoFruitingMove(snap) {
+  if (!snap || !snap.length) return;
+  const groups = new Map();
+  snap.forEach((s) => {
+    const key = s.batch.batchId + '|' + s.from;
+    if (!groups.has(key)) groups.set(key, { batch: s.batch, dest: s.from, bags: [] });
+    groups.get(key).bags.push(s.bag);
+  });
+  let back = 0;
+  groups.forEach((g) => moveBagsTo(g.batch, g.bags, g.dest, (m) => (back += m || 0)));
+  updateSD();
+  renderBatches();
+  renderStatus();
+  renderDashSummary();
+  renderDashBatchTasks();
+  flashUndoBar(t('dash.undone', { n: back }));
+}
 function moveBatchToFruiting(batchId) {
   const b = batches.find((x) => x.batchId === batchId);
   if (!b) return;
@@ -4059,19 +4123,21 @@ function moveBatchToFruiting(batchId) {
     setFb('err', t('dash.noFruitingZone'));
     return;
   }
+  const snap = _snapshotBeforeMove([b], dest, buildLastScanByBag());
   moveBatchTo(b, dest, function (moved, skipped) {
+    updateSD();
+    renderBatches();
+    renderStatus();
+    renderDashSummary();
+    renderDashBatchTasks();
     if (!moved) {
       setFb(
         'ok',
         skipped ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }) : t('batch.noBagsToMove')
       );
     } else {
-      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + zoneDisplayName(dest));
+      showUndoBar(b.batchId + ': ' + moved + ' → ' + zoneDisplayName(dest), () => _undoFruitingMove(snap));
     }
-    updateSD();
-    renderBatches();
-    renderStatus();
-    renderDashBatchTasks();
   });
 }
 // One-tap action button(s) for a single batch-tasks row.
@@ -4252,14 +4318,15 @@ function bulkZoneToFruiting(zoneId) {
     t('dash.bulkFruitingMsg', { n: bags, zone: zName, dest: zoneDisplayName(dest) }),
     t('dash.move'),
     () => {
+      const snap = _snapshotBeforeMove(targets, dest, buildLastScanByBag());
       let moved = 0;
       targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
-      setFb('ok', t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }));
       updateSD();
       renderBatches();
       renderStatus();
       renderDashSummary();
       renderDashBatchTasks();
+      showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoFruitingMove(snap));
     }
   );
 }

@@ -5334,6 +5334,12 @@
       <span class="cam-fab-label" data-i18n="scan.fabLabel">Scannen</span>
     </button>
 
+    <!-- Undo snackbar: reverse a → Fruchtung move (per-row or bulk) -->
+    <div id="undo-bar" class="undo-bar" role="status" aria-live="polite">
+      <span id="undo-msg"></span>
+      <button type="button" id="undo-btn" data-i18n="dash.undo">Rückgängig</button>
+    </div>
+
     <script src="/app.js" defer></script>
 
     <!-- Growth: 90-day marketing KPI dashboard (vanilla JS, no build step).

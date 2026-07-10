@@ -3130,6 +3130,55 @@ tr:hover td {
   margin-top: 16px;
 }
 
+/* ═══ UNDO SNACKBAR ════════════════════════════════════════════ */
+/* Bottom-centered "Rückgängig" bar for reversible → Fruchtung moves. */
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 150%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(90vw, 420px);
+  padding: 11px 12px 11px 16px;
+  border-radius: 12px;
+  background: #14201a;
+  color: #eaf3ed;
+  font-size: 13px;
+  line-height: 1.3;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+.undo-bar.show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.undo-bar #undo-msg {
+  flex: 1;
+  min-width: 0;
+}
+.undo-bar #undo-btn {
+  flex: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #7ee2a1;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.undo-bar #undo-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* ═══ DESKTOP: batch tasks own a full-width row ════════════════ */
 /* The move list is the primary card. On wide screens it takes its own
    row so its two-button rows aren't crushed into a quarter-column; the
