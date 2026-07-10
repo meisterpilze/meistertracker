@@ -713,6 +713,26 @@
             </svg>
           </button>
         </div>
+        <div id="wl-group" style="display: flex; gap: 8px; margin-bottom: 12px">
+          <button
+            type="button"
+            data-wl-group="location"
+            aria-pressed="true"
+            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            data-i18n="worklist.byLocation"
+          >
+            Nach Ort
+          </button>
+          <button
+            type="button"
+            data-wl-group="batch"
+            aria-pressed="false"
+            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            data-i18n="worklist.byBatch"
+          >
+            Nach Charge
+          </button>
+        </div>
         <div id="wl-body" style="max-height: 60vh; overflow-y: auto"></div>
         <div style="display: flex; justify-content: flex-end; margin-top: 14px">
           <button id="wl-print" class="btn btn-p" data-i18n="worklist.print">Drucken</button>
@@ -1843,42 +1863,49 @@
               </div>
             </div>
 
-            <!-- Pipeline KPI strip (total + 5 stage cards) -->
-            <div id="metrics" style="margin-bottom: 10px"></div>
+            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
+            <details class="dash-collapse" id="dc-kpi">
+              <summary class="dash-collapse-sum" data-i18n="dash.kpiSection">Kennzahlen</summary>
+              <div id="metrics" style="margin-bottom: 10px"></div>
+            </details>
 
-            <!-- Location overview with inline search header -->
-            <div class="dash-locations-header">
-              <div class="sec" style="margin: 0" data-i18n="dash.liveStatus">Live batch status</div>
-              <input
-                type="text"
-                id="status-q"
-                class="dash-search-inline"
-                data-i18n-aria-label="aria.searchDashboard"
-                aria-label="Search dashboard"
-                data-i18n-placeholder="dash.search"
-                placeholder="Search..."
-              />
-            </div>
-            <div id="dash-locations"></div>
+            <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+            <details class="dash-collapse" id="dc-status">
+              <summary class="dash-collapse-sum" data-i18n="dash.liveStatus">Live batch status</summary>
+              <div class="dash-locations-header">
+                <input
+                  type="text"
+                  id="status-q"
+                  class="dash-search-inline"
+                  data-i18n-aria-label="aria.searchDashboard"
+                  aria-label="Search dashboard"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Search..."
+                />
+              </div>
+              <div id="dash-locations"></div>
+            </details>
 
-            <!-- ── LAB section ── -->
-            <div class="dash-section-header dash-section-lab">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M9 3h6v7l4 9H5l4-9V3z" />
-                <line x1="9" y1="3" x2="15" y2="3" />
-              </svg>
-              <span>Lab</span>
-            </div>
-            <div id="dash-lab-stock"></div>
+            <!-- ── LAB section ── collapsible -->
+            <details class="dash-collapse" id="dc-lab">
+              <summary class="dash-collapse-sum dash-collapse-lab">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
+                  <line x1="9" y1="3" x2="15" y2="3" />
+                </svg>
+                <span>Lab</span>
+              </summary>
+              <div id="dash-lab-stock"></div>
+            </details>
           </div>
           <!-- end dash-farm-section -->
 
@@ -5313,6 +5340,12 @@
       </svg>
       <span class="cam-fab-label" data-i18n="scan.fabLabel">Scannen</span>
     </button>
+
+    <!-- Undo snackbar: reverse a → Fruchtung move (per-row or bulk) -->
+    <div id="undo-bar" class="undo-bar" role="status" aria-live="polite">
+      <span id="undo-msg"></span>
+      <button type="button" id="undo-btn" data-i18n="dash.undo">Rückgängig</button>
+    </div>
 
     <script src="/app.js" defer></script>
 

@@ -1441,6 +1441,28 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE users ADD COLUMN can_ship INTEGER DEFAULT 0');
       }
     }
+  },
+  {
+    version: 49,
+    description: 'Index scan_log(action) so action-only aggregates stop full-scanning',
+    fn(db) {
+      // The existing action index is partial (WHERE reason IS NOT NULL), so
+      // filters like action='ADD' couldn't use it and fell back to a full scan.
+      db.exec('CREATE INDEX IF NOT EXISTS idx_scanlog_action ON scan_log(action)');
+    }
+  },
+  {
+    version: 50,
+    description: 'Add report_uuid to contamination_reports for offline-replay idempotency',
+    fn(db) {
+      const cols = db.prepare('PRAGMA table_info(contamination_reports)').all();
+      if (!cols.some((c) => c.name === 'report_uuid')) {
+        db.exec('ALTER TABLE contamination_reports ADD COLUMN report_uuid TEXT');
+      }
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_contam_report_uuid ON contamination_reports(report_uuid) WHERE report_uuid IS NOT NULL'
+      );
+    }
   }
 ];
 
@@ -3222,11 +3244,18 @@ function appendScanEntries(db, entries, userId) {
 }
 
 function deleteLastScanEntries(db, n) {
-  db.prepare('DELETE FROM scan_log WHERE id IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT ?)').run(n);
-  // P-06: rows removed — incremental update not possible without re-reading,
-  // so invalidate and let the next read rebuild from scratch.
-  invalidateBagZoneCache(db);
-  incrementDataVersion(db);
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM scan_log WHERE id IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT ?)').run(n);
+    // P-06: rows removed — incremental update not possible without re-reading,
+    // so invalidate and let the next read rebuild from scratch.
+    invalidateBagZoneCache(db);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 function getScanEntryById(db, id) {
@@ -3243,9 +3272,16 @@ function deleteScanEntryById(db, id) {
 }
 
 function clearScanLog(db) {
-  db.prepare('DELETE FROM scan_log').run();
-  invalidateBagZoneCache(db); // P-06
-  incrementDataVersion(db);
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM scan_log').run();
+    invalidateBagZoneCache(db); // P-06
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 // -- Harvests --
@@ -4309,9 +4345,11 @@ function zoneBagCount(db, zoneId) {
     .all(...allLocs, ...allLocs);
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && allLocs.includes(r.to))
-      bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && allLocs.includes(r.from))
+    const toInZone = allLocs.includes(r.to);
+    const fromInZone = allLocs.includes(r.from);
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && toInZone) bags.add(r.bag);
+    // A rack-to-rack move within the zone has from & to both in-set — a no-op, so only depart when to is outside.
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && fromInZone && !toInZone)
       bags.delete(r.bag);
   }
   return bags.size;
@@ -5633,6 +5671,31 @@ function listContaminationTypes(db, includeInactive) {
 }
 
 function createContaminationReport(db, data) {
+  // Idempotent on report_uuid (offline replay): a duplicate returns the existing
+  // id and duplicate:true so the caller skips re-running side effects (photos,
+  // auto-MOVE). Old clients omit report_uuid and keep the plain insert.
+  if (data.report_uuid) {
+    const stmt = db.prepare(`INSERT INTO contamination_reports
+    (reported_at, user_id, bag_id, batch_id, zone_id, type_id, severity, notes, report_uuid)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(report_uuid) WHERE report_uuid IS NOT NULL DO NOTHING`);
+    const r = stmt.run(
+      data.reported_at || new Date().toISOString(),
+      data.user_id || null,
+      data.bag_id || null,
+      data.batch_id || null,
+      data.zone_id || null,
+      data.type_id,
+      data.severity || 'minor',
+      data.notes || '',
+      data.report_uuid
+    );
+    if (r.changes === 0) {
+      const existing = db.prepare('SELECT id FROM contamination_reports WHERE report_uuid = ?').get(data.report_uuid);
+      return { id: existing ? existing.id : null, duplicate: true };
+    }
+    return { id: r.lastInsertRowid, duplicate: false };
+  }
   const stmt = db.prepare(`INSERT INTO contamination_reports
     (reported_at, user_id, bag_id, batch_id, zone_id, type_id, severity, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -5646,7 +5709,7 @@ function createContaminationReport(db, data) {
     data.severity || 'minor',
     data.notes || ''
   );
-  return r.lastInsertRowid;
+  return { id: r.lastInsertRowid, duplicate: false };
 }
 
 function addContaminationPhoto(db, reportId, photo) {

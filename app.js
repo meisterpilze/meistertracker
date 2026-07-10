@@ -3680,6 +3680,7 @@ function renderDashSummary() {
 // walk zone by zone. Print goes to a normal browser printer (e.g. a Canon),
 // separate from the Zebra label printer.
 let _workListData = null;
+let _workListMode = localStorage.getItem('mp-wl-group') === 'batch' ? 'batch' : 'location';
 function _batchZoneCounts(batch, lastByBag) {
   const counts = {};
   (batch.bags || []).forEach((bag) => {
@@ -3690,16 +3691,26 @@ function _batchZoneCounts(batch, lastByBag) {
   });
   return counts;
 }
+// Flattens the move/harvest tasks into (batch, zone, count) rows. The same rows
+// then group either by zone or by batch (see _groupWorkList). total is the
+// distinct batch count, so the title matches the dashboard summary chip.
 function buildWorkList(kind) {
   const lastByBag = buildLastScanByBag();
-  const groups = {};
-  const add = (loc, row) => (groups[loc] = groups[loc] || []).push(row);
-  const rowsFor = (batchId, species, strain, note) => {
+  const rows = [];
+  const pushRows = (batchId, species, strain, note) => {
     const b = batches.find((x) => x.batchId === batchId);
     if (!b) return;
     const counts = _batchZoneCounts(b, lastByBag);
     Object.keys(counts).forEach((z) =>
-      add(z, { batchId, species: species || b.species, strain: (strain || '').trim(), count: counts[z], note: note || '' })
+      rows.push({
+        batchId,
+        species: species || b.species,
+        strain: (strain || '').trim(),
+        zone: z,
+        zoneName: zoneDisplayName(z),
+        count: counts[z],
+        note: note || ''
+      })
     );
   };
   if (kind === 'move') {
@@ -3707,68 +3718,129 @@ function buildWorkList(kind) {
       .filter((tk) => tk.taskAction === 'move')
       .forEach((tk) => {
         const b = batches.find((x) => x.batchId === tk.batchId);
-        rowsFor(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
+        pushRows(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
       });
   } else if (kind === 'harvest') {
-    buildHarvestTasks().forEach((tk) => rowsFor(tk.batchId, tk.species, tk.strain, tp('harvest.daysFruiting', tk.daysFruiting)));
+    buildHarvestTasks().forEach((tk) => pushRows(tk.batchId, tk.species, tk.strain, tp('harvest.daysFruiting', tk.daysFruiting)));
   }
-  const locs = Object.keys(groups).sort((a, b) => zoneDisplayName(a).localeCompare(zoneDisplayName(b)));
-  const groupList = locs.map((loc) => ({
-    loc,
-    locName: zoneDisplayName(loc),
-    bags: groups[loc].reduce((s, r) => s + r.count, 0),
-    items: groups[loc].sort((a, b) => a.batchId.localeCompare(b.batchId))
-  }));
   return {
     kind,
     title: kind === 'move' ? t('dash.sumMove') : t('dash.sumHarvest'),
-    groups: groupList,
-    total: groupList.reduce((s, g) => s + g.items.length, 0)
+    rows,
+    total: new Set(rows.map((r) => r.batchId)).size
   };
 }
+// Groups the flat rows for one of the two views. 'location' → a card per zone
+// listing its batches (walk the room zone by zone); 'batch' → a card per batch
+// listing where that batch's bags currently sit.
+function _groupWorkList(rows, mode) {
+  const byKey = new Map();
+  rows.forEach((r) => {
+    const key = mode === 'batch' ? r.batchId : r.zone;
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        batchId: r.batchId,
+        name: mode === 'batch' ? r.batchId : r.zoneName,
+        sub: mode === 'batch' ? r.species + (r.strain ? ' · ' + r.strain : '') : '',
+        bags: 0,
+        items: []
+      });
+    }
+    const g = byKey.get(key);
+    g.items.push(r);
+    g.bags += r.count;
+  });
+  const list = [...byKey.values()];
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  list.forEach((g) =>
+    g.items.sort((a, b) => (mode === 'batch' ? a.zoneName.localeCompare(b.zoneName) : a.batchId.localeCompare(b.batchId)))
+  );
+  return list;
+}
 function openWorkList(kind) {
-  const data = buildWorkList(kind);
-  _workListData = data;
+  _workListData = buildWorkList(kind);
+  renderWorkList();
+  document.getElementById('m-worklist').classList.add('open');
+}
+// Renders the open work list for the current _workListMode: title count, the
+// Ort/Charge toggle's active state, and the grouped body. Split from
+// openWorkList so flipping the toggle can re-render without rebuilding tasks.
+function renderWorkList() {
+  const data = _workListData;
+  if (!data) return;
+  const mode = _workListMode;
+  const bags = esc(t('worklist.bags'));
   document.getElementById('wl-title').textContent = data.title + ' (' + data.total + ')';
+  document.querySelectorAll('#wl-group [data-wl-group]').forEach((b) => {
+    const on = b.dataset.wlGroup === mode;
+    b.style.background = on ? 'var(--c-primary, #16a34a)' : 'transparent';
+    b.style.color = on ? '#fff' : 'var(--c-text-sec)';
+    b.style.borderColor = on ? 'var(--c-primary, #16a34a)' : 'var(--c-border)';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   const body = document.getElementById('wl-body');
-  if (!data.groups.length) {
+  const groups = _groupWorkList(data.rows, mode);
+  if (!groups.length) {
     body.innerHTML =
       '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t('worklist.empty')) + '</div>';
-  } else {
-    body.innerHTML = data.groups
-      .map((g) => {
-        const rows = g.items
+    return;
+  }
+  body.innerHTML = groups
+    .map((g) => {
+      if (mode === 'batch') {
+        const zoneRows = g.items
           .map(
             (it) =>
-              `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
-              `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
-              `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
-              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${esc(t('worklist.bags'))}</span>` +
+              `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px 8px 14px;border-bottom:0.5px solid var(--c-border)">` +
+              `<span style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.zoneName)}</span>` +
+              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
               `</div>`
           )
           .join('');
         return (
-          '<div style="margin-bottom:14px">' +
-          `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.locName)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${esc(t('worklist.bags'))}</span></div>` +
-          rows +
-          '</div>'
+          `<div data-wl-batch="${esc(g.batchId)}" style="margin-bottom:14px;cursor:pointer">` +
+          `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 4px;border-bottom:2px solid var(--c-border)">` +
+          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:monospace;font-size:13px;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span style="font-size:12px;color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
+          `<span style="font-size:12px;color:var(--c-text-muted);white-space:nowrap">${g.bags} ${bags}</span></div>` +
+          zoneRows +
+          `</div>`
         );
-      })
-      .join('');
-  }
-  document.getElementById('m-worklist').classList.add('open');
+      }
+      const batchRows = g.items
+        .map(
+          (it) =>
+            `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
+            `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
+            `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
+            `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
+            `</div>`
+        )
+        .join('');
+      return (
+        '<div style="margin-bottom:14px">' +
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.name)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
+        batchRows +
+        '</div>'
+      );
+    })
+    .join('');
+}
+function setWorkListMode(mode) {
+  const m = mode === 'batch' ? 'batch' : 'location';
+  if (m === _workListMode) return;
+  _workListMode = m;
+  localStorage.setItem('mp-wl-group', m);
+  renderWorkList();
 }
 function printWorkList() {
   const d = _workListData;
   if (!d) return;
-  const rows = d.groups
-    .map((g) =>
-      g.items
-        .map(
-          (it) =>
-            `<tr><td class="c">&#9744;</td><td>${esc(g.locName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
-        )
-        .join('')
+  const rows = _groupWorkList(d.rows, _workListMode)
+    .flatMap((g) => g.items)
+    .map(
+      (it) =>
+        `<tr><td class="c">&#9744;</td><td>${esc(it.zoneName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
     )
     .join('');
   const html =
@@ -3979,6 +4051,70 @@ function _fruitingDest() {
 // One-tap whole-batch move to fruiting for the dashboard "needs to move" cards.
 // Same move semantics as the Verschieben picker (moveBatchTo skips bags that
 // are unplaced/removed or already there) — just with the destination preset.
+// ── Undo for → Fruchtung moves ──────────────────────────────
+// A "Rückgängig" snackbar reverses a one-tap or bulk move to fruiting: we
+// snapshot each bag's location before the move, then move the exact same bags
+// back on undo (a compensating MOVE, so the scan history stays honest).
+let _undoTimer = null;
+function showUndoBar(msg, undoCb) {
+  const bar = document.getElementById('undo-bar');
+  if (!bar) return;
+  document.getElementById('undo-msg').textContent = msg;
+  const btn = document.getElementById('undo-btn');
+  btn.textContent = t('dash.undo');
+  btn.style.display = '';
+  btn.onclick = () => {
+    clearTimeout(_undoTimer);
+    hideUndoBar();
+    if (undoCb) undoCb();
+  };
+  bar.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndoBar, 8000);
+}
+function flashUndoBar(msg) {
+  const bar = document.getElementById('undo-bar');
+  if (!bar) return;
+  document.getElementById('undo-msg').textContent = msg;
+  document.getElementById('undo-btn').style.display = 'none';
+  bar.classList.add('show');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndoBar, 2500);
+}
+function hideUndoBar() {
+  const bar = document.getElementById('undo-bar');
+  if (bar) bar.classList.remove('show');
+}
+function _snapshotBeforeMove(batchList, dest, lastByBag) {
+  const snap = [];
+  const d = dest.toUpperCase();
+  batchList.forEach((b) => {
+    (b.bags || []).forEach((bag) => {
+      const last = lastByBag.get(bag.toUpperCase());
+      if (!last || last.action === 'REMOVE' || !last.to) return;
+      if (last.to.toUpperCase() === d) return; // already there → won't move
+      snap.push({ batch: b, bag, from: last.to });
+    });
+  });
+  return snap;
+}
+function _undoFruitingMove(snap) {
+  if (!snap || !snap.length) return;
+  const groups = new Map();
+  snap.forEach((s) => {
+    const key = s.batch.batchId + '|' + s.from;
+    if (!groups.has(key)) groups.set(key, { batch: s.batch, dest: s.from, bags: [] });
+    groups.get(key).bags.push(s.bag);
+  });
+  let back = 0;
+  groups.forEach((g) => moveBagsTo(g.batch, g.bags, g.dest, (m) => (back += m || 0)));
+  updateSD();
+  renderBatches();
+  renderStatus();
+  renderDashSummary();
+  renderDashBatchTasks();
+  flashUndoBar(t('dash.undone', { n: back }));
+}
 function moveBatchToFruiting(batchId) {
   const b = batches.find((x) => x.batchId === batchId);
   if (!b) return;
@@ -3987,85 +4123,247 @@ function moveBatchToFruiting(batchId) {
     setFb('err', t('dash.noFruitingZone'));
     return;
   }
+  const snap = _snapshotBeforeMove([b], dest, buildLastScanByBag());
   moveBatchTo(b, dest, function (moved, skipped) {
+    updateSD();
+    renderBatches();
+    renderStatus();
+    renderDashSummary();
+    renderDashBatchTasks();
     if (!moved) {
       setFb(
         'ok',
         skipped ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }) : t('batch.noBagsToMove')
       );
     } else {
-      setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + zoneDisplayName(dest));
+      showUndoBar(b.batchId + ': ' + moved + ' → ' + zoneDisplayName(dest), () => _undoFruitingMove(snap));
     }
-    updateSD();
-    renderBatches();
-    renderStatus();
-    renderDashBatchTasks();
   });
 }
+// One-tap action button(s) for a single batch-tasks row.
+function dashTaskBtn(tk) {
+  const id = esc(tk.batchId);
+  if (tk.taskAction === 'move') {
+    // One-tap → Fruchtung (the dominant move) as the primary action; the
+    // Verschieben picker stays for any other destination. Only offer it for
+    // batches actually in incubation — never for SPAWN RUN, where jumping
+    // grain spawn straight to a fruiting tent skips a whole growth stage.
+    const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
+    const toFruiting = canFruit
+      ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+      : '';
+    return (
+      toFruiting +
+      `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+    );
+  }
+  return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+}
+function dashTaskRowHtml(tk) {
+  const parts = tk.text.split(tk.batchId);
+  const textWithLink =
+    esc(parts[0] || '') +
+    `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
+    esc(parts.slice(1).join(tk.batchId) || '');
+  return (
+    '<div class="todo-row ' +
+    (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
+    '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+    spColor(tk.species) +
+    '">' +
+    (tk.urgent
+      ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
+      : tk.warn
+        ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
+        : '') +
+    '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
+    textWithLink +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
+    esc(tk.detail) +
+    '</div></div>' +
+    dashTaskBtn(tk) +
+    '</div>'
+  );
+}
+// Per-zone collapse state for the batch-tasks list, persisted so a worker's
+// expand/collapse choices survive reloads. No override → zones with an overdue
+// batch open, calmer zones collapsed (see renderDashBatchTasks).
+let _dashZoneOverride = null;
+function _dashZones() {
+  if (!_dashZoneOverride) {
+    try {
+      _dashZoneOverride = JSON.parse(localStorage.getItem('mp-dash-zones') || '{}') || {};
+    } catch (e) {
+      _dashZoneOverride = {};
+    }
+  }
+  return _dashZoneOverride;
+}
+function toggleDashZone(zoneId) {
+  const sel = '.dash-zone-head[data-zone="' + (window.CSS && CSS.escape ? CSS.escape(zoneId) : zoneId) + '"]';
+  const head = document.querySelector(sel);
+  const nowOpen = head ? head.getAttribute('aria-expanded') === 'true' : false;
+  const ov = _dashZones();
+  ov[zoneId] = nowOpen ? 'closed' : 'open';
+  localStorage.setItem('mp-dash-zones', JSON.stringify(ov));
+  renderDashBatchTasks();
+}
+// Groups the "needs to move" tasks by each batch's current zone into collapsible
+// cards, so a big cohort reads as a few zone lines instead of one long flat list.
+// A zone whose batches are all incubation-ready gets a one-tap "Alle → Fruchtung".
 function renderDashBatchTasks() {
   const filter = document.getElementById('dash-batch-filter')?.value || 'all';
-  const tasks = buildAutoTasks();
-  const shown = filter === 'urgent' ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
+  const empty =
+    '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+    t('dash.noUrgent') +
+    '</div>';
+  const tasks = buildAutoTasks();
   if (!tasks.length) {
-    el.innerHTML =
-      '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
-      t('dash.noUrgent') +
-      '</div>';
+    el.innerHTML = empty;
     return;
   }
-  function taskBtn(tk) {
-    const id = esc(tk.batchId);
-    if (tk.taskAction === 'move') {
-      // One-tap → Fruchtung (the dominant move) as the primary action; the
-      // Verschieben picker stays for any other destination. Only offer it for
-      // batches actually in incubation — never for SPAWN RUN, where jumping
-      // grain spawn straight to a fruiting tent skips a whole growth stage.
-      const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
-      const toFruiting = canFruit
-        ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+  const urgentOnly = filter === 'urgent';
+  const shown = urgentOnly ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
+  if (!shown.length) {
+    el.innerHTML = empty;
+    return;
+  }
+  const lastByBag = buildLastScanByBag();
+  const fruitingExists = zones.some((z) => z.role === 'fruiting');
+  const groups = new Map();
+  shown.forEach((tk) => {
+    const b = batches.find((x) => x.batchId === tk.batchId);
+    const counts = b ? _batchZoneCounts(b, lastByBag) : {};
+    const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
+    const zid = zoneIds[0] || '__none';
+    if (!groups.has(zid)) {
+      groups.set(zid, {
+        zoneId: zid,
+        name: zid === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zid),
+        tasks: [],
+        bags: 0,
+        urgent: false,
+        allFruit: true
+      });
+    }
+    const g = groups.get(zid);
+    g.tasks.push(tk);
+    g.bags += counts[zid] || 0;
+    if (tk.urgent) g.urgent = true;
+    const canFruit = tk.taskAction === 'move' && fruitingExists && getStatus(tk.batchId).status === 'INCUBATING';
+    if (!canFruit) g.allFruit = false;
+  });
+  const list = [...groups.values()].sort((a, b) => b.urgent - a.urgent || a.name.localeCompare(b.name));
+  const ov = _dashZones();
+  const bagsLbl = esc(t('worklist.bags'));
+  el.innerHTML = list
+    .map((g) => {
+      const override = ov[g.zoneId];
+      const open = override === 'open' ? true : override === 'closed' ? false : g.urgent || urgentOnly;
+      const bulk =
+        g.allFruit && g.tasks.length > 1
+          ? `<span class="dash-zone-bulk" data-action="bulk-fruiting" data-zone="${esc(g.zoneId)}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:4px 10px;white-space:nowrap;flex-shrink:0;margin-left:8px;cursor:pointer">→ ${esc(t('dash.bulkFruiting'))}</span>`
+          : '';
+      const head =
+        `<div class="dash-zone-head" data-action="toggle-zone" data-zone="${esc(g.zoneId)}" aria-expanded="${open}" style="display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer;user-select:none">` +
+        `<span style="color:var(--c-text-muted);font-size:10px;width:9px;flex:none">${open ? '▾' : '▸'}</span>` +
+        `<span style="font-size:13px;font-weight:640;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.name)}</span>` +
+        (g.urgent ? '<span class="pdot high" style="flex:none"></span>' : '') +
+        `<span style="flex:1"></span>` +
+        `<span style="font-size:11px;color:var(--c-text-muted);font-family:monospace;white-space:nowrap">${g.bags} ${bagsLbl}</span>` +
+        bulk +
+        '</div>';
+      const body = open
+        ? '<div style="padding:4px 8px 8px;border-top:1px solid var(--c-border)">' + g.tasks.map(dashTaskRowHtml).join('') + '</div>'
         : '';
       return (
-        toFruiting +
-        `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+        '<div class="dash-zone" style="background:var(--c-card);border:1px solid var(--c-border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+        head +
+        body +
+        '</div>'
       );
-    }
-    return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+    })
+    .join('');
+}
+// One-tap: move every incubation-ready batch currently in a zone to fruiting.
+// Confirms once, then reuses the same moveBatchTo path as the per-row button.
+function bulkZoneToFruiting(zoneId) {
+  const dest = _fruitingDest();
+  if (!dest) {
+    setFb('err', t('dash.noFruitingZone'));
+    return;
   }
-  el.innerHTML = shown.length
-    ? shown
-        .map((tk) => {
-          const parts = tk.text.split(tk.batchId);
-          const textWithLink =
-            esc(parts[0] || '') +
-            `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
-            esc(parts.slice(1).join(tk.batchId) || '');
-          return (
-            '<div class="todo-row ' +
-            (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
-            '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
-            spColor(tk.species) +
-            '">' +
-            (tk.urgent
-              ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
-              : tk.warn
-                ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
-                : '') +
-            '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
-            textWithLink +
-            '</div>' +
-            '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
-            esc(tk.detail) +
-            '</div></div>' +
-            taskBtn(tk) +
-            '</div>'
-          );
-        })
-        .join('')
-    : '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
-      t('dash.noUrgent') +
-      '</div>';
+  const lastByBag = buildLastScanByBag();
+  const targets = [];
+  let bags = 0;
+  buildAutoTasks()
+    .filter((tk) => tk.taskAction === 'move')
+    .forEach((tk) => {
+      const b = batches.find((x) => x.batchId === tk.batchId);
+      if (!b) return;
+      const counts = _batchZoneCounts(b, lastByBag);
+      const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
+      if ((zoneIds[0] || '__none') !== zoneId) return;
+      if (getStatus(tk.batchId).status !== 'INCUBATING') return;
+      targets.push(b);
+      bags += counts[zoneId] || 0;
+    });
+  if (!targets.length) return;
+  const zName = zoneId === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zoneId);
+  confirm2(
+    t('dash.bulkFruitingTitle'),
+    t('dash.bulkFruitingMsg', { n: bags, zone: zName, dest: zoneDisplayName(dest) }),
+    t('dash.move'),
+    () => {
+      // moveBatchTo moves each target's ENTIRE bag set, so a batch split across
+      // zones also moves the bags it has outside this zone — the "N Beutel" shown
+      // on the card counts this zone's bags only. snap records every bag that
+      // actually moves, so Undo restores them all exactly.
+      const snap = _snapshotBeforeMove(targets, dest, buildLastScanByBag());
+      let moved = 0;
+      targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
+      updateSD();
+      renderBatches();
+      renderStatus();
+      renderDashSummary();
+      renderDashBatchTasks();
+      showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoFruitingMove(snap));
+    }
+  );
+}
+// Collapsible dashboard reference sections (KPIs / Live status / Lab). No saved
+// choice → open on desktop, collapsed on phones (less scrolling); each toggle
+// is remembered per section under mp-dash-collapse.
+function initDashCollapse() {
+  const read = () => {
+    try {
+      return JSON.parse(localStorage.getItem('mp-dash-collapse') || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const store = read();
+  const desktop = window.matchMedia('(min-width: 769px)').matches;
+  ['dc-kpi', 'dc-status', 'dc-lab'].forEach((id) => {
+    const d = document.getElementById(id);
+    if (!d) return;
+    const initial = store[id] === undefined ? desktop : store[id] === 'open';
+    d.open = initial;
+    // Track the believed state so the toggle fired by the initial open= set above
+    // (desktop first load) isn't mistaken for a user choice and persisted — that
+    // would leak the desktop default onto a later phone visit.
+    let last = initial;
+    d.addEventListener('toggle', () => {
+      if (d.open === last) return;
+      last = d.open;
+      const cur = read();
+      cur[id] = d.open ? 'open' : 'closed';
+      localStorage.setItem('mp-dash-collapse', JSON.stringify(cur));
+    });
+  });
 }
 
 // Attention filter: temporarily restrict the batches list to a subset (due today, overdue, ...)
@@ -5187,10 +5485,25 @@ function moveBagsTo(batch, bagIds, dest, cb) {
     );
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (handleZoneMismatch(r, entries)) return; // I-12
-    if (r && r.ids)
+    if (r && r.ids) {
       entries.forEach((e, i) => {
         setEntryServerId(e, r.ids[i]);
       });
+      return;
+    }
+    if (r && r.error) {
+      // Retry once after 3s on server error — same idempotent retry as the
+      // single-scan path. Each entry carries a stable client_uuid and the
+      // server upserts on the unique index, so replaying the POST is safe.
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then(function (r2) {
+          if (handleZoneMismatch(r2, entries)) return;
+          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
+          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
+        });
+      }, 3000);
+    }
   });
   if (cb) cb(entries.length, skipped);
 }
@@ -5235,10 +5548,25 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
       scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
     );
   apiPost('/api/scan-log', { entries }).then(function (r) {
-    if (r && r.ids)
+    if (r && r.ids) {
       entries.forEach((e, i) => {
         setEntryServerId(e, r.ids[i]);
       });
+      return;
+    }
+    if (r && r.error) {
+      // Retry once after 3s on server error — same idempotent retry as the
+      // single-scan path. Each entry carries a stable client_uuid and the
+      // server upserts on the unique index, so replaying the POST is safe.
+      // ADD never triggers a zone_mismatch (from=null), so no 409 handling here.
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then(function (r2) {
+          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
+          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
+        });
+      }, 3000);
+    }
   });
   if (cb) cb(entries.length);
 }
@@ -11131,7 +11459,8 @@ async function _crSubmit() {
       severity: _crSeverity,
       notes: document.getElementById('cr-notes').value.trim(),
       photos: _crPhotos,
-      auto_move: !!document.getElementById('cr-auto-move')?.checked
+      auto_move: !!document.getElementById('cr-auto-move')?.checked,
+      report_uuid: newScanUuid()
     };
     const r = await apiPost('/api/contamination-reports', body);
     if (r && r.error) {
@@ -16602,9 +16931,18 @@ function initEventListeners() {
   function dashTaskCardClick(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
+    const action = el.dataset.action;
+    if (action === 'toggle-zone') {
+      toggleDashZone(el.dataset.zone);
+      return;
+    }
+    if (action === 'bulk-fruiting') {
+      bulkZoneToFruiting(el.dataset.zone);
+      return;
+    }
     const batch = el.dataset.batch;
     if (!batch) return;
-    switch (el.dataset.action) {
+    switch (action) {
       case 'go-to-batch':
         goToBatch(batch);
         break;
@@ -16641,6 +16979,11 @@ function initEventListeners() {
   $('wl-print').addEventListener('click', printWorkList);
   $('m-worklist').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
+    const seg = e.target.closest('[data-wl-group]');
+    if (seg) {
+      setWorkListMode(seg.dataset.wlGroup);
+      return;
+    }
     const row = e.target.closest('[data-wl-batch]');
     if (row) {
       this.classList.remove('open');
@@ -16686,6 +17029,7 @@ function initEventListeners() {
     }, 1500);
   });
   applyDashMode();
+  initDashCollapse();
 
   // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
   $('sp-batch-list').addEventListener('click', function (e) {
