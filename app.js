@@ -4330,6 +4330,30 @@ function bulkZoneToFruiting(zoneId) {
     }
   );
 }
+// Collapsible dashboard reference sections (KPIs / Live status / Lab). No saved
+// choice → open on desktop, collapsed on phones (less scrolling); each toggle
+// is remembered per section under mp-dash-collapse.
+function initDashCollapse() {
+  const read = () => {
+    try {
+      return JSON.parse(localStorage.getItem('mp-dash-collapse') || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const saved = read();
+  const desktop = window.matchMedia('(min-width: 769px)').matches;
+  ['dc-kpi', 'dc-status', 'dc-lab'].forEach((id) => {
+    const d = document.getElementById(id);
+    if (!d) return;
+    d.open = saved[id] === undefined ? desktop : saved[id] === 'open';
+    d.addEventListener('toggle', () => {
+      const cur = read();
+      cur[id] = d.open ? 'open' : 'closed';
+      localStorage.setItem('mp-dash-collapse', JSON.stringify(cur));
+    });
+  });
+}
 
 // Attention filter: temporarily restrict the batches list to a subset (due today, overdue, ...)
 // Set by dashboard View buttons; cleared by a banner in the batches list.
@@ -16963,6 +16987,7 @@ function initEventListeners() {
     }, 1500);
   });
   applyDashMode();
+  initDashCollapse();
 
   // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
   $('sp-batch-list').addEventListener('click', function (e) {

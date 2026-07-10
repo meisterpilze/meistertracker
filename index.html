@@ -1863,42 +1863,49 @@
               </div>
             </div>
 
-            <!-- Pipeline KPI strip (total + 5 stage cards) -->
-            <div id="metrics" style="margin-bottom: 10px"></div>
+            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
+            <details class="dash-collapse" id="dc-kpi">
+              <summary class="dash-collapse-sum" data-i18n="dash.kpiSection">Kennzahlen</summary>
+              <div id="metrics" style="margin-bottom: 10px"></div>
+            </details>
 
-            <!-- Location overview with inline search header -->
-            <div class="dash-locations-header">
-              <div class="sec" style="margin: 0" data-i18n="dash.liveStatus">Live batch status</div>
-              <input
-                type="text"
-                id="status-q"
-                class="dash-search-inline"
-                data-i18n-aria-label="aria.searchDashboard"
-                aria-label="Search dashboard"
-                data-i18n-placeholder="dash.search"
-                placeholder="Search..."
-              />
-            </div>
-            <div id="dash-locations"></div>
+            <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+            <details class="dash-collapse" id="dc-status">
+              <summary class="dash-collapse-sum" data-i18n="dash.liveStatus">Live batch status</summary>
+              <div class="dash-locations-header">
+                <input
+                  type="text"
+                  id="status-q"
+                  class="dash-search-inline"
+                  data-i18n-aria-label="aria.searchDashboard"
+                  aria-label="Search dashboard"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Search..."
+                />
+              </div>
+              <div id="dash-locations"></div>
+            </details>
 
-            <!-- ── LAB section ── -->
-            <div class="dash-section-header dash-section-lab">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M9 3h6v7l4 9H5l4-9V3z" />
-                <line x1="9" y1="3" x2="15" y2="3" />
-              </svg>
-              <span>Lab</span>
-            </div>
-            <div id="dash-lab-stock"></div>
+            <!-- ── LAB section ── collapsible -->
+            <details class="dash-collapse" id="dc-lab">
+              <summary class="dash-collapse-sum dash-collapse-lab">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
+                  <line x1="9" y1="3" x2="15" y2="3" />
+                </svg>
+                <span>Lab</span>
+              </summary>
+              <div id="dash-lab-stock"></div>
+            </details>
           </div>
           <!-- end dash-farm-section -->
 

@@ -150,6 +150,7 @@ window.LANG['pt'] = {
   'dash.bulkFruitingDone': '{n} sacos → {dest}',
   'dash.undo': 'Desfazer',
   'dash.undone': '{n} sacos de volta',
+  'dash.kpiSection': 'Métricas',
   'dash.remove': 'Remover',
   'dash.currentlyIn': 'Atualmente em {loc}',
   'dash.zones': 'Zonas',

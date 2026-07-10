@@ -383,6 +383,7 @@ window.LANG['en'] = {
   'dash.bulkFruitingDone': '{n} bags → {dest}',
   'dash.undo': 'Undo',
   'dash.undone': '{n} bags moved back',
+  'dash.kpiSection': 'Metrics',
   'dash.remove': 'Remove',
   'dash.currentlyIn': 'Currently in {loc}',
   'dash.zones': 'Zones',

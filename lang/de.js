@@ -383,6 +383,7 @@ window.LANG['de'] = {
   'dash.bulkFruitingDone': '{n} Beutel → {dest}',
   'dash.undo': 'Rückgängig',
   'dash.undone': '{n} Beutel zurück',
+  'dash.kpiSection': 'Kennzahlen',
   'dash.remove': 'Entfernen',
   'dash.currentlyIn': 'Aktuell in {loc}',
   'dash.zones': 'Zonen',
