@@ -3130,6 +3130,20 @@ tr:hover td {
   margin-top: 16px;
 }
 
+/* ═══ DESKTOP: batch tasks own a full-width row ════════════════ */
+/* The move list is the primary card. On wide screens it takes its own
+   row so its two-button rows aren't crushed into a quarter-column; the
+   harvest / alerts / split cards flow onto the row below. Mobile keeps
+   the single-column stack from the max-width:768px block. */
+@media (min-width: 769px) {
+  .dash-top-row {
+    flex-wrap: wrap;
+  }
+  .dash-top-row #dash-batch-tasks-card {
+    flex: 1 1 100% !important;
+  }
+}
+
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .g4,
