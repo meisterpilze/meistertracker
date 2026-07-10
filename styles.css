@@ -3229,6 +3229,12 @@ tr:hover td {
 .undo-bar #undo-btn:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+/* On phones the camera scan FAB sits bottom-right — lift the undo bar above it. */
+@media (pointer: coarse) and (hover: none) {
+  .undo-bar {
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 /* ═══ DESKTOP: batch tasks own a full-width row ════════════════ */
 /* The move list is the primary card. On wide screens it takes its own
