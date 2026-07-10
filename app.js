@@ -4318,6 +4318,10 @@ function bulkZoneToFruiting(zoneId) {
     t('dash.bulkFruitingMsg', { n: bags, zone: zName, dest: zoneDisplayName(dest) }),
     t('dash.move'),
     () => {
+      // moveBatchTo moves each target's ENTIRE bag set, so a batch split across
+      // zones also moves the bags it has outside this zone — the "N Beutel" shown
+      // on the card counts this zone's bags only. snap records every bag that
+      // actually moves, so Undo restores them all exactly.
       const snap = _snapshotBeforeMove(targets, dest, buildLastScanByBag());
       let moved = 0;
       targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
@@ -4341,13 +4345,20 @@ function initDashCollapse() {
       return {};
     }
   };
-  const saved = read();
+  const store = read();
   const desktop = window.matchMedia('(min-width: 769px)').matches;
   ['dc-kpi', 'dc-status', 'dc-lab'].forEach((id) => {
     const d = document.getElementById(id);
     if (!d) return;
-    d.open = saved[id] === undefined ? desktop : saved[id] === 'open';
+    const initial = store[id] === undefined ? desktop : store[id] === 'open';
+    d.open = initial;
+    // Track the believed state so the toggle fired by the initial open= set above
+    // (desktop first load) isn't mistaken for a user choice and persisted — that
+    // would leak the desktop default onto a later phone visit.
+    let last = initial;
     d.addEventListener('toggle', () => {
+      if (d.open === last) return;
+      last = d.open;
       const cur = read();
       cur[id] = d.open ? 'open' : 'closed';
       localStorage.setItem('mp-dash-collapse', JSON.stringify(cur));
