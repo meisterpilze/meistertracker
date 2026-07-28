@@ -4761,84 +4761,17 @@ function rememberDest(loc) {
     /* storage disabled — recents still work from scanLog */
   }
 }
+// Destination picker for the bags selected on the dashboard. Uses the shared
+// _openZonePicker (same list as the batch-move and placement pickers) instead of
+// the old bespoke grid + two-step confirm: picking a destination moves straight
+// away, and the Undo in the feedback bar covers a mistap. Destinations the
+// selected bags already sit at are dropped from the shortcut row (no-op moves).
 function openLocMovePopup() {
   if (!selectedLocBags.size) return;
-  const n = selectedLocBags.size;
-  // Determine source zone(s) for display
-  const fromLocs = new Set();
-  selectedLocBags.forEach((d) => fromLocs.add(toZone(d.loc)));
-  const fromLabel = fromLocs.size === 1 ? [...fromLocs][0] : 'Mixed';
-  const m = document.getElementById('m-locmove');
-  document.getElementById('lm-title').textContent = tp('dash.bags', n);
-  document.getElementById('lm-info').textContent = t('dash.currentlyIn', { loc: fromLabel });
-  document.getElementById('lm-confirm').style.display = 'none';
-  const grid = document.getElementById('lm-grid');
-  grid.style.display = 'flex';
-  // Shortcut row: where these bags most likely go, so the frequent moves skip
-  // the full zone/rack scroll. Drop any destination a selected bag is already
-  // at (that move would be a no-op).
   const srcLocs = new Set([...selectedLocBags.values()].map((d) => d.loc));
-  const recents = recentDestinations(4).filter((loc) => !srcLocs.has(loc));
-  const recentHtml = recents.length
-    ? '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">' +
-      t('dash.recentDests') +
-      '</div>' +
-      recents
-        .map((loc) => {
-          const col = (ZONE_BY_ID[toZone(loc)] && ZONE_BY_ID[toZone(loc)].color) || '#888';
-          return `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(loc)}" style="font-size:12px;font-weight:600;padding:8px 12px;border-left:3px solid ${col};background:var(--c-bg)">★ ${esc(zoneDisplayName(loc))}</button>`;
-        })
-        .join('') +
-      '<div style="width:100%;height:1px;background:var(--c-border);margin:6px 0"></div>'
-    : '';
-  grid.innerHTML =
-    recentHtml +
-    '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-bottom:2px">' +
-    t('dash.zones') +
-    '</div>' +
-    ZONES.map((z) => {
-      const zObj = zones.find((x) => x.id === z);
-      return `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(z)}" style="font-size:12px;padding:8px 12px;border-left:3px solid ${zObj?.color || '#888'}">${esc(zoneDisplayName(z))}</button>`;
-    }).join('') +
-    (ALL_RACKS.length
-      ? '<div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;width:100%;margin-top:8px;margin-bottom:2px">' +
-        t('dash.racks') +
-        '</div>'
-      : '') +
-    ALL_RACKS.map(
-      (r) =>
-        `<button class="btn btn-sm" data-action="loc-pre-confirm" data-loc="${esc(r)}" style="font-size:11px;padding:6px 10px">${rackLabel(r)}</button>`
-    ).join('');
-  m.classList.add('open');
-}
-function locPreConfirm(toLoc) {
-  document.getElementById('lm-grid').style.display = 'none';
-  const c = document.getElementById('lm-confirm');
-  c.style.display = 'block';
-  const n = selectedLocBags.size;
-  const ids = [...selectedLocBags.keys()];
-  const preview =
-    ids.length <= 6
-      ? ids.map((id) => id.split('-').pop()).join(', ')
-      : ids
-          .slice(0, 5)
-          .map((id) => id.split('-').pop())
-          .join(', ') +
-        ' + ' +
-        (ids.length - 5) +
-        ' more';
-  const fromLocs = new Set();
-  selectedLocBags.forEach((d) => fromLocs.add(toZone(d.loc)));
-  const fromLabel = fromLocs.size === 1 ? [...fromLocs][0] : 'Mixed';
-  c.innerHTML = `<div style="text-align:center;padding:12px 0">
-    <div style="font-size:14px;margin-bottom:8px">${t('dash.moveBags', { n: n })}</div>
-    <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px;font-family:monospace">${preview}</div>
-    <div style="font-size:20px;margin-bottom:16px">${esc(fromLabel)} \u2192 <strong>${esc(toLoc)}</strong></div>
-    <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn" data-action="loc-back-to-grid" style="min-width:100px">${t('nav.cancel')}</button>
-      <button class="btn btn-p" data-action="loc-move-to" data-loc="${esc(toLoc)}" style="min-width:100px">${t('confirm.confirm')}</button>
-    </div>
-  </div>`;
+  _openZonePicker(t('dash.moveBags', { n: selectedLocBags.size }), (dest) => locMoveTo(dest), {
+    excludeLocs: srcLocs
+  });
 }
 // Event delegation for bag chip clicks
 document.getElementById('dash-locations').addEventListener('click', function (e) {
@@ -4881,10 +4814,25 @@ function locMoveTo(toLoc) {
   document.getElementById('m-locmove').classList.remove('open');
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (handleZoneMismatch(r, entries)) return; // I-12
-    if (r && r.ids)
+    if (r && r.ids) {
       entries.forEach((e, i) => {
         setEntryServerId(e, r.ids[i]);
       });
+      return;
+    }
+    if (r && r.error) {
+      // Retry once after 3s on server error — same idempotent retry as the
+      // other bulk paths. Each entry carries a stable client_uuid and the
+      // server upserts on the unique index, so replaying the POST is safe.
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then(function (r2) {
+          if (handleZoneMismatch(r2, entries)) return;
+          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
+          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
+        });
+      }, 3000);
+    }
   });
   updateSD();
   renderStatus();
@@ -5606,7 +5554,11 @@ function _openZonePicker(title, onPick, opts) {
   // Shortcut row: most-recent destinations first, one tap each. moveBagsTo
   // already skips bags that are already at the chosen destination. The
   // placement caller passes recentOpts to surface ADD (placement) history.
-  const _recents = recentDestinations(4, opts.recentOpts);
+  // opts.excludeLocs: destinations to drop from the shortcut row — the caller's
+  // bags are already there, so offering them as a one-tap would be a no-op move.
+  const _recents = recentDestinations(4, opts.recentOpts).filter(
+    (loc) => !(opts.excludeLocs && opts.excludeLocs.has(loc))
+  );
   if (_recents.length) {
     const hdr = document.createElement('div');
     hdr.style.cssText =
@@ -16623,22 +16575,15 @@ function initEventListeners() {
   $('m-move-batch').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
   });
-  // Delegated actions for the location-move modal (grid + confirmation panel).
+  // Delegated actions for the m-locmove modal. The dashboard bag-move picker no
+  // longer uses it (it shares _openZonePicker now); the Zonen page still reuses
+  // this modal for its "move loose bags into a rack" grid.
   document.getElementById('m-locmove').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     switch (btn.dataset.action) {
       case 'bulk-rack-target':
         executeBulkMoveToRack(btn.dataset.zone, btn.dataset.rack);
-        break;
-      case 'loc-pre-confirm':
-        locPreConfirm(btn.dataset.loc);
-        break;
-      case 'loc-back-to-grid':
-        openLocMovePopup();
-        break;
-      case 'loc-move-to':
-        locMoveTo(btn.dataset.loc);
         break;
     }
   });
