@@ -694,6 +694,13 @@ window.LANG['en'] = {
   'settings.restoreDescHtml':
     'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
   'settings.restoreBtn': 'Restore',
+  'zoneCheck.btn': 'Check',
+  'zoneCheck.title': 'Check {zone}',
+  'zoneCheck.count': '{found} of {total} found',
+  'zoneCheck.empty': 'No bags expected here.',
+  'zoneCheck.allFound': '✓ All found — records match',
+  'zoneCheck.missingMove': '{n} not found → move elsewhere',
+  'zoneCheck.missingRemove': '{n} not found → mark removed',
   'reset.title': 'Start clean',
   'reset.desc':
     'Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users, suppliers, stock and all settings are kept. A backup is saved first.',

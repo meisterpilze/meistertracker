@@ -462,6 +462,13 @@ window.LANG['pt'] = {
   'settings.restoreDescHtml':
     'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
   'settings.restoreBtn': 'Restaurar',
+  'zoneCheck.btn': 'Verificar',
+  'zoneCheck.title': 'Verificar {zone}',
+  'zoneCheck.count': '{found} de {total} encontrados',
+  'zoneCheck.empty': 'Nenhum saco esperado aqui.',
+  'zoneCheck.allFound': '✓ Tudo encontrado — registos corretos',
+  'zoneCheck.missingMove': '{n} não encontrados → mover para outro local',
+  'zoneCheck.missingRemove': '{n} não encontrados → marcar removidos',
   'reset.title': 'Começar do zero',
   'reset.desc':
     'Apaga os dados selecionados para recomeçar com sacos novos. Zonas, prateleiras, Sorten, receitas, utilizadores, fornecedores, stock e todas as definições são mantidos. Um backup é guardado primeiro.',

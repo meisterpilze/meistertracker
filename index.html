@@ -692,6 +692,25 @@
       </div>
     </div>
 
+    <!-- Zone check (stocktake): tick off the bags you actually find in a zone,
+         then fix whatever the app still expects there but you didn't. -->
+    <div class="modal-bg" id="m-zonecheck" role="dialog" aria-modal="true" aria-labelledby="zc-title" hidden>
+      <div class="modal" style="max-width: 560px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px">
+          <h3 id="zc-title">Zone prüfen</h3>
+          <button id="zc-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div id="zc-count" style="font-size: 13px; color: var(--c-text-sec); margin-bottom: 10px"></div>
+        <div id="zc-body" style="max-height: 55vh; overflow-y: auto"></div>
+        <div id="zc-foot" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px"></div>
+      </div>
+    </div>
+
     <!-- Work list: findable, printable pick/walk sheet from the dashboard chips -->
     <div class="modal-bg" id="m-worklist" role="dialog" aria-modal="true" aria-labelledby="wl-title" hidden>
       <div class="modal" style="max-width: 560px">

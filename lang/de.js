@@ -700,6 +700,13 @@ window.LANG['de'] = {
   'settings.restoreDescHtml':
     'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
   'settings.restoreBtn': 'Wiederherstellen',
+  'zoneCheck.btn': 'Prüfen',
+  'zoneCheck.title': '{zone} prüfen',
+  'zoneCheck.count': '{found} von {total} gefunden',
+  'zoneCheck.empty': 'Hier werden keine Beutel erwartet.',
+  'zoneCheck.allFound': '✓ Alles gefunden — Bestand stimmt',
+  'zoneCheck.missingMove': '{n} nicht gefunden → woanders hin',
+  'zoneCheck.missingRemove': '{n} nicht gefunden → entfernt',
   'reset.title': 'Neu anfangen',
   'reset.desc':
     'Löscht die ausgewählten Daten, damit du mit frischen Beuteln neu starten kannst. Zonen, Regale, Sorten, Rezepte, Benutzer, Lieferanten, Lagerbestand und alle Einstellungen bleiben erhalten. Vorher wird automatisch ein Backup gespeichert.',

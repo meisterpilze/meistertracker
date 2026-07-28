@@ -3398,6 +3398,7 @@ function renderRackSection(zone, racks, filtered) {
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
+      <button type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
     </div>
     <div class="location-section-body">${capHtml}
       <div class="${gridClass}">${rackCards}</div>
@@ -4775,6 +4776,15 @@ function openLocMovePopup() {
 }
 // Event delegation for bag chip clicks
 document.getElementById('dash-locations').addEventListener('click', function (e) {
+  // Stocktake button sits inside the zone header, whose own click toggles the
+  // section — stop the event so opening the check doesn't also collapse it.
+  const zc = e.target.closest('[data-zone-check]');
+  if (zc) {
+    e.preventDefault();
+    e.stopPropagation();
+    openZoneCheck(zc.dataset.zoneCheck);
+    return;
+  }
   const chip = e.target.closest('.bag-chip[data-bag]');
   if (!chip) return;
   e.preventDefault();
@@ -4837,6 +4847,68 @@ function locMoveTo(toLoc) {
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
+}
+// ─── ZONE CHECK (stocktake) ─────────────────────────────────
+// Bag locations are derived from the scan log, so if bags get moved without
+// being scanned the records drift silently and there is no way to notice. This
+// walks one zone: it lists what the app still expects to be there, you tick off
+// what you actually find, and whatever is left over is the drift. The leftovers
+// feed the normal move/remove flows (via selectedLocBags) so they reuse the same
+// scan entries, undo and sync as every other correction.
+let _zcZone = null;
+const _zcFound = new Set();
+function openZoneCheck(zoneId) {
+  _zcZone = zoneId;
+  _zcFound.clear();
+  renderZoneCheck();
+  document.getElementById('m-zonecheck').classList.add('open');
+}
+function _zcExpected() {
+  return Object.entries(getZoneBags(_zcZone)).sort((a, b) => a[0].localeCompare(b[0]));
+}
+function renderZoneCheck() {
+  const expected = _zcExpected();
+  document.getElementById('zc-title').textContent = t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
+  document.getElementById('zc-count').textContent = t('zoneCheck.count', {
+    found: _zcFound.size,
+    total: expected.length
+  });
+  const body = document.getElementById('zc-body');
+  if (!expected.length) {
+    body.innerHTML =
+      '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t('zoneCheck.empty')) + '</div>';
+    document.getElementById('zc-foot').innerHTML = '';
+    return;
+  }
+  body.innerHTML = expected
+    .map(([bagId, d]) => {
+      const on = _zcFound.has(bagId);
+      return (
+        `<div data-zc-bag="${esc(bagId)}" style="display:flex;align-items:center;gap:10px;padding:11px 8px;border-bottom:0.5px solid var(--c-border);cursor:pointer;${on ? 'opacity:.5' : ''}">` +
+        `<span style="width:22px;height:22px;flex:none;border-radius:6px;border:2px solid ${on ? 'var(--c-primary,#16a34a)' : 'var(--c-border)'};background:${on ? 'var(--c-primary,#16a34a)' : 'transparent'};color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700">${on ? '✓' : ''}</span>` +
+        `<span style="font-family:monospace;font-size:13px;font-weight:600;${on ? 'text-decoration:line-through' : ''}">${esc(bagId)}</span>` +
+        `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.batchId || '')}</span>` +
+        `</div>`
+      );
+    })
+    .join('');
+  const missing = expected.length - _zcFound.size;
+  const btn =
+    'flex:1;min-width:130px;padding:11px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--c-border)';
+  document.getElementById('zc-foot').innerHTML = missing
+    ? `<button type="button" data-zc-act="move" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
+      `<button type="button" data-zc-act="remove" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`
+    : `<div style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`;
+}
+// Load the not-found bags into the shared selection, then hand off to the normal
+// move picker / remove flow so the correction is an ordinary scan entry.
+function _zcSelectMissing() {
+  selectedLocBags.clear();
+  _zcExpected().forEach(([bagId, d]) => {
+    if (!_zcFound.has(bagId)) selectedLocBags.set(bagId, { batchId: d.batchId, loc: d.loc });
+  });
+  document.getElementById('m-zonecheck').classList.remove('open');
+  return selectedLocBags.size;
 }
 function locRemoveSelected() {
   if (!selectedLocBags.size) return;
@@ -16229,7 +16301,11 @@ document.addEventListener('keydown', function (e) {
     'm-batchadd',
     'm-note',
     'm-prompt',
-    'm-move-batch'
+    // m-move-batch before the two list modals below: the zone picker opens on
+    // top of them, so Escape should dismiss it first.
+    'm-move-batch',
+    'm-zonecheck',
+    'm-worklist'
   ];
   for (const id of modals) {
     const el = document.getElementById(id);
@@ -17406,6 +17482,23 @@ function initEventListeners() {
   $('btn-41').addEventListener('click', downloadBackup);
   $('btn-42').addEventListener('click', restoreBackup);
   $('reset-go').addEventListener('click', runCleanReset);
+  $('zc-close').addEventListener('click', () => document.getElementById('m-zonecheck').classList.remove('open'));
+  $('m-zonecheck').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('open');
+    const row = e.target.closest('[data-zc-bag]');
+    if (row) {
+      const id = row.dataset.zcBag;
+      if (_zcFound.has(id)) _zcFound.delete(id);
+      else _zcFound.add(id);
+      renderZoneCheck();
+      return;
+    }
+    const act = e.target.closest('[data-zc-act]');
+    if (!act) return;
+    if (!_zcSelectMissing()) return;
+    if (act.dataset.zcAct === 'move') openLocMovePopup();
+    else locRemoveSelected();
+  });
   $('btn-43').addEventListener('click', doLogout);
   $('btn-44').addEventListener('click', addUser);
   $('btn-45').addEventListener('click', copyCalDavUrl);
