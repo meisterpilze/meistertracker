@@ -8563,6 +8563,43 @@ async function downloadBackup() {
     setStatus(st, 'Download failed', false);
   }
 }
+// Clean-slate reset. Deliberately awkward to fire: you pick the categories, type
+// the confirmation phrase, and still get a summary dialog naming what goes. The
+// server writes a verified backup before deleting anything.
+const RESET_CONFIRM_PHRASE = 'ALLES LOESCHEN';
+async function runCleanReset() {
+  const st = document.getElementById('reset-status');
+  const scopes = {
+    growing: document.getElementById('reset-growing').checked,
+    orders: document.getElementById('reset-orders').checked,
+    planning: document.getElementById('reset-planning').checked
+  };
+  if (!scopes.growing && !scopes.orders && !scopes.planning) {
+    setStatus(st, t('reset.errNoScope'), false);
+    return;
+  }
+  const typed = (document.getElementById('reset-confirm').value || '').trim().toUpperCase();
+  if (typed !== RESET_CONFIRM_PHRASE) {
+    setStatus(st, t('reset.errPhrase', { phrase: RESET_CONFIRM_PHRASE }), false);
+    return;
+  }
+  const parts = [];
+  if (scopes.growing) parts.push(t('reset.scopeGrowing'));
+  if (scopes.orders) parts.push(t('reset.scopeOrders'));
+  if (scopes.planning) parts.push(t('reset.scopePlanning'));
+  confirm2(t('reset.confirmTitle'), t('reset.confirmMsg', { what: parts.join(' · ') }), t('reset.btn'), async () => {
+    setStatus(st, t('reset.running'), true);
+    const r = await apiPost('/api/admin/reset', { ...scopes, confirm: RESET_CONFIRM_PHRASE });
+    if (!r || r.error) {
+      setStatus(st, t('reset.failed', { err: (r && r.error) || '?' }), false);
+      return;
+    }
+    const rows = Object.values(r.counts || {}).reduce((s, n) => s + n, 0);
+    setStatus(st, t('reset.done', { rows: rows, backup: r.backup }), true);
+    document.getElementById('reset-confirm').value = '';
+    await loadData(); // re-renders via refresh()
+  });
+}
 function restoreBackup() {
   const file = document.getElementById('restore-file').files[0];
   const pw = document.getElementById('backup-restore-pw').value;
@@ -17368,6 +17405,7 @@ function initEventListeners() {
   });
   $('btn-41').addEventListener('click', downloadBackup);
   $('btn-42').addEventListener('click', restoreBackup);
+  $('reset-go').addEventListener('click', runCleanReset);
   $('btn-43').addEventListener('click', doLogout);
   $('btn-44').addEventListener('click', addUser);
   $('btn-45').addEventListener('click', copyCalDavUrl);

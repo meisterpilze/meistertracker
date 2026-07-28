@@ -700,6 +700,20 @@ window.LANG['de'] = {
   'settings.restoreDescHtml':
     'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
   'settings.restoreBtn': 'Wiederherstellen',
+  'reset.title': 'Neu anfangen',
+  'reset.desc':
+    'Löscht die ausgewählten Daten, damit du mit frischen Beuteln neu starten kannst. Zonen, Regale, Sorten, Rezepte, Benutzer, Lieferanten, Lagerbestand und alle Einstellungen bleiben erhalten. Vorher wird automatisch ein Backup gespeichert.',
+  'reset.scopeGrowing': 'Chargen, Beutel, Scan-Verlauf, Ernten, Kulturen, Kontaminationsberichte',
+  'reset.scopeOrders': 'Bestellungen, Kunden und Sendungen',
+  'reset.scopePlanning': 'Aufgaben, Kalender, Benachrichtigungen, Wartungsprotokoll und KPI-Verlauf',
+  'reset.btn': 'Endgültig löschen',
+  'reset.errNoScope': 'Nichts ausgewählt.',
+  'reset.errPhrase': 'Zum Bestätigen "{phrase}" eintippen.',
+  'reset.confirmTitle': 'Wirklich alles löschen?',
+  'reset.confirmMsg': 'Wird gelöscht: {what}. Das lässt sich nicht rückgängig machen — vorher wird ein Backup gespeichert.',
+  'reset.running': 'Backup wird gespeichert, dann wird gelöscht…',
+  'reset.done': '{rows} Einträge gelöscht. Backup: {backup}',
+  'reset.failed': 'Fehlgeschlagen: {err}',
   'settings.syncInfo': 'Sync-Info',
   'settings.syncInfoDesc':
     'Alle Daten werden auf dem Server gespeichert \u2014 automatisch für alle Geräte verfügbar. Änderungen werden alle 5 Sekunden synchronisiert. Klicke auf den grünen Punkt für sofortige Synchronisation.',

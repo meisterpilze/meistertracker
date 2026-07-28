@@ -3258,6 +3258,67 @@ function deleteLastScanEntries(db, n) {
   }
 }
 
+// Clean-slate reset (admin "Neustart"): clears operational rows so the farm can
+// start over with fresh bags, while KEEPING everything you would otherwise have
+// to set up again — zones/racks, Sorten + recipes, users, suppliers, inventory
+// and all settings. Irreversible; the HTTP layer takes a verified backup first
+// and requires a typed confirmation.
+//
+// Categories are opt-in via opts so the operator chooses at the moment they run
+// it. Returns per-table row counts for the confirmation message.
+function resetOperationalData(db, opts) {
+  opts = opts || {};
+  const counts = {};
+  // Table names below are internal literals, never user input.
+  const wipe = (table, where) => {
+    const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+    if (!exists) return;
+    const info = db.prepare('DELETE FROM ' + table + (where ? ' WHERE ' + where : '')).run();
+    if (info.changes) counts[table] = info.changes;
+  };
+  db.exec('BEGIN');
+  try {
+    if (opts.growing) {
+      // Children before parents. bags also cascades from batches, but clearing
+      // it explicitly keeps the reported counts honest.
+      wipe('contamination_photos');
+      wipe('contamination_reports');
+      wipe('harvests');
+      wipe('scan_log');
+      wipe('bags');
+      wipe('batches');
+      wipe('cultures');
+      // Barcodes pointing at rows we just cleared; asset barcodes stay valid.
+      wipe('barcodes', "entity_type IN ('bag','culture','batch')");
+    }
+    if (opts.orders) {
+      wipe('order_allocations');
+      wipe('order_sync_log');
+      wipe('order_items');
+      wipe('shipments');
+      wipe('orders');
+      wipe('customer_identities');
+      wipe('customers');
+    }
+    if (opts.planning) {
+      wipe('calendar_event_assignees');
+      wipe('calendar_events');
+      wipe('manual_tasks');
+      wipe('notifications');
+      wipe('maintenance_log');
+      wipe('kpi_snapshots');
+    }
+    invalidateBagZoneCache(db);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    invalidateBagZoneCache(db);
+    throw e;
+  }
+  return counts;
+}
+
 function getScanEntryById(db, id) {
   return db.prepare('SELECT id, user_id, action, time FROM scan_log WHERE id = ?').get(id);
 }
@@ -6665,6 +6726,7 @@ module.exports = {
   getScanEntryById,
   deleteScanEntryById,
   clearScanLog,
+  resetOperationalData,
   insertHarvest,
   insertCultures,
   updateCulture,

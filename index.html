@@ -3924,6 +3924,48 @@
               </div>
               <div id="backup-restore-status" style="margin-top: 8px; font-size: 12px; color: var(--c-text-sec)"></div>
             </div>
+            <!-- Clean slate: wipe production data, keep the setup. Admin only;
+                 writes a verified backup before deleting anything. -->
+            <div class="card" id="reset-card" style="border: 1px solid var(--c-red-border)">
+              <div class="sec" style="color: var(--c-red-dark)" data-i18n="reset.title">Start clean</div>
+              <p
+                style="font-size: 13px; color: var(--c-text-sec); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="reset.desc"
+              >
+                Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users,
+                suppliers, stock and all settings are kept. A backup is saved first.
+              </p>
+              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
+                <input type="checkbox" id="reset-growing" checked style="width: 22px; height: 22px; flex: none" />
+                <span style="font-size: 13px" data-i18n="reset.scopeGrowing"
+                  >Batches, bags, scan history, harvests, cultures, contamination reports</span
+                >
+              </label>
+              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
+                <input type="checkbox" id="reset-orders" style="width: 22px; height: 22px; flex: none" />
+                <span style="font-size: 13px" data-i18n="reset.scopeOrders"
+                  >Orders, customers and shipments</span
+                >
+              </label>
+              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; cursor: pointer">
+                <input type="checkbox" id="reset-planning" style="width: 22px; height: 22px; flex: none" />
+                <span style="font-size: 13px" data-i18n="reset.scopePlanning"
+                  >Tasks, calendar, notifications, maintenance log and KPI history</span
+                >
+              </label>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                <input
+                  type="text"
+                  id="reset-confirm"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="ALLES LOESCHEN"
+                  style="flex: 1; min-width: 160px"
+                />
+                <button id="reset-go" class="btn btn-r" data-i18n="reset.btn">Delete permanently</button>
+              </div>
+              <div id="reset-status" style="margin-top: 8px; font-size: 12px; color: var(--c-text-sec)"></div>
+            </div>
             <div class="card">
               <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
               <p

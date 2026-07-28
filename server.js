@@ -726,6 +726,9 @@ const PHOTO_DIR_MAX_BYTES = (() => {
   const gb = Number.isFinite(raw) && raw > 0 ? raw : 10;
   return Math.round(gb * 1024 * 1024 * 1024);
 })();
+// Typed confirmation for the irreversible clean-slate reset. Must be echoed by
+// the client exactly, so the endpoint can't be fired by a stray/replayed POST.
+const RESET_CONFIRM_PHRASE = 'ALLES LOESCHEN';
 const PHOTO_DIR = path.join(DIR, 'data', 'photos');
 const PHOTO_SIZE_REFRESH_MS = 5 * 60 * 1000; // recompute every 5 min
 let _photoDirSizeBytes = 0;
@@ -6097,6 +6100,67 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // -- Clean-slate reset (admin) --
+  // Irreversible, so it is guarded three ways: admin only, the client must echo
+  // a typed confirmation phrase, and a verified backup is written first. The
+  // backup deliberately does NOT use BACKUP_PREFIX so the auto-backup rotation
+  // never prunes it. Configuration (zones, Sorten, users, suppliers, inventory,
+  // settings) is always kept — only the categories asked for are cleared.
+  if (req.method === 'POST' && req.url === '/api/admin/reset') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data || data.confirm !== RESET_CONFIRM_PHRASE) {
+        jsonErr(res, 400, 'confirmation phrase required');
+        return;
+      }
+      const scopes = {
+        growing: !!data.growing,
+        orders: !!data.orders,
+        planning: !!data.planning
+      };
+      if (!scopes.growing && !scopes.orders && !scopes.planning) {
+        jsonErr(res, 400, 'nothing selected');
+        return;
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const dest = path.join(BACKUP_DIR, 'pre-reset-' + stamp + '.db');
+      db.backupDb(database, dest)
+        .then(() => {
+          const verifyError = verifyBackupFile(dest);
+          if (verifyError) throw new Error('pre-reset backup failed verification: ' + verifyError);
+          const counts = db.resetOperationalData(database, scopes);
+          // Contamination photo files are on disk, not in the DB — drop them too
+          // so they don't hold the photo-dir cap against freshly cleared reports.
+          let photosRemoved = false;
+          if (scopes.growing) {
+            try {
+              fs.rmSync(PHOTO_DIR, { recursive: true, force: true });
+              fs.mkdirSync(PHOTO_DIR, { recursive: true });
+              _photoDirSizeBytes = 0;
+              _photoDirSizeStaleAt = 0; // force a recompute on the next check
+              photosRemoved = true;
+            } catch (fileErr) {
+              log('warn', 'Reset: photo cleanup failed', { error: fileErr.message });
+            }
+          }
+          log('warn', 'Clean-slate reset performed', {
+            user: req.authUser ? req.authUser.username : null,
+            scopes,
+            counts,
+            backup: dest
+          });
+          broadcastSSE(res);
+          jsonOk(res, { counts, backup: path.basename(dest), photosRemoved });
+        })
+        .catch((err) => safeErr(res, err));
+    });
     return;
   }
 

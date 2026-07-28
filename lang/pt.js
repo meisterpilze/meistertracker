@@ -462,6 +462,20 @@ window.LANG['pt'] = {
   'settings.restoreDescHtml':
     'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
   'settings.restoreBtn': 'Restaurar',
+  'reset.title': 'Começar do zero',
+  'reset.desc':
+    'Apaga os dados selecionados para recomeçar com sacos novos. Zonas, prateleiras, Sorten, receitas, utilizadores, fornecedores, stock e todas as definições são mantidos. Um backup é guardado primeiro.',
+  'reset.scopeGrowing': 'Lotes, sacos, histórico de leituras, colheitas, culturas, relatórios de contaminação',
+  'reset.scopeOrders': 'Encomendas, clientes e envios',
+  'reset.scopePlanning': 'Tarefas, calendário, notificações, registo de manutenção e histórico de KPI',
+  'reset.btn': 'Apagar definitivamente',
+  'reset.errNoScope': 'Nada selecionado.',
+  'reset.errPhrase': 'Escreva "{phrase}" para confirmar.',
+  'reset.confirmTitle': 'Apagar tudo?',
+  'reset.confirmMsg': 'Isto apaga: {what}. Não pode ser desfeito — um backup é guardado primeiro.',
+  'reset.running': 'A guardar backup e a apagar…',
+  'reset.done': '{rows} registos apagados. Backup: {backup}',
+  'reset.failed': 'Falhou: {err}',
   'settings.syncInfo': 'Info de sincronização',
   'settings.syncInfoDesc':
     'Todos os dados são armazenados no servidor \u2014 compartilhado automaticamente por todos os dispositivos. Mudanças sincronizam a cada 5 segundos. Clique no ponto verde para sincronizar imediatamente.',

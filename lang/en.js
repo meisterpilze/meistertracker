@@ -694,6 +694,20 @@ window.LANG['en'] = {
   'settings.restoreDescHtml':
     'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
   'settings.restoreBtn': 'Restore',
+  'reset.title': 'Start clean',
+  'reset.desc':
+    'Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users, suppliers, stock and all settings are kept. A backup is saved first.',
+  'reset.scopeGrowing': 'Batches, bags, scan history, harvests, cultures, contamination reports',
+  'reset.scopeOrders': 'Orders, customers and shipments',
+  'reset.scopePlanning': 'Tasks, calendar, notifications, maintenance log and KPI history',
+  'reset.btn': 'Delete permanently',
+  'reset.errNoScope': 'Nothing selected.',
+  'reset.errPhrase': 'Type "{phrase}" to confirm.',
+  'reset.confirmTitle': 'Delete everything?',
+  'reset.confirmMsg': 'This deletes: {what}. It cannot be undone — a backup is saved first.',
+  'reset.running': 'Saving backup, then deleting…',
+  'reset.done': 'Deleted {rows} rows. Backup: {backup}',
+  'reset.failed': 'Failed: {err}',
   'settings.syncInfo': 'Sync info',
   'settings.syncInfoDesc':
     'All data is stored on the server \u2014 shared by all devices automatically. Changes sync every 5 seconds. Click the green dot in the top bar to sync immediately.',
