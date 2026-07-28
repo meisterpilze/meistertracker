@@ -13057,9 +13057,13 @@ function updateCamHud() {
   // MOVE no longer needs FROM — FROM is auto-derived per bag
   fromChip.style.display = 'none';
   arrowChip.style.display = 'none';
-  toChip.className = 'cam-chip' + ((scan.action === 'ADD' || scan.action === 'MOVE') && scan.to ? ' ch-set' : '');
-  toChip.style.display = scan.action === 'ADD' || scan.action === 'MOVE' ? '' : 'none';
-  const toPulse = (scan.action === 'ADD' && !scan.to) || (scan.action === 'MOVE' && !scan.to);
+  // MOVE_BATCH needs a destination too, so show the chip for it as well —
+  // otherwise the HUD hides the one field the worker still has to fill (and
+  // with it the tap target that opens the destination picker).
+  const wantsTo = scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
+  toChip.className = 'cam-chip' + (wantsTo && scan.to ? ' ch-set' : '');
+  toChip.style.display = wantsTo ? '' : 'none';
+  const toPulse = wantsTo && !scan.to;
   toChip.classList.toggle('ch-pulse', toPulse);
   // Count chip highlight
   const countChip = document.getElementById('cam-chip-count');
@@ -13098,6 +13102,30 @@ function updateSD() {
   document.getElementById('btn-end-session').style.display = sessionEntries.length > 0 ? '' : 'none';
   // Also sync camera HUD if it exists
   updateCamHud();
+}
+// Tap the To chip (scan modal or camera HUD) to set the destination by hand.
+// Normally it comes from scanning a location barcode, but a shelf label can be
+// missing, damaged or out of reach — this opens the same zone picker the other
+// move flows use, so the scanner is no longer barcode-only. Mirrors what
+// scanning a location does: sets the target for ADD/MOVE/MOVE_BATCH, and with
+// no action chosen yet it starts a MOVE to that destination.
+function scanPickDestination() {
+  const act = scan.action;
+  if (act && act !== 'ADD' && act !== 'MOVE' && act !== 'MOVE_BATCH') return;
+  _openZonePicker(t('scan.pickDest'), function (dest) {
+    if (!scan.action) {
+      scan.action = 'MOVE';
+      scan.from = null;
+      scan.harvestBag = null;
+      _pendingDupe = null;
+      _pendingRemove = null;
+      clearTimeout(_pendingDupeTimer);
+      clearTimeout(_pendingRemoveTimer);
+    }
+    scan.to = dest;
+    updateSD();
+    setFb('ok', t('scanFb.to', { loc: dest }));
+  });
 }
 function resetScan() {
   scan = { action: null, from: null, to: null, count: scan.count, harvestBag: null };
@@ -16848,6 +16876,11 @@ function initEventListeners() {
   $('set-19').addEventListener('click', resetScan);
   $('btn-20').addEventListener('click', openBatchAdd);
   $('btn-end-session').addEventListener('click', endScanSession);
+  // Destination chips are tappable — pick a target when its barcode can't be scanned.
+  $('chip-to').addEventListener('click', scanPickDestination);
+  $('cam-chip-to').addEventListener('click', scanPickDestination);
+  $('chip-to').title = t('scan.pickDest');
+  $('cam-chip-to').title = t('scan.pickDest');
   $('btn-scan-cam').addEventListener('click', function () {
     openCamScan();
   });

@@ -283,6 +283,7 @@ window.LANG['en'] = {
   'scan.action': 'Action',
   'scan.from': 'From',
   'scan.to': 'To',
+  'scan.pickDest': 'Choose destination',
   'scan.count': 'Count',
   'scan.reset': 'Reset',
   'scan.addBatch': 'Add batch',

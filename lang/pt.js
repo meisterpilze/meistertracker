@@ -50,6 +50,7 @@ window.LANG['pt'] = {
   'scan.action': 'A\u00e7\u00e3o',
   'scan.from': 'De',
   'scan.to': 'Para',
+  'scan.pickDest': 'Escolher destino',
   'scan.count': 'Cont.',
   'scan.reset': 'Resetar',
   'scan.addBatch': 'Adicionar lote',

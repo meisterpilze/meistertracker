@@ -3181,6 +3181,13 @@ tr:hover td {
   margin-top: 16px;
 }
 
+/* Destination chips open the shared zone picker (for when a location barcode
+   can't be scanned), so they need to read as tappable. */
+#chip-to,
+#cam-chip-to {
+  cursor: pointer;
+}
+
 /* ═══ UNDO SNACKBAR ════════════════════════════════════════════ */
 /* Bottom-centered "Rückgängig" bar for reversible → Fruchtung moves. */
 .undo-bar {

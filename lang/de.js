@@ -283,6 +283,7 @@ window.LANG['de'] = {
   'scan.action': 'Aktion',
   'scan.from': 'Von',
   'scan.to': 'Nach',
+  'scan.pickDest': 'Ziel wählen',
   'scan.count': 'Anzahl',
   'scan.reset': 'Zur\u00fccksetzen',
   'scan.addBatch': 'Charge hinzufügen',
