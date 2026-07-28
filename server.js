@@ -4201,9 +4201,15 @@ function handleRequest(req, res) {
   // ── Security headers ──
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
+  // base-uri/form-action/object-src close injection pivots that the rest of the
+  // policy leaves open: a <base> tag rewriting every relative script URL, a form
+  // retargeted to an attacker origin, and plugin/embed content. script-src still
+  // needs 'unsafe-inline' because the app uses inline event handlers (onclick=)
+  // throughout index.html/app.js — removing it requires converting those to
+  // addEventListener first, or every one of them silently stops working.
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; report-uri /api/csp-reports"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri /api/csp-reports"
   );
   if (protocol === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
