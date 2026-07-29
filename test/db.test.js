@@ -1482,3 +1482,83 @@ describe('db – isSafeError (R-23)', () => {
     assert.equal(db.isSafeError('Pilzsorte gefunden'), false); // wrong message
   });
 });
+
+describe('resetOperationalData – scopes', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  // Seed stock plus a ledger row, and a batch so the growing scope has something
+  // to clear alongside it.
+  const seed = () => {
+    db.setInventoryAbsolute(d, 'hardwood', 500, 'count', 'seed', null);
+    db.setInventoryAbsolute(d, 'wheatbran', 900, 'count', 'seed', null);
+    db.setInventoryAbsolute(d, 'grain', 400, 'count', 'seed', null);
+    db.updateInventoryConfig(
+      d,
+      {
+        hardwood: { minKg: 50 },
+        wheatbran: { minKg: 40 },
+        gypsum: { minKg: 5 },
+        grain: { minKg: 30 },
+        coir: { minKg: 10 }
+      },
+      { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 }
+    );
+  };
+  const stock = () => d.prepare('SELECT * FROM inventory WHERE id=1').get();
+  const ledgerRows = () => d.prepare('SELECT COUNT(*) c FROM inventory_log').get().c;
+
+  it('leaves stock untouched when the stock scope is off', () => {
+    seed();
+    const before = stock();
+    assert.ok(before.stock_hardwood > 0, 'seeded');
+    db.resetOperationalData(d, { growing: true, orders: true, planning: true });
+    const after = stock();
+    assert.equal(after.stock_hardwood, before.stock_hardwood);
+    assert.equal(after.stock_wheatbran, before.stock_wheatbran);
+    assert.ok(ledgerRows() > 0, 'ledger survives a non-stock reset');
+  });
+
+  it('zeroes every material and clears the ledger when the stock scope is on', () => {
+    seed();
+    assert.ok(ledgerRows() > 0);
+    db.resetOperationalData(d, { stock: true });
+    const s = stock();
+    assert.equal(s.stock_hardwood, 0);
+    assert.equal(s.stock_wheatbran, 0);
+    assert.equal(s.stock_gypsum, 0);
+    assert.equal(s.stock_grain, 0);
+    assert.equal(s.stock_coir, 0);
+    assert.equal(ledgerRows(), 0, 'ledger cleared for a fresh count');
+  });
+
+  it('keeps thresholds and average composition — configuration, not data', () => {
+    seed();
+    db.resetOperationalData(d, { stock: true });
+    const s = stock();
+    assert.equal(s.thresh_hardwood, 50, 'threshold survives');
+    assert.equal(s.thresh_grain, 30);
+    assert.equal(s.avg_hw_pct, 75, 'average composition survives — it reseeds the new-batch form');
+    assert.equal(s.avg_wb_pct, 25);
+    assert.equal(s.avg_rh_pct, 63);
+  });
+
+  it('reports the inventory row in the returned counts', () => {
+    seed();
+    const counts = db.resetOperationalData(d, { stock: true });
+    assert.equal(counts.inventory, 1);
+  });
+
+  it('is a no-op for stock when no scope is passed', () => {
+    seed();
+    const before = stock();
+    db.resetOperationalData(d, {});
+    assert.equal(stock().stock_hardwood, before.stock_hardwood);
+  });
+});

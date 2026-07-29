@@ -732,10 +732,12 @@ window.LANG['de'] = {
   'zoneCheck.missingRemove': '{n} nicht gefunden → entfernt',
   'reset.title': 'Neu anfangen',
   'reset.desc':
-    'Löscht die ausgewählten Daten, damit du mit frischen Beuteln neu starten kannst. Zonen, Regale, Sorten, Rezepte, Benutzer, Lieferanten, Lagerbestand und alle Einstellungen bleiben erhalten. Vorher wird automatisch ein Backup gespeichert.',
+    'Löscht die ausgewählten Daten, damit du mit frischen Beuteln neu starten kannst. Zonen, Regale, Sorten, Rezepte, Benutzer, Lieferanten, Schwellenwerte und alle Einstellungen bleiben erhalten. Vorher wird automatisch ein Backup gespeichert.',
   'reset.scopeGrowing': 'Chargen, Beutel, Scan-Verlauf, Ernten, Kulturen, Kontaminationsberichte',
   'reset.scopeOrders': 'Bestellungen, Kunden und Sendungen',
   'reset.scopePlanning': 'Aufgaben, Kalender, Benachrichtigungen, Wartungsprotokoll und KPI-Verlauf',
+  'reset.scopeStock':
+    'Materialbestand auf null setzen und Bestandsverlauf löschen, bereit für eine frische Zählung (Schwellenwerte und Durchschnittsrezeptur bleiben erhalten)',
   'reset.btn': 'Endgültig löschen',
   'reset.errNoScope': 'Nichts ausgewählt.',
   'reset.errPhrase': 'Zum Bestätigen "{phrase}" eintippen.',

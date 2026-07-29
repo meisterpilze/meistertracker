@@ -3936,7 +3936,7 @@
                 data-i18n="reset.desc"
               >
                 Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users,
-                suppliers, stock and all settings are kept. A backup is saved first.
+                suppliers, thresholds and all settings are kept. A backup is saved first.
               </p>
               <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
                 <input type="checkbox" id="reset-growing" checked style="width: 22px; height: 22px; flex: none" />
@@ -3950,10 +3950,17 @@
                   >Orders, customers and shipments</span
                 >
               </label>
-              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; cursor: pointer">
+              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
                 <input type="checkbox" id="reset-planning" style="width: 22px; height: 22px; flex: none" />
                 <span style="font-size: 13px" data-i18n="reset.scopePlanning"
                   >Tasks, calendar, notifications, maintenance log and KPI history</span
+                >
+              </label>
+              <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; cursor: pointer">
+                <input type="checkbox" id="reset-stock" style="width: 22px; height: 22px; flex: none" />
+                <span style="font-size: 13px" data-i18n="reset.scopeStock"
+                  >Material stock set to zero and its ledger cleared, ready for a fresh count (thresholds and average
+                  composition are kept)</span
                 >
               </label>
               <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">

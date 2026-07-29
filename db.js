@@ -3308,6 +3308,22 @@ function resetOperationalData(db, opts) {
       wipe('maintenance_log');
       wipe('kpi_snapshots');
     }
+    if (opts.stock) {
+      // Material quantities and their ledger. Thresholds and the average
+      // composition are configuration the operator tuned — not operational data
+      // — so they survive; only the amounts and their history reset, ready for a
+      // fresh physical count. The ledger goes with them: its rows reference
+      // batch ids that a growing reset has just cleared, and a running total
+      // carried over from deleted batches is exactly the drift this is meant to
+      // clear out.
+      wipe('inventory_log');
+      const info = db
+        .prepare(
+          'UPDATE inventory SET stock_hardwood=0, stock_wheatbran=0, stock_gypsum=0, stock_grain=0, stock_coir=0 WHERE id=1'
+        )
+        .run();
+      if (info.changes) counts.inventory = info.changes;
+    }
     invalidateBagZoneCache(db);
     incrementDataVersion(db);
     db.exec('COMMIT');

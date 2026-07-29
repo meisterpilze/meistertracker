@@ -8805,9 +8805,10 @@ async function runCleanReset() {
   const scopes = {
     growing: document.getElementById('reset-growing').checked,
     orders: document.getElementById('reset-orders').checked,
-    planning: document.getElementById('reset-planning').checked
+    planning: document.getElementById('reset-planning').checked,
+    stock: document.getElementById('reset-stock').checked
   };
-  if (!scopes.growing && !scopes.orders && !scopes.planning) {
+  if (!scopes.growing && !scopes.orders && !scopes.planning && !scopes.stock) {
     setStatus(st, t('reset.errNoScope'), false);
     return;
   }
@@ -8820,6 +8821,7 @@ async function runCleanReset() {
   if (scopes.growing) parts.push(t('reset.scopeGrowing'));
   if (scopes.orders) parts.push(t('reset.scopeOrders'));
   if (scopes.planning) parts.push(t('reset.scopePlanning'));
+  if (scopes.stock) parts.push(t('reset.scopeStock'));
   confirm2(t('reset.confirmTitle'), t('reset.confirmMsg', { what: parts.join(' · ') }), t('reset.btn'), async () => {
     setStatus(st, t('reset.running'), true);
     const r = await apiPost('/api/admin/reset', { ...scopes, confirm: RESET_CONFIRM_PHRASE });

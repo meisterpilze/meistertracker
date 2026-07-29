@@ -6123,9 +6123,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const scopes = {
         growing: !!data.growing,
         orders: !!data.orders,
-        planning: !!data.planning
+        planning: !!data.planning,
+        stock: !!data.stock
       };
-      if (!scopes.growing && !scopes.orders && !scopes.planning) {
+      if (!scopes.growing && !scopes.orders && !scopes.planning && !scopes.stock) {
         jsonErr(res, 400, 'nothing selected');
         return;
       }

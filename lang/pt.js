@@ -487,10 +487,12 @@ window.LANG['pt'] = {
   'zoneCheck.missingRemove': '{n} não encontrados → marcar removidos',
   'reset.title': 'Começar do zero',
   'reset.desc':
-    'Apaga os dados selecionados para recomeçar com sacos novos. Zonas, prateleiras, Sorten, receitas, utilizadores, fornecedores, stock e todas as definições são mantidos. Um backup é guardado primeiro.',
+    'Apaga os dados selecionados para recomeçar com sacos novos. Zonas, prateleiras, Sorten, receitas, utilizadores, fornecedores, limiares e todas as definições são mantidos. Um backup é guardado primeiro.',
   'reset.scopeGrowing': 'Lotes, sacos, histórico de leituras, colheitas, culturas, relatórios de contaminação',
   'reset.scopeOrders': 'Encomendas, clientes e envios',
   'reset.scopePlanning': 'Tarefas, calendário, notificações, registo de manutenção e histórico de KPI',
+  'reset.scopeStock':
+    'Stock de material a zero e o respetivo histórico limpo, pronto para uma nova contagem (limiares e composição média são mantidos)',
   'reset.btn': 'Apagar definitivamente',
   'reset.errNoScope': 'Nada selecionado.',
   'reset.errPhrase': 'Escreva "{phrase}" para confirmar.',
