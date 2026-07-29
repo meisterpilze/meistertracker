@@ -3756,6 +3756,40 @@
                   >
                   <input type="text" id="ebay-siteid" style="width: 100%" />
                 </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.ebayVerifyToken"
+                    >Verification-Token (Kontolöschung)</label
+                  >
+                  <input
+                    type="password"
+                    id="ebay-verifytoken"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                  <p
+                    style="font-size: 11px; color: var(--c-text-muted); margin: 4px 0 0; line-height: 1.5"
+                    data-i18n="channels.ebayVerifyHint"
+                  >
+                    Selbst ausgedachtes Geheimnis, 32–80 Zeichen (A–Z, a–z, 0–9, _ und -). Muss im eBay-Developer-Portal
+                    unter „Marketplace account deletion" identisch eingetragen werden — zusammen mit der Endpunkt-URL
+                    unten.
+                  </p>
+                  <code
+                    id="ebay-deletion-url"
+                    style="
+                      display: block;
+                      font-size: 11px;
+                      margin-top: 6px;
+                      padding: 5px 8px;
+                      background: var(--c-bg);
+                      border-radius: 6px;
+                      word-break: break-all;
+                    "
+                  ></code>
+                </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
                   <button id="ebay-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
                   <button id="ebay-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>

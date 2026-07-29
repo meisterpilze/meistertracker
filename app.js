@@ -6865,6 +6865,16 @@ async function loadChannelsSettings() {
     };
     fillOauth('ebay', (d.channels || []).find((c) => c.channel === 'ebay') || {});
     fillOauth('etsy', (d.channels || []).find((c) => c.channel === 'etsy') || {});
+    // eBay account-deletion setup: never echo the stored token back, and show the
+    // endpoint URL the server actually hashes so it can be copied into the portal.
+    const ebay = (d.channels || []).find((c) => c.channel === 'ebay') || {};
+    const vt = document.getElementById('ebay-verifytoken');
+    if (vt) {
+      vt.value = '';
+      vt.placeholder = ebay.hasWebhookSecret ? t('channels.keySet') : t('channels.ebayVerifyToken');
+    }
+    const du = document.getElementById('ebay-deletion-url');
+    if (du) du.textContent = (d.urls && d.urls.ebayDeletion) || '';
   } catch (e) {
     /* not configured yet */
   }
@@ -6883,7 +6893,10 @@ async function saveChannel(channel) {
       enabled: document.getElementById('ebay-enabled').checked,
       clientId: (document.getElementById('ebay-clientid').value || '').trim(), // App-ID
       clientSecret: (document.getElementById('ebay-secret').value || '').trim(), // Cert-ID (blank = keep)
-      siteId: (document.getElementById('ebay-siteid').value || '').trim() // RuName
+      siteId: (document.getElementById('ebay-siteid').value || '').trim(), // RuName
+      // Account-deletion verification token (blank = keep the stored one). Read
+      // defensively so a cached older index.html can still save the other fields.
+      webhookSecret: ((document.getElementById('ebay-verifytoken') || {}).value || '').trim()
     };
   } else if (channel === 'etsy') {
     body = {

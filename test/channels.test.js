@@ -298,3 +298,73 @@ describe('channel review fixes (recall pass)', () => {
     }
   });
 });
+
+// House-number extraction. Wix orders often come without
+// streetAddress.number, so the street line is the real source. Shared by all
+// three channels, hence tested directly.
+describe('house number extraction from a street line', () => {
+  const split = channels._splitHouse;
+
+  it('takes a trailing number (DE/AT convention)', () => {
+    assert.deepEqual(split('Musterallee 18'), { street: 'Musterallee', house: '18' });
+    assert.deepEqual(split('Musterweg 18a'), { street: 'Musterweg', house: '18a' });
+    assert.deepEqual(split('Musterstr. 18 a'), { street: 'Musterstr.', house: '18a' });
+    assert.deepEqual(split('Am Alten Bahnhof 7'), { street: 'Am Alten Bahnhof', house: '7' });
+  });
+
+  it('takes a leading number (FR/NL/BE/IE convention) — we ship EU-wide', () => {
+    assert.deepEqual(split('12 Rue des Exemples'), { street: 'Rue des Exemples', house: '12' });
+    assert.deepEqual(split('9 Main Street'), { street: 'Main Street', house: '9' });
+    assert.deepEqual(split('221 Baker Street'), { street: 'Baker Street', house: '221' });
+  });
+
+  it('keeps a range or slash form together as one house number', () => {
+    assert.deepEqual(split('Musterstrasse 18-20'), { street: 'Musterstrasse', house: '18-20' });
+    assert.deepEqual(split('Musterstr 12/3'), { street: 'Musterstr', house: '12/3' });
+    assert.deepEqual(split('18-20 High Street'), { street: 'High Street', house: '18-20' });
+  });
+
+  it('refuses to guess rather than inventing a wrong house number', () => {
+    // No number at all — a label with a made-up number is worse than none.
+    assert.deepEqual(split('Musterplatz'), { street: 'Musterplatz', house: null });
+    assert.deepEqual(split('Am Sonnenhang'), { street: 'Am Sonnenhang', house: null });
+    // Ambiguous: leading digits followed by more digits could split either way.
+    assert.deepEqual(split('12 3rd Avenue'), { street: '12 3rd Avenue', house: null });
+    // Empty / missing input must not throw.
+    assert.deepEqual(split(''), { street: null, house: null });
+    assert.deepEqual(split(null), { street: null, house: null });
+  });
+
+  it('prefers Wix streetAddress.number when the channel does supply it', () => {
+    const o = channels._normalizeWix({
+      id: 'x-1',
+      number: 2001,
+      recipientInfo: {
+        contactDetails: { firstName: 'A', lastName: 'B' },
+        address: {
+          streetAddress: { name: 'Musterstr', number: '5' },
+          city: 'Musterstadt',
+          postalCode: '00000',
+          country: 'DE'
+        }
+      },
+      lineItems: []
+    });
+    assert.equal(o.shipStreet, 'Musterstr');
+    assert.equal(o.shipHouse, '5');
+  });
+
+  it('falls back to splitting the Wix address line when number is absent', () => {
+    const o = channels._normalizeWix({
+      id: 'x-2',
+      number: 2002,
+      recipientInfo: {
+        contactDetails: { firstName: 'A', lastName: 'B' },
+        address: { addressLine: '12 Rue des Exemples', city: 'Exempleville', postalCode: '00000', country: 'FR' }
+      },
+      lineItems: []
+    });
+    assert.equal(o.shipStreet, 'Rue des Exemples');
+    assert.equal(o.shipHouse, '12');
+  });
+});
