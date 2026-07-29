@@ -12447,6 +12447,9 @@ function itemsToZPL(items) {
     } else if (it.type === 'qr') {
       // Reset label home immediately before QR to ensure ^FO works from true origin.
       z += '^LH0,0^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
+    } else if (it.type === 'box') {
+      // ^GB w,h,thickness — outline only, so it frames whatever text sits inside.
+      z += '^FO' + it.x + ',' + it.y + '^GB' + it.w + ',' + it.h + ',' + (it.thick || 3) + '^FS';
     }
   }
   return z + '^XZ';
@@ -12489,6 +12492,16 @@ function buildPreviewCell(items) {
       if (it.bold) t.setAttribute('font-weight', 'bold');
       t.textContent = it.text;
       svg.appendChild(t);
+    } else if (it.type === 'box') {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', it.x);
+      r.setAttribute('y', it.y);
+      r.setAttribute('width', it.w);
+      r.setAttribute('height', it.h);
+      r.setAttribute('fill', 'none');
+      r.setAttribute('stroke', '#000');
+      r.setAttribute('stroke-width', it.thick || 3);
+      svg.appendChild(r);
     } else if (it.type === 'qr') {
       // QR as HTML overlay positioned with % from ZPL coords (qrcode.js → img/canvas).
       const qrDiv = document.createElement('div');
@@ -12569,19 +12582,33 @@ function renderPreviewDeferred(deferred, baseDelay) {
 // and two labels from the same batch must not read differently because someone
 // switched locale between prints.
 const LABEL_TYPE_WORD = { MC: 'MC — Slant', PD: 'PD — Petri', LC: 'LC — Liquid Culture', G2G: 'G2G — Grain-to-Grain' };
-function _labelHeaderItem(text, qr) {
+// reserveRight: dots to keep clear on the right for the batch-total badge. In
+// barcode mode header and badge share one horizontal band, so the header block
+// must stop short of it; in QR mode they are stacked and cannot collide.
+function _labelHeaderItem(text, qr, reserveRight) {
   if (!text) return null;
+  const keep = reserveRight || 0;
   return qr
     ? { type: 'text', x: 140, y: 55, blockW: 258, fontH: 28, text, bold: true } // beside the QR
-    : { type: 'text', x: 0, y: 6, blockW: 400, fontH: 30, text, bold: true }; // above the barcode
+    : { type: 'text', x: 0, y: 6, blockW: 400 - keep, fontH: 30, text, bold: true }; // above the barcode
 }
-// "3/10" — which bag this is out of how many the batch holds. Printed because a
-// bag on its own cannot tell you the batch size: move 9 of 10 and nothing on the
-// remaining label says one is still out there.
-function _bagCountText(bagId, batch) {
+// Batch size as a boxed badge in the top-right corner. Which bag this is was
+// already on the label — it is the ID's last segment — so only the total is
+// missing: move 9 of 10 and nothing said one was still out there. Kept as a
+// separate framed element rather than folded into a line of text, so it reads
+// at arm's length without disturbing anything else.
+// The slash is deliberate: a bare "10" next to bag …-06 invites being read as
+// the bag number. "/10" cannot be.
+const _BOX = { w: 74, h: 34, thick: 3 };
+function _bagTotalItems(batch, qr) {
   const total = (batch.bags || []).length;
-  const n = parseInt(String(bagId).split('-').pop(), 10);
-  return total > 0 && n > 0 ? n + '/' + total : '';
+  if (!total) return [];
+  const x = 400 - _BOX.w - 6;
+  const y = qr ? 16 : 4;
+  return [
+    { type: 'box', x, y, w: _BOX.w, h: _BOX.h, thick: _BOX.thick },
+    { type: 'text', x, y: y + 5, blockW: _BOX.w, fontH: 26, text: '/' + total, bold: true }
+  ];
 }
 function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = [];
@@ -12604,17 +12631,17 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       bcVal = bagId.replace(/-/g, '_');
     }
   }
-  // Grain spawn is the one bag type that carries a prefix word; block bags get
-  // the count alone, per the print layout that was signed off.
-  const _count = _bagCountText(bagId, batch);
-  const _header =
-    batch.batchType === 'grain' ? ('G — Grainspawn' + (_count ? ' ' + _count : '')).trim() : _count;
+  // Grain spawn is the one bag type that carries a prefix word. The batch total
+  // is a boxed badge on every bag label, independent of that.
+  const _header = batch.batchType === 'grain' ? 'G — Grainspawn' : '';
+  const _total = _bagTotalItems(batch, qr);
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
     const h = _labelHeaderItem(_header, true);
     if (h) items.push(h);
+    _total.forEach((i) => items.push(i));
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
@@ -12637,8 +12664,9 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
     const bcY = 40,
       bcH = 90;
     const bc = bcParams(bcVal);
-    const h = _labelHeaderItem(_header, false);
+    const h = _labelHeaderItem(_header, false, _total.length ? _BOX.w + 12 : 0);
     if (h) items.push(h);
+    _total.forEach((i) => items.push(i));
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
     items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
