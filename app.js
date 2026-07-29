@@ -12447,9 +12447,6 @@ function itemsToZPL(items) {
     } else if (it.type === 'qr') {
       // Reset label home immediately before QR to ensure ^FO works from true origin.
       z += '^LH0,0^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
-    } else if (it.type === 'box') {
-      // ^GB w,h,thickness — outline only, so it frames whatever text sits inside.
-      z += '^FO' + it.x + ',' + it.y + '^GB' + it.w + ',' + it.h + ',' + (it.thick || 3) + '^FS';
     }
   }
   return z + '^XZ';
@@ -12492,16 +12489,6 @@ function buildPreviewCell(items) {
       if (it.bold) t.setAttribute('font-weight', 'bold');
       t.textContent = it.text;
       svg.appendChild(t);
-    } else if (it.type === 'box') {
-      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      r.setAttribute('x', it.x);
-      r.setAttribute('y', it.y);
-      r.setAttribute('width', it.w);
-      r.setAttribute('height', it.h);
-      r.setAttribute('fill', 'none');
-      r.setAttribute('stroke', '#000');
-      r.setAttribute('stroke-width', it.thick || 3);
-      svg.appendChild(r);
     } else if (it.type === 'qr') {
       // QR as HTML overlay positioned with % from ZPL coords (qrcode.js → img/canvas).
       const qrDiv = document.createElement('div');
@@ -12585,12 +12572,12 @@ const LABEL_TYPE_WORD = { MC: 'MC — Slant', PD: 'PD — Petri', LC: 'LC — Li
 // reserveRight: dots to keep clear on the right for the batch-total badge. In
 // barcode mode header and badge share one horizontal band, so the header block
 // must stop short of it; in QR mode they are stacked and cannot collide.
-function _labelHeaderItem(text, qr, reserveRight) {
+function _labelHeaderItem(text, qr) {
   if (!text) return null;
-  const keep = reserveRight || 0;
+  // y=14, not 6: a printed test clipped the top of the stock at 6.
   return qr
     ? { type: 'text', x: 140, y: 55, blockW: 258, fontH: 28, text, bold: true } // beside the QR
-    : { type: 'text', x: 0, y: 6, blockW: 400 - keep, fontH: 30, text, bold: true }; // above the barcode
+    : { type: 'text', x: 0, y: 14, blockW: 400, fontH: 30, text, bold: true }; // above the barcode
 }
 // Batch size as a boxed badge in the bottom-right corner. Which bag this is was
 // already on the label — it is the ID's last segment — so only the total is
@@ -12598,20 +12585,17 @@ function _labelHeaderItem(text, qr, reserveRight) {
 // separate framed element rather than folded into a line of text, so it reads
 // at arm's length. The slash is deliberate: a bare "10" next to bag …-06 invites
 // being read as the bag number. "/10" cannot be.
-const _BOX = { w: 72, h: 32, thick: 3 };
+const _BOX = { w: 72, h: 30 };
 function _bagTotalBadge(batch) {
   const total = (batch.bags || []).length;
   if (!total) return null;
   const x = 400 - _BOX.w - 6; // 322
-  const y = 240 - _BOX.h - 6; // 202 → occupies 202..234
+  const y = 240 - _BOX.h - 8; // 202 → occupies 202..232
   return {
     x,
     y,
     h: _BOX.h,
-    items: [
-      { type: 'box', x, y, w: _BOX.w, h: _BOX.h, thick: _BOX.thick },
-      { type: 'text', x, y: y + 4, blockW: _BOX.w, fontH: 24, text: '/' + total, bold: true }
-    ]
+    items: [{ type: 'text', x, y, blockW: _BOX.w, fontH: 28, text: '/' + total, bold: true }]
   };
 }
 // Width a centred text line may use. The bottom-right badge sits over the band
@@ -12642,18 +12626,15 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       bcVal = bagId.replace(/-/g, '_');
     }
   }
-  // Grain spawn is the one bag type that carries a prefix word. The batch total
-  // is a boxed badge on every bag label, independent of that.
-  const _header = batch.batchType === 'grain' ? 'G — Grainspawn' : '';
+  // Bag labels carry no type word. Grainspawn had one, but the ID already opens
+  // with G- and the top of the label is where this printer clips, so it cost a
+  // line and printed cut off. Cultures keep theirs (see labLabelItems).
   const _badge = _bagTotalBadge(batch);
-  // Badge first so the frame is laid down before the text that re-centres beside it.
   if (_badge) _badge.items.forEach((i) => items.push(i));
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
-    const h = _labelHeaderItem(_header, true);
-    if (h) items.push(h);
     items.push({ type: 'text', y: 155, blockW: _lineBlockW(155, 28, _badge), fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
@@ -12673,13 +12654,17 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
-    const bcY = 40,
-      bcH = 90;
+    // How many lines print depends on the mode, so a fixed top margin leaves a
+    // "minimal" label (barcode + ID only) hugging the top with dead space under
+    // it. Centre the block for what is actually on it, but never above y=40 —
+    // this printer clips the very top of the stock.
+    const species0 = batch.strainName || batch.species || '';
+    const hasLine2 = (detail === 'sorte' || detail === 'full') && !!(species0 || bagKg != null || batch.strainText || batch.notes);
+    const hasLine3 = detail === 'full' && !!batch.due;
+    const bcH = 90;
+    const blockH = bcH + 6 + 24 + (hasLine2 ? 28 : 0) + (hasLine3 ? 28 : 0);
+    const bcY = Math.max(40, Math.round((240 - blockH) / 2));
     const bc = bcParams(bcVal);
-    // The header now has the whole top band to itself — the badge moved to the
-    // bottom-right corner, so nothing is reserved on this line.
-    const h = _labelHeaderItem(_header, false);
-    if (h) items.push(h);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
     items.push({ type: 'text', y: line1Y, blockW: _lineBlockW(line1Y, 24, _badge), fontH: 24, text: bagId });
@@ -12745,7 +12730,10 @@ function labLabelItems(id, c, detail, qr) {
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
-    const bcY = 40,
+    // The header sits above the barcode, and a printed test showed this stock
+    // loses the top few dots \u2014 so the whole stack drops by 10 to give the type
+    // word a real margin. Bottom still lands at 230 of 240.
+    const bcY = _header ? 50 : 40,
       bcH = 90;
     const bc = bcParams(bcVal);
     const h = _labelHeaderItem(_header, false);
