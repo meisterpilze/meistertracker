@@ -511,3 +511,110 @@ describe('order hub – review fixes (recall pass)', () => {
     assert.ok(billed && billed.id === sid, 'a real bought label is detected → blocks a second buy');
   });
 });
+
+// Erasure path behind the eBay marketplace account-deletion endpoint (and any
+// GDPR Art. 17 request): personal data goes, aggregate revenue stays.
+describe('order hub – customer erasure', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  function seedEbayBuyer(handle, email, orderId) {
+    return db.upsertOrder(d, {
+      channel: 'ebay',
+      channelOrderId: orderId,
+      buyerHandle: handle,
+      customerEmail: email,
+      customerName: 'Erika Musterfrau',
+      shipCountry: 'DE',
+      totalAmount: 42.5,
+      currency: 'EUR',
+      shipName: 'Erika Musterfrau',
+      shipStreet: 'Markgrafenallee',
+      shipHouse: '18',
+      shipCity: 'Bayreuth',
+      shipPostal: '95448',
+      shipPhone: '+4915565393174',
+      raw: { buyer: { username: handle }, secret: 'full payload with PII' },
+      items: [{ channelSku: 'EB-KIT', title: 'Growkit', qty: 1, unitPrice: 42.5 }]
+    });
+  }
+
+  it('resolves an eBay username to its customer, and falls back to email', () => {
+    seedEbayBuyer('ebay_erika', 'erika@example.de', 'EB-100');
+    const byHandle = db.findCustomerByIdentity(d, 'ebay', 'ebay_erika');
+    assert.ok(byHandle, 'username resolves via customer_identities');
+    assert.equal(db.findCustomerByIdentity(d, 'ebay', 'erika@example.de'), byHandle, 'email resolves to the same row');
+    assert.equal(db.findCustomerByIdentity(d, 'ebay', 'nobody_here'), null, 'unknown handle → null');
+    assert.equal(db.findCustomerByIdentity(d, 'ebay', ''), null, 'empty handle → null');
+  });
+
+  it('erases personal data from the customer and every order, keeping the money', () => {
+    const orderId = seedEbayBuyer('ebay_erika', 'erika@example.de', 'EB-100');
+    const cid = db.findCustomerByIdentity(d, 'ebay', 'ebay_erika');
+    db.insertShipment(d, {
+      orderId,
+      provider: 'sendcloud',
+      providerParcelId: 'P-ERASE',
+      trackingNumber: 'T-ERASE',
+      labelUrl: 'https://panel.sendcloud.sc/api/v2/labels/normal_printer/999',
+      status: 'created'
+    });
+
+    const r = db.eraseCustomer(d, cid);
+    assert.equal(r.orders, 1, 'reports how many orders were scrubbed');
+
+    const c = d.prepare('SELECT * FROM customers WHERE id = ?').get(cid);
+    assert.equal(c.email, null, 'email gone');
+    assert.equal(c.name, null, 'name gone');
+    assert.equal(c.total_spent, 42.5, 'revenue aggregate survives');
+    assert.equal(c.first_channel, 'ebay', 'channel attribution survives');
+
+    const o = d.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    for (const f of [
+      'customer_name',
+      'customer_email',
+      'raw_json',
+      'ship_name',
+      'ship_street',
+      'ship_house',
+      'ship_city',
+      'ship_postal',
+      'ship_phone'
+    ]) {
+      assert.equal(o[f], null, `orders.${f} must be erased`);
+    }
+    assert.equal(o.total_amount, 42.5, 'order value survives for the books');
+    assert.equal(o.customer_id, cid, 'order stays linked to the (now anonymous) customer');
+
+    const s = d.prepare('SELECT * FROM shipments WHERE order_id = ?').get(orderId);
+    assert.equal(s.label_url, null, 'label PDF url gone — it renders the full address');
+    assert.equal(s.tracking_number, 'T-ERASE', 'tracking number kept for the shipping record');
+
+    assert.equal(
+      d.prepare('SELECT COUNT(*) c FROM customer_identities WHERE customer_id = ?').get(cid).c,
+      0,
+      'platform identities dropped'
+    );
+    assert.equal(db.findCustomerByIdentity(d, 'ebay', 'ebay_erika'), null, 'no longer resolvable after erasure');
+  });
+
+  it('is idempotent and lets two erased customers coexist under UNIQUE(email)', () => {
+    seedEbayBuyer('buyer_one', 'one@example.de', 'EB-201');
+    seedEbayBuyer('buyer_two', 'two@example.de', 'EB-202');
+    const c1 = db.findCustomerByIdentity(d, 'ebay', 'buyer_one');
+    const c2 = db.findCustomerByIdentity(d, 'ebay', 'buyer_two');
+
+    db.eraseCustomer(d, c1);
+    assert.doesNotThrow(() => db.eraseCustomer(d, c2), 'a second NULL email must not trip the UNIQUE constraint');
+    assert.doesNotThrow(() => db.eraseCustomer(d, c1), 'erasing twice is a no-op');
+    assert.deepEqual(db.eraseCustomer(d, null), { orders: 0 }, 'null id is a safe no-op');
+
+    assert.equal(d.prepare('SELECT COUNT(*) c FROM customers WHERE id IN (?,?)').get(c1, c2).c, 2, 'rows still exist');
+  });
+});

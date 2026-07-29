@@ -272,6 +272,9 @@ window.LANG['de'] = {
   'channels.appId': 'App-ID (Client-ID)',
   'channels.certId': 'Cert-ID (Client-Secret)',
   'channels.ruName': 'RuName (Redirect-URL-Name)',
+  'channels.ebayVerifyToken': 'Verification-Token (Kontolöschung)',
+  'channels.ebayVerifyHint':
+    'Selbst ausgedachtes Geheimnis, 32–80 Zeichen (A–Z, a–z, 0–9, _ und -). Muss im eBay-Developer-Portal unter „Marketplace account deletion" identisch eingetragen werden — zusammen mit der Endpunkt-URL unten.',
   'channels.keystring': 'Keystring (API-Key)',
   'channels.connect': 'Verbinden',
   'channels.linked': 'Verbunden',
