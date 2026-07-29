@@ -6304,6 +6304,47 @@ function mergeCustomers(db, primaryId, secondaryId) {
   incrementDataVersion(db);
 }
 
+// Resolve a per-channel buyer handle (eBay username, Etsy buyer id, or an email)
+// to the deduped customer row. Entry point for an account-closure notification,
+// which identifies the person only by their platform handle.
+function findCustomerByIdentity(db, channel, handle) {
+  if (!channel || !handle) return null;
+  const h = String(handle).trim();
+  if (!h) return null;
+  const idn = db
+    .prepare('SELECT customer_id AS id FROM customer_identities WHERE channel = ? AND handle = ?')
+    .get(channel, h);
+  if (idn) return idn.id;
+  const c = db.prepare('SELECT id FROM customers WHERE email = ?').get(_lcEmail(h));
+  return c ? c.id : null;
+}
+
+// Erasure for a deletion request (GDPR Art. 17, or an eBay account-closure
+// notification). Strips the personal data — name, email, address, phone, and the
+// raw channel payloads that embed all of it — from the customer and every order
+// they placed, but keeps the rows and their aggregates so revenue and channel
+// statistics stay intact. label_url goes too: that PDF renders the full shipping
+// address. Idempotent — running it twice is a no-op.
+function eraseCustomer(db, customerId) {
+  if (!customerId) return { orders: 0 };
+  db.prepare(
+    'UPDATE shipments SET label_url = NULL WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)'
+  ).run(customerId);
+  const orders = db
+    .prepare(
+      `UPDATE orders SET customer_name = NULL, customer_email = NULL, raw_json = NULL,
+              ship_name = NULL, ship_company = NULL, ship_street = NULL, ship_house = NULL,
+              ship_address2 = NULL, ship_city = NULL, ship_postal = NULL, ship_phone = NULL
+       WHERE customer_id = ?`
+    )
+    .run(customerId).changes;
+  // email is UNIQUE, but SQLite allows many NULLs — erased rows never collide.
+  db.prepare("UPDATE customers SET email = NULL, name = NULL, notes = '' WHERE id = ?").run(customerId);
+  db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(customerId);
+  incrementDataVersion(db);
+  return { orders };
+}
+
 // ── Orders (idempotent ingestion) ──
 function _insertOrderItems(db, orderId, channel, items) {
   const ins = db.prepare(
@@ -6501,6 +6542,7 @@ function listChannelConfigs(db) {
       clientId: cfg.clientId,
       hasApiKey: !!cfg.apiKey,
       hasClientSecret: !!cfg.clientSecret,
+      hasWebhookSecret: !!cfg.webhookSecret,
       connected: c === 'wix' ? !!cfg.apiKey && !!cfg.siteId : !!cfg.accessToken,
       tokenExpires: cfg.tokenExpires,
       lastSync: cfg.lastSync,
@@ -6711,6 +6753,8 @@ module.exports = {
   setOrderStatus,
   listCustomers,
   mergeCustomers,
+  findCustomerByIdentity,
+  eraseCustomer,
   reserveDemand,
   computeProductionDemand,
   computeProductMaterialNeed,

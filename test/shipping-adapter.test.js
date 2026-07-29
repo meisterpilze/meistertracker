@@ -18,6 +18,16 @@ function jsonRes(status, body) {
 
 const cfg = { provider: 'sendcloud', publicKey: 'pub', secretKey: 'sec', defaultWeightG: 1000 };
 
+// A minimally valid ship-to. buyLabel refuses an incomplete address before it
+// reaches Sendcloud, so any fixture that expects a request to go out needs one.
+const ADDR = {
+  shipName: 'Max Mustermann',
+  shipStreet: 'Hauptstr',
+  shipHouse: '5',
+  shipPostal: '91054',
+  shipCity: 'Erlangen'
+};
+
 describe('sendcloud adapter', () => {
   it('lists methods and filters by weight', async () => {
     const restore = mockFetch(async (url) => {
@@ -94,7 +104,7 @@ describe('sendcloud adapter', () => {
       return jsonRes(200, { parcel: { id: 556, label: {} } });
     });
     try {
-      const order = { id: 8, channel: 'wix', channelOrderId: 'W-8', shipCountry: 'de' };
+      const order = { id: 8, channel: 'wix', channelOrderId: 'W-8', ...ADDR, shipCountry: 'de' };
       const r = await ship.sendcloud.buyLabel(cfg, { order, methodId: 8, weightG: 1000, requestLabel: false });
       assert.equal(sent.parcel.request_label, false, 'test mode must NOT request a billable label');
       assert.equal(r.status, 'announced');
@@ -120,7 +130,7 @@ describe('sendcloud adapter', () => {
     });
     try {
       await ship.sendcloud.buyLabel(cfg, {
-        order: { id: 1, shipCountry: 'Germany' },
+        order: { id: 1, ...ADDR, shipCountry: 'Germany' },
         methodId: 1,
         weightG: 1000,
         requestLabel: false
@@ -165,6 +175,77 @@ describe('sendcloud adapter', () => {
           'should refuse ' + c
         );
       }
+    } finally {
+      restore();
+    }
+  });
+});
+
+// Pre-flight address validation. Sendcloud accepts a parcel with a blank house
+// number and charges for it, so an incomplete address must never reach the wire.
+describe('address guard before a billable label', () => {
+  const complete = {
+    id: 1,
+    channel: 'wix',
+    channelOrderId: 'W-1',
+    shipName: 'Max Mustermann',
+    shipStreet: 'Markgrafenallee',
+    shipHouse: '18',
+    shipPostal: '95448',
+    shipCity: 'Bayreuth',
+    shipCountry: 'DE'
+  };
+
+  for (const [field, label] of [
+    ['shipStreet', 'Straße'],
+    ['shipHouse', 'Hausnummer'],
+    ['shipPostal', 'PLZ'],
+    ['shipCity', 'Ort']
+  ]) {
+    it('refuses to buy when ' + field + ' is missing, without calling Sendcloud', async () => {
+      let called = false;
+      const restore = mockFetch(async () => {
+        called = true;
+        return jsonRes(200, { parcel: { id: 1 } });
+      });
+      try {
+        const order = { ...complete, [field]: '' };
+        await assert.rejects(
+          () => ship.sendcloud.buyLabel(cfg, { order, methodId: 8, weightG: 1000 }),
+          (e) => e.message.includes(label),
+          'error must name the missing field: ' + label
+        );
+        assert.equal(called, false, 'no HTTP call may be made — that would bill the owner');
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('names every missing field at once so the fix is one pass', async () => {
+    const restore = mockFetch(async () => jsonRes(200, {}));
+    try {
+      const order = { ...complete, shipStreet: '', shipHouse: '', shipCity: '  ' };
+      await assert.rejects(
+        () => ship.sendcloud.buyLabel(cfg, { order, methodId: 8 }),
+        (e) => e.message.includes('Straße') && e.message.includes('Hausnummer') && e.message.includes('Ort')
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('still buys when the address is complete', async () => {
+    let body = null;
+    const restore = mockFetch(async (url, opts) => {
+      body = JSON.parse(opts.body);
+      return jsonRes(200, { parcel: { id: 77, tracking_number: 'T1', label: {} } });
+    });
+    try {
+      const r = await ship.sendcloud.buyLabel(cfg, { order: complete, methodId: 8, weightG: 1200 });
+      assert.equal(r.providerParcelId, '77');
+      assert.equal(body.parcel.house_number, '18', 'house number reaches the carrier');
+      assert.equal(body.parcel.postal_code, '95448');
     } finally {
       restore();
     }

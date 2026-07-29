@@ -12,8 +12,33 @@ const SENDCLOUD_BASE = 'https://panel.sendcloud.sc/api/v2';
 // resolved to an ISO-3166 alpha-2 code and then checked against this EU-27
 // allowlist; anything else is refused before a billable label is ever bought.
 const _EU_ISO2 = new Set([
-  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE',
-  'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
+  'AT',
+  'BE',
+  'BG',
+  'HR',
+  'CY',
+  'CZ',
+  'DK',
+  'EE',
+  'FI',
+  'FR',
+  'DE',
+  'GR',
+  'HU',
+  'IE',
+  'IT',
+  'LV',
+  'LT',
+  'LU',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SK',
+  'SI',
+  'ES',
+  'SE'
 ]);
 
 // Common country names (DE/EN) → ISO-3166 alpha-2, so a channel that sends a full
@@ -112,6 +137,28 @@ function _iso2Country(v) {
   return code;
 }
 
+// Buying a label is billable and irreversible-ish: Sendcloud accepts a parcel with
+// a blank house number or an empty street and happily charges for it, and the
+// carrier then cannot deliver it. Everything the address needs is checked here,
+// before the call goes out, so an incomplete order stops with a message naming the
+// missing field instead of costing postage. The buy-label dialog can send an
+// `address` override, so the fix is one screen away.
+function _requireAddress(order) {
+  const missing = [];
+  if (!String(order.shipName || order.customerName || '').trim()) missing.push('Name');
+  if (!String(order.shipStreet || '').trim()) missing.push('Straße');
+  if (!String(order.shipHouse || '').trim()) missing.push('Hausnummer');
+  if (!String(order.shipPostal || '').trim()) missing.push('PLZ');
+  if (!String(order.shipCity || '').trim()) missing.push('Ort');
+  if (missing.length) {
+    throw new Error(
+      'Adresse unvollständig — es fehlt: ' +
+        missing.join(', ') +
+        '. Bitte im Versand-Dialog ergänzen und erneut kaufen.'
+    );
+  }
+}
+
 function scAuth(cfg) {
   return 'Basic ' + Buffer.from((cfg.publicKey || '') + ':' + (cfg.secretKey || '')).toString('base64');
 }
@@ -184,6 +231,11 @@ const sendcloud = {
   },
 
   async buyLabel(cfg, { order, methodId, weightG, requestLabel }) {
+    // Destination policy first: for a country we refuse outright, "we don't ship
+    // there" is a clearer answer than "your address is incomplete". Completeness
+    // is only worth checking for a destination we would actually serve.
+    const country = _iso2Country(order.shipCountry);
+    _requireAddress(order);
     const weightKg = ((weightG || cfg.defaultWeightG || 1000) / 1000).toFixed(3);
     const parcel = {
       name: order.shipName || order.customerName || 'Customer',
@@ -193,7 +245,7 @@ const sendcloud = {
       address_2: order.shipAddress2 || '',
       city: order.shipCity || '',
       postal_code: order.shipPostal || '',
-      country: _iso2Country(order.shipCountry),
+      country,
       telephone: order.shipPhone || '',
       email: order.customerEmail || '',
       order_number: order.channel ? order.channel + '-' + (order.channelOrderId || order.id) : String(order.id || ''),

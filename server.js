@@ -4996,8 +4996,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // session gate. Its handler authenticates via the one-time `state` we minted in the
   // admin-only /oauth/start, so it's safe to exempt here like the GitHub webhook.
   const isChannelOAuthCb = req.method === 'GET' && /^\/api\/channels\/(etsy|ebay)\/oauth\/callback(?:\?|$)/.test(url);
+  // eBay's marketplace account-deletion endpoint. eBay calls it unauthenticated
+  // from its own infrastructure — there is no session and no way to give it one —
+  // and refuses to activate the production keyset until it answers. The GET is
+  // proven by the challenge hash (which needs the shared verification token), and
+  // the POST only ever erases data for a buyer eBay says has closed their account.
+  const isEbayDeletion =
+    (req.method === 'GET' || req.method === 'POST') && /^\/api\/channels\/ebay\/deletion(?:\?|$)/.test(url);
 
-  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb) {
+  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb && !isEbayDeletion) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -7588,7 +7595,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && req.url === '/api/channels') {
     if (requireAdmin(req, res)) return;
     try {
-      jsonOk(res, { channels: db.listChannelConfigs(database) });
+      jsonOk(res, {
+        channels: db.listChannelConfigs(database),
+        // The exact URLs to paste into the provider portals. They are derived from
+        // PUBLIC_BASE_URL, and eBay's challenge hash covers the deletion URL, so a
+        // mismatch fails verification — showing them removes the guesswork.
+        urls: {
+          ebayDeletion: PUBLIC_BASE_URL + '/api/channels/ebay/deletion',
+          ebayCallback: _channelCallbackUrl('ebay'),
+          etsyCallback: _channelCallbackUrl('etsy')
+        }
+      });
     } catch (err) {
       safeErr(res, err);
     }
@@ -7606,9 +7623,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Blank fields = keep the stored value, so a save with an empty input (e.g.
         // after a failed config load) can't wipe stored creds; secrets are never
         // revealed in the list view anyway.
-        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken', 'clientId', 'siteId'].forEach((k) => {
-          if (data[k] === '' || data[k] == null) delete data[k];
-        });
+        ['apiKey', 'clientSecret', 'accessToken', 'refreshToken', 'clientId', 'siteId', 'webhookSecret'].forEach(
+          (k) => {
+            if (data[k] === '' || data[k] == null) delete data[k];
+          }
+        );
         db.updateChannelConfig(database, chanCfgMatch[1], data);
         broadcastSSE(res);
         jsonOk(res, { channels: db.listChannelConfigs(database) });
@@ -7810,6 +7829,98 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         sendHtml(false, (err && err.message) || 'Login fehlgeschlagen');
       }
     })();
+    return;
+  }
+
+  // ── eBay Marketplace Account Deletion / Closure ─────────────────────────────
+  // eBay requires every production application to expose this endpoint, and will
+  // not activate the production keyset without it. Two jobs:
+  //
+  //   GET  ?challenge_code=X  → prove we own the endpoint by returning
+  //                             SHA-256(challengeCode + verificationToken + endpointUrl)
+  //                             as hex, in JSON, with HTTP 200.
+  //   POST                    → a buyer closed their eBay account: erase their
+  //                             personal data and acknowledge with 200 fast
+  //                             (eBay retries on anything else).
+  //
+  // The verification token is a 32–80 char secret you invent, stored in the eBay
+  // row's webhook_secret and pasted into the eBay developer portal alongside the
+  // URL. The endpoint URL in the hash must byte-for-byte match what is registered
+  // there — it is built from PUBLIC_BASE_URL, so that env var must be correct.
+  if (/^\/api\/channels\/ebay\/deletion(?:\?|$)/.test(req.url)) {
+    const endpointUrl = PUBLIC_BASE_URL + '/api/channels/ebay/deletion';
+    const token = (() => {
+      try {
+        return db.getChannelConfig(database, 'ebay').webhookSecret || '';
+      } catch (e) {
+        return '';
+      }
+    })();
+
+    if (req.method === 'GET') {
+      const challenge = new URL(req.url, 'http://x').searchParams.get('challenge_code');
+      if (!challenge) {
+        jsonErr(res, 400, 'challenge_code required');
+        return;
+      }
+      if (!token) {
+        // Without the token the hash would be wrong anyway; fail loudly so the
+        // eBay portal's "not verified" is traceable to the missing setup step.
+        log('error', 'eBay deletion challenge but no verification token configured');
+        jsonErr(res, 503, 'eBay verification token not configured');
+        return;
+      }
+      const hash = crypto.createHash('sha256').update(challenge).update(token).update(endpointUrl).digest('hex');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ challengeResponse: hash }));
+      log('info', 'eBay deletion challenge answered', { endpoint: endpointUrl });
+      return;
+    }
+
+    // POST — acknowledge unconditionally and fast: eBay retries, and eventually
+    // disables, an endpoint that errors or stalls. Read the body directly instead
+    // of via jsonBody(), which answers malformed JSON with a 400 of its own.
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > MAX_BODY_SIZE) {
+        log('error', 'eBay deletion notification oversized — dropped');
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      let data;
+      try {
+        data = JSON.parse(body);
+      } catch (e) {
+        log('error', 'eBay deletion notification unparseable', { error: e.message });
+        return;
+      }
+      try {
+        const d = (data && data.notification && data.notification.data) || {};
+        const handle = d.username || d.userId || null;
+        if (!handle) {
+          log('warn', 'eBay deletion notification without a username');
+          return;
+        }
+        const customerId = db.findCustomerByIdentity(database, 'ebay', handle);
+        if (!customerId) {
+          // Normal: eBay notifies every subscriber about every closure, and most
+          // closed accounts never bought from us.
+          log('info', 'eBay deletion notification for an unknown buyer — nothing to erase');
+          return;
+        }
+        const r = db.eraseCustomer(database, customerId);
+        log('info', 'eBay account closure — customer data erased', {
+          customerId,
+          orders: r.orders
+        });
+      } catch (err) {
+        log('error', 'eBay deletion handling failed', { error: err.message });
+      }
+    });
     return;
   }
 
