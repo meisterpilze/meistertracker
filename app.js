@@ -4033,10 +4033,14 @@ function _fruitingDest() {
 // One-tap whole-batch move to fruiting for the dashboard "needs to move" cards.
 // Same move semantics as the Verschieben picker (moveBatchTo skips bags that
 // are unplaced/removed or already there) — just with the destination preset.
-// ── Undo for → Fruchtung moves ──────────────────────────────
-// A "Rückgängig" snackbar reverses a one-tap or bulk move to fruiting: we
-// snapshot each bag's location before the move, then move the exact same bags
-// back on undo (a compensating MOVE, so the scan history stays honest).
+// ── Undo for bag moves ──────────────────────────────────────
+// A "Rückgängig" snackbar reverses a move: we snapshot each bag's location
+// before it, then move the exact same bags back on undo (a compensating MOVE,
+// so the scan history stays honest). Used by every whole-batch move path —
+// one-tap → Fruchtung, the per-zone bulk, the Verschieben picker and the
+// scan action sheet — so a mistap costs one tap to reverse wherever it happens.
+// Bags that were not placed before the move are absent from the snapshot and
+// stay where they were put: there is no prior location to restore them to.
 let _undoTimer = null;
 function showUndoBar(msg, undoCb) {
   const bar = document.getElementById('undo-bar');
@@ -4080,7 +4084,7 @@ function _snapshotBeforeMove(batchList, dest, lastByBag) {
   });
   return snap;
 }
-function _undoFruitingMove(snap) {
+function _undoMove(snap) {
   if (!snap || !snap.length) return;
   const groups = new Map();
   snap.forEach((s) => {
@@ -4118,7 +4122,7 @@ function moveBatchToFruiting(batchId) {
         skipped ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(dest) }) : t('batch.noBagsToMove')
       );
     } else {
-      showUndoBar(b.batchId + ': ' + moved + ' → ' + zoneDisplayName(dest), () => _undoFruitingMove(snap));
+      showUndoBar(b.batchId + ': ' + moved + ' → ' + zoneDisplayName(dest), () => _undoMove(snap));
     }
   });
 }
@@ -4312,7 +4316,7 @@ function bulkZoneToFruiting(zoneId) {
       renderStatus();
       renderDashSummary();
       renderDashBatchTasks();
-      showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoFruitingMove(snap));
+      showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoMove(snap));
     }
   );
 }
@@ -4803,28 +4807,7 @@ function locMoveTo(toLoc) {
   lastLocUndoEntries = entries;
   selectedLocBags.clear();
   document.getElementById('m-locmove').classList.remove('open');
-  apiPost('/api/scan-log', { entries }).then(function (r) {
-    if (handleZoneMismatch(r, entries)) return; // I-12
-    if (r && r.ids) {
-      entries.forEach((e, i) => {
-        setEntryServerId(e, r.ids[i]);
-      });
-      return;
-    }
-    if (r && r.error) {
-      // Retry once after 3s on server error — same idempotent retry as the
-      // other bulk paths. Each entry carries a stable client_uuid and the
-      // server upserts on the unique index, so replaying the POST is safe.
-      console.warn('Scan log POST failed, retrying:', r.error);
-      setTimeout(function () {
-        apiPost('/api/scan-log', { entries }).then(function (r2) {
-          if (handleZoneMismatch(r2, entries)) return;
-          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
-          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
-        });
-      }, 3000);
-    }
-  });
+  postScanEntries(entries); // I-12 zone check applies: these are MOVEs
   updateSD();
   renderStatus();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
@@ -5234,6 +5217,17 @@ function nbSubSum() {
     s = hw + wb;
   document.getElementById('nb-subsum').textContent =
     hw || wb ? 'Total: ' + s + '%' + (s !== 100 ? ' — should add up to 100%' : '') : '';
+  // Mirror the composition into the collapsed summary. Empty inputs read as 0
+  // and deduct nothing, which is invisible with the section closed — so say so
+  // there rather than letting the placeholders imply a value is set.
+  const head = document.getElementById('nb-sub-head');
+  if (head) {
+    const coir = parseDecimal((document.getElementById('nb-coir') || {}).value) || 0;
+    const rh = parseDecimal((document.getElementById('nb-rh') || {}).value) || 0;
+    if (coir) head.textContent = '— CVG ' + coir + '%' + (rh ? ' @ ' + rh + '% RH' : '');
+    else if (hw || wb) head.textContent = '— ' + hw + '/' + wb + (rh ? ' @ ' + rh + '% RH' : '');
+    else head.textContent = '— ' + t('batch.noDeduction');
+  }
   nbPreview();
 }
 // Remember the reusable new-batch inputs across batches and reloads, so a
@@ -5264,6 +5258,16 @@ function nbSaveDefaults() {
     /* storage disabled — nothing persisted, form just keeps HTML defaults */
   }
 }
+// Strip keys whose stored value is empty/null so they fall through to the seed
+// below rather than blanking a field that has a sensible default.
+function _dropEmpty(obj) {
+  const out = {};
+  Object.keys(obj || {}).forEach((k) => {
+    const v = obj[k];
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  });
+  return out;
+}
 function nbApplyDefaults() {
   let d = null;
   try {
@@ -5271,7 +5275,15 @@ function nbApplyDefaults() {
   } catch (e) {
     d = null;
   }
-  if (!d) return;
+  // The composition inputs carry only placeholders, never a value attribute, so
+  // an untouched form reads as 0/0 — and createBatch treats "no composition" as
+  // "consumes no material" and silently deducts nothing. Seed them from the
+  // configured average composition so a fresh device (or a cleared storage)
+  // starts from the real recipe instead of blank. Saved values still win; the
+  // seed only fills what is missing or was stored empty.
+  const _avg = getAvgComp();
+  const seeded = { hw: _avg.hwPct, wb: _avg.wbPct, rh: _avg.rhPct, grainrh: _avg.grainRhPct };
+  d = d ? Object.assign(seeded, _dropEmpty(d)) : seeded;
   const put = (id, v) => {
     if (v === undefined || v === null || v === '') return;
     const el = document.getElementById(id);
@@ -5289,7 +5301,7 @@ function nbApplyDefaults() {
   const gyp = document.getElementById('nb-gyp');
   if (gyp) gyp.checked = !!d.gyp;
   renderNbGrainBanner();
-  nbPreview();
+  nbSubSum(); // also refreshes the material preview
 }
 function createBatch() {
   const strainSel = document.getElementById('nb-strain-sel');
@@ -5332,6 +5344,13 @@ function createBatch() {
     alert(t('batch.substrateExceeds', { sum: hw + wb }));
     return;
   }
+  // Nothing to deduct at all: the substrate block below is skipped and the batch
+  // consumes no material on paper. That is a legitimate choice for batches that
+  // opt out of material tracking, but it used to be indistinguishable from an
+  // untouched form — the inputs only carry placeholders, so a collapsed
+  // "Substrat" section read as 70/30 while actually submitting 0/0, and stock
+  // drifted with no signal. Make the no-op explicit instead of silent.
+  if (!hw && !wb && !coir && !grainKg && !window.confirm(t('batch.noSubstrateWarn'))) return;
   const substrate =
     hw || wb || coir
       ? {
@@ -5561,19 +5580,54 @@ function goToPrintBatch() {
 // Move a specific set of bags in a batch to a destination zone/rack.
 // Skips bags that are unplaced, removed, or already at the destination.
 // Calls back with (movedCount, skippedCount) when done.
+// Persist a batch of scan entries, retrying once after 3s on server error.
+// Every entry carries a stable client_uuid and the server upserts on the unique
+// index, so replaying the POST is safe. opts.zoneCheck === false skips the I-12
+// optimistic-concurrency handling for ADD, which has no expected zone and can
+// never 409. Extracted because moveBagsTo, addBagsToLocation and locMoveTo each
+// carried their own copy of this block — the drift between those copies is what
+// let the grain path lose its inventory rollback.
+function postScanEntries(entries, opts) {
+  const zoneCheck = !(opts && opts.zoneCheck === false);
+  const settle = (r, isRetry) => {
+    if (zoneCheck && handleZoneMismatch(r, entries)) return;
+    if (r && r.ids) {
+      entries.forEach((e, i) => setEntryServerId(e, r.ids[i]));
+      return;
+    }
+    if (r && r.error) {
+      if (isRetry) {
+        setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r.error);
+        return;
+      }
+      console.warn('Scan log POST failed, retrying:', r.error);
+      setTimeout(function () {
+        apiPost('/api/scan-log', { entries }).then((r2) => settle(r2, true));
+      }, 3000);
+    }
+  };
+  apiPost('/api/scan-log', { entries }).then((r) => settle(r, false));
+}
+// bag → its last placement-relevant entry (ADD / MOVE / REMOVE). Built once per
+// caller: the previous shape reverse-copied the entire scan log for every bag,
+// so placing a 20-bag batch against a long log did 20 full array copies.
+function buildLastPlacementByBag() {
+  const m = new Map();
+  for (const e of scanLog) {
+    if (e.action !== 'ADD' && e.action !== 'MOVE' && e.action !== 'REMOVE') continue;
+    const k = (e.bag || '').toUpperCase();
+    if (k) m.set(k, e);
+  }
+  return m;
+}
 function moveBagsTo(batch, bagIds, dest, cb) {
   rememberDest(dest);
   const now = new Date().toISOString();
   const entries = [];
   let skipped = 0;
+  const lastPlacement = buildLastPlacementByBag();
   bagIds.forEach((bagId) => {
-    const bagLast = [...scanLog]
-      .reverse()
-      .find(
-        (e) =>
-          (e.bag || '').toUpperCase() === bagId.toUpperCase() &&
-          (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
-      );
+    const bagLast = lastPlacement.get(bagId.toUpperCase());
     if (!bagLast || bagLast.action === 'REMOVE') return;
     const curLoc = bagLast.to || null;
     if (curLoc && curLoc.toUpperCase() === dest.toUpperCase()) {
@@ -5610,35 +5664,32 @@ function moveBagsTo(batch, bagIds, dest, cb) {
     entries.forEach((e) =>
       scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
     );
-  apiPost('/api/scan-log', { entries }).then(function (r) {
-    if (handleZoneMismatch(r, entries)) return; // I-12
-    if (r && r.ids) {
-      entries.forEach((e, i) => {
-        setEntryServerId(e, r.ids[i]);
-      });
-      return;
-    }
-    if (r && r.error) {
-      // Retry once after 3s on server error — same idempotent retry as the
-      // single-scan path. Each entry carries a stable client_uuid and the
-      // server upserts on the unique index, so replaying the POST is safe.
-      console.warn('Scan log POST failed, retrying:', r.error);
-      setTimeout(function () {
-        apiPost('/api/scan-log', { entries }).then(function (r2) {
-          if (handleZoneMismatch(r2, entries)) return;
-          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
-          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
-        });
-      }, 3000);
-    }
-  });
+  postScanEntries(entries); // I-12 zone check applies: these are MOVEs
   if (cb) cb(entries.length, skipped);
 }
 
 // Move all active bags in a batch to a destination zone/rack.
 // Shared by the scan engine (MOVE_BATCH action) and the batch list dropdown.
+// Bags that were never placed (no ADD/MOVE/REMOVE in the log) are ADDed at the
+// destination instead of being skipped. Without this a batch whose placement
+// picker was dismissed had no scan entries at all, so every move path reported
+// "no bags to move" and the batch could not be recovered from the UI at all.
+// Placing them here is also what the worker means: a whole-batch move to a zone
+// says "this batch is now there", however it got created.
 function moveBatchTo(batch, dest, cb) {
-  moveBagsTo(batch, batch.bags, dest, cb);
+  const lastPlacement = buildLastPlacementByBag();
+  const unplaced = (batch.bags || []).filter((id) => !lastPlacement.get(id.toUpperCase()));
+  if (!unplaced.length) return moveBagsTo(batch, batch.bags, dest, cb);
+  const placed = (batch.bags || []).filter((id) => lastPlacement.get(id.toUpperCase()));
+  addBagsToLocation(batch, unplaced, dest, function (added) {
+    if (!placed.length) {
+      if (cb) cb(added, 0);
+      return;
+    }
+    moveBagsTo(batch, placed, dest, function (moved, skipped) {
+      if (cb) cb(added + moved, skipped);
+    });
+  });
 }
 
 // Add all bags in bagIds to a location (initial placement — ADD action, from=null).
@@ -5674,27 +5725,8 @@ function addBagsToLocation(batch, bagIds, dest, cb) {
     entries.forEach((e) =>
       scanChannel.postMessage({ type: 'scan-entry', entry: { bag: e.bag, batch: e.batch, action: e.action, to: e.to } })
     );
-  apiPost('/api/scan-log', { entries }).then(function (r) {
-    if (r && r.ids) {
-      entries.forEach((e, i) => {
-        setEntryServerId(e, r.ids[i]);
-      });
-      return;
-    }
-    if (r && r.error) {
-      // Retry once after 3s on server error — same idempotent retry as the
-      // single-scan path. Each entry carries a stable client_uuid and the
-      // server upserts on the unique index, so replaying the POST is safe.
-      // ADD never triggers a zone_mismatch (from=null), so no 409 handling here.
-      console.warn('Scan log POST failed, retrying:', r.error);
-      setTimeout(function () {
-        apiPost('/api/scan-log', { entries }).then(function (r2) {
-          if (r2 && r2.ids) entries.forEach((e, i) => setEntryServerId(e, r2.ids[i]));
-          else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
-        });
-      }, 3000);
-    }
-  });
+  // ADD never triggers a zone_mismatch (from=null), so no 409 handling here.
+  postScanEntries(entries, { zoneCheck: false });
   if (cb) cb(entries.length);
 }
 
@@ -5717,16 +5749,41 @@ function openZonePickModal(batch, bags, onDone) {
       });
       if (onDone) onDone();
     },
-    { recentOpts: { actions: ['ADD'], lastKey: null } }
+    { recentOpts: { actions: ['ADD'], lastKey: null }, mandatory: true }
   );
 }
 
+// True while the zone picker is up as a mandatory placement gate — the cancel
+// button, backdrop click and Escape key all consult this before dismissing.
+function _zpMandatory() {
+  const m = document.getElementById('m-move-batch');
+  return !!(m && m.classList.contains('open') && m.dataset.mandatory === '1');
+}
 // Render zone/rack picker inside the m-move-batch modal.
 // title: string shown at the top; onPick(destId): called when a zone or rack is chosen.
 function _openZonePicker(title, onPick, opts) {
   opts = opts || {};
   const m = document.getElementById('m-move-batch');
   if (!m) return;
+  // opts.mandatory: this picker is a gate, not an option — used for placing a
+  // freshly created batch, where dismissing left the batch with no scan entry
+  // at all. Such a batch is EMPTY for getStatus, hidden from the dashboard, and
+  // its bags are skipped by every move path, so it could not be recovered from
+  // the UI. Suppress all three dismiss routes (cancel button, backdrop, Escape)
+  // while it is up; _zpMandatory() is what the handlers consult.
+  // Never gate when there is nothing to pick — with no zones configured the
+  // worker would be locked into a modal with no way out.
+  const mandatory = !!opts.mandatory && zones.length > 0;
+  m.dataset.mandatory = mandatory ? '1' : '';
+  const cancelBtn = document.getElementById('mb-cancel-btn');
+  if (cancelBtn) cancelBtn.style.display = mandatory ? 'none' : '';
+  // Close + hand the destination to the caller. Clears the gate flag first so a
+  // later non-mandatory picker is dismissible again.
+  const pick = (dest) => {
+    m.dataset.mandatory = '';
+    m.classList.remove('open');
+    onPick(dest);
+  };
   document.getElementById('mb-title').textContent = title;
   const container = document.getElementById('mb-zones');
   container.innerHTML = '';
@@ -5751,10 +5808,7 @@ function _openZonePicker(title, onPick, opts) {
         'display:block;width:100%;text-align:left;background:var(--c-bg);border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;margin-bottom:2px;border-left:3px solid ' +
         ((ZONE_BY_ID[toZone(loc)] && ZONE_BY_ID[toZone(loc)].color) || '#888');
       row.textContent = '★ ' + zoneDisplayName(loc);
-      row.addEventListener('click', () => {
-        m.classList.remove('open');
-        onPick(loc);
-      });
+      row.addEventListener('click', () => pick(loc));
       container.appendChild(row);
     });
     const sep = document.createElement('div');
@@ -5780,10 +5834,7 @@ function _openZonePicker(title, onPick, opts) {
       zRow.addEventListener('mouseleave', () => {
         zRow.style.background = 'none';
       });
-      zRow.addEventListener('click', () => {
-        m.classList.remove('open');
-        onPick(z.id);
-      });
+      zRow.addEventListener('click', () => pick(z.id));
       container.appendChild(zRow);
       (z.racks || []).forEach((r) => {
         const rRow = document.createElement('button');
@@ -5798,10 +5849,7 @@ function _openZonePicker(title, onPick, opts) {
         rRow.addEventListener('mouseleave', () => {
           rRow.style.background = 'none';
         });
-        rRow.addEventListener('click', () => {
-          m.classList.remove('open');
-          onPick(r.id);
-        });
+        rRow.addEventListener('click', () => pick(r.id));
         container.appendChild(rRow);
       });
     });
@@ -5814,6 +5862,7 @@ function openMoveBatchModal(batchId) {
   const b = batches.find((x) => x.batchId === batchId);
   if (!b) return;
   _openZonePicker(t('batch.moveMenuTitle', { id: batchId }), function (dest) {
+    const snap = _snapshotBeforeMove([b], dest, buildLastScanByBag());
     moveBatchTo(b, dest, function (moved, skipped) {
       if (!moved) {
         if (skipped > 0) {
@@ -5834,6 +5883,11 @@ function openMoveBatchModal(batchId) {
       );
       updateSD();
       renderBatches();
+      renderStatus();
+      renderDashBatchTasks();
+      // Same one-tap reversal the \u2192 Fruchtung buttons offer. Skipped when the
+      // snapshot is empty (nothing had a prior location to restore).
+      if (snap.length) showUndoBar(b.batchId + ': ' + moved + ' \u2192 ' + zoneDisplayName(dest), () => _undoMove(snap));
     });
   });
 }
@@ -10157,6 +10211,51 @@ function msQuickChargeNew() {
 function msQuickLaborNew() {
   msQuickOpen('labor', null);
 }
+// Last quantity used per quick-create mode, so the dialog reopens on the batch
+// size actually being run instead of 1. Stored per mode: a Charge is typically
+// tens of bags, a Laborarbeit a handful.
+function _msqLastQty(mode) {
+  try {
+    const s = JSON.parse(localStorage.getItem('mp-msq-qty') || '{}');
+    const n = parseInt(s[mode], 10);
+    if (n > 0) return n;
+  } catch (e) {
+    /* storage disabled — fall back to 1 */
+  }
+  return 1;
+}
+function _msqSaveQty(mode, qty) {
+  if (!(qty > 0)) return;
+  try {
+    const s = JSON.parse(localStorage.getItem('mp-msq-qty') || '{}');
+    s[mode] = qty;
+    localStorage.setItem('mp-msq-qty', JSON.stringify(s));
+  } catch (e) {
+    /* storage disabled — next open just starts at 1 */
+  }
+}
+// Why a recipe can't be turned into a Charge, or null if it can.
+// A recipe only needs rec_batch_type to qualify for the picker, but the columns
+// behind it all default to 0 — so a Sorte could be offered here and then be
+// rejected by createBatch for a missing bag weight or a substrate split that
+// doesn't total 100. Those rejections fire after msQuickClose(), i.e. against a
+// modal that is already gone, discarding whatever was typed. Catch it up front
+// and keep the reason on screen instead.
+function _msRecipeProblem(ms) {
+  const type = ms.recBatchType || '';
+  if (!type) return t('msq.noRecipe');
+  if (type === 'block' || type === 'allinone') {
+    if (!(ms.recBagKg > 0)) return t('msq.recNoBagKg');
+    if ((ms.recSubstrate || 'holzkleie') === 'cvg') {
+      if (!(ms.recCoirPct > 0)) return t('msq.recNoCoir');
+    } else {
+      const sum = (ms.recHardwoodPct || 0) + (ms.recWheatbranPct || 0);
+      if (Math.abs(sum - 100) > 0.01) return t('msq.recBadSplit', { sum });
+    }
+  }
+  if ((type === 'grain' || type === 'allinone') && !(ms.recGrainKg > 0)) return t('msq.recNoGrainKg');
+  return null;
+}
 // Shared opener. ms === null → show the Sorte picker (charge mode lists only Sorten
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
@@ -10166,6 +10265,14 @@ function msQuickOpen(mode, ms) {
   if (!ms && wrap && sel) {
     let list = mushroomStrains.slice();
     if (mode === 'charge') list = list.filter((x) => x.recBatchType);
+    // No Sorte has a production recipe yet: the dialog would open on an empty
+    // dropdown with Anlegen disabled and no hint why. Point at the page where a
+    // recipe is actually defined instead of opening a dead end.
+    if (mode === 'charge' && !list.length) {
+      _msQuickCtx = null;
+      confirm2(t('msq.noRecipesTitle'), t('msq.noRecipesMsg'), t('msq.noRecipesGo'), goCreateStrain);
+      return;
+    }
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     sel.innerHTML =
       '<option value="">' +
@@ -10177,9 +10284,13 @@ function msQuickOpen(mode, ms) {
   } else if (wrap) {
     wrap.style.display = 'none';
   }
-  // qty/strain reset only on open (not when the Sorte changes).
+  // qty/strain reset only on open (not when the Sorte changes). qty restores the
+  // last value used in this mode rather than snapping back to 1: batch size is
+  // the one number the recipe cannot supply, it barely changes between runs, and
+  // stepping it back up to 20 costs 19 taps on a phone. The manual form already
+  // persists its qty the same way (nbSaveDefaults).
   const qtyEl = document.getElementById('ms-q-qty');
-  if (qtyEl) qtyEl.value = 1;
+  if (qtyEl) qtyEl.value = _msqLastQty(mode);
   const strainEl = document.getElementById('ms-q-strain');
   if (strainEl) strainEl.value = '';
   msQuickRender();
@@ -10208,7 +10319,10 @@ function msQuickRender() {
     if (cw) cw.style.display = 'none';
     return;
   }
-  if (goEl) goEl.disabled = false;
+  // An incomplete recipe is rejected downstream by createBatch, long after this
+  // dialog has closed — so block it here, while the reason is still readable.
+  const problem = mode === 'charge' ? _msRecipeProblem(ms) : null;
+  if (goEl) goEl.disabled = !!problem;
   if (subEl)
     subEl.textContent =
       ms.name + (ms.kuerzel ? ' (' + ms.kuerzel + ')' : '') + (mode === 'charge' ? ' — ' + msRecipeSummaryText(ms) : '');
@@ -10218,6 +10332,13 @@ function msQuickRender() {
   }
   msQuickPreview();
   msQuickFillCulture();
+  if (problem) {
+    const prev = document.getElementById('ms-q-preview');
+    if (prev) {
+      prev.textContent = '⚠ ' + problem;
+      prev.style.color = 'var(--c-red-dark)';
+    }
+  }
 }
 function msQuickSorteChanged() {
   if (!_msQuickCtx) return;
@@ -10239,6 +10360,7 @@ function msqQtyStep(d) {
 function msQuickPreview() {
   const el = document.getElementById('ms-q-preview');
   if (!el) return;
+  el.style.color = ''; // clear the recipe-problem styling from a previous render
   if (!_msQuickCtx || !_msQuickCtx.ms) {
     el.textContent = '';
     return;
@@ -10288,6 +10410,7 @@ function msQuickConfirm() {
     alert(t('batch.fillQty'));
     return;
   }
+  _msqSaveQty(mode, qty);
   const strainText = (document.getElementById('ms-q-strain').value || '').trim();
   const setv = (id, val) => {
     const el = document.getElementById(id);
@@ -10848,30 +10971,51 @@ function createGrainBatch() {
     bagWeights
   });
   const batchObj = batches[batches.length - 1];
-  // Send bags as [{id, bagKg}] to the server
-  const apiPayload = Object.assign({}, batchObj, { bags });
-  apiPost('/api/batches', apiPayload).then((r) => {
-    if (r && r.error) {
-      const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
-      if (i >= 0) batches.splice(i, 1);
-      alert(t('batch.saveFailed') + r.error);
-      renderBatches();
-      renderStatus();
-    }
-    if (r && r.bagBarcodes) {
-      for (const [id, bc] of Object.entries(r.bagBarcodes)) {
-        barcodeRegistry.set(bc, { type: 'bag', id });
-        barcodeByEntity.set('bag:' + id, bc);
-      }
-    }
-  });
   // Deduct grain from inventory — apply hydration so only dry grain is subtracted
-  // (wet bag weight includes water added during soaking, typically ~52% for wheat)
-  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
+  // (wet bag weight includes water added during soaking, typically ~52% for wheat).
+  // Computed up front so the delta travels with the POST and the server applies
+  // it atomically, exactly like createBatch (I-02). The previous shape fired
+  // invDeltas separately and unconditionally after the POST, so a rejected batch
+  // (duplicate id, server error) still drained grain for a batch that never
+  // existed — and nothing rolled the local stock back either.
+  if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0, coir: 0 };
+  const stockSnapshot = { ...inventory.stock };
   const hydrationFactor = mtGrainFactor(grainRh);
   const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
-  inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
-  invDeltas([{ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId }]);
+  const deltas = [];
+  if (grainUsed > 0) {
+    inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
+    deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
+  }
+  // Send bags as [{id, bagKg}] to the server
+  const apiPayload = Object.assign({}, batchObj, { bags, deltas });
+  // Disable while in flight: genGrainBatchId numbers off the local batches array,
+  // which already holds this batch, so a double-tap creates a second distinct
+  // batch and deducts the grain twice.
+  const createBtn = document.getElementById('btn-26');
+  if (createBtn) createBtn.disabled = true;
+  apiPost('/api/batches', apiPayload)
+    .then((r) => {
+      if (r && r.error) {
+        const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
+        if (i >= 0) batches.splice(i, 1);
+        // Roll back the optimistic stock mutation — server didn't apply the deltas.
+        inventory.stock = stockSnapshot;
+        alert(t('batch.saveFailed') + r.error);
+        renderBatches();
+        renderStatus();
+        return;
+      }
+      if (r && r.bagBarcodes) {
+        for (const [id, bc] of Object.entries(r.bagBarcodes)) {
+          barcodeRegistry.set(bc, { type: 'bag', id });
+          barcodeByEntity.set('bag:' + id, bc);
+        }
+      }
+    })
+    .finally(() => {
+      if (createBtn) createBtn.disabled = false;
+    });
   if (strainSel) strainSel.value = '';
   const lwStrainEl = document.getElementById('lw-strain-text');
   if (lwStrainEl) lwStrainEl.value = '';
@@ -11173,6 +11317,11 @@ function biMoveTo(dest) {
   // when the scanner is active). If we moved first, setFb would instead pop the
   // scan-log overlay, which the worker then has to close before scanning again.
   biRearmScanner();
+  // Snapshot before the move so a mistap here is as reversible as one on the
+  // dashboard. The undo bar sits at z-index 900, above the camera modal, so it
+  // stays reachable while scanning continues.
+  const snapBags = biWholeBatch ? [b] : [{ ...b, bags: [biBagId] }];
+  const snap = _snapshotBeforeMove(snapBags, dest, buildLastScanByBag());
   const cb = function (moved, skipped) {
     if (!moved) {
       setFb(
@@ -11181,6 +11330,7 @@ function biMoveTo(dest) {
       );
     } else {
       setFb('ok', b.batchId + ': ' + moved + ' Bags → ' + zoneDisplayName(dest));
+      if (snap.length) showUndoBar(b.batchId + ': ' + moved + ' → ' + zoneDisplayName(dest), () => _undoMove(snap));
     }
     updateSD();
     renderBatches();
@@ -13993,27 +14143,10 @@ function processScan(raw) {
         entry: { bag: entry.bag, batch: entry.batch, action: entry.action, to: entry.to }
       });
     scan.count++;
-    apiPost('/api/scan-log', { entries: [entry] }).then(function (r) {
-      if (r && r.ids && r.ids[0]) {
-        setEntryServerId(entry, r.ids[0]);
-        return;
-      }
-      // I-12: server rejected the MOVE because the bag has since been moved
-      // by another user. Discard the local entry and toast the user; do NOT
-      // retry (a retry would just hit the same 409).
-      if (handleZoneMismatch(r, entry)) return;
-      if (r && r.error) {
-        // Retry once after 3s on server error
-        console.warn('Scan log POST failed, retrying:', r.error);
-        setTimeout(function () {
-          apiPost('/api/scan-log', { entries: [entry] }).then(function (r2) {
-            if (r2 && r2.ids && r2.ids[0]) setEntryServerId(entry, r2.ids[0]);
-            else if (handleZoneMismatch(r2, entry)) return;
-            else if (r2 && r2.error) setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r2.error);
-          });
-        }, 3000);
-      }
-    });
+    // I-12 applies: on a zone_mismatch the server rejected the MOVE because the
+    // bag has since been moved by someone else — postScanEntries drops the local
+    // entry and toasts, without retrying into the same 409.
+    postScanEntries([entry]);
     _lastScanVal = isBag ? val : batchId;
     const fbTo =
       scan.action === 'MOVE' && scan.from
@@ -16431,6 +16564,8 @@ document.addEventListener('keydown', function (e) {
   for (const id of modals) {
     const el = document.getElementById(id);
     if (el && el.classList.contains('open')) {
+      // Placement gate: Escape must not strand a freshly created batch.
+      if (id === 'm-move-batch' && _zpMandatory()) return;
       if (id === 'm-bagselect') bsClose();
       // closeCamScan() stops the MediaStream + decode loop; just removing the
       // 'open' class would leave the camera live (LED on, battery drain,
@@ -16847,10 +16982,11 @@ function initEventListeners() {
   });
   // Move-batch modal
   $('mb-cancel-btn').addEventListener('click', () => {
+    if (_zpMandatory()) return;
     document.getElementById('m-move-batch').classList.remove('open');
   });
   $('m-move-batch').addEventListener('click', function (e) {
-    if (e.target === this) this.classList.remove('open');
+    if (e.target === this && !_zpMandatory()) this.classList.remove('open');
   });
   // Delegated actions for the m-locmove modal. The dashboard bag-move picker no
   // longer uses it (it shares _openZonePicker now); the Zonen page still reuses

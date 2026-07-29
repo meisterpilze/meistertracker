@@ -219,7 +219,8 @@ window.LANG['pt'] = {
   'batch.grainRh': 'Teor de \u00e1gua (%)',
   'batch.grainRhHint':
     '\u00c1gua adicionada durante a hidrata\u00e7\u00e3o \u2014 apenas gr\u00e3o seco \u00e9 deduzido do estoque',
-  'batch.substrate': 'Substrato (opcional)',
+  'batch.substrate': 'Substrato',
+  'batch.noDeduction': 'sem dedução de material',
   'batch.hardwood': 'Madeira dura %',
   'batch.wheatBran': 'Farelo de trigo %',
   'batch.fieldCapacity': 'Capacidade de campo %RH',
@@ -253,6 +254,8 @@ window.LANG['pt'] = {
   'batch.enterWeight': 'Insira o peso do saco',
   'batch.substrateExceeds':
     'A composi\u00e7\u00e3o do substrato deve totalizar 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
+  'batch.noSubstrateWarn':
+    'Nenhuma composi\u00e7\u00e3o de substrato informada \u2014 NENHUM material ser\u00e1 deduzido do estoque para este lote.\n\nCriar mesmo assim?',
   'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
   'batch.inStock': 'Em estoque:',
   'batch.sufficient': 'suficiente',
