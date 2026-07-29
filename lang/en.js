@@ -726,10 +726,12 @@ window.LANG['en'] = {
   'zoneCheck.missingRemove': '{n} not found → mark removed',
   'reset.title': 'Start clean',
   'reset.desc':
-    'Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users, suppliers, stock and all settings are kept. A backup is saved first.',
+    'Deletes the selected data so you can start over with fresh bags. Zones, racks, Sorten, recipes, users, suppliers, thresholds and all settings are kept. A backup is saved first.',
   'reset.scopeGrowing': 'Batches, bags, scan history, harvests, cultures, contamination reports',
   'reset.scopeOrders': 'Orders, customers and shipments',
   'reset.scopePlanning': 'Tasks, calendar, notifications, maintenance log and KPI history',
+  'reset.scopeStock':
+    'Material stock set to zero and its ledger cleared, ready for a fresh count (thresholds and average composition are kept)',
   'reset.btn': 'Delete permanently',
   'reset.errNoScope': 'Nothing selected.',
   'reset.errPhrase': 'Type "{phrase}" to confirm.',
