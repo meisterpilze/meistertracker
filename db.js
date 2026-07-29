@@ -1463,6 +1463,20 @@ const MIGRATIONS = [
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_contam_report_uuid ON contamination_reports(report_uuid) WHERE report_uuid IS NOT NULL'
       );
     }
+  },
+  {
+    version: 51,
+    description: 'Sorte recipe: expected days in the fruiting tent (rec_fruit_days)',
+    fn(db) {
+      // rec_inc_days only describes colonisation — it says nothing about how
+      // long a strain then sits in the tent, which differs by species (oysters
+      // ~7 days, Reishi ~60). 0 means "not set": the harvest card falls back to
+      // showing elapsed tent days with no target.
+      const cols = db.prepare('PRAGMA table_info(mushroom_strains)').all();
+      if (!cols.some((c) => c.name === 'rec_fruit_days')) {
+        db.exec('ALTER TABLE mushroom_strains ADD COLUMN rec_fruit_days INTEGER DEFAULT 0');
+      }
+    }
   }
 ];
 
@@ -4903,7 +4917,9 @@ function _strainRecipeFields(d) {
     rec_gypsum: d.recGypsum ? 1 : 0,
     rec_grain_kg: num(d.recGrainKg, 0),
     rec_grain_rh_pct: num(d.recGrainRhPct, 52),
-    rec_inc_days: num(d.recIncDays, 14)
+    rec_inc_days: num(d.recIncDays, 14),
+    // 0 = not set; the harvest card then shows tent days without a target.
+    rec_fruit_days: num(d.recFruitDays, 0)
   };
 }
 
@@ -4929,7 +4945,9 @@ function listMushroomStrains(db) {
       recGypsum: r.rec_gypsum === 1,
       recGrainKg: r.rec_grain_kg || 0,
       recGrainRhPct: r.rec_grain_rh_pct != null ? r.rec_grain_rh_pct : 52,
-      recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14
+      recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14,
+      // v51 — expected days in the fruiting tent; 0 = not set.
+      recFruitDays: r.rec_fruit_days || 0
     }));
 }
 
@@ -4975,7 +4993,8 @@ function updateMushroomStrain(db, id, data) {
     'recGypsum',
     'recGrainKg',
     'recGrainRhPct',
-    'recIncDays'
+    'recIncDays',
+    'recFruitDays'
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   if (!Object.keys(fields).length) return;
