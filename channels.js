@@ -25,6 +25,14 @@ const EBAY_MARKETPLACE = 'EBAY_DE';
 // on every sync page and every write-back (Etsy's rate limit is tight, ~10/s).
 const _etsyShopCache = new Map();
 
+// Every outbound provider call gets a hard timeout: without it a stalled request
+// hangs for minutes and (for a label buy) wedges the caller's in-flight lock.
+// AbortSignal.timeout aborts the fetch, surfacing as a normal caught error.
+const FETCH_TIMEOUT_MS = 15000;
+function tfetch(url, opts) {
+  return globalThis.fetch(url, { ...opts, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+}
+
 function _wixStatus(o) {
   const s = String(o.status || '').toUpperCase();
   if (s === 'CANCELED' || s === 'CANCELLED') return 'cancelled';
@@ -111,13 +119,13 @@ async function _wixSearch(cfg, cursorPaging) {
   // API-key calls to Wix usually also require the account id. For Wix we store it
   // in the (otherwise-unused) client_id column.
   if (cfg.clientId) headers['wix-account-id'] = cfg.clientId;
-  const res = await fetch(WIX_BASE + '/ecom/v1/orders/search', {
+  const res = await tfetch(WIX_BASE + '/ecom/v1/orders/search', {
     method: 'POST',
     headers,
     body: JSON.stringify({ search: { cursorPaging } })
   });
   const text = await res.text();
-  if (!res.ok) throw new Error('Wix HTTP ' + res.status + (text ? ': ' + text.slice(0, 200) : ''));
+  if (!res.ok) throw new Error('Wix HTTP ' + res.status);
   return text ? JSON.parse(text) : {};
 }
 
@@ -160,12 +168,11 @@ const wix = {
         }
       }
     };
-    const res = await fetch(
+    const res = await tfetch(
       WIX_BASE + '/ecom/v1/fulfillments/orders/' + encodeURIComponent(wixOrderId) + '/create-fulfillment',
       { method: 'POST', headers, body: JSON.stringify(body) }
     );
-    const text = await res.text();
-    if (!res.ok) throw new Error('Wix fulfillment HTTP ' + res.status + (text ? ': ' + text.slice(0, 200) : ''));
+    if (!res.ok) throw new Error('Wix fulfillment HTTP ' + res.status);
     return { ok: true };
   }
 };
@@ -196,7 +203,7 @@ function _expiryIso(expiresInSec) {
 }
 async function _json(res, label) {
   const text = await res.text();
-  if (!res.ok) throw new Error(label + ' HTTP ' + res.status + (text ? ': ' + text.slice(0, 300) : ''));
+  if (!res.ok) throw new Error(label + ' HTTP ' + res.status);
   return text ? JSON.parse(text) : {};
 }
 // DE addresses often embed the house number in the street line ("Musterweg 18").
@@ -245,7 +252,7 @@ function buildAuthorizeUrl(channel, cfg, { redirectUri, state, codeChallenge }) 
 }
 async function exchangeCode(channel, cfg, { code, redirectUri, codeVerifier }) {
   if (channel === 'etsy') {
-    const res = await fetch(ETSY_TOKEN_URL, {
+    const res = await tfetch(ETSY_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: _form({
@@ -262,7 +269,7 @@ async function exchangeCode(channel, cfg, { code, redirectUri, codeVerifier }) {
   }
   if (channel === 'ebay') {
     const basic = Buffer.from((cfg.clientId || '') + ':' + (cfg.clientSecret || '')).toString('base64');
-    const res = await fetch(EBAY_TOKEN_URL, {
+    const res = await tfetch(EBAY_TOKEN_URL, {
       method: 'POST',
       headers: { Authorization: 'Basic ' + basic, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: _form({ grant_type: 'authorization_code', code, redirect_uri: cfg.siteId })
@@ -289,7 +296,7 @@ async function _etsyShopId(cfg) {
   if (!uid) throw new Error('Etsy nicht verbunden');
   const cached = _etsyShopCache.get(cfg.accessToken);
   if (cached) return cached;
-  const res = await fetch(ETSY_API + '/users/' + encodeURIComponent(uid) + '/shops', { headers: _etsyHeaders(cfg) });
+  const res = await tfetch(ETSY_API + '/users/' + encodeURIComponent(uid) + '/shops', { headers: _etsyHeaders(cfg) });
   const j = await _json(res, 'Etsy shop');
   const shop = Array.isArray(j.results) ? j.results[0] : j;
   const shopId = shop && (shop.shop_id || shop.shopId);
@@ -368,7 +375,7 @@ const etsy = {
       limit +
       '&offset=' +
       offset;
-    const j = await _json(await fetch(url, { headers: _etsyHeaders(cfg) }), 'Etsy receipts');
+    const j = await _json(await tfetch(url, { headers: _etsyHeaders(cfg) }), 'Etsy receipts');
     const results = j.results || [];
     const orders = results.map(_normalizeEtsy);
     const got = offset + results.length;
@@ -384,7 +391,7 @@ const etsy = {
     const receiptId = raw && raw.receipt_id;
     if (!receiptId) throw new Error('Etsy Receipt-ID fehlt');
     const shopId = await _etsyShopId(cfg);
-    const res = await fetch(
+    const res = await tfetch(
       ETSY_API + '/shops/' + encodeURIComponent(shopId) + '/receipts/' + encodeURIComponent(receiptId) + '/tracking',
       {
         method: 'POST',
@@ -396,7 +403,7 @@ const etsy = {
     return { ok: true };
   },
   async refreshAccessToken(cfg) {
-    const res = await fetch(ETSY_TOKEN_URL, {
+    const res = await tfetch(ETSY_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: _form({ grant_type: 'refresh_token', client_id: cfg.clientId, refresh_token: cfg.refreshToken })
@@ -476,7 +483,7 @@ const ebay = {
     if (!cfg.clientId || !cfg.clientSecret) throw new Error('eBay App-ID + Cert-ID fehlen');
     if (!cfg.siteId) throw new Error('eBay RuName fehlt');
     if (!cfg.accessToken) throw new Error('eBay nicht verbunden — bitte „Mit eBay verbinden" klicken');
-    const j = await _json(await fetch(EBAY_API + '/order?limit=1', { headers: _ebayHeaders(cfg) }), 'eBay test');
+    const j = await _json(await tfetch(EBAY_API + '/order?limit=1', { headers: _ebayHeaders(cfg) }), 'eBay test');
     return { ok: true, account: 'Bestellungen: ' + (j.total != null ? j.total : (j.orders || []).length) };
   },
   // Unfulfilled orders → upsertOrder shape. Pages via offset cursor.
@@ -486,7 +493,7 @@ const ebay = {
     const filter = encodeURIComponent('orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}');
     let url = EBAY_API + '/order?filter=' + filter + '&limit=' + limit;
     if (cursor) url += '&offset=' + encodeURIComponent(cursor);
-    const j = await _json(await fetch(url, { headers: _ebayHeaders(cfg) }), 'eBay orders');
+    const j = await _json(await tfetch(url, { headers: _ebayHeaders(cfg) }), 'eBay orders');
     const orders = (j.orders || []).map(_normalizeEbay);
     let nextCursor = null;
     const off = j.offset != null ? j.offset : cursor ? parseInt(cursor, 10) || 0 : 0;
@@ -508,7 +515,7 @@ const ebay = {
       shippingCarrierCode: _ebayCarrier(carrier),
       shipmentTrackingNumber: trackingNumber || ''
     };
-    const res = await fetch(EBAY_API + '/order/' + encodeURIComponent(orderId) + '/shipping_fulfillment', {
+    const res = await tfetch(EBAY_API + '/order/' + encodeURIComponent(orderId) + '/shipping_fulfillment', {
       method: 'POST',
       headers: _ebayHeaders(cfg, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(body)
@@ -518,7 +525,7 @@ const ebay = {
   },
   async refreshAccessToken(cfg) {
     const basic = Buffer.from((cfg.clientId || '') + ':' + (cfg.clientSecret || '')).toString('base64');
-    const res = await fetch(EBAY_TOKEN_URL, {
+    const res = await tfetch(EBAY_TOKEN_URL, {
       method: 'POST',
       headers: { Authorization: 'Basic ' + basic, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: _form({ grant_type: 'refresh_token', refresh_token: cfg.refreshToken, scope: EBAY_SCOPES })

@@ -351,9 +351,38 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
+  // Compute the pathname once — used by the login guard and the app-shell
+  // network-first branch below. Comparing pathname (not the full URL) means a
+  // query string such as /login.html?redirect=… still matches the guard.
+  const path = new URL(e.request.url).pathname;
   // Login page: network only — never serve stale login form from cache
-  if (e.request.url.endsWith('/login.html') || e.request.url.endsWith('/login.js')) {
+  if (path === '/login.html' || e.request.url.endsWith('/login.js')) {
     e.respondWith(fetch(e.request));
+    return;
+  }
+  // App shell — navigations (/, /index.html) and /app.js: network-first with a
+  // short timeout so a fresh deploy replaces stale app code on the next reload
+  // instead of serving the previous build from cache. On success, cache the
+  // clone and return it; on timeout/offline, fall back to the cached copy.
+  // Mirrors the IS_WORKTREE network-first branch above, but keeps the cache
+  // write so offline navigation still works. Other static assets (CSS, vendor
+  // libs, icons, lang) keep stale-while-revalidate below.
+  if (path === '/' || path === '/index.html' || path === '/app.js') {
+    e.respondWith(
+      fetch(e.request, { signal: AbortSignal.timeout(3000) })
+        .then((res) => {
+          // !res.redirected: never cache a followed auth redirect (a lapsed
+          // session 302s to /login.html); returning it is fine, but caching
+          // it under the shell key would poison the cache until the next bump.
+          if (res && res.ok && !res.redirected) {
+            const clone = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, clone));
+          }
+          scheduleReplay();
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
     return;
   }
   // Everything else — stale-while-revalidate. Serve cache instantly (so

@@ -258,7 +258,10 @@ function createMcpServer(database, onWrite, printer) {
     version: '1.0.0'
   });
 
-  const auth = (printer && printer.auth) || { userId: null, role: 'admin' };
+  // Fail closed: with no auth context, default to no role (not admin) so a caller
+  // that forgets to pass auth cannot reach admin-only tools. The real server path
+  // always supplies printer.auth from checkMcpAuth (legacy static token -> admin).
+  const auth = (printer && printer.auth) || { userId: null, role: null };
 
   function notify() {
     if (typeof onWrite === 'function') onWrite();
