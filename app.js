@@ -12592,23 +12592,34 @@ function _labelHeaderItem(text, qr, reserveRight) {
     ? { type: 'text', x: 140, y: 55, blockW: 258, fontH: 28, text, bold: true } // beside the QR
     : { type: 'text', x: 0, y: 6, blockW: 400 - keep, fontH: 30, text, bold: true }; // above the barcode
 }
-// Batch size as a boxed badge in the top-right corner. Which bag this is was
+// Batch size as a boxed badge in the bottom-right corner. Which bag this is was
 // already on the label — it is the ID's last segment — so only the total is
 // missing: move 9 of 10 and nothing said one was still out there. Kept as a
 // separate framed element rather than folded into a line of text, so it reads
-// at arm's length without disturbing anything else.
-// The slash is deliberate: a bare "10" next to bag …-06 invites being read as
-// the bag number. "/10" cannot be.
-const _BOX = { w: 74, h: 34, thick: 3 };
-function _bagTotalItems(batch, qr) {
+// at arm's length. The slash is deliberate: a bare "10" next to bag …-06 invites
+// being read as the bag number. "/10" cannot be.
+const _BOX = { w: 72, h: 32, thick: 3 };
+function _bagTotalBadge(batch) {
   const total = (batch.bags || []).length;
-  if (!total) return [];
-  const x = 400 - _BOX.w - 6;
-  const y = qr ? 16 : 4;
-  return [
-    { type: 'box', x, y, w: _BOX.w, h: _BOX.h, thick: _BOX.thick },
-    { type: 'text', x, y: y + 5, blockW: _BOX.w, fontH: 26, text: '/' + total, bold: true }
-  ];
+  if (!total) return null;
+  const x = 400 - _BOX.w - 6; // 322
+  const y = 240 - _BOX.h - 6; // 202 → occupies 202..234
+  return {
+    x,
+    y,
+    h: _BOX.h,
+    items: [
+      { type: 'box', x, y, w: _BOX.w, h: _BOX.h, thick: _BOX.thick },
+      { type: 'text', x, y: y + 4, blockW: _BOX.w, fontH: 24, text: '/' + total, bold: true }
+    ]
+  };
+}
+// Width a centred text line may use. The bottom-right badge sits over the band
+// the last line(s) occupy, so any line overlapping it vertically is narrowed to
+// stop short — the text re-centres in the space left rather than running under
+// the box. Lines clear of the badge keep the full width they always had.
+function _lineBlockW(y, fontH, badge) {
+  return badge && y < badge.y + badge.h && badge.y < y + fontH ? badge.x - 6 : 400;
 }
 function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = [];
@@ -12634,15 +12645,16 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   // Grain spawn is the one bag type that carries a prefix word. The batch total
   // is a boxed badge on every bag label, independent of that.
   const _header = batch.batchType === 'grain' ? 'G — Grainspawn' : '';
-  const _total = _bagTotalItems(batch, qr);
+  const _badge = _bagTotalBadge(batch);
+  // Badge first so the frame is laid down before the text that re-centres beside it.
+  if (_badge) _badge.items.forEach((i) => items.push(i));
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
     const h = _labelHeaderItem(_header, true);
     if (h) items.push(h);
-    _total.forEach((i) => items.push(i));
-    items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
+    items.push({ type: 'text', y: 155, blockW: _lineBlockW(155, 28, _badge), fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
       const strainTxt = (batch.strainText || '').trim();
@@ -12653,23 +12665,24 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', y: 185, blockW: 400, fontH: 24, text: line2 });
+      if (line2) items.push({ type: 'text', y: 185, blockW: _lineBlockW(185, 24, _badge), fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
       const line3 = (batch.created ? fmtDt(batch.created) + ' - ' : '') + fmtDt(batch.due);
-      items.push({ type: 'text', y: 215, blockW: 400, fontH: 24, text: line3, bold: true });
+      items.push({ type: 'text', y: 215, blockW: _lineBlockW(215, 24, _badge), fontH: 24, text: line3, bold: true });
     }
   } else {
     // Barcode mode: barcode top-center, text lines below.
     const bcY = 40,
       bcH = 90;
     const bc = bcParams(bcVal);
-    const h = _labelHeaderItem(_header, false, _total.length ? _BOX.w + 12 : 0);
+    // The header now has the whole top band to itself — the badge moved to the
+    // bottom-right corner, so nothing is reserved on this line.
+    const h = _labelHeaderItem(_header, false);
     if (h) items.push(h);
-    _total.forEach((i) => items.push(i));
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
-    items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
+    items.push({ type: 'text', y: line1Y, blockW: _lineBlockW(line1Y, 24, _badge), fontH: 24, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
       const strainTxt = (batch.strainText || '').trim();
@@ -12680,11 +12693,19 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
+      if (line2)
+        items.push({ type: 'text', y: line1Y + 28, blockW: _lineBlockW(line1Y + 28, 24, _badge), fontH: 24, text: line2 });
     }
     if (detail === 'full' && batch.due) {
       const line3 = (batch.created ? fmtDt(batch.created) + ' - ' : '') + fmtDt(batch.due);
-      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: line3, bold: true });
+      items.push({
+        type: 'text',
+        y: line1Y + 56,
+        blockW: _lineBlockW(line1Y + 56, 28, _badge),
+        fontH: 28,
+        text: line3,
+        bold: true
+      });
     }
   }
   return items;
