@@ -94,3 +94,62 @@ describe('Sorte production recipe (rec_*)', () => {
     assert.equal(ms.description, 'updated note');
   });
 });
+
+// v51: expected days in the fruiting tent. Distinct from rec_inc_days, which
+// ends at colonisation and says nothing about how long the bags then fruit.
+describe('Sorte recipe – fruiting days (rec_fruit_days)', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('persists on create and reads back', () => {
+    const id = db.createMushroomStrain(d, {
+      name: 'Blue Oyster',
+      kuerzel: 'BO',
+      recBatchType: 'block',
+      recBagKg: 5,
+      recIncDays: 14,
+      recFruitDays: 7
+    });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.recFruitDays, 7);
+    assert.equal(ms.recIncDays, 14, 'incubation days stay independent');
+  });
+
+  it('defaults to 0 when not given — 0 means "no target", not "harvest today"', () => {
+    const id = db.createMushroomStrain(d, { name: 'Cordyceps', kuerzel: 'CORD' });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.recFruitDays, 0);
+  });
+
+  it('updates independently of incubation days', () => {
+    const id = db.createMushroomStrain(d, {
+      name: 'Shiitake',
+      kuerzel: 'SHIT',
+      recBatchType: 'block',
+      recIncDays: 90,
+      recFruitDays: 9
+    });
+    db.updateMushroomStrain(d, id, { recBatchType: 'block', recIncDays: 90, recFruitDays: 12 });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.recFruitDays, 12);
+    assert.equal(ms.recIncDays, 90, 'incubation untouched');
+  });
+
+  it('survives a name-only update', () => {
+    const id = db.createMushroomStrain(d, {
+      name: 'Reishi',
+      kuerzel: 'RESH',
+      recBatchType: 'block',
+      recFruitDays: 60
+    });
+    db.updateMushroomStrain(d, id, { description: 'long fruiter' });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.recFruitDays, 60, 'recipe preserved on a description-only edit');
+  });
+});

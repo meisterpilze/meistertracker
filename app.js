@@ -4444,38 +4444,73 @@ function goToBatch(batchId) {
 function buildHarvestTasks() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const lastByBag = buildLastScanByBag();
+  // Placement entries only (ADD/MOVE/REMOVE): a HARVEST entry must not be read
+  // as "this bag left the tent" \u2014 logging a flush does not move anything.
+  const lastByBag = buildLastPlacementByBag();
+  const isFruitingZone = (loc) => {
+    const z = ZONE_BY_ID[toZone(loc)];
+    return !!(z && z.role === 'fruiting');
+  };
   return batches
     .filter((b) => getStatus(b.batchId).status === 'FRUITING')
     .map((b) => {
-      const due = new Date(b.due);
-      due.setHours(0, 0, 0, 0);
-      const daysFruiting = Math.max(0, Math.round((today - due) / 864e5));
-      // Count active bags and pick a representative zone to display.
       const zoneCounts = {};
-      let activeBags = 0;
+      let activeBags = 0,
+        bagsInTent = 0,
+        enteredTent = null;
       b.bags.forEach((bag) => {
         const last = lastByBag.get(bag.toUpperCase());
         if (!last || last.action === 'REMOVE' || !last.to) return;
         activeBags++;
         const z = toZone(last.to);
         zoneCounts[z] = (zoneCounts[z] || 0) + 1;
+        if (!isFruitingZone(last.to)) return;
+        bagsInTent++;
+        // The placement entry that put this bag where it now is IS its arrival
+        // in the tent. The oldest such arrival is when this batch started
+        // fruiting \u2014 which is what "days in the tent" should mean. The previous
+        // code used the incubation due date instead, so the figure drifted by
+        // however early or late the move happened (up to 18 days in practice)
+        // and clamped to 0 for anything moved in ahead of its due date.
+        if (!enteredTent || last.time < enteredTent) enteredTent = last.time;
       });
       const zoneIds = Object.keys(zoneCounts).sort((a, z) => zoneCounts[z] - zoneCounts[a]);
       const zoneLabel = zoneIds.length ? zoneIds.map((z) => zoneDisplayName(z)).join(', ') : '\u2014';
       const harvTotal = harvests.filter((h) => h.batch === b.batchId).reduce((s, h) => s + (h.grams || 0), 0);
+      let daysInTent = 0;
+      if (enteredTent) {
+        const t0 = new Date(enteredTent);
+        t0.setHours(0, 0, 0, 0);
+        daysInTent = Math.max(0, Math.round((today - t0) / 864e5));
+      }
+      // Expected tent time comes from the Sorte's recipe, read live rather than
+      // frozen onto the batch, so batches already fruiting get a target too.
+      // 0 / no recipe \u2192 no target, just show the elapsed days.
+      const ms = b.strainId ? mushroomStrains.find((x) => x.id === b.strainId) : null;
+      const target = ms && ms.recFruitDays > 0 ? ms.recFruitDays : 0;
       return {
         batchId: b.batchId,
         species: b.species,
         strain: b.strain,
         activeBags,
+        bagsInTent,
+        elsewhere: activeBags - bagsInTent,
         zoneLabel,
-        daysFruiting,
+        daysInTent,
+        target,
+        remaining: target ? target - daysInTent : null,
         harvTotal
       };
     })
-    .filter((t) => t.activeBags > 0)
-    .sort((a, z) => z.daysFruiting - a.daysFruiting);
+    .filter((t) => t.bagsInTent > 0)
+    .sort((a, z) => {
+      // Most overdue first; batches without a target fall to the end, oldest
+      // first, so they still read as a sensible list rather than random order.
+      if (a.target && z.target) return a.remaining - z.remaining;
+      if (a.target) return -1;
+      if (z.target) return 1;
+      return z.daysInTent - a.daysInTent;
+    });
 }
 
 function renderDashHarvestTasks() {
@@ -4491,10 +4526,12 @@ function renderDashHarvestTasks() {
     return;
   }
   card.style.display = '';
+  // Count bags actually in a tent, not every live bag in the batch. A split
+  // batch used to inflate this \u2014 86 "ready" bags when only 63 were in a tent.
   if (countEl)
     countEl.textContent = tp(
       'dash.bags',
-      tasks.reduce((s, t) => s + t.activeBags, 0)
+      tasks.reduce((s, t) => s + t.bagsInTent, 0)
     );
   el.innerHTML = tasks
     .map((tk) => {
@@ -4503,8 +4540,29 @@ function renderDashHarvestTasks() {
         tk.harvTotal > 0
           ? ` \u00b7 <span style="color:var(--c-amber-dark);font-weight:500">${tk.harvTotal}g</span>`
           : '';
+      // Ripeness against the Sorte's expected tent time. No target configured \u2192
+      // no claim is made, just the elapsed days.
+      const overdue = tk.target && tk.remaining < 0;
+      const ripe = tk.target && tk.remaining <= 0;
+      let state = '';
+      if (tk.target) {
+        const label =
+          tk.remaining > 0
+            ? tp('harvest.readyIn', tk.remaining)
+            : tk.remaining === 0
+              ? t('harvest.readyNow')
+              : tp('harvest.overdueBy', -tk.remaining);
+        const color = overdue ? 'var(--c-red-dark)' : ripe ? 'var(--c-amber-dark)' : 'var(--c-text-muted)';
+        state = ` \u00b7 <span style="color:${color};font-weight:600">${esc(label)}</span>`;
+      }
+      // Bags sitting outside the tent are named rather than folded into the
+      // count \u2014 they are the ones the move workflow can't see, because a batch
+      // that reads FRUITING is skipped by buildAutoTasks.
+      const split = tk.elsewhere > 0 ? ` \u00b7 <span style="color:var(--c-text-muted)">+${tk.elsewhere} ${esc(t('harvest.elsewhere'))}</span>` : '';
       return (
-        '<div class="todo-row" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+        '<div class="todo-row ' +
+        (overdue ? 'urgent' : ripe ? 'warn' : '') +
+        '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
         spColor(tk.species) +
         '">' +
         '<div style="flex:1;min-width:0">' +
@@ -4518,8 +4576,15 @@ function renderDashHarvestTasks() {
         '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
         esc(tk.zoneLabel) +
         ' \u00b7 ' +
-        tp('harvest.daysFruiting', tk.daysFruiting) +
+        tp('harvest.daysInTent', tk.daysInTent) +
+        state +
         harvested +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
+        tp('dash.bags', tk.bagsInTent) +
+        ' ' +
+        esc(t('harvest.inTent')) +
+        split +
         '</div></div>' +
         `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>` +
         '</div>'
@@ -9982,6 +10047,7 @@ function editMStrain(id) {
   sv('ms-rec-grainkg', ms.recGrainKg || 0);
   sv('ms-rec-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
   sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
+  sv('ms-rec-fruitdays', ms.recFruitDays || 0);
   msRecTypeChange();
   _msFillRecCopyOptions(id);
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
@@ -10013,6 +10079,7 @@ function cancelMStrain() {
   sv('ms-rec-grainkg', 0);
   sv('ms-rec-grainrh', 52);
   sv('ms-rec-days', 14);
+  sv('ms-rec-fruitdays', 0);
   msRecTypeChange();
   _msFillRecCopyOptions(null);
 }
@@ -10054,7 +10121,8 @@ function _msReadRecipe() {
     recGypsum: chk('ms-rec-gyp'),
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
-    recIncDays: v('ms-rec-days')
+    recIncDays: v('ms-rec-days'),
+    recFruitDays: v('ms-rec-fruitdays')
   };
 }
 // Map a recipe (rec_*) onto the product spec shape so we can reuse the shared
@@ -10113,7 +10181,7 @@ function msRecTypeChange() {
   set('ms-rec-graingroup', type === 'grain' || type === 'allinone' ? 'block' : 'none');
   set('ms-rec-holzgroup', sub === 'holzkleie' ? 'grid' : 'none');
   set('ms-rec-coirgroup', sub === 'cvg' ? 'grid' : 'none');
-  set('ms-rec-daysrow', type ? 'block' : 'none');
+  set('ms-rec-daysrow', type ? 'grid' : 'none');
   msRecNeed();
 }
 function msRecNeed() {
@@ -10164,6 +10232,7 @@ function msRecCopyFrom() {
   sv('ms-rec-grainkg', src.recGrainKg || 0);
   sv('ms-rec-grainrh', src.recGrainRhPct != null ? src.recGrainRhPct : 52);
   sv('ms-rec-days', src.recIncDays != null ? src.recIncDays : 14);
+  sv('ms-rec-fruitdays', src.recFruitDays || 0);
   sel.value = '';
   msRecTypeChange();
 }
