@@ -1696,55 +1696,11 @@
 
           <!-- Farm-only sections (hidden in Overview mode) -->
           <div id="dash-farm-section">
-            <!-- Quick actions: jump straight to the most common creation flows -->
-            <div id="dash-actions-row" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap">
-              <button
-                id="dash-act-newbatch"
-                class="btn btn-p"
-                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
-                data-i18n="dash.actionNewBatch"
-              >
-                + New batch
-              </button>
-              <button
-                id="dash-act-labwork"
-                class="btn btn-p"
-                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
-                data-i18n="dash.actionLabWork"
-              >
-                + Lab work
-              </button>
-              <button
-                id="dash-act-harvest"
-                class="btn btn-p"
-                style="flex: 1; min-width: 140px; padding: 10px 14px; font-weight: 600; font-size: 13px"
-                data-i18n="dash.actionHarvest"
-              >
-                + Log harvest
-              </button>
-            </div>
+            <!-- Creation flows (Neue Charge / Laborarbeit / Ernte) live solely in
+                 the + speed-dial FAB — they used to be duplicated here as a row of
+                 three buttons, which pushed the actual work down the page. -->
             <!-- Today at a glance: actionable counts; tap a chip to jump to its list -->
             <div id="dash-summary" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap"></div>
-            <!-- ── GROWBLOCKS section ── -->
-            <div class="dash-section-header dash-section-growblocks">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path
-                  d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
-                />
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                <line x1="12" y1="22.08" x2="12" y2="12" />
-              </svg>
-              <span>Growblocks</span>
-            </div>
 
             <!-- Batch tasks + Alerts side by side -->
             <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
