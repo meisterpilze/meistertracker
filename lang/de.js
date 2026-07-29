@@ -550,7 +550,7 @@ window.LANG['de'] = {
   'lab.lineage': 'Abstammung',
   'lab.cultureLibrary': 'Kulturbibliothek',
   'lab.allTypes': 'Alle Typen',
-  'lab.motherCultures': 'Mutterkulturen',
+  'lab.motherCultures': 'Slants',
   'lab.petriDishes': 'Petrischalen',
   'lab.liquidCultures': 'Fl\u00fcssigkulturen',
   'lab.allStatuses': 'Alle Status',
