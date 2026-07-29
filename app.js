@@ -4856,10 +4856,56 @@ function locMoveTo(toLoc) {
 // feed the normal move/remove flows (via selectedLocBags) so they reuse the same
 // scan entries, undo and sync as every other correction.
 let _zcZone = null;
+let _zcScanMode = false;
+let _zcMoved = 0; // bags found here that the records had somewhere else
 const _zcFound = new Set();
+// Camera stocktake: keep the scanner open and walk the zone bag by bag. Each
+// scan ticks the bag off; a bag that is here but recorded elsewhere is corrected
+// to this zone on the spot (the drift the expected-list alone can never see).
+// Closing the camera returns to the check sheet — see closeCamScan.
+function zoneCheckStartScan() {
+  if (!_zcZone) return;
+  _zcScanMode = true;
+  document.getElementById('m-zonecheck').classList.remove('open');
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  scan.harvestBag = null;
+  updateSD();
+  openCamScan();
+}
+function zoneCheckScanned(bagId, batchId) {
+  const expected = getZoneBags(_zcZone);
+  const total = Object.keys(expected).length;
+  if (expected[bagId]) {
+    if (_zcFound.has(bagId)) {
+      setFb('info', t('zoneCheck.scanDup', { bag: bagId }));
+      return;
+    }
+    _zcFound.add(bagId);
+    setFb('ok', t('zoneCheck.scanOk', { found: _zcFound.size, total: total }));
+    return;
+  }
+  // Not expected here, but it is physically in the zone — correct the record.
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (batchId || '').toUpperCase());
+  if (!b) {
+    setFb('err', t('zoneCheck.scanUnknown', { bag: bagId }));
+    return;
+  }
+  moveBagsTo(b, [bagId], _zcZone, function (moved) {
+    if (!moved) {
+      setFb('err', t('zoneCheck.scanUnknown', { bag: bagId }));
+      return;
+    }
+    _zcFound.add(bagId);
+    _zcMoved++;
+    setFb('ok', t('zoneCheck.scanMoved', { bag: bagId, zone: zoneDisplayName(_zcZone) }));
+  });
+}
 function openZoneCheck(zoneId) {
   _zcZone = zoneId;
   _zcFound.clear();
+  _zcMoved = 0;
   renderZoneCheck();
   document.getElementById('m-zonecheck').classList.add('open');
 }
@@ -4869,10 +4915,9 @@ function _zcExpected() {
 function renderZoneCheck() {
   const expected = _zcExpected();
   document.getElementById('zc-title').textContent = t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
-  document.getElementById('zc-count').textContent = t('zoneCheck.count', {
-    found: _zcFound.size,
-    total: expected.length
-  });
+  document.getElementById('zc-count').textContent =
+    t('zoneCheck.count', { found: _zcFound.size, total: expected.length }) +
+    (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '');
   const body = document.getElementById('zc-body');
   if (!expected.length) {
     body.innerHTML =
@@ -4895,10 +4940,15 @@ function renderZoneCheck() {
   const missing = expected.length - _zcFound.size;
   const btn =
     'flex:1;min-width:130px;padding:11px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--c-border)';
-  document.getElementById('zc-foot').innerHTML = missing
+  // Scanning is the primary way to work through a zone; tapping rows is the
+  // fallback for a bag whose label won't read.
+  const scanBtn = `<button type="button" data-zc-act="scan" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;font-size:15px;padding:13px">📷 ${esc(t('zoneCheck.scanBtn'))}</button>`;
+  document.getElementById('zc-foot').innerHTML =
+    scanBtn +
+    (missing
     ? `<button type="button" data-zc-act="move" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
       `<button type="button" data-zc-act="remove" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`
-    : `<div style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`;
+      : `<div style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`);
 }
 // Load the not-found bags into the shared selection, then hand off to the normal
 // move picker / remove flow so the correction is an ordinary scan entry.
@@ -13713,6 +13763,12 @@ function processScan(raw) {
     return;
   }
   if (batch || isBag) {
+    // Stocktake: a scan means "this bag is physically in front of me", so it
+    // ticks off the check list instead of running the normal action flow.
+    if (_zcScanMode && isBag) {
+      zoneCheckScanned(val, batchId);
+      return;
+    }
     if (!scan.action) {
       openBagInfo(val, batchId, batch);
       return;
@@ -16582,6 +16638,13 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
+  // Finishing a stocktake scan drops you back on the check sheet, with whatever
+  // you scanned already ticked off and the leftovers ready to resolve.
+  if (_zcScanMode) {
+    _zcScanMode = false;
+    renderZoneCheck();
+    document.getElementById('m-zonecheck').classList.add('open');
+  }
   // Reset torch state and visual: the next openCamScan call will re-detect
   // capability on a fresh track. Keeping torch-on style across closes would
   // lie about the actual hardware state.
@@ -17495,6 +17558,10 @@ function initEventListeners() {
     }
     const act = e.target.closest('[data-zc-act]');
     if (!act) return;
+    if (act.dataset.zcAct === 'scan') {
+      zoneCheckStartScan();
+      return;
+    }
     if (!_zcSelectMissing()) return;
     if (act.dataset.zcAct === 'move') openLocMovePopup();
     else locRemoveSelected();
