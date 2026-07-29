@@ -2018,20 +2018,6 @@ function isBatchOverdue(b, now) {
   return due < today;
 }
 
-function countDueToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return batches.filter((b) => {
-    const { status } = getStatus(b.batchId);
-    // FRUITING → its own "Ready to harvest" card. CONTAM → Contamination reports flow.
-    // Both are tracked elsewhere; don't double-count them as "due today" work.
-    if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
-    const due = new Date(b.due);
-    due.setHours(0, 0, 0, 0);
-    const dl = Math.round((due - today) / 864e5);
-    return dl <= 0;
-  }).length;
-}
 function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
   const el = document.getElementById('metrics');
   if (!el) return;
@@ -3877,23 +3863,29 @@ function printWorkList() {
   win.document.write(html);
   win.document.close();
 }
+// "+ Ernte erfassen" from the speed-dial: scroll to the ready-to-harvest card
+// and flash it, or say so when nothing is fruiting.
+function dashGoHarvest() {
+  const card = document.getElementById('dash-harvest-tasks-card');
+  if (!card || card.style.display === 'none') {
+    setFb('info', t('dash.harvestNoFruiting'));
+    return;
+  }
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const prev = card.style.boxShadow;
+  card.style.transition = 'box-shadow 0.3s ease';
+  card.style.boxShadow = '0 0 0 3px var(--c-amber, #f59e0b)';
+  setTimeout(() => {
+    card.style.boxShadow = prev || '';
+  }, 1500);
+}
+// Warnungen is for problems you can't see anywhere else on the dashboard: low
+// stock, lab issues, zones at capacity. It deliberately does NOT restate
+// due-today / overdue batches — those are already the "zu verschieben" chip and
+// the Chargen-Aufgaben list directly above, and repeating them as two more lines
+// said nothing new while burying the alerts that only appear here.
 function renderDashAlerts() {
   const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
-  // Overdue batches
-  const overdueCount = batches.filter((b) => {
-    const { status } = getStatus(b.batchId);
-    if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
-    return isBatchOverdue(b);
-  }).length;
-  const overdueAlerts = overdueCount
-    ? [
-        {
-          text: tp('alert.batchOverdue', overdueCount),
-          urgent: overdueCount >= 3,
-          attentionKey: 'overdue'
-        }
-      ]
-    : [];
   // Zone capacity warnings (≥90%)
   const capAlerts = [];
   zones.forEach((z) => {
@@ -3910,19 +3902,8 @@ function renderDashAlerts() {
         goBtn: 'n-zones'
       });
   });
-  const dueToday = countDueToday();
-  const dueTodayAlerts =
-    dueToday > 0
-      ? [
-          {
-            text: tp('alert.dueToday', dueToday),
-            urgent: dueToday >= 3,
-            attentionKey: 'dueToday'
-          }
-        ]
-      : [];
   const labAlerts = getLabAlerts().map((a) => ({ ...a, goPage: 'lab', goBtn: 'n-lab' }));
-  const allAlerts = [...dueTodayAlerts, ...overdueAlerts, ...invAlerts, ...labAlerts, ...capAlerts];
+  const allAlerts = [...invAlerts, ...labAlerts, ...capAlerts];
   const card = document.getElementById('dash-alerts-card');
   const el = document.getElementById('dash-alerts');
   if (!allAlerts.length) {
@@ -4376,7 +4357,7 @@ const BATCH_ATTENTION_PRESETS = {
     labelKey: 'alert.filterDueToday',
     pred: (b) => {
       const { status } = getStatus(b.batchId);
-      // Must match countDueToday — FRUITING/CONTAM are tracked elsewhere
+      // FRUITING/CONTAM are tracked elsewhere
       // (Ready-to-harvest / Contamination reports), not as due-today work.
       if (['DONE', 'EMPTY', 'FRUITING', 'CONTAM'].includes(status)) return false;
       const today = new Date();
@@ -17184,27 +17165,6 @@ function initEventListeners() {
     if (!el) return;
     goToBatch(el.dataset.batch);
   });
-  $('dash-act-newbatch').addEventListener('click', () => {
-    // Guided, recipe-driven create dialog (pick Sorte → substrate auto-filled
-    // from its recipe → zone pick → print). The old full form is still reachable
-    // via Chargen → Neue Charge for advanced/recipe-less cases.
-    msQuickChargeNew();
-  });
-  $('dash-act-labwork').addEventListener('click', () => msQuickLaborNew());
-  $('dash-act-harvest').addEventListener('click', () => {
-    const card = document.getElementById('dash-harvest-tasks-card');
-    if (!card || card.style.display === 'none') {
-      setFb('info', t('dash.harvestNoFruiting'));
-      return;
-    }
-    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const prev = card.style.boxShadow;
-    card.style.transition = 'box-shadow 0.3s ease';
-    card.style.boxShadow = '0 0 0 3px var(--c-amber, #f59e0b)';
-    setTimeout(() => {
-      card.style.boxShadow = prev || '';
-    }, 1500);
-  });
   applyDashMode();
   initDashCollapse();
 
@@ -17698,8 +17658,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Action speed-dial FAB — toggles a 3-button menu (New batch / Lab work /
-  // Log harvest). Each item delegates to the matching dashboard quick-action
-  // handler (#dash-act-*) that already exists, so behaviour stays in one place.
+  // Log harvest). This is the single home for the creation flows on every page.
   var afab = document.getElementById('action-fab');
   var afabMenu = document.getElementById('action-fab-menu');
   var afabWrap = document.getElementById('action-fab-wrap');
@@ -17716,17 +17675,20 @@ document.addEventListener('DOMContentLoaded', function () {
       setAfabOpen(!open);
     });
   }
-  // Each menu item delegates to the existing dashboard quick-action handler.
+  // The speed-dial is now the single home for the creation flows (the duplicate
+  // dashboard button row is gone), so these call the flows directly.
   [
-    ['action-fab-newbatch', 'dash-act-newbatch'],
-    ['action-fab-labwork', 'dash-act-labwork'],
-    ['action-fab-harvest', 'dash-act-harvest']
+    // Guided, recipe-driven create dialog (pick Sorte → substrate auto-filled
+    // from its recipe → zone pick → print). The old full form is still reachable
+    // via Chargen → Neue Charge for advanced/recipe-less cases.
+    ['action-fab-newbatch', msQuickChargeNew],
+    ['action-fab-labwork', msQuickLaborNew],
+    ['action-fab-harvest', dashGoHarvest]
   ].forEach(function (pair) {
     var src = document.getElementById(pair[0]);
     if (!src) return;
     src.addEventListener('click', function () {
-      var target = document.getElementById(pair[1]);
-      if (target) target.click();
+      pair[1]();
       setAfabOpen(false);
     });
   });
