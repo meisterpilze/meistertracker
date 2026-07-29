@@ -2480,10 +2480,16 @@
                       </label>
                     </div>
                   </div>
-                  <div id="ms-rec-daysrow" style="display: none; margin-top: 8px; max-width: 160px">
+                  <div id="ms-rec-daysrow" class="g2" style="display: none; margin-top: 8px">
                     <label style="font-size: 12px; color: var(--c-text-muted)">
                       <span data-i18n="batch.incDays">Inkubationstage</span>
                       <input id="ms-rec-days" type="number" min="1" step="1" value="14" />
+                    </label>
+                    <!-- Distinct from incubation: rec_inc_days ends at colonisation,
+                         this is how long the bags then sit in the fruiting tent. -->
+                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <span data-i18n="strains.recFruitDays">Erntetage</span>
+                      <input id="ms-rec-fruitdays" type="number" min="0" step="1" value="0" />
                     </label>
                   </div>
                   <div id="ms-rec-need" class="muted" style="font-size: 12px; margin-top: 6px"></div>
