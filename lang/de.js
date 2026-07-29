@@ -202,6 +202,13 @@ window.LANG['de'] = {
   'msq.pickSorte': 'Pilzsorte',
   'msq.pickSortePrompt': 'Sorte wählen…',
   'msq.noRecipe': 'Diese Sorte hat noch kein Rezept. Bitte zuerst ein Rezept speichern.',
+  'msq.recNoBagKg': 'Rezept unvollständig: kein Beutelgewicht hinterlegt.',
+  'msq.recNoCoir': 'Rezept unvollständig: kein Kokos/CVG-Anteil hinterlegt.',
+  'msq.recNoGrainKg': 'Rezept unvollständig: keine Körnermenge hinterlegt.',
+  'msq.recBadSplit': 'Rezept unvollständig: Hartholz + Weizenkleie ergeben {sum}%, nicht 100%.',
+  'msq.noRecipesTitle': 'Noch kein Rezept hinterlegt',
+  'msq.noRecipesMsg': 'Keine Pilzsorte hat bisher ein Produktionsrezept. Ohne Rezept kann keine Charge angelegt werden.',
+  'msq.noRecipesGo': 'Zu den Pilzsorten',
   'msq.laborPreview': '{n} Kultur(en) werden angelegt.',
   // Versand (Phase 4)
   'nav.ordersVersand': 'Versand',
@@ -452,7 +459,8 @@ window.LANG['de'] = {
   'batch.incDays': 'Inkubationstage',
   'batch.grainRh': 'Wassergehalt (%)',
   'batch.grainRhHint': 'Wasseranteil nach Hydratation \u2014 nur Trockenmasse wird vom Lagerbestand abgezogen',
-  'batch.substrate': 'Substrat (optional)',
+  'batch.substrate': 'Substrat',
+  'batch.noDeduction': 'kein Materialabzug',
   'batch.hardwood': 'Hartholz %',
   'batch.wheatBran': 'Weizenkleie %',
   'batch.fieldCapacity': 'Feldkapazit\u00e4t %RH',
@@ -492,6 +500,8 @@ window.LANG['de'] = {
   'batch.enterWeight': 'Bitte ein Beutelgewicht eingeben',
   'batch.substrateExceeds':
     'Substratzusammensetzung muss 100% ergeben (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
+  'batch.noSubstrateWarn':
+    'Keine Substrat-Zusammensetzung angegeben — für diese Charge wird KEIN Material vom Lagerbestand abgezogen.\n\nTrotzdem anlegen?',
   'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
   'batch.inStock': 'Auf Lager:',
   'batch.sufficient': 'ausreichend',
