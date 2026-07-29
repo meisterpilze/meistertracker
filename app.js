@@ -4837,6 +4837,7 @@ function locMoveTo(toLoc) {
 // feed the normal move/remove flows (via selectedLocBags) so they reuse the same
 // scan entries, undo and sync as every other correction.
 let _zcZone = null;
+let _zcMode = 'zone'; // 'zone' = bags in a zone, 'culture' = lab cultures
 let _zcScanMode = false;
 let _zcMoved = 0; // bags found here that the records had somewhere else
 const _zcFound = new Set();
@@ -4845,7 +4846,7 @@ const _zcFound = new Set();
 // to this zone on the spot (the drift the expected-list alone can never see).
 // Closing the camera returns to the check sheet — see closeCamScan.
 function zoneCheckStartScan() {
-  if (!_zcZone) return;
+  if (_zcMode === 'zone' && !_zcZone) return;
   _zcScanMode = true;
   document.getElementById('m-zonecheck').classList.remove('open');
   scan.action = null;
@@ -4899,18 +4900,37 @@ function zoneCheckScanned(bagId, batchId) {
   });
 }
 function openZoneCheck(zoneId) {
+  _zcMode = 'zone';
   _zcZone = zoneId;
   _zcFound.clear();
   _zcMoved = 0;
   renderZoneCheck();
   document.getElementById('m-zonecheck').classList.add('open');
 }
+// Lab stocktake. Cultures have no location, so "expected" means every culture
+// the records still say you hold (aktiv / eingelagert). Scan what is really on
+// the shelf; whatever is left over is gone and gets marked aufgebraucht.
+function openLabCheck() {
+  _zcMode = 'culture';
+  _zcZone = null;
+  _zcFound.clear();
+  _zcMoved = 0;
+  renderZoneCheck();
+  document.getElementById('m-zonecheck').classList.add('open');
+}
 function _zcExpected() {
+  if (_zcMode === 'culture') {
+    return cultures
+      .filter((c) => c.status === 'active' || c.status === 'stored')
+      .map((c) => [c.id, { batchId: (c.species || '') + (c.strainText ? ' · ' + c.strainText : '') }])
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  }
   return Object.entries(getZoneBags(_zcZone)).sort((a, b) => a[0].localeCompare(b[0]));
 }
 function renderZoneCheck() {
   const expected = _zcExpected();
-  document.getElementById('zc-title').textContent = t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
+  document.getElementById('zc-title').textContent =
+    _zcMode === 'culture' ? t('labCheck.title') : t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
   document.getElementById('zc-count').textContent =
     t('zoneCheck.count', { found: _zcFound.size, total: expected.length }) +
     (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '');
@@ -4939,12 +4959,53 @@ function renderZoneCheck() {
   // Scanning is the primary way to work through a zone; tapping rows is the
   // fallback for a bag whose label won't read.
   const scanBtn = `<button type="button" data-zc-act="scan" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;font-size:15px;padding:13px">📷 ${esc(t('zoneCheck.scanBtn'))}</button>`;
+  const missingBtns =
+    _zcMode === 'culture'
+      ? `<button type="button" data-zc-act="used" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>`
+      : `<button type="button" data-zc-act="move" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
+        `<button type="button" data-zc-act="remove" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
   document.getElementById('zc-foot').innerHTML =
     scanBtn +
     (missing
-    ? `<button type="button" data-zc-act="move" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
-      `<button type="button" data-zc-act="remove" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`
+      ? missingBtns
       : `<div style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`);
+}
+// A culture scanned during a lab check is physically on the shelf: tick it off,
+// and if the records had already written it off (aufgebraucht/kontaminiert),
+// put it back to aktiv — the same "found where the records didn't expect it"
+// correction the zone check does for bags.
+function labCheckScanned(cultureId) {
+  const c = cultures.find((x) => x.id && x.id.toUpperCase() === cultureId.toUpperCase());
+  if (!c) {
+    _zcFeedback('err', t('labCheck.scanUnknown', { id: cultureId }));
+    return;
+  }
+  if (_zcFound.has(c.id)) {
+    _zcFeedback('info', t('zoneCheck.scanDup', { bag: c.id }));
+    return;
+  }
+  const total = _zcExpected().length;
+  if (c.status === 'active' || c.status === 'stored') {
+    _zcFound.add(c.id);
+    _zcFeedback('ok', t('zoneCheck.scanOk', { found: _zcFound.size, total: total }));
+    return;
+  }
+  setCultureStatus(c.id, 'active');
+  _zcFound.add(c.id);
+  _zcMoved++;
+  _zcFeedback('ok', t('labCheck.scanRevived', { id: c.id }));
+}
+// Mark every culture that wasn't found as used up.
+function _zcMarkMissingUsed() {
+  const missing = _zcExpected()
+    .map(([id]) => id)
+    .filter((id) => !_zcFound.has(id));
+  if (!missing.length) return;
+  confirm2(t('labCheck.confirmTitle'), t('labCheck.confirmMsg', { n: missing.length }), t('lab.usedUp'), () => {
+    missing.forEach((id) => setCultureStatus(id, 'used'));
+    document.getElementById('m-zonecheck').classList.remove('open');
+    setFb('ok', t('labCheck.done', { n: missing.length }));
+  });
 }
 // Load the not-found bags into the shared selection, then hand off to the normal
 // move picker / remove flow so the correction is an ordinary scan entry.
@@ -13681,6 +13742,14 @@ function processScan(raw) {
   }
   // Culture ID scan → auto-fill parent (lab work) or source (new batch), else open lineage
   if (/^(MC|PD|LC|G2G|GS)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
+    // Lab stocktake: a scan means "this culture is on the shelf in front of me",
+    // so it ticks the check list rather than running the normal culture flow.
+    // Checked before the used/contam guard below — finding a written-off culture
+    // is exactly the correction the check exists to make.
+    if (_zcScanMode && _zcMode === 'culture') {
+      labCheckScanned(val);
+      return;
+    }
     const c = cultures.find((x) => x.id.toUpperCase() === val);
     if (c) {
       if (c.status === 'used' || c.status === 'contam') {
@@ -17532,6 +17601,7 @@ function initEventListeners() {
   $('btn-41').addEventListener('click', downloadBackup);
   $('btn-42').addEventListener('click', restoreBackup);
   $('reset-go').addEventListener('click', runCleanReset);
+  $('lab-check-btn').addEventListener('click', openLabCheck);
   $('zc-close').addEventListener('click', () => document.getElementById('m-zonecheck').classList.remove('open'));
   $('m-zonecheck').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
@@ -17547,6 +17617,10 @@ function initEventListeners() {
     if (!act) return;
     if (act.dataset.zcAct === 'scan') {
       zoneCheckStartScan();
+      return;
+    }
+    if (act.dataset.zcAct === 'used') {
+      _zcMarkMissingUsed();
       return;
     }
     if (!_zcSelectMissing()) return;
