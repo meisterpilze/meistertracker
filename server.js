@@ -8365,7 +8365,44 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                       '"; }'
                   ]
                 ];
-          const child = spawn(script[0], script[1], { cwd: scriptDir, detached: true, stdio: 'ignore' });
+          // windowsVerbatimArguments is what makes the Windows branch work at all.
+          // Node escapes quotes inside an argv entry as \" — correct for MSVCRT
+          // programs, but cmd.exe does not understand it, so the whole `/c` string
+          // (quoted cd, quoted redirect targets, JSON) arrived mangled. cmd exited
+          // 1 immediately: no git, no npm, no pm2 restart, and neither the success
+          // nor the failed sentinel. The deploy looked like it ran, the files were
+          // never pulled, and the server kept serving the old code silently.
+          // Safe to pass the line verbatim because every interpolated value is
+          // generated here or whitelisted above — targetSha against
+          // /^[a-f0-9]{7,40}$/, PM2_PROCESS_NAME against /^[A-Za-z0-9_-]{1,64}$/,
+          // the paths from __dirname — never raw request input. The option is
+          // ignored on non-Windows platforms.
+          const child = spawn(script[0], script[1], {
+            cwd: scriptDir,
+            detached: true,
+            stdio: 'ignore',
+            windowsVerbatimArguments: true
+          });
+          // A deploy that dies before its own sentinel used to be completely
+          // silent. On success this handler never fires — `pm2 restart` replaces
+          // this process first — so anything we do see here is a real failure.
+          child.on('exit', (code) => {
+            if (code === 0) return;
+            log('error', 'Deploy chain exited without deploying', { code, sha: targetSha });
+            try {
+              writeDeployState({ status: 'failed', sha: targetSha, started: startedAt, exitCode: code });
+            } catch (e) {
+              /* best effort */
+            }
+          });
+          child.on('error', (e) => {
+            log('error', 'Deploy chain failed to spawn', { error: e.message, sha: targetSha });
+            try {
+              writeDeployState({ status: 'failed', sha: targetSha, started: startedAt, error: e.message });
+            } catch (e2) {
+              /* best effort */
+            }
+          });
           child.unref();
         }, 500);
       } catch (err) {
