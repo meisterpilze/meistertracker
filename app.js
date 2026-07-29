@@ -12562,40 +12562,26 @@ function renderPreviewDeferred(deferred, baseDelay) {
 //   'minimal' — barcode + Line 1 (bag ID) only
 //   'sorte'   — + Line 2 (Pilzsorte written out + notes)
 //   'full'    — + Line 3 (Fälligkeit)
-// Header band of a label. Barcode mode leaves y=0..40 empty above the barcode;
-// QR mode leaves the whole area to the right of the 125-dot QR unused. Both are
-// free real estate, so the header costs no layout below it.
-// Not translated on purpose: a printed label outlives the UI language setting,
-// and two labels from the same batch must not read differently because someone
-// switched locale between prints.
-const LABEL_TYPE_WORD = { MC: 'MC — Slant', PD: 'PD — Petri', LC: 'LC — Liquid Culture', G2G: 'G2G — Grain-to-Grain' };
-// reserveRight: dots to keep clear on the right for the batch-total badge. In
-// barcode mode header and badge share one horizontal band, so the header block
-// must stop short of it; in QR mode they are stacked and cannot collide.
-function _labelHeaderItem(text, qr) {
-  if (!text) return null;
-  // y=14, not 6: a printed test clipped the top of the stock at 6.
-  return qr
-    ? { type: 'text', x: 140, y: 55, blockW: 258, fontH: 28, text, bold: true } // beside the QR
-    : { type: 'text', x: 0, y: 14, blockW: 400, fontH: 30, text, bold: true }; // above the barcode
-}
-// Batch size as a boxed badge in the bottom-right corner. Which bag this is was
-// already on the label — it is the ID's last segment — so only the total is
-// missing: move 9 of 10 and nothing said one was still out there. Kept as a
-// separate framed element rather than folded into a line of text, so it reads
-// at arm's length. The slash is deliberate: a bare "10" next to bag …-06 invites
-// being read as the bag number. "/10" cannot be.
-const _BOX = { w: 72, h: 30 };
+// No label carries a spelled-out type word. The only band one fitted in was the
+// top edge, which this stock clips, and every ID already opens with its type
+// (MC-/PD-/LC-/G-) — so it cost a row and told nobody anything.
+// Batch size in the bottom-right corner. Which bag this is was already on the
+// label — it is the ID's last segment — so only the total was missing: move 9
+// of 10 and nothing said one was still out there. Set apart in its own corner
+// rather than folded into a line of text, so it reads at arm's length.
+// The slash is deliberate: a bare "10" next to bag …-06 invites being read as
+// the bag number. "/10" cannot be.
+const _BADGE = { w: 72, h: 30 };
 function _bagTotalBadge(batch) {
   const total = (batch.bags || []).length;
   if (!total) return null;
-  const x = 400 - _BOX.w - 6; // 322
-  const y = 240 - _BOX.h - 8; // 202 → occupies 202..232
+  const x = 400 - _BADGE.w - 6; // 322
+  const y = 240 - _BADGE.h - 8; // 202 → occupies 202..232
   return {
     x,
     y,
-    h: _BOX.h,
-    items: [{ type: 'text', x, y, blockW: _BOX.w, fontH: 28, text: '/' + total, bold: true }]
+    h: _BADGE.h,
+    items: [{ type: 'text', x, y, blockW: _BADGE.w, fontH: 28, text: '/' + total, bold: true }]
   };
 }
 // Width a centred text line may use. The bottom-right badge sits over the band
@@ -12711,14 +12697,11 @@ function labLabelItems(id, c, detail, qr) {
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('culture:' + id);
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
-  // The type is already the ID's first segment, but buried in a 40-character
-  // string \u2014 spell it out so the shelf is readable without decoding IDs.
-  const _header = LABEL_TYPE_WORD[c.type] || '';
+  // No type word: the ID already opens with MC-/PD-/LC-, and the only place one
+  // fitted was the top edge, which this label stock clips.
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
-    const h = _labelHeaderItem(_header, true);
-    if (h) items.push(h);
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: line1Text });
     if (detail === 'sorte' || detail === 'full') {
@@ -12729,15 +12712,15 @@ function labLabelItems(id, c, detail, qr) {
       items.push({ type: 'text', y: line3Y, blockW: 400, fontH: 24, text: ds, bold: true });
     }
   } else {
-    // Barcode mode: barcode top-center, text lines below.
-    // The header sits above the barcode, and a printed test showed this stock
-    // loses the top few dots \u2014 so the whole stack drops by 10 to give the type
-    // word a real margin. Bottom still lands at 230 of 240.
-    const bcY = _header ? 50 : 40,
-      bcH = 90;
+    // Barcode mode: barcode top-center, text lines below. Centred on whichever
+    // lines the print mode actually emits, same as bag labels, and floored at 40
+    // because this stock clips above that.
+    const hasSp = (detail === 'sorte' || detail === 'full') && !!sp;
+    const hasDs = detail === 'full' && !!c.created;
+    const bcH = 90;
+    const blockH = bcH + 6 + 24 + (hasSp ? 28 : 0) + (hasDs ? 28 : 0);
+    const bcY = Math.max(40, Math.round((240 - blockH) / 2));
     const bc = bcParams(bcVal);
-    const h = _labelHeaderItem(_header, false);
-    if (h) items.push(h);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
