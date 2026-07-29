@@ -2,7 +2,7 @@
 // Prod uses stale-while-revalidate (instant nav + offline fallback); the
 // worktree/test instance (port 3001) is forced network-first below so code
 // changes always show on reload. Bumping this version evicts the old cache.
-const CACHE = 'meistertracker-v35';
+const CACHE = 'meistertracker-v36';
 
 // Test/worktree instance detection. The worktree server runs on port 3001
 // (prod is 3000 / 443). On the worktree we never serve static assets from
@@ -360,14 +360,18 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request));
     return;
   }
-  // App shell — navigations (/, /index.html) and /app.js: network-first with a
-  // short timeout so a fresh deploy replaces stale app code on the next reload
-  // instead of serving the previous build from cache. On success, cache the
-  // clone and return it; on timeout/offline, fall back to the cached copy.
-  // Mirrors the IS_WORKTREE network-first branch above, but keeps the cache
-  // write so offline navigation still works. Other static assets (CSS, vendor
-  // libs, icons, lang) keep stale-while-revalidate below.
-  if (path === '/' || path === '/index.html' || path === '/app.js') {
+  // App shell — navigations (/, /index.html), /app.js AND /lang/*.js:
+  // network-first with a short timeout so a fresh deploy replaces stale app code
+  // on the next reload instead of serving the previous build from cache. On
+  // success, cache the clone and return it; on timeout/offline, fall back to the
+  // cached copy. Mirrors the IS_WORKTREE network-first branch above, but keeps
+  // the cache write so offline navigation still works.
+  //
+  // The lang files MUST travel with app.js: t() falls back to printing the raw
+  // key, so a fresh app.js paired with a stale cached locale renders new strings
+  // as "zoneCheck.btn" instead of the translation. Other static assets (CSS,
+  // vendor libs, icons) keep stale-while-revalidate below.
+  if (path === '/' || path === '/index.html' || path === '/app.js' || path.startsWith('/lang/')) {
     e.respondWith(
       fetch(e.request, { signal: AbortSignal.timeout(3000) })
         .then((res) => {
