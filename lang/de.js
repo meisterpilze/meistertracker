@@ -211,6 +211,8 @@ window.LANG['de'] = {
   'msq.noRecipesMsg': 'Keine Pilzsorte hat bisher ein Produktionsrezept. Ohne Rezept kann keine Charge angelegt werden.',
   'msq.noRecipesGo': 'Zu den Pilzsorten',
   'msq.laborPreview': '{n} Kultur(en) werden angelegt.',
+  'msq.grainKg': 'kg pro Beutel',
+  'msq.grainPreview': '{n} Beutel Grainspawn werden angelegt.',
   // Versand (Phase 4)
   'nav.ordersVersand': 'Versand',
   'orders.versandTab': 'Versand',
@@ -565,7 +567,7 @@ window.LANG['de'] = {
   'lab.noCultures': 'Noch keine Kulturen. Verwende Labor \u2192 Arbeit erfassen.',
   'lab.logCleanRoom': 'Reinraumarbeit erfassen',
   'lab.workType': 'Arbeitstyp',
-  'lab.registerMC': 'Mutterkultur registrieren',
+  'lab.registerMC': 'Slant registrieren',
   'lab.pdTransfer': 'Petrischalen-Transfer',
   'lab.lcPrep': 'Fl\u00fcssigkultur ansetzen',
   'lab.g2g': 'Korn-zu-Korn (G2G)',
@@ -1291,7 +1293,7 @@ window.LANG['de'] = {
   'harvest.gramsPlaceholder': 'z. B. 245',
   'batch.notesPlaceholder': 'Notizen\u2026',
   'lab.sourcePlaceholder': 'z. B. Klon von KINGS-250101-01-03',
-  'lab.kb': 'K\u00f6rnerbrut',
+  'lab.kb': 'Grainspawn',
   // Print
   'print.barcodeOnly': 'Nur Barcode (Barcode + ID)',
   'print.barcodeStrain': 'Barcode + Sorte (+ Pilzsorte & Notizen)',
