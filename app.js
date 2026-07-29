@@ -12549,6 +12549,27 @@ function renderPreviewDeferred(deferred, baseDelay) {
 //   'minimal' — barcode + Line 1 (bag ID) only
 //   'sorte'   — + Line 2 (Pilzsorte written out + notes)
 //   'full'    — + Line 3 (Fälligkeit)
+// Header band of a label. Barcode mode leaves y=0..40 empty above the barcode;
+// QR mode leaves the whole area to the right of the 125-dot QR unused. Both are
+// free real estate, so the header costs no layout below it.
+// Not translated on purpose: a printed label outlives the UI language setting,
+// and two labels from the same batch must not read differently because someone
+// switched locale between prints.
+const LABEL_TYPE_WORD = { MC: 'MC — Slant', PD: 'PD — Petri', LC: 'LC — Liquid Culture', G2G: 'G2G — Grain-to-Grain' };
+function _labelHeaderItem(text, qr) {
+  if (!text) return null;
+  return qr
+    ? { type: 'text', x: 140, y: 55, blockW: 258, fontH: 28, text, bold: true } // beside the QR
+    : { type: 'text', x: 0, y: 6, blockW: 400, fontH: 30, text, bold: true }; // above the barcode
+}
+// "3/10" — which bag this is out of how many the batch holds. Printed because a
+// bag on its own cannot tell you the batch size: move 9 of 10 and nothing on the
+// remaining label says one is still out there.
+function _bagCountText(bagId, batch) {
+  const total = (batch.bags || []).length;
+  const n = parseInt(String(bagId).split('-').pop(), 10);
+  return total > 0 && n > 0 ? n + '/' + total : '';
+}
 function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = [];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
@@ -12570,10 +12591,17 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       bcVal = bagId.replace(/-/g, '_');
     }
   }
+  // Grain spawn is the one bag type that carries a prefix word; block bags get
+  // the count alone, per the print layout that was signed off.
+  const _count = _bagCountText(bagId, batch);
+  const _header =
+    batch.batchType === 'grain' ? ('G — Grainspawn' + (_count ? ' ' + _count : '')).trim() : _count;
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     // mag=5 → ~125×125 dots for version-2 QR (25 modules × 5).
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
+    const h = _labelHeaderItem(_header, true);
+    if (h) items.push(h);
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
     if (detail === 'sorte' || detail === 'full') {
       const species = batch.strainName || batch.species || '';
@@ -12596,6 +12624,8 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
     const bcY = 40,
       bcH = 90;
     const bc = bcParams(bcVal);
+    const h = _labelHeaderItem(_header, false);
+    if (h) items.push(h);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
     items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
@@ -12634,9 +12664,14 @@ function labLabelItems(id, c, detail, qr) {
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('culture:' + id);
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
+  // The type is already the ID's first segment, but buried in a 40-character
+  // string \u2014 spell it out so the shelf is readable without decoding IDs.
+  const _header = LABEL_TYPE_WORD[c.type] || '';
   if (qr) {
     // QR mode: QR top-left, text centered full-width below.
     items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
+    const h = _labelHeaderItem(_header, true);
+    if (h) items.push(h);
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
     items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: line1Text });
     if (detail === 'sorte' || detail === 'full') {
@@ -12651,6 +12686,8 @@ function labLabelItems(id, c, detail, qr) {
     const bcY = 40,
       bcH = 90;
     const bc = bcParams(bcVal);
+    const h = _labelHeaderItem(_header, false);
+    if (h) items.push(h);
     items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
     const line1Y = bcY + bcH + 6;
     const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
