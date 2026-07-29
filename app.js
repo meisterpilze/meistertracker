@@ -10379,8 +10379,14 @@ function msQuickRender() {
   if (titleEl) titleEl.textContent = mode === 'charge' ? t('msq.chargeTitle') : t('msq.laborTitle');
   const lt = document.getElementById('ms-q-labtype-wrap');
   if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
+  // Grain spawn is a Charge in everything but name: it is weighed, incubates,
+  // and produces barcoded bags. So it wants the days and kg fields that the
+  // count-based culture types don't.
+  const isKb = _msqIsGrainspawn();
   const dw = document.getElementById('ms-q-days-wrap');
-  if (dw) dw.style.display = mode === 'charge' ? '' : 'none';
+  if (dw) dw.style.display = mode === 'charge' || isKb ? '' : 'none';
+  const gw = document.getElementById('ms-q-grainkg-wrap');
+  if (gw) gw.style.display = isKb ? '' : 'none';
   if (!ms) {
     if (subEl) subEl.textContent = t('msq.pickSortePrompt');
     if (goEl) goEl.disabled = true;
@@ -10400,6 +10406,13 @@ function msQuickRender() {
   if (mode === 'charge') {
     const d = document.getElementById('ms-q-days');
     if (d) d.value = ms.recIncDays || 14;
+  } else if (isKb) {
+    // No block recipe carries a spawn-bag weight, so seed both from the
+    // inventory averages the grain form already uses.
+    const d = document.getElementById('ms-q-days');
+    if (d && !(parseInt(d.value, 10) > 0)) d.value = 14;
+    const g = document.getElementById('ms-q-grainkg');
+    if (g && !(parseDecimal(g.value) > 0)) g.value = getAvgComp().grainBagKg;
   }
   msQuickPreview();
   msQuickFillCulture();
@@ -10410,6 +10423,19 @@ function msQuickRender() {
       prev.style.color = 'var(--c-red-dark)';
     }
   }
+}
+// True when the quick dialog is in Laborarbeit mode with Grainspawn selected.
+// Grain spawn (KB) is not a culture: it goes through createGrainBatch, not
+// logLabWork, and produces G-prefixed barcoded bags.
+function _msqIsGrainspawn() {
+  if (!_msQuickCtx || _msQuickCtx.mode !== 'labor') return false;
+  const el = document.getElementById('ms-q-labtype');
+  return !!el && el.value === 'KB';
+}
+function msQuickLabTypeChanged() {
+  // Full re-render, not just the culture list: switching to Grainspawn shows
+  // the days + kg fields and switching away hides them again.
+  msQuickRender();
 }
 function msQuickSorteChanged() {
   if (!_msQuickCtx) return;
@@ -10440,6 +10466,15 @@ function msQuickPreview() {
   if (_msQuickCtx.mode === 'charge') {
     const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
     el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+  } else if (_msqIsGrainspawn()) {
+    // Only dry grain is deducted, so show the hydrated→dry figure the grain
+    // form and createGrainBatch both use rather than the wet bag weight.
+    const kg = parseDecimal((document.getElementById('ms-q-grainkg') || {}).value) || 0;
+    const dry = qty * mtDryKg(kg, getAvgComp().grainRhPct);
+    el.textContent =
+      qty > 0 && kg > 0
+        ? t('msq.grainPreview', { n: qty }) + ' — ' + t('orders.p.needPrefix') + ' ' + Math.round(dry * 1000) / 1000 + ' kg'
+        : '';
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
@@ -10458,7 +10493,9 @@ function msQuickFillCulture() {
     types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC'] : ['PD', 'LC', 'G2G', 'GS'];
   } else {
     const lt = document.getElementById('ms-q-labtype').value;
-    types = lt === 'PD' ? ['MC', 'PD', 'LC'] : lt === 'LC' ? ['MC', 'PD'] : null; // MC = new isolation
+    // KB matches the full grain form, which inoculates from a PD or LC.
+    types =
+      lt === 'PD' ? ['MC', 'PD', 'LC'] : lt === 'LC' ? ['MC', 'PD'] : lt === 'KB' ? ['PD', 'LC'] : null; // MC = new isolation
   }
   if (!types) {
     sel.value = '';
@@ -10494,7 +10531,40 @@ function msQuickConfirm() {
   const sourceCulture =
     (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || '';
   if (mode === 'labor') {
-    setv('lw-type', document.getElementById('ms-q-labtype').value || 'MC');
+    const labType = document.getElementById('ms-q-labtype').value || 'MC';
+    // Grainspawn is not a culture: it is weighed, incubates and yields
+    // G-prefixed barcoded bags, so it goes through createGrainBatch like the
+    // full Körnerbrut form rather than logLabWork.
+    if (labType === 'KB') {
+      const grainKg = parseDecimal((document.getElementById('ms-q-grainkg') || {}).value) || 0;
+      // Validate before closing: gsReadLines drops zero-weight rows, so a 0 here
+      // would reach createGrainBatch as "no lines" and alert against a dialog
+      // that is already gone, discarding everything typed.
+      if (grainKg <= 0) {
+        alert(t('batch.enterWeight'));
+        return;
+      }
+      setv('lw-st', ms.id);
+      setv('lw-strain-text', strainText);
+      if (typeof gsResetLines === 'function') gsResetLines();
+      const row = document.querySelector('.gs-wline');
+      if (row) {
+        const kgEl = row.querySelector('.gs-line-kg');
+        const qtyEl = row.querySelector('.gs-line-qty');
+        if (kgEl) kgEl.value = grainKg;
+        if (qtyEl) qtyEl.value = qty;
+      }
+      setv('gs-days', parseInt(document.getElementById('ms-q-days').value) || 14);
+      setv('gs-rh', getAvgComp().grainRhPct);
+      fillCultureSelect('gs-culture', ['PD', 'LC']);
+      const gsc = document.getElementById('gs-culture');
+      if (gsc) gsc.value = sourceCulture;
+      setv('lw-notes', '');
+      msQuickClose();
+      createGrainBatch();
+      return;
+    }
+    setv('lw-type', labType);
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
     setv('lw-qty', qty);
