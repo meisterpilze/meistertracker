@@ -18,6 +18,16 @@ function jsonRes(status, body) {
 
 const cfg = { provider: 'sendcloud', publicKey: 'pub', secretKey: 'sec', defaultWeightG: 1000 };
 
+// A minimally valid ship-to. buyLabel refuses an incomplete address before it
+// reaches Sendcloud, so any fixture that expects a request to go out needs one.
+const ADDR = {
+  shipName: 'Max Mustermann',
+  shipStreet: 'Hauptstr',
+  shipHouse: '5',
+  shipPostal: '91054',
+  shipCity: 'Erlangen'
+};
+
 describe('sendcloud adapter', () => {
   it('lists methods and filters by weight', async () => {
     const restore = mockFetch(async (url) => {
@@ -94,7 +104,7 @@ describe('sendcloud adapter', () => {
       return jsonRes(200, { parcel: { id: 556, label: {} } });
     });
     try {
-      const order = { id: 8, channel: 'wix', channelOrderId: 'W-8', shipCountry: 'de' };
+      const order = { id: 8, channel: 'wix', channelOrderId: 'W-8', ...ADDR, shipCountry: 'de' };
       const r = await ship.sendcloud.buyLabel(cfg, { order, methodId: 8, weightG: 1000, requestLabel: false });
       assert.equal(sent.parcel.request_label, false, 'test mode must NOT request a billable label');
       assert.equal(r.status, 'announced');
@@ -120,7 +130,7 @@ describe('sendcloud adapter', () => {
     });
     try {
       await ship.sendcloud.buyLabel(cfg, {
-        order: { id: 1, shipCountry: 'Germany' },
+        order: { id: 1, ...ADDR, shipCountry: 'Germany' },
         methodId: 1,
         weightG: 1000,
         requestLabel: false
