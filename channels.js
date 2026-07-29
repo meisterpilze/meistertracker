@@ -68,14 +68,13 @@ function _normalizeWix(o) {
       : null;
   let street = addr.streetAddress ? addr.streetAddress.name : addr.addressLine1 || addr.addressLine || null;
   let house = addr.streetAddress && addr.streetAddress.number ? addr.streetAddress.number : null;
-  // Wix sometimes embeds the house number in the street line ("Markgrafenallee 18")
-  // and leaves number empty — split it off so labels get a clean house_number.
+  // Wix fills streetAddress.number on only a minority of orders (41 of 151 in the
+  // live shop); the rest carry the number inside the street line. Use the shared
+  // splitter so Wix, Etsy and eBay all resolve house numbers identically.
   if (street && !house) {
-    const m = street.match(/^(.*\S)\s+(\d+\s*[a-zA-Z]?)$/);
-    if (m) {
-      street = m[1];
-      house = m[2].replace(/\s+/g, '');
-    }
+    const sp = _splitHouse(street);
+    street = sp.street;
+    house = sp.house;
   }
   const items = (o.lineItems || []).map((li) => ({
     channelSku:
@@ -206,12 +205,24 @@ async function _json(res, label) {
   if (!res.ok) throw new Error(label + ' HTTP ' + res.status);
   return text ? JSON.parse(text) : {};
 }
-// DE addresses often embed the house number in the street line ("Musterweg 18").
-// Split it off so Sendcloud gets a clean house_number (mirrors the Wix logic).
+// Channels rarely send a separate house number; it arrives embedded in the street
+// line. German-style addresses put it last ("Musterweg 18"), while French, Dutch,
+// Belgian and Irish ones put it first ("12 Rue de la Paix") — and we ship EU-wide,
+// so both occur. Try trailing first (the local convention and the common case),
+// then leading. A range ("18-20") or a letter suffix ("18a") counts as one house
+// number. Anything matching neither is left alone rather than guessed at: a wrong
+// house number prints a wrong label, and the shipping guard would rather stop and
+// ask than ship to an address we invented. Shared by all three channels.
+const _HOUSE_NUM = '\\d+\\s*(?:[-/]\\s*\\d+)?\\s*[a-zA-Z]?';
 function _splitHouse(street) {
   if (!street) return { street: street || null, house: null };
-  const m = String(street).match(/^(.*\S)\s+(\d+\s*[a-zA-Z]?)$/);
-  if (m) return { street: m[1], house: m[2].replace(/\s+/g, '') };
+  const s = String(street).trim();
+  const trailing = s.match(new RegExp('^(.*\\S)\\s+(' + _HOUSE_NUM + ')$'));
+  if (trailing) return { street: trailing[1], house: trailing[2].replace(/\s+/g, '') };
+  // Leading form: the remainder must start with a non-digit, so "12 3rd Ave" is
+  // left for a human rather than split at the wrong number.
+  const leading = s.match(new RegExp('^(' + _HOUSE_NUM + ')\\s+(\\D.*\\S)$'));
+  if (leading) return { street: leading[2], house: leading[1].replace(/\s+/g, '') };
   return { street, house: null };
 }
 
@@ -555,5 +566,6 @@ module.exports = {
   _normalizeWix,
   _normalizeEtsy,
   _normalizeEbay,
+  _splitHouse,
   WIX_BASE
 };

@@ -170,3 +170,74 @@ describe('sendcloud adapter', () => {
     }
   });
 });
+
+// Pre-flight address validation. Sendcloud accepts a parcel with a blank house
+// number and charges for it, so an incomplete address must never reach the wire.
+describe('address guard before a billable label', () => {
+  const complete = {
+    id: 1,
+    channel: 'wix',
+    channelOrderId: 'W-1',
+    shipName: 'Max Mustermann',
+    shipStreet: 'Markgrafenallee',
+    shipHouse: '18',
+    shipPostal: '95448',
+    shipCity: 'Bayreuth',
+    shipCountry: 'DE'
+  };
+
+  for (const [field, label] of [
+    ['shipStreet', 'Straße'],
+    ['shipHouse', 'Hausnummer'],
+    ['shipPostal', 'PLZ'],
+    ['shipCity', 'Ort']
+  ]) {
+    it('refuses to buy when ' + field + ' is missing, without calling Sendcloud', async () => {
+      let called = false;
+      const restore = mockFetch(async () => {
+        called = true;
+        return jsonRes(200, { parcel: { id: 1 } });
+      });
+      try {
+        const order = { ...complete, [field]: '' };
+        await assert.rejects(
+          () => ship.sendcloud.buyLabel(cfg, { order, methodId: 8, weightG: 1000 }),
+          (e) => e.message.includes(label),
+          'error must name the missing field: ' + label
+        );
+        assert.equal(called, false, 'no HTTP call may be made — that would bill the owner');
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('names every missing field at once so the fix is one pass', async () => {
+    const restore = mockFetch(async () => jsonRes(200, {}));
+    try {
+      const order = { ...complete, shipStreet: '', shipHouse: '', shipCity: '  ' };
+      await assert.rejects(
+        () => ship.sendcloud.buyLabel(cfg, { order, methodId: 8 }),
+        (e) => e.message.includes('Straße') && e.message.includes('Hausnummer') && e.message.includes('Ort')
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('still buys when the address is complete', async () => {
+    let body = null;
+    const restore = mockFetch(async (url, opts) => {
+      body = JSON.parse(opts.body);
+      return jsonRes(200, { parcel: { id: 77, tracking_number: 'T1', label: {} } });
+    });
+    try {
+      const r = await ship.sendcloud.buyLabel(cfg, { order: complete, methodId: 8, weightG: 1200 });
+      assert.equal(r.providerParcelId, '77');
+      assert.equal(body.parcel.house_number, '18', 'house number reaches the carrier');
+      assert.equal(body.parcel.postal_code, '95448');
+    } finally {
+      restore();
+    }
+  });
+});
