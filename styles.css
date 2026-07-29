@@ -3188,6 +3188,43 @@ tr:hover td {
   cursor: pointer;
 }
 
+/* ═══ STOCKTAKE SCAN FLASH ═════════════════════════════════════
+   Per-bag confirmation during a zone check. The normal success flash paints
+   #scan-overlay, which sits behind the camera and is therefore invisible while
+   scanning — this flashes the camera view itself so a scan is unmistakable
+   without opening anything. */
+#m-camscan.cam-flash-ok::after,
+#m-camscan.cam-flash-err::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  animation: camFlash 0.28s ease-out;
+}
+#m-camscan.cam-flash-ok::after {
+  box-shadow: inset 0 0 0 6px #16a34a;
+  background: rgba(22, 163, 74, 0.16);
+}
+#m-camscan.cam-flash-err::after {
+  box-shadow: inset 0 0 0 6px #dc2626;
+  background: rgba(220, 38, 38, 0.16);
+}
+@keyframes camFlash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #m-camscan.cam-flash-ok::after,
+  #m-camscan.cam-flash-err::after {
+    animation-duration: 0.01s;
+  }
+}
+
 /* ═══ UNDO SNACKBAR ════════════════════════════════════════════ */
 /* Bottom-centered "Rückgängig" bar for reversible → Fruchtung moves. */
 .undo-bar {

@@ -4874,32 +4874,47 @@ function zoneCheckStartScan() {
   updateSD();
   openCamScan();
 }
+// Deliberately lighter than setFb: a stocktake fires one of these per bag, and
+// setFb also writes a scan-log entry and re-renders the success list, which is
+// wasted work here. Flash the camera view (the scan-overlay flash is invisible
+// behind the camera), beep, and drop a one-line HUD toast — no window.
+function _zcFeedback(type, msg) {
+  const el = document.getElementById('m-camscan');
+  if (el) {
+    el.classList.remove('cam-flash-ok', 'cam-flash-err');
+    void el.offsetWidth; // restart the animation for back-to-back scans
+    el.classList.add(type === 'ok' ? 'cam-flash-ok' : 'cam-flash-err');
+  }
+  if (type === 'ok') _scanBeepOk();
+  else _scanBeepErr();
+  _showCamHudToast(type, msg);
+}
 function zoneCheckScanned(bagId, batchId) {
   const expected = getZoneBags(_zcZone);
   const total = Object.keys(expected).length;
   if (expected[bagId]) {
     if (_zcFound.has(bagId)) {
-      setFb('info', t('zoneCheck.scanDup', { bag: bagId }));
+      _zcFeedback('info', t('zoneCheck.scanDup', { bag: bagId }));
       return;
     }
     _zcFound.add(bagId);
-    setFb('ok', t('zoneCheck.scanOk', { found: _zcFound.size, total: total }));
+    _zcFeedback('ok', t('zoneCheck.scanOk', { found: _zcFound.size, total: total }));
     return;
   }
   // Not expected here, but it is physically in the zone — correct the record.
   const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (batchId || '').toUpperCase());
   if (!b) {
-    setFb('err', t('zoneCheck.scanUnknown', { bag: bagId }));
+    _zcFeedback('err', t('zoneCheck.scanUnknown', { bag: bagId }));
     return;
   }
   moveBagsTo(b, [bagId], _zcZone, function (moved) {
     if (!moved) {
-      setFb('err', t('zoneCheck.scanUnknown', { bag: bagId }));
+      _zcFeedback('err', t('zoneCheck.scanUnknown', { bag: bagId }));
       return;
     }
     _zcFound.add(bagId);
     _zcMoved++;
-    setFb('ok', t('zoneCheck.scanMoved', { bag: bagId, zone: zoneDisplayName(_zcZone) }));
+    _zcFeedback('ok', t('zoneCheck.scanMoved', { bag: bagId, zone: zoneDisplayName(_zcZone) }));
   });
 }
 function openZoneCheck(zoneId) {
@@ -16469,6 +16484,10 @@ const SCAN_DEDUP_MS = 3000;
 // generous safety margin against double-reads; with the dedup window above,
 // 800 ms is plenty and lets workers scan a row of 20 bags ~14 s faster.
 const SCAN_PAUSE_MS = 800;
+// Stocktake pause: every bag is a distinct code and the dedup window above
+// already blocks re-reads of the same label, so this only needs to be long
+// enough to move the phone to the next bag.
+const ZC_SCAN_PAUSE_MS = 250;
 let _camLastDecoded = '';
 let _camLastDecodedAt = 0;
 // Persisted between sessions so workers who flipped to the front camera once
@@ -16581,6 +16600,10 @@ function openCamScan() {
         _camLastDecodedAt = now;
         scanner.pause(true);
         processScan(decoded);
+        // Stocktake runs bag-to-bag at pace, and every bag is a different code,
+        // so the 3 s dedup window already covers double-reads — a long pause on
+        // top of it just makes the walk feel sluggish.
+        var pauseMs = _zcScanMode ? ZC_SCAN_PAUSE_MS : SCAN_PAUSE_MS;
         setTimeout(function () {
           // Only resume if we're still the active scanner AND the state hasn't
           // moved to closing in the meantime.
@@ -16589,7 +16612,7 @@ function openCamScan() {
               scanner.resume();
             } catch (e) {}
           }
-        }, SCAN_PAUSE_MS);
+        }, pauseMs);
       },
       function () {}
     )
