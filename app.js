@@ -10616,6 +10616,15 @@ function msQuickConfirm() {
     return;
   }
   // block / all-in-one
+  // Land on the Charge page BEFORE prefilling. createBatch's success panel
+  // (nb-result, with the print buttons) lives inside sp-batch-new, so creating
+  // from the dashboard shortcut used to reveal it on a page the worker was not
+  // looking at — the batch appeared, the labels did not. Order matters: opening
+  // the sub-tab can run nbApplyDefaults() on first visit, which would overwrite
+  // every field the recipe is about to set.
+  msQuickClose();
+  go('batch', 'n-batch');
+  openStab('batch', 'new');
   const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
   setv('nb-strain-sel', ms.id);
   setv('nb-strain-text', strainText);
@@ -10633,7 +10642,6 @@ function msQuickConfirm() {
   const nbc = document.getElementById('nb-culture');
   if (nbc) nbc.value = sourceCulture;
   setv('nb-notes', '');
-  msQuickClose();
   createBatch();
 }
 
