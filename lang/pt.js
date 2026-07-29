@@ -302,7 +302,7 @@ window.LANG['pt'] = {
   'lab.lineage': 'Linhagem',
   'lab.cultureLibrary': 'Biblioteca de culturas',
   'lab.allTypes': 'Todos os tipos',
-  'lab.motherCultures': 'Culturas m\u00e3e',
+  'lab.motherCultures': 'Slants',
   'lab.petriDishes': 'Placas de Petri',
   'lab.liquidCultures': 'Culturas l\u00edquidas',
   'lab.allStatuses': 'Todos os status',
