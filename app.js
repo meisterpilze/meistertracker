@@ -17165,6 +17165,10 @@ function initEventListeners() {
     if (!el) return;
     goToBatch(el.dataset.batch);
   });
+  // The two creation flows keep one-tap buttons on the dashboard; the speed-dial
+  // FAB carries the same actions for every other page.
+  $('dash-act-newbatch').addEventListener('click', msQuickChargeNew);
+  $('dash-act-labwork').addEventListener('click', msQuickLaborNew);
   applyDashMode();
   initDashCollapse();
 
