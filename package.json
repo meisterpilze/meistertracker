@@ -31,7 +31,7 @@
   "devDependencies": {
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
-    "license-checker-rseidelsohn": "^4.4.2",
+    "license-checker-rseidelsohn": "^5.0.1",
     "prettier": "^3.8.1"
   }
 }

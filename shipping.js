@@ -103,7 +103,7 @@ const _COUNTRY_ISO2 = {
 // label that should never go out.
 function _iso2Country(v) {
   const s = String(v == null ? '' : v).trim();
-  if (!s) return 'DE';
+  if (!s) throw new Error('Zielland fehlt — bitte Lieferland angeben (ISO-Ländercode, z. B. DE).');
   const code = /^[A-Za-z]{2}$/.test(s) ? s.toUpperCase() : _COUNTRY_ISO2[s.toLowerCase()];
   if (!code) throw new Error('Unbekanntes Zielland: "' + s + '" — bitte ISO-Ländercode verwenden (z. B. DE).');
   if (!_EU_ISO2.has(code)) {
@@ -116,8 +116,16 @@ function scAuth(cfg) {
   return 'Basic ' + Buffer.from((cfg.publicKey || '') + ':' + (cfg.secretKey || '')).toString('base64');
 }
 
+// Every outbound Sendcloud call gets a hard timeout: without it a stalled request
+// hangs for minutes and a label buy would wedge the caller's in-flight lock.
+// AbortSignal.timeout aborts the fetch, surfacing as a normal caught error.
+const FETCH_TIMEOUT_MS = 15000;
+function tfetch(url, opts) {
+  return globalThis.fetch(url, { ...opts, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+}
+
 async function scFetch(cfg, method, path, body) {
-  const res = await fetch(SENDCLOUD_BASE + path, {
+  const res = await tfetch(SENDCLOUD_BASE + path, {
     method,
     headers: {
       Authorization: scAuth(cfg),
@@ -214,7 +222,13 @@ const sendcloud = {
   },
 
   async fetchLabelPdf(cfg, url) {
-    const res = await fetch(url, { headers: { Authorization: scAuth(cfg) } });
+    // labelUrl comes from an earlier Sendcloud response; only ever send the Basic
+    // credentials to Sendcloud's own host (new URL() also rejects a malformed url
+    // before any auth header goes out).
+    if (new URL(url).host !== 'panel.sendcloud.sc') {
+      throw new Error('Label-URL nicht von Sendcloud — Anfrage abgelehnt.');
+    }
+    const res = await tfetch(url, { headers: { Authorization: scAuth(cfg) } });
     if (!res.ok) throw new Error('label fetch HTTP ' + res.status);
     return Buffer.from(await res.arrayBuffer());
   }

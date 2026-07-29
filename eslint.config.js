@@ -54,6 +54,9 @@ module.exports = [
         URL: 'readonly',
         indexedDB: 'readonly',
         IDBKeyRange: 'readonly',
+        // Used to bound the app-shell network-first fetch so a hung request
+        // falls back to cache instead of blocking the page.
+        AbortSignal: 'readonly',
       }
     }
   },

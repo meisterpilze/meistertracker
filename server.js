@@ -726,6 +726,9 @@ const PHOTO_DIR_MAX_BYTES = (() => {
   const gb = Number.isFinite(raw) && raw > 0 ? raw : 10;
   return Math.round(gb * 1024 * 1024 * 1024);
 })();
+// Typed confirmation for the irreversible clean-slate reset. Must be echoed by
+// the client exactly, so the endpoint can't be fired by a stray/replayed POST.
+const RESET_CONFIRM_PHRASE = 'ALLES LOESCHEN';
 const PHOTO_DIR = path.join(DIR, 'data', 'photos');
 const PHOTO_SIZE_REFRESH_MS = 5 * 60 * 1000; // recompute every 5 min
 let _photoDirSizeBytes = 0;
@@ -4201,9 +4204,15 @@ function handleRequest(req, res) {
   // ── Security headers ──
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
+  // base-uri/form-action/object-src close injection pivots that the rest of the
+  // policy leaves open: a <base> tag rewriting every relative script URL, a form
+  // retargeted to an attacker origin, and plugin/embed content. script-src still
+  // needs 'unsafe-inline' because the app uses inline event handlers (onclick=)
+  // throughout index.html/app.js — removing it requires converting those to
+  // addEventListener first, or every one of them silently stops working.
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; report-uri /api/csp-reports"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri /api/csp-reports"
   );
   if (protocol === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -4727,11 +4736,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     const sessionId = req.headers['mcp-session-id'];
+    // S-01 follow-up: createMcpServer bakes the caller's role into the cached
+    // server at creation, so a reused session ignores the current request's
+    // token role. Bind each session to the identity that created it — a later
+    // request bearing a different token, or the same user after a role change,
+    // must not ride on the original session's privileges. Returns true when the
+    // presented auth no longer matches, so the caller rejects (client re-inits).
+    const mcpSessionAuthMismatch = (session) =>
+      !session.auth || session.auth.userId !== mcpAuth.userId || session.auth.role !== mcpAuth.role;
     if (req.method === 'POST') {
       jsonBody(req, res, async (e, body) => {
         if (e) return;
         try {
           let session = sessionId ? mcpSessions.get(sessionId) : null;
+          if (session && mcpSessionAuthMismatch(session)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end('{"error":"session belongs to a different identity"}');
+            return;
+          }
           if (!session) {
             // S-01: pass the caller's auth context (userId, role) into
             // the MCP server so destructive tools can require admin role.
@@ -4743,7 +4765,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             const transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => crypto.randomUUID(),
               onsessioninitialized: (sid) => {
-                mcpSessions.set(sid, { transport, server, lastActive: Date.now() });
+                mcpSessions.set(sid, { transport, server, lastActive: Date.now(), auth: mcpAuth });
               }
             });
             transport.onclose = () => {
@@ -4752,7 +4774,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               server.close().catch(() => {});
             };
             await server.connect(transport);
-            session = { transport, server, lastActive: Date.now() };
+            session = { transport, server, lastActive: Date.now(), auth: mcpAuth };
           } else {
             session.lastActive = Date.now();
           }
@@ -4778,6 +4800,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         res.end('{"error":"no session"}');
         return;
       }
+      if (mcpSessionAuthMismatch(session)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end('{"error":"session belongs to a different identity"}');
+        return;
+      }
       session.lastActive = Date.now();
       session.transport.handleRequest(req, res);
       return;
@@ -4787,6 +4814,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       if (!session) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"no session"}');
+        return;
+      }
+      if (mcpSessionAuthMismatch(session)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end('{"error":"session belongs to a different identity"}');
         return;
       }
       session.transport.handleRequest(req, res);
@@ -6071,6 +6103,67 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Clean-slate reset (admin) --
+  // Irreversible, so it is guarded three ways: admin only, the client must echo
+  // a typed confirmation phrase, and a verified backup is written first. The
+  // backup deliberately does NOT use BACKUP_PREFIX so the auto-backup rotation
+  // never prunes it. Configuration (zones, Sorten, users, suppliers, inventory,
+  // settings) is always kept — only the categories asked for are cleared.
+  if (req.method === 'POST' && req.url === '/api/admin/reset') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data || data.confirm !== RESET_CONFIRM_PHRASE) {
+        jsonErr(res, 400, 'confirmation phrase required');
+        return;
+      }
+      const scopes = {
+        growing: !!data.growing,
+        orders: !!data.orders,
+        planning: !!data.planning
+      };
+      if (!scopes.growing && !scopes.orders && !scopes.planning) {
+        jsonErr(res, 400, 'nothing selected');
+        return;
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const dest = path.join(BACKUP_DIR, 'pre-reset-' + stamp + '.db');
+      db.backupDb(database, dest)
+        .then(() => {
+          const verifyError = verifyBackupFile(dest);
+          if (verifyError) throw new Error('pre-reset backup failed verification: ' + verifyError);
+          const counts = db.resetOperationalData(database, scopes);
+          // Contamination photo files are on disk, not in the DB — drop them too
+          // so they don't hold the photo-dir cap against freshly cleared reports.
+          let photosRemoved = false;
+          if (scopes.growing) {
+            try {
+              fs.rmSync(PHOTO_DIR, { recursive: true, force: true });
+              fs.mkdirSync(PHOTO_DIR, { recursive: true });
+              _photoDirSizeBytes = 0;
+              _photoDirSizeStaleAt = 0; // force a recompute on the next check
+              photosRemoved = true;
+            } catch (fileErr) {
+              log('warn', 'Reset: photo cleanup failed', { error: fileErr.message });
+            }
+          }
+          log('warn', 'Clean-slate reset performed', {
+            user: req.authUser ? req.authUser.username : null,
+            scopes,
+            counts,
+            backup: dest
+          });
+          broadcastSSE(res);
+          jsonOk(res, { counts, backup: path.basename(dest), photosRemoved });
+        })
+        .catch((err) => safeErr(res, err));
+    });
+    return;
+  }
+
   // -- Contamination reports --
   if (req.method === 'GET' && req.url === '/api/contamination-types') {
     try {
@@ -6101,7 +6194,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, ve);
         return;
       }
-      const vl = validateLengths(data, { notes: 2000, bag_id: 100, batch_id: 100, zone_id: 100 });
+      const vl = validateLengths(data, { notes: 2000, bag_id: 100, batch_id: 100, zone_id: 100, report_uuid: 100 });
       if (vl) {
         jsonErr(res, 400, vl);
         return;
@@ -6118,11 +6211,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       try {
         database.exec('BEGIN');
         try {
-          reportId = db.createContaminationReport(database, {
+          const cr = db.createContaminationReport(database, {
             ...data,
             user_id: req.authUser ? req.authUser.user_id : null
           });
-          const photos = Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
+          reportId = cr.id;
+          // On an offline-replay duplicate (same report_uuid) the report, photos
+          // and auto-MOVE already committed the first time — skip re-running the
+          // side effects so a lost 200 can't create a second report or CONTAM move.
+          const photos = !cr.duplicate && Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
           for (const p of photos) {
             const saved = savePhotoToDisk(reportId, p, req.authUser);
             if (saved) {
@@ -6137,7 +6234,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // contamination_reports.scan_log_id to link the two records together.
           // Skipped silently when (a) auto_move is false, (b) severity is minor,
           // (c) no bag_id (whole-batch report), (d) no contam zone configured.
-          const wantAutoMove = data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
+          const wantAutoMove =
+            !cr.duplicate && data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
           if (wantAutoMove && data.bag_id) {
             const contamZone = database
               .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
@@ -6500,13 +6598,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && url === '/api/orders') {
     try {
       const params = new URL(req.url, 'http://x').searchParams;
-      jsonOk(res, {
-        items: db.listOrders(database, {
-          status: params.get('status') || undefined,
-          channel: params.get('channel') || undefined,
-          limit: parseInt(params.get('limit'), 10) || 200
-        })
+      const items = db.listOrders(database, {
+        status: params.get('status') || undefined,
+        channel: params.get('channel') || undefined,
+        limit: parseInt(params.get('limit'), 10) || 200
       });
+      // PII: the list carries customerName just like the order-detail route,
+      // which gates it behind requireShipping. Mirror that gate here — users
+      // without ship permission still see every order, just without the
+      // customer's name (mirrors requireShipping: admin OR can_ship).
+      const canSeeCustomer = req.authUser && (req.authUser.role === 'admin' || req.authUser.can_ship === 1);
+      if (!canSeeCustomer) {
+        for (const o of items) delete o.customerName;
+      }
+      jsonOk(res, { items });
     } catch (err) {
       safeErr(res, err);
     }
@@ -7536,16 +7641,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         let imported = 0;
         let cursor = null;
         let pages = 0;
-        // Fetch every page first (network I/O), then commit them in ONE transaction:
+        // Fetch pages first (network I/O), then commit them in ONE transaction:
         // one fsync instead of one per order, and no write-lock held across the
         // network round-trips. upsertOrder dedupes by (channel, channelOrderId).
+        // A mid-run page error (e.g. a 429) is captured, not thrown, so the
+        // pages already fetched still get committed below instead of the whole
+        // run being discarded.
         const collected = [];
-        do {
-          const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
-          for (const o of orders) collected.push(o);
-          cursor = nextCursor;
-          pages++;
-        } while (cursor && pages < 20);
+        let fetchErr = null;
+        try {
+          do {
+            const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
+            for (const o of orders) collected.push(o);
+            cursor = nextCursor;
+            pages++;
+          } while (cursor && pages < 20);
+        } catch (ePage) {
+          fetchErr = ePage;
+        }
         database.exec('BEGIN');
         try {
           for (const o of collected) {
@@ -7573,6 +7686,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             /* ignore */
           }
           throw eTx;
+        }
+        if (fetchErr) {
+          // Partial success: earlier pages are committed. Record and surface the
+          // error, but keep (and broadcast) the imported orders rather than
+          // throwing the whole run away when a later page fails.
+          db.setChannelSyncState(database, channel, {
+            lastSync: new Date().toISOString(),
+            lastError: fetchErr.message || 'sync failed'
+          });
+          broadcastSSE(res);
+          jsonErr(res, 502, fetchErr.message || 'sync failed');
+          return;
         }
         db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: null });
         broadcastSSE(res);
