@@ -237,24 +237,38 @@ function buildPayload(database, cfg, now) {
     // against the un-shifted window and shift the reported date, so a lead time
     // never silently widens how far ahead we look.
     const until = shiftDate(at, cfg.plannedDays);
+    // ⚠️ `date(b.due)`, not `b.due`. The column holds a full timestamp — it is
+    // written with toISOString() — so `b.due + 'T00:00:00Z'` produced
+    // "2026-08-05T14:23:11.123ZT00:00:00Z", an invalid Date, and the
+    // toISOString() below threw "Invalid time value". That took the *whole*
+    // payload down: one planned batch and the harvested half never left either.
+    //
+    // Normalising in SQL fixes two things at once. Rows whose date cannot be
+    // read yield NULL and drop out instead of throwing, and `BETWEEN` on a
+    // plain date stops cutting the last day short — a timestamp on the final
+    // day sorts after the bare date and was silently excluded.
     const rows = database
       .prepare(
-        `SELECT b.batch_id, b.species, b.strain, b.due
+        `SELECT b.batch_id, b.species, b.strain, date(b.due) AS due_date
            FROM batches b
           WHERE b.batch_type = 'block'
-            AND b.due >= ? AND b.due <= ?
+            AND date(b.due) BETWEEN ? AND ?
             AND b.species IS NOT NULL AND b.species <> ''
             AND EXISTS (SELECT 1 FROM bags g WHERE g.batch_id = b.batch_id)
             AND NOT EXISTS (SELECT 1 FROM harvests h WHERE h.batch = b.batch_id)
-          ORDER BY b.due, b.species`
+          ORDER BY date(b.due), b.species`
       )
       .all(today, until);
     for (const r of rows) {
+      // Belt and braces: date() already filtered the unreadable ones, and a
+      // single bad row must never cost the whole feed.
+      const tag = new Date(r.due_date + 'T00:00:00Z');
+      if (Number.isNaN(tag.getTime())) continue;
       planned.push(
         trim({
           species: r.species,
           strain: cfg.strain ? r.strain || null : null,
-          expectedFrom: shiftDate(new Date(r.due + 'T00:00:00Z'), cfg.leadDays)
+          expectedFrom: shiftDate(tag, cfg.leadDays)
         })
       );
     }

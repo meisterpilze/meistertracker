@@ -25,6 +25,24 @@ function daysFromNow(n) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * A due date the way the application actually writes it.
+ *
+ * ⚠️ `batches.due` is stored with `toISOString()` — a full timestamp, not a
+ * plain date. The fixture used to write 'YYYY-MM-DD', which no code path in the
+ * app produces, and that is exactly why a crash on real data passed every test
+ * here: the feed appended 'T00:00:00Z' to the stored value, which is harmless
+ * for a bare date and produces an invalid Date for a timestamp.
+ *
+ * A fixture in a format production never emits tests a program that does not
+ * exist.
+ */
+function dueAt(n) {
+  const d = new Date(NOW.getTime());
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString();
+}
+
 const CFG = {
   url: 'https://example.test/feed',
   secret: 's3cret',
@@ -145,9 +163,9 @@ describe('harvest feed payload', () => {
 
     // Upcoming: a block batch inside the window, one far beyond it, a grain
     // batch (never harvested), and one that has already produced.
-    block(d, 'P1', 'Lion', 'LM1', daysFromNow(6), ['P1-01']);
-    block(d, 'P2', 'Oyster', 'Blue', daysFromNow(90), ['P2-01']);
-    block(d, 'P3', 'Oyster', 'Blue', daysFromNow(4), ['P3-01']);
+    block(d, 'P1', 'Lion', 'LM1', dueAt(6), ['P1-01']);
+    block(d, 'P2', 'Oyster', 'Blue', dueAt(90), ['P2-01']);
+    block(d, 'P3', 'Oyster', 'Blue', dueAt(4), ['P3-01']);
     db.insertHarvest(d, {
       time: daysFromNow(-1) + 'T10:00:00',
       batch: 'P3',
@@ -542,5 +560,57 @@ describe('stored config', () => {
   it('caps a runaway error message instead of storing a whole response body', () => {
     db.updateHarvestFeedStatus(t.db, { ok: false, error: 'x'.repeat(5000) });
     assert.equal(db.getHarvestFeedCfg(t.db).lastError.length, 500);
+  });
+});
+
+// ── Due dates as the application really stores them ──────────────────────────
+//
+// Found in production on the first real run: "Last attempt failed — Invalid
+// time value". `batches.due` holds a full ISO timestamp, the feed appended
+// 'T00:00:00Z' to it, and the resulting Date was invalid. One planned batch was
+// enough to take the whole payload down — including the harvested half, which
+// has nothing to do with dates.
+describe('due dates', () => {
+  let t;
+  before(() => {
+    t = tmpDb();
+    db.insertHarvest(t.db, {
+      time: daysFromNow(0) + 'T07:00:00',
+      batch: 'H1',
+      species: 'Oyster',
+      strain: 'Blue',
+      grams: 2000
+    });
+  });
+  after(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  it('reads a full timestamp and reports the date part', () => {
+    block(t.db, 'D1', 'Lion', 'LM1', dueAt(5), ['D1-01']);
+    const out = feed.buildPayload(t.db, CFG, NOW);
+    assert.equal(out.planned.find((e) => e.species === 'Lion').expectedFrom, daysFromNow(5));
+  });
+
+  // The window used to be compared against the raw column, and a timestamp on
+  // the final day sorts after the bare date — so the last day of the look-ahead
+  // silently fell out.
+  it('includes a batch due on the very last day of the window', () => {
+    block(t.db, 'D2', 'Shiitake', 'S1', dueAt(CFG.plannedDays), ['D2-01']);
+    const out = feed.buildPayload(t.db, CFG, NOW);
+    assert.ok(
+      out.planned.some((e) => e.species === 'Shiitake'),
+      'a batch due exactly plannedDays out must still be reported'
+    );
+  });
+
+  // A single unreadable row is a data problem, not a reason to publish nothing.
+  // The harvested half is the half people sell against.
+  it('survives an unreadable due date instead of losing the whole payload', () => {
+    block(t.db, 'D3', 'Enoki', 'E1', 'sometime next week', ['D3-01']);
+    const out = feed.buildPayload(t.db, CFG, NOW);
+    assert.equal(out.harvested.length, 1, 'the harvested half must still be there');
+    assert.ok(!out.planned.some((e) => e.species === 'Enoki'));
   });
 });
