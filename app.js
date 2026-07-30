@@ -4215,13 +4215,10 @@ function dashTaskRowHtml(tk) {
   const idHtml = `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}" style="white-space:nowrap">${esc(tk.batchId)}</span>`;
   const bags = tk.bags ? `<strong>${tk.bags} ${esc(t('worklist.bags'))}</strong> ` : '';
   const instr = tk.instruction ? ` <span style="color:var(--c-text-sec)">${esc(tk.instruction)}</span>` : '';
-  // Where it is now → where it is going, then how late. The destination lives on
-  // this muted line rather than in the title: with a real zone name ("Big
-  // Fruiting Tent") the title wrapped to four lines at phone width.
-  const meta = [tk.where && tk.dest ? tk.where + ' → ' + tk.dest : tk.where, tk.detail]
-    .filter(Boolean)
-    .map(esc)
-    .join(' · ');
+  // Where it is now, then how late. The destination is NOT repeated here — it is
+  // the same tent for every move row, so it is stated once under the tab strip
+  // (see renderDashBatchTasks). Per row it pushed this line to a second wrap.
+  const meta = [tk.where, tk.detail].filter(Boolean).map(esc).join(' · ');
   return (
     // flex-wrap plus a flex-basis on the text column: at phone width the buttons
     // drop to their own right-aligned line instead of squeezing the text to
@@ -4264,6 +4261,24 @@ function toggleDashMore(key) {
   _dashMore[key] = !_dashMore[key];
   renderDashBatchTasks();
 }
+// Which urgency tab is open, remembered across reloads: a worker who lives in
+// "Heute" should not have to re-pick it every time the dashboard re-renders.
+// No stored choice → the most urgent section that has rows (see renderDashBatchTasks).
+let _dashTabKey = null;
+function _dashTab() {
+  if (_dashTabKey === null) _dashTabKey = localStorage.getItem('mp-dash-tab') || '';
+  return _dashTabKey;
+}
+function setDashTab(key) {
+  if (!DASH_SECTIONS.includes(key)) return;
+  _dashTabKey = key;
+  try {
+    localStorage.setItem('mp-dash-tab', key);
+  } catch (e) {
+    /* storage disabled — the choice just won't survive a reload */
+  }
+  renderDashBatchTasks();
+}
 // Bags of this batch that are actually placed somewhere, plus the room most of
 // them are in — "where do I walk to" and "how big is this job".
 function _dashTaskPlace(batchId, lastByBag) {
@@ -4298,10 +4313,15 @@ function _dashLeftBehindRows(splits) {
     };
   });
 }
-// The card, grouped by urgency rather than by room: the row itself now carries
-// the instruction ("12 Beutel → Fruchtzelt"), so what a worker needs is readable
-// without opening anything. The by-room walk sheet still exists behind the
-// summary chip (openWorkList), which is the better place for it — it prints.
+// The card, grouped by urgency rather than by room: the row itself carries the
+// instruction, so what a worker needs is readable without opening anything. The
+// by-room walk sheet still exists behind the summary chip (openWorkList), which
+// is the better place for it — it prints.
+//
+// One urgency at a time, behind a tab strip. Stacked, the four sections were ~17
+// rows deep before the fold — unusable on a phone, which is where this card is
+// actually read. The tabs keep every count visible (the whole picture is the
+// strip itself) while only one section's rows occupy the screen.
 function renderDashBatchTasks() {
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
@@ -4315,9 +4335,8 @@ function renderDashBatchTasks() {
       zoneId: p.zoneId,
       where: p.where,
       // Grain says what state it is in ("durchwachsen") because its button only
-      // says the action; a move row's destination is the button, so it goes to
-      // the muted meta line as `dest` instead of repeating in the title.
-      dest: tk.taskAction === 'inoculate' ? '' : destName,
+      // names the action. A move row says nothing extra: its button is the
+      // instruction and the destination is stated once under the tabs.
       instruction: tk.taskAction === 'inoculate' ? t('dash.grainReady') : ''
     });
   });
@@ -4330,42 +4349,74 @@ function renderDashBatchTasks() {
     return;
   }
   const fruitingExists = zones.some((z) => z.role === 'fruiting');
-  el.innerHTML = DASH_SECTIONS.map((key) => {
+  // Most overdue / soonest due first; left-behind by how many bags are stuck.
+  const bySection = {};
+  for (const key of DASH_SECTIONS) {
     const mine = rows.filter((r) => r.bucket === key);
-    if (!mine.length) return '';
-    // Most overdue / soonest due first; left-behind by how many bags are stuck.
+    if (!mine.length) continue;
     mine.sort((a, b) => (a.dueIn != null && b.dueIn != null ? a.dueIn - b.dueIn : b.bags - a.bags));
-    const open = _dashMore[key];
-    const shown = open ? mine : mine.slice(0, DASH_SECTION_CAP);
-    const hidden = mine.length - shown.length;
-    const bags = mine.reduce((n, r) => n + (r.bags || 0), 0);
-    // A whole-section "Alle → Fruchtung" only where the count is small enough to
-    // be a considered tap. Deliberately not on the overdue section: one tap
-    // moving the entire backlog is a foot-gun, undoable only via the snackbar.
-    const bulkable =
-      (key === 'today' || key === 'week') &&
-      fruitingExists &&
-      mine.length > 1 &&
-      mine.every((r) => r.taskAction === 'move');
-    const bulk = bulkable
-      ? `<span class="dash-sec-bulk" data-action="bulk-fruiting" data-bucket="${key}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0;cursor:pointer">${esc(t('dash.bulkFruiting'))}</span>`
+    bySection[key] = mine;
+  }
+  const live = DASH_SECTIONS.filter((k) => bySection[k]);
+  // A remembered tab that has emptied out (its work got done) falls back to the
+  // most urgent section that still has rows, rather than showing a blank card.
+  const active = live.includes(_dashTab()) ? _dashTab() : live[0];
+
+  const tabs =
+    '<div role="tablist" style="display:flex;gap:4px;margin-bottom:9px">' +
+    live
+      .map((key) => {
+        const on = key === active;
+        const bags = bySection[key].reduce((n, r) => n + (r.bags || 0), 0);
+        const accent = key === 'overdue' ? 'var(--c-red-dark)' : 'var(--c-text-sec)';
+        return (
+          `<button type="button" role="tab" aria-selected="${on}" data-action="dash-tab" data-key="${key}" ` +
+          `style="flex:1;min-width:0;padding:5px 2px 6px;border:1px solid ${on ? 'var(--c-border)' : 'transparent'};` +
+          `border-bottom:2px solid ${on ? accent : 'var(--c-border)'};border-radius:7px 7px 0 0;` +
+          `background:${on ? 'var(--c-surface)' : 'transparent'};cursor:pointer;line-height:1.15">` +
+          `<span style="display:block;font-size:15px;font-weight:700;color:${on ? accent : 'var(--c-text-sec)'}">${bags}</span>` +
+          `<span style="display:block;font-size:9.5px;font-weight:600;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t('dash.tab.' + key))}</span>` +
+          '</button>'
+        );
+      })
+      .join('') +
+    '</div>';
+
+  const mine = bySection[active];
+  const open = _dashMore[active];
+  const shown = open ? mine : mine.slice(0, DASH_SECTION_CAP);
+  const hidden = mine.length - shown.length;
+  // A whole-section "Alle → Fruchtung" only where the count is small enough to
+  // be a considered tap. Deliberately not on the overdue section: one tap
+  // moving the entire backlog is a foot-gun, undoable only via the snackbar.
+  const bulkable =
+    (active === 'today' || active === 'week') &&
+    fruitingExists &&
+    mine.length > 1 &&
+    mine.every((r) => r.taskAction === 'move');
+  // The destination is the same tent for every move row, so it is stated once
+  // here instead of on each row, where it wrapped every meta line.
+  const anyMove = mine.some((r) => r.taskAction === 'move');
+  const bulkPill = bulkable
+    ? `<span class="dash-sec-bulk" data-action="bulk-fruiting" data-bucket="${active}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0;cursor:pointer">${esc(t('dash.bulkFruiting'))}</span>`
+    : '';
+  const bulk =
+    anyMove || bulkPill
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+        (anyMove
+          ? `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ ${esc(destName)}</span>`
+          : '') +
+        '<span style="flex:1"></span>' +
+        bulkPill +
+        '</div>'
       : '';
-    const head =
-      '<div style="display:flex;align-items:center;gap:7px;padding:2px 2px 5px">' +
-      (key === 'overdue' ? '<span class="pdot high" style="flex:none"></span>' : '') +
-      `<span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${key === 'overdue' ? 'var(--c-red-dark)' : 'var(--c-text-sec)'}">${esc(t('dash.sec.' + key))}</span>` +
-      `<span style="font-size:10.5px;color:var(--c-text-muted);font-family:monospace;white-space:nowrap">${bags} ${esc(t('worklist.bags'))}</span>` +
-      '<span style="flex:1"></span>' +
-      bulk +
-      '</div>';
-    // Never silently truncate: the expander states how many rows are folded away.
-    const more = hidden
-      ? `<div data-action="dash-more" data-key="${key}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">+ ${esc(t('dash.moreRows', { n: hidden }))}</div>`
-      : open && mine.length > DASH_SECTION_CAP
-        ? `<div data-action="dash-more" data-key="${key}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">− ${esc(t('dash.fewerRows'))}</div>`
-        : '';
-    return '<div style="margin-bottom:11px">' + head + shown.map(dashTaskRowHtml).join('') + more + '</div>';
-  }).join('');
+  // Never silently truncate: the expander states how many rows are folded away.
+  const more = hidden
+    ? `<div data-action="dash-more" data-key="${active}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">+ ${esc(t('dash.moreRows', { n: hidden }))}</div>`
+    : open && mine.length > DASH_SECTION_CAP
+      ? `<div data-action="dash-more" data-key="${active}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">− ${esc(t('dash.fewerRows'))}</div>`
+      : '';
+  el.innerHTML = tabs + bulk + shown.map(dashTaskRowHtml).join('') + more;
 }
 // One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
@@ -17463,6 +17514,10 @@ function initEventListeners() {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const action = el.dataset.action;
+    if (action === 'dash-tab') {
+      setDashTab(el.dataset.key);
+      return;
+    }
     if (action === 'dash-more') {
       toggleDashMore(el.dataset.key);
       return;
