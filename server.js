@@ -10,6 +10,7 @@ const { execFile, spawn } = require('child_process');
 const db = require('./db.js');
 const ship = require('./shipping.js');
 const channels = require('./channels.js');
+const harvestFeed = require('./harvest-feed.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
@@ -1212,6 +1213,18 @@ function startDuckdnsUpdater() {
 }
 
 startDuckdnsUpdater();
+
+// ── OUTBOUND HARVEST FEED ────────────────────────────────────
+// Off unless HARVEST_WEBHOOK_URL is set. Pushes a signed summary of recorded
+// harvests and upcoming batches to a URL you choose, so a shop, a listing page
+// or a chat bot can answer "what do you have today?" without this machine being
+// reachable from the internet. Nothing comes back in — see harvest-feed.js for
+// the payload and the reasoning.
+//
+// Skipped in worktree mode for the same reason as DuckDNS: a second copy of the
+// server usually inherits the same .env, and two of them posting different
+// snapshots to one receiver is worse than one posting none.
+harvestFeed.start({ database, env: process.env, log, skip: WORKTREE_MODE });
 
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
 // Pure Node.js — no bash, curl, or acme.sh required.
