@@ -1578,7 +1578,7 @@ function createMcpServer(database, onWrite, printer) {
   // Example: lookup_barcode({ barcode: 1000042 })
   server.tool(
     'lookup_barcode',
-    'Resolve a numeric barcode to its entity (bag, culture, asset, zone, rack). Returns entity_type and entity_id. READ-ONLY.',
+    'Resolve a numeric barcode to its entity (bag, culture, zone, rack). Returns entity_type and entity_id. READ-ONLY.',
     {
       barcode: z.number().describe('Numeric barcode to look up')
     },
@@ -1592,9 +1592,9 @@ function createMcpServer(database, onWrite, printer) {
   // Example: assign_barcode({ entityType: 'bag', entityId: 'FB-2025-042-01' })
   server.tool(
     'assign_barcode',
-    'Assign a numeric barcode to an entity (bag, culture, asset, zone, rack). Returns existing barcode if already assigned (idempotent).',
+    'Assign a numeric barcode to an entity (bag, culture, zone, rack). Returns existing barcode if already assigned (idempotent).',
     {
-      entityType: z.enum(['bag', 'culture', 'asset', 'zone', 'rack']).describe('Entity type'),
+      entityType: z.enum(['bag', 'culture', 'zone', 'rack']).describe('Entity type'),
       entityId: z.string().describe('Entity ID')
     },
     async (params) => {
@@ -1612,85 +1612,6 @@ function createMcpServer(database, onWrite, printer) {
   server.tool('list_barcodes', 'List all assigned barcodes with their entity type and ID. READ-ONLY.', {}, async () => {
     return json(db.getAllBarcodes(database));
   });
-
-  // ──────────────────────────────────────────────────────────
-  // ASSETS
-  // ──────────────────────────────────────────────────────────
-
-  // Example: manage_assets({ action: 'create', assetId: 'AK-001', name: 'Autoklav', category: 'Sterilisation', purchasePrice: 2500 })
-  server.tool(
-    'manage_assets',
-    'Create, update, delete, or list equipment/assets. Actions: list (all assets), create/update (upsert by assetId), delete (remove asset). NOT for inventory/substrate (→ update_inventory).',
-    {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
-      assetId: z.string().optional().describe('Asset ID (required for create/update/delete)'),
-      name: z.string().optional().describe('Asset name (required for create)'),
-      category: z.string().optional().describe('Category (required for create)'),
-      entryDate: z.string().optional().describe('Entry date ISO (default: today)'),
-      exitDate: z.string().optional().describe('Exit/disposal date ISO'),
-      purchasePrice: z.number().optional().describe('Purchase price (required for create)'),
-      usefulLife: z.number().optional().describe('Useful life in years (required for create)'),
-      depreciationMethod: z.string().optional().describe('Depreciation method (default: linear)'),
-      supplier: z.string().optional().describe('Supplier name'),
-      invoiceNumber: z.string().optional().describe('Invoice number'),
-      serialNumber: z.string().optional().describe('Serial number'),
-      location: z.string().optional().describe('Current location'),
-      status: z.string().optional().describe('Status (default: aktiv)'),
-      notes: z.string().optional().describe('Notes')
-    },
-    async (params) => {
-      // 'list' is read-only and could be allowed for everyone, but the
-      // audit guidance lists `manage_assets` as admin-only — financial
-      // records should not leak even read-only to workers.
-      const adminErr = requireAdminRole();
-      if (adminErr) return adminErr;
-      try {
-        switch (params.action) {
-          case 'list':
-            return json(db.listAssets(database));
-          case 'create':
-          case 'update': {
-            if (!params.assetId) return errResult('assetId is required');
-            if (
-              params.action === 'create' &&
-              (!params.name || !params.category || params.purchasePrice == null || params.usefulLife == null)
-            ) {
-              return errResult('name, category, purchasePrice, and usefulLife are required for create');
-            }
-            const result = db.upsertAsset(database, {
-              assetId: params.assetId,
-              name: params.name || '',
-              category: params.category || '',
-              entryDate: params.entryDate || today(),
-              exitDate: params.exitDate || null,
-              purchasePrice: params.purchasePrice || 0,
-              usefulLife: params.usefulLife || 0,
-              depreciationMethod: params.depreciationMethod || 'linear',
-              supplier: params.supplier || null,
-              invoiceNumber: params.invoiceNumber || null,
-              serialNumber: params.serialNumber || null,
-              location: params.location || null,
-              status: params.status || 'aktiv',
-              notes: params.notes || '',
-              created: new Date().toISOString()
-            });
-            notify();
-            return json({ success: true, action: params.action, assetId: params.assetId, barcode: result.barcode });
-          }
-          case 'delete': {
-            if (!params.assetId) return errResult('assetId is required for delete');
-            db.deleteAssetById(database, params.assetId);
-            notify();
-            return json({ success: true, action: 'delete', assetId: params.assetId });
-          }
-          default:
-            return errResult('Unknown action: ' + params.action);
-        }
-      } catch (e) {
-        return safeErrResult(e);
-      }
-    }
-  );
 
   // ──────────────────────────────────────────────────────────
   // SUPPLIERS
@@ -1925,10 +1846,13 @@ function createMcpServer(database, onWrite, printer) {
   // Example: schedule_maintenance({ type: 'autoclave_cycle', assetId: 'AK-001', scheduledDate: '2025-04-15' })
   server.tool(
     'schedule_maintenance',
-    'Schedule a maintenance task for an asset or zone (e.g. autoclave cycle, HEPA filter change, laminar flow cleaning). Creates an open maintenance entry with a due date.',
+    'Schedule a maintenance task for a piece of equipment or a zone (e.g. autoclave cycle, HEPA filter change, laminar flow cleaning). Creates an open maintenance entry with a due date.',
     {
       type: z.string().describe('Maintenance type (e.g. autoclave_cycle, hepa_filter, cleaning, calibration)'),
-      assetId: z.string().optional().describe('Asset ID (for equipment maintenance)'),
+      assetId: z
+        .string()
+        .optional()
+        .describe('Free-text equipment identifier, e.g. "AK-001" (for equipment maintenance)'),
       zoneId: z.string().optional().describe('Zone ID (for room/zone maintenance)'),
       description: z.string().optional().describe('Detailed description'),
       scheduledDate: z.string().optional().describe('ISO date when maintenance is due'),
@@ -1980,7 +1904,7 @@ function createMcpServer(database, onWrite, printer) {
     'get_maintenance_due',
     'Get all due/overdue maintenance tasks (not yet completed). READ-ONLY. To schedule new maintenance use schedule_maintenance, to complete use complete_maintenance.',
     {
-      assetId: z.string().optional().describe('Filter by asset ID'),
+      assetId: z.string().optional().describe('Filter by equipment identifier'),
       zoneId: z.string().optional().describe('Filter by zone ID'),
       limit: z.number().optional().describe('Max entries (for history)')
     },

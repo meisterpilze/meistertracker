@@ -80,11 +80,10 @@ Hard-coded coordinates live in:
 | `app.js` | `bagLabelItems()` ~9673 | Bag label fields (y=155/185/215, blockW=400, fontH=28/24/24) |
 | `app.js` | `labLabelItems()` ~9743 | Lab/culture label fields (same scheme) |
 | `app.js` | `bcParams()` ~9482 | Barcode width + centering, hardcoded `> 400` and `(400 - w) / 2` |
-| `app.js` | Asset-print template ~7677 | `^FB400`, `^A0N,30,30` etc. inline in ZPL strings |
 | `app.js` | `buildPreviewCell()` UI preview | `viewBox="0 0 400 240"` — the in-app preview is also pinned to 400×240 |
 | `mcp-server.js` | `itemsToZPL()` and `bagLabelItems()` ~121 | Mirror of the client logic for MCP-driven printing |
 
-Forking for a different label size means editing all six places (or
+Forking for a different label size means editing all five places (or
 introducing a label-template abstraction) and updating the preview
 viewBox. Not impossible, but more than a config tweak.
 
@@ -121,7 +120,6 @@ licence.
 | UI language `de` | `app.js:59` `localStorage.mp-lang \|\| 'de'` | User picks via the language selector in the sidebar; default is per-browser |
 | Date format `DD.MM.YY` | `app.js` `fmtDt()` | Hardcoded — change in `app.js` if you need ISO or US format |
 | Server timezone | KPI snapshots, "due today" buckets are based on the **server's local timezone** at midnight | Run with `TZ=Europe/Berlin` (or your zone) in the service env |
-| Currency `€`, locale `de-DE` | `app.js:7305` `formatEur()` (asset register only) | Hardcoded — see "Asset register" below |
 
 ## 4. Workflow / business-logic assumptions
 
@@ -142,19 +140,6 @@ for `batches.sub_*`. A lab that tracks straw pellets, coffee grounds,
 millet, or soy hulls **cannot** add those without a schema migration in
 `db.js:118-133` and corresponding column additions in `batches`. Display
 names ARE translatable; the underlying schema is not.
-
-### Asset register (`app.js:7305+`)
-
-Built for **German Anlagebilanzierung**:
-
-- GWG threshold €800 (Geringwertige Wirtschaftsgüter, §6 Abs. 2 EStG)
-- AfA depreciation method
-- Currency formatted as `1.234,56 €` (de-DE)
-- CSV export headers in German (`Inventar-Nr`, `Anschaffungsdatum`, `Buchwert`, …)
-- Asset ID format `INV-NNNN`
-
-If you're not in DE/AT/CH, treat this as an "equipment list" and ignore
-the depreciation columns. Or fork the asset-register section.
 
 ## 5. External services
 

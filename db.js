@@ -268,24 +268,6 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created DESC);
 
-CREATE TABLE IF NOT EXISTS assets (
-  asset_id            TEXT PRIMARY KEY,
-  name                TEXT NOT NULL,
-  category            TEXT NOT NULL,
-  entry_date          TEXT NOT NULL,
-  exit_date           TEXT,
-  purchase_price      REAL NOT NULL,
-  useful_life         INTEGER NOT NULL,
-  depreciation_method TEXT DEFAULT 'linear',
-  supplier            TEXT,
-  invoice_number      TEXT,
-  serial_number       TEXT,
-  location            TEXT,
-  status              TEXT DEFAULT 'aktiv',
-  notes               TEXT DEFAULT '',
-  created             TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -663,9 +645,13 @@ const MIGRATIONS = [
       for (const r of db.prepare('SELECT id FROM cultures ORDER BY created, id').all()) {
         ins.run(nextBarcode++, 'culture', r.id, now);
       }
-      // Assign barcodes to all existing assets
-      for (const r of db.prepare('SELECT asset_id FROM assets ORDER BY asset_id').all()) {
-        ins.run(nextBarcode++, 'asset', r.asset_id, now);
+      // Assign barcodes to all existing assets. The asset register was removed
+      // in v52, so on a fresh database `assets` never exists — only pre-v52
+      // databases replaying this migration still have rows to backfill.
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'").get()) {
+        for (const r of db.prepare('SELECT asset_id FROM assets ORDER BY asset_id').all()) {
+          ins.run(nextBarcode++, 'asset', r.asset_id, now);
+        }
       }
       // Assign barcodes to all existing zones
       for (const r of db.prepare('SELECT id FROM zones ORDER BY sort_order, id').all()) {
@@ -1477,6 +1463,46 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE mushroom_strains ADD COLUMN rec_fruit_days INTEGER DEFAULT 0');
       }
     }
+  },
+  {
+    version: 52,
+    description: 'Remove the fixed-asset register — accounting does not belong in a cultivation tracker',
+    disableForeignKeys: true,
+    fn(db) {
+      // The asset register was pure bookkeeping: purchase price, useful life,
+      // AfA depreciation, book value, a Steuerberater CSV and a Stichtag
+      // valuation. maintenance_log stays — scheduling an autoclave cycle or a
+      // HEPA filter change is operational, not financial — but it carried a
+      // FOREIGN KEY into assets, so recreate it without that reference.
+      // asset_id survives as a free-text equipment identifier (there is no
+      // register left to validate it against).
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='maintenance_log'").get()) {
+        db.exec(`
+          CREATE TABLE maintenance_log_new (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id        TEXT,
+            zone_id         TEXT,
+            type            TEXT NOT NULL,
+            description     TEXT,
+            scheduled_date  TEXT,
+            completed_date  TEXT,
+            completed_by    TEXT,
+            notes           TEXT,
+            FOREIGN KEY (zone_id) REFERENCES zones(id)
+          )
+        `);
+        db.exec('INSERT INTO maintenance_log_new SELECT * FROM maintenance_log');
+        db.exec('DROP TABLE maintenance_log');
+        db.exec('ALTER TABLE maintenance_log_new RENAME TO maintenance_log');
+        // The old indexes went with the dropped table.
+        db.exec('CREATE INDEX IF NOT EXISTS idx_maint_asset ON maintenance_log(asset_id)');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_maint_zone ON maintenance_log(zone_id)');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_maint_scheduled ON maintenance_log(scheduled_date)');
+      }
+      db.exec('DROP TABLE IF EXISTS assets');
+      // Barcodes printed for inventory tags no longer resolve to anything.
+      db.exec("DELETE FROM barcodes WHERE entity_type='asset'");
+    }
   }
 ];
 
@@ -1537,10 +1563,6 @@ function backfillBarcodes(db) {
     {
       type: 'culture',
       sql: "SELECT id FROM cultures WHERE id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='culture') ORDER BY created, id"
-    },
-    {
-      type: 'asset',
-      sql: "SELECT asset_id AS id FROM assets WHERE asset_id NOT IN (SELECT entity_id FROM barcodes WHERE entity_type='asset') ORDER BY asset_id"
     },
     {
       type: 'zone',
@@ -1868,28 +1890,6 @@ function readAll(db, opts = {}) {
     leExpiry: ddns.le_expiry || null
   };
 
-  // Assets
-  const assets = db
-    .prepare('SELECT * FROM assets ORDER BY asset_id')
-    .all()
-    .map((r) => ({
-      assetId: r.asset_id,
-      name: r.name,
-      category: r.category,
-      entryDate: r.entry_date,
-      exitDate: r.exit_date,
-      purchasePrice: r.purchase_price,
-      usefulLife: r.useful_life,
-      depreciationMethod: r.depreciation_method,
-      supplier: r.supplier,
-      invoiceNumber: r.invoice_number,
-      serialNumber: r.serial_number,
-      location: r.location,
-      status: r.status,
-      notes: r.notes,
-      created: r.created
-    }));
-
   // Calendar events
   const assigneeMap = getAllCalendarEventAssignees(db);
   const calendarEvents = db
@@ -1951,7 +1951,6 @@ function readAll(db, opts = {}) {
     teamMembers,
     caldav,
     duckdns,
-    assets,
     calendarEvents,
     zones,
     suppliers,
@@ -2307,60 +2306,8 @@ function writeAll(db, incoming) {
       );
     }
 
-    // ── Assets ──
-    if (incoming.assets) {
-      const existingIds = new Set(
-        db
-          .prepare('SELECT asset_id FROM assets')
-          .all()
-          .map((r) => r.asset_id)
-      );
-      const incomingIds = new Set(incoming.assets.map((a) => a.assetId));
-
-      for (const id of existingIds) {
-        if (!incomingIds.has(id)) {
-          db.prepare('DELETE FROM assets WHERE asset_id = ?').run(id);
-        }
-      }
-
-      const upsert = db.prepare(`
-        INSERT INTO assets(asset_id, name, category, entry_date, exit_date, purchase_price, useful_life,
-          depreciation_method, supplier, invoice_number, serial_number, location, status, notes, created)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(asset_id) DO UPDATE SET
-          name=excluded.name, category=excluded.category, entry_date=excluded.entry_date,
-          exit_date=excluded.exit_date, purchase_price=excluded.purchase_price,
-          useful_life=excluded.useful_life, depreciation_method=excluded.depreciation_method,
-          supplier=excluded.supplier, invoice_number=excluded.invoice_number,
-          serial_number=excluded.serial_number, location=excluded.location,
-          status=excluded.status, notes=excluded.notes, created=excluded.created
-      `);
-      const assetIds = [];
-      for (const a of incoming.assets) {
-        upsert.run(
-          a.assetId,
-          a.name,
-          a.category,
-          a.entryDate,
-          a.exitDate || null,
-          a.purchasePrice,
-          a.usefulLife,
-          a.depreciationMethod || 'linear',
-          a.supplier || null,
-          a.invoiceNumber || null,
-          a.serialNumber || null,
-          a.location || null,
-          a.status || 'aktiv',
-          a.notes || '',
-          a.created
-        );
-        assetIds.push(a.assetId);
-      }
-      // Ensure all assets have barcode assignments
-      if (assetIds.length) {
-        assignBarcodes(db, 'asset', assetIds);
-      }
-    }
+    // Backups taken before v52 still carry an `assets` key (the removed
+    // fixed-asset register). It is ignored rather than restored.
 
     // ── Calendar Events ──
     if (incoming.calendarEvents) {
@@ -3302,7 +3249,7 @@ function resetOperationalData(db, opts) {
       wipe('bags');
       wipe('batches');
       wipe('cultures');
-      // Barcodes pointing at rows we just cleared; asset barcodes stay valid.
+      // Barcodes pointing at rows we just cleared; zone and rack barcodes stay valid.
       wipe('barcodes', "entity_type IN ('bag','culture','batch')");
     }
     if (opts.orders) {
@@ -3720,61 +3667,6 @@ function insertMember(db, m) {
 
 function deleteMember(db, id) {
   db.prepare('DELETE FROM team_members WHERE id=?').run(id);
-  incrementDataVersion(db);
-}
-
-// -- Assets --
-function upsertAsset(db, a) {
-  db.prepare(
-    `INSERT INTO assets(asset_id,name,category,entry_date,exit_date,purchase_price,useful_life,depreciation_method,supplier,invoice_number,serial_number,location,status,notes,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET name=excluded.name,category=excluded.category,entry_date=excluded.entry_date,exit_date=excluded.exit_date,purchase_price=excluded.purchase_price,useful_life=excluded.useful_life,depreciation_method=excluded.depreciation_method,supplier=excluded.supplier,invoice_number=excluded.invoice_number,serial_number=excluded.serial_number,location=excluded.location,status=excluded.status,notes=excluded.notes,created=excluded.created`
-  ).run(
-    a.assetId,
-    a.name,
-    a.category,
-    a.entryDate,
-    a.exitDate || null,
-    a.purchasePrice,
-    a.usefulLife,
-    a.depreciationMethod || 'linear',
-    a.supplier || null,
-    a.invoiceNumber || null,
-    a.serialNumber || null,
-    a.location || null,
-    a.status || 'aktiv',
-    a.notes || '',
-    a.created
-  );
-  const barcode = assignBarcode(db, 'asset', a.assetId);
-  incrementDataVersion(db);
-  return { barcode };
-}
-
-/** List all assets ordered by asset_id */
-function listAssets(db) {
-  return db
-    .prepare('SELECT * FROM assets ORDER BY asset_id')
-    .all()
-    .map((r) => ({
-      assetId: r.asset_id,
-      name: r.name,
-      category: r.category,
-      entryDate: r.entry_date,
-      exitDate: r.exit_date,
-      purchasePrice: r.purchase_price,
-      usefulLife: r.useful_life,
-      depreciationMethod: r.depreciation_method,
-      supplier: r.supplier,
-      invoiceNumber: r.invoice_number,
-      serialNumber: r.serial_number,
-      location: r.location,
-      status: r.status,
-      notes: r.notes,
-      created: r.created
-    }));
-}
-
-function deleteAssetById(db, id) {
-  db.prepare('DELETE FROM assets WHERE asset_id=?').run(id);
   incrementDataVersion(db);
 }
 
@@ -6820,9 +6712,6 @@ module.exports = {
   readBatchById,
   insertMember,
   deleteMember,
-  upsertAsset,
-  listAssets,
-  deleteAssetById,
   updateCaldavCfg,
   getDuckdnsCfg,
   updateDuckdnsCfg,
