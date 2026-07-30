@@ -140,7 +140,13 @@ function loadLang(code) {
   if (LANG[code]) return Promise.resolve();
   let p = _langPromises.get(code);
   if (p) return p;
-  p = loadScript('/lang/' + code + '.js');
+  // ?v=2 is a one-time cache-buster. /lang/*.js was served
+  // "max-age=31536000, immutable" against an unversioned URL, so any client that
+  // had fetched a locale kept it for a year and never saw newly added keys —
+  // t() then printed the raw key. The header is now max-age=300, but a client
+  // already holding the immutable copy would never ask again; a different URL is
+  // the only thing that reaches it. Future string changes need no bump.
+  p = loadScript('/lang/' + code + '.js?v=2');
   _langPromises.set(code, p);
   return p;
 }
