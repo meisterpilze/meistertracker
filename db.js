@@ -179,6 +179,22 @@ CREATE TABLE IF NOT EXISTS print_bridge_config (
   token   TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS harvest_feed_config (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled      INTEGER DEFAULT 0,
+  url          TEXT DEFAULT '',
+  secret       TEXT DEFAULT '',
+  interval_min INTEGER DEFAULT 15,
+  fresh_days   INTEGER DEFAULT 3,
+  planned_days INTEGER DEFAULT 28,
+  lead_days    INTEGER DEFAULT 0,
+  strain       INTEGER DEFAULT 1,
+  site         TEXT DEFAULT '',
+  last_at      TEXT,
+  last_ok      INTEGER,
+  last_error   TEXT
+);
+
 -- Camera dashboard (admin-only WIP). The Python mushroom_camera module
 -- owns the camera_measurements / snapshots / flags / labels tables and
 -- creates them in its own ensure_schema(); the two below are also created
@@ -1503,6 +1519,34 @@ const MIGRATIONS = [
       // Barcodes printed for inventory tags no longer resolve to anything.
       db.exec("DELETE FROM barcodes WHERE entity_type='asset'");
     }
+  },
+  {
+    version: 53,
+    description: 'Add harvest_feed_config so the outbound feed is set up in Settings, not in .env',
+    fn(db) {
+      // The feed shipped as environment variables only, which meant editing a
+      // file on the server and restarting it. Every other integration here —
+      // DuckDNS, CalDAV, the print bridge, shipping, channels — is a form in
+      // Settings, and most people running this have a browser open and no shell.
+      // Environment variables keep working and take over when this row is off,
+      // so container setups that bake config into the image are unaffected.
+      db.exec(`CREATE TABLE IF NOT EXISTS harvest_feed_config (
+      id           INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled      INTEGER DEFAULT 0,
+      url          TEXT DEFAULT '',
+      secret       TEXT DEFAULT '',
+      interval_min INTEGER DEFAULT 15,
+      fresh_days   INTEGER DEFAULT 3,
+      planned_days INTEGER DEFAULT 28,
+      lead_days    INTEGER DEFAULT 0,
+      strain       INTEGER DEFAULT 1,
+      site         TEXT DEFAULT '',
+      last_at      TEXT,
+      last_ok      INTEGER,
+      last_error   TEXT
+    )`);
+      db.prepare('INSERT OR IGNORE INTO harvest_feed_config(id) VALUES(1)').run();
+    }
   }
 ];
 
@@ -1607,6 +1651,7 @@ function openDb(dbPath) {
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO duckdns_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO print_bridge_config(id) VALUES(1)`).run();
+  db.prepare(`INSERT OR IGNORE INTO harvest_feed_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO mcp_config(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO camera_calibration(id) VALUES(1)`).run();
   // Backfill: assign numeric barcodes to any entities missing them
@@ -3759,6 +3804,67 @@ function updateDuckdnsStatus(db, fields) {
     vals.push(fields.leExpiry);
   }
   if (sets.length) db.prepare('UPDATE duckdns_config SET ' + sets.join(',') + ' WHERE id=1').run(...vals);
+}
+
+// -- Harvest Feed Config --
+//
+// One row, same shape as the other integrations. `secret` never leaves this
+// file towards a client: the API hands out `hasSecret` instead, and an update
+// that omits it keeps the stored one — otherwise loading the form and pressing
+// Save would silently blank it.
+function getHarvestFeedCfg(db) {
+  const row = db.prepare('SELECT * FROM harvest_feed_config WHERE id = 1').get();
+  if (!row) return null;
+  return {
+    enabled: row.enabled === 1,
+    url: row.url || '',
+    secret: row.secret || '',
+    intervalMin: row.interval_min ?? 15,
+    freshDays: row.fresh_days ?? 3,
+    plannedDays: row.planned_days ?? 28,
+    leadDays: row.lead_days ?? 0,
+    strain: row.strain !== 0,
+    site: row.site || '',
+    lastAt: row.last_at || null,
+    lastOk: row.last_ok === null || row.last_ok === undefined ? null : row.last_ok === 1,
+    lastError: row.last_error || null
+  };
+}
+
+function updateHarvestFeedCfg(db, cfg) {
+  db.prepare(
+    `UPDATE harvest_feed_config
+        SET enabled=?, url=?, secret=?, interval_min=?, fresh_days=?,
+            planned_days=?, lead_days=?, strain=?, site=?
+      WHERE id=1`
+  ).run(
+    cfg.enabled ? 1 : 0,
+    cfg.url || '',
+    cfg.secret || '',
+    cfg.intervalMin ?? 15,
+    cfg.freshDays ?? 3,
+    cfg.plannedDays ?? 28,
+    cfg.leadDays ?? 0,
+    cfg.strain === false ? 0 : 1,
+    cfg.site || ''
+  );
+  incrementDataVersion(db);
+}
+
+/**
+ * Record how the last attempt went.
+ *
+ * Kept apart from the config write so a failing receiver cannot bump the data
+ * version every quarter of an hour — and so "when did this last work?" survives
+ * a restart. Without it, a feed that quietly stopped delivering looks exactly
+ * like one that is working.
+ */
+function updateHarvestFeedStatus(db, { at, ok, error }) {
+  db.prepare('UPDATE harvest_feed_config SET last_at=?, last_ok=?, last_error=? WHERE id=1').run(
+    at || new Date().toISOString(),
+    ok ? 1 : 0,
+    ok ? null : String(error || '').slice(0, 500)
+  );
 }
 
 // -- Print Bridge Config --
@@ -6798,6 +6904,9 @@ module.exports = {
   updateCaldavCfg,
   getDuckdnsCfg,
   updateDuckdnsCfg,
+  getHarvestFeedCfg,
+  updateHarvestFeedCfg,
+  updateHarvestFeedStatus,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,

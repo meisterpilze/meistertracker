@@ -24,6 +24,9 @@ module.exports = [
         URL: 'readonly',
         URLSearchParams: 'readonly',
         setImmediate: 'readonly',
+        // Used to bound outbound requests (harvest-feed.js) so a receiver that
+        // accepts the connection and then goes quiet cannot pin a timer open.
+        AbortController: 'readonly',
       }
     },
     rules: {

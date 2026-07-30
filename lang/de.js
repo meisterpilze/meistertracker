@@ -704,6 +704,37 @@ window.LANG['de'] = {
   'caldav.hiwTwoWay':
     '<strong>Zwei-Wege-Sync:</strong> Aufgaben werden als Kalender-Dateien auf dem Server gespeichert. Kalender-Apps lesen sie via CalDAV. \u00c4nderungen in der Kalender-App werden zur\u00fcckgespeichert.',
   // DuckDNS / Let's Encrypt / Server
+  'harvestFeed.title': 'Ernte-Feed',
+  'harvestFeed.desc':
+    'Schickt eine Zusammenfassung des Erntestands und der kommenden Chargen an eine Adresse deiner Wahl — eigene Website, Abo-Kiste, Chat-Bot. Nur in eine Richtung: Dieser Server sendet, es kommt nichts herein. Keine Chargen- oder Beutelnummern, keine Kundendaten, kein Scan-Verlauf.',
+  'harvestFeed.enable': 'Ernte-Feed aktivieren',
+  'harvestFeed.url': 'Adresse des Empfängers',
+  'harvestFeed.urlHint':
+    'Muss https sein. http ist nur für localhost erlaubt, damit sich das Ganze erst lokal ausprobieren lässt.',
+  'harvestFeed.secret': 'Gemeinsames Geheimnis',
+  'harvestFeed.secretHint':
+    'Die Gegenstelle braucht denselben Wert. Er signiert jede Anfrage, damit der Empfänger deine Zahlen von fremden unterscheiden kann — ohne ihn könnte jeder „wir haben 40 kg“ einwerfen, und das sähe echt aus.',
+  'harvestFeed.generate': 'Erzeugen',
+  'harvestFeed.generated': 'Erzeugt — jetzt kopieren und speichern. Danach ist er nicht mehr ablesbar.',
+  'harvestFeed.interval': 'Alle … Minuten',
+  'harvestFeed.freshDays': 'Gilt … Tage als frisch',
+  'harvestFeed.plannedDays': 'Vorausschau … Tage',
+  'harvestFeed.leadDays': 'Vorlauf … Tage',
+  'harvestFeed.strain': 'Sortennamen mitschicken',
+  'harvestFeed.site': 'Standort-Kennung (optional)',
+  'harvestFeed.testNow': 'Jetzt einmal senden',
+  'harvestFeed.preview': 'Zeigen, was hinausginge',
+  'harvestFeed.building': 'Wird zusammengestellt …',
+  'harvestFeed.sending': 'Wird gesendet …',
+  'harvestFeed.saved': 'Gespeichert.',
+  'harvestFeed.previewOk': 'Nichts gesendet. Geerntet / geplant:',
+  'harvestFeed.testOk': 'Angekommen. Geerntet / geplant:',
+  'harvestFeed.testFailed': 'Nicht angekommen',
+  'harvestFeed.lastOk': 'Zuletzt geliefert:',
+  'harvestFeed.lastFailed': 'Letzter Versuch fehlgeschlagen:',
+  'harvestFeed.neverSent': 'Aktiv, aber noch nichts geliefert.',
+  'harvestFeed.envActive':
+    'Der Feed läuft über Umgebungsvariablen (HARVEST_WEBHOOK_URL). Was hier steht, gilt erst, wenn du ihn hier aktivierst — dann hat dieses Formular Vorrang.',
   'duckdns.title': 'DuckDNS Dynamic DNS',
   'duckdns.desc':
     'Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain f\u00fcr Zugriff \u00fcber das Internet. Die \u00f6ffentliche IP wird automatisch alle 5 Minuten aktualisiert.',
@@ -1256,6 +1287,7 @@ window.LANG['de'] = {
   'settings.tabUsers': 'Benutzer',
   'settings.tabCaldav': 'CalDAV',
   'settings.tabDuckdns': 'DuckDNS',
+  'settings.tabHarvestFeed': 'Ernte-Feed',
   'settings.tabPrinter': 'Drucker',
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Kamera',

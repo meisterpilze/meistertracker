@@ -49,6 +49,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Camera AI** *(in active development)* ([`mushroom_camera/`](mushroom_camera/)) — Python sidecar for RTSP-based fruiting and incubation monitoring, writing hourly snapshots back to the same SQLite database
 - **Print bridge** — HTTPS-secured Windows service that forwards label prints from a Linux server to a USB-attached Zebra GK420d
 - **DuckDNS + Let's Encrypt** — built-in dynamic DNS and automatic free TLS for self-hosted public access (no Nginx required)
+- **Harvest feed** — signed, outbound-only push of what you harvested and what is coming, to a URL you choose, so a shop or listing page can answer "what's available today?" without the lab machine being reachable
 
 ## 👥 Who is this for?
 
@@ -293,6 +294,40 @@ The installer handles TLS certificate, URL ACL, inbound firewall rule, scheduled
 
 Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
 
+### Harvest feed (outbound)
+
+[`harvest-feed.js`](harvest-feed.js) posts a small, signed summary of your harvest situation to a URL you configure. The problem it solves: the numbers already live in this database, but the systems that need them — your own website, a CSA or box scheme, a co-op listing, a chat bot answering *"what do you have today?"* — live elsewhere. Copying them by hand goes stale within a day, and pointing those systems at the lab machine means exposing it to the internet.
+
+**One direction only.** This module opens connections; it never accepts any. No inbound endpoint is added, no port needs opening, and a changing home IP does not matter. If the lab machine is off, the receiver keeps the last payload — its consumers see older numbers rather than an outage.
+
+```json
+{
+  "version": 1,
+  "generatedAt": "2026-07-30T16:00:00.000Z",
+  "freshDays": 3,
+  "harvested": [{ "species": "Oyster", "strain": "Blue", "grams": 4700, "lastHarvest": "2026-07-30T07:30:00" }],
+  "planned": [{ "species": "Lion's Mane", "strain": "LM1", "expectedFrom": "2026-08-05" }]
+}
+```
+
+Species, strain, gram totals and dates. **No batch ids, no bag ids, no customers, no scan history, no notes** — a summary is far easier to reason about than a dump, and everything that leaves is something you have to reason about.
+
+Two things it deliberately does not do:
+
+- **It does not estimate yields.** Planned entries carry a species and a date, never an amount. How much a block gives varies too much between flushes, and a number that reaches a customer becomes a promise. Recorded harvests are measured, so those do carry grams.
+- **It does not subtract reservations.** If half of Thursday's harvest is already promised to a restaurant, publish the remainder — but what counts as promised differs per lab and is not tracked here. Do that subtraction in the receiving system, where the commitments live.
+
+Every request is signed: `X-Meistertracker-Signature: sha256=<HMAC-SHA256 of "<timestamp>.<body>">` plus `X-Meistertracker-Timestamp`. Signing the timestamp together with the body is what makes a captured request useless later — reject anything outside your tolerance window and it cannot be replayed. The secret is not optional; the feed refuses to start without one, because a forged *"we have 40 kg"* is worse than no feed at all.
+
+**Set it up in Settings → Harvest feed.** Receiver URL, a generated secret, how often, and how long a harvest counts as fresh. Two buttons that matter: *Show what would be sent* builds the payload and displays it without sending — the answer to "is this going to leak something?" is to look at it, not to trust the description above. *Send one now* delivers it and reports what came back, which is the difference between saved and working. The last outcome stays on the screen, so a feed that quietly stopped delivering is visible instead of silent.
+
+The same knobs exist as environment variables (`HARVEST_WEBHOOK_URL`, `HARVEST_WEBHOOK_SECRET`, …) for installs that bake configuration into an image — see **DEPLOYMENT.md → Section 15**. The stored settings win when enabled; environment variables apply otherwise, and Settings says which of the two is in charge. Off is the default, and an upgrade never starts sending on its own.
+
+```bash
+node harvest-feed.js --dry-run   # print exactly what would be posted, post nothing
+node harvest-feed.js --once      # build, sign, POST, report the result
+```
+
 ## 🔌 API
 
 The full REST surface (40+ operations covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
@@ -315,6 +350,7 @@ Notable surfaces worth knowing about:
 server.js              HTTP+HTTPS server, CalDAV, OAuth, printer integration
 db.js                  SQLite schema, migrations, queries, sessions, KPI snapshots
 mcp-server.js          Model Context Protocol tool surface
+harvest-feed.js        Outbound-only signed harvest summary (optional)
 index.html             SPA shell
 app.js                 Frontend application logic
 styles.css             Stylesheet

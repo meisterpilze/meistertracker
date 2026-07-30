@@ -1008,6 +1008,7 @@ function openStab(page, sub) {
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
+  if (page === 'settings' && sub === 'harvestfeed') loadHarvestFeedSettings();
   if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
@@ -7516,6 +7517,154 @@ async function refreshDuckdnsStatus() {
     /* non-admin */
   }
 }
+// ── Harvest feed ─────────────────────────────────────────────────────────────
+async function loadHarvestFeedSettings() {
+  try {
+    const r = await authFetch('/api/harvest-feed/config');
+    if (!r.ok) return;
+    const cfg = await r.json();
+    document.getElementById('harvestfeed-enabled').checked = !!cfg.enabled;
+    document.getElementById('harvestfeed-url').value = cfg.url || '';
+    document.getElementById('harvestfeed-interval').value = cfg.intervalMin ?? 15;
+    document.getElementById('harvestfeed-fresh').value = cfg.freshDays ?? 3;
+    document.getElementById('harvestfeed-planned').value = cfg.plannedDays ?? 28;
+    document.getElementById('harvestfeed-lead').value = cfg.leadDays ?? 0;
+    document.getElementById('harvestfeed-strain').checked = cfg.strain !== false;
+    document.getElementById('harvestfeed-site').value = cfg.site || '';
+    const sec = document.getElementById('harvestfeed-secret');
+    sec.value = '';
+    // A stored secret is never sent back to the page. The placeholder says one
+    // exists; leaving the field empty on save keeps it.
+    sec.placeholder = cfg.hasSecret ? '••••••••••' : '';
+    renderHarvestFeedBanner(cfg);
+  } catch (e) {
+    /* non-admin */
+  }
+}
+
+function renderHarvestFeedBanner(cfg) {
+  const banner = document.getElementById('harvestfeed-status-banner');
+  // Configured through the environment: the form below is not what is running,
+  // and saying so beats an empty form on a server that is busily posting.
+  if (cfg.envActive) {
+    banner.style.display = 'block';
+    banner.style.background = 'var(--c-amber-light)';
+    banner.style.border = '1px solid var(--c-amber-border)';
+    banner.style.color = 'var(--c-amber-dark)';
+    banner.textContent = t('harvestFeed.envActive');
+    return;
+  }
+  if (!cfg.enabled) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'block';
+  if (cfg.lastOk === true) {
+    banner.style.background = 'var(--c-primary-light)';
+    banner.style.border = '1px solid var(--c-green-border)';
+    banner.style.color = 'var(--c-green-dark)';
+    banner.textContent = t('harvestFeed.lastOk') + ' ' + (cfg.lastAt ? fmtDtTime(cfg.lastAt) : '');
+  } else if (cfg.lastOk === false) {
+    banner.style.background = 'var(--c-red-light)';
+    banner.style.border = '1px solid var(--c-red-border)';
+    banner.style.color = 'var(--c-red-dark)';
+    banner.textContent =
+      t('harvestFeed.lastFailed') +
+      ' ' +
+      (cfg.lastAt ? fmtDtTime(cfg.lastAt) : '') +
+      (cfg.lastError ? ' — ' + cfg.lastError : '');
+  } else {
+    banner.style.background = 'var(--c-amber-light)';
+    banner.style.border = '1px solid var(--c-amber-border)';
+    banner.style.color = 'var(--c-amber-dark)';
+    banner.textContent = t('harvestFeed.neverSent');
+  }
+}
+
+function showHarvestFeedResult(msg, color) {
+  const el = document.getElementById('harvestfeed-result');
+  el.style.display = 'block';
+  el.style.color = color || '#888';
+  el.textContent = msg;
+}
+
+function generateHarvestFeedSecret() {
+  // 32 random bytes as hex. Generated here rather than asked for, because a
+  // secret someone thinks up is a secret someone can guess — and this one is
+  // copied into another system once and then never typed again.
+  const raw = new Uint8Array(32);
+  crypto.getRandomValues(raw);
+  const hex = Array.from(raw)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  const el = document.getElementById('harvestfeed-secret');
+  el.type = 'text';
+  el.value = hex;
+  showHarvestFeedResult(t('harvestFeed.generated'), 'var(--c-amber-dark)');
+}
+
+async function saveHarvestFeedSettings() {
+  const secret = document.getElementById('harvestfeed-secret').value.trim();
+  const cfg = {
+    enabled: document.getElementById('harvestfeed-enabled').checked,
+    url: document.getElementById('harvestfeed-url').value.trim(),
+    intervalMin: parseInt(document.getElementById('harvestfeed-interval').value, 10),
+    freshDays: parseInt(document.getElementById('harvestfeed-fresh').value, 10),
+    plannedDays: parseInt(document.getElementById('harvestfeed-planned').value, 10),
+    leadDays: parseInt(document.getElementById('harvestfeed-lead').value, 10),
+    strain: document.getElementById('harvestfeed-strain').checked,
+    site: document.getElementById('harvestfeed-site').value.trim()
+  };
+  if (secret) cfg.secret = secret;
+  try {
+    const r = await apiPost('/api/harvest-feed/config', cfg);
+    if (r.error) {
+      showHarvestFeedResult(t('common.error') + ': ' + r.error, 'var(--c-red-dark)');
+      return;
+    }
+    showHarvestFeedResult(t('harvestFeed.saved'), 'var(--c-green-dark)');
+    document.getElementById('harvestfeed-secret').type = 'password';
+    loadHarvestFeedSettings();
+  } catch (e) {
+    showHarvestFeedResult(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  }
+}
+
+/**
+ * `previewOnly` goes to a different endpoint, not a different flag on the same
+ * one. "Show what would be sent" that sends is a button whose label is a lie,
+ * and this is the button people press when they are not yet sure they want the
+ * feed on at all.
+ */
+async function testHarvestFeed(previewOnly) {
+  const pre = document.getElementById('harvestfeed-payload');
+  showHarvestFeedResult(t(previewOnly ? 'harvestFeed.building' : 'harvestFeed.sending'), 'var(--c-text-muted)');
+  try {
+    const r = await apiPost(previewOnly ? '/api/harvest-feed/preview' : '/api/harvest-feed/test', {});
+    if (r.error) {
+      showHarvestFeedResult(t('common.error') + ': ' + r.error, 'var(--c-red-dark)');
+      pre.style.display = 'none';
+      return;
+    }
+    if (r.payload) {
+      pre.style.display = 'block';
+      pre.textContent = JSON.stringify(r.payload, null, 2);
+    }
+    if (previewOnly) {
+      showHarvestFeedResult(t('harvestFeed.previewOk') + ' ' + r.harvested + ' / ' + r.planned, 'var(--c-text-muted)');
+      return;
+    }
+    if (r.ok) {
+      showHarvestFeedResult(t('harvestFeed.testOk') + ' ' + r.harvested + ' / ' + r.planned, 'var(--c-green-dark)');
+    } else {
+      showHarvestFeedResult(t('harvestFeed.testFailed') + ': ' + (r.error || ''), 'var(--c-red-dark)');
+    }
+    loadHarvestFeedSettings();
+  } catch (e) {
+    showHarvestFeedResult(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  }
+}
+
 function showDuckdnsStatus(msg, color) {
   const el = document.getElementById('duckdns-ip-status');
   el.style.display = 'block';
@@ -18109,6 +18258,10 @@ function initEventListeners() {
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
   $('btn-migrate-strain-text').addEventListener('click', runStrainTextMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
+  $('harvestfeed-save-btn').addEventListener('click', saveHarvestFeedSettings);
+  $('harvestfeed-gen-btn').addEventListener('click', generateHarvestFeedSecret);
+  $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));
+  $('harvestfeed-preview-btn').addEventListener('click', () => testHarvestFeed(true));
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);
