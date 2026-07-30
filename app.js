@@ -963,7 +963,7 @@ function openStab(page, sub) {
       _nbDefaultsApplied = true;
     }
     // Refill every time: bags get consumed and created between visits.
-    nbRenderSpawnBags();
+    inocRender('nb');
   }
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
@@ -5404,6 +5404,106 @@ function nbPreview() {
     el.style.display = 'block';
   } else el.style.display = 'none';
 }
+// ── "Beimpft mit" — what a new batch was inoculated from ─────
+// One list for both kinds of inoculant, because the worker does not care which
+// table it lives in: cultures (MC/PD/LC/G2G/GS) sit in `cultures`, grain spawn
+// sits in `batches` as G-… with barcoded bags. Two separate fields asked them to
+// know the difference; scanning does not.
+//
+// Nothing is consumed automatically. A liquid culture or petri normally survives
+// many inoculations, and even a grain bag makes 5-15 blocks, so whether it is
+// spent is a question only the operator can answer — asked once after the batch
+// saves. Answer no and it stays in inventory.
+// [{ kind: 'culture' | 'bag', id }]
+let _inoc = [];
+function inocAvailable() {
+  const out = cultures
+    .filter((c) => c.status === 'active' || c.status === 'stored')
+    .map((c) => ({
+      kind: 'culture',
+      id: c.id,
+      label: c.id + ' — ' + (c.strainName || c.species || '') + ' (' + c.type + ')'
+    }));
+  nbAvailableSpawnBags().forEach((b) =>
+    out.push({ kind: 'bag', id: b.bag, label: b.bag + ' — ' + b.species + ' (' + zoneDisplayName(b.loc) + ')' })
+  );
+  return out;
+}
+// null when accepted, else the reason. Accepts a culture id or a grain bag id in
+// any case, which is what a scanner hands over.
+function inocAdd(rawId) {
+  const id = String(rawId || '').trim();
+  if (!id) return t('inoc.notUsable', { id: rawId });
+  if (_inoc.some((x) => x.id.toUpperCase() === id.toUpperCase())) return t('inoc.already', { id });
+  const hit = inocAvailable().find((x) => x.id.toUpperCase() === id.toUpperCase());
+  if (!hit) {
+    // Distinguish "known but spent" from "never heard of it" — the first is a
+    // real answer, the second is probably a mis-scan.
+    const c = cultures.find((x) => x.id.toUpperCase() === id.toUpperCase());
+    if (c) return t('scanFb.cultureNotUsable', { id: c.id, status: c.status });
+    return t('inoc.notUsable', { id });
+  }
+  _inoc.push({ kind: hit.kind, id: hit.id });
+  return null;
+}
+function inocRemove(id) {
+  _inoc = _inoc.filter((x) => x.id !== id);
+}
+// A batch's source_id column takes a culture. Grain bags are not cultures and are
+// recorded in the scan log instead (nbConsumeSpawnBags), so only the first culture
+// in the list lands there — the full list still drives what gets written off.
+function inocCultureId() {
+  const c = _inoc.find((x) => x.kind === 'culture');
+  return c ? c.id : '';
+}
+// Renders chips + the fallback picker into whichever prefix is on screen.
+function inocRender(prefix) {
+  const chips = document.getElementById(prefix + '-inoc-chips');
+  if (chips)
+    chips.innerHTML = _inoc
+      .map(
+        (x) =>
+          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(x.id)}<button type="button" data-action="inoc-drop" data-id="${esc(x.id)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
+      )
+      .join('');
+  const sel = document.getElementById(prefix + '-inoc-pick');
+  if (sel) {
+    const free = inocAvailable().filter((x) => !_inoc.some((y) => y.id === x.id));
+    sel.innerHTML =
+      `<option value="">${esc(t('inoc.pick'))}</option>` +
+      free.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('');
+    sel.value = '';
+  }
+}
+function inocPicked(prefix) {
+  const sel = document.getElementById(prefix + '-inoc-pick');
+  if (!sel || !sel.value) return;
+  const err = inocAdd(sel.value);
+  if (err) setFb('err', err, { noModal: true });
+  inocRender(prefix);
+}
+// After the batch is safely saved: was the inoculant used up? Yes writes it off,
+// no leaves it exactly where it was.
+function inocAskConsume(batchObj, list) {
+  if (!list.length) return;
+  const names = list.map((x) => x.id).join(', ');
+  // OK writes it off; Cancel is the "no, still have some" answer and leaves
+  // everything untouched — which is what Cancel already means, so no custom
+  // button label is needed.
+  confirm2(t('inoc.spentTitle'), t('inoc.spentMsg', { names, id: batchObj.batchId }), t('inoc.spentYes'), () =>
+    inocConsume(batchObj, list)
+  );
+}
+function inocConsume(batchObj, list) {
+  const bags = list.filter((x) => x.kind === 'bag').map((x) => x.id);
+  if (bags.length) nbConsumeSpawnBags(batchObj, bags);
+  list
+    .filter((x) => x.kind === 'culture')
+    .forEach((x) => {
+      const c = cultures.find((y) => y.id === x.id);
+      if (c && c.status !== 'used') setCultureStatus(c.id, 'used');
+    });
+}
 // ── Grain spawn consumed by a new block batch ────────────────
 // Grain spawn lives in `batches` (G-… with barcoded bags), never in `cultures`,
 // so nb-culture — which lists PD/LC/G2G/GS cultures — can never reference one.
@@ -5411,12 +5511,11 @@ function nbPreview() {
 // written off on create: a REMOVE carrying reason "spawn:<new batch id>", so the
 // link lives in the scan log rather than needing a column, and it is naturally
 // multi-valued (a 20-bag batch may take two grain bags).
-let _nbSpawnBags = [];
-// Set while the "Scan" button by that field has the camera open, so a grain-bag
-// scan is read as "this is the spawn I used" instead of opening the bag sheet.
-// Cleared as soon as the camera closes — otherwise every later bag scan would be
-// swallowed by a form the worker has moved on from.
-let _nbSpawnScanArmed = false;
+// Which UI prefix ('nb' | 'ms-q') has the camera open for a "Beimpft mit" scan,
+// so the read lands in that field instead of opening the bag sheet or the lineage
+// view. Cleared when the camera closes, or every later scan would be swallowed by
+// a form the worker has moved on from.
+let _inocScanPrefix = null;
 // A grain bag is available if it belongs to a grain batch and is still placed.
 function nbAvailableSpawnBags() {
   const placed = buildLastPlacementByBag();
@@ -5430,47 +5529,6 @@ function nbAvailableSpawnBags() {
     });
   });
   return out.sort((a, z) => a.bag.localeCompare(z.bag));
-}
-function nbFillSpawnSelect() {
-  const sel = document.getElementById('nb-spawn-pick');
-  if (!sel) return;
-  const avail = nbAvailableSpawnBags().filter((x) => !_nbSpawnBags.includes(x.bag));
-  sel.innerHTML =
-    `<option value="">${esc(t('batch.spawnPick'))}</option>` +
-    avail
-      .map((x) => `<option value="${esc(x.bag)}">${esc(x.bag)} — ${esc(x.species)} (${esc(zoneDisplayName(x.loc))})</option>`)
-      .join('');
-  sel.value = '';
-}
-function nbRenderSpawnBags() {
-  const el = document.getElementById('nb-spawn-chips');
-  if (!el) return;
-  el.innerHTML = _nbSpawnBags
-    .map(
-      (bag) =>
-        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(bag)}<button type="button" data-action="nb-drop-spawn" data-bag="${esc(bag)}" title="${esc(t('common.delete'))}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
-    )
-    .join('');
-  nbFillSpawnSelect();
-}
-// Returns null when accepted, else a reason string — the caller decides how loud
-// to be (a scan beeps, the dropdown cannot produce most of these).
-function nbAddSpawnBag(bagId) {
-  const bag = String(bagId || '').toUpperCase();
-  if (!bag) return t('batch.spawnNotGrain', { bag: bagId });
-  if (_nbSpawnBags.some((x) => x.toUpperCase() === bag)) return t('batch.spawnAlready', { bag: bagId });
-  const match = nbAvailableSpawnBags().find((x) => x.bag.toUpperCase() === bag);
-  if (!match) return t('batch.spawnNotGrain', { bag: bagId });
-  _nbSpawnBags.push(match.bag);
-  nbRenderSpawnBags();
-  return null;
-}
-function nbSpawnPicked() {
-  const sel = document.getElementById('nb-spawn-pick');
-  if (!sel || !sel.value) return;
-  const err = nbAddSpawnBag(sel.value);
-  if (err) setFb('err', err, { noModal: true });
-  sel.value = '';
 }
 // Write off each grain bag consumed by `batchObj`. from = its current location so
 // the zone counts drop, and reason ties it to the batch it became.
@@ -5723,7 +5781,7 @@ function createBatch() {
     batchType,
     grainKg,
     grainRh,
-    sourceId: document.getElementById('nb-culture').value || null,
+    sourceId: inocCultureId() || document.getElementById('nb-culture').value || null,
     notes: document.getElementById('nb-notes').value.trim(),
     strainText,
     created: new Date().toISOString(),
@@ -5773,7 +5831,7 @@ function createBatch() {
   const batchObj = batches[batches.length - 1];
   // Snapshot the grain bags now: the form is cleared below, well before the POST
   // resolves, and they are only written off once the batch is known to be saved.
-  let _spawnUsed = _nbSpawnBags.slice();
+  let _inocUsed = _inoc.slice();
   const createBtn = document.getElementById('btn-24');
   if (createBtn) createBtn.disabled = true;
   apiPost('/api/batches', { ...batchObj, deltas })
@@ -5806,8 +5864,8 @@ function createBatch() {
       // Same idea for real grain-spawn bags, which are batches rather than
       // cultures. Only after the batch is known to have saved — writing the bags
       // off first would strip spawn inventory for a batch that then failed.
-      nbConsumeSpawnBags(batchObj, _spawnUsed);
-      _spawnUsed = [];
+      inocAskConsume(batchObj, _inocUsed);
+      _inocUsed = [];
       renderBatches();
       renderStatus();
     })
@@ -5820,8 +5878,8 @@ function createBatch() {
   if (nbStrainTextEl) nbStrainTextEl.value = '';
   const nbCultureEl = document.getElementById('nb-culture');
   if (nbCultureEl) nbCultureEl.value = '';
-  _nbSpawnBags = [];
-  nbRenderSpawnBags();
+  _inoc = [];
+  inocRender('nb');
   renderNbGrainBanner();
   // qty/days/weight/substrate intentionally kept (persisted via nbSaveDefaults
   // above) so the next batch reuses them; only per-batch fields are cleared.
@@ -10529,13 +10587,7 @@ function msRecipeSummaryText(ms) {
 
 // ── Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe ──
 let _msQuickCtx = null;
-// Which field the quick dialog is scanning for: 'culture' | 'spawn' | null.
-// processScan consults it so a scan lands in the dialog instead of opening the
-// bag sheet or the lineage view.
-let _msqScanTarget = null;
-// Culture types the current dialog state accepts, so a scanned culture can be
-// refused if it is the wrong kind rather than quietly accepted.
-let _msqCultureTypes = null;
+
 function msQuickCharge(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
@@ -10608,10 +10660,9 @@ function _msRecipeProblem(ms) {
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
   _msQuickCtx = { mode, ms: ms || null };
-  // Fresh dialog, fresh source selections — a grain bag left over from an
-  // abandoned dialog would otherwise be written off against the next batch.
-  _nbSpawnBags = [];
-  _msqScanTarget = null;
+  // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
+  // would otherwise be offered up for the next batch.
+  _inoc = [];
   const cSel = document.getElementById('ms-q-culture');
   if (cSel) {
     cSel.value = '';
@@ -10702,7 +10753,7 @@ function msQuickRender() {
   }
   msQuickPreview();
   msQuickFillCulture();
-  msqRenderSpawn();
+  inocRender('ms-q');
   if (problem) {
     const prev = document.getElementById('ms-q-preview');
     if (prev) {
@@ -10732,12 +10783,11 @@ function msQuickSorteChanged() {
 }
 function msQuickClose() {
   _msQuickCtx = null;
-  _msqScanTarget = null;
-  // Drop any grain bags picked here. Abandoning the dialog must not leave them
-  // armed to be written off against whatever batch is created next. The confirm
-  // path closes the dialog before createBatch runs, so it carries the selection
-  // across itself — see msQuickConfirm.
-  _nbSpawnBags = [];
+  _inocScanPrefix = null;
+  // Drop the inoculant list. Abandoning the dialog must not leave it armed for
+  // whatever batch is created next. The confirm path closes the dialog before
+  // createBatch runs, so it carries the list across itself — see msQuickConfirm.
+  _inoc = [];
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
 }
@@ -10793,70 +10843,19 @@ function msQuickFillCulture() {
   if (!types) {
     sel.value = '';
     wrap.style.display = 'none';
-    _msqCultureTypes = null;
     return;
   }
-  // Remembered so a scan can be validated against the same types the picker
-  // offers — scanning an MC when only PD/LC make sense must be refused, not
-  // silently accepted.
-  _msqCultureTypes = types;
+  // The hidden select still carries a culture through to nb-culture/gs-culture.
   fillCultureSelect('ms-q-culture', types);
   wrap.style.display = '';
-  msqRenderCultureChip();
-}
-// Show what was scanned (or picked) next to the camera button, with a way to
-// clear it. The select is the fallback and stays hidden until asked for.
-function msqRenderCultureChip() {
-  const chip = document.getElementById('ms-q-culture-chip');
-  const sel = document.getElementById('ms-q-culture');
-  if (!chip || !sel) return;
-  if (!sel.value) {
-    chip.innerHTML = `<span style="color:var(--c-text-muted)">${esc(t('msq.noneScanned'))}</span>`;
-    return;
-  }
-  const c = cultures.find((x) => x.id === sel.value);
-  chip.innerHTML =
-    `<span style="display:inline-flex;align-items:center;gap:5px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(sel.value)}${c ? '' : ' ?'}<button type="button" id="ms-q-culture-clear" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`;
-}
-// Grain bags in the quick dialog, drawn from the same _nbSpawnBags the manual
-// form uses so createBatch consumes them without knowing which UI filled it.
-function msqRenderSpawn() {
-  const wrap = document.getElementById('ms-q-spawn-wrap');
-  if (!wrap) return;
-  const isCharge = _msQuickCtx && _msQuickCtx.mode === 'charge';
-  const avail = isCharge ? nbAvailableSpawnBags() : [];
-  // Hidden when there is no grain spawn on hand at all — an empty control on a
-  // phone form is just noise.
-  wrap.style.display = isCharge && (avail.length || _nbSpawnBags.length) ? '' : 'none';
-  const sel = document.getElementById('ms-q-spawn-pick');
-  if (sel) {
-    const free = avail.filter((x) => !_nbSpawnBags.includes(x.bag));
-    sel.innerHTML =
-      `<option value="">${esc(t('batch.spawnPick'))}</option>` +
-      free.map((x) => `<option value="${esc(x.bag)}">${esc(x.bag)}</option>`).join('');
-    sel.value = '';
-  }
-  const chips = document.getElementById('ms-q-spawn-chips');
-  if (chips)
-    chips.innerHTML = _nbSpawnBags
-      .map(
-        (bag) =>
-          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(bag)}<button type="button" data-action="msq-drop-spawn" data-bag="${esc(bag)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
-      )
-      .join('');
-}
-function msqSpawnPicked() {
-  const sel = document.getElementById('ms-q-spawn-pick');
-  if (!sel || !sel.value) return;
-  const err = nbAddSpawnBag(sel.value);
-  if (err) setFb('err', err, { noModal: true });
-  msqRenderSpawn();
+  inocRender('ms-q');
 }
 // The camera modal is z-index 200 and this dialog is 1200, so the camera would
 // open behind it. Hide the dialog for the duration and put it back on close —
-// _msQuickCtx survives, so nothing typed is lost.
-function msqOpenScan(target) {
-  _msqScanTarget = target;
+// _msQuickCtx survives, so nothing typed is lost. _inocScanPrefix doubles as the
+// record of who opened the camera, so 'ms-q' is what says to restore.
+function msqOpenScan(prefix) {
+  _inocScanPrefix = prefix;
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
   scan.action = null;
@@ -10865,10 +10864,11 @@ function msqOpenScan(target) {
   updateSD();
   openCamScan();
 }
-function msqRestoreAfterScan() {
-  if (!_msqScanTarget) return;
-  _msqScanTarget = null;
-  if (!_msQuickCtx) return;
+// Takes the prefix as an argument because closeCamScan clears _inocScanPrefix,
+// and reading it here after that would always see null.
+function msqRestoreAfterScan(prefix) {
+  if (prefix !== 'ms-q') return;
+  if (!_msQuickCtx) return; // confirmed or dismissed while the camera was up
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'flex';
   msQuickRender();
@@ -10973,7 +10973,7 @@ function msQuickConfirm() {
   // block / all-in-one
   // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
   // leak into the next batch — so carry it over the close explicitly.
-  const _spawnPicked = _nbSpawnBags.slice();
+  const _inocPicked = _inoc.slice();
   // Land on the Charge page BEFORE prefilling. createBatch's success panel
   // (nb-result, with the print buttons) lives inside sp-batch-new, so creating
   // from the dashboard shortcut used to reveal it on a page the worker was not
@@ -11000,8 +11000,8 @@ function msQuickConfirm() {
   const nbc = document.getElementById('nb-culture');
   if (nbc) nbc.value = sourceCulture;
   setv('nb-notes', '');
-  _nbSpawnBags = _spawnPicked;
-  nbRenderSpawnBags();
+  _inoc = _inocPicked;
+  inocRender('nb');
   createBatch();
 }
 
@@ -11484,7 +11484,7 @@ function createGrainBatch() {
     bagKg: batchBagKg,
     batchType: 'grain',
     grainRh,
-    sourceId: document.getElementById('gs-culture').value || null,
+    sourceId: inocCultureId() || document.getElementById('gs-culture').value || null,
     notes: document.getElementById('lw-notes').value.trim(),
     strainText: lwStrainText,
     created: new Date().toISOString(),
@@ -11516,6 +11516,9 @@ function createGrainBatch() {
   // batch and deducts the grain twice.
   const createBtn = document.getElementById('btn-26');
   if (createBtn) createBtn.disabled = true;
+  // Snapshot the inoculant list: the form is cleared below, before the POST
+  // resolves, and nothing is written off until the batch is known to have saved.
+  const _inocUsed = _inoc.slice();
   apiPost('/api/batches', apiPayload)
     .then((r) => {
       if (r && r.error) {
@@ -11534,10 +11537,16 @@ function createGrainBatch() {
           barcodeByEntity.set('bag:' + id, bc);
         }
       }
+      // Grain spawn is usually made from a liquid culture that survives many
+      // uses, so ask rather than assume.
+      inocAskConsume(batchObj, _inocUsed);
     })
     .finally(() => {
       if (createBtn) createBtn.disabled = false;
     });
+  _inoc = [];
+  inocRender('nb');
+  inocRender('ms-q');
   if (strainSel) strainSel.value = '';
   const lwStrainEl = document.getElementById('lw-strain-text');
   if (lwStrainEl) lwStrainEl.value = '';
@@ -14481,7 +14490,7 @@ function processScan(raw) {
     }
     // Quick dialog asked for a source culture: take it there instead of opening
     // the lineage view. Refused if it is not a type this dialog state accepts.
-    if (_msqScanTarget === 'culture') {
+    if (_inocScanPrefix) {
       const hit = cultures.find((x) => x.id.toUpperCase() === val);
       if (!hit) {
         _scanBeep(300, 150);
@@ -14493,13 +14502,13 @@ function processScan(raw) {
         setFb('err', t('scanFb.cultureNotUsable', { id: hit.id, status: hit.status }));
         return;
       }
-      if (_msqCultureTypes && !_msqCultureTypes.includes(hit.type)) {
+      const addErr = inocAdd(hit.id);
+      if (addErr) {
         _scanBeep(300, 150);
-        setFb('err', t('msq.wrongCultureType', { id: hit.id, type: hit.type }));
+        setFb('err', addErr);
         return;
       }
-      const sel = document.getElementById('ms-q-culture');
-      if (sel) sel.value = hit.id;
+      inocRender(_inocScanPrefix);
       _scanBeep(800, 60);
       setFb('ok', t('scanFb.cultureAutofilled', { id: hit.id }));
       closeCamScan();
@@ -14589,37 +14598,22 @@ function processScan(raw) {
       zoneCheckScanned(val, batchId);
       return;
     }
-    // Quick dialog asked for a grain bag — same intent as the form field below,
-    // but the dialog is hidden behind the camera so it closes the camera to show
-    // the result.
-    if (isBag && !scan.action && _msqScanTarget === 'spawn') {
-      const err = nbAddSpawnBag(val);
+    // A "Beimpft mit" field has the camera: the worker is naming the grain bag
+    // they inoculated from, not asking about the bag. Only with no action armed,
+    // so an explicit MOVE/REMOVE still wins. Closing the camera is what brings
+    // the quick dialog back into view (it steps aside for the camera).
+    if (isBag && !scan.action && _inocScanPrefix) {
+      const err = inocAdd(val);
       if (err) {
         _scanBeep(300, 150);
         setFb('err', err);
         return;
       }
+      inocRender(_inocScanPrefix);
       _scanBeep(800, 60);
-      setFb('ok', t('batch.spawnAdded', { bag: val }));
+      setFb('ok', t('inoc.added', { id: val }));
       closeCamScan();
       return;
-    }
-    // New-batch form open and a grain bag scanned: the worker is naming the spawn
-    // they just used, not asking about the bag. Mirrors the culture autofill above.
-    // Only with no action armed, so an explicit MOVE/REMOVE still wins.
-    if (isBag && !scan.action && _nbSpawnScanArmed) {
-      const nbPanel = document.getElementById('sp-batch-new');
-      if (nbPanel && nbPanel.classList.contains('active')) {
-        const err = nbAddSpawnBag(val);
-        if (err) {
-          _scanBeep(300, 150);
-          setFb('err', err);
-        } else {
-          _scanBeep(800, 60);
-          setFb('ok', t('batch.spawnAdded', { bag: val }));
-        }
-        return;
-      }
     }
     if (!scan.action) {
       openBagInfo(val, batchId, batch);
@@ -17483,11 +17477,14 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
-  // Closing the camera ends spawn-picking; without this every later bag scan
-  // would keep feeding a new-batch form the worker has already left.
-  _nbSpawnScanArmed = false;
+  // Closing the camera ends inoculant-picking; without this every later bag scan
+  // would keep feeding a form the worker has already left. Captured first — the
+  // restore below needs to know who opened the camera, and clearing it before
+  // asking would always read as "nobody".
+  const _wasScanning = _inocScanPrefix;
+  _inocScanPrefix = null;
   // Bring the quick dialog back if it stepped aside for the camera.
-  msqRestoreAfterScan();
+  msqRestoreAfterScan(_wasScanning);
   // Finishing a stocktake scan drops you back on the check sheet, with whatever
   // you scanned already ticked off and the leftovers ready to resolve.
   if (_zcScanMode) {
@@ -18077,40 +18074,26 @@ function initEventListeners() {
   $('ms-save-btn').addEventListener('click', saveMStrain);
   $('ms-cancel-btn').addEventListener('click', cancelMStrain);
   $('btn-24').addEventListener('click', createBatch);
-  $('ms-q-culture-scan').addEventListener('click', () => msqOpenScan('culture'));
-  $('ms-q-spawn-scan').addEventListener('click', () => msqOpenScan('spawn'));
-  $('ms-q-culture-manual').addEventListener('click', () => {
-    const sel = document.getElementById('ms-q-culture');
-    if (sel) sel.style.display = sel.style.display === 'none' ? '' : 'none';
-  });
-  $('ms-q-culture').addEventListener('change', msqRenderCultureChip);
-  $('ms-q-culture-chip').addEventListener('click', (e) => {
-    if (!e.target.closest('#ms-q-culture-clear')) return;
-    const sel = document.getElementById('ms-q-culture');
-    if (sel) sel.value = '';
-    msqRenderCultureChip();
-  });
-  $('ms-q-spawn-chips').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="msq-drop-spawn"]');
-    if (!btn) return;
-    _nbSpawnBags = _nbSpawnBags.filter((b) => b !== btn.dataset.bag);
-    msqRenderSpawn();
-  });
-  $('nb-spawn-scan').addEventListener('click', () => {
-    // Arm before opening: the camera must already know the next bag it sees is a
-    // spawn pick. Clearing any armed action stops a stale MOVE hijacking the scan.
-    _nbSpawnScanArmed = true;
+  // "Beimpft mit" — one control, two places. The quick dialog hides itself for
+  // the camera (msqOpenScan); the manual form just arms and opens.
+  $('ms-q-inoc-scan').addEventListener('click', () => msqOpenScan('ms-q'));
+  $('nb-inoc-scan').addEventListener('click', () => {
+    _inocScanPrefix = 'nb';
     scan.action = null;
     scan.to = null;
     scan.from = null;
     updateSD();
     openCamScan();
   });
-  $('nb-spawn-chips').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="nb-drop-spawn"]');
-    if (!btn) return;
-    _nbSpawnBags = _nbSpawnBags.filter((b) => b !== btn.dataset.bag);
-    nbRenderSpawnBags();
+  ['nb', 'ms-q'].forEach((prefix) => {
+    const chips = document.getElementById(prefix + '-inoc-chips');
+    if (!chips) return;
+    chips.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action="inoc-drop"]');
+      if (!btn) return;
+      inocRemove(btn.dataset.id);
+      inocRender(prefix);
+    });
   });
   const strainShortcut = document.getElementById('nb-create-strain-btn');
   if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
