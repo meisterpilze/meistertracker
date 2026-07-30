@@ -162,6 +162,20 @@ let ZONES = [],
   // Hot path: dashboard contam-rate (renderOverviewKPIs) iterated all scan-log
   // entries x zones.find() = O(scanLog * zones).
   ZONE_BY_ID = {};
+// batchId -> batch. Same reasoning as ZONE_BY_ID: the dashboard resolved a batch
+// per task row with batches.find(), which is ~100 rows x ~140 batches of string
+// comparison on every render, every 30s poll and every tab tap.
+//
+// Revalidated on length rather than rebuilt at each write site: createBatch and
+// createGrainBatch push optimistically and splice back on failure, so a map built
+// only in applyData would miss a just-created batch until the next sync. Length is
+// the only thing those paths change, and a push-then-splice rollback moves it
+// twice, so both directions self-correct.
+let _batchById = new Map();
+function batchById(id) {
+  if (_batchById.size !== batches.length) _batchById = new Map(batches.map((b) => [b.batchId, b]));
+  return _batchById.get(id);
+}
 const toZone = (loc) => {
   if (!loc) return loc;
   if (RACK_ZONE[loc]) return RACK_ZONE[loc];
@@ -3706,7 +3720,7 @@ function applyOvPeriod() {
 function renderDashSummary() {
   const el = document.getElementById('dash-summary');
   if (!el) return;
-  const moveCount = buildAutoTasks().filter((tk) => tk.taskAction === 'move').length;
+  const moveCount = buildAutoTasks().filter((tk) => tk.taskAction === 'move' && tk.ready).length;
   const harvestCount = buildHarvestTasks().length;
   const alertsCard = document.getElementById('dash-alerts-card');
   const alertsEl = document.getElementById('dash-alerts');
@@ -3773,7 +3787,7 @@ function buildWorkList(kind) {
   };
   if (kind === 'move') {
     buildAutoTasks()
-      .filter((tk) => tk.taskAction === 'move')
+      .filter((tk) => tk.taskAction === 'move' && tk.ready)
       .forEach((tk) => {
         const b = batches.find((x) => x.batchId === tk.batchId);
         pushRows(tk.batchId, b && b.species, b && (b.strainText || b.strain), tk.detail);
@@ -3994,21 +4008,27 @@ function renderDashAlerts() {
 // Split-batch detection: flag batches whose active bags straddle multiple
 // production stages ({spawn, incubation, fruiting}). Harvested, removed, and
 // contaminated bags are excluded so deliberate placements don't trigger alerts.
-function getSplitBatches() {
+// lastByBag is optional: the dashboard has already built this index by the time
+// it calls us, and rebuilding it walked the whole scan log a second time.
+function getSplitBatches(sharedLastByBag) {
   const STAGE_ORDER = { spawn: 1, incubation: 2, fruiting: 3 };
   const zoneRole = {};
   zones.forEach((z) => (zoneRole[z.id] = z.role));
   const harvestedBags = new Set();
   harvests.forEach((h) => h && h.bag && harvestedBags.add(String(h.bag).toUpperCase()));
-  const lastByBag = {};
+  // Reuse the caller's index when it passes one — the dashboard has already built
+  // exactly this map by the time it calls us. Only the per-batch last-move time
+  // still needs a pass of its own, and that one allocates nothing per entry.
+  const own = sharedLastByBag ? null : new Map();
   const lastMoveTimeByBatch = {};
   scanLog.forEach((e) => {
-    if (e.bag) lastByBag[String(e.bag).toUpperCase()] = e;
+    if (own && e.bag) own.set(String(e.bag).toUpperCase(), e);
     if (e.batch && (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'MOVE_BATCH')) {
       const cur = lastMoveTimeByBatch[e.batch];
       if (!cur || (e.time && e.time > cur)) lastMoveTimeByBatch[e.batch] = e.time;
     }
   });
+  const lastByBag = sharedLastByBag || own;
   const now = Date.now();
   const STALE_HOURS = 24;
   const out = [];
@@ -4020,7 +4040,7 @@ function getSplitBatches() {
     bags.forEach((bag) => {
       const key = String(bag).toUpperCase();
       if (harvestedBags.has(key)) return;
-      const last = lastByBag[key];
+      const last = lastByBag.get(key);
       if (!last || last.action === 'REMOVE' || !last.to) return;
       const z = toZone(last.to);
       const role = zoneRole[z];
@@ -4188,14 +4208,19 @@ function dashTaskBtn(tk) {
     // straight to the create dialog rather than offering a move.
     return `<button class="btn btn-sm btn-p" data-action="inoculate-from" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${esc(t('dash.doInoculate'))}</button>`;
   }
-  if (tk.taskAction === 'move') {
-    // One-tap → Fruchtung (the dominant move) as the primary action; the
+  if (tk.taskAction === 'move' && tk.ready) {
+    // One-tap \u2192 Fruchtung (the dominant move) as the primary action; the
     // Verschieben picker stays for any other destination. Only offer it for
-    // batches actually in incubation — never for SPAWN RUN, where jumping
+    // batches actually in incubation \u2014 never for SPAWN RUN, where jumping
     // grain spawn straight to a fruiting tent skips a whole growth stage.
+    //
+    // tk.ready gates both: a batch 3-7 days out is listed so the week ahead is
+    // visible, but offering a one-tap move for it ends incubation early, and the
+    // only way back is an 8-second undo snackbar. Not ready \u2014 falls through to
+    // the passive "Ansehen" button below, which is what it did before the tabs.
     const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
     const toFruiting = canFruit
-      ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">→ ${esc(t('dash.toFruiting'))}</button>`
+      ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">\u2192 ${esc(t('dash.toFruiting'))}</button>`
       : '';
     return (
       toFruiting +
@@ -4209,16 +4234,16 @@ function dashTaskBtn(tk) {
 // job or a twenty-minute one; the room and the timing drop to a muted second
 // line. tk is decorated with bags/instruction/where by the renderer, which has
 // the scan index needed to count bags (see renderDashBatchTasks).
-function dashTaskRowHtml(tk) {
+function dashTaskRowHtml(tk, where) {
   // nowrap: a batch id broken across lines ("KO-" / "140426-01") is unreadable,
   // and it is the one string a worker matches against a printed label.
   const idHtml = `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}" style="white-space:nowrap">${esc(tk.batchId)}</span>`;
   const bags = tk.bags ? `<strong>${tk.bags} ${esc(t('worklist.bags'))}</strong> ` : '';
   const instr = tk.instruction ? ` <span style="color:var(--c-text-sec)">${esc(tk.instruction)}</span>` : '';
-  // Where it is now, then how late. The destination is NOT repeated here — it is
+  // Where it is now, then how late. The destination is NOT repeated here \u2014 it is
   // the same tent for every move row, so it is stated once under the tab strip
   // (see renderDashBatchTasks). Per row it pushed this line to a second wrap.
-  const meta = [tk.where, tk.detail].filter(Boolean).map(esc).join(' · ');
+  const meta = [where || tk.where, tk.detail]
   return (
     // flex-wrap plus a flex-basis on the text column: at phone width the buttons
     // drop to their own right-aligned line instead of squeezing the text to
@@ -4266,7 +4291,17 @@ function toggleDashMore(key) {
 // No stored choice → the most urgent section that has rows (see renderDashBatchTasks).
 let _dashTabKey = null;
 function _dashTab() {
-  if (_dashTabKey === null) _dashTabKey = localStorage.getItem('mp-dash-tab') || '';
+  if (_dashTabKey === null) {
+    // Guarded like initDashCollapse and _msqLastQty: this runs on every render,
+    // so if storage is revoked mid-session (site data blocked, partitioned
+    // context, a backgrounded PWA evicted by iOS) an unguarded read would throw
+    // inside renderDashBatchTasks and abort every render queued after it.
+    try {
+      _dashTabKey = localStorage.getItem('mp-dash-tab') || '';
+    } catch (e) {
+      _dashTabKey = '';
+    }
+  }
   return _dashTabKey;
 }
 function setDashTab(key) {
@@ -4279,34 +4314,54 @@ function setDashTab(key) {
   }
   renderDashBatchTasks();
 }
-// Bags of this batch that are actually placed somewhere, plus the room most of
-// them are in — "where do I walk to" and "how big is this job".
+// Bags of this batch that are actually placed somewhere, plus the per-zone
+// breakdown the row label needs. Returns counts rather than a formatted room so
+// the (linear) zoneDisplayName lookup happens only for the rows actually shown.
 function _dashTaskPlace(batchId, lastByBag) {
-  const b = batches.find((x) => x.batchId === batchId);
+  const b = batchById(batchId);
   const counts = b ? _batchZoneCounts(b, lastByBag) : {};
-  const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
   let bags = 0;
-  for (const z of zoneIds) bags += counts[z];
-  return { bags, zoneId: zoneIds[0] || '', where: zoneIds[0] ? zoneDisplayName(zoneIds[0]) : '' };
+  for (const z in counts) bags += counts[z];
+  return { bags, counts };
+}
+// "Where do I walk to." bags counts every placed bag of the batch, because that
+// is what a whole-batch move moves \u2014 but naming only the biggest room told the
+// worker to fetch N bags from a room holding fewer. When the batch straddles
+// rooms, say so and give the split.
+function _dashTaskWhere(counts) {
+  const zoneIds = Object.keys(counts);
+  if (!zoneIds.length) return '';
+  let top = zoneIds[0];
+  let total = 0;
+  for (const z of zoneIds) {
+    total += counts[z];
+    if (counts[z] > counts[top]) top = z;
+  }
+  const name = zoneDisplayName(top);
+  if (zoneIds.length === 1) return name;
+  return t('dash.bagsSplitAcross', { n: counts[top], zone: name, rest: total - counts[top] });
 }
 // Turns the "bags left behind" splits into rows shaped like every other row, so
 // the section reads the same way: N bags of a batch, still one stage back, with
 // the rest of the batch noted in the meta line.
 function _dashLeftBehindRows(splits) {
   return splits.map((s) => {
-    const behind = s.stages.find((x) => x.behind) || { count: 0, role: 'incubation' };
+    // behindStage / behindCount are already computed by getSplitBatches \u2014 do not
+    // re-derive them, and never fabricate a fallback stage the batch is not in.
     const rest = s.stages
       .filter((x) => !x.behind)
       .map((x) => x.count + ' ' + t('dash.splitBatches.in') + ' ' + t('stage.' + x.role))
-      .join(' · ');
+      .join(' \u00b7 ');
     return {
       batchId: s.batchId,
       species: s.species,
-      bags: behind.count,
-      instruction: t('dash.stillIn', { stage: t('stage.' + behind.role) }),
+      bags: s.behindCount,
+      instruction: t('dash.stillIn', { stage: t('stage.' + s.behindStage) }),
       where: rest ? '(' + rest + ')' : '',
       detail: s.urgent ? t('dash.splitBatches.stale') : '',
-      urgent: false,
+      // s.urgent means "unmoved for over 24h", which is a warning, not an overdue
+      // date \u2014 it drives the orange dot. warn is also what keeps --sp-color live,
+      // see the .todo-row rules in styles.css.
       warn: s.urgent,
       taskAction: 'view',
       bucket: 'left'
@@ -4325,42 +4380,47 @@ function _dashLeftBehindRows(splits) {
 function renderDashBatchTasks() {
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
+  // Cheapest possible empty path: buildAutoTasks touches no scan log and
+  // getSplitBatches is the only walk needed to know there is nothing to show, so
+  // an idle farm never pays for the scan index or the fruiting-destination walk.
+  const auto = buildAutoTasks();
   const lastByBag = buildLastScanByBag();
-  const dest = _fruitingDest();
-  const destName = dest ? zoneDisplayName(dest) : t('dash.toFruiting');
-  const rows = buildAutoTasks().map((tk) => {
-    const p = _dashTaskPlace(tk.batchId, lastByBag);
-    return Object.assign({}, tk, {
-      bags: p.bags,
-      zoneId: p.zoneId,
-      where: p.where,
-      // Grain says what state it is in ("durchwachsen") because its button only
-      // names the action. A move row says nothing extra: its button is the
-      // instruction and the destination is stated once under the tabs.
-      instruction: tk.taskAction === 'inoculate' ? t('dash.grainReady') : ''
-    });
-  });
-  rows.push(..._dashLeftBehindRows(getSplitBatches()));
-  if (!rows.length) {
+  const splits = getSplitBatches(lastByBag);
+  if (!auto.length && !splits.length) {
     el.innerHTML =
       '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
       esc(t('dash.noUrgent')) +
       '</div>';
     return;
   }
-  const fruitingExists = zones.some((z) => z.role === 'fruiting');
-  // Most overdue / soonest due first; left-behind by how many bags are stuck.
+  const rows = auto.map((tk) => {
+    const p = _dashTaskPlace(tk.batchId, lastByBag);
+    return Object.assign({}, tk, {
+      bags: p.bags,
+      counts: p.counts,
+      // Grain says what state it is in ("durchwachsen") because its button only
+      // names the action. A move row says nothing extra: its button is the
+      // instruction and the destination is stated once under the tabs.
+      instruction: tk.taskAction === 'inoculate' ? t('dash.grainReady') : ''
+    });
+  });
+  rows.push(..._dashLeftBehindRows(splits));
   const bySection = {};
   for (const key of DASH_SECTIONS) {
     const mine = rows.filter((r) => r.bucket === key);
-    if (!mine.length) continue;
-    mine.sort((a, b) => (a.dueIn != null && b.dueIn != null ? a.dueIn - b.dueIn : b.bags - a.bags));
-    bySection[key] = mine;
+    if (mine.length) bySection[key] = mine;
   }
   const live = DASH_SECTIONS.filter((k) => bySection[k]);
   // A remembered tab that has emptied out (its work got done) falls back to the
-  // most urgent section that still has rows, rather than showing a blank card.
+  // most urgent section that still has rows. Writing the fallback back into
+  // _dashTabKey is what stops a background re-render moving the tab under a
+  // worker mid-task: without it the screen showed the fallback while memory still
+  // held the stored choice, so the moment that section repopulated (a 30s poll, a
+  // colleague's scan, midnight) the card silently jumped to it. Only an explicit
+  // tap reaches setDashTab and persists; this assignment is in-memory only, so a
+  // fresh load still honours what the worker actually chose.
   const active = live.includes(_dashTab()) ? _dashTab() : live[0];
+  _dashTabKey = active;
 
   const tabs =
     '<div role="tablist" style="display:flex;gap:4px;margin-bottom:9px">' +
@@ -4373,7 +4433,7 @@ function renderDashBatchTasks() {
           `<button type="button" role="tab" aria-selected="${on}" data-action="dash-tab" data-key="${key}" ` +
           `style="flex:1;min-width:0;padding:5px 2px 6px;border:1px solid ${on ? 'var(--c-border)' : 'transparent'};` +
           `border-bottom:2px solid ${on ? accent : 'var(--c-border)'};border-radius:7px 7px 0 0;` +
-          `background:${on ? 'var(--c-surface)' : 'transparent'};cursor:pointer;line-height:1.15">` +
+          `background:${on ? 'var(--c-surface)' : 'transparent'};cursor:pointer;font-family:inherit;line-height:1.15">` +
           `<span style="display:block;font-size:15px;font-weight:700;color:${on ? accent : 'var(--c-text-sec)'}">${bags}</span>` +
           `<span style="display:block;font-size:9.5px;font-weight:600;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t('dash.tab.' + key))}</span>` +
           '</button>'
@@ -4383,40 +4443,71 @@ function renderDashBatchTasks() {
     '</div>';
 
   const mine = bySection[active];
+  // Sort only the section being rendered. The left-behind bucket arrives already
+  // ordered by getSplitBatches (stale first, then most bags behind) \u2014 re-sorting it
+  // here by bags alone dropped the stale-first half and folded the very rows the
+  // card flags as stale in behind the "+N weitere".
+  if (active !== 'left') mine.sort((a, b) => a.dueIn - b.dueIn);
+  // An expand flag is invisible while the section fits under the cap, so it could
+  // not be cleared from the UI and silently re-applied to a later, larger set of
+  // rows \u2014 defeating the cap it was expanded past. Drop it the moment it stops
+  // being reachable.
+  if (mine.length <= DASH_SECTION_CAP) delete _dashMore[active];
   const open = _dashMore[active];
   const shown = open ? mine : mine.slice(0, DASH_SECTION_CAP);
   const hidden = mine.length - shown.length;
-  // A whole-section "Alle → Fruchtung" only where the count is small enough to
+  // Only rows that are actually due get a move offered, so the destination hint
+  // and the bulk pill follow the same rule as the per-row buttons.
+  const movable = mine.filter((r) => r.taskAction === 'move' && r.ready);
+  // every(), not some(): one move row must not put "\u2192 Fruchtzelt" above a grain
+  // row, whose whole point is that sending it to a tent skips a growth stage.
+  const allMove = mine.length > 0 && movable.length === mine.length;
+  const dest = allMove ? _fruitingDest() : null;
+  const destName = dest ? zoneDisplayName(dest) : '';
+  // A whole-section "Alle \u2192 Fruchtung" only where the count is small enough to
   // be a considered tap. Deliberately not on the overdue section: one tap
   // moving the entire backlog is a foot-gun, undoable only via the snackbar.
-  const bulkable =
-    (active === 'today' || active === 'week') &&
-    fruitingExists &&
-    mine.length > 1 &&
-    mine.every((r) => r.taskAction === 'move');
-  // The destination is the same tent for every move row, so it is stated once
-  // here instead of on each row, where it wrapped every meta line.
-  const anyMove = mine.some((r) => r.taskAction === 'move');
+  const bulkable = (active === 'today' || active === 'week') && !!dest && mine.length > 1;
   const bulkPill = bulkable
-    ? `<span class="dash-sec-bulk" data-action="bulk-fruiting" data-bucket="${active}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0;cursor:pointer">${esc(t('dash.bulkFruiting'))}</span>`
+    ? `<button type="button" class="btn btn-sm btn-p" data-action="bulk-fruiting" data-bucket="${active}" style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0">${esc(t('dash.bulkFruiting'))}</button>`
     : '';
+  // The destination is the same tent for every move row, so it is stated once
+  // here instead of on each row, where it wrapped every meta line. destName is
+  // empty unless a real fruiting zone exists, so the card never advertises a
+  // destination nothing on it can reach.
   const bulk =
-    anyMove || bulkPill
+    destName || bulkPill
       ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-        (anyMove
-          ? `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ ${esc(destName)}</span>`
+        (destName
+          ? `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2192 ${esc(destName)}</span>`
           : '') +
         '<span style="flex:1"></span>' +
         bulkPill +
         '</div>'
       : '';
   // Never silently truncate: the expander states how many rows are folded away.
-  const more = hidden
-    ? `<div data-action="dash-more" data-key="${active}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">+ ${esc(t('dash.moreRows', { n: hidden }))}</div>`
+  // A real <button> so the folded rows are reachable by keyboard and announced by
+  // assistive tech \u2014 as a <div> they were unreachable by anything but a tap.
+  const moreLabel = hidden
+    ? '+ ' + t('dash.moreRows', { n: hidden })
     : open && mine.length > DASH_SECTION_CAP
-      ? `<div data-action="dash-more" data-key="${active}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">− ${esc(t('dash.fewerRows'))}</div>`
+      ? '\u2212 ' + t('dash.fewerRows')
       : '';
-  el.innerHTML = tabs + bulk + shown.map(dashTaskRowHtml).join('') + more;
+  const more = moreLabel
+    ? `<button type="button" class="btn btn-sm" data-action="dash-more" data-key="${active}" aria-expanded="${!!open}" style="font-size:11.5px;padding:4px 8px;border:0;background:none;color:var(--c-text-sec);font-family:inherit">${esc(moreLabel)}</button>`
+    : '';
+  el.innerHTML = tabs + bulk + shown.map((r) => dashTaskRowHtml(r, _dashTaskWhere(r.counts || {}))).join('') + more;
+}
+// One-tap: move every incubation-ready batch in one urgency section to fruiting.
+// Confirms once, then reuses the same moveBatchTo path as the per-row button.
+// Sections run most-urgent-first, and a batch can only ever become MORE urgent
+// while the card sits on screen. So a tap is honoured for its own section or any
+// more urgent one: without this, a pill rendered at 23:50 on "Heute" matched
+// nothing at 00:05, because buildAutoTasks had re-bucketed those batches as
+// "overdue" \u2014 and the button did nothing at all, with no confirm and no error.
+function _bucketRank(key) {
+  const i = DASH_SECTIONS.indexOf(key);
+  return i < 0 ? 99 : i;
 }
 // One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
@@ -4429,17 +4520,22 @@ function bulkSectionToFruiting(bucket) {
   const lastByBag = buildLastScanByBag();
   const targets = [];
   let bags = 0;
+  const rank = _bucketRank(bucket);
   buildAutoTasks()
-    .filter((tk) => tk.taskAction === 'move' && tk.bucket === bucket)
+    .filter((tk) => tk.taskAction === 'move' && tk.ready && _bucketRank(tk.bucket) <= rank)
     .forEach((tk) => {
-      const b = batches.find((x) => x.batchId === tk.batchId);
+      const b = batchById(tk.batchId);
       if (!b) return;
       if (getStatus(tk.batchId).status !== 'INCUBATING') return;
       targets.push(b);
-      const counts = _batchZoneCounts(b, lastByBag);
-      for (const z in counts) bags += counts[z];
+      bags += _dashTaskPlace(tk.batchId, lastByBag).bags;
     });
-  if (!targets.length) return;
+  if (!targets.length) {
+    // Say so rather than looking broken: the data moved on under the button.
+    flashUndoBar(t('dash.nothingToMove'));
+    renderDashBatchTasks();
+    return;
+  }
   confirm2(
     t('dash.bulkFruitingTitle'),
     t('dash.bulkFruitingMsg', { n: bags, zone: t('dash.sec.' + bucket), dest: zoneDisplayName(dest) }),
@@ -6898,7 +6994,7 @@ function buildAutoTasks() {
     today = new Date();
   today.setHours(0, 0, 0, 0);
   batches.forEach((b) => {
-    const { status, action } = getStatus(b.batchId);
+    const { status } = getStatus(b.batchId);
     // Only the two growing states produce work here. FRUITING has its own
     // Ready-to-harvest card; CONTAM is tracked via Contamination reports (resolve
     // as Discarded/Autoclaved/etc.) \u2014 once bags are in the contam zone the worker
@@ -6907,24 +7003,29 @@ function buildAutoTasks() {
     const due = new Date(b.due);
     due.setHours(0, 0, 0, 0);
     const dl = Math.round((due - today) / 864e5);
-    if (dl > 7) return; // only show tasks due this week
+    // A missing or unparseable due date makes dl NaN, which fails every
+    // comparison below \u2014 so it would fall through as "due this week" and render
+    // an actionable row reading "F\u00e4llig in NaN Tag(en)". Reject it explicitly.
+    if (!Number.isFinite(dl) || dl > 7) return; // only show tasks due this week
     // Two states, two different instructions \u2014 so two task kinds. A block that
     // finished incubation goes to a fruiting tent. Grain that finished its spawn
     // run is not "monitor it": it is ready to be used, and sending it to a tent
-    // would skip a whole growth stage. Tagging only the real moves 'move' keeps
-    // every existing taskAction === 'move' reader (the summary chip, the
-    // Arbeitsliste, the bulk mover) counting moves and nothing else.
+    // would skip a whole growth stage.
     const urgent = dl < 0;
     tasks.push({
-      // One-line form, still used by the printable Arbeitsliste.
-      text: `${b.batchId} \u2014 ${action}`,
-      // dl === 0 gets its own string: "Fällig in 0 Tag(en)" is how a machine
+      // dl === 0 gets its own string: "F\u00e4llig in 0 Tag(en)" is how a machine
       // says "today", and it reads that way on the card and the work list alike.
       detail: urgent ? t('todo.dueAgo', { n: -dl }) : dl === 0 ? t('todo.dueToday') : t('todo.dueIn', { n: dl }),
       urgent,
       // warn keeps its old meaning (due within two days) so the dashboard badge
       // and the orange dot behave exactly as before.
       warn: !urgent && dl <= 2,
+      // Is it actually due? A batch 3-7 days out belongs on the card so the week
+      // ahead is visible, but moving it now ends incubation early. So it is listed
+      // and NOT offered a move. This is exactly the old taskAction!==null boundary,
+      // kept as its own flag: taskAction says WHAT the job is, ready says whether
+      // it is due yet. Every reader that meant "actionable move" tests both.
+      ready: dl <= 2,
       species: b.species,
       batchId: b.batchId,
       taskAction: status === 'SPAWN RUN' ? 'inoculate' : 'move',

@@ -152,7 +152,6 @@ window.LANG['pt'] = {
   'dash.move': 'Mover',
   'dash.toFruiting': 'Frutificação',
   'dash.noFruitingZone': 'Nenhuma zona de frutificação definida',
-  'dash.zoneUnknown': 'Sem local',
   'dash.bulkFruiting': 'Todos → Frutificação',
   'dash.bulkFruitingTitle': 'Mover para frutificação?',
   'dash.bulkFruitingMsg': 'Mover todos os {n} sacos de “{zone}” para {dest}?',
@@ -165,6 +164,8 @@ window.LANG['pt'] = {
   'dash.tab.today': 'Hoje',
   'dash.tab.week': 'Semana',
   'dash.tab.left': 'Parados',
+  'dash.bagsSplitAcross': '{n} em {zone}, {rest} noutro local',
+  'dash.nothingToMove': 'Nada para mover \u2014 lista atualizada',
   'dash.grainReady': 'colonizado → inocular',
   'dash.doInoculate': 'Inocular',
   'dash.stillIn': 'ainda em {stage}',
@@ -204,8 +205,6 @@ window.LANG['pt'] = {
   'dash.legend.title': 'Guia de cores',
   'dash.legend.species':
     'Faixa colorida \u00e0 esquerda dos cart\u00f5es de lote — cada esp\u00e9cie tem sua pr\u00f3pria cor para identifica\u00e7\u00e3o r\u00e1pida.',
-  'dash.legend.zoneDot':
-    'Ponto da zona nos cabe\u00e7alhos de se\u00e7\u00e3o — mostra a cor de cada local (configurado em Ferramentas \u2192 Zonas).',
   'dash.legend.orangeDot':
     'Ponto laranja nas tarefas de lote — aviso, tarefa prestes a vencer ou precisa de aten\u00e7\u00e3o.',
   'dash.legend.redDot':
@@ -420,8 +419,6 @@ window.LANG['pt'] = {
   'print.tickCulturesPreview': 'Marque as culturas na lista para pré-visualizar etiquetas.',
   // To-do
   'todo.batchTasks': 'Tarefas dos lotes',
-  'todo.all': 'Todas',
-  'todo.urgentOnly': 'Apenas urgentes',
   'todo.priorityHigh': 'Prioridade alta',
   'todo.priorityMed': 'Prioridade m\u00e9dia',
   'todo.dueAgo': 'Vencido h\u00e1 {n} dia(s)',
@@ -1237,12 +1234,10 @@ window.LANG['pt'] = {
   'alert.filterShowAll': 'Mostrar todos',
   'alert.filterDueToday': 'Vencem hoje ou precisam de atenção',
   'alert.filterOverdue': 'Atrasados',
-  'dash.splitBatches.title': 'Lotes divididos \u2014 sacos deixados para tr\u00e1s',
   'dash.splitBatches.in': 'em',
   'stage.spawn': 'Spawn',
   'stage.incubation': 'Incubação',
   'stage.fruiting': 'Frutificação',
-  'dash.splitBatches.behindIn': 'atrás em',
   'dash.splitBatches.stale': '> 24 h sem movimento',
   'dash.actionNewBatch': '+ Novo lote',
   'dash.actionLabWork': '+ Trabalho de laborat\u00f3rio',
