@@ -956,6 +956,8 @@ function openStab(page, sub) {
       nbApplyDefaults();
       _nbDefaultsApplied = true;
     }
+    // Refill every time: bags get consumed and created between visits.
+    nbRenderSpawnBags();
   }
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
@@ -5396,6 +5398,113 @@ function nbPreview() {
     el.style.display = 'block';
   } else el.style.display = 'none';
 }
+// ── Grain spawn consumed by a new block batch ────────────────
+// Grain spawn lives in `batches` (G-… with barcoded bags), never in `cultures`,
+// so nb-culture — which lists PD/LC/G2G/GS cultures — can never reference one.
+// That left the grain generation missing from every lineage. Bags picked here are
+// written off on create: a REMOVE carrying reason "spawn:<new batch id>", so the
+// link lives in the scan log rather than needing a column, and it is naturally
+// multi-valued (a 20-bag batch may take two grain bags).
+let _nbSpawnBags = [];
+// Set while the "Scan" button by that field has the camera open, so a grain-bag
+// scan is read as "this is the spawn I used" instead of opening the bag sheet.
+// Cleared as soon as the camera closes — otherwise every later bag scan would be
+// swallowed by a form the worker has moved on from.
+let _nbSpawnScanArmed = false;
+// A grain bag is available if it belongs to a grain batch and is still placed.
+function nbAvailableSpawnBags() {
+  const placed = buildLastPlacementByBag();
+  const out = [];
+  batches.forEach((b) => {
+    if (b.batchType !== 'grain') return;
+    (b.bags || []).forEach((bag) => {
+      const last = placed.get(String(bag).toUpperCase());
+      if (!last || last.action === 'REMOVE' || !last.to) return;
+      out.push({ bag, loc: last.to, species: b.strainName || b.species || '' });
+    });
+  });
+  return out.sort((a, z) => a.bag.localeCompare(z.bag));
+}
+function nbFillSpawnSelect() {
+  const sel = document.getElementById('nb-spawn-pick');
+  if (!sel) return;
+  const avail = nbAvailableSpawnBags().filter((x) => !_nbSpawnBags.includes(x.bag));
+  sel.innerHTML =
+    `<option value="">${esc(t('batch.spawnPick'))}</option>` +
+    avail
+      .map((x) => `<option value="${esc(x.bag)}">${esc(x.bag)} — ${esc(x.species)} (${esc(zoneDisplayName(x.loc))})</option>`)
+      .join('');
+  sel.value = '';
+}
+function nbRenderSpawnBags() {
+  const el = document.getElementById('nb-spawn-chips');
+  if (!el) return;
+  el.innerHTML = _nbSpawnBags
+    .map(
+      (bag) =>
+        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(bag)}<button type="button" data-action="nb-drop-spawn" data-bag="${esc(bag)}" title="${esc(t('common.delete'))}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
+    )
+    .join('');
+  nbFillSpawnSelect();
+}
+// Returns null when accepted, else a reason string — the caller decides how loud
+// to be (a scan beeps, the dropdown cannot produce most of these).
+function nbAddSpawnBag(bagId) {
+  const bag = String(bagId || '').toUpperCase();
+  if (!bag) return t('batch.spawnNotGrain', { bag: bagId });
+  if (_nbSpawnBags.some((x) => x.toUpperCase() === bag)) return t('batch.spawnAlready', { bag: bagId });
+  const match = nbAvailableSpawnBags().find((x) => x.bag.toUpperCase() === bag);
+  if (!match) return t('batch.spawnNotGrain', { bag: bagId });
+  _nbSpawnBags.push(match.bag);
+  nbRenderSpawnBags();
+  return null;
+}
+function nbSpawnPicked() {
+  const sel = document.getElementById('nb-spawn-pick');
+  if (!sel || !sel.value) return;
+  const err = nbAddSpawnBag(sel.value);
+  if (err) setFb('err', err, { noModal: true });
+  sel.value = '';
+}
+// Write off each grain bag consumed by `batchObj`. from = its current location so
+// the zone counts drop, and reason ties it to the batch it became.
+function nbConsumeSpawnBags(batchObj, bags) {
+  if (!bags.length) return;
+  const placed = buildLastPlacementByBag();
+  const now = new Date().toISOString();
+  const entries = [];
+  bags.forEach((bag) => {
+    const last = placed.get(String(bag).toUpperCase());
+    if (!last || last.action === 'REMOVE') return;
+    const src = batches.find((b) => (b.bags || []).some((x) => x.toUpperCase() === bag.toUpperCase()));
+    const entry = {
+      time: now,
+      action: 'REMOVE',
+      batch: src ? src.batchId : null,
+      bag,
+      from: last.to || null,
+      to: null,
+      species: src ? src.species : null,
+      strain: src ? src.strain : null,
+      reason: 'spawn:' + batchObj.batchId,
+      user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
+      _tempId: 's' + ++_scanTempIdCounter
+    };
+    scanLog.push(entry);
+    movements.push(entry);
+    entries.push(entry);
+  });
+  if (!entries.length) return;
+  _statusByBatch = null; // the grain batch may now be DONE
+  postScanEntries(entries, { zoneCheck: false });
+  setFb('ok', t('batch.spawnConsumed', { n: entries.length, id: batchObj.batchId }), { noModal: true });
+}
+// Grain bags written off for a batch, read back out of the scan log.
+function spawnSourceFor(batchId) {
+  const key = 'spawn:' + batchId;
+  return scanLog.filter((e) => e.action === 'REMOVE' && e.reason === key && e.bag).map((e) => e.bag);
+}
 function nbSubSum() {
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
     wb = parseDecimal(document.getElementById('nb-wb').value) || 0,
@@ -5656,6 +5765,9 @@ function createBatch() {
 
   // Save batch + inventory deltas atomically on the server
   const batchObj = batches[batches.length - 1];
+  // Snapshot the grain bags now: the form is cleared below, well before the POST
+  // resolves, and they are only written off once the batch is known to be saved.
+  let _spawnUsed = _nbSpawnBags.slice();
   const createBtn = document.getElementById('btn-24');
   if (createBtn) createBtn.disabled = true;
   apiPost('/api/batches', { ...batchObj, deltas })
@@ -5685,6 +5797,13 @@ function createBatch() {
           setCultureStatus(src.id, 'used');
         }
       }
+      // Same idea for real grain-spawn bags, which are batches rather than
+      // cultures. Only after the batch is known to have saved — writing the bags
+      // off first would strip spawn inventory for a batch that then failed.
+      nbConsumeSpawnBags(batchObj, _spawnUsed);
+      _spawnUsed = [];
+      renderBatches();
+      renderStatus();
     })
     .finally(() => {
       if (createBtn) createBtn.disabled = false;
@@ -5695,6 +5814,8 @@ function createBatch() {
   if (nbStrainTextEl) nbStrainTextEl.value = '';
   const nbCultureEl = document.getElementById('nb-culture');
   if (nbCultureEl) nbCultureEl.value = '';
+  _nbSpawnBags = [];
+  nbRenderSpawnBags();
   renderNbGrainBanner();
   // qty/days/weight/substrate intentionally kept (persisted via nbSaveDefaults
   // above) so the next batch reuses them; only per-batch fields are cleared.
@@ -6242,8 +6363,18 @@ function renderBatches() {
                 : ''
             ].join('')
           : '<span style="color:#ccc;font-size:11px">—</span>';
-        const src = b.sourceId
-          ? `<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`
+        // Source is two things now: the culture on the batch row, and any grain
+        // bags written off for it (recorded in the scan log, not on the batch).
+        const _spawn = spawnSourceFor(b.batchId);
+        const _srcParts = [];
+        if (b.sourceId)
+          _srcParts.push(`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
+        if (_spawn.length)
+          _srcParts.push(
+            `<span style="font-family:monospace;font-size:10px;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
+          );
+        const src = _srcParts.length
+          ? _srcParts.join('<br>')
           : '<span style="color:#ccc;font-size:11px">—</span>';
         const note = b.notes
           ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
@@ -14323,6 +14454,23 @@ function processScan(raw) {
       zoneCheckScanned(val, batchId);
       return;
     }
+    // New-batch form open and a grain bag scanned: the worker is naming the spawn
+    // they just used, not asking about the bag. Mirrors the culture autofill above.
+    // Only with no action armed, so an explicit MOVE/REMOVE still wins.
+    if (isBag && !scan.action && _nbSpawnScanArmed) {
+      const nbPanel = document.getElementById('sp-batch-new');
+      if (nbPanel && nbPanel.classList.contains('active')) {
+        const err = nbAddSpawnBag(val);
+        if (err) {
+          _scanBeep(300, 150);
+          setFb('err', err);
+        } else {
+          _scanBeep(800, 60);
+          setFb('ok', t('batch.spawnAdded', { bag: val }));
+        }
+        return;
+      }
+    }
     if (!scan.action) {
       openBagInfo(val, batchId, batch);
       return;
@@ -17185,6 +17333,9 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
+  // Closing the camera ends spawn-picking; without this every later bag scan
+  // would keep feeding a new-batch form the worker has already left.
+  _nbSpawnScanArmed = false;
   // Finishing a stocktake scan drops you back on the check sheet, with whatever
   // you scanned already ticked off and the leftovers ready to resolve.
   if (_zcScanMode) {
@@ -17774,6 +17925,22 @@ function initEventListeners() {
   $('ms-save-btn').addEventListener('click', saveMStrain);
   $('ms-cancel-btn').addEventListener('click', cancelMStrain);
   $('btn-24').addEventListener('click', createBatch);
+  $('nb-spawn-scan').addEventListener('click', () => {
+    // Arm before opening: the camera must already know the next bag it sees is a
+    // spawn pick. Clearing any armed action stops a stale MOVE hijacking the scan.
+    _nbSpawnScanArmed = true;
+    scan.action = null;
+    scan.to = null;
+    scan.from = null;
+    updateSD();
+    openCamScan();
+  });
+  $('nb-spawn-chips').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="nb-drop-spawn"]');
+    if (!btn) return;
+    _nbSpawnBags = _nbSpawnBags.filter((b) => b !== btn.dataset.bag);
+    nbRenderSpawnBags();
+  });
   const strainShortcut = document.getElementById('nb-create-strain-btn');
   if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
   $('prt-25').addEventListener('click', printBatchLabelsInline);
