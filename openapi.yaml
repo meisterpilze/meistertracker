@@ -796,47 +796,6 @@ paths:
         '200':
           description: Event deleted
 
-  /api/assets:
-    post:
-      summary: Create or update an asset
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [assetId, name, category, entryDate, purchasePrice, usefulLife, created]
-              properties:
-                assetId:
-                  type: string
-                name:
-                  type: string
-                category:
-                  type: string
-                entryDate:
-                  type: string
-                  format: date
-                purchasePrice:
-                  type: number
-                usefulLife:
-                  type: integer
-      responses:
-        '200':
-          description: Asset saved
-
-  /api/assets/{id}:
-    delete:
-      summary: Delete an asset
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Asset deleted
-
   /api/backup/download:
     post:
       summary: Download encrypted database backup

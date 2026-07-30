@@ -29,8 +29,8 @@ own products, and roll up into the one question that matters in the lab:
   The `harvest` fulfillment path is designed-for but deferred.
 - Shipping labels + tracking write-back are **Phase 4, not v1** — fully planned in §11, but the
   order→production core (Phases 0–3) ships first.
-- Not accounting / invoicing / VAT (you have DATEV-style asset bookkeeping already; orders stay
-  operational).
+- Not accounting / invoicing / VAT — bookkeeping lives outside Meistertracker; orders stay
+  operational.
 - Not a replacement for the channels' own storefronts — read-mostly ingestion.
 
 ---
