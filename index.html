@@ -274,9 +274,39 @@
           <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
           <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
         </div>
+        <!-- Camera first: in the grow room the barcode is on the tube in your
+             hand, and picking a 40-character id out of a dropdown on a phone is
+             the slow path. The select stays behind "manuell wählen" for a damaged
+             label or a desktop. -->
         <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
           <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
-          <select id="ms-q-culture"></select>
+          <div style="display: flex; gap: 6px; align-items: center">
+            <button type="button" class="btn btn-sm" id="ms-q-culture-scan" style="flex: none">
+              <span aria-hidden="true">📷</span> <span data-i18n="msq.scan">Scannen</span>
+            </button>
+            <span id="ms-q-culture-chip" style="flex: 1; min-width: 0; font-size: 11px"></span>
+          </div>
+          <button
+            type="button"
+            id="ms-q-culture-manual"
+            style="border: 0; background: none; padding: 3px 0 0; font-size: 11px; color: var(--c-text-muted); text-decoration: underline; cursor: pointer"
+            data-i18n="msq.pickManually"
+          >
+            manuell wählen
+          </button>
+          <select id="ms-q-culture" style="display: none; margin-top: 4px"></select>
+        </div>
+        <!-- Grain spawn used, charge mode only. Same state the manual form fills
+             (_nbSpawnBags), so createBatch writes the bags off unchanged. -->
+        <div id="ms-q-spawn-wrap" style="display: none; margin-top: 8px">
+          <label data-i18n="batch.spawnSource">Verwendete Körnerbrut (optional)</label>
+          <div style="display: flex; gap: 6px; align-items: center">
+            <button type="button" class="btn btn-sm" id="ms-q-spawn-scan" style="flex: none">
+              <span aria-hidden="true">📷</span> <span data-i18n="msq.scan">Scannen</span>
+            </button>
+            <select id="ms-q-spawn-pick" style="flex: 1; min-width: 0" onchange="msqSpawnPicked()"></select>
+          </div>
+          <div id="ms-q-spawn-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
         </div>
         <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
         <div style="display: flex; gap: 8px; margin-top: 12px">

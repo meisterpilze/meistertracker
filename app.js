@@ -10523,6 +10523,13 @@ function msRecipeSummaryText(ms) {
 
 // ── Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe ──
 let _msQuickCtx = null;
+// Which field the quick dialog is scanning for: 'culture' | 'spawn' | null.
+// processScan consults it so a scan lands in the dialog instead of opening the
+// bag sheet or the lineage view.
+let _msqScanTarget = null;
+// Culture types the current dialog state accepts, so a scanned culture can be
+// refused if it is the wrong kind rather than quietly accepted.
+let _msqCultureTypes = null;
 function msQuickCharge(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
@@ -10595,6 +10602,15 @@ function _msRecipeProblem(ms) {
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
   _msQuickCtx = { mode, ms: ms || null };
+  // Fresh dialog, fresh source selections — a grain bag left over from an
+  // abandoned dialog would otherwise be written off against the next batch.
+  _nbSpawnBags = [];
+  _msqScanTarget = null;
+  const cSel = document.getElementById('ms-q-culture');
+  if (cSel) {
+    cSel.value = '';
+    cSel.style.display = 'none';
+  }
   const wrap = document.getElementById('ms-q-sorte-wrap');
   const sel = document.getElementById('ms-q-sorte');
   if (!ms && wrap && sel) {
@@ -10680,6 +10696,7 @@ function msQuickRender() {
   }
   msQuickPreview();
   msQuickFillCulture();
+  msqRenderSpawn();
   if (problem) {
     const prev = document.getElementById('ms-q-preview');
     if (prev) {
@@ -10709,6 +10726,12 @@ function msQuickSorteChanged() {
 }
 function msQuickClose() {
   _msQuickCtx = null;
+  _msqScanTarget = null;
+  // Drop any grain bags picked here. Abandoning the dialog must not leave them
+  // armed to be written off against whatever batch is created next. The confirm
+  // path closes the dialog before createBatch runs, so it carries the selection
+  // across itself — see msQuickConfirm.
+  _nbSpawnBags = [];
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
 }
@@ -10764,10 +10787,85 @@ function msQuickFillCulture() {
   if (!types) {
     sel.value = '';
     wrap.style.display = 'none';
+    _msqCultureTypes = null;
     return;
   }
+  // Remembered so a scan can be validated against the same types the picker
+  // offers — scanning an MC when only PD/LC make sense must be refused, not
+  // silently accepted.
+  _msqCultureTypes = types;
   fillCultureSelect('ms-q-culture', types);
   wrap.style.display = '';
+  msqRenderCultureChip();
+}
+// Show what was scanned (or picked) next to the camera button, with a way to
+// clear it. The select is the fallback and stays hidden until asked for.
+function msqRenderCultureChip() {
+  const chip = document.getElementById('ms-q-culture-chip');
+  const sel = document.getElementById('ms-q-culture');
+  if (!chip || !sel) return;
+  if (!sel.value) {
+    chip.innerHTML = `<span style="color:var(--c-text-muted)">${esc(t('msq.noneScanned'))}</span>`;
+    return;
+  }
+  const c = cultures.find((x) => x.id === sel.value);
+  chip.innerHTML =
+    `<span style="display:inline-flex;align-items:center;gap:5px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(sel.value)}${c ? '' : ' ?'}<button type="button" id="ms-q-culture-clear" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`;
+}
+// Grain bags in the quick dialog, drawn from the same _nbSpawnBags the manual
+// form uses so createBatch consumes them without knowing which UI filled it.
+function msqRenderSpawn() {
+  const wrap = document.getElementById('ms-q-spawn-wrap');
+  if (!wrap) return;
+  const isCharge = _msQuickCtx && _msQuickCtx.mode === 'charge';
+  const avail = isCharge ? nbAvailableSpawnBags() : [];
+  // Hidden when there is no grain spawn on hand at all — an empty control on a
+  // phone form is just noise.
+  wrap.style.display = isCharge && (avail.length || _nbSpawnBags.length) ? '' : 'none';
+  const sel = document.getElementById('ms-q-spawn-pick');
+  if (sel) {
+    const free = avail.filter((x) => !_nbSpawnBags.includes(x.bag));
+    sel.innerHTML =
+      `<option value="">${esc(t('batch.spawnPick'))}</option>` +
+      free.map((x) => `<option value="${esc(x.bag)}">${esc(x.bag)}</option>`).join('');
+    sel.value = '';
+  }
+  const chips = document.getElementById('ms-q-spawn-chips');
+  if (chips)
+    chips.innerHTML = _nbSpawnBags
+      .map(
+        (bag) =>
+          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(bag)}<button type="button" data-action="msq-drop-spawn" data-bag="${esc(bag)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
+      )
+      .join('');
+}
+function msqSpawnPicked() {
+  const sel = document.getElementById('ms-q-spawn-pick');
+  if (!sel || !sel.value) return;
+  const err = nbAddSpawnBag(sel.value);
+  if (err) setFb('err', err, { noModal: true });
+  msqRenderSpawn();
+}
+// The camera modal is z-index 200 and this dialog is 1200, so the camera would
+// open behind it. Hide the dialog for the duration and put it back on close —
+// _msQuickCtx survives, so nothing typed is lost.
+function msqOpenScan(target) {
+  _msqScanTarget = target;
+  const m = document.getElementById('ms-quick-modal');
+  if (m) m.style.display = 'none';
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  updateSD();
+  openCamScan();
+}
+function msqRestoreAfterScan() {
+  if (!_msqScanTarget) return;
+  _msqScanTarget = null;
+  if (!_msQuickCtx) return;
+  const m = document.getElementById('ms-quick-modal');
+  if (m) m.style.display = 'flex';
+  msQuickRender();
 }
 function msQuickConfirm() {
   if (!_msQuickCtx) return;
@@ -10867,6 +10965,9 @@ function msQuickConfirm() {
     return;
   }
   // block / all-in-one
+  // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
+  // leak into the next batch — so carry it over the close explicitly.
+  const _spawnPicked = _nbSpawnBags.slice();
   // Land on the Charge page BEFORE prefilling. createBatch's success panel
   // (nb-result, with the print buttons) lives inside sp-batch-new, so creating
   // from the dashboard shortcut used to reveal it on a page the worker was not
@@ -10893,6 +10994,8 @@ function msQuickConfirm() {
   const nbc = document.getElementById('nb-culture');
   if (nbc) nbc.value = sourceCulture;
   setv('nb-notes', '');
+  _nbSpawnBags = _spawnPicked;
+  nbRenderSpawnBags();
   createBatch();
 }
 
@@ -14370,6 +14473,32 @@ function processScan(raw) {
       labCheckScanned(val);
       return;
     }
+    // Quick dialog asked for a source culture: take it there instead of opening
+    // the lineage view. Refused if it is not a type this dialog state accepts.
+    if (_msqScanTarget === 'culture') {
+      const hit = cultures.find((x) => x.id.toUpperCase() === val);
+      if (!hit) {
+        _scanBeep(300, 150);
+        setFb('err', t('scanFb.unknown', { val }));
+        return;
+      }
+      if (hit.status === 'used' || hit.status === 'contam') {
+        _scanBeep(300, 150);
+        setFb('err', t('scanFb.cultureNotUsable', { id: hit.id, status: hit.status }));
+        return;
+      }
+      if (_msqCultureTypes && !_msqCultureTypes.includes(hit.type)) {
+        _scanBeep(300, 150);
+        setFb('err', t('msq.wrongCultureType', { id: hit.id, type: hit.type }));
+        return;
+      }
+      const sel = document.getElementById('ms-q-culture');
+      if (sel) sel.value = hit.id;
+      _scanBeep(800, 60);
+      setFb('ok', t('scanFb.cultureAutofilled', { id: hit.id }));
+      closeCamScan();
+      return;
+    }
     const c = cultures.find((x) => x.id.toUpperCase() === val);
     if (c) {
       if (c.status === 'used' || c.status === 'contam') {
@@ -14452,6 +14581,21 @@ function processScan(raw) {
     // ticks off the check list instead of running the normal action flow.
     if (_zcScanMode && isBag) {
       zoneCheckScanned(val, batchId);
+      return;
+    }
+    // Quick dialog asked for a grain bag — same intent as the form field below,
+    // but the dialog is hidden behind the camera so it closes the camera to show
+    // the result.
+    if (isBag && !scan.action && _msqScanTarget === 'spawn') {
+      const err = nbAddSpawnBag(val);
+      if (err) {
+        _scanBeep(300, 150);
+        setFb('err', err);
+        return;
+      }
+      _scanBeep(800, 60);
+      setFb('ok', t('batch.spawnAdded', { bag: val }));
+      closeCamScan();
       return;
     }
     // New-batch form open and a grain bag scanned: the worker is naming the spawn
@@ -17336,6 +17480,8 @@ function closeCamScan() {
   // Closing the camera ends spawn-picking; without this every later bag scan
   // would keep feeding a new-batch form the worker has already left.
   _nbSpawnScanArmed = false;
+  // Bring the quick dialog back if it stepped aside for the camera.
+  msqRestoreAfterScan();
   // Finishing a stocktake scan drops you back on the check sheet, with whatever
   // you scanned already ticked off and the leftovers ready to resolve.
   if (_zcScanMode) {
@@ -17925,6 +18071,25 @@ function initEventListeners() {
   $('ms-save-btn').addEventListener('click', saveMStrain);
   $('ms-cancel-btn').addEventListener('click', cancelMStrain);
   $('btn-24').addEventListener('click', createBatch);
+  $('ms-q-culture-scan').addEventListener('click', () => msqOpenScan('culture'));
+  $('ms-q-spawn-scan').addEventListener('click', () => msqOpenScan('spawn'));
+  $('ms-q-culture-manual').addEventListener('click', () => {
+    const sel = document.getElementById('ms-q-culture');
+    if (sel) sel.style.display = sel.style.display === 'none' ? '' : 'none';
+  });
+  $('ms-q-culture').addEventListener('change', msqRenderCultureChip);
+  $('ms-q-culture-chip').addEventListener('click', (e) => {
+    if (!e.target.closest('#ms-q-culture-clear')) return;
+    const sel = document.getElementById('ms-q-culture');
+    if (sel) sel.value = '';
+    msqRenderCultureChip();
+  });
+  $('ms-q-spawn-chips').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="msq-drop-spawn"]');
+    if (!btn) return;
+    _nbSpawnBags = _nbSpawnBags.filter((b) => b !== btn.dataset.bag);
+    msqRenderSpawn();
+  });
   $('nb-spawn-scan').addEventListener('click', () => {
     // Arm before opening: the camera must already know the next bag it sees is a
     // spawn pick. Clearing any armed action stops a stale MOVE hijacking the scan.
