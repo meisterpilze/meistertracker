@@ -274,40 +274,21 @@
           <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
           <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. BHA-1" />
         </div>
-        <!-- Camera first: in the grow room the barcode is on the tube in your
-             hand, and picking a 40-character id out of a dropdown on a phone is
-             the slow path. The select stays behind "manuell wählen" for a damaged
-             label or a desktop. -->
+        <!-- One "Beimpft mit" field for every kind of inoculant — camera first,
+             since the barcode is on the thing in your hand. Applies to a Charge
+             and to new Grainspawn alike (scan the LC it came from). -->
         <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
-          <label data-i18n="msq.sourceCulture">Quellkultur (optional)</label>
+          <label data-i18n="inoc.label">Beimpft mit (optional)</label>
           <div style="display: flex; gap: 6px; align-items: center">
-            <button type="button" class="btn btn-sm" id="ms-q-culture-scan" style="flex: none">
-              <span aria-hidden="true">📷</span> <span data-i18n="msq.scan">Scannen</span>
+            <button type="button" class="btn btn-sm" id="ms-q-inoc-scan" style="flex: none; white-space: nowrap">
+              <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
             </button>
-            <span id="ms-q-culture-chip" style="flex: 1; min-width: 0; font-size: 11px"></span>
+            <select id="ms-q-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('ms-q')"></select>
           </div>
-          <button
-            type="button"
-            id="ms-q-culture-manual"
-            style="border: 0; background: none; padding: 3px 0 0; font-size: 11px; color: var(--c-text-muted); text-decoration: underline; cursor: pointer"
-            data-i18n="msq.pickManually"
-          >
-            manuell wählen
-          </button>
-          <select id="ms-q-culture" style="display: none; margin-top: 4px"></select>
+          <div id="ms-q-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
         </div>
-        <!-- Grain spawn used, charge mode only. Same state the manual form fills
-             (_nbSpawnBags), so createBatch writes the bags off unchanged. -->
-        <div id="ms-q-spawn-wrap" style="display: none; margin-top: 8px">
-          <label data-i18n="batch.spawnSource">Verwendete Körnerbrut (optional)</label>
-          <div style="display: flex; gap: 6px; align-items: center">
-            <button type="button" class="btn btn-sm" id="ms-q-spawn-scan" style="flex: none">
-              <span aria-hidden="true">📷</span> <span data-i18n="msq.scan">Scannen</span>
-            </button>
-            <select id="ms-q-spawn-pick" style="flex: 1; min-width: 0" onchange="msqSpawnPicked()"></select>
-          </div>
-          <div id="ms-q-spawn-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
-        </div>
+        <!-- Kept only so msQuickConfirm can hand a culture to nb-culture/gs-culture. -->
+        <select id="ms-q-culture" style="display: none"></select>
         <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
         <div style="display: flex; gap: 8px; margin-top: 12px">
           <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
@@ -2285,46 +2266,32 @@
                       <div id="nb-subsum" style="font-size: 11px; color: var(--c-text-muted)"></div>
                     </div>
                   </details>
+                  <!-- One field for every kind of inoculant. Cultures live in
+                       `cultures`, grain spawn in `batches` as G-… bags, but the
+                       worker just scans what is in their hand. Nothing is consumed
+                       automatically — after the batch saves we ask whether it was
+                       used up (see inocAskConsume). -->
                   <div>
-                    <label data-i18n="batch.sourceCulture">Source culture (optional)</label
-                    ><select id="nb-culture">
-                      <option value="" data-i18n="batch.none">— none —</option>
-                    </select>
-                    <div
-                      style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px"
-                      data-i18n="batch.sourceCultureHint"
-                    >
-                      Link to the PD or LC used to inoculate this batch
-                    </div>
-                  </div>
-                  <!-- Grain spawn is stored as batches with barcoded bags, not as
-                       cultures, so the select above can never reference one. Scan or
-                       pick the grain bag(s) actually used; each is written off on
-                       create (a REMOVE naming this batch). -->
-                  <div>
-                    <label data-i18n="batch.spawnSource">Grain spawn used (optional)</label>
+                    <label data-i18n="inoc.label">Beimpft mit (optional)</label>
                     <div style="display: flex; gap: 6px; align-items: center">
-                      <select id="nb-spawn-pick" style="flex: 1; min-width: 0" onchange="nbSpawnPicked()">
-                        <option value="" data-i18n="batch.spawnPick">— pick a grain bag —</option>
-                      </select>
                       <button
                         type="button"
                         class="btn btn-sm"
-                        id="nb-spawn-scan"
+                        id="nb-inoc-scan"
                         style="flex: none; white-space: nowrap"
-                        data-i18n="batch.spawnScan"
                       >
-                        Scan
+                        <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
                       </button>
+                      <select id="nb-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('nb')"></select>
                     </div>
-                    <div id="nb-spawn-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
-                    <div
-                      style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px"
-                      data-i18n="batch.spawnSourceHint"
-                    >
-                      Each bag listed here is written off when the batch is created
+                    <div id="nb-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
+                    <div style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px" data-i18n="inoc.hint">
+                      Flüssigkultur, Petrischale, Mutterkultur oder Körnerbrut — scannen oder wählen
                     </div>
                   </div>
+                  <!-- Kept for createBatch's sourceId and for the scan autofill;
+                       the visible control above is what the operator uses. -->
+                  <select id="nb-culture" style="display: none"></select>
                   <div>
                     <label data-i18n="batch.notes">Notes (optional)</label
                     ><textarea
