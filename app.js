@@ -1992,13 +1992,24 @@ function _emptyStatus() {
   if (Array.isArray(ZONES)) ZONES.forEach((z) => (c[z] = 0));
   return { c, total: 0, status: 'EMPTY', action: '' };
 }
-function _statusFromCounts(c, hasScans) {
+// Which growth stage a bag of `batchType` is in while it sits in a zone of
+// `role`. The room alone cannot answer this: grain spawn lives in the aircon
+// incubation room whenever the spawn tent runs too hot, and finished blocks get
+// parked in the spawn tent — so keying off the room called grain "incubating"
+// and called blocks a "spawn run". A fruiting or contamination room still wins
+// outright (that genuinely IS a stage change); anywhere else the batch decides.
+function stageOf(role, batchType) {
+  if (role === 'fruiting' || role === 'contaminated') return role;
+  return batchType === 'grain' ? 'spawn' : 'incubation';
+}
+function _statusFromCounts(c, hasScans, batchType) {
   let total = 0;
   for (const k in c) total += c[k];
   const byRole = {};
   for (const z of zones) {
-    if (!byRole[z.role]) byRole[z.role] = 0;
-    byRole[z.role] += c[z.id] || 0;
+    const st = stageOf(z.role, batchType);
+    if (!byRole[st]) byRole[st] = 0;
+    byRole[st] += c[z.id] || 0;
   }
   let status = 'EMPTY',
     action = '';
@@ -2038,6 +2049,10 @@ function _buildStatusByBatch() {
     const key = e.bag || `__batch__:${e.batch}`;
     m.set(key, e);
   }
+  // batch -> type, so stageOf() can tell grain from a block without a lookup
+  // inside the per-zone loop.
+  const typeById = new Map();
+  for (const b of batches) typeById.set(b.batchId, b.batchType);
   const out = new Map();
   for (const [batchId, m] of lastByBatchBag) {
     const c = {};
@@ -2047,7 +2062,7 @@ function _buildStatusByBatch() {
       const tz = toZone(e.to);
       if (tz && c[tz] !== undefined) c[tz]++;
     }
-    out.set(batchId, _statusFromCounts(c, true));
+    out.set(batchId, _statusFromCounts(c, true, typeById.get(batchId)));
   }
   _hasScanByBatch = hasByBatch;
   return out;
@@ -4013,9 +4028,14 @@ function getSplitBatches() {
       const z = toZone(last.to);
       const role = zoneRole[z];
       if (!role || role === 'contaminated') return;
-      if (!STAGE_ORDER[role]) return;
+      // Stage comes from the batch, not the room — see stageOf(). Without it,
+      // grain cooling off in the aircon room read as "incubation" and blocks
+      // parked in the spawn tent read as "spawn", so batches were reported split
+      // across stages when every bag was really at the same one.
+      const stage = stageOf(role, b.batchType);
+      if (!STAGE_ORDER[stage]) return;
       zoneCounts[z] = (zoneCounts[z] || 0) + 1;
-      stageCounts[role] = (stageCounts[role] || 0) + 1;
+      stageCounts[stage] = (stageCounts[stage] || 0) + 1;
     });
     const stages = Object.keys(stageCounts);
     if (stages.length < 2) return;
@@ -4023,9 +4043,9 @@ function getSplitBatches() {
     const behindCount = stageCounts[behindStage];
     const entries = Object.keys(zoneCounts).map((z) => ({
       zone: z,
-      role: zoneRole[z],
+      role: stageOf(zoneRole[z], b.batchType),
       count: zoneCounts[z],
-      behind: zoneRole[z] === behindStage
+      behind: stageOf(zoneRole[z], b.batchType) === behindStage
     }));
     entries.sort((a, c) => (STAGE_ORDER[a.role] || 99) - (STAGE_ORDER[c.role] || 99));
     const lastTime = lastMoveTimeByBatch[b.batchId];
@@ -4075,7 +4095,7 @@ function renderDashSplitBatches() {
     )
     .join('');
   const staleNote = splits.some((s) => s.urgent)
-    ? `<span style="display:inline-flex;align-items:center;gap:5px;margin-left:auto"><i style="width:9px;height:3px;background:var(--c-red-dark);display:inline-block"></i>${esc(t('dash.splitBatches.stale'))}</span>`
+    ? `<span style="display:inline-flex;align-items:center;gap:5px;margin-left:auto"><span style="color:var(--c-red-dark);font-weight:600">●</span>${esc(t('dash.splitBatches.stale'))}</span>`
     : '';
   el.innerHTML =
     `<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--c-text-muted);margin-bottom:7px">${legend}${staleNote}</div>` +
@@ -4096,11 +4116,16 @@ function renderDashSplitBatches() {
           ? `<strong style="color:var(--c-red-dark)">${behind.count} ${esc(t('dash.splitBatches.behindIn'))} ${esc(t('stage.' + behind.role))}</strong>`
           : '';
         const restTxt = rest.map((x) => `${x.count} ${esc(t('stage.' + x.role))}`).join(' · ');
+        // Left edge carries the species colour, same as the Erntebereit rows —
+        // one convention across the dashboard, and no separate dot needed since
+        // the stripe already says which mushroom this is. Staleness moves into
+        // the meta line rather than competing for the same edge.
         return (
-          `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:4px;background:var(--c-surface);border:1px solid var(--c-border);border-left:3px solid ${s.urgent ? 'var(--c-red-dark)' : 'var(--c-border-light)'}">` +
+          `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:4px;background:var(--c-surface);border:1px solid var(--c-border);border-left:3px solid ${spColor(s.species)}">` +
           '<div style="flex:1;min-width:0">' +
           `<div style="font-size:11.5px"><span style="font-family:monospace;font-weight:600">${esc(s.batchId)}</span>` +
-          `${s.species ? ` <span style="color:var(--c-text-muted)">${spDot(s.species)}${esc(s.species)}</span>` : ''}</div>` +
+          `${s.species ? ` <span style="color:var(--c-text-muted)">${esc(s.species)}</span>` : ''}` +
+          `${s.urgent ? ` <span style="color:var(--c-red-dark);font-weight:600" title="${esc(t('dash.splitBatches.stale'))}">●</span>` : ''}</div>` +
           `<div style="display:flex;height:9px;border-radius:3px;overflow:hidden;margin-top:4px" aria-hidden="true">${bar}</div>` +
           `<div style="font-size:10.5px;color:var(--c-text-sec);margin-top:3px">${behindTxt}${behindTxt && restTxt ? ' · ' : ''}${restTxt} (${total})</div>` +
           '</div>' +
