@@ -18199,19 +18199,22 @@ function initEventListeners() {
   $('st-settings-duckdns').addEventListener('click', () => {
     openStab('settings', 'duckdns');
   });
+  // openStab() already dispatches loadHarvestFeedSettings() for this sub-tab —
+  // calling it here as well would fetch the config twice on every click.
+  $('st-settings-harvestfeed').addEventListener('click', () => {
+    openStab('settings', 'harvestfeed');
+  });
   $('st-settings-printer').addEventListener('click', () => {
     openStab('settings', 'printer');
     renderPrinterSettings();
   });
   $('st-settings-versand').addEventListener('click', () => {
     openStab('settings', 'versand');
-    loadShipSettings();
   });
   $('versand-save-btn').addEventListener('click', saveShipSettings);
   $('versand-test-btn').addEventListener('click', testShipConnection);
   $('st-settings-channels').addEventListener('click', () => {
     openStab('settings', 'channels');
-    loadChannelsSettings();
   });
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
