@@ -403,8 +403,17 @@ window.LANG['de'] = {
   'dash.zoneUnknown': 'Ohne Ort',
   'dash.bulkFruiting': 'Alle → Fruchtung',
   'dash.bulkFruitingTitle': 'Auf Fruchtung verschieben?',
-  'dash.bulkFruitingMsg': 'Alle {n} Beutel in {zone} nach {dest} verschieben?',
+  'dash.bulkFruitingMsg': 'Alle {n} Beutel aus „{zone}“ nach {dest} verschieben?',
   'dash.bulkFruitingDone': '{n} Beutel → {dest}',
+  'dash.sec.overdue': 'Überfällig',
+  'dash.sec.today': 'Heute',
+  'dash.sec.week': 'Diese Woche',
+  'dash.sec.left': 'Liegengeblieben',
+  'dash.grainReady': 'durchwachsen → beimpfen',
+  'dash.doInoculate': 'Beimpfen',
+  'dash.stillIn': 'noch in {stage}',
+  'dash.moreRows': '{n} weitere',
+  'dash.fewerRows': 'weniger anzeigen',
   'dash.undo': 'Rückgängig',
   'dash.undone': '{n} Beutel zurück',
   'dash.kpiSection': 'Kennzahlen',
@@ -664,6 +673,7 @@ window.LANG['de'] = {
   'todo.priorityMed': 'Mittlere Priorit\u00e4t',
   'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
   'todo.dueIn': 'F\u00e4llig in {n} Tag(en)',
+  'todo.dueToday': 'Heute fällig',
   // Days
   // Team
   'team.membersDesc':
