@@ -591,7 +591,20 @@ Pushes a signed summary of recorded harvests and upcoming batches to a URL you c
 
 **Nothing is opened up.** No inbound endpoint, no port, no dependency on your public IP. The server dials out; that is the whole surface.
 
-### Setup
+### Setup — in the browser
+
+**Settings → Harvest feed.** No shell, no file, no restart.
+
+1. **Receiver URL.** HTTPS; plain HTTP is accepted for `localhost` only, so you can try it against a local receiver first.
+2. **Generate** a secret and give the same value to the receiving side. It is stored write-only — the page never reads it back, so copy it before saving.
+3. **Show what would be sent.** This builds the payload from the database and displays it, sending nothing. Do this before enabling: "does this leak anything?" is a question to answer by looking, not by trusting the description.
+4. **Save**, then **Send one now.** The result says whether the receiver accepted it, which is the difference between saved and working — a wrong secret or a typo in the host looks exactly like a correct setup until something is actually delivered.
+
+The timer restarts on save. The last outcome stays visible at the top of the page, so a feed that quietly stopped delivering shows up instead of failing in silence.
+
+### Setup — from a file instead
+
+For installs where configuration is baked into an image or handled by whatever starts the process, the same settings exist as environment variables. They apply whenever the stored config is **off**; enabling it in Settings takes over, and the page says which of the two is in charge. The two are never merged — a URL from one place and a secret from the other is a configuration nobody can read off a single screen.
 
 1. **Generate a secret** and give the same value to the receiving side:
 

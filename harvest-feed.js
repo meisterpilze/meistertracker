@@ -34,7 +34,19 @@
 // counts as promised is a business rule that differs per lab and is not tracked
 // here. Do that subtraction in the receiving system, where the commitments live.
 //
-// ── Configuration (.env) ─────────────────────────────────────────────────────
+// ── Configuration ────────────────────────────────────────────────────────────
+//
+// Normally: Settings → Harvest feed, in the browser. That writes one row and
+// restarts the timer; nothing needs a shell or a restart of the server.
+//
+// The environment variables below still work and are the fallback whenever the
+// stored config is off. They exist for installs where the configuration is baked
+// into an image or handled by whatever starts the process — there, a value that
+// can be changed through the web UI is the wrong shape.
+//
+// One place wins at a time, and which one is visible in Settings. Splitting a
+// single setting across two sources is how you end up with a feed pointing
+// somewhere nobody can find.
 //
 //   HARVEST_WEBHOOK_URL           where to POST. Required — unset means off.
 //   HARVEST_WEBHOOK_SECRET        HMAC key. Required; see "Signature" below.
@@ -83,6 +95,25 @@ let timer = null;
 const VERSION = 1;
 const ATTEMPTS = 3;
 
+/**
+ * The URL check, shared by both config sources.
+ *
+ * Plain HTTP would put the payload and the signature on the wire in clear.
+ * Loopback stays allowed so the thing can be tried out against a local receiver
+ * before a certificate exists.
+ */
+function checkUrl(url, label) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(label + ' is not a URL: ' + url);
+  }
+  const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
+    throw new Error(label + ' must be https (http is allowed for localhost only): ' + url);
+}
+
 /** Read config from an env-like object. Returns null when the feed is off. */
 function readConfig(env) {
   const url = String(env.HARVEST_WEBHOOK_URL || '').trim();
@@ -92,18 +123,7 @@ function readConfig(env) {
   if (!secret)
     throw new Error('HARVEST_WEBHOOK_URL is set but HARVEST_WEBHOOK_SECRET is not — refusing to send unsigned');
 
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error('HARVEST_WEBHOOK_URL is not a URL: ' + url);
-  }
-  // Plain HTTP would put the payload and the signature on the wire in clear.
-  // Loopback stays allowed so the thing can be tried out against a local
-  // receiver before a certificate exists.
-  const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
-    throw new Error('HARVEST_WEBHOOK_URL must be https (http is allowed for localhost only): ' + url);
+  checkUrl(url, 'HARVEST_WEBHOOK_URL');
 
   return {
     url,
@@ -118,8 +138,48 @@ function readConfig(env) {
     // cannot invent one it never got.
     strain: String(env.HARVEST_WEBHOOK_STRAIN ?? '1') !== '0',
     site: String(env.HARVEST_WEBHOOK_SITE || '').trim(),
-    timeoutMs: Math.max(1000, num(env.HARVEST_WEBHOOK_TIMEOUT_MS, 15000))
+    timeoutMs: Math.max(1000, num(env.HARVEST_WEBHOOK_TIMEOUT_MS, 15000)),
+    source: 'env'
   };
+}
+
+/** Turn a stored row (db.getHarvestFeedCfg) into the same shape. */
+function storedConfig(row) {
+  if (!row || !row.enabled) return null;
+  const url = String(row.url || '').trim();
+  if (!url) throw new Error('Harvest feed is enabled but no URL is set');
+  const secret = String(row.secret || '').trim();
+  if (!secret) throw new Error('Harvest feed is enabled but no secret is set — refusing to send unsigned');
+  checkUrl(url, 'Harvest feed URL');
+
+  return {
+    url,
+    secret,
+    intervalMs: Math.max(1, Number(row.intervalMin) || 15) * 60 * 1000,
+    freshDays: Math.max(0, Number(row.freshDays) || 0),
+    plannedDays: Math.max(0, Number(row.plannedDays) || 0),
+    leadDays: Math.max(0, Number(row.leadDays) || 0),
+    strain: row.strain !== false,
+    site: String(row.site || '').trim(),
+    timeoutMs: 15000,
+    source: 'db'
+  };
+}
+
+/**
+ * Which config actually applies.
+ *
+ * Stored config wins when it is on, environment otherwise. Not merged: a URL
+ * from one place and a secret from the other is a configuration nobody can read
+ * off a single screen, and the failure mode is a feed posting to a stale
+ * receiver with nothing in the UI to explain it.
+ */
+function resolveConfig({ database, env, dbApi }) {
+  if (database && dbApi && typeof dbApi.getHarvestFeedCfg === 'function') {
+    const fromDb = storedConfig(dbApi.getHarvestFeedCfg(database));
+    if (fromDb) return fromDb;
+  }
+  return readConfig(env || process.env);
 }
 
 function num(raw, fallback) {
@@ -284,11 +344,11 @@ async function sendOnce(database, cfg, deps) {
  * staging copy usually inherits the production .env, and two servers posting
  * contradictory snapshots to one receiver is worse than one posting none.
  */
-function start({ database, env, log, skip }) {
+function start({ database, env, log, skip, dbApi }) {
   stop();
   let cfg;
   try {
-    cfg = readConfig(env || process.env);
+    cfg = resolveConfig({ database, env, dbApi });
   } catch (e) {
     log('error', 'Harvest feed misconfigured — not started', { error: e.message });
     return false;
@@ -298,6 +358,18 @@ function start({ database, env, log, skip }) {
     log('info', 'Harvest feed skipped', { reason: 'worktree mode' });
     return false;
   }
+
+  // Write the outcome where Settings can show it. A log line only helps someone
+  // who already suspects a problem; "last delivery: 3 days ago" on the screen is
+  // what makes a feed that quietly stopped visible at all.
+  const note = (ok, error) => {
+    if (!database || !dbApi || typeof dbApi.updateHarvestFeedStatus !== 'function') return;
+    try {
+      dbApi.updateHarvestFeedStatus(database, { at: new Date().toISOString(), ok, error });
+    } catch {
+      // Recording the outcome must never take the timer down with it.
+    }
+  };
 
   const tick = async () => {
     if (inFlight) {
@@ -314,10 +386,12 @@ function start({ database, env, log, skip }) {
           attempts: r.attempts
         });
       else log('warn', 'Harvest feed failed', { error: r.error, attempts: r.attempts });
+      note(r.ok, r.error);
     } catch (e) {
       // buildPayload can throw if the schema is mid-migration. Log, keep the
       // timer.
       log('error', 'Harvest feed error', { error: e.message });
+      note(false, e.message);
     } finally {
       inFlight = false;
     }
@@ -336,7 +410,7 @@ function stop() {
   timer = null;
 }
 
-module.exports = { readConfig, buildPayload, sign, post, sendOnce, start, stop, VERSION };
+module.exports = { readConfig, storedConfig, resolveConfig, buildPayload, sign, post, sendOnce, start, stop, VERSION };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 // `node harvest-feed.js --dry-run` prints exactly what would be posted, without

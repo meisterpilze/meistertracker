@@ -509,6 +509,19 @@ function jsonErr(res, code, msg) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: msg }));
 }
+/**
+ * A whole number inside a range, with a fallback for anything unusable.
+ *
+ * Clamping rather than rejecting: these are interval and window settings from a
+ * number field, where "0 days" or "every 0 minutes" is a slip, not an attack.
+ * Silently taking the nearest sane value beats an error message about a field
+ * the person did not mean to touch.
+ */
+function clampInt(raw, min, max, fallback) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
 // Safe error response: log internals, send generic message to client for
 // unexpected errors. R-23: classifier lives in db.js (db.isSafeError) since
 // the allowlist is fundamentally a registry of every validator message db.js
@@ -1224,7 +1237,10 @@ startDuckdnsUpdater();
 // Skipped in worktree mode for the same reason as DuckDNS: a second copy of the
 // server usually inherits the same .env, and two of them posting different
 // snapshots to one receiver is worse than one posting none.
-harvestFeed.start({ database, env: process.env, log, skip: WORKTREE_MODE });
+function startHarvestFeed() {
+  return harvestFeed.start({ database, env: process.env, log, skip: WORKTREE_MODE, dbApi: db });
+}
+startHarvestFeed();
 
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
 // Pure Node.js — no bash, curl, or acme.sh required.
@@ -8035,6 +8051,148 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // -- Harvest Feed API --
+  //
+  // The feed used to be environment-only, which meant a shell on the server and
+  // a restart. Most people running this have neither to hand, and the settings
+  // for every other integration live in the UI.
+  if (req.method === 'GET' && req.url === '/api/harvest-feed/config') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const cfg = db.getHarvestFeedCfg(database);
+      // The secret goes out as a yes/no. Handing it back to fill a form field
+      // means it sits in a page anyone can read over a shoulder, and there is no
+      // reason to read it — only to set it.
+      const { secret, ...rest } = cfg;
+      // Where the running config actually comes from. Without this the UI would
+      // show an empty, disabled form on a server that is happily posting from
+      // environment variables — and the obvious next move would be to fill the
+      // form and point the feed somewhere else.
+      let envActive = false;
+      try {
+        envActive = !cfg.enabled && !!harvestFeed.readConfig(process.env);
+      } catch {
+        // A broken env config is reported by start(); here it just means "not
+        // a working env source".
+      }
+      jsonOk(res, { ...rest, hasSecret: !!secret, envActive });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/harvest-feed/config') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const current = db.getHarvestFeedCfg(database);
+        // No secret in the body means "leave it alone" — otherwise loading the
+        // form and pressing Save would blank it, and the feed would stop with
+        // nothing on screen to say why.
+        const next = {
+          enabled: !!data.enabled,
+          url: String(data.url || '').trim(),
+          secret: data.secret ? String(data.secret).trim() : current.secret,
+          intervalMin: clampInt(data.intervalMin, 1, 1440, 15),
+          freshDays: clampInt(data.freshDays, 0, 365, 3),
+          plannedDays: clampInt(data.plannedDays, 0, 365, 28),
+          leadDays: clampInt(data.leadDays, 0, 365, 0),
+          strain: data.strain !== false,
+          site: String(data.site || '').trim()
+        };
+        // Validated before saving, not at the next tick: a rejected URL that is
+        // already stored would leave the feed off with the reason buried in a
+        // log file.
+        if (next.enabled) {
+          if (!next.url) {
+            jsonErr(res, 400, 'A URL is required to enable the feed');
+            return;
+          }
+          if (!next.secret) {
+            jsonErr(res, 400, 'A shared secret is required — an unsigned feed is one anyone can forge');
+            return;
+          }
+          try {
+            harvestFeed.storedConfig({ ...next, enabled: true });
+          } catch (bad) {
+            jsonErr(res, 400, bad.message);
+            return;
+          }
+        }
+        db.updateHarvestFeedCfg(database, next);
+        const running = startHarvestFeed();
+        log('info', 'Harvest feed config updated', { actor: req.authUser.username, enabled: next.enabled });
+        jsonOk(res, { running });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // Build the payload and show it, without sending anything. This is the answer
+  // to "is this going to leak something?" — look at it before switching it on,
+  // rather than trusting a description of what it contains. Same thing
+  // `harvest-feed.js --dry-run` does at the command line.
+  if (req.method === 'POST' && req.url === '/api/harvest-feed/preview') {
+    if (requireAdmin(req, res)) return;
+    let cfg;
+    try {
+      cfg = harvestFeed.resolveConfig({ database, env: process.env, dbApi: db });
+    } catch (bad) {
+      jsonErr(res, 400, bad.message);
+      return;
+    }
+    try {
+      // No config yet is the normal state for someone looking before deciding.
+      // Defaults let them see the shape without filling the form first.
+      const shape = cfg || { freshDays: 3, plannedDays: 28, leadDays: 0, strain: true, site: '' };
+      const payload = harvestFeed.buildPayload(database, shape);
+      jsonOk(res, { payload, harvested: payload.harvested.length, planned: payload.planned.length });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // Send one now and report what came back. This is the difference between
+  // "saved" and "working": a wrong secret or a typo in the host looks exactly
+  // like a correct setup until something is actually delivered.
+  if (req.method === 'POST' && req.url === '/api/harvest-feed/test') {
+    if (requireAdmin(req, res)) return;
+    let cfg;
+    try {
+      cfg = harvestFeed.resolveConfig({ database, env: process.env, dbApi: db });
+    } catch (bad) {
+      jsonErr(res, 400, bad.message);
+      return;
+    }
+    if (!cfg) {
+      jsonErr(res, 400, 'The harvest feed is off — enable and save it first');
+      return;
+    }
+    harvestFeed
+      .sendOnce(database, cfg)
+      .then((r) => {
+        db.updateHarvestFeedStatus(database, { at: new Date().toISOString(), ok: r.ok, error: r.error });
+        log('info', 'Harvest feed test', { actor: req.authUser.username, ok: r.ok });
+        jsonOk(res, {
+          ok: r.ok,
+          error: r.error || null,
+          attempts: r.attempts,
+          // What was actually sent, so "is this leaking something?" can be
+          // answered by looking rather than by trusting the description.
+          harvested: r.payload.harvested.length,
+          planned: r.payload.planned.length,
+          payload: r.payload
+        });
+      })
+      .catch((err) => safeErr(res, err));
     return;
   }
 

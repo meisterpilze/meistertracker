@@ -3537,6 +3537,7 @@
             <button class="stab" id="st-settings-users" data-i18n="settings.tabUsers">Users</button>
             <button class="stab" id="st-settings-caldav" data-i18n="settings.tabCaldav">CalDAV</button>
             <button class="stab" id="st-settings-duckdns" data-i18n="settings.tabDuckdns">DuckDNS</button>
+            <button class="stab" id="st-settings-harvestfeed" data-i18n="settings.tabHarvestFeed">Harvest feed</button>
             <button class="stab" id="st-settings-printer" data-i18n="settings.tabPrinter">Drucker</button>
             <button class="stab" id="st-settings-mcp" style="display: none" data-i18n="settings.tabMcp">MCP</button>
             <button class="stab" id="st-settings-camera" style="display: none" data-i18n="settings.tabCamera">
@@ -4312,6 +4313,148 @@
                 data-i18n="le.note"
               >
                 No extra software required — works on all operating systems (Linux, macOS, Windows).
+              </div>
+            </div>
+          </div>
+          <!-- Harvest feed -->
+          <div class="sp" id="sp-settings-harvestfeed">
+            <div class="card">
+              <div class="sec" data-i18n="harvestFeed.title">Harvest feed</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="harvestFeed.desc"
+              >
+                Push a summary of what you have harvested and what is coming to a URL you choose — your own website, a
+                box scheme, a chat bot. One direction only: this server sends, nothing reaches in. No batch or bag ids,
+                no customers, no scan history.
+              </p>
+              <div
+                id="harvestfeed-status-banner"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+              ></div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="harvestfeed-enabled" style="width: auto" />
+                  <span data-i18n="harvestFeed.enable">Enable harvest feed</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="harvestFeed.url"
+                    >Receiver URL</label
+                  >
+                  <input
+                    type="url"
+                    id="harvestfeed-url"
+                    placeholder="https://example.org/harvest"
+                    style="max-width: 480px; width: 100%"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.urlHint"
+                  >
+                    Must be https. http is allowed for localhost only, so you can try it against a local receiver first.
+                  </div>
+                </div>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="harvestFeed.secret"
+                    >Shared secret</label
+                  >
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
+                    <input type="password" id="harvestfeed-secret" style="max-width: 380px; width: 100%; flex: 1" />
+                    <button id="harvestfeed-gen-btn" class="btn btn-sm" data-i18n="harvestFeed.generate">
+                      Generate
+                    </button>
+                  </div>
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.secretHint"
+                  >
+                    The receiving side needs the same value. It signs every request, so the receiver can tell your
+                    numbers from someone else's — without it, anyone could post "we have 40 kg" and it would look real.
+                  </div>
+                </div>
+                <div style="display: flex; gap: 14px; flex-wrap: wrap">
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="harvestFeed.interval"
+                      >Every … minutes</label
+                    >
+                    <input type="number" id="harvestfeed-interval" min="1" max="1440" style="width: 90px" />
+                  </div>
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="harvestFeed.freshDays"
+                      >Counts as fresh for … days</label
+                    >
+                    <input type="number" id="harvestfeed-fresh" min="0" max="365" style="width: 90px" />
+                  </div>
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="harvestFeed.plannedDays"
+                      >Look ahead … days</label
+                    >
+                    <input type="number" id="harvestfeed-planned" min="0" max="365" style="width: 90px" />
+                  </div>
+                  <div>
+                    <label
+                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      data-i18n="harvestFeed.leadDays"
+                      >Lead time … days</label
+                    >
+                    <input type="number" id="harvestfeed-lead" min="0" max="365" style="width: 90px" />
+                  </div>
+                </div>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="harvestfeed-strain" style="width: auto" />
+                  <span data-i18n="harvestFeed.strain">Include strain names</span>
+                </label>
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="harvestFeed.site"
+                    >Site label (optional)</label
+                  >
+                  <input type="text" id="harvestfeed-site" style="max-width: 240px; width: 100%" />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="harvestfeed-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
+                  <button id="harvestfeed-test-btn" class="btn btn-sm" data-i18n="harvestFeed.testNow">
+                    Send one now
+                  </button>
+                  <button id="harvestfeed-preview-btn" class="btn btn-sm" data-i18n="harvestFeed.preview">
+                    Show what would be sent
+                  </button>
+                </div>
+                <div
+                  id="harvestfeed-result"
+                  style="
+                    font-size: 12px;
+                    color: var(--c-text-muted);
+                    padding: 6px 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                  "
+                ></div>
+                <pre
+                  id="harvestfeed-payload"
+                  style="
+                    font-size: 11px;
+                    max-height: 320px;
+                    overflow: auto;
+                    padding: 10px;
+                    background: var(--c-bg);
+                    border-radius: 7px;
+                    display: none;
+                    margin: 0;
+                  "
+                ></pre>
               </div>
             </div>
           </div>

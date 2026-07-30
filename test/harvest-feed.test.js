@@ -434,3 +434,113 @@ describe('harvest feed lifecycle', () => {
     assert.equal(ok, false);
   });
 });
+
+// ── Stored config ────────────────────────────────────────────────────────────
+//
+// The feed shipped as environment variables only, which meant a shell on the
+// server and a restart. Everything else here is configured in Settings, so it
+// is now too — and the two sources have to stay unambiguous.
+describe('stored config', () => {
+  let t;
+  before(() => {
+    t = tmpDb();
+  });
+  after(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  it('starts off, so an upgrade never begins posting on its own', () => {
+    const cfg = db.getHarvestFeedCfg(t.db);
+    assert.equal(cfg.enabled, false);
+    assert.equal(cfg.url, '');
+    assert.equal(feed.storedConfig(cfg), null);
+  });
+
+  it('survives a round trip through the database', () => {
+    db.updateHarvestFeedCfg(t.db, {
+      enabled: true,
+      url: 'https://receiver.test/harvest',
+      secret: 'shared',
+      intervalMin: 30,
+      freshDays: 2,
+      plannedDays: 14,
+      leadDays: 4,
+      strain: false,
+      site: 'north shed'
+    });
+    const cfg = feed.storedConfig(db.getHarvestFeedCfg(t.db));
+    assert.equal(cfg.url, 'https://receiver.test/harvest');
+    assert.equal(cfg.secret, 'shared');
+    assert.equal(cfg.intervalMs, 30 * 60 * 1000);
+    assert.equal(cfg.freshDays, 2);
+    assert.equal(cfg.plannedDays, 14);
+    assert.equal(cfg.leadDays, 4);
+    assert.equal(cfg.strain, false);
+    assert.equal(cfg.site, 'north shed');
+    assert.equal(cfg.source, 'db');
+  });
+
+  it('refuses to send unsigned, exactly like the env path', () => {
+    db.updateHarvestFeedCfg(t.db, { enabled: true, url: 'https://receiver.test/x', secret: '' });
+    assert.throws(() => feed.storedConfig(db.getHarvestFeedCfg(t.db)), /secret/);
+  });
+
+  it('refuses plain http to anywhere but loopback', () => {
+    db.updateHarvestFeedCfg(t.db, { enabled: true, url: 'http://receiver.test/x', secret: 'k' });
+    assert.throws(() => feed.storedConfig(db.getHarvestFeedCfg(t.db)), /https/);
+    db.updateHarvestFeedCfg(t.db, { enabled: true, url: 'http://localhost:8787/x', secret: 'k' });
+    assert.equal(feed.storedConfig(db.getHarvestFeedCfg(t.db)).url, 'http://localhost:8787/x');
+  });
+
+  // Which source is in charge has to be answerable by looking at one screen.
+  // Merging the two — URL from the form, secret from the environment — is how a
+  // feed ends up posting somewhere nobody can account for.
+  it('lets the stored config win when it is on', () => {
+    db.updateHarvestFeedCfg(t.db, { enabled: true, url: 'https://from-db.test/x', secret: 'db-secret' });
+    const cfg = feed.resolveConfig({
+      database: t.db,
+      dbApi: db,
+      env: { HARVEST_WEBHOOK_URL: 'https://from-env.test/x', HARVEST_WEBHOOK_SECRET: 'env-secret' }
+    });
+    assert.equal(cfg.url, 'https://from-db.test/x');
+    assert.equal(cfg.source, 'db');
+  });
+
+  it('falls back to the environment when the stored config is off', () => {
+    db.updateHarvestFeedCfg(t.db, { enabled: false, url: 'https://from-db.test/x', secret: 'db-secret' });
+    const cfg = feed.resolveConfig({
+      database: t.db,
+      dbApi: db,
+      env: { HARVEST_WEBHOOK_URL: 'https://from-env.test/x', HARVEST_WEBHOOK_SECRET: 'env-secret' }
+    });
+    assert.equal(cfg.url, 'https://from-env.test/x');
+    assert.equal(cfg.source, 'env');
+  });
+
+  it('is off when neither source says otherwise', () => {
+    db.updateHarvestFeedCfg(t.db, { enabled: false, url: '', secret: '' });
+    assert.equal(feed.resolveConfig({ database: t.db, dbApi: db, env: {} }), null);
+  });
+
+  // A feed that quietly stopped delivering looks exactly like one that works,
+  // unless the last outcome is written down where the settings screen can show
+  // it.
+  it('records how the last attempt went', () => {
+    db.updateHarvestFeedStatus(t.db, { at: '2026-07-30T10:00:00.000Z', ok: true });
+    let cfg = db.getHarvestFeedCfg(t.db);
+    assert.equal(cfg.lastOk, true);
+    assert.equal(cfg.lastAt, '2026-07-30T10:00:00.000Z');
+    assert.equal(cfg.lastError, null);
+
+    db.updateHarvestFeedStatus(t.db, { at: '2026-07-30T10:15:00.000Z', ok: false, error: 'HTTP 503' });
+    cfg = db.getHarvestFeedCfg(t.db);
+    assert.equal(cfg.lastOk, false);
+    assert.equal(cfg.lastError, 'HTTP 503');
+  });
+
+  it('caps a runaway error message instead of storing a whole response body', () => {
+    db.updateHarvestFeedStatus(t.db, { ok: false, error: 'x'.repeat(5000) });
+    assert.equal(db.getHarvestFeedCfg(t.db).lastError.length, 500);
+  });
+});

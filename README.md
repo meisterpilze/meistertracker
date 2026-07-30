@@ -319,12 +319,14 @@ Two things it deliberately does not do:
 
 Every request is signed: `X-Meistertracker-Signature: sha256=<HMAC-SHA256 of "<timestamp>.<body>">` plus `X-Meistertracker-Timestamp`. Signing the timestamp together with the body is what makes a captured request useless later — reject anything outside your tolerance window and it cannot be replayed. The secret is not optional; the feed refuses to start without one, because a forged *"we have 40 kg"* is worse than no feed at all.
 
+**Set it up in Settings → Harvest feed.** Receiver URL, a generated secret, how often, and how long a harvest counts as fresh. Two buttons that matter: *Show what would be sent* builds the payload and displays it without sending — the answer to "is this going to leak something?" is to look at it, not to trust the description above. *Send one now* delivers it and reports what came back, which is the difference between saved and working. The last outcome stays on the screen, so a feed that quietly stopped delivering is visible instead of silent.
+
+The same knobs exist as environment variables (`HARVEST_WEBHOOK_URL`, `HARVEST_WEBHOOK_SECRET`, …) for installs that bake configuration into an image — see **DEPLOYMENT.md → Section 15**. The stored settings win when enabled; environment variables apply otherwise, and Settings says which of the two is in charge. Off is the default, and an upgrade never starts sending on its own.
+
 ```bash
 node harvest-feed.js --dry-run   # print exactly what would be posted, post nothing
 node harvest-feed.js --once      # build, sign, POST, report the result
 ```
-
-Configure via `.env` (`HARVEST_WEBHOOK_URL`, `HARVEST_WEBHOOK_SECRET`, and the tuning knobs) — see **DEPLOYMENT.md → Section 15**. Unset URL means the feature is off, which is the default.
 
 ## 🔌 API
 
