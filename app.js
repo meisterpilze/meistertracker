@@ -920,7 +920,6 @@ function go(page, btnId) {
   if (page === 'dash') {
     renderStatus();
     renderDashAlerts();
-    renderDashSplitBatches();
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
@@ -1018,7 +1017,6 @@ function refresh() {
   if (id === 'dash') {
     renderStatus();
     renderDashAlerts();
-    renderDashSplitBatches();
     renderDashBatchTasks();
     renderDashHarvestTasks();
     renderDashLabStock();
@@ -4080,69 +4078,6 @@ function getSplitBatches() {
   });
   return out;
 }
-function renderDashSplitBatches() {
-  const card = document.getElementById('dash-split-batches-card');
-  const el = document.getElementById('dash-split-batches');
-  if (!card || !el) return;
-  const splits = getSplitBatches();
-  if (!splits.length) {
-    card.style.display = 'none';
-    el.innerHTML = '';
-    return;
-  }
-  card.style.display = '';
-  // One colour channel: growth stage. It used to be four — red background, red
-  // border AND red button all repeating "stale", plus a per-zone dot whose
-  // colour duplicated the zone name printed beside it. Stage is what the card is
-  // actually about, and these are the same colours the zones and the pipeline
-  // KPIs already use, so there is nothing new to learn. A legend says so once.
-  const legend = STAGE_SEQ.filter((r) => splits.some((s) => s.stages.some((x) => x.role === r)))
-    .map(
-      (r) =>
-        `<span style="display:inline-flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:2px;background:${stageColor(r)};display:inline-block"></i>${esc(t('stage.' + r))}</span>`
-    )
-    .join('');
-  const staleNote = splits.some((s) => s.urgent)
-    ? `<span style="display:inline-flex;align-items:center;gap:5px;margin-left:auto"><span style="color:var(--c-red-dark);font-weight:600">●</span>${esc(t('dash.splitBatches.stale'))}</span>`
-    : '';
-  el.innerHTML =
-    `<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--c-text-muted);margin-bottom:7px">${legend}${staleNote}</div>` +
-    splits
-      .map((s) => {
-        const total = s.stages.reduce((n, x) => n + x.count, 0) || 1;
-        // Segment widths are the split itself, so "mostly moved on" versus
-        // "mostly stuck" reads without counting bags.
-        const bar = s.stages
-          .map(
-            (x) =>
-              `<i title="${esc(x.count + ' ' + t('stage.' + x.role))}" style="display:block;flex:${x.count};background:${stageColor(x.role)}"></i>`
-          )
-          .join('');
-        const behind = s.stages.find((x) => x.behind);
-        const rest = s.stages.filter((x) => !x.behind);
-        const behindTxt = behind
-          ? `<strong style="color:var(--c-red-dark)">${behind.count} ${esc(t('dash.splitBatches.behindIn'))} ${esc(t('stage.' + behind.role))}</strong>`
-          : '';
-        const restTxt = rest.map((x) => `${x.count} ${esc(t('stage.' + x.role))}`).join(' · ');
-        // Left edge carries the species colour, same as the Erntebereit rows —
-        // one convention across the dashboard, and no separate dot needed since
-        // the stripe already says which mushroom this is. Staleness moves into
-        // the meta line rather than competing for the same edge.
-        return (
-          `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:4px;background:var(--c-surface);border:1px solid var(--c-border);border-left:3px solid ${spColor(s.species)}">` +
-          '<div style="flex:1;min-width:0">' +
-          `<div style="font-size:11.5px"><span style="font-family:monospace;font-weight:600">${esc(s.batchId)}</span>` +
-          `${s.species ? ` <span style="color:var(--c-text-muted)">${esc(s.species)}</span>` : ''}` +
-          `${s.urgent ? ` <span style="color:var(--c-red-dark);font-weight:600" title="${esc(t('dash.splitBatches.stale'))}">●</span>` : ''}</div>` +
-          `<div style="display:flex;height:9px;border-radius:3px;overflow:hidden;margin-top:4px" aria-hidden="true">${bar}</div>` +
-          `<div style="font-size:10.5px;color:var(--c-text-sec);margin-top:3px">${behindTxt}${behindTxt && restTxt ? ' · ' : ''}${restTxt} (${total})</div>` +
-          '</div>' +
-          `<button class="btn btn-sm" data-action="go-split-batch" data-batch="${esc(s.batchId)}" style="font-size:11px;padding:3px 9px;white-space:nowrap;flex-shrink:0">${t('dash.view')}</button>` +
-          '</div>'
-        );
-      })
-      .join('');
-}
 // Preferred one-tap fruiting destination: the most recently used fruiting
 // zone/rack (matches how it's actually done — nearly always the same tent),
 // else the first zone tagged role 'fruiting'. Null if no fruiting zone exists.
@@ -4257,6 +4192,11 @@ function moveBatchToFruiting(batchId) {
 // One-tap action button(s) for a single batch-tasks row.
 function dashTaskBtn(tk) {
   const id = esc(tk.batchId);
+  if (tk.taskAction === 'inoculate') {
+    // Colonised grain: the useful next step is making blocks from it, so go
+    // straight to the create dialog rather than offering a move.
+    return `<button class="btn btn-sm btn-p" data-action="inoculate-from" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${esc(t('dash.doInoculate'))}</button>`;
+  }
   if (tk.taskAction === 'move') {
     // One-tap → Fruchtung (the dominant move) as the primary action; the
     // Verschieben picker stays for any other destination. Only offer it for
@@ -4273,16 +4213,31 @@ function dashTaskBtn(tk) {
   }
   return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
 }
+// One instruction row: how many bags, which batch, and what to do with them.
+// The bag count leads because it is what decides whether this is a two-minute
+// job or a twenty-minute one; the room and the timing drop to a muted second
+// line. tk is decorated with bags/instruction/where by the renderer, which has
+// the scan index needed to count bags (see renderDashBatchTasks).
 function dashTaskRowHtml(tk) {
-  const parts = tk.text.split(tk.batchId);
-  const textWithLink =
-    esc(parts[0] || '') +
-    `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}">${esc(tk.batchId)}</span>` +
-    esc(parts.slice(1).join(tk.batchId) || '');
+  // nowrap: a batch id broken across lines ("KO-" / "140426-01") is unreadable,
+  // and it is the one string a worker matches against a printed label.
+  const idHtml = `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}" style="white-space:nowrap">${esc(tk.batchId)}</span>`;
+  const bags = tk.bags ? `<strong>${tk.bags} ${esc(t('worklist.bags'))}</strong> ` : '';
+  const instr = tk.instruction ? ` <span style="color:var(--c-text-sec)">${esc(tk.instruction)}</span>` : '';
+  // Where it is now → where it is going, then how late. The destination lives on
+  // this muted line rather than in the title: with a real zone name ("Big
+  // Fruiting Tent") the title wrapped to four lines at phone width.
+  const meta = [tk.where && tk.dest ? tk.where + ' → ' + tk.dest : tk.where, tk.detail]
+    .filter(Boolean)
+    .map(esc)
+    .join(' · ');
   return (
+    // flex-wrap plus a flex-basis on the text column: at phone width the buttons
+    // drop to their own right-aligned line instead of squeezing the text to
+    // ~150px; on desktop there is room and they stay inline as before.
     '<div class="todo-row ' +
     (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
-    '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
+    '" style="padding:6px 8px;margin-bottom:3px;flex-wrap:wrap;gap:6px;--sp-color:' +
     spColor(tk.species) +
     '">' +
     (tk.urgent
@@ -4290,121 +4245,140 @@ function dashTaskRowHtml(tk) {
       : tk.warn
         ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
         : '') +
-    '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">' +
-    textWithLink +
+    '<div style="flex:1 1 190px;min-width:0"><div style="font-size:13px;font-weight:500">' +
+    bags +
+    idHtml +
+    instr +
     '</div>' +
-    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
-    esc(tk.detail) +
-    '</div></div>' +
+    (meta ? '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' + meta + '</div>' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0">' +
     dashTaskBtn(tk) +
+    '</div>' +
     '</div>'
   );
 }
-// Per-zone collapse state for the batch-tasks list, persisted so a worker's
-// expand/collapse choices survive reloads. No override → zones with an overdue
-// batch open, calmer zones collapsed (see renderDashBatchTasks).
-let _dashZoneOverride = null;
-function _dashZones() {
-  if (!_dashZoneOverride) {
-    try {
-      _dashZoneOverride = JSON.parse(localStorage.getItem('mp-dash-zones') || '{}') || {};
-    } catch (e) {
-      _dashZoneOverride = {};
-    }
-  }
-  return _dashZoneOverride;
-}
-function toggleDashZone(zoneId) {
-  const sel = '.dash-zone-head[data-zone="' + (window.CSS && CSS.escape ? CSS.escape(zoneId) : zoneId) + '"]';
-  const head = document.querySelector(sel);
-  const nowOpen = head ? head.getAttribute('aria-expanded') === 'true' : false;
-  const ov = _dashZones();
-  ov[zoneId] = nowOpen ? 'closed' : 'open';
-  localStorage.setItem('mp-dash-zones', JSON.stringify(ov));
+// The urgency sections of the batch-tasks card, in the order a worker triages:
+// what is late, what is due today, what is coming, and what got left behind.
+// 'left' is not date-driven — it is bags of a batch still sitting a stage behind
+// the rest of it (see getSplitBatches), which is why it sits below the dated
+// sections instead of being forced into "today".
+const DASH_SECTIONS = ['overdue', 'today', 'week', 'left'];
+// Sections cap at this many rows with a "+N weitere" expander. Without it the
+// overdue section is the whole historical backlog — hundreds of bags of it — and
+// buries today's two real jobs off the bottom of a phone screen.
+const DASH_SECTION_CAP = 5;
+let _dashMore = {};
+function toggleDashMore(key) {
+  _dashMore[key] = !_dashMore[key];
   renderDashBatchTasks();
 }
-// Groups the "needs to move" tasks by each batch's current zone into collapsible
-// cards, so a big cohort reads as a few zone lines instead of one long flat list.
-// A zone whose batches are all incubation-ready gets a one-tap "Alle → Fruchtung".
+// Bags of this batch that are actually placed somewhere, plus the room most of
+// them are in — "where do I walk to" and "how big is this job".
+function _dashTaskPlace(batchId, lastByBag) {
+  const b = batches.find((x) => x.batchId === batchId);
+  const counts = b ? _batchZoneCounts(b, lastByBag) : {};
+  const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
+  let bags = 0;
+  for (const z of zoneIds) bags += counts[z];
+  return { bags, zoneId: zoneIds[0] || '', where: zoneIds[0] ? zoneDisplayName(zoneIds[0]) : '' };
+}
+// Turns the "bags left behind" splits into rows shaped like every other row, so
+// the section reads the same way: N bags of a batch, still one stage back, with
+// the rest of the batch noted in the meta line.
+function _dashLeftBehindRows(splits) {
+  return splits.map((s) => {
+    const behind = s.stages.find((x) => x.behind) || { count: 0, role: 'incubation' };
+    const rest = s.stages
+      .filter((x) => !x.behind)
+      .map((x) => x.count + ' ' + t('dash.splitBatches.in') + ' ' + t('stage.' + x.role))
+      .join(' · ');
+    return {
+      batchId: s.batchId,
+      species: s.species,
+      bags: behind.count,
+      instruction: t('dash.stillIn', { stage: t('stage.' + behind.role) }),
+      where: rest ? '(' + rest + ')' : '',
+      detail: s.urgent ? t('dash.splitBatches.stale') : '',
+      urgent: false,
+      warn: s.urgent,
+      taskAction: 'view',
+      bucket: 'left'
+    };
+  });
+}
+// The card, grouped by urgency rather than by room: the row itself now carries
+// the instruction ("12 Beutel → Fruchtzelt"), so what a worker needs is readable
+// without opening anything. The by-room walk sheet still exists behind the
+// summary chip (openWorkList), which is the better place for it — it prints.
 function renderDashBatchTasks() {
-  const filter = document.getElementById('dash-batch-filter')?.value || 'all';
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
-  const empty =
-    '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
-    t('dash.noUrgent') +
-    '</div>';
-  const tasks = buildAutoTasks();
-  if (!tasks.length) {
-    el.innerHTML = empty;
-    return;
-  }
-  const urgentOnly = filter === 'urgent';
-  const shown = urgentOnly ? tasks.filter((tk) => tk.urgent || tk.warn) : tasks;
-  if (!shown.length) {
-    el.innerHTML = empty;
-    return;
-  }
   const lastByBag = buildLastScanByBag();
-  const fruitingExists = zones.some((z) => z.role === 'fruiting');
-  const groups = new Map();
-  shown.forEach((tk) => {
-    const b = batches.find((x) => x.batchId === tk.batchId);
-    const counts = b ? _batchZoneCounts(b, lastByBag) : {};
-    const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
-    const zid = zoneIds[0] || '__none';
-    if (!groups.has(zid)) {
-      groups.set(zid, {
-        zoneId: zid,
-        name: zid === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zid),
-        tasks: [],
-        bags: 0,
-        urgent: false,
-        allFruit: true
-      });
-    }
-    const g = groups.get(zid);
-    g.tasks.push(tk);
-    g.bags += counts[zid] || 0;
-    if (tk.urgent) g.urgent = true;
-    const canFruit = tk.taskAction === 'move' && fruitingExists && getStatus(tk.batchId).status === 'INCUBATING';
-    if (!canFruit) g.allFruit = false;
+  const dest = _fruitingDest();
+  const destName = dest ? zoneDisplayName(dest) : t('dash.toFruiting');
+  const rows = buildAutoTasks().map((tk) => {
+    const p = _dashTaskPlace(tk.batchId, lastByBag);
+    return Object.assign({}, tk, {
+      bags: p.bags,
+      zoneId: p.zoneId,
+      where: p.where,
+      // Grain says what state it is in ("durchwachsen") because its button only
+      // says the action; a move row's destination is the button, so it goes to
+      // the muted meta line as `dest` instead of repeating in the title.
+      dest: tk.taskAction === 'inoculate' ? '' : destName,
+      instruction: tk.taskAction === 'inoculate' ? t('dash.grainReady') : ''
+    });
   });
-  const list = [...groups.values()].sort((a, b) => b.urgent - a.urgent || a.name.localeCompare(b.name));
-  const ov = _dashZones();
-  const bagsLbl = esc(t('worklist.bags'));
-  el.innerHTML = list
-    .map((g) => {
-      const override = ov[g.zoneId];
-      const open = override === 'open' ? true : override === 'closed' ? false : g.urgent || urgentOnly;
-      const bulk =
-        g.allFruit && g.tasks.length > 1
-          ? `<span class="dash-zone-bulk" data-action="bulk-fruiting" data-zone="${esc(g.zoneId)}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:4px 10px;white-space:nowrap;flex-shrink:0;margin-left:8px;cursor:pointer">→ ${esc(t('dash.bulkFruiting'))}</span>`
-          : '';
-      const head =
-        `<div class="dash-zone-head" data-action="toggle-zone" data-zone="${esc(g.zoneId)}" aria-expanded="${open}" style="display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer;user-select:none">` +
-        `<span style="color:var(--c-text-muted);font-size:10px;width:9px;flex:none">${open ? '▾' : '▸'}</span>` +
-        `<span style="font-size:13px;font-weight:640;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.name)}</span>` +
-        (g.urgent ? '<span class="pdot high" style="flex:none"></span>' : '') +
-        `<span style="flex:1"></span>` +
-        `<span style="font-size:11px;color:var(--c-text-muted);font-family:monospace;white-space:nowrap">${g.bags} ${bagsLbl}</span>` +
-        bulk +
-        '</div>';
-      const body = open
-        ? '<div style="padding:4px 8px 8px;border-top:1px solid var(--c-border)">' + g.tasks.map(dashTaskRowHtml).join('') + '</div>'
+  rows.push(..._dashLeftBehindRows(getSplitBatches()));
+  if (!rows.length) {
+    el.innerHTML =
+      '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+      esc(t('dash.noUrgent')) +
+      '</div>';
+    return;
+  }
+  const fruitingExists = zones.some((z) => z.role === 'fruiting');
+  el.innerHTML = DASH_SECTIONS.map((key) => {
+    const mine = rows.filter((r) => r.bucket === key);
+    if (!mine.length) return '';
+    // Most overdue / soonest due first; left-behind by how many bags are stuck.
+    mine.sort((a, b) => (a.dueIn != null && b.dueIn != null ? a.dueIn - b.dueIn : b.bags - a.bags));
+    const open = _dashMore[key];
+    const shown = open ? mine : mine.slice(0, DASH_SECTION_CAP);
+    const hidden = mine.length - shown.length;
+    const bags = mine.reduce((n, r) => n + (r.bags || 0), 0);
+    // A whole-section "Alle → Fruchtung" only where the count is small enough to
+    // be a considered tap. Deliberately not on the overdue section: one tap
+    // moving the entire backlog is a foot-gun, undoable only via the snackbar.
+    const bulkable =
+      (key === 'today' || key === 'week') &&
+      fruitingExists &&
+      mine.length > 1 &&
+      mine.every((r) => r.taskAction === 'move');
+    const bulk = bulkable
+      ? `<span class="dash-sec-bulk" data-action="bulk-fruiting" data-bucket="${key}" style="font-size:11px;font-weight:650;color:#fff;background:var(--c-primary,#16a34a);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0;cursor:pointer">${esc(t('dash.bulkFruiting'))}</span>`
+      : '';
+    const head =
+      '<div style="display:flex;align-items:center;gap:7px;padding:2px 2px 5px">' +
+      (key === 'overdue' ? '<span class="pdot high" style="flex:none"></span>' : '') +
+      `<span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${key === 'overdue' ? 'var(--c-red-dark)' : 'var(--c-text-sec)'}">${esc(t('dash.sec.' + key))}</span>` +
+      `<span style="font-size:10.5px;color:var(--c-text-muted);font-family:monospace;white-space:nowrap">${bags} ${esc(t('worklist.bags'))}</span>` +
+      '<span style="flex:1"></span>' +
+      bulk +
+      '</div>';
+    // Never silently truncate: the expander states how many rows are folded away.
+    const more = hidden
+      ? `<div data-action="dash-more" data-key="${key}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">+ ${esc(t('dash.moreRows', { n: hidden }))}</div>`
+      : open && mine.length > DASH_SECTION_CAP
+        ? `<div data-action="dash-more" data-key="${key}" style="font-size:11.5px;color:var(--c-text-sec);padding:5px 8px;cursor:pointer;user-select:none">− ${esc(t('dash.fewerRows'))}</div>`
         : '';
-      return (
-        '<div class="dash-zone" style="background:var(--c-card);border:1px solid var(--c-border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
-        head +
-        body +
-        '</div>'
-      );
-    })
-    .join('');
+    return '<div style="margin-bottom:11px">' + head + shown.map(dashTaskRowHtml).join('') + more + '</div>';
+  }).join('');
 }
-// One-tap: move every incubation-ready batch currently in a zone to fruiting.
+// One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
-function bulkZoneToFruiting(zoneId) {
+function bulkSectionToFruiting(bucket) {
   const dest = _fruitingDest();
   if (!dest) {
     setFb('err', t('dash.noFruitingZone'));
@@ -4414,28 +4388,25 @@ function bulkZoneToFruiting(zoneId) {
   const targets = [];
   let bags = 0;
   buildAutoTasks()
-    .filter((tk) => tk.taskAction === 'move')
+    .filter((tk) => tk.taskAction === 'move' && tk.bucket === bucket)
     .forEach((tk) => {
       const b = batches.find((x) => x.batchId === tk.batchId);
       if (!b) return;
-      const counts = _batchZoneCounts(b, lastByBag);
-      const zoneIds = Object.keys(counts).sort((a, z) => counts[z] - counts[a]);
-      if ((zoneIds[0] || '__none') !== zoneId) return;
       if (getStatus(tk.batchId).status !== 'INCUBATING') return;
       targets.push(b);
-      bags += counts[zoneId] || 0;
+      const counts = _batchZoneCounts(b, lastByBag);
+      for (const z in counts) bags += counts[z];
     });
   if (!targets.length) return;
-  const zName = zoneId === '__none' ? t('dash.zoneUnknown') : zoneDisplayName(zoneId);
   confirm2(
     t('dash.bulkFruitingTitle'),
-    t('dash.bulkFruitingMsg', { n: bags, zone: zName, dest: zoneDisplayName(dest) }),
+    t('dash.bulkFruitingMsg', { n: bags, zone: t('dash.sec.' + bucket), dest: zoneDisplayName(dest) }),
     t('dash.move'),
     () => {
-      // moveBatchTo moves each target's ENTIRE bag set, so a batch split across
-      // zones also moves the bags it has outside this zone — the "N Beutel" shown
-      // on the card counts this zone's bags only. snap records every bag that
-      // actually moves, so Undo restores them all exactly.
+      // moveBatchTo moves each target's ENTIRE bag set, which is what the "N
+      // Beutel" on the section header now counts too — the section is a set of
+      // whole batches, not a room. snap records every bag that actually moves,
+      // so Undo restores them all exactly.
       const snap = _snapshotBeforeMove(targets, dest, buildLastScanByBag());
       let moved = 0;
       targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
@@ -4447,6 +4418,17 @@ function bulkZoneToFruiting(zoneId) {
       showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoMove(snap));
     }
   );
+}
+// Colonised grain → make blocks from it. Opens the same quick-create dialog as
+// the dashboard's "Neue Charge" with this grain's Sorte preselected, so the
+// recipe is already right. The grain itself is then picked under "Beimpft mit":
+// that list is per bag, not per batch, so a multi-bag grain batch has no single
+// bag we could honestly preselect — the worker scans the one they opened.
+function inoculateFromBatch(batchId) {
+  const b = batches.find((x) => x.batchId === batchId);
+  const ms = b && b.strainId ? mushroomStrains.find((x) => x.id === b.strainId) : null;
+  if (ms && ms.recBatchType) msQuickOpen('charge', ms);
+  else msQuickChargeNew();
 }
 // Collapsible dashboard reference sections (KPIs / Live status / Lab). No saved
 // choice → open on desktop, collapsed on phones (less scrolling); each toggle
@@ -6875,36 +6857,39 @@ function buildAutoTasks() {
   today.setHours(0, 0, 0, 0);
   batches.forEach((b) => {
     const { status, action } = getStatus(b.batchId);
-    // Skip terminal/archived states. FRUITING has its own Ready-to-harvest card;
-    // CONTAM is tracked via Contamination reports (resolve as Discarded/Autoclaved/etc.) \u2014
-    // once bags are in the contam zone the worker has already acted, no need to nag here.
-    if (status === 'DONE' || status === 'EMPTY' || status === 'CONTAM' || status === 'FRUITING') return;
+    // Only the two growing states produce work here. FRUITING has its own
+    // Ready-to-harvest card; CONTAM is tracked via Contamination reports (resolve
+    // as Discarded/Autoclaved/etc.) \u2014 once bags are in the contam zone the worker
+    // has already acted, no need to nag here; DONE/EMPTY are terminal.
+    if (status !== 'INCUBATING' && status !== 'SPAWN RUN') return;
     const due = new Date(b.due);
     due.setHours(0, 0, 0, 0);
     const dl = Math.round((due - today) / 864e5);
-    let urgent = false,
-      warn = false,
-      text = '',
-      detail = '',
-      taskAction = null;
-    if (status === 'INCUBATING' || status === 'SPAWN RUN') {
-      if (dl > 7) return; // only show tasks due this week
-      if (dl < 0) {
-        urgent = true;
-        text = `${b.batchId} \u2014 ${action}`;
-        detail = t('todo.dueAgo', { n: Math.abs(dl) });
-        taskAction = 'move';
-      } else if (dl <= 2) {
-        warn = true;
-        text = `${b.batchId} \u2014 ${action}`;
-        detail = t('todo.dueIn', { n: dl });
-        taskAction = 'move';
-      } else {
-        text = `${b.batchId} \u2014 ${action}`;
-        detail = t('todo.dueIn', { n: dl });
-      }
-    }
-    if (text) tasks.push({ text, detail, urgent, warn, species: b.species, batchId: b.batchId, taskAction });
+    if (dl > 7) return; // only show tasks due this week
+    // Two states, two different instructions \u2014 so two task kinds. A block that
+    // finished incubation goes to a fruiting tent. Grain that finished its spawn
+    // run is not "monitor it": it is ready to be used, and sending it to a tent
+    // would skip a whole growth stage. Tagging only the real moves 'move' keeps
+    // every existing taskAction === 'move' reader (the summary chip, the
+    // Arbeitsliste, the bulk mover) counting moves and nothing else.
+    const urgent = dl < 0;
+    tasks.push({
+      // One-line form, still used by the printable Arbeitsliste.
+      text: `${b.batchId} \u2014 ${action}`,
+      // dl === 0 gets its own string: "Fällig in 0 Tag(en)" is how a machine
+      // says "today", and it reads that way on the card and the work list alike.
+      detail: urgent ? t('todo.dueAgo', { n: -dl }) : dl === 0 ? t('todo.dueToday') : t('todo.dueIn', { n: dl }),
+      urgent,
+      // warn keeps its old meaning (due within two days) so the dashboard badge
+      // and the orange dot behave exactly as before.
+      warn: !urgent && dl <= 2,
+      species: b.species,
+      batchId: b.batchId,
+      taskAction: status === 'SPAWN RUN' ? 'inoculate' : 'move',
+      // Which urgency section the row lands in \u2014 see renderDashBatchTasks.
+      bucket: urgent ? 'overdue' : dl === 0 ? 'today' : 'week',
+      dueIn: dl
+    });
   });
   return tasks;
 }
@@ -17927,19 +17912,18 @@ function initEventListeners() {
   $('btn-22').addEventListener('click', cancelHarvest);
 
   // Dashboard
-  $('dash-batch-filter').addEventListener('change', renderDashBatchTasks);
   $('status-q').addEventListener('input', renderStatus);
   // Delegated clicks for Batch tasks + Ready-to-harvest cards
   function dashTaskCardClick(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const action = el.dataset.action;
-    if (action === 'toggle-zone') {
-      toggleDashZone(el.dataset.zone);
+    if (action === 'dash-more') {
+      toggleDashMore(el.dataset.key);
       return;
     }
     if (action === 'bulk-fruiting') {
-      bulkZoneToFruiting(el.dataset.zone);
+      bulkSectionToFruiting(el.dataset.bucket);
       return;
     }
     const batch = el.dataset.batch;
@@ -17953,6 +17937,9 @@ function initEventListeners() {
         break;
       case 'move-to-fruiting':
         moveBatchToFruiting(batch);
+        break;
+      case 'inoculate-from':
+        inoculateFromBatch(batch);
         break;
     }
   }
@@ -18003,11 +17990,6 @@ function initEventListeners() {
         go(el.dataset.page, el.dataset.btn);
         break;
     }
-  });
-  $('dash-split-batches').addEventListener('click', function (e) {
-    const el = e.target.closest('[data-action="go-split-batch"]');
-    if (!el) return;
-    goToBatch(el.dataset.batch);
   });
   // The two creation flows keep one-tap buttons on the dashboard; the speed-dial
   // FAB carries the same actions for every other page.

@@ -403,8 +403,17 @@ window.LANG['en'] = {
   'dash.zoneUnknown': 'No location',
   'dash.bulkFruiting': 'All → Fruiting',
   'dash.bulkFruitingTitle': 'Move to fruiting?',
-  'dash.bulkFruitingMsg': 'Move all {n} bags in {zone} to {dest}?',
+  'dash.bulkFruitingMsg': 'Move all {n} bags from “{zone}” to {dest}?',
   'dash.bulkFruitingDone': '{n} bags → {dest}',
+  'dash.sec.overdue': 'Overdue',
+  'dash.sec.today': 'Today',
+  'dash.sec.week': 'This week',
+  'dash.sec.left': 'Left behind',
+  'dash.grainReady': 'colonised → inoculate',
+  'dash.doInoculate': 'Inoculate',
+  'dash.stillIn': 'still in {stage}',
+  'dash.moreRows': '{n} more',
+  'dash.fewerRows': 'show fewer',
   'dash.undo': 'Undo',
   'dash.undone': '{n} bags moved back',
   'dash.kpiSection': 'Metrics',
@@ -660,6 +669,7 @@ window.LANG['en'] = {
   'todo.priorityMed': 'Medium priority',
   'todo.dueAgo': 'Due {n} day(s) ago',
   'todo.dueIn': 'Due in {n} day(s)',
+  'todo.dueToday': 'Due today',
   // Days
   // Team
   'team.membersDesc':
