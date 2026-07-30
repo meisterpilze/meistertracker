@@ -9627,8 +9627,16 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
     // so a bad SW build can be rolled back within one navigation rather
     // than waiting up to 5 min + the browser's own 24 h SW-bypass cache.
     headers['Cache-Control'] = 'no-cache';
-  } else if (url.startsWith('/lib/') || url.startsWith('/lang/')) {
+  } else if (url.startsWith('/lib/')) {
+    // Pinned vendor builds — the file at this path genuinely never changes.
     headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+  } else if (url.startsWith('/lang/')) {
+    // NOT immutable: /lang/de.js has no version in its URL but its contents
+    // change on every deploy that touches a string. Marked immutable it was
+    // pinned in the browser for a year, so newly added keys never arrived and
+    // t() printed the raw key ("msq.scan") on a client that had loaded the file
+    // once. Same short window as the other code assets.
+    headers['Cache-Control'] = 'public, max-age=300';
   } else if (ext === '.png' || ext === '.ico' || ext === '.svg') {
     headers['Cache-Control'] = 'public, max-age=86400';
   } else if (ext === '.css' || ext === '.js') {
