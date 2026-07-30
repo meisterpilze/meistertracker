@@ -594,7 +594,10 @@ describe('order hub – customer erasure', () => {
 
     const s = d.prepare('SELECT * FROM shipments WHERE order_id = ?').get(orderId);
     assert.equal(s.label_url, null, 'label PDF url gone — it renders the full address');
-    assert.equal(s.tracking_number, 'T-ERASE', 'tracking number kept for the shipping record');
+    assert.equal(s.provider_parcel_id, null, 'parcel id gone — it resolves the address at Sendcloud');
+    // status 'created' = still in flight. Tracking survives so a parcel already
+    // moving can still be delivered; the delivered case is covered below.
+    assert.equal(s.tracking_number, 'T-ERASE', 'tracking kept while the parcel is in transit');
 
     assert.equal(
       d.prepare('SELECT COUNT(*) c FROM customer_identities WHERE customer_id = ?').get(cid).c,
@@ -613,8 +616,80 @@ describe('order hub – customer erasure', () => {
     db.eraseCustomer(d, c1);
     assert.doesNotThrow(() => db.eraseCustomer(d, c2), 'a second NULL email must not trip the UNIQUE constraint');
     assert.doesNotThrow(() => db.eraseCustomer(d, c1), 'erasing twice is a no-op');
-    assert.deepEqual(db.eraseCustomer(d, null), { orders: 0 }, 'null id is a safe no-op');
+    assert.deepEqual(db.eraseCustomer(d, null), { orders: 0, found: false, subject: null }, 'null id is a safe no-op');
+    assert.equal(db.eraseCustomer(d, 999999).found, false, 'an unknown id reports not-found, not success');
 
     assert.equal(d.prepare('SELECT COUNT(*) c FROM customers WHERE id IN (?,?)').get(c1, c2).c, 2, 'rows still exist');
+  });
+
+  it('survives the next channel sync — the erase does not get undone', () => {
+    seedEbayBuyer('ebay_dauer', 'dauer@example.de', 'EB-300');
+    const cid = db.findCustomerByIdentity(d, 'ebay', 'ebay_dauer');
+    const before = db.eraseCustomer(d, cid);
+    assert.equal(before.found, true);
+    // Only this call can still see who it was — afterwards nothing in the DB
+    // resolves the id to a person, so the caller's audit line depends on this.
+    assert.equal(before.subject, 'Erika Musterfrau', 'subject captured before the write');
+
+    // Exactly what a poll does: the same order arrives again, PII and all.
+    db.upsertOrder(d, {
+      channel: 'ebay',
+      channelOrderId: 'EB-300',
+      buyerHandle: 'ebay_dauer',
+      customerName: 'Erika Dauer',
+      customerEmail: 'dauer@example.de',
+      shipName: 'Erika Dauer',
+      shipStreet: 'Hauptstr',
+      shipHouse: '7',
+      shipCity: 'Berlin',
+      shipPostal: '10115',
+      shipPhone: '+4930123',
+      totalAmount: 42.5,
+      status: 'new',
+      raw: { buyer: { username: 'ebay_dauer', email: 'dauer@example.de' } },
+      items: []
+    });
+
+    const o = d.prepare("SELECT * FROM orders WHERE channel_order_id = 'EB-300'").get();
+    for (const f of [
+      'customer_name',
+      'customer_email',
+      'raw_json',
+      'ship_name',
+      'ship_street',
+      'ship_postal',
+      'ship_phone'
+    ]) {
+      assert.equal(o[f], null, `re-sync must not restore orders.${f}`);
+    }
+    assert.equal(o.total_amount, 42.5, 'non-identifying data still syncs');
+    assert.equal(
+      d.prepare('SELECT COUNT(*) c FROM customers WHERE name = ?').get('Erika Dauer').c,
+      0,
+      're-sync must not insert a second customer carrying the erased name'
+    );
+    assert.ok(
+      d.prepare('SELECT erased_at FROM customers WHERE id = ?').get(cid).erased_at,
+      'erased_at is what tells the sync path to keep the columns empty'
+    );
+  });
+
+  it('clears tracking once the parcel is delivered', () => {
+    seedEbayBuyer('ebay_zugestellt', 'zu@example.de', 'EB-301');
+    const cid = db.findCustomerByIdentity(d, 'ebay', 'ebay_zugestellt');
+    const oid = d.prepare("SELECT id FROM orders WHERE channel_order_id = 'EB-301'").get().id;
+    db.insertShipment(d, {
+      orderId: oid,
+      provider: 'sendcloud',
+      providerParcelId: 'P-DONE',
+      trackingNumber: 'T-DONE',
+      trackingUrl: 'https://track/T-DONE',
+      status: 'delivered'
+    });
+    db.eraseCustomer(d, cid);
+    const s = d.prepare('SELECT * FROM shipments WHERE order_id = ?').get(oid);
+    assert.equal(s.tracking_number, null, 'a delivered parcel keeps no handle to the address');
+    assert.equal(s.tracking_url, null, 'tracking url resolves the same data');
+    assert.equal(s.provider_parcel_id, null, 'parcel id gone');
   });
 });

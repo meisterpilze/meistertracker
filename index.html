@@ -2808,6 +2808,12 @@
                       <th data-i18n="orders.th.ltv">Umsatz</th>
                       <th data-i18n="orders.th.last">Letzte</th>
                       <th data-i18n="orders.th.type">Status</th>
+                      <!-- Admin-only; empty for everyone else. This is where a
+                           marketplace account-closure request gets carried out.
+                           The eBay deletion endpoint records such requests but
+                           never erases on its own — it is unauthenticated by
+                           necessity, so the irreversible part lives behind auth. -->
+                      <th id="orders-customers-privacy-th" hidden data-i18n="orders.th.privacy">Datenschutz</th>
                     </tr>
                   </thead>
                   <tbody id="orders-customers-body"></tbody>
