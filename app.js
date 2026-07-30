@@ -164,6 +164,7 @@ const toZone = (loc) => {
   return z || loc;
 };
 // ABBR removed — kuerzel comes from mushroomStrains (Pilzsorten) now.
+// Fallback ramp for species with no entry in SP_REAL below.
 const SP_COLORS = [
   '#e11d48',
   '#0284c7',
@@ -176,6 +177,45 @@ const SP_COLORS = [
   '#0891b2',
   '#65a30d'
 ];
+// Species colours approximate what the mushroom actually looks like, so the dot
+// is recognisable instead of decorative. Keyed on the species name with any
+// " (KUERZEL)" suffix stripped — batches carry both "Blue Oyster" and
+// "Blue Oyster (BO)", which the old raw-string key treated as two species and
+// coloured differently.
+//
+// Realism is bent where it would cost legibility: Shiitake, Chestnut, Pioppino
+// and Maitake are all brown in life, which at a 10px dot is four of the same
+// colour. They are spread across hue and roughly 25 / 40 / 65 / 85 lightness so
+// no two read alike — chestnut pushed orange, pioppino cooled to olive, maitake
+// taken fully grey. Phoenix is nudged toward salmon so it parts from King Oyster
+// tan, and Pearl Oyster to blue-grey so it parts from Maitake.
+// Growth stages, in order. The split-batch card colours by stage, taking the hue
+// from the operator's own zone config so it matches the Zonen page and the
+// pipeline KPI strip; the fallbacks are the KPI defaults.
+const STAGE_SEQ = ['spawn', 'incubation', 'fruiting'];
+const STAGE_FALLBACK = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981' };
+function stageColor(role) {
+  const z = zones.find((x) => x.role === role && x.color);
+  return (z && z.color) || STAGE_FALLBACK[role] || '#888888';
+}
+const SP_REAL = {
+  'pink oyster': '#E8618C',
+  'blue oyster': '#4A7FB5',
+  'yellow oyster': '#E8B92E',
+  cordyceps: '#E8701A',
+  chestnut: '#C8721F',
+  reishi: '#8E2B20',
+  shiitake: '#4A2E18',
+  pioppino: '#6E6046',
+  'king oyster': '#C8A275',
+  'phoenix oyster': '#D9A08A',
+  'phoenix oyster mushroom': '#D9A08A',
+  maitake: '#A9A49B',
+  'pearl oyster': '#8FA3B0',
+  'lions mane': '#EDE7DA',
+  "lion's mane": '#EDE7DA',
+  'black pearl king oyster': '#2B2F36'
+};
 let REF_GROUPS = [];
 // ZPL label dimensions in dots, populated from /api/data labelDims
 // (server reads LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env). Default
@@ -282,9 +322,28 @@ let confirmCb = null,
   saving = false,
   lastHash = '';
 let spMap = {};
+// "Blue Oyster (BO)" and "Blue Oyster" must land on the same key, or the same
+// mushroom gets two colours — which is what happened, since batches store both.
+function _spKey(s) {
+  return String(s || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim()
+    .toLowerCase();
+}
+// Anything outside SP_REAL is coloured from a hash of its own name, so it is at
+// least STABLE. The previous code indexed the ramp by insertion order
+// (SP_COLORS[Object.keys(spMap).length % …]), so a species took whatever colour
+// was next when it happened to be drawn first — different per card, different
+// after a reload.
+function _spHashColor(k) {
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return SP_COLORS[h % SP_COLORS.length];
+}
 const spColor = (s) => {
-  const k = (s || '').toLowerCase();
-  if (!spMap[k]) spMap[k] = SP_COLORS[Object.keys(spMap).length % SP_COLORS.length];
+  const k = _spKey(s);
+  if (!k) return '#888888';
+  if (!spMap[k]) spMap[k] = SP_REAL[k] || _spHashColor(k);
   return spMap[k];
 };
 const spDot = (s) => `<span class="sp-dot" style="background:${spColor(s)}"></span>`;
@@ -3974,10 +4033,16 @@ function getSplitBatches() {
     const urgent = ageHours > STALE_HOURS;
     out.push({
       batchId: b.batchId,
+      species: b.species || '',
       strain: b.strain || b.species || '',
       behindStage,
       behindCount,
       entries,
+      // Per stage, not per zone: two incubation rooms are one stage, and the
+      // card is about how far along the bags are, not which room they sit in.
+      stages: Object.keys(stageCounts)
+        .sort((a, c) => (STAGE_ORDER[a] || 99) - (STAGE_ORDER[c] || 99))
+        .map((role) => ({ role, count: stageCounts[role], behind: role === behindStage })),
       urgent
     });
   });
@@ -3998,22 +4063,52 @@ function renderDashSplitBatches() {
     return;
   }
   card.style.display = '';
-  el.innerHTML = splits
-    .map((s) => {
-      const distribution = s.entries
-        .map((z) => {
-          const color = locColor[z.zone] || '#888';
-          const name = esc(zoneDisplayName(z.zone));
-          const chip = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:6px;vertical-align:middle"></span>`;
-          const line = `${chip}${z.count} ${esc(t('dash.splitBatches.in'))} ${name}`;
-          return `<div style="padding-left:4px;line-height:1.6${z.behind ? ';font-weight:700' : ''}">${line}</div>`;
-        })
-        .join('');
-      const head = `<div style="margin-bottom:3px"><strong>${esc(s.batchId)}</strong>${s.strain ? ' (' + esc(s.strain) + ')' : ''}</div>`;
-      const btn = `<button class="btn btn-sm" data-action="go-split-batch" data-batch="${esc(s.batchId)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${s.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${s.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${s.urgent ? '#dc2626' : '#ea580c'};color:${s.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;min-width:0">${head}${distribution}</div>${btn}</div>`;
-    })
+  // One colour channel: growth stage. It used to be four — red background, red
+  // border AND red button all repeating "stale", plus a per-zone dot whose
+  // colour duplicated the zone name printed beside it. Stage is what the card is
+  // actually about, and these are the same colours the zones and the pipeline
+  // KPIs already use, so there is nothing new to learn. A legend says so once.
+  const legend = STAGE_SEQ.filter((r) => splits.some((s) => s.stages.some((x) => x.role === r)))
+    .map(
+      (r) =>
+        `<span style="display:inline-flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:2px;background:${stageColor(r)};display:inline-block"></i>${esc(t('stage.' + r))}</span>`
+    )
     .join('');
+  const staleNote = splits.some((s) => s.urgent)
+    ? `<span style="display:inline-flex;align-items:center;gap:5px;margin-left:auto"><i style="width:9px;height:3px;background:var(--c-red-dark);display:inline-block"></i>${esc(t('dash.splitBatches.stale'))}</span>`
+    : '';
+  el.innerHTML =
+    `<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--c-text-muted);margin-bottom:7px">${legend}${staleNote}</div>` +
+    splits
+      .map((s) => {
+        const total = s.stages.reduce((n, x) => n + x.count, 0) || 1;
+        // Segment widths are the split itself, so "mostly moved on" versus
+        // "mostly stuck" reads without counting bags.
+        const bar = s.stages
+          .map(
+            (x) =>
+              `<i title="${esc(x.count + ' ' + t('stage.' + x.role))}" style="display:block;flex:${x.count};background:${stageColor(x.role)}"></i>`
+          )
+          .join('');
+        const behind = s.stages.find((x) => x.behind);
+        const rest = s.stages.filter((x) => !x.behind);
+        const behindTxt = behind
+          ? `<strong style="color:var(--c-red-dark)">${behind.count} ${esc(t('dash.splitBatches.behindIn'))} ${esc(t('stage.' + behind.role))}</strong>`
+          : '';
+        const restTxt = rest.map((x) => `${x.count} ${esc(t('stage.' + x.role))}`).join(' · ');
+        return (
+          `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;margin-bottom:4px;background:var(--c-surface);border:1px solid var(--c-border);border-left:3px solid ${s.urgent ? 'var(--c-red-dark)' : 'var(--c-border-light)'}">` +
+          '<div style="flex:1;min-width:0">' +
+          `<div style="font-size:11.5px"><span style="font-family:monospace;font-weight:600">${esc(s.batchId)}</span>` +
+          `${s.species ? ` <span style="color:var(--c-text-muted)">${spDot(s.species)}${esc(s.species)}</span>` : ''}</div>` +
+          `<div style="display:flex;height:9px;border-radius:3px;overflow:hidden;margin-top:4px" aria-hidden="true">${bar}</div>` +
+          `<div style="font-size:10.5px;color:var(--c-text-sec);margin-top:3px">${behindTxt}${behindTxt && restTxt ? ' · ' : ''}${restTxt} (${total})</div>` +
+          '</div>' +
+          `<button class="btn btn-sm" data-action="go-split-batch" data-batch="${esc(s.batchId)}" style="font-size:11px;padding:3px 9px;white-space:nowrap;flex-shrink:0">${t('dash.view')}</button>` +
+          '</div>'
+        );
+      })
+      .join('');
 }
 // Preferred one-tap fruiting destination: the most recently used fruiting
 // zone/rack (matches how it's actually done — nearly always the same tent),
