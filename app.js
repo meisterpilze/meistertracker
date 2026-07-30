@@ -313,7 +313,6 @@ let mushroomStrains = [],
   teamMembers = [],
   caldav = {},
   duckdns = {},
-  assets = [],
   zones = [],
   suppliers = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
@@ -538,7 +537,6 @@ function applyData(d) {
   teamMembers = d.teamMembers || [];
   caldav = d.caldav || {};
   duckdns = d.duckdns || {};
-  assets = d.assets || [];
   calendarEvents = d.calendarEvents || [];
   zones = d.zones || [];
   suppliers = d.suppliers || [];
@@ -901,7 +899,6 @@ const PAGES = {
   dash: 'n-dash',
   batch: 'n-batch',
   lab: 'n-lab',
-  assets: 'n-assets',
   print: 'n-print',
   cal: 'n-cal',
   settings: 'n-settings',
@@ -931,7 +928,6 @@ function go(page, btnId) {
     renderInvStock();
   }
   if (page === 'zones') renderZones();
-  if (page === 'assets') renderAssets();
   if (page === 'print') {
     fillBatchSelect();
     renderLabList();
@@ -978,10 +974,6 @@ function openStab(page, sub) {
     adjMatChange();
   }
   if (page === 'inv' && sub === 'log') renderInvLog();
-  if (page === 'assets' && sub === 'list') renderAssets();
-  if (page === 'assets' && sub === 'add') resetAssetForm();
-  if (page === 'assets' && sub === 'export') initExportTab();
-  if (page === 'assets' && sub === 'labels') renderAssetLabelList();
   if (page === 'print' && sub === 'bags') fillBatchSelect();
   if (page === 'print' && sub === 'lab') {
     renderLabList();
@@ -1025,7 +1017,6 @@ function refresh() {
   if (id === 'batch') renderBatches();
   if (id === 'lab') renderCultures();
   if (id === 'inv') renderInvStock();
-  if (id === 'assets') renderAssets();
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
@@ -9760,446 +9751,6 @@ async function printQrSheet(items, title) {
   setTimeout(() => window.print(), 600);
 }
 
-// ─── ASSETS (Anlageinventar) ────────────────────────────────
-let editingAssetId = null;
-let selectedAssetIds = new Set();
-
-function formatEur(n) {
-  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-}
-
-function computeDepreciation(asset, refDate) {
-  const ref = refDate ? new Date(refDate) : new Date();
-  const entry = new Date(asset.entryDate);
-  const isGwg = asset.purchasePrice <= 800;
-  if (asset.purchasePrice <= 0 || asset.usefulLife <= 0)
-    return { annualDepr: 0, accumulated: 0, bookValue: asset.purchasePrice, isGwg };
-  const annualDepr = asset.purchasePrice / asset.usefulLife;
-  // Calculate elapsed days for prorated depreciation
-  let msElapsed = ref.getTime() - entry.getTime();
-  if (msElapsed < 0) msElapsed = 0;
-  const yearsElapsed = msElapsed / (365.25 * 24 * 60 * 60 * 1000);
-  let accumulated = Math.min(annualDepr * yearsElapsed, asset.purchasePrice);
-  accumulated = Math.round(accumulated * 100) / 100;
-  let bookValue = asset.purchasePrice - accumulated;
-  // Erinnerungswert: 1€ if fully depreciated but still active
-  if (bookValue < 1 && asset.status === 'aktiv' && asset.purchasePrice > 0) bookValue = 1;
-  if (bookValue < 0) bookValue = 0;
-  bookValue = Math.round(bookValue * 100) / 100;
-  return { annualDepr: Math.round(annualDepr * 100) / 100, accumulated, bookValue, isGwg };
-}
-
-function nextAssetId() {
-  let max = 0;
-  assets.forEach((a) => {
-    const m = a.assetId.match(/^INV-(\d+)$/);
-    if (m) max = Math.max(max, parseInt(m[1]));
-  });
-  return 'INV-' + String(max + 1).padStart(4, '0');
-}
-
-function assetStatusBadge(s) {
-  return `<span class="badge badge-${s}">${s.charAt(0).toUpperCase() + s.slice(1)}</span>`;
-}
-
-function renderAssets() {
-  const cat = document.getElementById('asset-cat-filter').value;
-  const stat = document.getElementById('asset-stat-filter').value;
-  const q = (document.getElementById('asset-search').value || '').toLowerCase().trim();
-  const now = new Date();
-
-  let rows = assets
-    .filter((a) => {
-      if (cat !== 'all' && a.category !== cat) return false;
-      if (stat !== 'all' && a.status !== stat) return false;
-      if (q) {
-        const hay = (
-          a.assetId +
-          ' ' +
-          a.name +
-          ' ' +
-          (a.supplier || '') +
-          ' ' +
-          (a.serialNumber || '') +
-          ' ' +
-          (a.location || '')
-        ).toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => b.assetId.localeCompare(a.assetId));
-
-  // Stats
-  const aktiv = assets.filter((a) => a.status === 'aktiv');
-  const totalPurchase = aktiv.reduce((s, a) => s + a.purchasePrice, 0);
-  const totalBook = aktiv.reduce((s, a) => s + computeDepreciation(a).bookValue, 0);
-  const gwgCount = aktiv.filter((a) => a.purchasePrice <= 800).length;
-  document.getElementById('asset-stats').innerHTML =
-    `<div class="met"><div class="met-v">${assets.length}</div><div class="met-l">${t('assets.total')}</div></div>` +
-    `<div class="met"><div class="met-v">${formatEur(totalPurchase)}</div><div class="met-l">${t('assets.purchaseValueActive')}</div></div>` +
-    `<div class="met"><div class="met-v">${formatEur(totalBook)}</div><div class="met-l">${t('assets.bookValueToday')}</div></div>` +
-    `<div class="met"><div class="met-v">${gwgCount}</div><div class="met-l">${t('assets.gwg')}</div></div>`;
-
-  // Table
-  const body = document.getElementById('assets-body');
-  if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty">' + t('assets.empty') + '</td></tr>';
-    return;
-  }
-  body.innerHTML = rows
-    .map((a) => {
-      const d = computeDepreciation(a);
-      const gwg = d.isGwg ? '<span class="badge badge-gwg" style="margin-left:4px;font-size:9px">GWG</span>' : '';
-      // data-mlabel attrs become ::before labels in the mobile card layout
-      // (#t-assets block in styles.css). as-id and as-actions are positioning
-      // hooks for header promotion + action-row styling.
-      return `<tr>
-      <td data-mlabel="${esc(t('asset.nr'))}" class="as-id" style="font-family:monospace;font-size:11px;font-weight:500">${esc(a.assetId)}</td>
-      <td data-mlabel="${esc(t('asset.name'))}">${esc(a.name)}${gwg}</td>
-      <td data-mlabel="${esc(t('asset.category'))}">${esc(a.category)}</td>
-      <td data-mlabel="${esc(t('asset.purchasePrice'))}" style="text-align:right">${formatEur(a.purchasePrice)}</td>
-      <td data-mlabel="${esc(t('asset.bookValue'))}" style="text-align:right">${formatEur(d.bookValue)}</td>
-      <td data-mlabel="${esc(t('asset.status'))}">${assetStatusBadge(a.status)}</td>
-      <td data-mlabel="${esc(t('asset.location'))}" style="font-size:11px;color:var(--c-text-sec)">${esc(a.location) || '—'}</td>
-      <td class="as-actions" style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="editAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.editBtn')}</button>
-        <button class="btn btn-sm" onclick="quickPrintAsset('${esc(a.assetId)}')" style="padding:2px 6px">${t('assets.printBtn')}</button>
-        <button class="btn btn-sm" onclick="deleteAsset('${esc(a.assetId)}')" style="padding:2px 6px;color:var(--c-red-dark)">×</button>
-      </td>
-    </tr>`;
-    })
-    .join('');
-}
-
-function resetAssetForm() {
-  editingAssetId = null;
-  document.getElementById('asset-name').value = '';
-  document.getElementById('asset-category').value = 'Maschinen';
-  document.getElementById('asset-entry-date').value = new Date().toISOString().slice(0, 10);
-  document.getElementById('asset-price').value = '';
-  document.getElementById('asset-life').value = '5';
-  document.getElementById('asset-depr-method').value = 'linear';
-  document.getElementById('asset-supplier').value = '';
-  document.getElementById('asset-invoice').value = '';
-  document.getElementById('asset-serial').value = '';
-  document.getElementById('asset-location').value = '';
-  document.getElementById('asset-status').value = 'aktiv';
-  document.getElementById('asset-exit-date').value = '';
-  document.getElementById('asset-exit-row').style.display = 'none';
-  document.getElementById('asset-notes').value = '';
-  document.getElementById('asset-id-preview').textContent = t('assets.newId', { id: nextAssetId() });
-  // Fill location datalist
-  const locs = [...new Set(assets.map((a) => a.location).filter(Boolean))];
-  document.getElementById('asset-loc-list').innerHTML = locs.map((l) => `<option value="${esc(l)}">`).join('');
-}
-
-function assetStatusChange() {
-  const s = document.getElementById('asset-status').value;
-  document.getElementById('asset-exit-row').style.display = s === 'aktiv' ? 'none' : 'block';
-}
-
-function editAsset(id) {
-  const a = assets.find((x) => x.assetId === id);
-  if (!a) return;
-  editingAssetId = id;
-  document.getElementById('asset-name').value = a.name;
-  document.getElementById('asset-category').value = a.category;
-  document.getElementById('asset-entry-date').value = a.entryDate;
-  document.getElementById('asset-price').value = a.purchasePrice;
-  document.getElementById('asset-life').value = a.usefulLife;
-  document.getElementById('asset-depr-method').value = a.depreciationMethod || 'linear';
-  document.getElementById('asset-supplier').value = a.supplier || '';
-  document.getElementById('asset-invoice').value = a.invoiceNumber || '';
-  document.getElementById('asset-serial').value = a.serialNumber || '';
-  document.getElementById('asset-location').value = a.location || '';
-  document.getElementById('asset-status').value = a.status;
-  document.getElementById('asset-exit-date').value = a.exitDate || '';
-  document.getElementById('asset-exit-row').style.display = a.status === 'aktiv' ? 'none' : 'block';
-  document.getElementById('asset-notes').value = a.notes || '';
-  document.getElementById('asset-id-preview').textContent = t('assets.editing', { id });
-  openStab('assets', 'add');
-}
-
-function saveAsset() {
-  const name = document.getElementById('asset-name').value.trim();
-  const category = document.getElementById('asset-category').value;
-  const entryDate = document.getElementById('asset-entry-date').value;
-  const price = parseDecimal(document.getElementById('asset-price').value);
-  const life = parseInt(document.getElementById('asset-life').value);
-  if (!name || !entryDate || isNaN(price) || price < 0 || isNaN(life) || life < 1) {
-    alert(t('assets.fillRequired'));
-    return;
-  }
-  const status = document.getElementById('asset-status').value;
-  const obj = {
-    assetId: editingAssetId || nextAssetId(),
-    name,
-    category,
-    entryDate,
-    exitDate: status !== 'aktiv' ? document.getElementById('asset-exit-date').value || null : null,
-    purchasePrice: price,
-    usefulLife: life,
-    depreciationMethod: document.getElementById('asset-depr-method').value,
-    supplier: document.getElementById('asset-supplier').value.trim() || null,
-    invoiceNumber: document.getElementById('asset-invoice').value.trim() || null,
-    serialNumber: document.getElementById('asset-serial').value.trim() || null,
-    location: document.getElementById('asset-location').value.trim() || null,
-    status,
-    notes: document.getElementById('asset-notes').value.trim(),
-    created: editingAssetId
-      ? (assets.find((a) => a.assetId === editingAssetId) || {}).created || new Date().toISOString()
-      : new Date().toISOString()
-  };
-  const wasEditing = !!editingAssetId;
-  const prevAssets = assets.slice();
-  if (editingAssetId) {
-    const i = assets.findIndex((a) => a.assetId === editingAssetId);
-    if (i >= 0) assets[i] = obj;
-    else assets.push(obj);
-  } else assets.push(obj);
-  apiPost('/api/assets', obj).then((r) => {
-    if (r && r.error) {
-      assets = prevAssets;
-      renderAssets();
-      alert(t('common.error') + ': ' + r.error);
-      if (wasEditing) editAsset(obj.assetId);
-    }
-  });
-  editingAssetId = null;
-  openStab('assets', 'list');
-}
-
-function deleteAsset(id) {
-  confirm2(t('assets.deleteAsset'), t('assets.deleteMsg', { id: id }), t('assets.deleteBtn'), () => {
-    const prev = assets;
-    assets = assets.filter((a) => a.assetId !== id);
-    renderAssets();
-    apiDelete('/api/assets/' + encodeURIComponent(id)).then((r) => {
-      if (r && r.error) {
-        assets = prev;
-        renderAssets();
-        setFb('err', t('common.error') + ': ' + r.error);
-      }
-    });
-  });
-}
-
-// ─── ASSET EXPORT ───────────────────────────────────────────
-function initExportTab() {
-  const y = new Date().getFullYear();
-  document.getElementById('stichtag-date').value = y + '-12-31';
-}
-
-function exportAssetCSV() {
-  const hdr = [
-    'Inventar-Nr',
-    'Bezeichnung',
-    'Kategorie',
-    'Anschaffungsdatum',
-    'Anschaffungskosten',
-    'Nutzungsdauer (J.)',
-    'Jahres-AfA',
-    'Kumulierte AfA',
-    'Buchwert',
-    'GWG',
-    'Status',
-    'Lieferant',
-    'Rechnungsnr',
-    'Seriennr',
-    'Standort',
-    'Abgangsdatum',
-    'Bemerkungen'
-  ];
-  const rows = assets.map((a) => {
-    const d = computeDepreciation(a);
-    return [
-      a.assetId,
-      a.name,
-      a.category,
-      fmtDE(a.entryDate),
-      fmtNum(a.purchasePrice),
-      a.usefulLife,
-      fmtNum(d.annualDepr),
-      fmtNum(d.accumulated),
-      fmtNum(d.bookValue),
-      d.isGwg ? 'Ja' : 'Nein',
-      a.status,
-      a.supplier || '',
-      a.invoiceNumber || '',
-      a.serialNumber || '',
-      a.location || '',
-      a.exitDate ? fmtDE(a.exitDate) : '',
-      a.notes || ''
-    ];
-  });
-  const csv =
-    '\uFEFF' +
-    [hdr, ...rows].map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'inventar_' + todayStr() + '.csv';
-  a.click();
-}
-
-function fmtDE(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
-}
-function fmtNum(n) {
-  return String(Math.round(n * 100) / 100).replace('.', ',');
-}
-
-function renderStichtagReport() {
-  const ref = document.getElementById('stichtag-date').value;
-  if (!ref) {
-    alert(t('assets.chooseCutoff'));
-    return;
-  }
-  // As-of the cutoff: only assets already acquired by `ref` (entryDate <= ref)
-  // that were still in service then — active, or exited after the cutoff.
-  // Without the entryDate guard a past-Stichtag report counted assets bought
-  // after the cutoff at full price, inflating the totals.
-  const aktiv = assets.filter((a) => a.entryDate <= ref && (a.status === 'aktiv' || (a.exitDate && a.exitDate > ref)));
-  let totalPurchase = 0,
-    totalBook = 0,
-    totalAccum = 0;
-  const rows = aktiv.map((a) => {
-    const d = computeDepreciation(a, ref);
-    totalPurchase += a.purchasePrice;
-    totalBook += d.bookValue;
-    totalAccum += d.accumulated;
-    return `<tr><td style="font-family:monospace;font-size:11px">${esc(a.assetId)}</td><td>${esc(a.name)}</td><td style="text-align:right">${formatEur(a.purchasePrice)}</td><td style="text-align:right">${formatEur(d.accumulated)}</td><td style="text-align:right;font-weight:600">${formatEur(d.bookValue)}</td></tr>`;
-  });
-  document.getElementById('stichtag-result').innerHTML =
-    `<div style="font-size:12px;color:var(--c-text-sec);margin-bottom:6px">${t('cutoff.date', { date: fmtDE(ref), n: aktiv.length })}</div>` +
-    `<div style="overflow-x:auto"><table><thead><tr><th>Nr</th><th>Bezeichnung</th><th>Anschaffungskosten</th><th>Kum. AfA</th><th>Buchwert</th></tr></thead><tbody>` +
-    rows.join('') +
-    `<tr style="font-weight:700;border-top:2px solid #333"><td colspan="2">Summe</td><td style="text-align:right">${formatEur(totalPurchase)}</td><td style="text-align:right">${formatEur(totalAccum)}</td><td style="text-align:right">${formatEur(totalBook)}</td></tr>` +
-    `</tbody></table></div>`;
-}
-
-// ─── ASSET LABELS ───────────────────────────────────────────
-function renderAssetLabelList() {
-  const el = document.getElementById('asset-label-list');
-  if (!assets.length) {
-    el.innerHTML = '<div class="empty">' + t('assets.noneAvailable') + '</div>';
-    return;
-  }
-  el.innerHTML = assets
-    .filter((a) => a.status === 'aktiv')
-    .map((a) => {
-      const chk = selectedAssetIds.has(a.assetId) ? 'checked' : '';
-      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px;cursor:pointer">
-      <input type="checkbox" ${chk} onchange="toggleAssetLabel('${esc(a.assetId)}',this.checked)">
-      <span style="font-family:monospace;font-weight:500">${esc(a.assetId)}</span>
-      <span style="color:var(--c-text-sec)">${esc(a.name)}</span>
-      <span style="color:var(--c-text-muted);font-size:11px">${esc(a.category)}</span>
-    </label>`;
-    })
-    .join('');
-}
-
-function toggleAssetLabel(id, on) {
-  if (on) selectedAssetIds.add(id);
-  else selectedAssetIds.delete(id);
-}
-function toggleAllAssetLabels(on) {
-  if (on) assets.filter((a) => a.status === 'aktiv').forEach((a) => selectedAssetIds.add(a.assetId));
-  else selectedAssetIds.clear();
-  renderAssetLabelList();
-}
-
-function makeAssetZPL(ids) {
-  const truncated = [];
-  const zpl = ids
-    .map((id) => {
-      const a = assets.find((x) => x.assetId === id);
-      if (!a) return '';
-      const numBc = barcodeByEntity.get('asset:' + id);
-      const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
-      const loc = (a.category || '') + (a.location ? ' / ' + a.location : '');
-      const nameTrunc = a.name.length > 28 ? a.name.slice(0, 26) + '..' : a.name;
-      if (a.name.length > 28 || loc.length > 36) truncated.push(a.name || id);
-      const bc = bcParams(bcVal);
-      return (
-        '^XA^PW' +
-        labelDims.widthDots +
-        '^LL' +
-        labelDims.heightDots +
-        '^CI28^LH0,0' +
-        '^FO' +
-        bc.x +
-        ',40^BY' +
-        bc.mw +
-        ',2.0,72^BCN,72,N,N,N^FD' +
-        bcVal +
-        '^FS' +
-        '^FO0,120^FB400,1,0,C^A0N,30,30^FD' +
-        id +
-        '^FS' +
-        '^FO0,156^FB400,1,0,C^A0N,22,22^FD' +
-        nameTrunc +
-        '^FS' +
-        '^FO0,182^FB400,1,0,C^A0N,18,18^FD' +
-        loc.slice(0, 36) +
-        '^FS' +
-        '^XZ'
-      );
-    })
-    .filter(Boolean)
-    .join('\n');
-  if (truncated.length) alert(t('print.warnTruncated', { id: truncated.join(', ') }));
-  return zpl;
-}
-
-async function printAssetLabels() {
-  const ids = [...selectedAssetIds];
-  if (!ids.length) {
-    alert(t('assets.selectAsset'));
-    return;
-  }
-  const zpl = makeAssetZPL(ids);
-  const err = await sendToPrinter(zpl);
-  if (err) {
-    const blob = new Blob([zpl], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'inventar_labels.zpl';
-    a.click();
-  } else {
-    setFb('ok', ids.length + ' Inventar-Etikett' + (ids.length !== 1 ? 'en' : '') + ' gedruckt');
-  }
-}
-
-function downloadAssetZPL() {
-  const ids = [...selectedAssetIds];
-  if (!ids.length) {
-    alert(t('assets.selectAsset'));
-    return;
-  }
-  const zpl = makeAssetZPL(ids);
-  const blob = new Blob([zpl], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'inventar_labels.zpl';
-  a.click();
-}
-
-async function quickPrintAsset(id) {
-  const zpl = makeAssetZPL([id]);
-  const err = await sendToPrinter(zpl);
-  if (err) {
-    const blob = new Blob([zpl], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = id + '_label.zpl';
-    a.click();
-  }
-}
-
 // ─── MUSHROOM STRAINS ────────────────────────────────────────
 function fillStrainSelects() {
   const opts =
@@ -10269,7 +9820,7 @@ function renderStrains() {
       <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
         ${chargeBtn}<button class="btn btn-sm" onclick="msQuickLabor(${ms.id})" style="padding:2px 7px" title="${t('strains.addLaborHint')}">${t('strains.addLabor')}</button>
-        <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('assets.editBtn')}</button>
+        <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('strains.editBtn')}</button>
         <button class="btn btn-sm btn-r" onclick="deleteMStrain(${ms.id})" ${inUse ? 'disabled title="' + t('strains.deleteProtected') + '"' : ''} style="padding:2px 7px">&#x2715;</button>
       </td>
     </tr>`;
@@ -11082,7 +10633,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id" style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td data-mlabel="${esc(t('th.notes'))}" style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('asset.print')}" style="padding:2px 6px">${t('asset.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id" style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td data-mlabel="${esc(t('th.notes'))}" style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -14337,9 +13888,6 @@ function processScan(raw) {
       val = entry.id; // e.g. "MC-SHI-260327-01"
     } else if (entry.type === 'zone' || entry.type === 'rack') {
       val = entry.id; // e.g. "INC" or "INC_R1"
-    } else if (entry.type === 'asset') {
-      setFb('info', 'Asset: ' + entry.id);
-      return;
     }
   } else {
     // ── Legacy barcode fallback ──
@@ -17861,9 +17409,6 @@ function initEventListeners() {
     // Clear hints only when leaving the list entirely, not when moving between rows.
     if (!zonesList.contains(e.relatedTarget)) clearZoneDropHints();
   });
-  $('n-assets').addEventListener('click', () => {
-    go('assets', 'n-assets');
-  });
   $('n-print').addEventListener('click', () => {
     go('print', 'n-print');
   });
@@ -18438,36 +17983,6 @@ function initEventListeners() {
   });
   $('btn-48').addEventListener('click', logAdjustment);
   $('inv-log-filter').addEventListener('change', renderInvLog);
-
-  // Assets
-  $('st-assets-list').addEventListener('click', () => {
-    openStab('assets', 'list');
-  });
-  $('st-assets-add').addEventListener('click', () => {
-    openStab('assets', 'add');
-  });
-  $('st-assets-export').addEventListener('click', () => {
-    openStab('assets', 'export');
-  });
-  $('st-assets-labels').addEventListener('click', () => {
-    openStab('assets', 'labels');
-  });
-  $('asset-cat-filter').addEventListener('change', renderAssets);
-  $('asset-stat-filter').addEventListener('change', renderAssets);
-  $('asset-search').addEventListener('input', renderAssets);
-  $('asset-status').addEventListener('change', assetStatusChange);
-  $('act-49').addEventListener('click', saveAsset);
-  $('set-50').addEventListener('click', resetAssetForm);
-  $('set-51').addEventListener('click', exportAssetCSV);
-  $('ctl-52').addEventListener('click', renderStichtagReport);
-  $('tgl-53').addEventListener('click', () => {
-    toggleAllAssetLabels(true);
-  });
-  $('tgl-54').addEventListener('click', () => {
-    toggleAllAssetLabels(false);
-  });
-  $('prt-55').addEventListener('click', printAssetLabels);
-  $('set-56').addEventListener('click', downloadAssetZPL);
 }
 
 // Camera FAB is in the HTML *after* the <script> tag, so it doesn't exist

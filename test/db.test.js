@@ -35,7 +35,6 @@ describe('db – schema & init', () => {
     assert.ok(typeof data.inventory === 'object');
     assert.ok(Array.isArray(data.teamMembers));
     assert.ok(typeof data.caldav === 'object');
-    assert.ok(Array.isArray(data.assets));
     assert.ok(Array.isArray(data.calendarEvents));
     assert.equal(typeof data.version, 'number');
   });
@@ -821,52 +820,6 @@ describe('db – addBagsToBatch deducts inventory (I-23)', () => {
     db.addBagsToBatch(d, 'GS-GROW', ['GS-GROW-06', 'GS-GROW-07'], 7);
     const after = db.readAll(d).inventory.stock.grain;
     assert.ok(Math.abs(before - after - 0.96) < 1e-6, `grain delta: ${before - after}`);
-  });
-});
-
-describe('db – assets', () => {
-  let d, p;
-  before(() => {
-    ({ db: d, path: p } = tmpDb());
-  });
-  after(() => {
-    d.close();
-    fs.unlinkSync(p);
-  });
-
-  it('upsertAsset creates an asset', () => {
-    db.upsertAsset(d, {
-      assetId: 'A-001',
-      name: 'Autoclave',
-      category: 'Equipment',
-      entryDate: '2024-01-01',
-      purchasePrice: 5000,
-      usefulLife: 10,
-      created: '2024-01-01T00:00:00Z'
-    });
-    const data = db.readAll(d);
-    assert.equal(data.assets.length, 1);
-    assert.equal(data.assets[0].name, 'Autoclave');
-  });
-
-  it('upsertAsset updates existing asset', () => {
-    db.upsertAsset(d, {
-      assetId: 'A-001',
-      name: 'Autoclave XL',
-      category: 'Equipment',
-      entryDate: '2024-01-01',
-      purchasePrice: 7000,
-      usefulLife: 10,
-      created: '2024-01-01T00:00:00Z'
-    });
-    const data = db.readAll(d);
-    assert.equal(data.assets.length, 1);
-    assert.equal(data.assets[0].name, 'Autoclave XL');
-  });
-
-  it('deleteAssetById removes the asset', () => {
-    db.deleteAssetById(d, 'A-001');
-    assert.equal(db.readAll(d).assets.length, 0);
   });
 });
 

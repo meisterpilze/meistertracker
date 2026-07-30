@@ -8,7 +8,7 @@
 
 **Meistertracker is a self-hosted lab management system for mushroom cultivation.** Workers walk the lab with phones or tablets, scan barcodes on bags and cultures with the device camera, and the software tracks every fruiting block from inoculation to harvest — across the four phases of the cultivation cycle (spawn run → incubation → fruiting → contamination triage).
 
-Print barcode and QR labels at the workbench, file contamination reports with photos, weigh harvests against KPI dashboards, manage cultures, inventory, and a fixed-asset register, and sync tasks and due dates to any CalDAV calendar (Apple Calendar, Google Calendar, Thunderbird, DAVx5). Multi-user with role-based access (worker / admin), MCP integration for Claude Desktop and other LLM clients, offline-capable as a PWA. One Node.js process, SQLite database, no cloud dependencies — runs on **Windows, macOS, or Linux** (including a Raspberry Pi).
+Print barcode and QR labels at the workbench, file contamination reports with photos, weigh harvests against KPI dashboards, manage cultures and inventory, and sync tasks and due dates to any CalDAV calendar (Apple Calendar, Google Calendar, Thunderbird, DAVx5). Multi-user with role-based access (worker / admin), MCP integration for Claude Desktop and other LLM clients, offline-capable as a PWA. One Node.js process, SQLite database, no cloud dependencies — runs on **Windows, macOS, or Linux** (including a Raspberry Pi).
 
 Meistertracker is the operational backbone of **[Meisterpilze](https://www.meisterpilze.de)**, an urban mushroom farm in Erlangen, Germany, growing shiitake, oyster, king oyster, lion's mane, and blue oyster mushrooms for restaurants, retail, and home growers. Every fruiting block, every culture transfer, and every harvest gram in the lab is tracked through this software — released under **AGPL-3.0-or-later** so other labs can run, modify, and self-host it freely.
 
@@ -36,7 +36,6 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Harvest logging** — per-bag weight tracking with flush numbers and yield analytics
 - **Inventory ledger** — substrate stock, delivery logging, low-stock alerts, audit trail per change
 - **Contamination reports** — photo upload + on-screen annotations, optional auto-MOVE to CONTAM zone, follow-up tasks
-- **Asset register** — fixed-asset bookkeeping with depreciation, CSV export, printable labels
 - **Task management** — auto-generated batch tasks plus manual tasks with team assignment
 - **CalDAV calendar sync** — built-in CalDAV server consumed by Apple Calendar, Thunderbird, DAVx5
 - **Dashboard** — KPIs, production pipeline chart, harvest analytics, rack occupancy, contamination rate
@@ -170,7 +169,7 @@ The app has two user roles: **worker** and **admin**.
 **Admins can:**
 
 - Everything workers can
-- Delete assets, calendar events, and suppliers
+- Delete calendar events and suppliers
 - Manage users (create/delete/reset password)
 - Adjust inventory manually (thresholds, composition config)
 - Manage zones, racks, OAuth clients, CalDAV config
@@ -296,7 +295,7 @@ Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
 
 ## 🔌 API
 
-The full REST surface (40+ operations covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, assets, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
+The full REST surface (40+ operations covering auth, scanning, batches, cultures, harvests, inventory, tasks, contamination reports, photos, users, OAuth, MCP, CalDAV, DuckDNS, Let's Encrypt, backups, health, and webhook auto-deploy) is specified in [`openapi.yaml`](openapi.yaml).
 
 Notable surfaces worth knowing about:
 
@@ -338,7 +337,7 @@ Dockerfile             Containerized deployment
 
 ## 🍴 Running it for your own lab?
 
-Meistertracker was built for one specific operator and a few rough edges still reflect that — a fixed inventory schema, German tax-law defaults in the asset register, a CalDAV slug baked in for compatibility, and a print pipeline tuned for Zebra ZPL at 203 dpi with 50×30 mm labels. Most of these are configurable via env vars; some need a small fork. Read [FORKING.md](FORKING.md) for the full inventory of what's tuned to Meisterpilze vs. what's generic, and the env-var matrix for the configurable bits.
+Meistertracker was built for one specific operator and a few rough edges still reflect that — a fixed inventory schema, a CalDAV slug baked in for compatibility, and a print pipeline tuned for Zebra ZPL at 203 dpi with 50×30 mm labels. Most of these are configurable via env vars; some need a small fork. Read [FORKING.md](FORKING.md) for the full inventory of what's tuned to Meisterpilze vs. what's generic, and the env-var matrix for the configurable bits.
 
 ## 🤝 Contributing
 
