@@ -399,7 +399,6 @@ window.LANG['de'] = {
   'dash.move': 'Verschieben',
   'dash.toFruiting': 'Fruchtung',
   'dash.noFruitingZone': 'Keine Fruchtungszone definiert',
-  'dash.zoneUnknown': 'Ohne Ort',
   'dash.bulkFruiting': 'Alle → Fruchtung',
   'dash.bulkFruitingTitle': 'Auf Fruchtung verschieben?',
   'dash.bulkFruitingMsg': 'Alle {n} Beutel aus „{zone}“ nach {dest} verschieben?',
@@ -412,6 +411,8 @@ window.LANG['de'] = {
   'dash.tab.today': 'Heute',
   'dash.tab.week': 'Woche',
   'dash.tab.left': 'Liegen',
+  'dash.bagsSplitAcross': '{n} in {zone}, {rest} anderswo',
+  'dash.nothingToMove': 'Nichts mehr zu verschieben \u2014 Liste aktualisiert',
   'dash.grainReady': 'durchwachsen → beimpfen',
   'dash.doInoculate': 'Beimpfen',
   'dash.stillIn': 'noch in {stage}',
@@ -451,8 +452,6 @@ window.LANG['de'] = {
   'dash.legend.title': 'Farb\u00fcbersicht',
   'dash.legend.species':
     'Farbiger Balken links an Batch-Karten — jede Art bekommt ihre eigene Farbe, damit man sie auf einen Blick erkennt.',
-  'dash.legend.zoneDot':
-    'Zonen-Punkt in Abschnitts\u00fcberschriften — zeigt die Farbe des jeweiligen Ortes (konfiguriert unter Tools \u2192 Zonen).',
   'dash.legend.orangeDot':
     'Oranger Punkt in Batch-Aufgaben — Warnung, Aufgabe wird bald f\u00e4llig oder ben\u00f6tigt Aufmerksamkeit.',
   'dash.legend.redDot':
@@ -670,8 +669,6 @@ window.LANG['de'] = {
   'print.tickCulturesPreview': 'Kulturen in der Liste anhaken, um Etiketten in der Vorschau zu sehen.',
   // To-do
   'todo.batchTasks': 'Chargen-Aufgaben',
-  'todo.all': 'Alle',
-  'todo.urgentOnly': 'Nur dringende',
   'todo.priorityHigh': 'Hohe Priorit\u00e4t',
   'todo.priorityMed': 'Mittlere Priorit\u00e4t',
   'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
@@ -1483,12 +1480,10 @@ window.LANG['de'] = {
   'alert.filterShowAll': 'Alle anzeigen',
   'alert.filterDueToday': 'Heute fällig oder braucht Aufmerksamkeit',
   'alert.filterOverdue': 'Überfällig',
-  'dash.splitBatches.title': 'Geteilte Chargen \u2014 Beutel zur\u00fcckgelassen',
   'dash.splitBatches.in': 'in',
   'stage.spawn': 'Spawn',
   'stage.incubation': 'Inkubation',
   'stage.fruiting': 'Fruchtung',
-  'dash.splitBatches.behindIn': 'zurück in',
   'dash.splitBatches.stale': '> 24 h unbewegt',
   'dash.actionNewBatch': '+ Neue Charge',
   'dash.actionLabWork': '+ Laborarbeit',

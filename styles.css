@@ -1788,7 +1788,12 @@ tr:hover td {
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
   border: 1px solid var(--c-border);
-  border-left: 4px solid var(--action-color, var(--c-border));
+  /* --sp-color first: the species stripe is set inline on every batch-tasks row,
+     but was only read by the .urgent / .warn rules below, so a row that was
+     neither (a split batch moved recently, a batch due later this week) fell back
+     to a neutral border while the colour guide still promised the stripe.
+     --action-color is kept as the calendar's own override. */
+  border-left: 4px solid var(--sp-color, var(--action-color, var(--c-border)));
   background: var(--c-surface);
   transition: box-shadow 0.15s;
 }
