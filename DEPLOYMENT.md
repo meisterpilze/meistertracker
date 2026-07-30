@@ -101,6 +101,10 @@ HTTP_REDIRECT_PORT=80
 # Windows PC. Leave unset to use the ZPL-download fallback instead.
 # PRINT_BRIDGE_URL=https://<windows-pc-ip>:9100
 # PRINT_BRIDGE_TOKEN=<long-random-string>
+
+# Outbound harvest feed — see Section 15. Unset means off.
+# HARVEST_WEBHOOK_URL=https://example.org/harvest
+# HARVEST_WEBHOOK_SECRET=<long-random-string>
 ```
 
 ## 4. TLS Certificate Setup
@@ -580,6 +584,98 @@ docker run -d \
 ```
 
 The container uses Node.js 22 Alpine, runs as a non-root user, and includes a health check on `/api/health`.
+
+## 15. Outbound Harvest Feed (Optional)
+
+Pushes a signed summary of recorded harvests and upcoming batches to a URL you choose, so a shop, listing page or chat bot can answer "what's available today?" without this machine being reachable from the internet. See **README.md → Harvest feed** for the payload shape and what it deliberately leaves out.
+
+**Nothing is opened up.** No inbound endpoint, no port, no dependency on your public IP. The server dials out; that is the whole surface.
+
+### Setup — in the browser
+
+**Settings → Harvest feed.** No shell, no file, no restart.
+
+1. **Receiver URL.** HTTPS; plain HTTP is accepted for `localhost` only, so you can try it against a local receiver first.
+2. **Generate** a secret and give the same value to the receiving side. It is stored write-only — the page never reads it back, so copy it before saving.
+3. **Show what would be sent.** This builds the payload from the database and displays it, sending nothing. Do this before enabling: "does this leak anything?" is a question to answer by looking, not by trusting the description.
+4. **Save**, then **Send one now.** The result says whether the receiver accepted it, which is the difference between saved and working — a wrong secret or a typo in the host looks exactly like a correct setup until something is actually delivered.
+
+The timer restarts on save. The last outcome stays visible at the top of the page, so a feed that quietly stopped delivering shows up instead of failing in silence.
+
+### Setup — from a file instead
+
+For installs where configuration is baked into an image or handled by whatever starts the process, the same settings exist as environment variables. They apply whenever the stored config is **off**; enabling it in Settings takes over, and the page says which of the two is in charge. The two are never merged — a URL from one place and a secret from the other is a configuration nobody can read off a single screen.
+
+1. **Generate a secret** and give the same value to the receiving side:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. **Add both values to `.env`:**
+
+   ```ini
+   HARVEST_WEBHOOK_URL=https://example.org/harvest
+   HARVEST_WEBHOOK_SECRET=<the value from step 1>
+   ```
+
+3. **Look at the payload before you turn it on.** This reads the database and prints what would be sent, without sending it:
+
+   ```bash
+   node harvest-feed.js --dry-run
+   ```
+
+4. **Send one for real**, to check the receiver accepts the signature:
+
+   ```bash
+   node harvest-feed.js --once
+   ```
+
+5. **Restart the server.** The feed then runs on its own timer.
+
+   ```bash
+   bash update_server.sh
+   ```
+
+### Tuning
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HARVEST_WEBHOOK_URL` | — | Where to POST. Unset means the feature is off. HTTPS required (plain HTTP only for `localhost`, so you can try it against a local receiver). |
+| `HARVEST_WEBHOOK_SECRET` | — | HMAC key. Required — the feed refuses to start without one. |
+| `HARVEST_WEBHOOK_INTERVAL_MIN` | `15` | How often to post. Minimum 1. |
+| `HARVEST_WEBHOOK_FRESH_DAYS` | `3` | How far back a harvest still counts as on offer. Set it to what your product actually keeps. |
+| `HARVEST_WEBHOOK_PLANNED_DAYS` | `28` | How far ahead to report upcoming block batches. `0` drops the planned block entirely. |
+| `HARVEST_WEBHOOK_LEAD_DAYS` | `0` | Days between a batch's due date (end of incubation) and the first expected flush. Species-dependent — yours is whatever your records show. |
+| `HARVEST_WEBHOOK_STRAIN` | `1` | `0` sends species only, no strain names. |
+| `HARVEST_WEBHOOK_SITE` | — | Free-form label, passed through untouched. Useful when several sites post to one receiver. |
+| `HARVEST_WEBHOOK_TIMEOUT_MS` | `15000` | Per attempt. Three attempts with backoff; a 4xx other than 408/429 stops immediately, because a wrong secret does not fix itself. |
+
+### Verifying the signature on the receiving side
+
+```js
+const crypto = require('crypto');
+// `raw` must be the exact request body, before any JSON parsing.
+const ts = Number(req.headers['x-meistertracker-timestamp']);
+if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) reject(); // replay window
+const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(`${ts}.${raw}`).digest('hex');
+const got = String(req.headers['x-meistertracker-signature'] || '');
+// Compare in constant time, and check the length first — timingSafeEqual throws
+// on a length mismatch, and the caller controls that header.
+const ok = got.length === expected.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+```
+
+The timestamp check is the half that stops replays; without it a captured request stays valid forever.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `Harvest feed misconfigured — not started` in the log | The URL is set but the secret is not, or the URL is not HTTPS. The message names which. |
+| `Harvest feed skipped {reason: worktree mode}` | `WORKTREE_MODE=1`. Deliberate — two servers posting contradictory snapshots to one receiver is worse than one posting none. |
+| Receiver gets a 401 back from your own check | Verify over the **raw** body, not a re-serialized object; `JSON.stringify` of a parsed payload will not byte-match. |
+| `harvested` is empty but you harvested today | Check `HARVEST_WEBHOOK_FRESH_DAYS`, and that the harvest rows carry a species. |
+| `planned` is empty | Only `block` batches with bags, a due date inside the window, and no harvest recorded yet appear there. |
 
 ## Quick Reference
 
