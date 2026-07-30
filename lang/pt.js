@@ -545,6 +545,8 @@ window.LANG['pt'] = {
   // Table headers - scan log
   // Sync
   // Inventory
+  'inv.deliveryFailed': 'Entrega NÃO guardada: {err}',
+  'inv.adjustFailed': 'Correção NÃO guardada: {err}',
   'inv.stock': 'Estoque',
   'inv.logDelivery': 'Registrar entrega',
   'inv.usageLog': 'Hist\u00f3rico de uso',

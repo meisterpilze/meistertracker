@@ -150,6 +150,8 @@ window.LANG['de'] = {
   'orders.set': 'Setzen',
   'orders.invSaved': 'Bestand gespeichert',
   'orders.invBadValue': 'Ungültiger Wert',
+  'inv.deliveryFailed': 'Lieferung NICHT gespeichert: {err}',
+  'inv.adjustFailed': 'Korrektur NICHT gespeichert: {err}',
   'inv.coir': 'Kokos / CVG',
   'orders.th.demand': 'Bedarf',
   'orders.th.fromStock': 'vom Lager',
