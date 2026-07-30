@@ -408,7 +408,7 @@ function writeData(data) {
 }
 
 function jsonBody(req, res, cb) {
-  let body = '';
+  const body = [];
   let sz = 0;
   let aborted = false;
   req.on('data', (c) => {
@@ -419,13 +419,19 @@ function jsonBody(req, res, cb) {
       req.destroy();
       return;
     }
-    body += c;
+    // Collect Buffers and decode once at the end. `body += c` decoded each chunk
+    // independently, so a multi-byte character split across a ~64 KiB stream
+    // boundary became two U+FFFD replacement chars — "Kräuterseitling" arriving
+    // in two pieces persisted as "Kr��uterseitling", still valid JSON,
+    // so it reached the database with no error. In a German-language app every
+    // umlaut in a body over one chunk was at risk.
+    body.push(c);
   });
   req.on('end', () => {
     if (aborted) return;
     let parsed;
     try {
-      parsed = JSON.parse(body);
+      parsed = JSON.parse(Buffer.concat(body).toString('utf8'));
     } catch (e) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end('{"error":"bad json"}');
@@ -435,7 +441,7 @@ function jsonBody(req, res, cb) {
   });
 }
 function formBody(req, res, cb) {
-  let body = '';
+  const body = [];
   let sz = 0;
   let aborted = false;
   req.on('data', (c) => {
@@ -446,13 +452,15 @@ function formBody(req, res, cb) {
       req.destroy();
       return;
     }
-    body += c;
+    // See jsonBody: decode once, or a multi-byte char split across a chunk
+    // boundary is silently replaced with U+FFFD.
+    body.push(c);
   });
   req.on('end', () => {
     if (aborted) return;
     let parsed;
     try {
-      const params = new URLSearchParams(body);
+      const params = new URLSearchParams(Buffer.concat(body).toString('utf8'));
       parsed = Object.fromEntries(params.entries());
     } catch (e) {
       jsonErr(res, 400, 'bad form data');
@@ -835,6 +843,15 @@ function getSessionToken(req) {
   // and clients that sent a stale cookie from an earlier session.
   const m1 = cookies.match(/(?:^|;\s*)__Host-session=([a-f0-9]+)/);
   if (m1) return m1[1];
+  // Over HTTPS, accept ONLY the __Host- prefixed cookie. The prefix is what makes
+  // the browser refuse a same-name cookie that lacks Secure/Path=/ or carries a
+  // Domain — accepting the bare name here gave that guarantee away: anyone able to
+  // set a cookie over plaintext for this host (the port-80 listener, or any
+  // network position — cookies are not scheme-isolated) could plant
+  // `session=<their token>` and silently place a victim inside their account. It
+  // also kept honouring non-Secure sessions minted during an HTTP fallback (what
+  // happens on a cert-renewal failure) after TLS came back.
+  if (protocol === 'https') return null;
   const m2 = cookies.match(/(?:^|;\s*)session=([a-f0-9]+)/);
   return m2 ? m2[1] : null;
 }
@@ -3469,7 +3486,15 @@ async function handleReport(parts, body, req, res) {
     }
 
     // Parse requested hrefs from the XML body — handle any namespace prefix (d:href, D:href, href, etc.)
-    const hrefMatches = body.match(/<(?:[a-zA-Z0-9]+:)?href(?:\s[^>]*)?>([^<]+)<\/(?:[a-zA-Z0-9]+:)?href>/gi) || [];
+    // `(?:\s[^>]*)?` before the `>` made this catastrophically backtracking: on a
+    // body of repeated `<href ` the `[^>]*` scans to end-of-string and backtracks
+    // once per start position, so the match is O(n^2) in the body length. Measured
+    // 26.8 s at 400 KB and 112 s at 800 KB, i.e. over an hour at the 5 MB body cap
+    // — and Node is single-threaded, so that freezes the entire server (no HTTP,
+    // no SSE, no health check) for any account that can reach CalDAV.
+    // `[^<>]*` cannot cross the `>` that ends the tag, so each position fails in
+    // constant time and the scan is linear.
+    const hrefMatches = body.match(/<(?:[a-zA-Z0-9]+:)?href(?:\s[^<>]*)?>([^<]+)<\/(?:[a-zA-Z0-9]+:)?href>/gi) || [];
     let responses = '';
 
     // If calendar-multiget with specific hrefs
@@ -6847,6 +6872,35 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+  // POST /api/customers/erase — the authenticated counterpart to the eBay
+  // account-closure notification. That endpoint is unauthenticated by necessity
+  // (eBay calls it from its own infrastructure) and its POST carries no
+  // verification we validate, so it only records the request; the irreversible
+  // erase happens here, behind the admin gate, where we know who asked.
+  if (req.method === 'POST' && url === '/api/customers/erase') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      const vr = validateRequired(data, ['customerId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      try {
+        const r = db.eraseCustomer(database, data.customerId);
+        log('warn', 'customer data erased by admin', {
+          customerId: data.customerId,
+          orders: r.orders,
+          by: req.authUser.username
+        });
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, orders: r.orders });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && url === '/api/customers/merge') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -7834,11 +7888,40 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           log('info', 'eBay deletion notification for an unknown buyer — nothing to erase');
           return;
         }
-        const r = db.eraseCustomer(database, customerId);
-        log('info', 'eBay account closure — customer data erased', {
+        // This route is exempt from the session gate (eBay calls it from its own
+        // infrastructure with no credential we can check) and the POST carries no
+        // verification we currently validate: the shared token above proves only
+        // the GET challenge, and eBay signs the POST with a rotating public key
+        // we do not yet fetch. Erasing here therefore let anyone who could reach
+        // the host destroy a customer's order history, shipping address and the
+        // raw_json that could have restored it — irreversibly, one request per
+        // customer, using a public eBay handle or (via findCustomerByIdentity's
+        // email fallback) a plain email address.
+        //
+        // So: record the request, do NOT erase. GDPR allows 30 days and an admin
+        // completes it through POST /api/customers/erase, while eBay still gets
+        // its 200. Restore the automatic path only together with
+        // x-ebay-signature verification. NOTE: there is no UI for this yet — the
+        // admin notification and this log line are the entire surface.
+        log('warn', 'eBay account-closure request recorded — NOT erased automatically (unverified sender)', {
           customerId,
-          orders: r.orders
+          action: 'POST /api/customers/erase {"customerId":' + customerId + '} as an admin to complete it'
         });
+        try {
+          for (const u of db.listUsers(database)) {
+            if (u.role !== 'admin') continue;
+            db.createNotification(database, {
+              userId: u.id,
+              type: 'ebay-deletion',
+              title: 'eBay account closure',
+              body: 'Customer #' + customerId + ' requested erasure. Complete it with POST /api/customers/erase.',
+              linkType: 'customer',
+              linkId: String(customerId)
+            });
+          }
+        } catch (e) {
+          /* notifications are best-effort — the warn log above is the durable record */
+        }
       } catch (err) {
         log('error', 'eBay deletion handling failed', { error: err.message });
       }
@@ -8129,7 +8212,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       jsonErr(res, 500, 'webhook secret not configured');
       return;
     }
-    let raw = '';
+    // Buffers, not a string: the HMAC must be computed over the exact bytes
+    // GitHub signed. `raw += c` decoded each chunk separately, so a push payload
+    // over ~64 KiB containing a non-ASCII commit message got a U+FFFD at the
+    // chunk seam, hashed to a different digest, and was rejected as "bad
+    // signature" — silently killing the auto-deploy chain for that push.
+    const rawChunks = [];
     let whSize = 0;
     let whAborted = false;
     req.on('data', (c) => {
@@ -8142,19 +8230,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         req.destroy();
         return;
       }
-      raw += c;
+      rawChunks.push(c);
     });
     req.on('end', () => {
       if (whAborted) return;
       // Defence in depth: any throw inside this async callback would otherwise
       // bubble to `uncaughtException` and terminate the process.
       try {
+        const rawBody = Buffer.concat(rawChunks);
         const sig = req.headers['x-hub-signature-256'];
         if (!sig) {
           jsonErr(res, 401, 'missing signature');
           return;
         }
-        const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex');
+        const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
         // Length check first — timingSafeEqual throws RangeError on mismatched
         // byte lengths, and the attacker controls the X-Hub-Signature-256
         // header. Without this guard a single bad-length signature crashes
@@ -8177,7 +8266,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         let body;
         try {
-          body = JSON.parse(raw);
+          body = JSON.parse(rawBody.toString('utf8'));
         } catch (_) {
           jsonErr(res, 400, 'bad json');
           return;
@@ -9043,8 +9132,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'POST' && req.url === '/api/caldav/sync') {
     try {
       const data = readData();
+      // syncAllTasksLocal only reads `data` and writes .ics files — it never
+      // mutates it, so the writeData(data) that used to sit here round-tripped
+      // the whole database through writeAll on every sync for nothing. That was
+      // destructive: writeAll rebuilds scan_log with DELETE + re-INSERT under
+      // AUTOINCREMENT, renumbering every id (which NULLs
+      // contamination_reports.scan_log_id through ON DELETE SET NULL) and
+      // resetting manual_tasks.sequence, defeating CalDAV change detection.
       const result = syncAllTasksLocal(data);
-      writeData(data);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (e) {
@@ -9635,8 +9730,16 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   // Legacy redirect on port 80 so users who type `http://host` (no port) still get forwarded to HTTPS.
   legacyRedirectServer = http.createServer((req, res) => {
     const host = (req.headers.host || '').replace(/:.*$/, '');
-    // Allow localhost HTTP for local development
-    if (host === 'localhost' || host === '127.0.0.1') {
+    // Allow localhost HTTP for local development — but decide that from the peer
+    // address, never the Host header. The header is attacker-controlled, so
+    // `Host: localhost` used to hand any remote client the full application over
+    // cleartext: login, /api/auth/login, /oauth/*, /mcp, with no HSTS (that is
+    // only set when protocol === 'https'). It also defeated the CalDAV plaintext
+    // guard, whose host check is the only thing keeping Basic-auth credentials
+    // off the wire. /api/internal/notify already does it this way.
+    const peer = req.socket.remoteAddress || '';
+    const peerIsLocal = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
+    if (peerIsLocal && (host === 'localhost' || host === '127.0.0.1')) {
       handleRequest(req, res);
       return;
     }

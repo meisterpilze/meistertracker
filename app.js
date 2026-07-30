@@ -398,6 +398,15 @@ function setEntryServerId(entry, id) {
   entry._serverId = id;
   if (entry._undoPending) apiDelete('/api/scan-log/' + id);
 }
+// Undo an entry the server has never seen because it is still in the service
+// worker's offline queue. A DELETE would 404 — the only way to honour the undo
+// is to drop it from the queue before it replays.
+function dropQueuedScanEntry(entry) {
+  if (!entry || !entry.client_uuid) return false;
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return false;
+  navigator.serviceWorker.controller.postMessage({ type: 'drop-queued-scan', clientUuid: entry.client_uuid });
+  return true;
+}
 function safeHref(url) {
   if (!url) return '';
   const u = String(url).trim();
@@ -4996,7 +5005,13 @@ function getZoneBags(zone) {
       bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
     if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
       if (tz === zone && e.bag) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
-      if (fz === zone && e.bag) delete bags[e.bag];
+      // fz !== tz: a move WITHIN this zone (rack to rack — 'INC' to 'INC_R1',
+      // which toZone() maps back to 'INC') inserted the bag and then deleted it
+      // on the very next line, so the zone card, the fruiting summary and the
+      // dashboard zone count all read 0 right after a successful move. It also
+      // emptied the stocktake's expected list, so every bag scanned on the walk
+      // was judged "recorded elsewhere" and got a spurious correcting MOVE.
+      if (fz === zone && fz !== tz && e.bag) delete bags[e.bag];
     }
     if (e.action === 'REMOVE' && fz === zone && e.bag) delete bags[e.bag];
   });
@@ -5818,8 +5833,17 @@ function createBatch() {
   // mass and the remaining 10% went unaccounted. Now we reject any drift in
   // either direction. Skip when both fields are zero (no substrate composition,
   // e.g. grain-spawn batches or batches that opt out of detailed tracking).
-  if ((hw || wb) && Math.abs(hw + wb - 100) > 0.01) {
-    alert(t('batch.substrateExceeds', { sum: hw + wb }));
+  // coir counts toward the same 100%. It is deducted alongside hardwood and
+  // wheatbran below, but was left out of this sum — and nb-coir persists across
+  // batches (nbSaveDefaults/nbApplyDefaults, and createBatch keeps the fields
+  // populated after submit). So after one CVG batch left coir at 100, entering a
+  // normal 70/30 block passed the check and then deducted 70% hardwood + 30%
+  // wheatbran + 100% coir: 222 kg of raw material booked against 111 kg of actual
+  // dry substrate. The mirror case (0/0/50) skipped the check entirely and
+  // under-deducted by half.
+  const subTotal = hw + wb + coir;
+  if ((hw || wb || coir) && Math.abs(subTotal - 100) > 0.01) {
+    alert(t('batch.substrateExceeds', { sum: subTotal }));
     return;
   }
   // Nothing to deduct at all: the substrate block below is skipped and the batch
@@ -6083,6 +6107,16 @@ function postScanEntries(entries, opts) {
     if (zoneCheck && handleZoneMismatch(r, entries)) return;
     if (r && r.ids) {
       entries.forEach((e, i) => setEntryServerId(e, r.ids[i]));
+      return;
+    }
+    // The service worker queued this offline: HTTP 200 {ok:true, queued:true},
+    // no ids and no error. Without this branch settle() fell through both arms,
+    // no _serverId ever arrived, and an undo could only set _undoPending — which
+    // setEntryServerId is the sole consumer of, so the DELETE never fired. The
+    // scan replayed on reconnect and the "undone" entry came back on the next
+    // poll. Mark it so the undo path can pull it out of the queue instead.
+    if (r && r.queued) {
+      entries.forEach((e) => (e._queued = true));
       return;
     }
     if (r && r.error) {
@@ -9030,17 +9064,30 @@ function logDelivery() {
     return;
   }
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
-  inventory.stock[mat] = (inventory.stock[mat] || 0) + kg;
-  invDelta(mat, kg, 'delivery', note || 'delivery');
+  const prev = inventory.stock[mat] || 0;
+  inventory.stock[mat] = prev + kg;
   document.getElementById('del-kg').value = '';
   document.getElementById('del-note').value = '';
   document.getElementById('del-preview').style.display = 'none';
   openStab('inv', 'stock');
   renderInvStock();
-  setFb(
-    'ok',
-    'Delivery logged: +' + kg + 'kg ' + MAT_LABELS[mat] + ' now ' + inventory.stock[mat].toFixed(2) + 'kg total'
-  );
+  // Confirm only once the server has it. /api/inventory/delta is NOT in the
+  // service worker's offline queue (that covers scan-log and contamination
+  // reports only), so an offline booking is simply lost — and the optimistic
+  // local number is overwritten by the next poll. Reporting success for a
+  // delivery that never landed is how stock silently drifts from the floor.
+  invDelta(mat, kg, 'delivery', note || 'delivery').then((r) => {
+    if (r && r.error) {
+      inventory.stock[mat] = prev;
+      renderInvStock();
+      setFb('err', t('inv.deliveryFailed', { err: r.error }));
+      return;
+    }
+    setFb(
+      'ok',
+      'Delivery logged: +' + kg + 'kg ' + MAT_LABELS[mat] + ' now ' + inventory.stock[mat].toFixed(2) + 'kg total'
+    );
+  });
 }
 function logAdjustment() {
   const mat = document.getElementById('adj-mat').value;
@@ -9060,25 +9107,36 @@ function logAdjustment() {
     alert(t('inv.enterAmount'));
     return;
   }
+  const prevStock = inventory.stock[mat] || 0;
   inventory.stock[mat] = newStock;
-  invSetAbsolute(mat, newStock, 'adjustment', reason);
   document.getElementById('adj-absolute').value = '';
   document.getElementById('adj-delta').value = '';
   document.getElementById('adj-reason').value = '';
   document.getElementById('adj-preview').style.display = 'none';
   openStab('inv', 'stock');
   renderInvStock();
-  setFb(
-    'ok',
-    'Adjusted ' +
-      MAT_LABELS[mat] +
-      ': ' +
-      (delta >= 0 ? '+' : '') +
-      delta.toFixed(2) +
-      'kg now ' +
-      newStock.toFixed(2) +
-      'kg'
-  );
+  // Same as logDelivery: /api/inventory/set has no offline queue, so confirm
+  // only after the server accepts it. A stocktake correction reported as saved
+  // and then silently reverted by the next poll is worse than an error.
+  invSetAbsolute(mat, newStock, 'adjustment', reason).then((r) => {
+    if (r && r.error) {
+      inventory.stock[mat] = prevStock;
+      renderInvStock();
+      setFb('err', t('inv.adjustFailed', { err: r.error }));
+      return;
+    }
+    setFb(
+      'ok',
+      'Adjusted ' +
+        MAT_LABELS[mat] +
+        ': ' +
+        (delta >= 0 ? '+' : '') +
+        delta.toFixed(2) +
+        'kg now ' +
+        newStock.toFixed(2) +
+        'kg'
+    );
+  });
 }
 
 function renderInvLog() {
@@ -13547,6 +13605,9 @@ function undoSuccessRow(btn) {
   if (mi !== -1) movements.splice(mi, 1);
   sessionEntries.splice(idx, 1);
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  // _queued: the SW holds it offline, so there is no server row to DELETE and
+  // none is coming until replay — pull it out of the queue instead.
+  else if (entry._queued && dropQueuedScanEntry(entry)) entry._queued = false;
   else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   scan.count = Math.max(0, scan.count - 1);
   _scanBeep(400, 100);
@@ -13795,6 +13856,9 @@ function undoScanEntry(btn) {
   sessionEntries.splice(idx, 1);
   // Delete from server
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
+  // _queued: the SW holds it offline, so there is no server row to DELETE and
+  // none is coming until replay — pull it out of the queue instead.
+  else if (entry._queued && dropQueuedScanEntry(entry)) entry._queued = false;
   else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   // Remove DOM row
   if (row) row.remove();
