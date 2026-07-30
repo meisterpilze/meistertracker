@@ -1744,7 +1744,13 @@ function readAll(db, opts = {}) {
       strain: r.strain,
       reason: r.reason || null,
       userId: r.user_id,
-      user: r.username || null
+      user: r.username || null,
+      // Must survive a readAll -> writeAll round trip. Without it every restore
+      // silently drops the offline-replay idempotency keys, leaving the partial
+      // unique index idx_scanlog_client_uuid nothing to match — so a
+      // service-worker replay re-inserts a duplicate MOVE instead of hitting
+      // ON CONFLICT DO NOTHING, and the bag-to-zone derivation drifts.
+      client_uuid: r.client_uuid || null
     }));
 
   // Harvests — include id for targeting
@@ -2059,13 +2065,30 @@ function zoneIdOfLocation(db, loc) {
   return base;
 }
 
+// A section of an incoming payload is only allowed to rewrite its table when it
+// actually carries rows. Every section below either DELETEs the table outright or
+// diffs against an id set, so a bare `if (incoming.scanLog)` accepted `[]` — which
+// is truthy — and truncated the table with nothing to re-insert. One malformed or
+// half-serialised payload could therefore wipe the scan log or every batch (bags
+// cascade) with no backup and no confirmation.
+//
+// Restore does not come through here (it closes, renames and reopens the DB file),
+// and the client has no writer at all — saveData() was replaced by atomic REST
+// endpoints — so nothing legitimately needs to clear a table this way. A caller
+// that genuinely must may pass allowEmpty.
+function _section(incoming, key, allowEmpty) {
+  const v = incoming[key];
+  if (!Array.isArray(v)) return !!v && typeof v === 'object'; // inventory/caldav are plain objects
+  return allowEmpty ? true : v.length > 0;
+}
 // ── Write All (diff incoming JSON against DB, apply changes) ─
 // Used by backup/restore only — normal mutations use atomic functions below
-function writeAll(db, incoming) {
+function writeAll(db, incoming, opts) {
+  const allowEmpty = !!(opts && opts.allowEmpty);
   db.exec('BEGIN');
   try {
     // ── Batches ──
-    if (incoming.batches) {
+    if (_section(incoming, 'batches', allowEmpty)) {
       const existingIds = new Set(
         db
           .prepare('SELECT batch_id FROM batches')
@@ -2140,7 +2163,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Scan Log (replace all) ──
-    if (incoming.scanLog) {
+    if (_section(incoming, 'scanLog', allowEmpty)) {
       db.prepare('DELETE FROM scan_log').run();
       // P-06: scan_log was wiped — invalidate the in-memory bag-zone cache
       // so the next snapshotDailyKPIs / getProductionPipeline rebuilds it
@@ -2170,7 +2193,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Harvests (replace all) ──
-    if (incoming.harvests) {
+    if (_section(incoming, 'harvests', allowEmpty)) {
       db.prepare('DELETE FROM harvests').run();
       const ins = db.prepare(
         'INSERT INTO harvests(time, batch, bag, species, strain, grams, flush, quality, notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -2191,7 +2214,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Cultures ──
-    if (incoming.cultures) {
+    if (_section(incoming, 'cultures', allowEmpty)) {
       const existingIds = new Set(
         db
           .prepare('SELECT id FROM cultures')
@@ -2239,7 +2262,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Manual Tasks (replace all) ──
-    if (incoming.manualTasks) {
+    if (_section(incoming, 'manualTasks', allowEmpty)) {
       db.prepare('DELETE FROM manual_tasks').run();
       const ins = db.prepare(
         'INSERT INTO manual_tasks(text, priority, done, created, assignee, due_date, due_time, due_end_time, description, caldav_uid, caldav_synced, private, recurrence, recurrence_until) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -2265,7 +2288,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Team Members ──
-    if (incoming.teamMembers) {
+    if (_section(incoming, 'teamMembers', allowEmpty)) {
       db.prepare('DELETE FROM team_members').run();
       const ins = db.prepare('INSERT INTO team_members(name, role, added) VALUES(?, ?, ?)');
       for (const m of incoming.teamMembers) {
@@ -2310,7 +2333,7 @@ function writeAll(db, incoming) {
     // fixed-asset register). It is ignored rather than restored.
 
     // ── Calendar Events ──
-    if (incoming.calendarEvents) {
+    if (_section(incoming, 'calendarEvents', allowEmpty)) {
       const existingIds = new Set(
         db
           .prepare('SELECT id FROM calendar_events')
@@ -2371,7 +2394,7 @@ function writeAll(db, incoming) {
     }
 
     // ── Zones & Racks ──
-    if (incoming.zones) {
+    if (_section(incoming, 'zones', allowEmpty)) {
       const existingZoneIds = new Set(
         db
           .prepare('SELECT id FROM zones')
@@ -2981,9 +3004,24 @@ function deleteBatchById(db, batchId, userId) {
     if (row) {
       row.batch_id = batchId;
       const deltas = computeBatchMaterialDeltas(db, row);
-      // Reverse each delta (add materials back)
+      // Only credit back what this batch actually took out. The MCP create_batch
+      // tool deliberately passes deltas = null, so a batch created that way never
+      // deducted anything — reversing its computed composition on delete invented
+      // stock out of nothing. The HTTP path is asymmetric too:
+      // applyInventoryDeltaNoTxn clamps a deduction to available stock via
+      // Math.max(deltaKg, -cur), so creating a batch while short and then deleting
+      // it left a permanent surplus. Both drift the running total upward and never
+      // self-correct, so cap the credit at the recorded deduction for this batch.
+      const takenByMat = {};
+      for (const r of db
+        .prepare("SELECT mat, SUM(delta_kg) AS total FROM inventory_log WHERE ref = ? AND type = 'batch' GROUP BY mat")
+        .all(batchId))
+        takenByMat[r.mat] = Math.abs(r.total || 0);
       for (const d of deltas) {
         const col = 'stock_' + d.mat;
+        const credit = Math.min(d.deltaKg, takenByMat[d.mat] || 0);
+        if (!(credit > 0)) continue;
+        d.deltaKg = credit;
         db.prepare(`UPDATE inventory SET ${col} = ${col} + ? WHERE id=1`).run(d.deltaKg);
         const cur = db.prepare(`SELECT ${col} as val FROM inventory WHERE id=1`).get();
         // I-22: include user_id so the inventory ledger records who triggered the credit-back.
@@ -4511,6 +4549,7 @@ function updateCamera(db, id, patch) {
   if (!sets.length) return;
   vals.push(id);
   db.prepare('UPDATE camera_cameras SET ' + sets.join(', ') + ' WHERE id=?').run(...vals);
+  incrementDataVersion(db);
 }
 
 function deleteCamera(db, id) {
@@ -4581,6 +4620,7 @@ function resolveCameraFlag(db, kind, id) {
   const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(table);
   if (!exists) throw new Error(table + ' not yet created — run python -m mushroom_camera once');
   db.prepare(`UPDATE ${table} SET resolved_at=? WHERE id=? AND resolved_at IS NULL`).run(new Date().toISOString(), id);
+  incrementDataVersion(db);
 }
 
 function listRecentCameraMeasurements(db, limit) {
@@ -5826,6 +5866,10 @@ function resolveContaminationReport(db, id, userId, resolution) {
        WHERE id = ?`
     )
     .run(new Date().toISOString(), userId || null, resolution, id);
+  // GET /api/data builds its ETag from data_version and 304s when it has not
+  // moved, so without this the route's broadcastSSE wakes every other device,
+  // they poll, get a 304, and keep showing the report as unresolved — for good.
+  if (r.changes > 0) incrementDataVersion(db);
   return r.changes > 0;
 }
 
@@ -5837,6 +5881,7 @@ function unresolveContaminationReport(db, id) {
        WHERE id = ?`
     )
     .run(id);
+  if (r.changes > 0) incrementDataVersion(db);
   return r.changes > 0;
 }
 
@@ -6322,8 +6367,46 @@ function upsertOrder(db, o) {
       orderId
     );
     if (Array.isArray(o.items)) {
+      // order_allocations.order_item_id is ON DELETE CASCADE, so the old
+      // delete-then-reinsert silently destroyed every production reservation for
+      // this order on each re-sync — and channels.js always sends an items array,
+      // so a routine poll was enough. computeProductionDemand then read
+      // reserved = 0 and the farm scheduled a second batch for an order that was
+      // already covered. Carry the allocations across the rebuild.
+      const saved = db
+        .prepare(
+          `SELECT a.batch_id, a.qty, a.status, a.created,
+                  i.channel_sku AS _sku, i.listing_id AS _listing, i.title AS _title
+             FROM order_allocations a JOIN order_items i ON i.id = a.order_item_id
+            WHERE i.order_id = ?`
+        )
+        .all(orderId);
       db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
       _insertOrderItems(db, orderId, o.channel, o.items);
+      if (saved.length) {
+        // The CASCADE already removed the allocation rows, so re-insert rather
+        // than re-point them. Match on what was ordered (sku, else listing id,
+        // else title) — the row ids are new, but the line a reservation belongs
+        // to is identified by the product, not by its id.
+        const fresh = db
+          .prepare('SELECT id, channel_sku, listing_id, title FROM order_items WHERE order_id = ?')
+          .all(orderId);
+        const ins = db.prepare(
+          `INSERT INTO order_allocations(order_item_id, batch_id, qty, status, created)
+             VALUES(?,?,?,?,?) ON CONFLICT(order_item_id, batch_id) DO NOTHING`
+        );
+        for (const a of saved) {
+          const match =
+            (a._sku && fresh.find((f) => f.channel_sku === a._sku)) ||
+            (a._listing && fresh.find((f) => f.listing_id === a._listing)) ||
+            (a._title && fresh.find((f) => f.title === a._title));
+          if (match) ins.run(match.id, a.batch_id, a.qty, a.status, a.created);
+          // No match means the channel genuinely removed that line, so the
+          // reservation has nothing left to attach to. Say so rather than
+          // dropping it silently, which is what this whole block is fixing.
+          else console.log(`[orders] re-sync dropped allocation for order ${orderId} batch ${a.batch_id} (line gone)`);
+        }
+      }
     }
   } else {
     const info = db

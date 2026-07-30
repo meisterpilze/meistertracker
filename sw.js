@@ -74,6 +74,20 @@ function _idbAdd(store, body) {
       })
   );
 }
+// Overwrite an existing queued record in place (keyPath id preserved on the
+// object). Used to remove one entry from a multi-entry queued POST without
+// dropping the whole record — see dropQueuedScan.
+function _idbPut(store, record) {
+  return openIDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).put(record);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      })
+  );
+}
 function _idbGetAll(store) {
   return openIDB().then(
     (db) =>
@@ -170,12 +184,37 @@ async function _replayQueue(store, getAll, del, url) {
             c.postMessage({ type: 'scan-replay-rejected', reason: 'zone_mismatch', detail });
           }
         });
-      } else {
-        // R-22: 5xx (and any other unexpected status) — the server is
-        // unhealthy. Stop replay and signal the caller so it can apply
-        // exponential backoff before retrying.
-        if (resp.status >= 500) serverFailure = true;
+      } else if (resp.status >= 500) {
+        // R-22: 5xx — the server is unhealthy. Stop replay and signal the caller
+        // so it can apply exponential backoff before retrying.
+        serverFailure = true;
         break;
+      } else {
+        // Any other 4xx: the server has judged this specific entry unacceptable
+        // (400 from validateScanEntries, 413 oversize, 507 photo store full).
+        // Retrying cannot change that, so drop it and tell the client — exactly
+        // as the 409 branch does.
+        //
+        // Previously this fell into the 5xx branch, which broke WITHOUT deleting
+        // and without setting serverFailure. _replayQueue then returned normally,
+        // so replayAll() resolved and reset _replayFailureCount/_replayCooldownUntil
+        // — the failure actively cleared the backoff it should have triggered.
+        // With scheduleReplay() firing on every asset fetch behind a 1 s debounce,
+        // one 507'd 1.2 MB contamination report re-uploaded itself about once a
+        // second for as long as the user browsed, and everything queued behind it
+        // was stuck for good with no operator-visible signal.
+        let detail = null;
+        try {
+          detail = await resp.json();
+        } catch {
+          /* ignore body parse errors */
+        }
+        await del(item.id);
+        self.clients.matchAll().then((clients) => {
+          for (const c of clients) {
+            c.postMessage({ type: 'scan-replay-rejected', reason: 'rejected_' + resp.status, detail });
+          }
+        });
       }
     } catch {
       break; // Still offline — stop replay (no backoff; network errors retry naturally)
@@ -286,7 +325,34 @@ self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'get-pending-count') {
     notifyClients();
   }
+  // Undo of a scan that is still sitting in the offline queue. The page cannot
+  // DELETE it server-side — the server has never seen it — so the only way to
+  // honour the undo is to drop it here before replay. Without this the entry
+  // replayed after reconnect and the "undone" scan came back on the next poll,
+  // silently removing the bag again.
+  if (e.data && e.data.type === 'drop-queued-scan' && e.data.clientUuid) {
+    e.waitUntil(dropQueuedScan(e.data.clientUuid));
+  }
 });
+
+// Remove any queued scan-log entry carrying this client_uuid. Entries are stored
+// as the whole POST body ({entries: [...]}), so an entry may be one of several in
+// a batch — drop just that one, and the record only when it empties.
+async function dropQueuedScan(clientUuid) {
+  try {
+    const pending = await getPendingScans();
+    for (const item of pending) {
+      const list = (item.body && item.body.entries) || [];
+      const keep = list.filter((x) => x && x.client_uuid !== clientUuid);
+      if (keep.length === list.length) continue;
+      if (keep.length === 0) await deletePendingScan(item.id);
+      else await _idbPut(STORE_SCANS, Object.assign({}, item, { body: { entries: keep } }));
+    }
+    notifyClients();
+  } catch (err) {
+    /* best-effort: a failure here leaves the entry queued, which is the old behaviour */
+  }
+}
 
 // ── Fetch handler ───────────────────────────────────────────
 self.addEventListener('fetch', (e) => {

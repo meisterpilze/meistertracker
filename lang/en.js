@@ -150,6 +150,8 @@ window.LANG['en'] = {
   'orders.set': 'Set',
   'orders.invSaved': 'Stock saved',
   'orders.invBadValue': 'Invalid value',
+  'inv.deliveryFailed': 'Delivery NOT saved: {err}',
+  'inv.adjustFailed': 'Adjustment NOT saved: {err}',
   'inv.coir': 'Coir / CVG',
   'orders.th.demand': 'Demand',
   'orders.th.fromStock': 'from stock',

@@ -92,9 +92,27 @@ describe('db – P-06 bag-zone cache', () => {
   it('invalidates after writeAll replaces the scan log', () => {
     // Force a rebuild on next read
     db.invalidateBagZoneCache(d);
-    db.writeAll(d, { scanLog: [] });
+    // allowEmpty: clearing a table with an empty array is opt-in now. A bare
+    // `[]` is truthy, so the old default let one malformed payload truncate
+    // scan_log (or batches, cascading bags) with nothing to re-insert.
+    db.writeAll(d, { scanLog: [] }, { allowEmpty: true });
     const m = db.getBagZoneMap(d);
     assert.equal(m.size, 0, 'wholesale replace should leave the cache empty');
+  });
+
+  it('an empty section does NOT truncate unless allowEmpty is passed', () => {
+    // Self-seeded: the test above clears scan_log, so do not rely on the fixture.
+    db.writeAll(d, {
+      scanLog: [{ time: new Date().toISOString(), action: 'ADD', batch: 'T-1', bag: 'T-1-01', to: 'INC' }]
+    });
+    const before = d.prepare('SELECT COUNT(*) n FROM scan_log').get().n;
+    assert.ok(before > 0, 'seed row should be present');
+    db.writeAll(d, { scanLog: [] });
+    assert.equal(
+      d.prepare('SELECT COUNT(*) n FROM scan_log').get().n,
+      before,
+      'an empty scanLog array must be ignored, not treated as "delete everything"'
+    );
   });
 });
 
