@@ -2267,6 +2267,34 @@
                       Link to the PD or LC used to inoculate this batch
                     </div>
                   </div>
+                  <!-- Grain spawn is stored as batches with barcoded bags, not as
+                       cultures, so the select above can never reference one. Scan or
+                       pick the grain bag(s) actually used; each is written off on
+                       create (a REMOVE naming this batch). -->
+                  <div>
+                    <label data-i18n="batch.spawnSource">Grain spawn used (optional)</label>
+                    <div style="display: flex; gap: 6px; align-items: center">
+                      <select id="nb-spawn-pick" style="flex: 1; min-width: 0" onchange="nbSpawnPicked()">
+                        <option value="" data-i18n="batch.spawnPick">— pick a grain bag —</option>
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-sm"
+                        id="nb-spawn-scan"
+                        style="flex: none; white-space: nowrap"
+                        data-i18n="batch.spawnScan"
+                      >
+                        Scan
+                      </button>
+                    </div>
+                    <div id="nb-spawn-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
+                    <div
+                      style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px"
+                      data-i18n="batch.spawnSourceHint"
+                    >
+                      Each bag listed here is written off when the batch is created
+                    </div>
+                  </div>
                   <div>
                     <label data-i18n="batch.notes">Notes (optional)</label
                     ><textarea
