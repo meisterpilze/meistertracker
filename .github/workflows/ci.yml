@@ -38,5 +38,13 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # Part of `npm test` below, but called out as its own step so an
+      # untranslated key reads as "Translations complete: failed" in the checks
+      # list instead of hiding inside a 280-test run. A missing translation is
+      # invisible in review — the language you read looks finished — so it needs
+      # to be loud here.
+      - name: Translations complete
+        run: node --test test/i18n.test.js
+
       - name: Tests
         run: npm test

@@ -11,18 +11,13 @@
 // waved it through because the number happened to match. The browser showed the
 // key on screen. This test is that check without the browser.
 //
-// ── Why a budget and not zero ────────────────────────────────────────────────
+// ── No budget, no exceptions ─────────────────────────────────────────────────
 //
-// German and English are complete. Portuguese is not: 209 of the 1162 keys the
-// interface asks for have no Portuguese text yet. That is a translation job, not
-// a bug, and asserting zero here would mean a suite that is red on a clean
-// checkout — which ends with someone deleting the test rather than translating
-// 209 strings.
-//
-// So the assertion is "no worse than it is". A new key added to two of three
-// files pushes the count up and fails. Translating one pushes it down, and the
-// number below wants lowering to match — deliberately, so the budget shrinks
-// instead of quietly becoming a licence.
+// This file used to carry a per-language budget, because Portuguese was 240
+// keys short and a red suite on a clean checkout ends with someone deleting the
+// test rather than translating 240 strings. Those strings exist now, so the
+// budget is gone and every language is held to the same rule: a key added to
+// two of three files fails here instead of reaching a user.
 const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -30,10 +25,6 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const SPRACHEN = ['de', 'en', 'pt'];
-
-// Measured 2026-07-30. Lower these as translations land; never raise one to
-// make a commit pass — that is the failure this test exists to report.
-const OHNE_UEBERSETZUNG = { de: 0, en: 0, pt: 209 };
 
 // The lang files assign to `window`, which does not exist in node.
 function loadDictionaries() {
@@ -46,15 +37,22 @@ function loadDictionaries() {
 }
 
 // `data-i18n`, `data-i18n-html` and `data-i18n-placeholder` in the markup, plus
-// `t('…')` in the application code. Keys assembled at runtime (`t('a.' + x)`)
-// are out of reach here and stay out — a regex that guessed at them would report
-// keys that do not exist and train people to ignore this test.
+// `t('…')` in the application code — including the `t('…', { n })` form, which an
+// earlier version of this pattern walked straight past, leaving 170 calls
+// unchecked. Keys assembled at runtime (`t('a.' + x)`) stay out of reach of any
+// regex; the dictionary-parity test below is what covers those.
 function usedKeys() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
   const fromHtml = [...html.matchAll(/data-i18n(?:-html|-placeholder)?="([^"]+)"/g)].map((m) => m[1]);
-  const fromApp = [...app.matchAll(/\bt\('([^']+)'\)/g)].map((m) => m[1]);
+  const fromApp = [...app.matchAll(/\bt\('([^']+)'\s*[,)]/g)].map((m) => m[1]);
   return [...new Set([...fromHtml, ...fromApp])];
+}
+
+// {n}, {sum}, {time} … — a translation that drops one renders the placeholder
+// as literal text, which is the same class of bug as a missing key.
+function placeholders(text) {
+  return [...String(text).matchAll(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g)].map((m) => m[0]).sort();
 }
 
 describe('translations', () => {
@@ -70,26 +68,40 @@ describe('translations', () => {
   });
 
   it('finds keys to check — a silent zero would make this test useless', () => {
-    assert.ok(used.length > 500, 'only found ' + used.length + ' keys, the extraction is probably broken');
+    assert.ok(used.length > 1000, 'only found ' + used.length + ' keys, the extraction is probably broken');
   });
 
-  it('translates every key the interface asks for, in German and English', () => {
-    for (const s of ['de', 'en']) {
+  it('translates every key the interface asks for, in every language', () => {
+    for (const s of SPRACHEN) {
       const missing = used.filter((k) => !(k in dicts[s]));
-      assert.deepEqual(missing, [], s + ' is complete and must stay complete');
+      assert.deepEqual(missing, [], s + ' has no text for these keys, so the interface shows the key itself');
     }
   });
 
-  it('does not let the Portuguese gap grow', () => {
-    const missing = used.filter((k) => !(k in dicts.pt));
-    assert.ok(
-      missing.length <= OHNE_UEBERSETZUNG.pt,
-      'Portuguese is now missing ' +
-        missing.length +
-        ' of the keys the interface asks for, up from ' +
-        OHNE_UEBERSETZUNG.pt +
-        '. New: ' +
-        missing.slice(0, 10).join(', ')
-    );
+  // Covers what the regex above cannot see: `t('orders.status.' + o.status)` and
+  // friends never appear as a literal, so a gap there is invisible until someone
+  // switches language and reads a status column full of identifiers.
+  it('keeps the three dictionaries on the same set of keys', () => {
+    const all = new Set(SPRACHEN.flatMap((s) => Object.keys(dicts[s])));
+    for (const s of SPRACHEN) {
+      const missing = [...all].filter((k) => !(k in dicts[s]));
+      assert.deepEqual(missing, [], s + ' is missing keys the other languages define');
+    }
+  });
+
+  it('has no blank translations', () => {
+    for (const s of SPRACHEN) {
+      const blank = Object.keys(dicts[s]).filter((k) => !String(dicts[s][k]).trim());
+      assert.deepEqual(blank, [], s + ' has empty strings, which render as nothing at all');
+    }
+  });
+
+  it('keeps the same placeholders in every language', () => {
+    for (const k of Object.keys(dicts.de)) {
+      const wanted = placeholders(dicts.de[k]);
+      for (const s of SPRACHEN) {
+        assert.deepEqual(placeholders(dicts[s][k]), wanted, s + ' changed the placeholders in ' + k);
+      }
+    }
   });
 });
