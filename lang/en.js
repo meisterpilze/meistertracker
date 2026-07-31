@@ -497,6 +497,7 @@ window.LANG['en'] = {
   'status.action.monitorSpawn': 'Monitor spawn run',
   'status.action.discard': 'Discard bags',
   // Table headers - dashboard
+  'sort.by': 'Sort by:',
   'th.batchId': 'Batch ID',
   'th.species': 'Species',
   'th.strain': 'Strain',

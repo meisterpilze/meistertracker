@@ -3459,7 +3459,9 @@ function renderStatus() {
       (d.b.strainName || '').toLowerCase().includes(q)
   );
 
-  let html = '';
+  // One sort control above all the rooms, not one per room — the question
+  // "what am I looking at first" has the same answer in every tent.
+  let html = locSortControlHtml();
   // Render zones dynamically by role
   const fruitingZones = zones.filter((z) => z.role === 'fruiting');
   const contamZones = zones.filter((z) => z.role === 'contaminated');
@@ -3506,7 +3508,7 @@ function renderRackSection(zone, racks, filtered) {
         byBatch[d.batchId].bags.push({ id: bagId, loc: rackId });
       });
       // Filter batches by search
-      const batchEntries = Object.entries(byBatch).filter(
+      const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
         ([bid, d]) =>
           !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
       );
@@ -3588,7 +3590,7 @@ function renderFruitingSection(fruitingZones, filtered) {
         if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
         byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
       });
-      const batchEntries = Object.entries(byBatch).filter(
+      const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
         ([bid, d]) =>
           !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
       );
@@ -3652,6 +3654,83 @@ function renderFruitingSection(fruitingZones, filtered) {
   </div>`;
 }
 
+// The room lists came out in scan-log insertion order — effectively the order
+// bags happened to be added, which is no order at all once a tent holds twenty
+// batches. One sort, shared by the simple, rack and fruiting renderers so a
+// room never sorts differently from the room next to it.
+const LOC_SORTS = ['due', 'species', 'bags', 'id'];
+const LOC_SORT_LABEL = { due: 'th.due', species: 'th.species', bags: 'worklist.bags', id: 'th.batchId' };
+let _locSortKey = null;
+function locSortKey() {
+  if (_locSortKey === null) {
+    // Guarded like the other stored preferences: storage revoked mid-session
+    // must not throw inside a render.
+    try {
+      _locSortKey = localStorage.getItem('mp-loc-sort') || '';
+    } catch (e) {
+      _locSortKey = '';
+    }
+  }
+  // Due date is the default because it is the one that says what to do next.
+  return LOC_SORTS.includes(_locSortKey) ? _locSortKey : 'due';
+}
+function setLocSort(key) {
+  if (!LOC_SORTS.includes(key)) return;
+  _locSortKey = key;
+  try {
+    localStorage.setItem('mp-loc-sort', key);
+  } catch (e) {
+    /* storage disabled — the choice just won't survive a reload */
+  }
+  renderStatus();
+}
+function locSortControlHtml() {
+  const cur = locSortKey();
+  return (
+    '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px">' +
+    '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+    esc(t('sort.by')) +
+    '</span>' +
+    LOC_SORTS.map((k) => {
+      const on = k === cur;
+      return (
+        '<button type="button" data-action="loc-sort" data-key="' +
+        esc(k) +
+        '" aria-pressed="' +
+        on +
+        '" style="font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+        (on ? 'var(--c-accent)' : 'var(--c-border)') +
+        ';background:' +
+        (on ? 'var(--c-accent)' : 'transparent') +
+        ';color:' +
+        (on ? '#fff' : 'var(--c-text-sec)') +
+        '">' +
+        esc(t(LOC_SORT_LABEL[k])) +
+        '</button>'
+      );
+    }).join('') +
+    '</div>'
+  );
+}
+// batchEntries is [batchId, {sp, st, bags}] in all three renderers, so they can
+// share this. Ties break on the batch id, which keeps the order stable rather
+// than reshuffling equal rows on every re-render.
+function sortZoneBatches(batchEntries) {
+  const key = locSortKey();
+  const dueOf = (bid) => {
+    const b = batchById(bid);
+    return b ? b.due : null;
+  };
+  return [...batchEntries].sort((x, y) => {
+    if (key === 'species') return sortCmp(x[1].sp, y[1].sp) || sortCmp(x[0], y[0]);
+    // Most bags first: "where is the bulk of the work" is the question here.
+    if (key === 'bags') return y[1].bags.length - x[1].bags.length || sortCmp(x[0], y[0]);
+    if (key === 'id') return sortCmp(x[0], y[0]);
+    // sortCmp already sinks null to the end, so an undated batch lands last
+    // rather than pretending to be the most urgent thing in the room.
+    return sortCmp(dueOf(x[0]), dueOf(y[0])) || sortCmp(x[0], y[0]);
+  });
+}
 function renderSimpleZoneSection(zone, filtered) {
   const bags = getZoneBags(zone.id);
   const entries = Object.entries(bags);
@@ -3661,7 +3740,7 @@ function renderSimpleZoneSection(zone, filtered) {
     if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
     byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
   });
-  const batchEntries = Object.entries(byBatch).filter(
+  const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
     ([bid, d]) =>
       !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
   );
@@ -3706,7 +3785,7 @@ function renderContamSection(zone, filtered) {
     if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
     byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
   });
-  const batchEntries = Object.entries(byBatch).filter(
+  const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
     ([bid, d]) =>
       !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
   );
@@ -5471,6 +5550,15 @@ function openLocMovePopup() {
 }
 // Event delegation for bag chip clicks
 document.getElementById('dash-locations').addEventListener('click', function (e) {
+  // The sort chips sit above the zones, so handle them before anything that
+  // treats a click as landing inside a room.
+  const ls = e.target.closest('[data-action="loc-sort"]');
+  if (ls) {
+    e.preventDefault();
+    e.stopPropagation();
+    setLocSort(ls.dataset.key);
+    return;
+  }
   // Stocktake button sits inside the zone header, whose own click toggles the
   // section — stop the event so opening the check doesn't also collapse it.
   const zc = e.target.closest('[data-zone-check]');
@@ -6800,14 +6888,23 @@ function openMoveBatchModal(batchId) {
 
 // Persisted so a chosen column/direction survives a reload instead of
 // resetting every time the batches (or cultures) list is reopened.
+// Every sortable table, and the tbody its rows land in. Adding a table here plus
+// data-sort on its headers is the whole job — the click wiring, the arrows and
+// the persistence are shared rather than copied per table, which is how batches
+// and cultures ended up with two near-identical listeners.
+const SORT_TABLES = { batches: 'batches-body', cultures: 'cultures-body', harvests: 'harvest-body' };
 const tableSort = (() => {
+  const empty = {};
+  for (const k in SORT_TABLES) empty[k] = null;
   try {
     const s = JSON.parse(localStorage.getItem('mp-table-sort') || 'null');
-    if (s && typeof s === 'object') return { batches: s.batches || null, cultures: s.cultures || null };
+    // Keep whatever was stored for a table still known; ignore the rest, so a
+    // renamed or removed table cannot resurrect a sort nothing can clear.
+    if (s && typeof s === 'object') for (const k in SORT_TABLES) empty[k] = s[k] || null;
   } catch (e) {
     /* storage disabled — fall back to no saved sort */
   }
-  return { batches: null, cultures: null };
+  return empty;
 })();
 function sortCmp(a, b) {
   if (a == null && b == null) return 0;
@@ -6831,7 +6928,10 @@ function cycleTableSort(table, key) {
   }
 }
 function updateSortIndicators(table, activeState) {
-  const bodyId = table === 'batches' ? 'batches-body' : 'cultures-body';
+  // Was a two-way ternary, so any third table silently got the cultures header
+  // row and wrote its arrows into the wrong table.
+  const bodyId = SORT_TABLES[table];
+  if (!bodyId) return;
   const body = document.getElementById(bodyId);
   if (!body) return;
   const thead = body.closest('table').tHead;
@@ -7329,10 +7429,17 @@ function renderHarvests() {
     loadVendorLibs().then(() => renderHarvests());
     return;
   }
-  const items = [...harvests]
+  // Newest first by default; a chosen column overrides it. The 200-row cap is
+  // applied AFTER sorting, so sorting by grams shows the biggest harvests rather
+  // than the biggest of the 200 most recent.
+  const matching = [...harvests]
     .reverse()
-    .filter((h) => !q || h.batch.toLowerCase().includes(q) || (h.species || '').toLowerCase().includes(q))
-    .slice(0, 200);
+    .filter((h) => !q || h.batch.toLowerCase().includes(q) || (h.species || '').toLowerCase().includes(q));
+  updateSortIndicators('harvests', tableSort.harvests);
+  const items = applyTableSort(matching, tableSort.harvests, (h, k) => {
+    if (k === 'grams' || k === 'flush') return Number(h[k]) || 0;
+    return h[k];
+  }).slice(0, 200);
   body.innerHTML = items.length
     ? items
         .map(
@@ -18585,14 +18692,21 @@ function initEventListeners() {
   });
   $('batch-q').addEventListener('input', renderBatches);
   $('batch-archive-filter').addEventListener('change', renderBatches);
-  $('batches-body')
-    .closest('table')
-    .tHead.addEventListener('click', (e) => {
+  // One listener per registered sortable table, wired the same way, so a new
+  // table needs only its entry in SORT_TABLES and data-sort on its headers.
+  const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests };
+  for (const table in SORT_TABLES) {
+    const body = document.getElementById(SORT_TABLES[table]);
+    const thead = body && body.closest('table') ? body.closest('table').tHead : null;
+    if (!thead) continue;
+    thead.addEventListener('click', (e) => {
       const th = e.target.closest('th[data-sort]');
       if (!th) return;
-      cycleTableSort('batches', th.dataset.sort);
-      renderBatches();
+      cycleTableSort(table, th.dataset.sort);
+      const redraw = SORT_RERENDER[table];
+      if (redraw) redraw();
     });
+  }
   $('wbtn-3').addEventListener('click', () => {
     setBagWeight(3);
   });
@@ -18700,14 +18814,6 @@ function initEventListeners() {
   $('prt-lw').addEventListener('click', goToPrintLabCulture);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
-  $('cultures-body')
-    .closest('table')
-    .tHead.addEventListener('click', (e) => {
-      const th = e.target.closest('th[data-sort]');
-      if (!th) return;
-      cycleTableSort('cultures', th.dataset.sort);
-      renderCultures();
-    });
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => {
     const type = document.getElementById('lw-type').value;
