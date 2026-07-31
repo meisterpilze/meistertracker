@@ -1547,6 +1547,38 @@ const MIGRATIONS = [
     )`);
       db.prepare('INSERT OR IGNORE INTO harvest_feed_config(id) VALUES(1)').run();
     }
+  },
+  {
+    version: 54,
+    description: 'Make a customer erasure stick: erased_at plus a hashed suppression list',
+    fn(db) {
+      // Erasing a customer NULLed their PII, and then the next channel sync put
+      // it straight back: upsertOrder rewrites customer_name/customer_email/
+      // raw_json unconditionally and COALESCEs the ship_* columns, so a NULLed
+      // column simply took the incoming value again. Worse, because the erase
+      // deleted the customer_identities rows, upsertCustomerFromOrder could no
+      // longer match the person and inserted a SECOND customer carrying the
+      // repopulated name and email.
+      //
+      // Two pieces fix that. erased_at marks the customer so the sync path knows
+      // to keep the PII columns empty. erased_identities is a suppression list —
+      // the marketplace handle is itself identifying, so it is stored only as a
+      // SHA-256 of "channel|handle", which is enough to recognise the same buyer
+      // arriving again without keeping anything that names them. Remembering an
+      // erasure request is the one thing you are expected to retain in order to
+      // honour it.
+      const cols = db.prepare('PRAGMA table_info(customers)').all();
+      if (!cols.some((c) => c.name === 'erased_at')) {
+        db.exec('ALTER TABLE customers ADD COLUMN erased_at TEXT');
+      }
+      db.exec(`CREATE TABLE IF NOT EXISTS erased_identities (
+      channel     TEXT NOT NULL,
+      handle_hash TEXT NOT NULL,
+      customer_id INTEGER,
+      erased_at   TEXT NOT NULL,
+      PRIMARY KEY (channel, handle_hash)
+    )`);
+    }
   }
 ];
 
@@ -6261,11 +6293,36 @@ function listUnmappedItems(db) {
     .all();
 }
 
+// One-way identifier for the erasure suppression list. The marketplace handle
+// names a person, so it is never stored back in the clear — only enough to
+// recognise the same buyer arriving on a later sync.
+function _identityHash(channel, handle) {
+  return crypto
+    .createHash('sha256')
+    .update(String(channel) + '|' + String(handle))
+    .digest('hex');
+}
+// Has this identity been erased on request? Returns the tombstoned customer id
+// (which may be null if the row was since removed) or undefined when not erased.
+function isIdentityErased(db, channel, handle) {
+  if (!channel || !handle) return undefined;
+  const row = db
+    .prepare('SELECT customer_id FROM erased_identities WHERE channel = ? AND handle_hash = ?')
+    .get(channel, _identityHash(channel, handle));
+  return row ? row.customer_id : undefined;
+}
+
 // ── Customers (dedup + rolled-up stats) ──
 function upsertCustomerFromOrder(db, o) {
   const email = _lcEmail(o.customerEmail);
   const handle = o.buyerHandle ? String(o.buyerHandle).trim() : email; // eBay masks email → username fallback
   const now = new Date().toISOString();
+  // An erased buyer ordering again must not resurrect the old identity. Re-point
+  // at the tombstoned customer and leave its PII columns alone — writing the name
+  // back is exactly what made the erase temporary. A genuinely new order still
+  // gets fulfilled: upsertOrder keeps the ship_* fields it needs for THIS order.
+  const erasedId = isIdentityErased(db, o.channel, handle);
+  if (erasedId !== undefined) return erasedId;
   let customerId = null;
   if (handle) {
     const idn = db
@@ -6328,6 +6385,7 @@ function listCustomers(db, { limit = 200 } = {}) {
       `SELECT c.id, c.email, c.name, c.country, c.first_channel AS firstChannel,
               c.first_order AS firstOrder, c.last_order AS lastOrder,
               c.order_count AS orderCount, c.total_spent AS totalSpent, c.currency,
+              c.erased_at AS erasedAt,
               (SELECT GROUP_CONCAT(DISTINCT ci.channel) FROM customer_identities ci WHERE ci.customer_id = c.id) AS channels
        FROM customers c ORDER BY c.total_spent DESC, c.order_count DESC LIMIT ?`
     )
@@ -6369,23 +6427,72 @@ function findCustomerByIdentity(db, channel, handle) {
 // statistics stay intact. label_url goes too: that PDF renders the full shipping
 // address. Idempotent — running it twice is a no-op.
 function eraseCustomer(db, customerId) {
-  if (!customerId) return { orders: 0 };
-  db.prepare(
-    'UPDATE shipments SET label_url = NULL WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)'
-  ).run(customerId);
-  const orders = db
-    .prepare(
-      `UPDATE orders SET customer_name = NULL, customer_email = NULL, raw_json = NULL,
+  if (!customerId) return { orders: 0, found: false, subject: null };
+  const now = new Date().toISOString();
+  // Captured before the write and handed back so the caller's audit line can name
+  // the subject. Afterwards nothing in the database resolves this id to a person,
+  // which is the point — but it also means the log is the only remaining record.
+  const before = db.prepare('SELECT name, email FROM customers WHERE id = ?').get(customerId);
+  if (!before) return { orders: 0, found: false, subject: null };
+  const subject = before.name || before.email || null;
+  // All of it or none of it. Four unwrapped writes meant a SQLITE_BUSY from the
+  // concurrent sync writer part-way through could leave the addresses destroyed
+  // while the name still identified the person — and the caller's audit line is
+  // never reached on the throw, so nothing would record that data was lost.
+  db.exec('BEGIN');
+  try {
+    // Suppression list BEFORE the identities are dropped: hash each handle so a
+    // later sync recognises this buyer without us keeping anything that names
+    // them. Without it, upsertCustomerFromOrder cannot match the person, inserts
+    // a second customer, and the next poll repopulates the PII we just removed.
+    const ins = db.prepare(
+      'INSERT OR REPLACE INTO erased_identities(channel, handle_hash, customer_id, erased_at) VALUES(?,?,?,?)'
+    );
+    for (const r of db.prepare('SELECT channel, handle FROM customer_identities WHERE customer_id = ?').all(customerId))
+      ins.run(r.channel, _identityHash(r.channel, r.handle), customerId, now);
+    // The email is an identity too — an order arriving with it must not rebuild
+    // the customer either.
+    const cur = db.prepare('SELECT email FROM customers WHERE id = ?').get(customerId);
+    if (cur && cur.email) {
+      for (const ch of db.prepare('SELECT DISTINCT channel FROM orders WHERE customer_id = ?').all(customerId))
+        ins.run(ch.channel, _identityHash(ch.channel, cur.email), customerId, now);
+    }
+    // provider_parcel_id and the tracking fields are live handles: they resolve
+    // the recipient's name and address at Sendcloud and at the carrier, and
+    // `error` echoes the address verbatim on a validation failure. Tracking is
+    // kept only while a parcel is still moving — stranding an in-flight delivery
+    // helps nobody — and goes as soon as it is delivered.
+    db.prepare(
+      `UPDATE shipments SET label_url = NULL, provider_parcel_id = NULL, error = NULL
+         WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)`
+    ).run(customerId);
+    db.prepare(
+      `UPDATE shipments SET tracking_number = NULL, tracking_url = NULL
+         WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)
+           AND (status IS NULL OR status IN ('delivered','cancelled','error'))`
+    ).run(customerId);
+    const orders = db
+      .prepare(
+        `UPDATE orders SET customer_name = NULL, customer_email = NULL, raw_json = NULL,
               ship_name = NULL, ship_company = NULL, ship_street = NULL, ship_house = NULL,
               ship_address2 = NULL, ship_city = NULL, ship_postal = NULL, ship_phone = NULL
        WHERE customer_id = ?`
-    )
-    .run(customerId).changes;
-  // email is UNIQUE, but SQLite allows many NULLs — erased rows never collide.
-  db.prepare("UPDATE customers SET email = NULL, name = NULL, notes = '' WHERE id = ?").run(customerId);
-  db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(customerId);
-  incrementDataVersion(db);
-  return { orders };
+      )
+      .run(customerId).changes;
+    // email is UNIQUE, but SQLite allows many NULLs — erased rows never collide.
+    // erased_at is what stops the sync path writing the PII back.
+    db.prepare("UPDATE customers SET email = NULL, name = NULL, notes = '', erased_at = ? WHERE id = ?").run(
+      now,
+      customerId
+    );
+    db.prepare('DELETE FROM customer_identities WHERE customer_id = ?').run(customerId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return { orders, found: true, subject };
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 // ── Orders (idempotent ingestion) ──
@@ -6416,17 +6523,28 @@ function upsertOrder(db, o) {
     .prepare('SELECT id, status FROM orders WHERE channel = ? AND channel_order_id = ?')
     .get(o.channel, coid);
   let orderId;
-  const raw = o.raw != null ? JSON.stringify(o.raw) : null;
+  // An erased customer's PII must not come back on the next sync. The columns
+  // below are written unconditionally (customer_name/email/raw_json) or through
+  // COALESCE (ship_*), and COALESCE takes the incoming value precisely because
+  // the erase left the column NULL — so without this the erase lasted until the
+  // next poll. Everything non-identifying (status, totals, dates, weight) still
+  // syncs normally, so revenue and fulfilment state stay correct.
+  const erased = customerId
+    ? !!(db.prepare('SELECT erased_at FROM customers WHERE id = ?').get(customerId) || {}).erased_at
+    : false;
+  const raw = erased ? null : o.raw != null ? JSON.stringify(o.raw) : null;
+  const cName = erased ? null : o.customerName || null;
+  const cEmail = erased ? null : _lcEmail(o.customerEmail);
   // Structured ship-to address from the channel, so synced orders are ready to
   // label without manual entry. null values preserve any existing/edited value.
-  const sName = o.shipName || null,
-    sCompany = o.shipCompany || null,
-    sStreet = o.shipStreet || null,
-    sHouse = o.shipHouse || null,
-    sAddr2 = o.shipAddress2 || null,
-    sCity = o.shipCity || null,
-    sPostal = o.shipPostal || null,
-    sPhone = o.shipPhone || null,
+  const sName = erased ? null : o.shipName || null,
+    sCompany = erased ? null : o.shipCompany || null,
+    sStreet = erased ? null : o.shipStreet || null,
+    sHouse = erased ? null : o.shipHouse || null,
+    sAddr2 = erased ? null : o.shipAddress2 || null,
+    sCity = erased ? null : o.shipCity || null,
+    sPostal = erased ? null : o.shipPostal || null,
+    sPhone = erased ? null : o.shipPhone || null,
     sWeight = o.shipWeightG != null && o.shipWeightG !== '' ? o.shipWeightG : null;
   if (existing) {
     orderId = existing.id;
@@ -6454,8 +6572,8 @@ function upsertOrder(db, o) {
       o.orderDate || null,
       o.shipBy || null,
       customerId,
-      o.customerName || null,
-      o.customerEmail || null,
+      cName,
+      cEmail,
       o.shipCountry || null,
       o.totalAmount != null ? o.totalAmount : null,
       o.currency || null,
@@ -6530,8 +6648,8 @@ function upsertOrder(db, o) {
         o.orderDate || now,
         o.shipBy || null,
         customerId,
-        o.customerName || null,
-        o.customerEmail || null,
+        cName,
+        cEmail,
         o.shipCountry || null,
         o.totalAmount != null ? o.totalAmount : null,
         o.currency || null,
