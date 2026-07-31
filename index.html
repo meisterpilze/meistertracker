@@ -1835,48 +1835,6 @@
 
           <!-- Charts section — visible in Overview mode only -->
           <div id="dash-charts-section" style="display: none">
-            <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
-            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
-            <details class="dash-collapse" id="dc-kpi">
-              <summary class="dash-collapse-sum" data-i18n="dash.kpiSection">Kennzahlen</summary>
-              <div id="metrics" style="margin-bottom: 10px"></div>
-            </details>
-            <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
-            <details class="dash-collapse" id="dc-status">
-              <summary class="dash-collapse-sum" data-i18n="dash.liveStatus">Live batch status</summary>
-              <div class="dash-locations-header">
-                <input
-                  type="text"
-                  id="status-q"
-                  class="dash-search-inline"
-                  data-i18n-aria-label="aria.searchDashboard"
-                  aria-label="Search dashboard"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Search..."
-                />
-              </div>
-              <div id="dash-locations"></div>
-            </details>
-            <!-- ── LAB section ── collapsible -->
-            <details class="dash-collapse" id="dc-lab">
-              <summary class="dash-collapse-sum dash-collapse-lab">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
-                  <line x1="9" y1="3" x2="15" y2="3" />
-                </svg>
-                <span>Lab</span>
-              </summary>
-              <div id="dash-lab-stock"></div>
-            </details>
             <!-- Top bar: Period toggle + CSV download -->
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
               <div class="ov-period-toggle" style="margin-bottom: 0">
@@ -2009,6 +1967,12 @@
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
+            <!-- Pipeline per stage — the header the batch list was missing -->
+            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
+            <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
+            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
+              <div id="metrics" style="margin-bottom: 10px"></div>
+            </div>
           <div class="stabs">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
@@ -2018,6 +1982,22 @@
           </div>
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
+            <!-- Where everything currently sits, by room -->
+            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
+            <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+              <div class="dash-locations-header">
+                <input
+                  type="text"
+                  id="status-q"
+                  class="dash-search-inline"
+                  data-i18n-aria-label="aria.searchDashboard"
+                  aria-label="Search dashboard"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Search..."
+                />
+              </div>
+              <div id="dash-locations"></div>
+            </div>
             <div class="card">
               <div
                 style="
@@ -2925,6 +2905,25 @@
         </div>
 
         <div class="page" id="p-lab">
+            <!-- Lab stock — the state of the section, above its tabs -->
+            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
+            <!-- ── LAB section ── collapsible -->
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
+                  <line x1="9" y1="3" x2="15" y2="3" />
+                </svg>
+                <span>Lab</span>
+              <div id="dash-lab-stock"></div>
+            </div>
           <div class="stabs">
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
