@@ -341,6 +341,10 @@ window.LANG['de'] = {
   'harvest.enterWeight': 'Bitte ein Gewicht in Gramm eingeben',
   'harvest.cancelled': 'Ernte abgebrochen.',
   // Dashboard
+  'cat.create': 'Ansetzen',
+  'cat.move': 'Umziehen',
+  'cat.harvest': 'Ernten',
+  'cat.overdue': '{n} überfällig',
   'dash.totalBatches': 'Chargen gesamt',
   'dash.totalHarvested': 'Gesamt geerntet',
   'dash.alerts': 'Warnungen',

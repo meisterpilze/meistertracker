@@ -341,6 +341,10 @@ window.LANG['en'] = {
   'harvest.enterWeight': 'Enter a weight in grams',
   'harvest.cancelled': 'Harvest cancelled.',
   // Dashboard
+  'cat.create': 'Make blocks',
+  'cat.move': 'Move',
+  'cat.harvest': 'Harvest',
+  'cat.overdue': '{n} overdue',
   'dash.totalBatches': 'Total batches',
   'dash.totalHarvested': 'Total harvested',
   'dash.alerts': 'Alerts',

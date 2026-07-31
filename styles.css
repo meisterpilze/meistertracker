@@ -1812,13 +1812,29 @@ tr:hover td {
 }
 .wk-h.sel {
   border-bottom-color: var(--c-accent);
-  background: var(--c-bg-soft, transparent);
+  background: var(--c-bg);
 }
 .wk-b {
   grid-row: 2;
   grid-column: var(--col);
   min-width: 0;
   font-size: 11px;
+  /* A rule between the days, not just a gap. Seven columns of similar-looking
+     rows run together without one, and the eye loses which day it is reading.
+     Left edge on every column but the first, so the outer edges stay clean. */
+  border-left: 1px solid var(--c-border);
+  padding: 4px 5px 0;
+}
+.wk-b:first-of-type {
+  border-left: 0;
+}
+.wk-h {
+  border-right: 1px solid transparent;
+}
+/* The selected day is the one you are working from, so it gets a tinted
+   channel down the whole column rather than only a marked header. */
+.wk-b.sel {
+  background: var(--c-bg);
 }
 /* Below this the seven columns are too narrow to hold a task list, so the grid
    keeps its header strip and only the chosen day opens, spanning every column.
