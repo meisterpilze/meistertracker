@@ -23,8 +23,16 @@ data/
 # Calendars
 calendars/
 
-# TLS certificates
+# TLS certificates.
+#
+# The directory rule alone is a trap: rename certs/ to certs.old while trying
+# something out and the folder walks straight out from under the pattern, where
+# the next `git add -A` picks it up. The key patterns catch it wherever it ends
+# up, which is the property that actually matters for a private key.
 certs/
+certs*/
+*.key
+*.pem
 
 # Environment
 .env

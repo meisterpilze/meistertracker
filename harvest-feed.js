@@ -92,7 +92,14 @@ const crypto = require('crypto');
 let inFlight = false;
 let timer = null;
 
+// Fassung 1 carries `harvested`, and a receiver is free to publish it. Fassung 2
+// says a `released` list is present and that it, not `harvested`, is what may be
+// offered for sale. Ignoring that difference means publishing produce the grower
+// deliberately kept back, so it is a version bump and not a new optional field —
+// and it is only sent when release mode is actually on, so receivers of labs
+// that do not use it never see a version they were not built for.
 const VERSION = 1;
+const VERSION_RELEASE = 2;
 const ATTEMPTS = 3;
 
 /**
@@ -138,6 +145,11 @@ function readConfig(env) {
     // cannot invent one it never got.
     strain: String(env.HARVEST_WEBHOOK_STRAIN ?? '1') !== '0',
     site: String(env.HARVEST_WEBHOOK_SITE || '').trim(),
+    // Default off. On, the feed reports only what has been explicitly released
+    // for sale — which is nothing at all until someone enters the first amount.
+    // A silent switch to "nothing available" on upgrade would be worse than the
+    // problem it solves.
+    releaseMode: String(env.HARVEST_WEBHOOK_RELEASE_MODE || '0') === '1',
     timeoutMs: Math.max(1000, num(env.HARVEST_WEBHOOK_TIMEOUT_MS, 15000)),
     source: 'env'
   };
@@ -161,6 +173,7 @@ function storedConfig(row) {
     leadDays: Math.max(0, Number(row.leadDays) || 0),
     strain: row.strain !== false,
     site: String(row.site || '').trim(),
+    releaseMode: row.releaseMode === true,
     timeoutMs: 15000,
     source: 'db'
   };
@@ -192,6 +205,20 @@ function shiftDate(from, days) {
   const d = new Date(from.getTime());
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Today, in the machine's own timezone. Twin of localDay() in db.js.
+ *
+ * Deliberately not the UTC day the window arithmetic above uses. A window that
+ * ends two hours early costs nothing; a release does not expire until the end of
+ * the day someone typed, and east of Greenwich the UTC day ends first — "valid
+ * until Saturday" would keep selling into Sunday morning. The direction of the
+ * error is what decides this, not tidiness.
+ */
+function localDay(at) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}`;
 }
 
 /**
@@ -275,12 +302,31 @@ function buildPayload(database, cfg, now) {
   }
 
   const payload = {
-    version: VERSION,
+    version: cfg.releaseMode ? VERSION_RELEASE : VERSION,
     generatedAt: at.toISOString(),
     freshDays: cfg.freshDays,
     harvested,
     planned
   };
+
+  if (cfg.releaseMode) {
+    // A separate list, not a field on `harvested`. The two answer different
+    // questions — what came off the racks, and what may be sold — and only the
+    // first is production data. Keeping them apart also lets a release outlive
+    // its harvest window: set two kilos aside on Monday for a Saturday market
+    // and by Thursday the harvest has aged out of `freshDays`, while the crate
+    // is still standing there. The human who put it there is the better source.
+    payload.released = database
+      .prepare(
+        `SELECT species, grams, valid_until AS validUntil
+           FROM harvest_release
+          WHERE grams > 0 AND (valid_until IS NULL OR valid_until >= ?)
+          ORDER BY species`
+      )
+      .all(localDay(at))
+      .map((r) => trim({ species: r.species, grams: Math.round(r.grams), validUntil: r.validUntil || null }));
+  }
+
   if (cfg.site) payload.site = cfg.site;
   return payload;
 }
@@ -424,7 +470,19 @@ function stop() {
   timer = null;
 }
 
-module.exports = { readConfig, storedConfig, resolveConfig, buildPayload, sign, post, sendOnce, start, stop, VERSION };
+module.exports = {
+  readConfig,
+  storedConfig,
+  resolveConfig,
+  buildPayload,
+  sign,
+  post,
+  sendOnce,
+  start,
+  stop,
+  VERSION,
+  VERSION_RELEASE
+};
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 // `node harvest-feed.js --dry-run` prints exactly what would be posted, without
