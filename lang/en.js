@@ -417,6 +417,7 @@ window.LANG['en'] = {
   'dash.destFull': '{zone} would hold {n} bags, over its capacity of {cap}.',
   'rhythm.title': 'Weekly rhythm',
   'rhythm.edit': 'Edit weekly rhythm',
+  'rhythm.setQty': '+ Amount',
   'rhythm.targetEdit': 'Change the amount for this day',
   'rhythm.targetPrompt': 'How many on {date}? (changes this day only, not the weekly rhythm)',
   'rhythm.targetSaved': 'Amount saved for this day',
