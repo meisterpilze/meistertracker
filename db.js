@@ -1626,6 +1626,26 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE harvest_feed_config ADD COLUMN release_mode INTEGER DEFAULT 0');
       }
     }
+  },
+  {
+    version: 56,
+    description: 'Add week_rhythm so the working week has a shape instead of being purely reactive',
+    fn(db) {
+      // The dashboard could only answer "what is late", which makes every day a
+      // reaction to whatever the batches happen to be doing. The farm already
+      // runs to a rhythm — blocks early in the week, grain mid-week, moves to
+      // fruiting on Thursday — it just had nowhere to be written down.
+      //
+      // One row per weekday, keyed the way JavaScript's getDay() counts (0 =
+      // Sunday), so the client never has to translate. Nothing is seeded here:
+      // the editor proposes a rhythm from the farm's own history, and an empty
+      // table is exactly what tells it to do that rather than to trust a guess
+      // baked into a migration.
+      db.exec(`CREATE TABLE IF NOT EXISTS week_rhythm (
+      weekday INTEGER PRIMARY KEY CHECK (weekday BETWEEN 0 AND 6),
+      theme   TEXT NOT NULL
+    )`);
+    }
   }
 ];
 
@@ -2069,12 +2089,19 @@ function readAll(db, opts = {}) {
   // Barcodes
   const barcodes = getAllBarcodes(db);
 
+  // Weekday → theme. Sent as a plain object keyed by getDay() so the client can
+  // look a day up directly; an empty object means no rhythm has been set yet,
+  // which is what makes the editor offer one derived from history.
+  const weekRhythm = {};
+  for (const r of db.prepare('SELECT weekday, theme FROM week_rhythm').all()) weekRhythm[r.weekday] = r.theme;
+
   const version = getDataVersion(db);
   return {
     mushroomStrains,
     batches,
     scanLog,
     manualTasks,
+    weekRhythm,
     harvests,
     cultures,
     inventory,
@@ -4731,6 +4758,39 @@ function setZoneCapacity(db, id, cap) {
   return v;
 }
 
+// The themes a weekday can carry. Kept here rather than in the client so the
+// endpoint can reject a typo instead of storing a theme nothing renders.
+const WEEK_THEMES = ['substrate', 'grain', 'fruiting', 'harvest', 'lab', 'free'];
+
+// Replaces the whole week in one transaction. A partial update would let a
+// half-applied save leave two days claiming to be grain day, and the editor
+// always submits all seven anyway. Omitting a weekday clears it.
+function setWeekRhythm(db, map) {
+  if (!map || typeof map !== 'object' || Array.isArray(map))
+    throw new Error('Rhythm must be an object of weekday → theme');
+  const rows = [];
+  for (const k of Object.keys(map)) {
+    const day = Number(k);
+    if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error('Not a weekday: ' + k);
+    const theme = map[k];
+    if (theme === null || theme === undefined || theme === '') continue;
+    if (!WEEK_THEMES.includes(theme)) throw new Error('Unknown theme: ' + theme);
+    rows.push([day, theme]);
+  }
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM week_rhythm').run();
+    const ins = db.prepare('INSERT INTO week_rhythm(weekday, theme) VALUES(?, ?)');
+    for (const [day, theme] of rows) ins.run(day, theme);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return rows.length;
+}
+
 // -- Camera dashboard (admin WIP) --------------------------------------------
 const CAMERA_CALIB_FIELDS = [
   ['pxPerMm', 'px_per_mm', 'real'],
@@ -7205,6 +7265,8 @@ module.exports = {
   zoneExists,
   renameZoneName,
   setZoneCapacity,
+  setWeekRhythm,
+  WEEK_THEMES,
   zoneBagCount,
   rackBagCount,
   getMcpCfg,

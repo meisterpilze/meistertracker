@@ -328,7 +328,8 @@ let mushroomStrains = [],
   caldav = {},
   duckdns = {},
   zones = [],
-  suppliers = [];
+  suppliers = [],
+  weekRhythm = {};
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
 let barcodeRegistry = new Map(),
   barcodeByEntity = new Map();
@@ -466,6 +467,9 @@ function apiPost(path, body) {
 function apiPatch(path, body) {
   return _apiCall('PATCH', path, body);
 }
+function apiPut(path, body) {
+  return _apiCall('PUT', path, body);
+}
 function apiDelete(path) {
   return _apiCall('DELETE', path);
 }
@@ -563,6 +567,7 @@ function applyData(d) {
   calendarEvents = d.calendarEvents || [];
   zones = d.zones || [];
   suppliers = d.suppliers || [];
+  weekRhythm = d.weekRhythm || {};
   // Build barcode registry from server data
   barcodeRegistry = new Map();
   barcodeByEntity = new Map();
@@ -4312,91 +4317,12 @@ function dashTaskBtn(tk) {
   }
   return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
 }
-// One instruction row: how many bags, which batch, and what to do with them.
-// The bag count leads because it is what decides whether this is a two-minute
-// job or a twenty-minute one; the room and the timing drop to a muted second
-// line. tk is decorated with bags/instruction/where by the renderer, which has
-// the scan index needed to count bags (see renderDashBatchTasks).
-function dashTaskRowHtml(tk, where) {
-  // nowrap: a batch id broken across lines ("KO-" / "140426-01") is unreadable,
-  // and it is the one string a worker matches against a printed label.
-  const idHtml = `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${esc(tk.batchId)}" title="${esc(tk.batchId)}" style="white-space:nowrap">${esc(tk.batchId)}</span>`;
-  const bags = tk.bags ? `<strong>${tk.bags} ${esc(t('worklist.bags'))}</strong> ` : '';
-  const instr = tk.instruction ? ` <span style="color:var(--c-text-sec)">${esc(tk.instruction)}</span>` : '';
-  // Where it is now, then how late. The destination is NOT repeated here \u2014 it is
-  // the same tent for every move row, so it is stated once under the tab strip
-  // (see renderDashBatchTasks). Per row it pushed this line to a second wrap.
-  const meta = [where || tk.where, tk.detail]
-  return (
-    // flex-wrap plus a flex-basis on the text column: at phone width the buttons
-    // drop to their own right-aligned line instead of squeezing the text to
-    // ~150px; on desktop there is room and they stay inline as before.
-    '<div class="todo-row ' +
-    (tk.urgent ? 'urgent' : tk.warn ? 'warn' : '') +
-    '" style="padding:6px 8px;margin-bottom:3px;flex-wrap:wrap;gap:6px;--sp-color:' +
-    spColor(tk.species) +
-    '">' +
-    (tk.urgent
-      ? '<span class="pdot high" role="img" aria-label="' + esc(t('todo.priorityHigh')) + '"></span>'
-      : tk.warn
-        ? '<span class="pdot med" role="img" aria-label="' + esc(t('todo.priorityMed')) + '"></span>'
-        : '') +
-    '<div style="flex:1 1 190px;min-width:0"><div style="font-size:13px;font-weight:500">' +
-    bags +
-    idHtml +
-    instr +
-    '</div>' +
-    (meta ? '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' + meta + '</div>' : '') +
-    '</div>' +
-    '<div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0">' +
-    dashTaskBtn(tk) +
-    '</div>' +
-    '</div>'
-  );
-}
 // The urgency sections of the batch-tasks card, in the order a worker triages:
 // what is late, what is due today, what is coming, and what got left behind.
 // 'left' is not date-driven — it is bags of a batch still sitting a stage behind
 // the rest of it (see getSplitBatches), which is why it sits below the dated
 // sections instead of being forced into "today".
 const DASH_SECTIONS = ['overdue', 'today', 'week', 'left'];
-// Sections cap at this many rows with a "+N weitere" expander. Without it the
-// overdue section is the whole historical backlog — hundreds of bags of it — and
-// buries today's two real jobs off the bottom of a phone screen.
-const DASH_SECTION_CAP = 5;
-const _dashMore = {};
-function toggleDashMore(key) {
-  _dashMore[key] = !_dashMore[key];
-  renderDashBatchTasks();
-}
-// Which urgency tab is open, remembered across reloads: a worker who lives in
-// "Heute" should not have to re-pick it every time the dashboard re-renders.
-// No stored choice → the most urgent section that has rows (see renderDashBatchTasks).
-let _dashTabKey = null;
-function _dashTab() {
-  if (_dashTabKey === null) {
-    // Guarded like initDashCollapse and _msqLastQty: this runs on every render,
-    // so if storage is revoked mid-session (site data blocked, partitioned
-    // context, a backgrounded PWA evicted by iOS) an unguarded read would throw
-    // inside renderDashBatchTasks and abort every render queued after it.
-    try {
-      _dashTabKey = localStorage.getItem('mp-dash-tab') || '';
-    } catch (e) {
-      _dashTabKey = '';
-    }
-  }
-  return _dashTabKey;
-}
-function setDashTab(key) {
-  if (!DASH_SECTIONS.includes(key)) return;
-  _dashTabKey = key;
-  try {
-    localStorage.setItem('mp-dash-tab', key);
-  } catch (e) {
-    /* storage disabled — the choice just won't survive a reload */
-  }
-  renderDashBatchTasks();
-}
 // Which fruiting tent the one-tap moves target, remembered across reloads.
 //
 // This used to be _fruitingDest() alone: whichever tent something was last moved
@@ -4451,6 +4377,266 @@ function fruitingFill(zoneId, incoming) {
   const used = Object.keys(getZoneBags(zoneId)).length;
   return { used, cap, incoming: incoming || 0, over: used + (incoming || 0) > cap };
 }
+// How many rows a room shows before folding the rest away. Four keeps a busy
+// day inside a screen or two while still proving every room has work in it.
+const DASH_ROOM_CAP = 4;
+const _dashRoomOpen = {};
+function toggleDashRoom(key) {
+  _dashRoomOpen[key] = !_dashRoomOpen[key];
+  renderDashBatchTasks();
+}
+// ─── Weekly rhythm ──────────────────────────────────────────
+// Must stay in step with WEEK_THEMES in db.js, which rejects anything else.
+const WEEK_THEMES = ['substrate', 'grain', 'fruiting', 'harvest', 'lab', 'free'];
+// Weekdays in the order a working week reads, not the order getDay() numbers
+// them — Monday first, Sunday last, while the stored keys stay 0 = Sunday.
+const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0];
+function weekThemeLabel(theme) {
+  return theme ? t('rhythm.theme.' + theme) : t('rhythm.theme.none');
+}
+// Which theme a given weekday carries, or '' if the farm has not said.
+function themeOf(weekday) {
+  return weekRhythm[weekday] || weekRhythm[String(weekday)] || '';
+}
+// Propose a rhythm from what the farm already does, so the editor opens on a
+// draft to correct rather than seven empty rows to invent.
+//
+// Picking the busiest activity per day would just print "substrate" on every
+// weekday — blocks outnumber grain 1179 to 81, so they win everywhere. What
+// makes a day *characteristic* is the share of an activity that lands on it:
+// half of all grain runs happen on one weekday even though grain is rare. So
+// each day takes the activity most concentrated on it, and a day that holds no
+// meaningful share of anything is offered as free rather than mislabelled.
+function suggestWeekRhythm() {
+  const KINDS = ['substrate', 'grain', 'fruiting'];
+  const byDay = {};
+  const totals = { substrate: 0, grain: 0, fruiting: 0 };
+  for (let d = 0; d < 7; d++) byDay[d] = { substrate: 0, grain: 0, fruiting: 0 };
+  const typeOf = {};
+  for (const b of batches) typeOf[b.batchId] = b.batchType;
+  for (const e of scanLog) {
+    if (!e || !e.time) continue;
+    const dt = new Date(e.time);
+    if (isNaN(dt)) continue;
+    const d = dt.getDay();
+    let kind = null;
+    if (e.action === 'ADD') kind = typeOf[e.batch] === 'grain' ? 'grain' : 'substrate';
+    else if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      const z = ZONE_BY_ID[toZone(e.to)];
+      if (z && z.role === 'fruiting') kind = 'fruiting';
+    }
+    if (!kind) continue;
+    byDay[d][kind]++;
+    totals[kind]++;
+  }
+  // Share alone over-rewards rare work. Moves into a tent number 69 against
+  // 1179 block builds, so a Tuesday holding 20 moves scores a higher share
+  // (0.29) than the 314 blocks built the same day (0.27) — and Tuesday would be
+  // labelled a fruiting day when 94% of what happens on it is substrate.
+  //
+  // So share only decides when it decides clearly. A kind must lead the
+  // runner-up by half again to name the day; otherwise the day is named by what
+  // there is simply most of. That keeps Wednesday as grain day, where grain is
+  // genuinely concentrated (0.51 against 0.22), without letting a thin margin
+  // rename a day around twenty events.
+  const MARGIN = 1.5;
+  // A day holding almost nothing all year is offered as free rather than being
+  // given a theme on the strength of a handful of entries.
+  const QUIET = 0.1;
+  const dayTotal = (d) => KINDS.reduce((n, k) => n + byDay[d][k], 0);
+  let busiest = 0;
+  for (let d = 0; d < 7; d++) busiest = Math.max(busiest, dayTotal(d));
+
+  const out = {};
+  for (let d = 0; d < 7; d++) {
+    if (!busiest || dayTotal(d) < QUIET * busiest) {
+      out[d] = 'free';
+      continue;
+    }
+    const shares = KINDS.map((k) => ({ k, share: totals[k] ? byDay[d][k] / totals[k] : 0, n: byDay[d][k] })).sort(
+      (a, b) => b.share - a.share
+    );
+    const runnerUp = shares[1] ? shares[1].share : 0;
+    if (shares[0].share > 0 && shares[0].share >= runnerUp * MARGIN) out[d] = shares[0].k;
+    else out[d] = KINDS.reduce((best, k) => (byDay[d][k] > byDay[d][best] ? k : best), KINDS[0]);
+  }
+  return out;
+}
+// The next seven days, starting today, each with the work that lands on it.
+//
+// A rolling window rather than Monday-to-Sunday: a calendar week spends part of
+// itself in the past, and the first question this card exists to answer is what
+// to do now. Every weekday still appears exactly once, so the rhythm is just as
+// visible — today is simply the one at the top.
+//
+// Overdue work folds onto today. It is not Tuesday's job any more; it is this
+// morning's, and leaving it on the day it was missed would show an empty today
+// beside a backlog nobody is looking at.
+function buildWeekPlan() {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const lastByBag = buildLastScanByBag();
+  const days = [];
+  for (let off = 0; off < 7; off++) {
+    const date = new Date(midnight.getTime() + off * 864e5);
+    days.push({ offset: off, date, weekday: date.getDay(), theme: themeOf(date.getDay()), items: [] });
+  }
+  const put = (off, item) => days[Math.max(0, Math.min(6, off))].items.push(item);
+  const biggestZone = (counts) => {
+    let top = '';
+    for (const z in counts) if (!top || counts[z] > counts[top]) top = z;
+    return top;
+  };
+
+  for (const tk of buildAutoTasks()) {
+    const place = _dashTaskPlace(tk.batchId, lastByBag);
+    put(Math.max(0, tk.dueIn), {
+      kind: tk.taskAction === 'inoculate' ? 'grain' : 'fruiting',
+      batchId: tk.batchId,
+      label: tk.batchId,
+      detail: tk.detail,
+      bags: place.bags,
+      zone: biggestZone(place.counts),
+      overdue: tk.dueIn < 0,
+      ready: tk.ready,
+      // Carry the task itself so the row reuses dashTaskBtn, which already
+      // encodes every guard: never offer a tent to grain spawn, never offer a
+      // one-tap move to a batch that is not due yet, fall back to "Ansehen".
+      task: tk
+    });
+  }
+  for (const h of buildHarvestTasks()) {
+    // remaining > 0 means it is still filling out; anything at or past its target
+    // is work for today. No target at all means judge it by eye, so it is listed.
+    const off = h.remaining == null ? 0 : Math.max(0, h.remaining);
+    if (off > 6) continue;
+    put(off, {
+      kind: 'harvest',
+      batchId: h.batchId,
+      label: h.batchId,
+      detail: h.target ? t('todo.dueIn', { n: Math.max(0, h.remaining) }) : '',
+      bags: h.bagsInTent,
+      zone: (h.zoneIds && h.zoneIds[0]) || '',
+      overdue: h.target ? h.remaining < 0 : false,
+      ready: true,
+      task: h
+    });
+  }
+  // Bags a split left a stage behind: not dated, but they are not going to fix
+  // themselves either, so they belong in today's work rather than nowhere.
+  for (const r of _dashLeftBehindRows(getSplitBatches(lastByBag))) {
+    put(0, {
+      kind: 'left',
+      batchId: r.batchId,
+      label: r.batchId,
+      // These rows carry an instruction ("still in incubation") rather than a
+      // due date, and offer no one-tap move — the split has to be looked at.
+      detail: r.instruction || r.detail || '',
+      bags: r.bags || 0,
+      zone: '',
+      overdue: false,
+      ready: false,
+      task: null
+    });
+  }
+  for (const mt of manualTasks) {
+    if (!mt || mt.done || !mt.dueDate) continue;
+    const due = new Date(mt.dueDate);
+    if (isNaN(due)) continue;
+    due.setHours(0, 0, 0, 0);
+    const off = Math.round((due - midnight) / 864e5);
+    if (off > 6) continue;
+    put(Math.max(0, off), {
+      kind: 'manual',
+      taskId: mt.id,
+      label: mt.text || '',
+      detail: '',
+      bags: 0,
+      zone: '',
+      overdue: off < 0,
+      ready: true,
+      task: mt
+    });
+  }
+  return days;
+}
+// How much of today is already behind you. Generated work vanishes as it is
+// done — a moved batch simply stops being a task — so a bare "N left" can only
+// ever shrink and never reads as progress. Counting what was actually recorded
+// today gives the denominator something to move against.
+function todayProgress(todayItems) {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  let done = 0;
+  for (const e of scanLog) {
+    if (!e || !e.time) continue;
+    const dt = new Date(e.time);
+    if (isNaN(dt) || dt < midnight) continue;
+    if (e.action === 'ADD') done++;
+    else if ((e.action === 'MOVE' || e.action === 'MOVE_BATCH') && e.to) {
+      const z = ZONE_BY_ID[toZone(e.to)];
+      if (z && z.role === 'fruiting') done++;
+    }
+  }
+  for (const h of harvests) {
+    if (!h || !h.time) continue;
+    const dt = new Date(h.time);
+    if (!isNaN(dt) && dt >= midnight) done++;
+  }
+  for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
+  return { done, total: done + todayItems.length };
+}
+// The editor. Opens on the saved week, or — the first time, when nothing has
+// been saved — on the one derived from the farm's own history, so the first
+// interaction is correcting a draft rather than filling in seven blanks.
+function openRhythmEditor() {
+  const modal = document.getElementById('m-rhythm');
+  const rows = document.getElementById('rhythm-rows');
+  const hint = document.getElementById('rhythm-hint');
+  if (!modal || !rows) return;
+  const saved = Object.keys(weekRhythm).length > 0;
+  const start = saved ? {} : suggestWeekRhythm();
+  if (saved) for (let d = 0; d < 7; d++) start[d] = themeOf(d);
+  if (hint) hint.textContent = saved ? '' : t('rhythm.suggested');
+  rows.innerHTML = WEEK_DAYS.map((d) => {
+    const sel = start[d] || 'free';
+    const opts = WEEK_THEMES.map(
+      (k) => `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(weekThemeLabel(k))}</option>`
+    ).join('');
+    return (
+      `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
+      `<span style="width:38px;flex-shrink:0;font-size:13px">${esc(t('rhythm.day.' + d))}</span>` +
+      `<select data-rhythm-day="${d}" style="flex:1;padding:5px">${opts}</select>` +
+      `</label>`
+    );
+  }).join('');
+  modal.hidden = false;
+}
+function closeRhythmEditor() {
+  const m = document.getElementById('m-rhythm');
+  if (m) m.hidden = true;
+}
+function saveRhythmEditor() {
+  const rows = document.getElementById('rhythm-rows');
+  if (!rows) return;
+  const map = {};
+  rows.querySelectorAll('select[data-rhythm-day]').forEach((s) => {
+    // 'free' is stored, not omitted: a day deliberately kept clear is a real
+    // answer, and dropping it would look identical to never having decided —
+    // which is what makes the editor offer a suggestion again.
+    map[s.getAttribute('data-rhythm-day')] = s.value;
+  });
+  apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
+    if (res && res.error) {
+      alert(res.error);
+      return;
+    }
+    weekRhythm = map;
+    closeRhythmEditor();
+    setFb('ok', t('rhythm.saved'));
+    renderDashBatchTasks();
+  });
+}
 // Bags of this batch that are actually placed somewhere, plus the per-zone
 // breakdown the row label needs. Returns counts rather than a formatted room so
 // the (linear) zoneDisplayName lookup happens only for the rows actually shown.
@@ -4460,23 +4646,6 @@ function _dashTaskPlace(batchId, lastByBag) {
   let bags = 0;
   for (const z in counts) bags += counts[z];
   return { bags, counts };
-}
-// "Where do I walk to." bags counts every placed bag of the batch, because that
-// is what a whole-batch move moves \u2014 but naming only the biggest room told the
-// worker to fetch N bags from a room holding fewer. When the batch straddles
-// rooms, say so and give the split.
-function _dashTaskWhere(counts) {
-  const zoneIds = Object.keys(counts);
-  if (!zoneIds.length) return '';
-  let top = zoneIds[0];
-  let total = 0;
-  for (const z of zoneIds) {
-    total += counts[z];
-    if (counts[z] > counts[top]) top = z;
-  }
-  const name = zoneDisplayName(top);
-  if (zoneIds.length === 1) return name;
-  return t('dash.bagsSplitAcross', { n: counts[top], zone: name, rest: total - counts[top] });
 }
 // Turns the "bags left behind" splits into rows shaped like every other row, so
 // the section reads the same way: N bags of a batch, still one stage back, with
@@ -4517,174 +4686,275 @@ function _dashLeftBehindRows(splits) {
 function renderDashBatchTasks() {
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
-  // Cheapest possible empty path: buildAutoTasks touches no scan log and
-  // getSplitBatches is the only walk needed to know there is nothing to show, so
-  // an idle farm never pays for the scan index or the fruiting-destination walk.
-  const auto = buildAutoTasks();
-  const lastByBag = buildLastScanByBag();
-  const splits = getSplitBatches(lastByBag);
-  if (!auto.length && !splits.length) {
+  const week = buildWeekPlan();
+  const today = week[0];
+  const anyWork = week.some((d) => d.items.length);
+  const prog = todayProgress(today.items);
+
+  // The rhythm is worth showing even on a quiet day — an empty week that still
+  // says which day is grain day is the point of the card. But a farm with no
+  // rhythm set AND no work has nothing to say, so it stays out of the way.
+  const hasRhythm = Object.keys(weekRhythm).length > 0;
+  if (!anyWork && !hasRhythm) {
     el.innerHTML =
       '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
       esc(t('dash.noUrgent')) +
-      '</div>';
+      '</div>' +
+      _rhythmEditLink();
     return;
   }
-  const rows = auto.map((tk) => {
-    const p = _dashTaskPlace(tk.batchId, lastByBag);
-    return Object.assign({}, tk, {
-      bags: p.bags,
-      counts: p.counts,
-      // Grain says what state it is in ("durchwachsen") because its button only
-      // names the action. A move row says nothing extra: its button is the
-      // instruction and the destination is stated once under the tabs.
-      instruction: tk.taskAction === 'inoculate' ? t('dash.grainReady') : ''
-    });
-  });
-  rows.push(..._dashLeftBehindRows(splits));
-  const bySection = {};
-  for (const key of DASH_SECTIONS) {
-    const mine = rows.filter((r) => r.bucket === key);
-    if (mine.length) bySection[key] = mine;
+
+  el.innerHTML =
+    week.map((d, i) => (i === 0 ? _dashTodayHtml(d, prog) : _dashDayRowHtml(d))).join('') + _rhythmEditLink();
+}
+function _rhythmEditLink() {
+  return (
+    '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--c-border)">' +
+    '<button type="button" data-action="edit-rhythm" style="border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec)">' +
+    esc(t('rhythm.edit')) +
+    '</button></div>'
+  );
+}
+// A collapsed day: name, theme, and how much lands on it. Deliberately not a
+// task list — the point of the other six rows is to show the shape of the week
+// and where the load sits, not to be read item by item.
+function _dashDayRowHtml(d) {
+  const themed = d.theme && d.theme !== 'free';
+  const n = d.items.length;
+  return (
+    '<div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--c-border)">' +
+    '<span style="width:26px;flex-shrink:0;font-size:11.5px;color:var(--c-text-sec)">' +
+    esc(t('rhythm.day.' + d.weekday)) +
+    '</span>' +
+    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:' +
+    (themed ? 'var(--c-text)' : 'var(--c-text-muted)') +
+    '">' +
+    esc(weekThemeLabel(d.theme)) +
+    '</span>' +
+    '<span style="font-size:11.5px;color:var(--c-text-muted)">' +
+    (n || '') +
+    '</span>' +
+    '</div>'
+  );
+}
+// Today, opened out as a run sheet. Grouped by room in the order the zones are
+// sorted, which is the order you physically walk them — so the list can be
+// worked top to bottom instead of criss-crossing the site.
+function _dashTodayHtml(d, prog) {
+  const order = {};
+  zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
+  const groups = {};
+  for (const it of d.items) {
+    const key = it.zone || '';
+    (groups[key] = groups[key] || []).push(it);
   }
-  const live = DASH_SECTIONS.filter((k) => bySection[k]);
-  // A remembered tab that has emptied out (its work got done) falls back to the
-  // most urgent section that still has rows. Writing the fallback back into
-  // _dashTabKey is what stops a background re-render moving the tab under a
-  // worker mid-task: without it the screen showed the fallback while memory still
-  // held the stored choice, so the moment that section repopulated (a 30s poll, a
-  // colleague's scan, midnight) the card silently jumped to it. Only an explicit
-  // tap reaches setDashTab and persists; this assignment is in-memory only, so a
-  // fresh load still honours what the worker actually chose.
-  const active = live.includes(_dashTab()) ? _dashTab() : live[0];
-  _dashTabKey = active;
+  const keys = Object.keys(groups).sort((a, b) => {
+    // Everything without a room sinks to the bottom: it is not part of the walk.
+    if (!a) return 1;
+    if (!b) return -1;
+    return (order[a] == null ? 999 : order[a]) - (order[b] == null ? 999 : order[b]);
+  });
+  const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
 
-  const tabs =
-    '<div role="tablist" style="display:flex;gap:4px;margin-bottom:9px">' +
-    live
-      .map((key) => {
-        const on = key === active;
-        const bags = bySection[key].reduce((n, r) => n + (r.bags || 0), 0);
-        const accent = key === 'overdue' ? 'var(--c-red-dark)' : 'var(--c-text-sec)';
-        return (
-          `<button type="button" role="tab" aria-selected="${on}" data-action="dash-tab" data-key="${key}" ` +
-          `style="flex:1;min-width:0;padding:5px 2px 6px;border:1px solid ${on ? 'var(--c-border)' : 'transparent'};` +
-          `border-bottom:2px solid ${on ? accent : 'var(--c-border)'};border-radius:7px 7px 0 0;` +
-          `background:${on ? 'var(--c-surface)' : 'transparent'};cursor:pointer;font-family:inherit;line-height:1.15">` +
-          `<span style="display:block;font-size:15px;font-weight:700;color:${on ? accent : 'var(--c-text-sec)'}">${bags}</span>` +
-          `<span style="display:block;font-size:9.5px;font-weight:600;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t('dash.tab.' + key))}</span>` +
-          '</button>'
-        );
-      })
-      .join('') +
+  let html =
+    '<div style="padding:2px 0 8px">' +
+    '<div style="display:flex;align-items:baseline;gap:8px">' +
+    '<span style="font-size:14px;font-weight:600">' +
+    esc(t('rhythm.day.' + d.weekday)) +
+    ' · ' +
+    esc(t('rhythm.today')) +
+    '</span>' +
+    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--c-text-sec)">' +
+    esc(weekThemeLabel(d.theme)) +
+    '</span>' +
     '</div>';
+  if (prog.total) {
+    html +=
+      '<div style="display:flex;align-items:center;gap:6px;margin:6px 0 2px">' +
+      '<div style="flex:1;height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">' +
+      '<div style="width:' +
+      pct +
+      '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
+      '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+      prog.done +
+      '/' +
+      prog.total +
+      '</span>' +
+      '</div>';
+  }
+  html += '</div>';
 
-  const mine = bySection[active];
-  // Sort only the section being rendered. The left-behind bucket arrives already
-  // ordered by getSplitBatches (stale first, then most bags behind) \u2014 re-sorting it
-  // here by bags alone dropped the stale-first half and folded the very rows the
-  // card flags as stale in behind the "+N weitere".
-  if (active !== 'left') mine.sort((a, b) => a.dueIn - b.dueIn);
-  // An expand flag is invisible while the section fits under the cap, so it could
-  // not be cleared from the UI and silently re-applied to a later, larger set of
-  // rows \u2014 defeating the cap it was expanded past. Drop it the moment it stops
-  // being reachable.
-  if (mine.length <= DASH_SECTION_CAP) delete _dashMore[active];
-  const open = _dashMore[active];
-  const shown = open ? mine : mine.slice(0, DASH_SECTION_CAP);
-  const hidden = mine.length - shown.length;
-  // Only rows that are actually due get a move offered, so the destination hint
-  // and the bulk pill follow the same rule as the per-row buttons.
-  const movable = mine.filter((r) => r.taskAction === 'move' && r.ready);
-  // every(), not some(): one move row must not put "\u2192 Fruchtzelt" above a grain
-  // row, whose whole point is that sending it to a tent skips a growth stage.
-  const allMove = mine.length > 0 && movable.length === mine.length;
+  if (!d.items.length) {
+    return (
+      html +
+      '<div style="padding:6px 0 10px;font-size:12px;color:var(--c-text-muted)">' +
+      esc(t('rhythm.nothing')) +
+      '</div>'
+    );
+  }
+  html += _fruitingTargetHtml(d.items);
+  let step = 0;
+  for (const k of keys) {
+    step++;
+    const name = k ? zoneDisplayName(k) : t('rhythm.other');
+    html +=
+      '<div style="font-size:11px;font-weight:600;color:var(--c-text-sec);margin:8px 0 3px">' +
+      step +
+      ' · ' +
+      esc(name) +
+      '</div>';
+    // Capped per room, not across the day. A backlog of 109 printed in full is
+    // nine phone screens — the exact complaint the tabs were meant to fix. But a
+    // single global cap would swallow whole rooms, and a room you cannot see is
+    // a room you will not walk. So every room stays on screen, showing its first
+    // few, and says out loud how many it is holding back.
+    const list = _dashRoomOpen[k || '_'] ? groups[k] : groups[k].slice(0, DASH_ROOM_CAP);
+    for (const it of list) html += _dashPlanRowHtml(it);
+    const hidden = groups[k].length - list.length;
+    if (hidden > 0 || _dashRoomOpen[k || '_']) {
+      html +=
+        '<button type="button" data-action="dash-room-more" data-room="' +
+        esc(k || '_') +
+        '" aria-expanded="' +
+        !!_dashRoomOpen[k || '_'] +
+        '" style="border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;font-size:11.5px;color:var(--c-text-sec)">' +
+        esc(hidden > 0 ? '+ ' + t('dash.moreRows', { n: hidden }) : '− ' + t('dash.fewerRows')) +
+        '</button>';
+    }
+  }
+  return html;
+}
+function _dashPlanRowHtml(it) {
+  const btn = _planBtn(it);
+  const meta = [it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean).join(' · ');
+  return (
+    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0' +
+    (it.overdue ? ';--sp-color:var(--c-red-dark)' : '') +
+    '">' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    esc(it.label) +
+    '</div>' +
+    (meta ? '<div style="font-size:11px;color:var(--c-text-muted)">' + esc(meta) + '</div>' : '') +
+    '</div>' +
+    btn +
+    '</div>'
+  );
+}
+// Which tent today's moves are heading for, stated once above the rows and
+// switchable. Only shown when something on the day can actually move there, and
+// never on a day that also holds grain rows — naming a tent beside grain invites
+// sending it there, which skips a growth stage.
+function _fruitingTargetHtml(items) {
   const dest = fruitingTarget();
-  const destName = dest ? zoneDisplayName(dest) : '';
-  // A whole-section "Alle \u2192 Fruchtung" only where the count is small enough to
-  // be a considered tap. Deliberately not on the overdue section: one tap
-  // moving the entire backlog is a foot-gun, undoable only via the snackbar.
-  // allMove is still required here even though the destination no longer depends
-  // on it: bulkSectionToFruiting skips grain rows, so on a mixed section the pill
-  // would promise "Alle" and quietly move only some of them.
-  const bulkable = (active === 'today' || active === 'week') && allMove && !!dest && mine.length > 1;
-  const bulkPill = bulkable
-    ? `<button type="button" class="btn btn-sm btn-p" data-action="bulk-fruiting" data-bucket="${active}" style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0">${esc(t('dash.bulkFruiting'))}</button>`
-    : '';
-  // The destination is the same tent for every move row, so it is stated once
-  // here instead of on each row, where it wrapped every meta line.
-  //
-  // Shown whenever at least one row can actually move, not only when every row
-  // can. The old rule hid it on any mixed section \u2014 which is most of them \u2014 so
-  // the target was invisible in exactly the case where it is least obvious. The
-  // label names the move explicitly, so it cannot be read as applying to a grain
-  // row sitting next to it.
+  const movable = items.filter((x) => x.kind === 'fruiting' && x.ready);
+  const hasGrain = items.some((x) => x.kind === 'grain');
+  if (!dest || hasGrain || !movable.length) return '';
   const tents = fruitingZones();
-  // allMove bundled two rules: no grain rows on the tab, and every row already
-  // due. Only the first is a safety rule — naming the tent next to a grain row
-  // invites sending it there, which skips a growth stage. The second just hid
-  // the target on any tab mixing due and not-yet-due moves, which is most of
-  // them, so the tent was invisible almost always. A move that is not due yet
-  // still goes to the same tent, so keep the grain rule and drop the other.
-  const hasGrain = mine.some((r) => r.taskAction === 'inoculate');
-  const canMove = !hasGrain && mine.some((r) => r.taskAction === 'move') && !!dest;
-  // Only the rows that would actually move count toward filling the tent.
   let incoming = 0;
-  if (canMove) for (const r of movable) for (const z in r.counts || {}) incoming += r.counts[z];
-  const fill = canMove ? fruitingFill(dest, incoming) : null;
-  const destPick = !canMove
-    ? ''
-    : tents.length > 1
-      ? `<span style="font-size:10.5px;color:var(--c-text-muted);flex-shrink:0">${esc(t('dash.destLabel'))}</span>` +
-        // Wraps rather than scrolls. Four tents come to ~400px of chips against
-        // ~306px of usable width on a 375px phone, so a scroll strip pushed the
-        // last tent off-screen — hiding an option is the very thing the chips
-        // exist to stop. One extra 22px line is the cheaper trade.
-        `<span role="group" aria-label="${esc(t('dash.destLabel'))}" style="display:flex;flex-wrap:wrap;gap:4px;min-width:0">` +
-        tents
-          .map((z) => {
-            const on = z.id === dest;
-            const zf = z.maxCapacity ? fruitingFill(z.id, on ? incoming : 0) : null;
-            return (
-              `<button type="button" data-action="dash-dest" data-zone="${esc(z.id)}" aria-pressed="${on}" ` +
-              `title="${esc(z.name)}${zf ? ' \u2014 ' + zf.used + '/' + zf.cap : ''}" ` +
-              `style="flex:0 0 auto;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;` +
-              `border:1px solid ${on ? 'var(--c-accent)' : 'var(--c-border)'};background:${on ? 'var(--c-accent)' : 'transparent'};color:${on ? '#fff' : 'var(--c-text-sec)'}">` +
-              esc(z.name) +
-              (zf ? `<span style="opacity:.75"> ${zf.used}/${zf.cap}</span>` : '') +
-              '</button>'
-            );
-          })
-          .join('') +
-        '</span>'
-      : `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2192 ${esc(destName)}${fill ? ' ' + fill.used + '/' + fill.cap : ''}</span>`;
-  // Only ever a warning: a tent with no capacity recorded says nothing, and one
-  // that is over capacity still moves. The grower decides what fits.
-  const overWarn =
+  for (const m of movable) incoming += m.bags || 0;
+  const fill = fruitingFill(dest, incoming);
+  const warn =
     fill && fill.over
-      ? `<div style="font-size:10.5px;color:var(--c-red-dark);margin-bottom:6px">\u26a0 ${esc(t('dash.destFull', { zone: destName, n: fill.used + fill.incoming, cap: fill.cap }))}</div>`
+      ? '<div style="font-size:10.5px;color:var(--c-red-dark);margin-bottom:4px">⚠ ' +
+        esc(t('dash.destFull', { zone: zoneDisplayName(dest), n: fill.used + fill.incoming, cap: fill.cap })) +
+        '</div>'
       : '';
-  const bulk =
-    destPick || bulkPill
-      ? '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px">' +
-        destPick +
-        '<span style="flex:1"></span>' +
-        bulkPill +
-        '</div>' +
-        overWarn
-      : '';
-  // Never silently truncate: the expander states how many rows are folded away.
-  // A real <button> so the folded rows are reachable by keyboard and announced by
-  // assistive tech \u2014 as a <div> they were unreachable by anything but a tap.
-  const moreLabel = hidden
-    ? '+ ' + t('dash.moreRows', { n: hidden })
-    : open && mine.length > DASH_SECTION_CAP
-      ? '\u2212 ' + t('dash.fewerRows')
-      : '';
-  const more = moreLabel
-    ? `<button type="button" class="btn btn-sm" data-action="dash-more" data-key="${active}" aria-expanded="${!!open}" style="font-size:11.5px;padding:4px 8px;border:0;background:none;color:var(--c-text-sec);font-family:inherit">${esc(moreLabel)}</button>`
-    : '';
-  el.innerHTML = tabs + bulk + shown.map((r) => dashTaskRowHtml(r, _dashTaskWhere(r.counts || {}))).join('') + more;
+  if (tents.length < 2) {
+    return (
+      '<div style="font-size:10.5px;color:var(--c-text-muted);margin:6px 0 2px">→ ' +
+      esc(zoneDisplayName(dest)) +
+      (fill ? ' ' + fill.used + '/' + fill.cap : '') +
+      '</div>' +
+      warn
+    );
+  }
+  // Wraps rather than scrolls: four tents overflow a phone, and a tent pushed
+  // off-screen is a tent nobody picks.
+  const chips = tents
+    .map((z) => {
+      const on = z.id === dest;
+      const zf = z.maxCapacity ? fruitingFill(z.id, on ? incoming : 0) : null;
+      return (
+        '<button type="button" data-action="dash-dest" data-zone="' +
+        esc(z.id) +
+        '" aria-pressed="' +
+        on +
+        '" title="' +
+        esc(z.name) +
+        '" style="flex:0 0 auto;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+        (on ? 'var(--c-accent)' : 'var(--c-border)') +
+        ';background:' +
+        (on ? 'var(--c-accent)' : 'transparent') +
+        ';color:' +
+        (on ? '#fff' : 'var(--c-text-sec)') +
+        '">' +
+        esc(z.name) +
+        (zf ? '<span style="opacity:.75"> ' + zf.used + '/' + zf.cap + '</span>' : '') +
+        '</button>'
+      );
+    })
+    .join('');
+  return (
+    '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 2px">' +
+    '<span style="font-size:10.5px;color:var(--c-text-muted);flex-shrink:0">' +
+    esc(t('dash.destLabel')) +
+    '</span>' +
+    '<span role="group" aria-label="' +
+    esc(t('dash.destLabel')) +
+    '" style="display:flex;flex-wrap:wrap;gap:4px;min-width:0">' +
+    chips +
+    '</span>' +
+    _bulkPillHtml(movable) +
+    '</div>' +
+    warn
+  );
+}
+// "Alle → Fruchtung" for today, kept from the old card. Only when there is more
+// than one, and only on today: a one-tap that moves a whole backlog is undoable
+// for eight seconds and no longer. bulkSectionToFruiting('today') already sweeps
+// overdue in with today, which is exactly how the week plan buckets them.
+function _bulkPillHtml(movable) {
+  if (movable.length < 2) return '';
+  return (
+    '<button type="button" class="btn btn-sm btn-p" data-action="bulk-fruiting" data-bucket="today" ' +
+    'style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0;margin-left:auto">' +
+    esc(t('dash.bulkFruiting')) +
+    '</button>'
+  );
+}
+// Each kind keeps the button it already had elsewhere on the dashboard, rather
+// than a new one invented for this card. Batch work goes through dashTaskBtn so
+// its guards travel with it; a harvest opens the batch where the flush is
+// logged; a manual task toggles done.
+function _planBtn(it) {
+  const id = esc(it.batchId || '');
+  if (it.kind === 'fruiting' || it.kind === 'grain') return it.task ? dashTaskBtn(it.task) : '';
+  if (it.kind === 'harvest') {
+    return (
+      '<button class="btn btn-sm" data-action="go-to-batch" data-batch="' +
+      id +
+      '" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
+      esc(t('harvest.logHarvest')) +
+      '</button>'
+    );
+  }
+  if (it.kind === 'manual') {
+    return (
+      '<button class="btn btn-sm" data-action="toggle-task" data-id="' +
+      esc(String(it.taskId || '')) +
+      '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+      esc(t('calDetail.markDone')) +
+      '</button>'
+    );
+  }
+  return (
+    '<button class="btn btn-sm" data-action="go-to-batch" data-batch="' +
+    id +
+    '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+    esc(t('dash.view')) +
+    '</button>'
+  );
 }
 // One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
@@ -4932,6 +5202,9 @@ function buildHarvestTasks() {
         bagsInTent,
         elsewhere: activeBags - bagsInTent,
         zoneLabel,
+        // Already computed for the label; exposed so the day plan can group a
+        // harvest under the room you actually walk to rather than re-deriving it.
+        zoneIds,
         daysInTent,
         target,
         remaining: target ? target - daysInTent : null,
@@ -18119,6 +18392,8 @@ function initEventListeners() {
       e.target.value = '';
     });
   $('btn-add-zone').addEventListener('click', addZone);
+  $('rhythm-cancel').addEventListener('click', closeRhythmEditor);
+  $('rhythm-save').addEventListener('click', saveRhythmEditor);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
     const c = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981', contaminated: '#ef4444' }[this.value];
@@ -18202,16 +18477,16 @@ function initEventListeners() {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const action = el.dataset.action;
-    if (action === 'dash-tab') {
-      setDashTab(el.dataset.key);
-      return;
-    }
     if (action === 'dash-dest') {
       setFruitingTarget(el.dataset.zone);
       return;
     }
-    if (action === 'dash-more') {
-      toggleDashMore(el.dataset.key);
+    if (action === 'edit-rhythm') {
+      openRhythmEditor();
+      return;
+    }
+    if (action === 'dash-room-more') {
+      toggleDashRoom(el.dataset.room);
       return;
     }
     if (action === 'bulk-fruiting') {
