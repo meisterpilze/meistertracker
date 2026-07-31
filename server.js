@@ -8275,7 +8275,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         )
         .all(since)
         .map((r) => ({ species: r.species, grams: Math.round(r.grams), last: r.last }));
-      jsonOk(res, { releaseMode: cfg.releaseMode, freshDays: days, releases: db.listHarvestReleases(database), recent });
+      jsonOk(res, {
+        releaseMode: cfg.releaseMode,
+        freshDays: days,
+        releases: db.listHarvestReleases(database),
+        recent
+      });
     } catch (err) {
       safeErr(res, err);
     }

@@ -1626,7 +1626,10 @@ describe('db – harvest releases', () => {
     // valid_until is compared as a string. '1.8.2026' sorts before every
     // ISO date there is, so a release stored that way is expired the moment it
     // is written — silently, and looking perfectly fine in the form.
-    assert.throws(() => db.setHarvestRelease(d, { species: 'Oyster', grams: 100, validUntil: '1.8.2026' }), /validUntil/);
+    assert.throws(
+      () => db.setHarvestRelease(d, { species: 'Oyster', grams: 100, validUntil: '1.8.2026' }),
+      /validUntil/
+    );
   });
 
   it('refuses a negative amount', () => {
