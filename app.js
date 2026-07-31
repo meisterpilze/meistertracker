@@ -5017,14 +5017,42 @@ function countByCategory(items) {
 // Counts per category rather than a list of ids. In a 170px column four
 // truncated batch ids say almost nothing; "3 Umziehen · 2 Ernten" says what the
 // day is. The ids are in the open day, where there is room for them.
+// The one control for changing what a day asks for, used everywhere the amount
+// is shown. Carries its affordance with it: a dashed underline and a pencil, so
+// it reads as something you can change rather than a number somebody decided.
+function _rhythmTargetBtn(date, target, label) {
+  return (
+    '<button type="button" data-action="rhythm-target" data-date="' +
+    esc(date) +
+    '" data-target="' +
+    target +
+    '" title="' +
+    esc(t('rhythm.targetEdit')) +
+    '" style="display:block;max-width:100%;text-align:left;border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:inherit;font-weight:600;color:inherit;' +
+    'border-bottom:1px dashed var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    esc(label) +
+    ' <span aria-hidden="true" style="color:var(--c-text-muted);font-weight:400">✎</span></button>'
+  );
+}
 function _weekColPreviewHtml(d) {
   const task = rhythmTaskOn(d.date);
   let html = '';
+  // The amount is editable on every day it appears, not only the open one. It
+  // used to be plain text here and a borderless button there, so it read as a
+  // fixed number in both places — an edit nobody can find is the same as no
+  // edit at all.
   if (task && task.targetQty) {
     const ms = task.strainId ? mushroomStrains.find((m) => m.id === task.strainId) : null;
     html +=
-      '<div style="padding:3px 2px;border-left:2px solid var(--c-accent);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">' +
-      esc(task.targetQty + (ms ? '× ' + ms.name : '')) +
+      '<div style="padding:3px 2px;border-left:2px solid var(--c-accent);margin-bottom:3px">' +
+      _rhythmTargetBtn(task.date, task.targetQty, task.targetQty + (ms ? '× ' + ms.name : '')) +
+      '</div>';
+  } else if (themeFor(d.weekday).theme && themeFor(d.weekday).theme !== 'free') {
+    // A themed day with no amount yet still needs a way in, or the first number
+    // can only ever be set through the recurring editor.
+    html +=
+      '<div style="padding:3px 2px;margin-bottom:3px">' +
+      _rhythmTargetBtn(_ymd(d.date), 0, t('rhythm.setQty')) +
       '</div>';
   }
   if (!d.items.length && !html) {
@@ -5157,16 +5185,8 @@ function _rhythmTaskRowHtml(task, outstanding) {
     // The amount is the thing that changes week to week, so it is the thing you
     // can tap. Editing it here changes this date only — the recurring rhythm is
     // the usual amount, and one busy Monday must not rewrite every Monday after.
-    '<div style="flex:1;min-width:0">' +
-    '<button type="button" data-action="rhythm-target" data-date="' +
-    esc(task.date) +
-    '" data-target="' +
-    target +
-    '" title="' +
-    esc(t('rhythm.targetEdit')) +
-    '" style="display:block;width:100%;text-align:left;border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:12px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-    esc(label) +
-    '</button>' +
+    '<div style="flex:1;min-width:0;font-size:12px">' +
+    _rhythmTargetBtn(task.date, target, label) +
     '<div style="font-size:11px;color:' +
     (late ? 'var(--c-red-dark)' : 'var(--c-text-muted)') +
     '">' +

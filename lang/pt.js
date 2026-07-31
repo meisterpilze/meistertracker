@@ -299,6 +299,7 @@ window.LANG['pt'] = {
   'dash.destFull': '{zone} ficaria com {n} sacos, acima da capacidade de {cap}.',
   'rhythm.title': 'Ritmo semanal',
   'rhythm.edit': 'Editar ritmo semanal',
+  'rhythm.setQty': '+ Quantidade',
   'rhythm.targetEdit': 'Alterar a quantidade deste dia',
   'rhythm.targetPrompt': 'Quantos em {date}? (altera só este dia, não o ritmo semanal)',
   'rhythm.targetSaved': 'Quantidade guardada para este dia',
