@@ -1672,6 +1672,36 @@ const MIGRATIONS = [
       if (!cols.includes('strain_id')) db.exec('ALTER TABLE week_rhythm ADD COLUMN strain_id INTEGER');
       if (!cols.includes('note')) db.exec('ALTER TABLE week_rhythm ADD COLUMN note TEXT');
     }
+  },
+  {
+    version: 58,
+    description: 'Track what a rhythm day actually produced, so unfinished work carries to the next day',
+    fn(db) {
+      // week_rhythm is a template: "Mondays are 45 blocks of Lions Mane". It
+      // says nothing about whether last Monday's 45 got made, so a day that was
+      // missed simply vanished — the card showed the same 45 again the following
+      // week and nobody was any wiser.
+      //
+      // One row per date, and the plan is COPIED onto it rather than read back
+      // through the template. That is the whole point: editing Monday from 45 to
+      // 30 must not retroactively decide that last Monday was met. What was
+      // asked for on a date is a fact about that date.
+      //
+      // done_qty is a count, not a flag, because a half-finished day is the
+      // normal case — 30 of 45 made, 15 carried forward.
+      db.exec(`CREATE TABLE IF NOT EXISTS rhythm_task (
+      date       TEXT PRIMARY KEY,
+      weekday    INTEGER NOT NULL,
+      theme      TEXT NOT NULL,
+      target_qty INTEGER,
+      strain_id  INTEGER,
+      note       TEXT,
+      done_qty   INTEGER NOT NULL DEFAULT 0,
+      created    TEXT NOT NULL,
+      updated    TEXT
+    )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_rhythm_task_date ON rhythm_task(date)');
+    }
   }
 ];
 
@@ -2118,6 +2148,14 @@ function readAll(db, opts = {}) {
   // Weekday → {theme, targetQty, strainId, note}, keyed by getDay() so the
   // client can look a day up directly. An empty object means no rhythm has been
   // set yet, which is what makes the editor offer one derived from history.
+  // Snapshot any past day the rhythm applied to before reading them back, so a
+  // day that was missed is a row that can carry forward rather than a gap.
+  try {
+    ensureRhythmTasks(db);
+  } catch (e) {
+    // A read must not fail because a snapshot could not be written.
+  }
+  const rhythmTasks = listRhythmTasks(db);
   const weekRhythm = {};
   for (const r of db.prepare('SELECT weekday, theme, target_qty, strain_id, note FROM week_rhythm').all()) {
     weekRhythm[r.weekday] = {
@@ -2135,6 +2173,7 @@ function readAll(db, opts = {}) {
     scanLog,
     manualTasks,
     weekRhythm,
+    rhythmTasks,
     harvests,
     cultures,
     inventory,
@@ -4847,6 +4886,83 @@ function setWeekRhythm(db, map) {
   return rows.length;
 }
 
+// How far back a missed day is still chased. Two weeks is long enough that a
+// holiday does not quietly erase the work, and short enough that switching the
+// rhythm on does not immediately invent a month of debt.
+const RHYTHM_LOOKBACK_DAYS = 14;
+function _ymd(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+// Copy the template onto every past date it applied to, once. Idempotent: a date
+// already snapshotted is left exactly as it was, which is what stops an edit to
+// the template rewriting what last Monday was asked to do.
+//
+// Only dates up to and including today are materialised. A future day has not
+// happened yet, so it can be read straight from the template and will be
+// snapshotted when it arrives.
+function ensureRhythmTasks(db, now) {
+  const today = now ? new Date(now) : new Date();
+  today.setHours(0, 0, 0, 0);
+  const tpl = {};
+  for (const r of db.prepare('SELECT weekday, theme, target_qty, strain_id, note FROM week_rhythm').all())
+    tpl[r.weekday] = r;
+  if (!Object.keys(tpl).length) return 0;
+  const have = new Set(
+    db
+      .prepare('SELECT date FROM rhythm_task')
+      .all()
+      .map((r) => r.date)
+  );
+  const ins = db.prepare(
+    'INSERT INTO rhythm_task(date, weekday, theme, target_qty, strain_id, note, done_qty, created) VALUES(?, ?, ?, ?, ?, ?, 0, ?)'
+  );
+  const stamp = new Date().toISOString();
+  let made = 0;
+  for (let back = RHYTHM_LOOKBACK_DAYS; back >= 0; back--) {
+    const d = new Date(today.getTime() - back * 864e5);
+    const key = _ymd(d);
+    if (have.has(key)) continue;
+    const t = tpl[d.getDay()];
+    // Nothing to track on a day with no theme, or a themed day with no target:
+    // "Thursday is fruiting day" is not a countable job.
+    if (!t || t.theme === 'free' || !t.target_qty) continue;
+    ins.run(key, d.getDay(), t.theme, t.target_qty, t.strain_id, t.note, stamp);
+    made++;
+  }
+  if (made) incrementDataVersion(db);
+  return made;
+}
+// Record how many were actually made on a date. Absolute, not a delta, so a
+// double-tap or a retried request cannot inflate the count.
+function setRhythmProgress(db, date, doneQty) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
+  const n = Number(doneQty);
+  if (!Number.isInteger(n) || n < 0) throw new Error('Done must be a whole number of 0 or more');
+  const row = db.prepare('SELECT date, target_qty FROM rhythm_task WHERE date = ?').get(date);
+  if (!row) throw new Error('No planned work on ' + date);
+  // Overshooting is real — 50 made against a target of 45 — so it is stored as
+  // it happened rather than clamped to the target.
+  if (n > 100000) throw new Error('Done is implausibly large');
+  db.prepare('UPDATE rhythm_task SET done_qty = ?, updated = ? WHERE date = ?').run(n, new Date().toISOString(), date);
+  incrementDataVersion(db);
+  return n;
+}
+function listRhythmTasks(db) {
+  return db
+    .prepare('SELECT date, weekday, theme, target_qty, strain_id, note, done_qty FROM rhythm_task ORDER BY date')
+    .all()
+    .map((r) => ({
+      date: r.date,
+      weekday: r.weekday,
+      theme: r.theme,
+      targetQty: r.target_qty || null,
+      strainId: r.strain_id || null,
+      note: r.note || null,
+      doneQty: r.done_qty || 0
+    }));
+}
+
 // -- Camera dashboard (admin WIP) --------------------------------------------
 const CAMERA_CALIB_FIELDS = [
   ['pxPerMm', 'px_per_mm', 'real'],
@@ -7323,6 +7439,9 @@ module.exports = {
   setZoneCapacity,
   setWeekRhythm,
   WEEK_THEMES,
+  ensureRhythmTasks,
+  setRhythmProgress,
+  listRhythmTasks,
   zoneBagCount,
   rackBagCount,
   getMcpCfg,
