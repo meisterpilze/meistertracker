@@ -4261,7 +4261,7 @@ function _undoMove(snap) {
 function moveBatchToFruiting(batchId) {
   const b = batches.find((x) => x.batchId === batchId);
   if (!b) return;
-  const dest = _fruitingDest();
+  const dest = fruitingTarget();
   if (!dest) {
     setFb('err', t('dash.noFruitingZone'));
     return;
@@ -4396,6 +4396,60 @@ function setDashTab(key) {
     /* storage disabled — the choice just won't survive a reload */
   }
   renderDashBatchTasks();
+}
+// Which fruiting tent the one-tap moves target, remembered across reloads.
+//
+// This used to be _fruitingDest() alone: whichever tent something was last moved
+// into. With one tent that is always right. With several it is a hidden global —
+// move one batch into tent 3 by hand and every "→ Fruchtung" on the card silently
+// retargets to tent 3, with nothing on screen saying so. Worse, a tent that has
+// never received a move is unreachable from the card entirely.
+//
+// So the choice is explicit and visible. _fruitingDest() stays as the seed for a
+// user who has never picked one, which keeps the single-tent case zero-effort.
+function fruitingZones() {
+  return zones.filter((z) => z.role === 'fruiting');
+}
+let _fruitingTargetKey = null;
+function fruitingTarget() {
+  const avail = fruitingZones();
+  if (!avail.length) return null;
+  if (_fruitingTargetKey === null) {
+    // Guarded like _dashTab: storage revoked mid-session (site data blocked,
+    // partitioned context, a backgrounded PWA evicted by iOS) must not throw
+    // inside a render and abort everything queued behind it.
+    try {
+      _fruitingTargetKey = localStorage.getItem('mp-fruiting-target') || '';
+    } catch (e) {
+      _fruitingTargetKey = '';
+    }
+  }
+  // The stored tent can have been deleted, renamed to another id, or had its
+  // role changed since it was picked — never move bags at a stale target.
+  if (_fruitingTargetKey && avail.some((z) => z.id === _fruitingTargetKey)) return _fruitingTargetKey;
+  return _fruitingDest();
+}
+function setFruitingTarget(id) {
+  if (!fruitingZones().some((z) => z.id === id)) return;
+  _fruitingTargetKey = id;
+  try {
+    localStorage.setItem('mp-fruiting-target', id);
+  } catch (e) {
+    /* storage disabled — the choice just won't survive a reload */
+  }
+  renderDashBatchTasks();
+}
+// How full a tent is, and whether this many more bags would overflow it.
+// max_capacity is optional and unset by default: with no capacity recorded there
+// is nothing to warn about, and the (linear) getZoneBags walk is skipped
+// entirely. Reuses getZoneBags rather than re-deriving occupancy, so the
+// same-zone-move rule it encodes cannot drift out of sync here.
+function fruitingFill(zoneId, incoming) {
+  const z = zones.find((x) => x.id === zoneId);
+  const cap = z && z.maxCapacity ? z.maxCapacity : 0;
+  if (!cap) return null;
+  const used = Object.keys(getZoneBags(zoneId)).length;
+  return { used, cap, incoming: incoming || 0, over: used + (incoming || 0) > cap };
 }
 // Bags of this batch that are actually placed somewhere, plus the per-zone
 // breakdown the row label needs. Returns counts rather than a formatted room so
@@ -4545,28 +4599,79 @@ function renderDashBatchTasks() {
   // every(), not some(): one move row must not put "\u2192 Fruchtzelt" above a grain
   // row, whose whole point is that sending it to a tent skips a growth stage.
   const allMove = mine.length > 0 && movable.length === mine.length;
-  const dest = allMove ? _fruitingDest() : null;
+  const dest = fruitingTarget();
   const destName = dest ? zoneDisplayName(dest) : '';
   // A whole-section "Alle \u2192 Fruchtung" only where the count is small enough to
   // be a considered tap. Deliberately not on the overdue section: one tap
   // moving the entire backlog is a foot-gun, undoable only via the snackbar.
-  const bulkable = (active === 'today' || active === 'week') && !!dest && mine.length > 1;
+  // allMove is still required here even though the destination no longer depends
+  // on it: bulkSectionToFruiting skips grain rows, so on a mixed section the pill
+  // would promise "Alle" and quietly move only some of them.
+  const bulkable = (active === 'today' || active === 'week') && allMove && !!dest && mine.length > 1;
   const bulkPill = bulkable
     ? `<button type="button" class="btn btn-sm btn-p" data-action="bulk-fruiting" data-bucket="${active}" style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0">${esc(t('dash.bulkFruiting'))}</button>`
     : '';
   // The destination is the same tent for every move row, so it is stated once
-  // here instead of on each row, where it wrapped every meta line. destName is
-  // empty unless a real fruiting zone exists, so the card never advertises a
-  // destination nothing on it can reach.
+  // here instead of on each row, where it wrapped every meta line.
+  //
+  // Shown whenever at least one row can actually move, not only when every row
+  // can. The old rule hid it on any mixed section \u2014 which is most of them \u2014 so
+  // the target was invisible in exactly the case where it is least obvious. The
+  // label names the move explicitly, so it cannot be read as applying to a grain
+  // row sitting next to it.
+  const tents = fruitingZones();
+  // allMove bundled two rules: no grain rows on the tab, and every row already
+  // due. Only the first is a safety rule — naming the tent next to a grain row
+  // invites sending it there, which skips a growth stage. The second just hid
+  // the target on any tab mixing due and not-yet-due moves, which is most of
+  // them, so the tent was invisible almost always. A move that is not due yet
+  // still goes to the same tent, so keep the grain rule and drop the other.
+  const hasGrain = mine.some((r) => r.taskAction === 'inoculate');
+  const canMove = !hasGrain && mine.some((r) => r.taskAction === 'move') && !!dest;
+  // Only the rows that would actually move count toward filling the tent.
+  let incoming = 0;
+  if (canMove) for (const r of movable) for (const z in r.counts || {}) incoming += r.counts[z];
+  const fill = canMove ? fruitingFill(dest, incoming) : null;
+  const destPick = !canMove
+    ? ''
+    : tents.length > 1
+      ? `<span style="font-size:10.5px;color:var(--c-text-muted);flex-shrink:0">${esc(t('dash.destLabel'))}</span>` +
+        // Wraps rather than scrolls. Four tents come to ~400px of chips against
+        // ~306px of usable width on a 375px phone, so a scroll strip pushed the
+        // last tent off-screen — hiding an option is the very thing the chips
+        // exist to stop. One extra 22px line is the cheaper trade.
+        `<span role="group" aria-label="${esc(t('dash.destLabel'))}" style="display:flex;flex-wrap:wrap;gap:4px;min-width:0">` +
+        tents
+          .map((z) => {
+            const on = z.id === dest;
+            const zf = z.maxCapacity ? fruitingFill(z.id, on ? incoming : 0) : null;
+            return (
+              `<button type="button" data-action="dash-dest" data-zone="${esc(z.id)}" aria-pressed="${on}" ` +
+              `title="${esc(z.name)}${zf ? ' \u2014 ' + zf.used + '/' + zf.cap : ''}" ` +
+              `style="flex:0 0 auto;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;` +
+              `border:1px solid ${on ? 'var(--c-accent)' : 'var(--c-border)'};background:${on ? 'var(--c-accent)' : 'transparent'};color:${on ? '#fff' : 'var(--c-text-sec)'}">` +
+              esc(z.name) +
+              (zf ? `<span style="opacity:.75"> ${zf.used}/${zf.cap}</span>` : '') +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</span>'
+      : `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2192 ${esc(destName)}${fill ? ' ' + fill.used + '/' + fill.cap : ''}</span>`;
+  // Only ever a warning: a tent with no capacity recorded says nothing, and one
+  // that is over capacity still moves. The grower decides what fits.
+  const overWarn =
+    fill && fill.over
+      ? `<div style="font-size:10.5px;color:var(--c-red-dark);margin-bottom:6px">\u26a0 ${esc(t('dash.destFull', { zone: destName, n: fill.used + fill.incoming, cap: fill.cap }))}</div>`
+      : '';
   const bulk =
-    destName || bulkPill
-      ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-        (destName
-          ? `<span style="font-size:10.5px;color:var(--c-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\u2192 ${esc(destName)}</span>`
-          : '') +
+    destPick || bulkPill
+      ? '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px">' +
+        destPick +
         '<span style="flex:1"></span>' +
         bulkPill +
-        '</div>'
+        '</div>' +
+        overWarn
       : '';
   // Never silently truncate: the expander states how many rows are folded away.
   // A real <button> so the folded rows are reachable by keyboard and announced by
@@ -4595,7 +4700,7 @@ function _bucketRank(key) {
 // One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
 function bulkSectionToFruiting(bucket) {
-  const dest = _fruitingDest();
+  const dest = fruitingTarget();
   if (!dest) {
     setFb('err', t('dash.noFruitingZone'));
     return;
@@ -9734,6 +9839,7 @@ function renderZones() {
         ${directCount > 0 && z.racks.length ? `<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>` : ''}
         <span style="flex:1"></span>
         <button class="btn btn-sm" data-action="rename-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('batch.zones.rename'))}</button>
+        <button class="btn btn-sm" data-action="zone-capacity" data-zone="${esc(z.id)}" title="${esc(z.maxCapacity ? z.name + ': ' + bagCount + ' / ' + z.maxCapacity : t('zones.capacityNone'))}" style="font-size:11px">${esc(t('zones.capacity'))}</button>
         <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
         <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
         <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
@@ -9988,6 +10094,41 @@ function renameZone(id) {
       renderZones();
       renderStatus();
       renderBatches();
+    });
+  });
+}
+// Capacity could be set when a zone was created and never again, so a tent whose
+// real limit only became clear in use was stuck at whatever was guessed on day
+// one — or at nothing. Empty clears the limit rather than meaning zero.
+function editZoneCapacity(id) {
+  const z = zones.find((x) => x.id === id);
+  if (!z) return;
+  prompt2(t('zones.capacityPrompt', { zone: z.name }), z.maxCapacity ? String(z.maxCapacity) : '', function (raw) {
+    if (raw === null || raw === undefined) return;
+    const s = String(raw).trim();
+    // '' clears; anything else must be a whole, non-negative number. Number('')
+    // is 0, so the empty case is taken first and never reads as a limit of zero.
+    let cap;
+    if (s === '') cap = null;
+    else {
+      const n = Number(s);
+      if (!Number.isInteger(n) || n < 0) {
+        setFb('err', t('zones.capacityBad'));
+        return;
+      }
+      cap = n === 0 ? null : n;
+    }
+    if ((z.maxCapacity || null) === cap) return;
+    apiPatch('/api/zones/' + encodeURIComponent(id) + '/capacity', { maxCapacity: cap }).then((res) => {
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      z.maxCapacity = cap;
+      setFb('ok', t('zones.capacitySaved'));
+      renderZones();
+      renderStatus();
+      renderDashBatchTasks();
     });
   });
 }
@@ -17639,7 +17780,9 @@ function initEventListeners() {
     if (a === 'harvest') return biOpenHarvest();
     if (a === 'contam') return biReportContam();
     if (a === 'remove') return biConfirmRemove();
-    if (a === 'fruchtung') return biMoveTo(_fruitingDest());
+    // Same explicit target as the dashboard one-tap — this button names no tent
+    // either, so it must not resolve to a different one.
+    if (a === 'fruchtung') return biMoveTo(fruitingTarget());
     if (a === 'move') {
       document.getElementById('m-baginfo').classList.remove('open');
       _openZonePicker(t('batch.moveTo') + ' — ' + biBagId, function (dest) {
@@ -17838,6 +17981,7 @@ function initEventListeners() {
     const action = btn.dataset.action;
     if (action === 'del-zone') removeZone(btn.dataset.zone);
     else if (action === 'rename-zone') renameZone(btn.dataset.zone);
+    else if (action === 'zone-capacity') editZoneCapacity(btn.dataset.zone);
     else if (action === 'add-rack') addRackToZone(btn.dataset.zone);
     else if (action === 'del-rack') removeRack(btn.dataset.rack);
     else if (action === 'toggle-qr') renderZoneQrPanel(btn.dataset.zone);
@@ -17910,6 +18054,10 @@ function initEventListeners() {
     const action = el.dataset.action;
     if (action === 'dash-tab') {
       setDashTab(el.dataset.key);
+      return;
+    }
+    if (action === 'dash-dest') {
+      setFruitingTarget(el.dataset.zone);
       return;
     }
     if (action === 'dash-more') {

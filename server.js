@@ -7277,6 +7277,33 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // PATCH /api/zones/:id/capacity — set or clear the bag limit (null = no limit)
+  const zoneCapMatch = req.url.match(/^\/api\/zones\/([^/]+)\/capacity$/);
+  if (req.method === 'PATCH' && zoneCapMatch) {
+    if (requireAdmin(req, res)) return;
+    const id = decodeURIComponent(zoneCapMatch[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const cap = data.maxCapacity;
+      // Reject anything that is not null or a whole non-negative number before it
+      // reaches the DB — '12abc' would coerce to NaN and silently clear the limit.
+      if (cap !== null && cap !== undefined && !(Number.isInteger(cap) && cap >= 0)) {
+        jsonErr(res, 400, 'maxCapacity must be null or a whole number of 0 or more');
+        return;
+      }
+      try {
+        db.setZoneCapacity(database, id, cap === undefined ? null : cap);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const zoneRackMatch = req.url.match(/^\/api\/zones\/([^/]+)\/racks$/);
   if (req.method === 'POST' && zoneRackMatch) {
     if (requireAdmin(req, res)) return;
