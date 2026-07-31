@@ -1,5 +1,5 @@
 'use strict';
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
@@ -1758,5 +1758,132 @@ describe('db – week rhythm', () => {
     const v = db.getDataVersion(d);
     db.setWeekRhythm(d, { 4: 'fruiting' });
     assert.equal(db.getDataVersion(d), v + 1);
+  });
+});
+
+describe('db – rhythm tasks carry forward', () => {
+  let d, p;
+  const ymd = (dt) => {
+    const q = (n) => String(n).padStart(2, '0');
+    return dt.getFullYear() + '-' + q(dt.getMonth() + 1) + '-' + q(dt.getDate());
+  };
+  const daysAgo = (n) => {
+    const x = new Date();
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() - n);
+    return x;
+  };
+  beforeEach(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  afterEach(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+  const tasks = () => db.listRhythmTasks(d);
+
+  // Set every weekday to the same job so the assertions do not depend on which
+  // day the suite happens to run.
+  const everyDay = (qty) => {
+    const m = {};
+    for (let i = 0; i < 7; i++) m[i] = { theme: 'substrate', targetQty: qty, strainId: 3, note: 'mix A' };
+    db.setWeekRhythm(d, m);
+  };
+
+  it('snapshots one row per past day the rhythm applied to', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const all = tasks();
+    // 14 days back plus today.
+    assert.equal(all.length, 15, 'made ' + all.length + ' snapshots');
+    assert.equal(all[all.length - 1].date, ymd(new Date()), 'today was not snapshotted');
+    assert.equal(all[0].targetQty, 45);
+  });
+
+  it('is idempotent — running it again adds nothing', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const n = tasks().length;
+    assert.equal(db.ensureRhythmTasks(d), 0, 'a second pass created rows');
+    assert.equal(tasks().length, n);
+  });
+
+  // The reason the plan is copied rather than looked up: what was asked for on
+  // a date is a fact about that date.
+  it('does not let a later edit rewrite what a past day asked for', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    everyDay(30);
+    db.ensureRhythmTasks(d);
+    assert.ok(
+      tasks().every((x) => x.targetQty === 45),
+      'editing the template changed history'
+    );
+  });
+
+  it('records what was actually made, and leaves the target alone', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmProgress(d, day, 30);
+    const row = tasks().find((x) => x.date === day);
+    assert.equal(row.doneQty, 30);
+    assert.equal(row.targetQty, 45, 'recording progress moved the target');
+  });
+
+  it('is absolute, so a retried request cannot inflate the count', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmProgress(d, day, 30);
+    db.setRhythmProgress(d, day, 30);
+    assert.equal(tasks().find((x) => x.date === day).doneQty, 30, 'the same value applied twice added up');
+  });
+
+  it('stores an overshoot as it happened rather than clamping it', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmProgress(d, day, 50);
+    assert.equal(tasks().find((x) => x.date === day).doneQty, 50);
+  });
+
+  it('refuses a bad date, a bad count, or a day nothing was planned for', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    assert.throws(() => db.setRhythmProgress(d, 'Montag', 5), /Not a date/);
+    assert.throws(() => db.setRhythmProgress(d, day, -1), /whole number/);
+    assert.throws(() => db.setRhythmProgress(d, day, 2.5), /whole number/);
+    assert.throws(() => db.setRhythmProgress(d, '1999-01-01', 5), /No planned work/);
+  });
+
+  it('tracks nothing for a themed day that carries no target', () => {
+    const m = {};
+    for (let i = 0; i < 7; i++) m[i] = { theme: 'fruiting' };
+    db.setWeekRhythm(d, m);
+    db.ensureRhythmTasks(d);
+    assert.equal(tasks().length, 0, '"Thursday is fruiting day" is not a countable job');
+  });
+
+  it('tracks nothing at all until a rhythm exists', () => {
+    assert.equal(db.ensureRhythmTasks(d), 0);
+    assert.deepEqual(tasks(), []);
+  });
+
+  it('reaches back two weeks and no further', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const oldest = tasks()[0].date;
+    assert.equal(oldest, ymd(daysAgo(14)), 'oldest snapshot is ' + oldest);
+    assert.ok(!tasks().some((x) => x.date < ymd(daysAgo(14))), 'a snapshot older than the window exists');
+  });
+
+  it('surfaces the tasks through readAll', () => {
+    everyDay(45);
+    const all = db.readAll(d).rhythmTasks;
+    // readAll materialises before reading, so the caller never sees a gap.
+    assert.ok(all.length > 0, 'readAll returned no rhythm tasks');
+    assert.equal(all[0].targetQty, 45);
   });
 });
