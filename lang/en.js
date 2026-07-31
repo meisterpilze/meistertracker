@@ -413,6 +413,8 @@ window.LANG['en'] = {
   'dash.destFull': '{zone} would hold {n} bags, over its capacity of {cap}.',
   'rhythm.title': 'Weekly rhythm',
   'rhythm.edit': 'Edit weekly rhythm',
+  'rhythm.qtyPh': 'Qty',
+  'rhythm.notePh': 'Note (optional)',
   'rhythm.guess': 'estimated',
   'rhythm.suggested': 'Suggested from what you have logged so far — adjust and save.',
   'rhythm.saved': 'Weekly rhythm saved',
