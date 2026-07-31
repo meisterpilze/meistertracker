@@ -4439,6 +4439,9 @@ function fruitingFill(zoneId, incoming) {
 // How many rows the open day shows. Six leaves the whole week on one screen
 // with a day open; the rest is one tap away rather than pushed off the bottom.
 const DASH_DAY_CAP = 6;
+// How many rows a non-selected column previews. Four keeps seven columns the
+// same rough height, so the week reads as a row rather than a ragged skyline.
+const DASH_COL_CAP = 4;
 const _dashRoomOpen = {};
 function toggleDashRoom(key) {
   _dashRoomOpen[key] = !_dashRoomOpen[key];
@@ -4922,60 +4925,101 @@ function renderDashBatchTasks() {
     return;
   }
   const sel = _dashDayOffset >= 0 && _dashDayOffset < 7 ? _dashDayOffset : 0;
-  // The week reads across, not down. Seven columns of ~50px fit a 375px phone,
-  // so the whole week is one glance rather than a list to scroll — an
-  // overloaded Thursday is visible on Monday without opening anything.
+  // Every day renders its own work, every time. On a wide screen all seven
+  // columns are readable at once, which is the point of showing a week; on a
+  // phone the CSS keeps the header strip and opens only the chosen day. One
+  // render, two layouts — the alternative was emitting the open day twice.
   el.innerHTML =
-    _weekGridHtml(week, sel) + _weekDayBodyHtml(week[sel], sel, sel === 0) + _rhythmEditLink();
+    '<div class="wk">' +
+    week.map((d, i) => _weekHeadHtml(d, i, i === sel)).join('') +
+    week.map((d, i) => _weekColBodyHtml(d, i, i === sel)).join('') +
+    '</div>' +
+    _rhythmEditLink();
 }
-function _weekGridHtml(week, sel) {
+function _weekHeadHtml(d, off, sel) {
+  const isToday = off === 0;
+  const th = themeFor(d.weekday);
+  const task = rhythmTaskOn(d.date);
+  // The number is the day's own load: what the rhythm asks for if it asks for
+  // anything, otherwise how much generated work landed on it.
+  const n = task && task.targetQty ? task.targetQty : d.items.length;
+  const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
   return (
-    '<div role="tablist" style="display:flex;gap:2px;margin-bottom:8px">' +
-    week
-      .map((d, i) => {
-        const on = i === sel;
-        const isToday = i === 0;
-        const th = themeFor(d.weekday);
-        const task = rhythmTaskOn(d.date);
-        // The number is the day's own load: what the rhythm asks for if it asks
-        // for anything, otherwise how much generated work landed on it.
-        const n = task && task.targetQty ? task.targetQty : d.items.length;
-        const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
-        return (
-          '<button type="button" role="tab" data-action="dash-day" data-off="' +
-          i +
-          '" aria-selected="' +
-          on +
-          '" title="' +
-          esc(t('rhythm.day.' + d.weekday) + (short ? ' · ' + short : '')) +
-          '" style="flex:1;min-width:0;padding:4px 1px 5px;border:1px solid transparent;border-bottom:2px solid ' +
-          (on ? 'var(--c-accent)' : 'var(--c-border)') +
-          ';border-radius:6px 6px 0 0;background:' +
-          (on ? 'var(--c-bg-soft,transparent)' : 'transparent') +
-          ';cursor:pointer;font-family:inherit;line-height:1.15;overflow:hidden">' +
-          '<span style="display:block;font-size:13px;font-weight:700;color:' +
-          (n ? (on ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
-          '">' +
-          (n || '·') +
-          '</span>' +
-          '<span style="display:block;font-size:9.5px;font-weight:' +
-          (isToday ? '700' : '600') +
-          ';color:' +
-          (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
-          '">' +
-          esc(t('rhythm.day.' + d.weekday)) +
-          '</span>' +
-          // The theme is what makes it a week rather than seven counts. Clipped
-          // rather than wrapped: at 50px a wrapped word would push the columns
-          // to different heights and the strip would stop reading as a row.
-          '<span style="display:block;font-size:8.5px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-          esc(short || '·') +
-          '</span></button>'
-        );
-      })
-      .join('') +
+    '<button type="button" role="tab" data-action="dash-day" data-off="' +
+    off +
+    '" aria-selected="' +
+    sel +
+    '" class="wk-h' +
+    (sel ? ' sel' : '') +
+    '" style="--col:' +
+    (off + 1) +
+    '" title="' +
+    esc(t('rhythm.day.' + d.weekday) + (short ? ' · ' + short : '')) +
+    '">' +
+    '<span style="display:block;font-size:13px;font-weight:700;color:' +
+    (n ? (sel ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
+    '">' +
+    (n || '·') +
+    '</span>' +
+    '<span style="display:block;font-size:9.5px;font-weight:' +
+    (isToday ? '700' : '600') +
+    ';color:' +
+    (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
+    '">' +
+    esc(t('rhythm.day.' + d.weekday)) +
+    '</span>' +
+    // Clipped rather than wrapped: a wrapped word would push the columns to
+    // different heights and the strip would stop reading as a row.
+    '<span style="display:block;font-size:8.5px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    esc(short || '·') +
+    '</span></button>'
+  );
+}
+// One column's work. Narrow by design — on a wide screen this is a seventh of
+// the card, so rows are stripped to the batch and its count, with the detail
+// on the open day only.
+function _weekColBodyHtml(d, off, sel) {
+  return (
+    '<div class="wk-b' +
+    (sel ? ' sel' : '') +
+    '" style="--col:' +
+    (off + 1) +
+    '">' +
+    // The chosen day gets the full run sheet — rooms, buttons, progress. The
+    // other six get a preview: a seventh of the card is not enough width for an
+    // action button, and a truncated one is worse than none.
+    (sel ? _weekDayBodyHtml(d, off, off === 0) : _weekColPreviewHtml(d)) +
     '</div>'
   );
+}
+// A column's work at a glance: what, and how much. No actions — this is for
+// reading the week; the day you want to act on is one click away.
+function _weekColPreviewHtml(d) {
+  const task = rhythmTaskOn(d.date);
+  let html = '';
+  if (task && task.targetQty) {
+    const ms = task.strainId ? mushroomStrains.find((m) => m.id === task.strainId) : null;
+    html +=
+      '<div style="padding:3px 2px;border-left:2px solid var(--c-accent);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">' +
+      esc(task.targetQty + (ms ? '× ' + ms.name : '')) +
+      '</div>';
+  }
+  if (!d.items.length && !html) {
+    return '<div style="padding:3px 2px;color:var(--c-text-muted);font-size:10px">' + esc(t('rhythm.nothing')) + '</div>';
+  }
+  const shown = d.items.slice(0, DASH_COL_CAP);
+  for (const it of shown) {
+    html +=
+      '<div style="padding:2px;border-left:2px solid ' +
+      (it.overdue ? 'var(--c-red-dark)' : spColor(it.species)) +
+      ';margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px">' +
+      esc(it.label) +
+      '</div>';
+  }
+  const hidden = d.items.length - shown.length;
+  // Never silently truncate, even in a preview.
+  if (hidden > 0) html += '<div style="font-size:10px;color:var(--c-text-muted);padding:1px 2px">+ ' + hidden + '</div>';
+  return html;
 }
 // The open day, flat and dense. The room is a label on the row rather than a
 // heading of its own — the headings were most of the old view's height, and the
