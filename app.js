@@ -957,9 +957,7 @@ function go(page, btnId) {
     renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
-    renderDashHarvestTasks();
     renderDashLabStock();
-    renderDashSummary();
   }
   if (page === 'batch') renderBatches();
   if (page === 'lab') renderCultures();
@@ -1050,9 +1048,7 @@ function refresh() {
     renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
-    renderDashHarvestTasks();
     renderDashLabStock();
-    renderDashSummary();
   }
   if (id === 'batch') renderBatches();
   if (id === 'lab') renderCultures();
@@ -3800,40 +3796,6 @@ function applyOvPeriod() {
   });
 }
 
-// Compact "today at a glance" strip above the stacked cards, so the day's
-// actionable work is visible without scrolling. Counts reuse the same builders
-// the cards use (buildAutoTasks / buildHarvestTasks) so they can't drift; the
-// alert count is read from the already-rendered alerts card (this runs last).
-// Each chip scrolls to + flashes the card that lists those items.
-function renderDashSummary() {
-  const el = document.getElementById('dash-summary');
-  if (!el) return;
-  const moveCount = buildAutoTasks().filter((tk) => tk.taskAction === 'move' && tk.ready).length;
-  const harvestCount = buildHarvestTasks().length;
-  const alertsCard = document.getElementById('dash-alerts-card');
-  const alertsEl = document.getElementById('dash-alerts');
-  const alertCount = alertsCard && alertsCard.style.display !== 'none' && alertsEl ? alertsEl.children.length : 0;
-  if (!moveCount && !harvestCount && !alertCount) {
-    el.innerHTML = '';
-    return;
-  }
-  const chips = [
-    { n: moveCount, label: t('dash.sumMove'), color: '#0ea5e9', target: 'dash-batch-tasks-card', kind: 'move' },
-    { n: harvestCount, label: t('dash.sumHarvest'), color: '#d97706', target: 'dash-harvest-tasks-card', kind: 'harvest' },
-    { n: alertCount, label: t('dash.sumAlerts'), color: '#ef4444', target: 'dash-alerts-card', kind: '' }
-  ];
-  el.innerHTML = chips
-    .map((c) => {
-      const active = c.n > 0;
-      return (
-        `<button type="button" data-flash="${c.target}" data-worklist="${c.kind}"${active ? '' : ' disabled'} style="flex:1;min-width:110px;display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-card);cursor:${active ? 'pointer' : 'default'};opacity:${active ? '1' : '0.45'}">` +
-        `<span style="font-size:22px;font-weight:700;color:${c.color};min-width:1.1em;text-align:center">${c.n}</span>` +
-        `<span style="font-size:12px;font-weight:600;color:var(--c-text-sec);text-align:left;line-height:1.15">${esc(c.label)}</span>` +
-        `</button>`
-      );
-    })
-    .join('');
-}
 // ─── WORK LIST (pick / walk sheet) ──────────────────────────
 // Tapping a summary chip opens a findable, printable list of the batches that
 // need moving / harvesting, grouped by their CURRENT location so a worker can
@@ -4036,14 +3998,18 @@ function printWorkList() {
   win.document.write(html);
   win.document.close();
 }
-// "+ Ernte erfassen" from the speed-dial: scroll to the ready-to-harvest card
-// and flash it, or say so when nothing is fruiting.
+// "+ Ernte erfassen" from the speed-dial. Harvests used to have their own card;
+// they are rows in the day plan now, so this opens the day they sit on and
+// flashes the card holding it rather than pointing at a card that is gone.
 function dashGoHarvest() {
-  const card = document.getElementById('dash-harvest-tasks-card');
-  if (!card || card.style.display === 'none') {
+  const card = document.getElementById('dash-batch-tasks-card');
+  const week = buildWeekPlan();
+  const day = week.findIndex((d) => d.items.some((i) => i.kind === 'harvest'));
+  if (!card || day < 0) {
     setFb('info', t('dash.harvestNoFruiting'));
     return;
   }
+  setDashDay(day);
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const prev = card.style.boxShadow;
   card.style.transition = 'box-shadow 0.3s ease';
@@ -4259,7 +4225,6 @@ function _undoMove(snap) {
   updateSD();
   renderBatches();
   renderStatus();
-  renderDashSummary();
   renderDashBatchTasks();
   flashUndoBar(t('dash.undone', { n: back }));
 }
@@ -4276,7 +4241,6 @@ function moveBatchToFruiting(batchId) {
     updateSD();
     renderBatches();
     renderStatus();
-    renderDashSummary();
     renderDashBatchTasks();
     if (!moved) {
       setFb(
@@ -4384,6 +4348,28 @@ const _dashRoomOpen = {};
 function toggleDashRoom(key) {
   _dashRoomOpen[key] = !_dashRoomOpen[key];
   renderDashBatchTasks();
+}
+// Which day of the week strip is open, as an offset from today rather than a
+// weekday number — a stored weekday would silently point at a different day
+// after midnight, and 0 always means "today" no matter when it is read.
+let _dashDayOffset = 0;
+function setDashDay(off) {
+  const n = Number(off);
+  if (!Number.isInteger(n) || n < 0 || n > 6) return;
+  _dashDayOffset = n;
+  renderDashBatchTasks();
+}
+// The theme for a weekday, and whether it is the farm's decision or only this
+// card's guess from history. Showing "no theme" on a card whose whole purpose
+// is to give the week a shape was the worst possible default; a labelled guess
+// is honest and useful, and the editor turns it into a decision.
+let _rhythmGuess = null;
+function themeFor(weekday) {
+  const set = themeOf(weekday);
+  if (set) return { theme: set, suggested: false };
+  if (Object.keys(weekRhythm).length) return { theme: '', suggested: false };
+  if (!_rhythmGuess) _rhythmGuess = suggestWeekRhythm();
+  return { theme: _rhythmGuess[weekday] || '', suggested: true };
 }
 // ─── Weekly rhythm ──────────────────────────────────────────
 // Must stay in step with WEEK_THEMES in db.js, which rejects anything else.
@@ -4493,6 +4479,7 @@ function buildWeekPlan() {
     put(Math.max(0, tk.dueIn), {
       kind: tk.taskAction === 'inoculate' ? 'grain' : 'fruiting',
       batchId: tk.batchId,
+      species: tk.species,
       label: tk.batchId,
       detail: tk.detail,
       bags: place.bags,
@@ -4513,6 +4500,7 @@ function buildWeekPlan() {
     put(off, {
       kind: 'harvest',
       batchId: h.batchId,
+      species: h.species,
       label: h.batchId,
       detail: h.target ? t('todo.dueIn', { n: Math.max(0, h.remaining) }) : '',
       bags: h.bagsInTent,
@@ -4528,6 +4516,7 @@ function buildWeekPlan() {
     put(0, {
       kind: 'left',
       batchId: r.batchId,
+      species: r.species,
       label: r.batchId,
       // These rows carry an instruction ("still in incubation") rather than a
       // due date, and offer no one-tap move — the split has to be looked at.
@@ -4674,26 +4663,11 @@ function _dashLeftBehindRows(splits) {
     };
   });
 }
-// The card, grouped by urgency rather than by room: the row itself carries the
-// instruction, so what a worker needs is readable without opening anything. The
-// by-room walk sheet still exists behind the summary chip (openWorkList), which
-// is the better place for it — it prints.
-//
-// One urgency at a time, behind a tab strip. Stacked, the four sections were ~17
-// rows deep before the fold — unusable on a phone, which is where this card is
-// actually read. The tabs keep every count visible (the whole picture is the
-// strip itself) while only one section's rows occupy the screen.
 function renderDashBatchTasks() {
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
   const week = buildWeekPlan();
-  const today = week[0];
   const anyWork = week.some((d) => d.items.length);
-  const prog = todayProgress(today.items);
-
-  // The rhythm is worth showing even on a quiet day — an empty week that still
-  // says which day is grain day is the point of the card. But a farm with no
-  // rhythm set AND no work has nothing to say, so it stays out of the way.
   const hasRhythm = Object.keys(weekRhythm).length > 0;
   if (!anyWork && !hasRhythm) {
     el.innerHTML =
@@ -4703,44 +4677,92 @@ function renderDashBatchTasks() {
       _rhythmEditLink();
     return;
   }
-
-  el.innerHTML =
-    week.map((d, i) => (i === 0 ? _dashTodayHtml(d, prog) : _dashDayRowHtml(d))).join('') + _rhythmEditLink();
+  // Clamp rather than trust: the stored day survives a reload, and a week is
+  // only ever seven long.
+  const sel = _dashDayOffset >= 0 && _dashDayOffset < 7 ? _dashDayOffset : 0;
+  const d = week[sel];
+  const prog = sel === 0 ? todayProgress(d.items) : null;
+  el.innerHTML = _weekTabsHtml(week, sel) + _dashDayHtml(d, prog, sel === 0) + _rhythmEditLink();
 }
-function _rhythmEditLink() {
+// The week across the top, not down the page. Stacked, today's list pushed the
+// other six days below the fold on a phone, which is no use at all: the reason
+// to show a week is to see Thursday filling up while it is still Monday.
+function _weekTabsHtml(week, sel) {
   return (
-    '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--c-border)">' +
-    '<button type="button" data-action="edit-rhythm" style="border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec)">' +
-    esc(t('rhythm.edit')) +
-    '</button></div>'
-  );
-}
-// A collapsed day: name, theme, and how much lands on it. Deliberately not a
-// task list — the point of the other six rows is to show the shape of the week
-// and where the load sits, not to be read item by item.
-function _dashDayRowHtml(d) {
-  const themed = d.theme && d.theme !== 'free';
-  const n = d.items.length;
-  return (
-    '<div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--c-border)">' +
-    '<span style="width:26px;flex-shrink:0;font-size:11.5px;color:var(--c-text-sec)">' +
-    esc(t('rhythm.day.' + d.weekday)) +
-    '</span>' +
-    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:' +
-    (themed ? 'var(--c-text)' : 'var(--c-text-muted)') +
-    '">' +
-    esc(weekThemeLabel(d.theme)) +
-    '</span>' +
-    '<span style="font-size:11.5px;color:var(--c-text-muted)">' +
-    (n || '') +
-    '</span>' +
+    '<div role="tablist" style="display:flex;gap:3px;margin-bottom:8px">' +
+    week
+      .map((d, i) => {
+        const on = i === sel;
+        const th = themeFor(d.weekday);
+        return (
+          '<button type="button" role="tab" aria-selected="' +
+          on +
+          '" data-action="dash-day" data-off="' +
+          i +
+          '" title="' +
+          esc(weekThemeLabel(th.theme)) +
+          '" style="flex:1;min-width:0;padding:4px 1px 5px;border:1px solid transparent;border-bottom:2px solid ' +
+          (on ? 'var(--c-accent)' : 'var(--c-border)') +
+          ';border-radius:6px 6px 0 0;background:transparent;cursor:pointer;font-family:inherit;line-height:1.15">' +
+          '<span style="display:block;font-size:14px;font-weight:700;color:' +
+          (d.items.length ? (on ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
+          '">' +
+          (d.items.length || '·') +
+          '</span>' +
+          '<span style="display:block;font-size:9.5px;font-weight:600;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          esc(t('rhythm.day.' + d.weekday)) +
+          '</span></button>'
+        );
+      })
+      .join('') +
     '</div>'
   );
 }
-// Today, opened out as a run sheet. Grouped by room in the order the zones are
-// sorted, which is the order you physically walk them — so the list can be
-// worked top to bottom instead of criss-crossing the site.
-function _dashTodayHtml(d, prog) {
+// One day's work. Only today gets a progress bar — a bar on Thursday would be
+// measuring a day that has not started.
+function _dashDayHtml(d, prog, isToday) {
+  const th = themeFor(d.weekday);
+  let html =
+    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">' +
+    '<span style="font-size:13px;font-weight:600">' +
+    esc(t('rhythm.day.' + d.weekday)) +
+    (isToday ? ' · ' + esc(t('rhythm.today')) : '') +
+    '</span>' +
+    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--c-text-sec)">' +
+    esc(weekThemeLabel(th.theme)) +
+    // Say when the theme is only a guess from history, so an unconfirmed
+    // suggestion never reads as a decision somebody made.
+    (th.suggested ? ' <span style="color:var(--c-text-muted)">(' + esc(t('rhythm.guess')) + ')</span>' : '') +
+    '</span>' +
+    // The printable walk sheet used to hang off the summary chips. Those are
+    // gone, and this is where it belongs anyway — next to the day it prints.
+    (isToday && d.items.length
+      ? '<button type="button" data-action="dash-print" style="border:0;background:none;padding:0 0 0 6px;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec);flex-shrink:0">' +
+        esc(t('worklist.print')) +
+        '</button>'
+      : '') +
+    '</div>';
+  if (prog && prog.total) {
+    const pct = Math.round((prog.done / prog.total) * 100);
+    html +=
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">' +
+      '<div style="flex:1;height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">' +
+      '<div style="width:' +
+      pct +
+      '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
+      '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+      prog.done +
+      '/' +
+      prog.total +
+      '</span></div>';
+  }
+  if (!d.items.length) {
+    return (
+      html + '<div style="padding:6px 0 10px;font-size:12px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div>'
+    );
+  }
+  html += _fruitingTargetHtml(d.items);
+
   const order = {};
   zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
   const groups = {};
@@ -4754,45 +4776,6 @@ function _dashTodayHtml(d, prog) {
     if (!b) return -1;
     return (order[a] == null ? 999 : order[a]) - (order[b] == null ? 999 : order[b]);
   });
-  const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
-
-  let html =
-    '<div style="padding:2px 0 8px">' +
-    '<div style="display:flex;align-items:baseline;gap:8px">' +
-    '<span style="font-size:14px;font-weight:600">' +
-    esc(t('rhythm.day.' + d.weekday)) +
-    ' · ' +
-    esc(t('rhythm.today')) +
-    '</span>' +
-    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--c-text-sec)">' +
-    esc(weekThemeLabel(d.theme)) +
-    '</span>' +
-    '</div>';
-  if (prog.total) {
-    html +=
-      '<div style="display:flex;align-items:center;gap:6px;margin:6px 0 2px">' +
-      '<div style="flex:1;height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">' +
-      '<div style="width:' +
-      pct +
-      '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
-      '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
-      prog.done +
-      '/' +
-      prog.total +
-      '</span>' +
-      '</div>';
-  }
-  html += '</div>';
-
-  if (!d.items.length) {
-    return (
-      html +
-      '<div style="padding:6px 0 10px;font-size:12px;color:var(--c-text-muted)">' +
-      esc(t('rhythm.nothing')) +
-      '</div>'
-    );
-  }
-  html += _fruitingTargetHtml(d.items);
   let step = 0;
   for (const k of keys) {
     step++;
@@ -4803,20 +4786,20 @@ function _dashTodayHtml(d, prog) {
       ' · ' +
       esc(name) +
       '</div>';
-    // Capped per room, not across the day. A backlog of 109 printed in full is
-    // nine phone screens — the exact complaint the tabs were meant to fix. But a
-    // single global cap would swallow whole rooms, and a room you cannot see is
-    // a room you will not walk. So every room stays on screen, showing its first
-    // few, and says out loud how many it is holding back.
-    const list = _dashRoomOpen[k || '_'] ? groups[k] : groups[k].slice(0, DASH_ROOM_CAP);
+    // Capped per room, not across the day. A backlog printed in full runs to
+    // nine phone screens. A single global cap would swallow whole rooms, and a
+    // room you cannot see is a room you will not walk — so every room stays on
+    // screen showing its first few, and says how many it is holding back.
+    const openKey = d.offset + '/' + (k || '_');
+    const list = _dashRoomOpen[openKey] ? groups[k] : groups[k].slice(0, DASH_ROOM_CAP);
     for (const it of list) html += _dashPlanRowHtml(it);
     const hidden = groups[k].length - list.length;
-    if (hidden > 0 || _dashRoomOpen[k || '_']) {
+    if (hidden > 0 || _dashRoomOpen[openKey]) {
       html +=
         '<button type="button" data-action="dash-room-more" data-room="' +
-        esc(k || '_') +
+        esc(openKey) +
         '" aria-expanded="' +
-        !!_dashRoomOpen[k || '_'] +
+        !!_dashRoomOpen[openKey] +
         '" style="border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;font-size:11.5px;color:var(--c-text-sec)">' +
         esc(hidden > 0 ? '+ ' + t('dash.moreRows', { n: hidden }) : '− ' + t('dash.fewerRows')) +
         '</button>';
@@ -4824,12 +4807,23 @@ function _dashTodayHtml(d, prog) {
   }
   return html;
 }
+function _rhythmEditLink() {
+  return (
+    '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--c-border)">' +
+    '<button type="button" data-action="edit-rhythm" style="border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec)">' +
+    esc(t('rhythm.edit')) +
+    '</button></div>'
+  );
+}
 function _dashPlanRowHtml(it) {
   const btn = _planBtn(it);
   const meta = [it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean).join(' · ');
   return (
-    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0' +
-    (it.overdue ? ';--sp-color:var(--c-red-dark)' : '') +
+    // The left edge carries the species colour, as it did before the redesign —
+    // it is how a row is recognised at a glance without reading the id. Overdue
+    // still overrides it: being late outranks knowing which mushroom it is.
+    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;--sp-color:' +
+    (it.overdue ? 'var(--c-red-dark)' : spColor(it.species)) +
     '">' +
     '<div style="flex:1;min-width:0">' +
     '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
@@ -5009,7 +5003,6 @@ function bulkSectionToFruiting(bucket) {
       updateSD();
       renderBatches();
       renderStatus();
-      renderDashSummary();
       renderDashBatchTasks();
       showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoMove(snap));
     }
@@ -5222,85 +5215,6 @@ function buildHarvestTasks() {
     });
 }
 
-function renderDashHarvestTasks() {
-  const card = document.getElementById('dash-harvest-tasks-card');
-  const el = document.getElementById('dash-harvest-tasks');
-  const countEl = document.getElementById('dash-harvest-count');
-  if (!el || !card) return;
-  const tasks = buildHarvestTasks();
-  if (!tasks.length) {
-    card.style.display = 'none';
-    if (countEl) countEl.textContent = '';
-    el.innerHTML = '';
-    return;
-  }
-  card.style.display = '';
-  // Count bags actually in a tent, not every live bag in the batch. A split
-  // batch used to inflate this \u2014 86 "ready" bags when only 63 were in a tent.
-  if (countEl)
-    countEl.textContent = tp(
-      'dash.bags',
-      tasks.reduce((s, t) => s + t.bagsInTent, 0)
-    );
-  el.innerHTML = tasks
-    .map((tk) => {
-      const id = esc(tk.batchId);
-      const harvested =
-        tk.harvTotal > 0
-          ? ` \u00b7 <span style="color:var(--c-amber-dark);font-weight:500">${tk.harvTotal}g</span>`
-          : '';
-      // Ripeness against the Sorte's expected tent time. No target configured \u2192
-      // no claim is made, just the elapsed days.
-      const overdue = tk.target && tk.remaining < 0;
-      const ripe = tk.target && tk.remaining <= 0;
-      let state = '';
-      if (tk.target) {
-        const label =
-          tk.remaining > 0
-            ? tp('harvest.readyIn', tk.remaining)
-            : tk.remaining === 0
-              ? t('harvest.readyNow')
-              : tp('harvest.overdueBy', -tk.remaining);
-        const color = overdue ? 'var(--c-red-dark)' : ripe ? 'var(--c-amber-dark)' : 'var(--c-text-muted)';
-        state = ` \u00b7 <span style="color:${color};font-weight:600">${esc(label)}</span>`;
-      }
-      // Bags sitting outside the tent are named rather than folded into the
-      // count \u2014 they are the ones the move workflow can't see, because a batch
-      // that reads FRUITING is skipped by buildAutoTasks.
-      const split = tk.elsewhere > 0 ? ` \u00b7 <span style="color:var(--c-text-muted)">+${tk.elsewhere} ${esc(t('harvest.elsewhere'))}</span>` : '';
-      return (
-        '<div class="todo-row ' +
-        (overdue ? 'urgent' : ripe ? 'warn' : '') +
-        '" style="padding:6px 8px;margin-bottom:3px;--sp-color:' +
-        spColor(tk.species) +
-        '">' +
-        '<div style="flex:1;min-width:0">' +
-        '<div style="font-size:13px;font-weight:500">' +
-        `<span class="dash-task-batch-id" data-action="go-to-batch" data-batch="${id}" title="${id}">${id}</span>` +
-        ' \u2014 ' +
-        esc(tk.species) +
-        '/' +
-        esc(tk.strain) +
-        '</div>' +
-        '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
-        esc(tk.zoneLabel) +
-        ' \u00b7 ' +
-        tp('harvest.daysInTent', tk.daysInTent) +
-        state +
-        harvested +
-        '</div>' +
-        '<div style="font-size:11px;color:var(--c-text-muted);margin-top:1px">' +
-        tp('dash.bags', tk.bagsInTent) +
-        ' ' +
-        esc(t('harvest.inTent')) +
-        split +
-        '</div></div>' +
-        `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">${t('harvest.logHarvest')}</button>` +
-        '</div>'
-      );
-    })
-    .join('');
-}
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
 const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
@@ -18485,8 +18399,18 @@ function initEventListeners() {
       openRhythmEditor();
       return;
     }
+    if (action === 'dash-print') {
+      // 'move' is the walk this card is mostly about; the modal has its own
+      // group switcher for the rest.
+      openWorkList('move');
+      return;
+    }
     if (action === 'dash-room-more') {
       toggleDashRoom(el.dataset.room);
+      return;
+    }
+    if (action === 'dash-day') {
+      setDashDay(el.dataset.off);
       return;
     }
     if (action === 'bulk-fruiting') {
@@ -18511,26 +18435,6 @@ function initEventListeners() {
     }
   }
   $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
-  $('dash-harvest-tasks').addEventListener('click', dashTaskCardClick);
-  $('dash-summary').addEventListener('click', function (e) {
-    const btn = e.target.closest('button');
-    if (!btn || btn.disabled) return;
-    // Move / harvest chips open a findable, printable work list; the alerts
-    // chip keeps its scroll-to-card behaviour.
-    if (btn.dataset.worklist) {
-      openWorkList(btn.dataset.worklist);
-      return;
-    }
-    const card = document.getElementById(btn.dataset.flash);
-    if (!card || card.style.display === 'none') return;
-    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const prev = card.style.boxShadow;
-    card.style.transition = 'box-shadow 0.3s ease';
-    card.style.boxShadow = '0 0 0 3px var(--c-accent, #0ea5e9)';
-    setTimeout(() => {
-      card.style.boxShadow = prev || '';
-    }, 1500);
-  });
   $('wl-close').addEventListener('click', () => document.getElementById('m-worklist').classList.remove('open'));
   $('wl-print').addEventListener('click', printWorkList);
   $('m-worklist').addEventListener('click', function (e) {
