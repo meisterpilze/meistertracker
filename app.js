@@ -340,7 +340,7 @@ let confirmCb = null,
   noteId = null,
   saving = false,
   lastHash = '';
-let spMap = {};
+const spMap = {};
 // "Blue Oyster (BO)" and "Blue Oyster" must land on the same key, or the same
 // mushroom gets two colours — which is what happened, since batches store both.
 function _spKey(s) {
@@ -2852,8 +2852,8 @@ function renderKpiHistory() {
     snapshotMap[s.date] = s;
   });
 
-  let histKeys = []; // date keys for x-axis
-  let histLabels = []; // display labels
+  const histKeys = []; // date keys for x-axis
+  const histLabels = []; // display labels
   if (ovPeriod === 'week') {
     // Mon–Sun (7 days)
     const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -3483,7 +3483,7 @@ function renderRackSection(zone, racks, filtered) {
   racks.forEach((r) => (totalBags += Object.keys(getRackBags(r)).length));
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
 
-  let rackCards = racks
+  const rackCards = racks
     .map((rackId) => {
       const bags = getRackBags(rackId);
       const count = Object.keys(bags).length;
@@ -4364,7 +4364,7 @@ const DASH_SECTIONS = ['overdue', 'today', 'week', 'left'];
 // overdue section is the whole historical backlog — hundreds of bags of it — and
 // buries today's two real jobs off the bottom of a phone screen.
 const DASH_SECTION_CAP = 5;
-let _dashMore = {};
+const _dashMore = {};
 function toggleDashMore(key) {
   _dashMore[key] = !_dashMore[key];
   renderDashBatchTasks();
@@ -5556,7 +5556,7 @@ function nbPreview() {
     document.getElementById('nb-mat-preview').style.display = 'none';
     return;
   }
-  let lines = [];
+  const lines = [];
   {
     const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
     const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
@@ -9835,7 +9835,7 @@ async function reorderZoneWithinRole(sourceId, targetId, before, role) {
   const srcIdx = sameRole.findIndex((x) => x.id === sourceId);
   if (srcIdx < 0) return;
   const [src] = sameRole.splice(srcIdx, 1);
-  let tgtIdx = sameRole.findIndex((x) => x.id === targetId);
+  const tgtIdx = sameRole.findIndex((x) => x.id === targetId);
   if (tgtIdx < 0) sameRole.push(src);
   else sameRole.splice(before ? tgtIdx : tgtIdx + 1, 0, src);
   // Build full order: roles in canonical order + any extras, each group in its new local order.
@@ -12972,7 +12972,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       const strainTxt = (batch.strainText || '').trim();
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-      let parts = [species];
+      const parts = [species];
       if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
@@ -13004,7 +13004,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       const strainTxt = (batch.strainText || '').trim();
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-      let parts = [species];
+      const parts = [species];
       if (bagKg != null) parts.push(bagKg + 'kg');
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
@@ -13034,7 +13034,7 @@ function labLabelItems(id, c, detail, qr) {
   const strainTxt = (c.strainText || '').trim();
   const rawNotes = (c.notes || '').trim();
   const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-  let spParts = [species];
+  const spParts = [species];
   if (strainTxt) spParts.push(strainTxt);
   if (notes) spParts.push(notes);
   const sp = spParts.join(' \u2013 ');
@@ -13668,8 +13668,8 @@ function _scanBeep(freq, dur) {
   try {
     _initScanAudio();
     if (!_scanAudioCtx) return;
-    var o = _scanAudioCtx.createOscillator();
-    var g = _scanAudioCtx.createGain();
+    const o = _scanAudioCtx.createOscillator();
+    const g = _scanAudioCtx.createGain();
     o.connect(g);
     g.connect(_scanAudioCtx.destination);
     o.frequency.value = freq;
@@ -13685,10 +13685,10 @@ function _scanBeepOk() {
   try {
     _initScanAudio();
     if (!_scanAudioCtx) return;
-    var ctx = _scanAudioCtx;
-    var now = ctx.currentTime;
-    var o = ctx.createOscillator();
-    var g = ctx.createGain();
+    const ctx = _scanAudioCtx;
+    const now = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
     o.type = 'sine';
     o.frequency.setValueAtTime(880, now);
     o.connect(g);
@@ -13706,12 +13706,12 @@ function _scanBeepErr() {
   try {
     _initScanAudio();
     if (!_scanAudioCtx) return;
-    var ctx = _scanAudioCtx;
-    var t0 = ctx.currentTime;
+    const ctx = _scanAudioCtx;
+    const t0 = ctx.currentTime;
     function tone(start, dur) {
-      var o1 = ctx.createOscillator();
-      var o2 = ctx.createOscillator();
-      var g = ctx.createGain();
+      const o1 = ctx.createOscillator();
+      const o2 = ctx.createOscillator();
+      const g = ctx.createGain();
       o1.type = 'square';
       o2.type = 'square';
       o1.frequency.setValueAtTime(280, start);
@@ -13734,44 +13734,44 @@ function _scanBeepErr() {
 }
 // Tab navigation for 3-tab scan modal
 function switchScanTab(tab) {
-  var tabs = document.querySelectorAll('.scan-tab');
-  var panels = document.querySelectorAll('.scan-tab-panel');
-  for (var i = 0; i < tabs.length; i++) {
-    var t = tabs[i];
+  const tabs = document.querySelectorAll('.scan-tab');
+  const panels = document.querySelectorAll('.scan-tab-panel');
+  for (let i = 0; i < tabs.length; i++) {
+    const t = tabs[i];
     if (t.getAttribute('data-scan-tab') === tab) t.classList.add('active');
     else t.classList.remove('active');
   }
-  for (var j = 0; j < panels.length; j++) {
-    var p = panels[j];
+  for (let j = 0; j < panels.length; j++) {
+    const p = panels[j];
     if (p.getAttribute('data-scan-panel') === tab) p.classList.add('active');
     else p.classList.remove('active');
   }
 }
 // Render the "Letzte Erfolge" tab from sessionEntries (session successes)
 function renderScanSuccesses() {
-  var list = document.getElementById('scan-successes-list');
+  const list = document.getElementById('scan-successes-list');
   if (!list) return;
   list.innerHTML = '';
-  var succ = (sessionEntries || []).filter(function (e) {
+  const succ = (sessionEntries || []).filter(function (e) {
     return e && e.action && (e.batch || e.bag);
   });
-  var cnt = document.getElementById('scan-tab-succ-count');
+  const cnt = document.getElementById('scan-tab-succ-count');
   if (cnt) cnt.textContent = String(succ.length);
   // Newest first
-  for (var i = succ.length - 1; i >= 0; i--) {
-    var e = succ[i];
-    var row = document.createElement('div');
+  for (let i = succ.length - 1; i >= 0; i--) {
+    const e = succ[i];
+    const row = document.createElement('div');
     row.className = 'scan-success-row';
     if (e._tempId) row.setAttribute('data-succ-id', e._tempId);
-    var tm = e.time ? new Date(e.time) : new Date();
-    var timeStr =
+    const tm = e.time ? new Date(e.time) : new Date();
+    const timeStr =
       tm.getHours().toString().padStart(2, '0') +
       ':' +
       tm.getMinutes().toString().padStart(2, '0') +
       ':' +
       tm.getSeconds().toString().padStart(2, '0');
-    var label = e.bag || e.batch || '';
-    var locStr =
+    const label = e.bag || e.batch || '';
+    const locStr =
       e.action === 'MOVE'
         ? (e.from || '?') + ' → ' + (e.to || '?')
         : e.action === 'ADD'
@@ -13801,27 +13801,27 @@ function renderScanSuccesses() {
 }
 // Undo from "Letzte Erfolge" tab row
 function undoSuccessRow(btn) {
-  var row = btn.closest('.scan-success-row');
-  var tempId = row ? row.getAttribute('data-succ-id') : null;
+  const row = btn.closest('.scan-success-row');
+  const tempId = row ? row.getAttribute('data-succ-id') : null;
   if (!tempId) return;
   // Delegate to existing undoScanEntry via a matching log-entry button, or perform undo directly
-  var logBtn = document.querySelector('.scan-log-entry[data-scan-id="' + tempId + '"] .sle-undo');
+  const logBtn = document.querySelector('.scan-log-entry[data-scan-id="' + tempId + '"] .sle-undo');
   if (logBtn) {
     undoScanEntry(logBtn);
     renderScanSuccesses();
     return;
   }
   // Fallback: mirror undoScanEntry logic for entries not in the visible log
-  var idx = sessionEntries.findIndex(function (e) {
+  const idx = sessionEntries.findIndex(function (e) {
     return e._tempId === tempId;
   });
   if (idx === -1) return;
-  var entry = sessionEntries[idx];
-  var si = scanLog.findIndex(function (e) {
+  const entry = sessionEntries[idx];
+  const si = scanLog.findIndex(function (e) {
     return e._tempId === tempId;
   });
   if (si !== -1) scanLog.splice(si, 1);
-  var mi = movements.findIndex(function (e) {
+  const mi = movements.findIndex(function (e) {
     return e._tempId === tempId;
   });
   if (mi !== -1) movements.splice(mi, 1);
@@ -13841,7 +13841,7 @@ function undoSuccessRow(btn) {
 // Transient overlay background flash to reinforce feedback
 var _scanBgFlashTimer = null;
 function _flashScanBg(type) {
-  var ov = document.getElementById('scan-overlay');
+  const ov = document.getElementById('scan-overlay');
   if (!ov) return;
   ov.classList.remove('scan-bg-ok', 'scan-bg-err');
   if (type === 'ok') ov.classList.add('scan-bg-ok');
@@ -15461,7 +15461,7 @@ function renderCalMonth() {
   title.textContent = months[calMonth] + ' ' + calYear;
   const firstDay = new Date(calYear, calMonth, 1);
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  let startDow = (firstDay.getDay() + 6) % 7;
+  const startDow = (firstDay.getDay() + 6) % 7;
   const prevLast = new Date(calYear, calMonth, 0).getDate();
   const events = collectCalendarEvents();
   const todayStr = localDateStr(new Date());
@@ -17299,42 +17299,42 @@ let _camTorchOn = false;
 // Returns the active video MediaStreamTrack from the html5-qrcode reader, or
 // null if the camera hasn't attached one yet.
 function _camActiveTrack() {
-  var video = document.querySelector('#cam-reader video');
+  const video = document.querySelector('#cam-reader video');
   if (!video || !video.srcObject) return null;
-  var tracks = video.srcObject.getVideoTracks();
+  const tracks = video.srcObject.getVideoTracks();
   return tracks && tracks.length ? tracks[0] : null;
 }
 // After scanner.start resolves, html5-qrcode may take a moment to attach the
 // <video> element. Poll briefly, then show the torch button if the track
 // reports torch capability. Most desktop webcams and the front camera do not.
 function _detectTorchSupport() {
-  var attempts = 0;
+  let attempts = 0;
   function check() {
-    var track = _camActiveTrack();
+    const track = _camActiveTrack();
     if (!track || !track.getCapabilities) {
       if (attempts++ < 10) setTimeout(check, 100);
       return;
     }
-    var caps;
+    let caps;
     try {
       caps = track.getCapabilities();
     } catch (e) {
       return;
     }
-    var btn = document.getElementById('btn-cam-torch');
+    const btn = document.getElementById('btn-cam-torch');
     if (btn) btn.hidden = !caps || !caps.torch;
   }
   check();
 }
 function toggleTorch() {
-  var track = _camActiveTrack();
+  const track = _camActiveTrack();
   if (!track || !track.applyConstraints) return;
-  var newState = !_camTorchOn;
+  const newState = !_camTorchOn;
   track
     .applyConstraints({ advanced: [{ torch: newState }] })
     .then(function () {
       _camTorchOn = newState;
-      var btn = document.getElementById('btn-cam-torch');
+      const btn = document.getElementById('btn-cam-torch');
       if (btn) btn.classList.toggle('torch-on', _camTorchOn);
     })
     .catch(function (err) {
@@ -17363,7 +17363,7 @@ function openCamScan() {
     return;
   }
   _camScanner = new Html5Qrcode('cam-reader');
-  var scanner = _camScanner;
+  const scanner = _camScanner;
   scanner
     .start(
       { facingMode: _camFacingMode },
@@ -17375,8 +17375,8 @@ function openCamScan() {
           // 0.88×0.38 to 0.95×0.45 so 1D barcodes printed at 50×30 mm aren't a
           // hit-or-miss target on phones held at typical reading distance
           // (audit Section 1.5 — scan target was <44 mm wide on screen).
-          var w = Math.floor(Math.min(vw, vh) * 0.95);
-          var h = Math.max(80, Math.floor(w * 0.45));
+          const w = Math.floor(Math.min(vw, vh) * 0.95);
+          const h = Math.max(80, Math.floor(w * 0.45));
           return { width: w, height: h };
         },
         aspectRatio: 1.0
@@ -17386,7 +17386,7 @@ function openCamScan() {
         // Dedup: same code re-decoded inside the dedup window is silently
         // dropped. Workers running through 20 bags don't see ghost re-fires
         // when a 1D label lingers in frame across the pause boundary.
-        var now = Date.now();
+        const now = Date.now();
         if (decoded === _camLastDecoded && now - _camLastDecodedAt < SCAN_DEDUP_MS) {
           return;
         }
@@ -17397,7 +17397,7 @@ function openCamScan() {
         // Stocktake runs bag-to-bag at pace, and every bag is a different code,
         // so the 3 s dedup window already covers double-reads — a long pause on
         // top of it just makes the walk feel sluggish.
-        var pauseMs = _zcScanMode ? ZC_SCAN_PAUSE_MS : SCAN_PAUSE_MS;
+        const pauseMs = _zcScanMode ? ZC_SCAN_PAUSE_MS : SCAN_PAUSE_MS;
         setTimeout(function () {
           // Only resume if we're still the active scanner AND the state hasn't
           // moved to closing in the meantime.
@@ -17435,7 +17435,7 @@ function openCamScan() {
       _camState = CAM_IDLE;
       _camScanner = null;
       console.error('Camera start failed:', err);
-      var s = String(err);
+      const s = String(err);
       // Permission-denied is its own path because workers on a brand-new phone
       // see only a one-shot toast and have no idea how to recover. Show the
       // platform-specific recovery steps as a confirm-style modal that stays
@@ -17445,7 +17445,7 @@ function openCamScan() {
         confirm2(t('cam.permDeniedTitle'), t('cam.permDeniedHelp'), t('common.ok'), function () {});
         return;
       }
-      var msg;
+      let msg;
       if (/NotFoundError/.test(s)) msg = t('cam.notFound');
       else if (/NotReadableError|TrackStartError/.test(s)) msg = t('cam.inUse');
       else msg = t('cam.unknownError', { err: err });
@@ -17474,7 +17474,7 @@ function closeCamScan() {
   // capability on a fresh track. Keeping torch-on style across closes would
   // lie about the actual hardware state.
   _camTorchOn = false;
-  var torchBtn = document.getElementById('btn-cam-torch');
+  const torchBtn = document.getElementById('btn-cam-torch');
   if (torchBtn) {
     torchBtn.classList.remove('torch-on');
     torchBtn.hidden = true;
@@ -17485,7 +17485,7 @@ function closeCamScan() {
     _camState = CAM_IDLE;
     return;
   }
-  var scanner = _camScanner;
+  const scanner = _camScanner;
   _camScanner = null;
   _camState = CAM_CLOSING;
   scanner
@@ -17495,7 +17495,7 @@ function closeCamScan() {
     })
     .catch(function () {
       // Force-stop media tracks if library cleanup fails (iOS Safari)
-      var vids = document.getElementById('cam-reader').querySelectorAll('video');
+      const vids = document.getElementById('cam-reader').querySelectorAll('video');
       vids.forEach(function (v) {
         if (v.srcObject)
           v.srcObject.getTracks().forEach(function (t) {
@@ -17536,8 +17536,8 @@ function camUndoLastScan() {
     _showCamHudToast('info', t('cam.nothingToUndo'));
     return;
   }
-  var last = null;
-  for (var i = sessionEntries.length - 1; i >= 0; i--) {
+  let last = null;
+  for (let i = sessionEntries.length - 1; i >= 0; i--) {
     if (sessionEntries[i].action !== 'HARVEST') {
       last = sessionEntries[i];
       break;
@@ -17547,7 +17547,7 @@ function camUndoLastScan() {
     _showCamHudToast('info', t('cam.nothingToUndo'));
     return;
   }
-  var btn = document.querySelector('[data-scan-id="' + last._tempId + '"] .sle-undo');
+  const btn = document.querySelector('[data-scan-id="' + last._tempId + '"] .sle-undo');
   if (btn) undoScanEntry(btn);
 }
 function copyCalDavUrl() {
@@ -17890,7 +17890,7 @@ function initEventListeners() {
   // Scan modal tab navigation
   document.querySelectorAll('.scan-tab').forEach(function (tabBtn) {
     tabBtn.addEventListener('click', function () {
-      var name = this.getAttribute('data-scan-tab');
+      const name = this.getAttribute('data-scan-tab');
       switchScanTab(name);
       if (name === 'successes') renderScanSuccesses();
     });
@@ -18444,7 +18444,7 @@ function initEventListeners() {
 // Camera FAB is in the HTML *after* the <script> tag, so it doesn't exist
 // when initEventListeners() runs. Bind it once the full DOM is ready.
 document.addEventListener('DOMContentLoaded', function () {
-  var fab = document.getElementById('cam-fab');
+  const fab = document.getElementById('cam-fab');
   if (fab)
     fab.addEventListener('click', function () {
       // Front-door scan: always start neutral so scanning a bag opens its
@@ -18461,7 +18461,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Wait until the rest of the app has had a chance to fetch data + render
   // before dispatching, so go() / openCamScan find the elements they need.
   try {
-    var actionParam = new URLSearchParams(window.location.search).get('action');
+    const actionParam = new URLSearchParams(window.location.search).get('action');
     if (actionParam) {
       window.setTimeout(function () {
         if (actionParam === 'scan') {
@@ -18486,9 +18486,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Action speed-dial FAB — toggles a 3-button menu (New batch / Lab work /
   // Log harvest). This is the single home for the creation flows on every page.
-  var afab = document.getElementById('action-fab');
-  var afabMenu = document.getElementById('action-fab-menu');
-  var afabWrap = document.getElementById('action-fab-wrap');
+  const afab = document.getElementById('action-fab');
+  const afabMenu = document.getElementById('action-fab-menu');
+  const afabWrap = document.getElementById('action-fab-wrap');
   function setAfabOpen(open) {
     if (!afab || !afabMenu) return;
     afab.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -18498,7 +18498,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (afab) {
     afab.addEventListener('click', function (e) {
       e.stopPropagation();
-      var open = afab.getAttribute('aria-expanded') === 'true';
+      const open = afab.getAttribute('aria-expanded') === 'true';
       setAfabOpen(!open);
     });
   }
@@ -18512,7 +18512,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ['action-fab-labwork', msQuickLaborNew],
     ['action-fab-harvest', dashGoHarvest]
   ].forEach(function (pair) {
-    var src = document.getElementById(pair[0]);
+    const src = document.getElementById(pair[0]);
     if (!src) return;
     src.addEventListener('click', function () {
       pair[1]();
