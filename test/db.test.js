@@ -1650,3 +1650,62 @@ describe('db – harvest releases', () => {
     assert.equal(db.deleteHarvestRelease(d, 'Pink'), 0, 'removing twice is not an error, just nothing');
   });
 });
+
+describe('db – week rhythm', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+  const rhythm = () => db.readAll(d).weekRhythm;
+
+  // Empty is meaningful: it is what tells the editor to propose a rhythm from
+  // history rather than presenting seven blank rows.
+  it('starts empty rather than pre-seeded with a guess', () => {
+    assert.deepEqual(rhythm(), {});
+  });
+
+  it('round-trips a full week keyed the way getDay() counts', () => {
+    db.setWeekRhythm(d, { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
+    assert.deepEqual(rhythm(), { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
+  });
+
+  it('replaces the whole week, so a dropped day is really gone', () => {
+    db.setWeekRhythm(d, { 1: 'substrate', 3: 'grain' });
+    db.setWeekRhythm(d, { 3: 'grain' });
+    assert.deepEqual(rhythm(), { 3: 'grain' }, 'Monday survived a save that omitted it');
+  });
+
+  it('treats an empty theme as clearing that day', () => {
+    db.setWeekRhythm(d, { 1: 'substrate', 2: '', 3: null });
+    assert.deepEqual(rhythm(), { 1: 'substrate' });
+  });
+
+  it('refuses an unknown theme rather than storing something nothing renders', () => {
+    db.setWeekRhythm(d, { 1: 'substrate' });
+    assert.throws(() => db.setWeekRhythm(d, { 1: 'brunch' }), /Unknown theme/);
+    assert.deepEqual(rhythm(), { 1: 'substrate' }, 'a rejected save still changed the week');
+  });
+
+  it('refuses a weekday outside 0..6', () => {
+    for (const bad of [7, -1, 1.5, 'Montag']) {
+      assert.throws(() => db.setWeekRhythm(d, { [bad]: 'grain' }), /Not a weekday/, 'accepted ' + bad);
+    }
+  });
+
+  it('rolls back completely when one day of the save is bad', () => {
+    db.setWeekRhythm(d, { 1: 'substrate', 3: 'grain' });
+    const before = rhythm();
+    assert.throws(() => db.setWeekRhythm(d, { 1: 'lab', 2: 'nonsense' }));
+    assert.deepEqual(rhythm(), before, 'a failed save left the week half-applied');
+  });
+
+  it('bumps the data version so other clients pick the change up', () => {
+    const v = db.getDataVersion(d);
+    db.setWeekRhythm(d, { 4: 'fruiting' });
+    assert.equal(db.getDataVersion(d), v + 1);
+  });
+});

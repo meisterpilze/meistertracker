@@ -7304,6 +7304,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // PUT /api/week-rhythm — replace the whole weekday → theme map at once
+  if (req.method === 'PUT' && req.url === '/api/week-rhythm') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const map = data && data.rhythm;
+      if (!map || typeof map !== 'object' || Array.isArray(map)) {
+        jsonErr(res, 400, 'rhythm must be an object of weekday → theme');
+        return;
+      }
+      try {
+        const n = db.setWeekRhythm(database, map);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, days: n });
+      } catch (err) {
+        // A bad weekday or unknown theme is the caller's fault, not a 500.
+        if (/Not a weekday|Unknown theme|must be an object/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const zoneRackMatch = req.url.match(/^\/api\/zones\/([^/]+)\/racks$/);
   if (req.method === 'POST' && zoneRackMatch) {
     if (requireAdmin(req, res)) return;
