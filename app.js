@@ -4599,11 +4599,15 @@ function openRhythmEditor() {
       `</label>`
     );
   }).join('');
+  // .modal-bg is display:none and only .modal-bg.open is display:flex, so
+  // clearing the hidden attribute alone left the dialog invisible — which is
+  // exactly what it did. Visibility here is the class, like every other modal.
   modal.hidden = false;
+  modal.classList.add('open');
 }
 function closeRhythmEditor() {
   const m = document.getElementById('m-rhythm');
-  if (m) m.hidden = true;
+  if (m) m.classList.remove('open');
 }
 function saveRhythmEditor() {
   const rows = document.getElementById('rhythm-rows');
