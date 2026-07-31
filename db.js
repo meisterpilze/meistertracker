@@ -4948,6 +4948,40 @@ function setRhythmProgress(db, date, doneQty) {
   incrementDataVersion(db);
   return n;
 }
+// Change what ONE date is asking for, leaving the recurring rhythm alone. The
+// template is the usual amount; a given week rarely matches it exactly, and
+// editing the template to cover one busy Monday would quietly change every
+// Monday after it too.
+//
+// Upserts, because a future date has no snapshot yet — "this Thursday we need
+// 60" has to be sayable before Thursday arrives. The row is seeded from the
+// template so the Sorte, theme and note come along with it.
+function setRhythmTarget(db, date, targetQty) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
+  let qty = null;
+  if (targetQty !== null && targetQty !== undefined && targetQty !== '') {
+    const n = Number(targetQty);
+    if (!Number.isInteger(n) || n < 0) throw new Error('Target must be a whole number of 0 or more');
+    if (n > 100000) throw new Error('Target is implausibly large');
+    qty = n === 0 ? null : n;
+  }
+  const row = db.prepare('SELECT date FROM rhythm_task WHERE date = ?').get(date);
+  const stamp = new Date().toISOString();
+  if (row) {
+    db.prepare('UPDATE rhythm_task SET target_qty = ?, updated = ? WHERE date = ?').run(qty, stamp, date);
+  } else {
+    // Seed from the weekday's template so the new row is a real job, not a bare
+    // number floating on a date.
+    const weekday = new Date(date + 'T00:00:00').getDay();
+    const tpl = db.prepare('SELECT theme, strain_id, note FROM week_rhythm WHERE weekday = ?').get(weekday) || {};
+    if (!tpl.theme || tpl.theme === 'free') throw new Error('No rhythm on ' + date);
+    db.prepare(
+      'INSERT INTO rhythm_task(date, weekday, theme, target_qty, strain_id, note, done_qty, created) VALUES(?, ?, ?, ?, ?, ?, 0, ?)'
+    ).run(date, weekday, tpl.theme, qty, tpl.strain_id, tpl.note, stamp);
+  }
+  incrementDataVersion(db);
+  return qty;
+}
 function listRhythmTasks(db) {
   return db
     .prepare('SELECT date, weekday, theme, target_qty, strain_id, note, done_qty FROM rhythm_task ORDER BY date')
@@ -7441,6 +7475,7 @@ module.exports = {
   WEEK_THEMES,
   ensureRhythmTasks,
   setRhythmProgress,
+  setRhythmTarget,
   listRhythmTasks,
   zoneBagCount,
   rackBagCount,
