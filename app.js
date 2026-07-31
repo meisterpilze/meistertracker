@@ -15855,7 +15855,7 @@ function handleCalendarDrop(type, id, newDateStr) {
     b.days = Math.max(1, Math.round((newDue - created) / MS_PER_DAY));
     apiPatch('/api/batches/' + encodeURIComponent(id), { due: b.due, days: b.days });
     renderCalendar();
-    if (typeof pushBatchCaldav === 'function') pushBatchCaldav(b);
+    pushBatchCaldav(b);
   } else if (type === 'task-due') {
     const t = manualTasks.find((x) => x.created === id);
     if (!t) return;
@@ -16302,7 +16302,7 @@ function saveBatchDueFromDetail(id) {
   b.days = Math.max(1, Math.round((newDue - created) / MS_PER_DAY));
   apiPatch('/api/batches/' + encodeURIComponent(id), { due: b.due, days: b.days });
   renderCalendar();
-  if (typeof pushBatchCaldav === 'function') pushBatchCaldav(b);
+  pushBatchCaldav(b);
   closeEventDetail();
 }
 
@@ -17031,19 +17031,26 @@ async function loadCalDAVImports() {
   }
 }
 
-if (typeof pushBatchCaldav === 'undefined') {
-  window.pushBatchCaldav = async function (batch) {
-    if (!caldav.enabled) return;
-    try {
-      await authFetch('/api/caldav/push-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch })
-      });
-    } catch (e) {
-      console.warn('CalDAV push failed:', e.message);
-    }
-  };
+// A plain declaration, like every other function here. It used to be
+// `if (typeof pushBatchCaldav === 'undefined') window.pushBatchCaldav = ...`,
+// guarding against a redefinition that never existed — nothing else in the repo
+// defines this name. Its two call sites guarded in the same spirit
+// (`if (typeof pushBatchCaldav === 'function')`), which meant that if this block
+// ever failed to run, CalDAV push degraded to a silent no-op: batches would stop
+// appearing in the shared calendar with no error and no failed request to notice.
+// Declared normally it hoists, so the call sites can just call it — and ESLint can
+// now see the binding, which is how this was found.
+async function pushBatchCaldav(batch) {
+  if (!caldav.enabled) return;
+  try {
+    await authFetch('/api/caldav/push-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch })
+    });
+  } catch (e) {
+    console.warn('CalDAV push failed:', e.message);
+  }
 }
 
 // All .modal-bg elements ship with a `hidden` attribute in index.html so the
