@@ -530,6 +530,7 @@ window.LANG['pt'] = {
   'th.created': 'Criado',
   'th.notes': 'Notas',
   // Lab
+  'lab.grain': 'Inóculo de grão',
   'lab.cultures': 'Culturas',
   'lab.logWork': 'Trabalho de laborat\u00f3rio',
   'lab.lineage': 'Linhagem',

@@ -618,6 +618,7 @@ window.LANG['de'] = {
   'th.created': 'Erstellt',
   'th.notes': 'Notizen',
   // Lab
+  'lab.grain': 'Körnerbrut',
   'lab.cultures': 'Kulturen',
   'lab.logWork': 'Laborarbeit',
   'lab.lineage': 'Abstammung',
