@@ -954,13 +954,21 @@ function go(page, btnId) {
   const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
   if (bnBtn) bnBtn.classList.add('active');
   if (page === 'dash') {
-    renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
-    renderDashLabStock();
   }
-  if (page === 'batch') renderBatches();
-  if (page === 'lab') renderCultures();
+  // The pipeline strip and the "where is everything" list live on the Chargen
+  // page now, and lab stock on Labor — each section carries its own overview
+  // instead of the dashboard carrying all of them. renderStatus fills both
+  // #metrics and #dash-locations, so it belongs with the page that shows them.
+  if (page === 'batch') {
+    renderStatus();
+    renderBatches();
+  }
+  if (page === 'lab') {
+    renderDashLabStock();
+    renderCultures();
+  }
   if (page === 'inv') {
     renderInvStock();
   }
@@ -1045,13 +1053,17 @@ function refresh() {
   if (!active) return;
   const id = active.id.replace('p-', '');
   if (id === 'dash') {
-    renderStatus();
     renderDashAlerts();
     renderDashBatchTasks();
-    renderDashLabStock();
   }
-  if (id === 'batch') renderBatches();
-  if (id === 'lab') renderCultures();
+  if (id === 'batch') {
+    renderStatus();
+    renderBatches();
+  }
+  if (id === 'lab') {
+    renderDashLabStock();
+    renderCultures();
+  }
   if (id === 'inv') renderInvStock();
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
@@ -6852,6 +6864,59 @@ let _rbLastRenderFp = null;
 const ARCHIVED_STATUSES = ['DONE', 'EMPTY', 'CONTAM'];
 const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
 
+// The batch list was one flat run of every row in due-date order, which is fine
+// for finding a known id and useless for "how much is in incubation". Grouped by
+// stage it reads like the pipeline strip above it, and a stage you are not
+// working on folds away.
+const BATCH_GROUP_ORDER = ['SPAWN RUN', 'INCUBATING', 'FRUITING', '__archived'];
+const BATCH_GROUP_LABEL = {
+  'SPAWN RUN': 'stage.spawn',
+  INCUBATING: 'stage.incubation',
+  FRUITING: 'stage.fruiting',
+  __archived: 'batch.filterArchived'
+};
+// Collapsed state per group. Archived starts closed — it is history, and on this
+// farm it is a third of the rows; everything else starts open.
+const _batchGroupClosed = { __archived: true };
+function toggleBatchGroup(key) {
+  _batchGroupClosed[key] = !_batchGroupClosed[key];
+  renderBatches();
+}
+function _batchGroupKey(status) {
+  return isArchivedStatus(status) ? '__archived' : status;
+}
+function _groupBatchRows(rows) {
+  if (!rows.length) return '';
+  const groups = {};
+  for (const r of rows) (groups[_batchGroupKey(r.status)] = groups[_batchGroupKey(r.status)] || []).push(r);
+  // Known stages in pipeline order, then anything unexpected rather than
+  // dropping it — a row nobody planned for must still be reachable.
+  const keys = BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
+    Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
+  );
+  let out = '';
+  for (const k of keys) {
+    const closed = !!_batchGroupClosed[k];
+    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : k;
+    out +=
+      '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg-soft,transparent)">' +
+      '<button type="button" data-action="batch-group" data-key="' +
+      esc(k) +
+      '" aria-expanded="' +
+      !closed +
+      '" style="width:100%;text-align:left;border:0;background:none;padding:6px 8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:var(--c-text-sec);display:flex;align-items:center;gap:6px">' +
+      '<span style="font-size:10px">' +
+      (closed ? '▸' : '▾') +
+      '</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      esc(label) +
+      '</span><span style="color:var(--c-text-muted);font-weight:400">' +
+      groups[k].length +
+      '</span></button></td></tr>';
+    if (!closed) for (const r of groups[k]) out += r.html;
+  }
+  return out;
+}
+
 function renderBatches() {
   const q = (document.getElementById('batch-q').value || '').toLowerCase(),
     body = document.getElementById('batches-body');
@@ -6900,6 +6965,10 @@ function renderBatches() {
     '|' +
     archiveFilter +
     '|' +
+    // Which stage groups are folded is part of what is on screen — leave it out
+    // and the early return below swallows every expand and collapse.
+    JSON.stringify(_batchGroupClosed) +
+    '|' +
     JSON.stringify(tableSort.batches || null) +
     '|' +
     (batchAttentionFilter ? batchAttentionFilter.label || 'flt' : '') +
@@ -6938,9 +7007,10 @@ function renderBatches() {
       .join('');
   if (renderFp === _rbLastRenderFp) return;
   _rbLastRenderFp = renderFp;
-  body.innerHTML =
-    sorted
-      .map((b) => {
+  // Each row is returned with its status so _groupBatchRows can bucket it by
+  // stage; the row markup itself is unchanged.
+  const _rowsByStage = sorted.map((b) => {
+    {
         const { status } = getStatus(b.batchId);
         const sub = b.substrate
           ? [
@@ -6975,9 +7045,13 @@ function renderBatches() {
           : '';
         // data-mlabel attrs are surfaced as ::before labels in the mobile
         // card layout (styles.css "Batches table — mobile card mode").
-        return `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id" style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td data-mlabel="${esc(t('th.due'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`;
-      })
-      .join('') || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
+        return {
+          status,
+          html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id" style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td data-mlabel="${esc(t('th.due'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
+        };
+    }
+  });
+  body.innerHTML = _groupBatchRows(_rowsByStage) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
 }
 let locColor = {};
 function toggleBatchBags(batchId) {
@@ -18479,6 +18553,9 @@ function initEventListeners() {
     if (!el) return;
     const batch = el.dataset.batch;
     switch (el.dataset.action) {
+      case 'batch-group':
+        toggleBatchGroup(el.dataset.key);
+        break;
       case 'toggle-bags':
         toggleBatchBags(batch);
         break;
