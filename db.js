@@ -4591,6 +4591,25 @@ function renameZoneName(db, id, newName) {
   incrementDataVersion(db);
 }
 
+// Capacity was write-once at zone creation; this lets it be corrected later, once
+// the real limit of a tent is known. null clears the limit. Stored as NULL rather
+// than 0 so "no limit" and "holds nothing" stay distinguishable — every reader
+// tests truthiness on max_capacity.
+function setZoneCapacity(db, id, cap) {
+  const z = db.prepare('SELECT id FROM zones WHERE id=?').get(id);
+  if (!z) throw new Error('Zone not found: ' + id);
+  let v = null;
+  if (cap !== null && cap !== undefined && cap !== '') {
+    const n = Number(cap);
+    if (!Number.isInteger(n) || n < 0) throw new Error('Capacity must be a whole number of 0 or more');
+    if (n > 1000000) throw new Error('Capacity is implausibly large');
+    v = n === 0 ? null : n;
+  }
+  db.prepare('UPDATE zones SET max_capacity=? WHERE id=?').run(v, id);
+  incrementDataVersion(db);
+  return v;
+}
+
 // -- Camera dashboard (admin WIP) --------------------------------------------
 const CAMERA_CALIB_FIELDS = [
   ['pxPerMm', 'px_per_mm', 'real'],
@@ -7060,6 +7079,7 @@ module.exports = {
   deleteRack,
   zoneExists,
   renameZoneName,
+  setZoneCapacity,
   zoneBagCount,
   rackBagCount,
   getMcpCfg,

@@ -1515,3 +1515,63 @@ describe('resetOperationalData – scopes', () => {
     assert.equal(stock().stock_hardwood, before.stock_hardwood);
   });
 });
+
+describe('db – zone capacity', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.insertZone(d, { id: 'TENTX', name: 'Test Tent', role: 'fruiting', color: '#0a0', sortOrder: 9 });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+  const cap = () => d.prepare('SELECT max_capacity FROM zones WHERE id=?').get('TENTX').max_capacity;
+
+  it('sets a limit on a zone that had none', () => {
+    assert.equal(cap(), null);
+    db.setZoneCapacity(d, 'TENTX', 150);
+    assert.equal(cap(), 150);
+  });
+
+  it('clears the limit on null or empty, rather than storing a zero', () => {
+    db.setZoneCapacity(d, 'TENTX', 150);
+    db.setZoneCapacity(d, 'TENTX', null);
+    assert.equal(cap(), null);
+    db.setZoneCapacity(d, 'TENTX', 150);
+    db.setZoneCapacity(d, 'TENTX', '');
+    assert.equal(cap(), null);
+  });
+
+  // 0 and "no limit" must not be the same stored value or every reader that
+  // tests truthiness would treat a deliberate zero as unlimited anyway. Storing
+  // NULL keeps that honest instead of pretending 0 is a capacity.
+  it('stores an explicit zero as no-limit, not as a capacity of zero', () => {
+    db.setZoneCapacity(d, 'TENTX', 0);
+    assert.equal(cap(), null);
+  });
+
+  it('refuses a fractional, negative or non-numeric capacity', () => {
+    db.setZoneCapacity(d, 'TENTX', 150);
+    for (const bad of [1.5, -1, 'abc', '12abc', NaN, Infinity]) {
+      assert.throws(() => db.setZoneCapacity(d, 'TENTX', bad), /whole number/, 'accepted ' + String(bad));
+    }
+    assert.equal(cap(), 150, 'a rejected value still changed the stored capacity');
+  });
+
+  it('refuses an unknown zone rather than silently doing nothing', () => {
+    assert.throws(() => db.setZoneCapacity(d, 'NOPE', 10), /Zone not found/);
+  });
+
+  it('bumps the data version so other clients pick the change up', () => {
+    const before = db.getDataVersion(d);
+    db.setZoneCapacity(d, 'TENTX', 42);
+    assert.equal(db.getDataVersion(d), before + 1, 'setting a capacity did not bump dataVersion');
+  });
+
+  it('surfaces the new limit through readAll', () => {
+    db.setZoneCapacity(d, 'TENTX', 77);
+    const z = db.readAll(d).zones.find((x) => x.id === 'TENTX');
+    assert.equal(z.maxCapacity, 77);
+  });
+});
