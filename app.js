@@ -329,7 +329,8 @@ let mushroomStrains = [],
   duckdns = {},
   zones = [],
   suppliers = [],
-  weekRhythm = {};
+  weekRhythm = {},
+  rhythmTasks = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
 let barcodeRegistry = new Map(),
   barcodeByEntity = new Map();
@@ -568,6 +569,7 @@ function applyData(d) {
   zones = d.zones || [];
   suppliers = d.suppliers || [];
   weekRhythm = d.weekRhythm || {};
+  rhythmTasks = d.rhythmTasks || [];
   // Build barcode registry from server data
   barcodeRegistry = new Map();
   barcodeByEntity = new Map();
@@ -4484,6 +4486,41 @@ function themeOf(weekday) {
   const r = rhythmOf(weekday);
   return r ? r.theme || '' : '';
 }
+function _ymd(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+// The tracked job for a date, if one was planned. Past days and today are
+// snapshots taken when they arrived; a future day has none yet, so it is read
+// from the template and marked as still only a plan.
+function rhythmTaskOn(date) {
+  const key = _ymd(date);
+  const row = rhythmTasks.find((x) => x.date === key);
+  if (row) return row;
+  const r = rhythmOf(date.getDay());
+  if (!r || r.theme === 'free' || !r.targetQty) return null;
+  return {
+    date: key,
+    weekday: date.getDay(),
+    theme: r.theme,
+    targetQty: r.targetQty,
+    strainId: r.strainId,
+    note: r.note,
+    doneQty: 0,
+    planned: true
+  };
+}
+// Everything asked for before today and not finished. This is the point of
+// tracking at all: 45 planned for Monday with 30 made means Tuesday still owes
+// 15. Without it the shortfall simply vanished and the same 45 came round again
+// the following week as though nothing had been missed.
+function rhythmArrears(today) {
+  const cut = _ymd(today);
+  return rhythmTasks
+    .filter((x) => x.date < cut && x.targetQty && (x.doneQty || 0) < x.targetQty)
+    .map((x) => Object.assign({}, x, { outstanding: x.targetQty - (x.doneQty || 0) }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
 // "45× Blue Oyster" — what the day is actually asking for. The mixture is not
 // stored on the day: it is read live off the Sorte, so correcting a recipe
 // updates every day that points at it instead of leaving stale copies behind.
@@ -4954,6 +4991,11 @@ function _weekDayBodyHtml(d, off, isToday) {
       esc([mix, r && r.note].filter(Boolean).join(' · ')) +
       '</div>';
   }
+  // The day's own planned job, and — on today only — whatever earlier days
+  // still owe. Arrears belong on today because that is when they can be done.
+  const own = rhythmTaskOn(d.date);
+  if (own) html += _rhythmTaskRowHtml(own, 0);
+  if (isToday) for (const late of rhythmArrears(d.date)) html += _rhythmTaskRowHtml(late, late.outstanding);
   if (isToday) {
     const prog = todayProgress(d.items);
     if (prog.total) {
@@ -4997,6 +5039,81 @@ function _weekDayBodyHtml(d, off, isToday) {
       '</button>';
   }
   return html + '</div>';
+}
+// A planned job as a row you can act on: what was asked for, how much of it is
+// done, and a button to record the rest. `outstanding` is set for a job carried
+// over from an earlier day, which is shown by its date rather than pretending
+// it belongs to today.
+function _rhythmTaskRowHtml(task, outstanding) {
+  const ms = task.strainId ? mushroomStrains.find((m) => m.id === task.strainId) : null;
+  const done = task.doneQty || 0;
+  const target = task.targetQty || 0;
+  const late = outstanding > 0;
+  const label = (ms ? target + '× ' + ms.name : String(target)) + ' · ' + weekThemeLabel(task.theme);
+  const meta = late
+    ? t('rhythm.carriedFrom', { date: fmtDt(task.date), n: outstanding })
+    : done
+      ? t('rhythm.done', { done, total: target })
+      : task.planned
+        ? t('rhythm.planned')
+        : t('rhythm.done', { done: 0, total: target });
+  return (
+    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;--sp-color:' +
+    (late ? 'var(--c-red-dark)' : ms ? spColor(ms.name) : 'var(--c-accent)') +
+    '">' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    esc(label) +
+    '</div>' +
+    '<div style="font-size:11px;color:' +
+    (late ? 'var(--c-red-dark)' : 'var(--c-text-muted)') +
+    '">' +
+    esc(meta) +
+    '</div></div>' +
+    // A future day cannot be logged against — it has no snapshot yet, and
+    // recording work before the day arrives would be recording a guess.
+    (task.planned
+      ? ''
+      : '<button class="btn btn-sm btn-p" data-action="rhythm-log" data-date="' +
+        esc(task.date) +
+        '" data-target="' +
+        target +
+        '" data-done="' +
+        done +
+        '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+        esc(t('rhythm.log')) +
+        '</button>') +
+    '</div>'
+  );
+}
+// Ask how many were actually made, and send the absolute figure. Pre-filled
+// with the target rather than 0: the common answer is "all of them", and the
+// common answer should be one tap away.
+function logRhythmProgress(date, target, done) {
+  if (!date) return;
+  prompt2(t('rhythm.logPrompt', { total: target }), String(done || target || ''), function (raw) {
+    if (raw === null || raw === undefined) return;
+    const s = String(raw).trim();
+    if (s === '') return;
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < 0) {
+      setFb('err', t('rhythm.logBad'));
+      return;
+    }
+    apiPost('/api/rhythm-task', { date, doneQty: n }).then((res) => {
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      // Update in place so the row reflects the new figure without waiting for
+      // the next poll; the server is the source of truth on the next load.
+      const row = rhythmTasks.find((x) => x.date === date);
+      if (row) row.doneQty = n;
+      else rhythmTasks.push({ date, weekday: new Date(date).getDay(), theme: '', targetQty: target, doneQty: n });
+      setFb('ok', t('rhythm.logged'));
+      renderDashBatchTasks();
+    });
+  });
 }
 function _rhythmEditLink() {
   return (
@@ -18682,6 +18799,10 @@ function initEventListeners() {
     }
     if (action === 'edit-rhythm') {
       openRhythmEditor();
+      return;
+    }
+    if (action === 'rhythm-log') {
+      logRhythmProgress(el.dataset.date, Number(el.dataset.target), Number(el.dataset.done));
       return;
     }
     if (action === 'dash-print') {

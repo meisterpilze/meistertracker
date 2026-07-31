@@ -7332,6 +7332,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // POST /api/rhythm-task — record how many of a planned day actually got made.
+  // Deliberately not admin-only: logging what you just produced is the job.
+  // Editing the rhythm itself still requires an admin.
+  if (req.method === 'POST' && req.url === '/api/rhythm-task') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const n = db.setRhythmProgress(database, data && data.date, data && data.doneQty);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, doneQty: n });
+      } catch (err) {
+        if (/Not a date|whole number|No planned work|implausibly large/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const zoneRackMatch = req.url.match(/^\/api\/zones\/([^/]+)\/racks$/);
   if (req.method === 'POST' && zoneRackMatch) {
     if (requireAdmin(req, res)) return;
