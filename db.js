@@ -192,7 +192,19 @@ CREATE TABLE IF NOT EXISTS harvest_feed_config (
   site         TEXT DEFAULT '',
   last_at      TEXT,
   last_ok      INTEGER,
-  last_error   TEXT
+  last_error   TEXT,
+  release_mode INTEGER DEFAULT 0
+);
+
+-- How much of a harvest the shop may sell, per species. See migration v55: the
+-- feed otherwise reports what was harvested, which stops being the truth the
+-- moment anything is sold anywhere else.
+CREATE TABLE IF NOT EXISTS harvest_release (
+  species     TEXT PRIMARY KEY,
+  grams       REAL NOT NULL DEFAULT 0,
+  valid_until TEXT,
+  note        TEXT DEFAULT '',
+  updated     TEXT NOT NULL
 );
 
 -- Camera dashboard (admin-only WIP). The Python mushroom_camera module
@@ -1578,6 +1590,41 @@ const MIGRATIONS = [
       erased_at   TEXT NOT NULL,
       PRIMARY KEY (channel, handle_hash)
     )`);
+    }
+  },
+  {
+    version: 55,
+    description: 'Release for sale: how much of a harvest a shop may actually sell, and until when',
+    fn(db) {
+      // The feed reports what was harvested. That is not the same as what is
+      // still there, and the difference is the whole problem: `harvests` only
+      // ever grows. Sell three kilos at the market on Saturday and the feed
+      // still reports the Friday harvest until it falls out of the window.
+      //
+      // Recording every sale would fix the arithmetic and will not happen — a
+      // market stand takes cash, not keystrokes. So the number that goes out is
+      // not a live stock but a **release**: this much is set aside for the shop.
+      // Sales that happen elsewhere come out of the rest and can no longer make
+      // the published figure wrong, because they cannot touch the set-aside.
+      //
+      // valid_until is the guardrail. Fresh mushrooms do not keep, and the
+      // realistic failure here is not a wrong number, it is a forgotten one —
+      // last week's release quietly selling produce that was eaten days ago. An
+      // expired release counts as zero, both here and in the receiver.
+      db.exec(`CREATE TABLE IF NOT EXISTS harvest_release (
+      species     TEXT PRIMARY KEY,
+      grams       REAL NOT NULL DEFAULT 0,
+      valid_until TEXT,
+      note        TEXT DEFAULT '',
+      updated     TEXT NOT NULL
+    )`);
+      const cols = db.prepare('PRAGMA table_info(harvest_feed_config)').all();
+      // Off by default, and it has to be: switching it on changes what the
+      // numbers in the feed *mean*, and nobody's shop should start capping
+      // itself because they pulled a new version.
+      if (!cols.some((c) => c.name === 'release_mode')) {
+        db.exec('ALTER TABLE harvest_feed_config ADD COLUMN release_mode INTEGER DEFAULT 0');
+      }
     }
   }
 ];
@@ -3360,6 +3407,10 @@ function resetOperationalData(db, opts) {
       wipe('contamination_photos');
       wipe('contamination_reports');
       wipe('harvests');
+      // A release says "this much of the harvest is set aside for sale". With
+      // the harvests gone it would still say it, and keep offering produce that
+      // no longer exists in any record.
+      wipe('harvest_release');
       wipe('scan_log');
       wipe('bags');
       wipe('batches');
@@ -3857,6 +3908,7 @@ function getHarvestFeedCfg(db) {
     leadDays: row.lead_days ?? 0,
     strain: row.strain !== 0,
     site: row.site || '',
+    releaseMode: row.release_mode === 1,
     lastAt: row.last_at || null,
     lastOk: row.last_ok === null || row.last_ok === undefined ? null : row.last_ok === 1,
     lastError: row.last_error || null
@@ -3867,7 +3919,7 @@ function updateHarvestFeedCfg(db, cfg) {
   db.prepare(
     `UPDATE harvest_feed_config
         SET enabled=?, url=?, secret=?, interval_min=?, fresh_days=?,
-            planned_days=?, lead_days=?, strain=?, site=?
+            planned_days=?, lead_days=?, strain=?, site=?, release_mode=?
       WHERE id=1`
   ).run(
     cfg.enabled ? 1 : 0,
@@ -3878,7 +3930,8 @@ function updateHarvestFeedCfg(db, cfg) {
     cfg.plannedDays ?? 28,
     cfg.leadDays ?? 0,
     cfg.strain === false ? 0 : 1,
-    cfg.site || ''
+    cfg.site || '',
+    cfg.releaseMode ? 1 : 0
   );
   incrementDataVersion(db);
 }
@@ -3897,6 +3950,74 @@ function updateHarvestFeedStatus(db, { at, ok, error }) {
     ok ? 1 : 0,
     ok ? null : String(error || '').slice(0, 500)
   );
+}
+
+// -- Release for sale --
+//
+// One row per species: how much of it a shop may sell, and until when. Grams,
+// because that is what the scale says and what `harvests` stores — the
+// conversion to whatever a shop lists in belongs at the far end, once.
+
+/** Today as YYYY-MM-DD, local time. A release runs out at the end of a day, not at UTC midnight. */
+function localDay(at) {
+  const d = at || new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Every release, expired ones included — they are the interesting ones in a list. */
+function listHarvestReleases(db, at) {
+  const today = localDay(at);
+  return db
+    .prepare('SELECT species, grams, valid_until, note, updated FROM harvest_release ORDER BY species')
+    .all()
+    .map((r) => ({
+      species: r.species,
+      grams: r.grams || 0,
+      validUntil: r.valid_until || null,
+      note: r.note || '',
+      updated: r.updated,
+      expired: !!(r.valid_until && r.valid_until < today)
+    }));
+}
+
+/**
+ * Only what may actually go out right now, keyed by species.
+ *
+ * Expired and zero rows are dropped rather than reported as 0, so a caller
+ * cannot accidentally read "released: 0" as "released, none left" — the two
+ * mean different things to a shop and only one of them should be published.
+ */
+function activeHarvestReleases(db, at) {
+  const today = localDay(at);
+  const out = new Map();
+  for (const r of db.prepare('SELECT species, grams, valid_until FROM harvest_release').all()) {
+    if (!(r.grams > 0)) continue;
+    if (r.valid_until && r.valid_until < today) continue;
+    out.set(r.species, { grams: r.grams, validUntil: r.valid_until || null });
+  }
+  return out;
+}
+
+function setHarvestRelease(db, { species, grams, validUntil, note }) {
+  const name = String(species || '').trim();
+  if (!name) throw new Error('setHarvestRelease: species required');
+  const g = Number(grams);
+  if (!Number.isFinite(g) || g < 0) throw new Error('setHarvestRelease: grams must be a number >= 0');
+  const until = validUntil ? String(validUntil).slice(0, 10) : null;
+  if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new Error('setHarvestRelease: validUntil must be YYYY-MM-DD');
+  db.prepare(
+    `INSERT INTO harvest_release(species, grams, valid_until, note, updated) VALUES(?,?,?,?,?)
+     ON CONFLICT(species) DO UPDATE SET grams=excluded.grams, valid_until=excluded.valid_until,
+                                        note=excluded.note, updated=excluded.updated`
+  ).run(name, g, until, String(note || '').slice(0, 200), new Date().toISOString());
+  incrementDataVersion(db);
+}
+
+function deleteHarvestRelease(db, species) {
+  const info = db.prepare('DELETE FROM harvest_release WHERE species = ?').run(String(species || ''));
+  if (info.changes) incrementDataVersion(db);
+  return info.changes;
 }
 
 // -- Print Bridge Config --
@@ -7044,6 +7165,10 @@ module.exports = {
   getHarvestFeedCfg,
   updateHarvestFeedCfg,
   updateHarvestFeedStatus,
+  listHarvestReleases,
+  activeHarvestReleases,
+  setHarvestRelease,
+  deleteHarvestRelease,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
