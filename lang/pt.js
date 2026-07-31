@@ -382,6 +382,7 @@ window.LANG['pt'] = {
   'status.action.monitorSpawn': 'Monitorar fase spawn',
   'status.action.discard': 'Descartar sacos',
   // Table headers - dashboard
+  'sort.by': 'Ordenar:',
   'th.batchId': 'ID do lote',
   'th.species': 'Esp\u00e9cie',
   'th.strain': 'Cepa',

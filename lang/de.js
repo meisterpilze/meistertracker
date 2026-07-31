@@ -501,6 +501,7 @@ window.LANG['de'] = {
   'status.action.monitorSpawn': 'Spawn-Phase \u00fcberwachen',
   'status.action.discard': 'Beutel entsorgen',
   // Table headers - dashboard
+  'sort.by': 'Sortieren:',
   'th.batchId': 'Chargen-ID',
   'th.species': 'Art',
   'th.strain': 'Stamm',
