@@ -1661,6 +1661,12 @@ describe('db – week rhythm', () => {
     fs.unlinkSync(p);
   });
   const rhythm = () => db.readAll(d).weekRhythm;
+  // A day is read back as an object now; most of these only care about themes.
+  const themes = () => {
+    const out = {};
+    for (const k in rhythm()) out[k] = rhythm()[k].theme;
+    return out;
+  };
 
   // Empty is meaningful: it is what tells the editor to propose a rhythm from
   // history rather than presenting seven blank rows.
@@ -1670,24 +1676,69 @@ describe('db – week rhythm', () => {
 
   it('round-trips a full week keyed the way getDay() counts', () => {
     db.setWeekRhythm(d, { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
-    assert.deepEqual(rhythm(), { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
+    assert.deepEqual(themes(), { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
   });
 
   it('replaces the whole week, so a dropped day is really gone', () => {
     db.setWeekRhythm(d, { 1: 'substrate', 3: 'grain' });
     db.setWeekRhythm(d, { 3: 'grain' });
-    assert.deepEqual(rhythm(), { 3: 'grain' }, 'Monday survived a save that omitted it');
+    assert.deepEqual(themes(), { 3: 'grain' }, 'Monday survived a save that omitted it');
   });
 
   it('treats an empty theme as clearing that day', () => {
     db.setWeekRhythm(d, { 1: 'substrate', 2: '', 3: null });
-    assert.deepEqual(rhythm(), { 1: 'substrate' });
+    assert.deepEqual(themes(), { 1: 'substrate' });
   });
 
   it('refuses an unknown theme rather than storing something nothing renders', () => {
     db.setWeekRhythm(d, { 1: 'substrate' });
     assert.throws(() => db.setWeekRhythm(d, { 1: 'brunch' }), /Unknown theme/);
-    assert.deepEqual(rhythm(), { 1: 'substrate' }, 'a rejected save still changed the week');
+    assert.deepEqual(themes(), { 1: 'substrate' }, 'a rejected save still changed the week');
+  });
+
+  // ── the detail that turns a theme into a job ──────────────────────────────
+  it('carries a target, a Sorte and a note', () => {
+    db.setWeekRhythm(d, { 1: { theme: 'substrate', targetQty: 45, strainId: 3, note: 'grosse Charge' } });
+    assert.deepEqual(rhythm()[1], { theme: 'substrate', targetQty: 45, strainId: 3, note: 'grosse Charge' });
+  });
+
+  it('still accepts a bare theme string, so an older client keeps working', () => {
+    db.setWeekRhythm(d, { 1: 'grain' });
+    assert.deepEqual(rhythm()[1], { theme: 'grain', targetQty: null, strainId: null, note: null });
+  });
+
+  it('stores a target of zero as no target, not as a job for nothing', () => {
+    db.setWeekRhythm(d, { 1: { theme: 'substrate', targetQty: 0 } });
+    assert.equal(rhythm()[1].targetQty, null);
+  });
+
+  it('refuses a fractional, negative or absurd target', () => {
+    db.setWeekRhythm(d, { 1: { theme: 'substrate', targetQty: 45 } });
+    for (const bad of [1.5, -1, 'abc', 1000001]) {
+      assert.throws(
+        () => db.setWeekRhythm(d, { 1: { theme: 'substrate', targetQty: bad } }),
+        /Target/,
+        'accepted ' + bad
+      );
+    }
+    assert.equal(rhythm()[1].targetQty, 45, 'a rejected target still changed the stored week');
+  });
+
+  it('refuses a Sorte id that is not a positive whole number', () => {
+    for (const bad of [0, -3, 2.5, 'KO']) {
+      assert.throws(
+        () => db.setWeekRhythm(d, { 1: { theme: 'substrate', strainId: bad } }),
+        /Sorte id/,
+        'accepted ' + bad
+      );
+    }
+  });
+
+  it('trims a note and caps its length rather than rejecting it', () => {
+    db.setWeekRhythm(d, { 1: { theme: 'substrate', note: '  ' } });
+    assert.equal(rhythm()[1].note, null, 'a whitespace-only note should read as no note');
+    db.setWeekRhythm(d, { 1: { theme: 'substrate', note: 'x'.repeat(400) } });
+    assert.equal(rhythm()[1].note.length, 200);
   });
 
   it('refuses a weekday outside 0..6', () => {

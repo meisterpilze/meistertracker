@@ -4432,9 +4432,9 @@ function fruitingFill(zoneId, incoming) {
   const used = Object.keys(getZoneBags(zoneId)).length;
   return { used, cap, incoming: incoming || 0, over: used + (incoming || 0) > cap };
 }
-// How many rows a room shows before folding the rest away. Four keeps a busy
-// day inside a screen or two while still proving every room has work in it.
-const DASH_ROOM_CAP = 4;
+// How many rows the open day shows. Six leaves the whole week on one screen
+// with a day open; the rest is one tap away rather than pushed off the bottom.
+const DASH_DAY_CAP = 6;
 const _dashRoomOpen = {};
 function toggleDashRoom(key) {
   _dashRoomOpen[key] = !_dashRoomOpen[key];
@@ -4472,8 +4472,49 @@ function weekThemeLabel(theme) {
   return theme ? t('rhythm.theme.' + theme) : t('rhythm.theme.none');
 }
 // Which theme a given weekday carries, or '' if the farm has not said.
+// The whole entry for a weekday: {theme, targetQty, strainId, note}. A day the
+// farm has not set returns null. Older payloads stored a bare theme string, so
+// one is normalised rather than left to blow up on .theme.
+function rhythmOf(weekday) {
+  const v = weekRhythm[weekday] || weekRhythm[String(weekday)] || null;
+  if (!v) return null;
+  return typeof v === 'string' ? { theme: v, targetQty: null, strainId: null, note: null } : v;
+}
 function themeOf(weekday) {
-  return weekRhythm[weekday] || weekRhythm[String(weekday)] || '';
+  const r = rhythmOf(weekday);
+  return r ? r.theme || '' : '';
+}
+// "45× Blue Oyster" — what the day is actually asking for. The mixture is not
+// stored on the day: it is read live off the Sorte, so correcting a recipe
+// updates every day that points at it instead of leaving stale copies behind.
+function rhythmPlanText(weekday) {
+  const r = rhythmOf(weekday);
+  if (!r) return '';
+  const ms = r.strainId ? mushroomStrains.find((m) => m.id === r.strainId) : null;
+  const parts = [];
+  // "45× Lions Mane" reads as an order; a bare "12×" with nothing after it is
+  // just a dangling multiplier, so the × only appears when it multiplies something.
+  if (r.targetQty) parts.push(ms ? r.targetQty + '×' : String(r.targetQty));
+  if (ms) parts.push(ms.name);
+  if (!parts.length && r.note) return r.note;
+  return parts.join(' ');
+}
+// The recipe behind the plan, for the day that is actually open. Empty when no
+// Sorte is chosen or that Sorte carries no substrate recipe.
+function rhythmMixText(weekday) {
+  const r = rhythmOf(weekday);
+  if (!r || !r.strainId) return '';
+  const ms = mushroomStrains.find((m) => m.id === r.strainId);
+  if (!ms) return '';
+  const bits = [];
+  if (ms.recBagKg) bits.push(ms.recBagKg + ' kg');
+  if (ms.recHardwoodPct) bits.push('HW ' + ms.recHardwoodPct + '%');
+  if (ms.recWheatbranPct) bits.push('WB ' + ms.recWheatbranPct + '%');
+  // recGypsum is a flag ("add gypsum"), not a percentage — the app labels it
+  // "Gips (~1%)" everywhere else, so printing the flag as a number would invent
+  // a figure the recipe never held.
+  if (ms.recGypsum) bits.push(t('inv.gypsum'));
+  return bits.join(' · ');
 }
 // Propose a rhythm from what the farm already does, so the editor opens on a
 // draft to correct rather than seven empty rows to invent.
@@ -4666,50 +4707,134 @@ function todayProgress(todayItems) {
   for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
   return { done, total: done + todayItems.length };
 }
-// The editor. Opens on the saved week, or — the first time, when nothing has
-// been saved — on the one derived from the farm's own history, so the first
-// interaction is correcting a draft rather than filling in seven blanks.
-function openRhythmEditor() {
-  const modal = document.getElementById('m-rhythm');
+// The editor works on a draft rather than straight off the DOM. Changing a
+// theme has to redraw the row — a free day carries no target — and redrawing
+// off the DOM would discard whatever else was half-typed. The draft holds the
+// answer; the form is only ever a view of it.
+let _rhythmDraft = null;
+function _rhythmSyncFromForm() {
   const rows = document.getElementById('rhythm-rows');
-  const hint = document.getElementById('rhythm-hint');
-  if (!modal || !rows) return;
-  const saved = Object.keys(weekRhythm).length > 0;
-  const start = saved ? {} : suggestWeekRhythm();
-  if (saved) for (let d = 0; d < 7; d++) start[d] = themeOf(d);
-  if (hint) hint.textContent = saved ? '' : t('rhythm.suggested');
+  if (!rows || !_rhythmDraft) return;
+  rows.querySelectorAll('select[data-rhythm-day]').forEach((s) => {
+    const d = s.getAttribute('data-rhythm-day');
+    const e = (_rhythmDraft[d] = _rhythmDraft[d] || {});
+    e.theme = s.value;
+  });
+  rows.querySelectorAll('[data-rhythm-qty]').forEach((i) => {
+    const e = _rhythmDraft[i.getAttribute('data-rhythm-qty')];
+    if (e) e.targetQty = i.value === '' ? null : Number(i.value);
+  });
+  rows.querySelectorAll('[data-rhythm-strain]').forEach((i) => {
+    const e = _rhythmDraft[i.getAttribute('data-rhythm-strain')];
+    if (e) e.strainId = i.value === '' ? null : Number(i.value);
+  });
+  rows.querySelectorAll('[data-rhythm-note]').forEach((i) => {
+    const e = _rhythmDraft[i.getAttribute('data-rhythm-note')];
+    if (e) e.note = i.value.trim() || null;
+  });
+}
+function _renderRhythmRows() {
+  const rows = document.getElementById('rhythm-rows');
+  if (!rows || !_rhythmDraft) return;
+  // '' is a real choice: a day can have a target without naming a Sorte.
+  const strainOpts = (sel) =>
+    '<option value="">—</option>' +
+    [...mushroomStrains]
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .map((m) => '<option value="' + m.id + '"' + (m.id === sel ? ' selected' : '') + '>' + esc(m.name) + '</option>')
+      .join('');
   rows.innerHTML = WEEK_DAYS.map((d) => {
-    const sel = start[d] || 'free';
+    const cur = _rhythmDraft[d] || {};
+    const sel = cur.theme || 'free';
     const opts = WEEK_THEMES.map(
-      (k) => `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(weekThemeLabel(k))}</option>`
+      (k) => '<option value="' + esc(k) + '"' + (k === sel ? ' selected' : '') + '>' + esc(weekThemeLabel(k)) + '</option>'
     ).join('');
+    // A free day takes no target, so it is not asked for one.
+    const detail =
+      sel === 'free'
+        ? ''
+        : '<div style="display:flex;gap:6px;margin:0 0 5px 46px">' +
+          '<input type="number" min="0" step="1" data-rhythm-qty="' +
+          d +
+          '" value="' +
+          esc(cur.targetQty == null ? '' : String(cur.targetQty)) +
+          '" placeholder="' +
+          esc(t('rhythm.qtyPh')) +
+          '" style="width:70px;padding:4px" />' +
+          '<select data-rhythm-strain="' +
+          d +
+          '" style="flex:1;min-width:0;padding:4px">' +
+          strainOpts(cur.strainId || 0) +
+          '</select></div>' +
+          '<div style="margin:0 0 9px 46px"><input type="text" maxlength="200" data-rhythm-note="' +
+          d +
+          '" value="' +
+          esc(cur.note || '') +
+          '" placeholder="' +
+          esc(t('rhythm.notePh')) +
+          '" style="width:100%;padding:4px" /></div>';
     return (
-      `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
-      `<span style="width:38px;flex-shrink:0;font-size:13px">${esc(t('rhythm.day.' + d))}</span>` +
-      `<select data-rhythm-day="${d}" style="flex:1;padding:5px">${opts}</select>` +
-      `</label>`
+      '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+      '<span style="width:38px;flex-shrink:0;font-size:13px">' +
+      esc(t('rhythm.day.' + d)) +
+      '</span><select data-rhythm-day="' +
+      d +
+      '" style="flex:1;padding:5px">' +
+      opts +
+      '</select></label>' +
+      detail
     );
   }).join('');
+  rows.querySelectorAll('select[data-rhythm-day]').forEach((s) => {
+    s.addEventListener('change', () => {
+      _rhythmSyncFromForm();
+      _renderRhythmRows();
+    });
+  });
+}
+// Opens on the saved week, or — the first time, when nothing has been saved —
+// on the one derived from the farm's own history, so the first interaction is
+// correcting a draft rather than filling in seven blanks. A suggestion can only
+// guess the theme; the target and the Sorte are the farm's call.
+function openRhythmEditor() {
+  const modal = document.getElementById('m-rhythm');
+  const hint = document.getElementById('rhythm-hint');
+  if (!modal) return;
+  const saved = Object.keys(weekRhythm).length > 0;
+  const guess = saved ? null : suggestWeekRhythm();
+  _rhythmDraft = {};
+  for (const d of WEEK_DAYS) {
+    const cur = rhythmOf(d);
+    _rhythmDraft[d] = saved
+      ? { theme: (cur && cur.theme) || 'free', targetQty: (cur && cur.targetQty) || null, strainId: (cur && cur.strainId) || null, note: (cur && cur.note) || null }
+      : { theme: guess[d] || 'free', targetQty: null, strainId: null, note: null };
+  }
+  if (hint) hint.textContent = saved ? '' : t('rhythm.suggested');
+  _renderRhythmRows();
   // .modal-bg is display:none and only .modal-bg.open is display:flex, so
-  // clearing the hidden attribute alone left the dialog invisible — which is
-  // exactly what it did. Visibility here is the class, like every other modal.
+  // clearing the hidden attribute alone leaves the dialog invisible.
   modal.hidden = false;
   modal.classList.add('open');
 }
 function closeRhythmEditor() {
   const m = document.getElementById('m-rhythm');
   if (m) m.classList.remove('open');
+  _rhythmDraft = null;
 }
 function saveRhythmEditor() {
-  const rows = document.getElementById('rhythm-rows');
-  if (!rows) return;
+  _rhythmSyncFromForm();
+  if (!_rhythmDraft) return;
   const map = {};
-  rows.querySelectorAll('select[data-rhythm-day]').forEach((s) => {
-    // 'free' is stored, not omitted: a day deliberately kept clear is a real
-    // answer, and dropping it would look identical to never having decided —
-    // which is what makes the editor offer a suggestion again.
-    map[s.getAttribute('data-rhythm-day')] = s.value;
-  });
+  // 'free' is stored, not omitted: a day deliberately kept clear is a real
+  // answer, and dropping it would look identical to never having decided —
+  // which is what makes the editor offer a suggestion again.
+  for (const d of WEEK_DAYS) {
+    const e = _rhythmDraft[d] || {};
+    map[d] =
+      e.theme === 'free'
+        ? { theme: 'free' }
+        : { theme: e.theme || 'free', targetQty: e.targetQty, strainId: e.strainId, note: e.note };
+  }
   apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
     if (res && res.error) {
       alert(res.error);
@@ -4772,135 +4897,106 @@ function renderDashBatchTasks() {
       _rhythmEditLink();
     return;
   }
-  // Clamp rather than trust: the stored day survives a reload, and a week is
-  // only ever seven long.
   const sel = _dashDayOffset >= 0 && _dashDayOffset < 7 ? _dashDayOffset : 0;
-  const d = week[sel];
-  const prog = sel === 0 ? todayProgress(d.items) : null;
-  el.innerHTML = _weekTabsHtml(week, sel) + _dashDayHtml(d, prog, sel === 0) + _rhythmEditLink();
+  // Every day is a row, and every row states its plan and its load. Only the
+  // open one lists its work — a tab strip showed one day at full height and
+  // hid the other six, which answered "what is today" but never "what is the
+  // week", and cost most of a phone screen doing it.
+  el.innerHTML = week.map((d, i) => _weekDayRowHtml(d, i, i === sel)).join('') + _rhythmEditLink();
 }
-// The week across the top, not down the page. Stacked, today's list pushed the
-// other six days below the fold on a phone, which is no use at all: the reason
-// to show a week is to see Thursday filling up while it is still Monday.
-function _weekTabsHtml(week, sel) {
-  return (
-    '<div role="tablist" style="display:flex;gap:3px;margin-bottom:8px">' +
-    week
-      .map((d, i) => {
-        const on = i === sel;
-        const th = themeFor(d.weekday);
-        return (
-          '<button type="button" role="tab" aria-selected="' +
-          on +
-          '" data-action="dash-day" data-off="' +
-          i +
-          '" title="' +
-          esc(weekThemeLabel(th.theme)) +
-          '" style="flex:1;min-width:0;padding:4px 1px 5px;border:1px solid transparent;border-bottom:2px solid ' +
-          (on ? 'var(--c-accent)' : 'var(--c-border)') +
-          ';border-radius:6px 6px 0 0;background:transparent;cursor:pointer;font-family:inherit;line-height:1.15">' +
-          '<span style="display:block;font-size:14px;font-weight:700;color:' +
-          (d.items.length ? (on ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
-          '">' +
-          (d.items.length || '·') +
-          '</span>' +
-          '<span style="display:block;font-size:9.5px;font-weight:600;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-          esc(t('rhythm.day.' + d.weekday)) +
-          '</span></button>'
-        );
-      })
-      .join('') +
-    '</div>'
-  );
-}
-// One day's work. Only today gets a progress bar — a bar on Thursday would be
-// measuring a day that has not started.
-function _dashDayHtml(d, prog, isToday) {
+function _weekDayRowHtml(d, off, open) {
+  const isToday = off === 0;
   const th = themeFor(d.weekday);
+  const plan = rhythmPlanText(d.weekday);
+  const n = d.items.length;
+  // The header line: which day, what it is for, what was planned, how much
+  // generated work landed on it. One line, so seven of them still fit.
   let html =
-    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">' +
-    '<span style="font-size:13px;font-weight:600">' +
+    '<div style="border-bottom:0.5px solid var(--c-border)">' +
+    '<button type="button" data-action="dash-day" data-off="' +
+    off +
+    '" aria-expanded="' +
+    open +
+    '" style="width:100%;display:flex;align-items:baseline;gap:6px;padding:6px 2px;border:0;background:' +
+    (open ? 'var(--c-bg-soft,transparent)' : 'transparent') +
+    ';cursor:pointer;font-family:inherit;text-align:left">' +
+    '<span style="width:52px;flex-shrink:0;font-size:12px;font-weight:' +
+    (isToday ? '700' : '500') +
+    ';color:' +
+    (isToday ? 'var(--c-accent)' : 'var(--c-text)') +
+    '">' +
     esc(t('rhythm.day.' + d.weekday)) +
-    (isToday ? ' · ' + esc(t('rhythm.today')) : '') +
     '</span>' +
     '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--c-text-sec)">' +
     esc(weekThemeLabel(th.theme)) +
-    // Say when the theme is only a guess from history, so an unconfirmed
-    // suggestion never reads as a decision somebody made.
+    (plan ? ' <span style="color:var(--c-text)">· ' + esc(plan) + '</span>' : '') +
     (th.suggested ? ' <span style="color:var(--c-text-muted)">(' + esc(t('rhythm.guess')) + ')</span>' : '') +
     '</span>' +
-    // The printable walk sheet used to hang off the summary chips. Those are
-    // gone, and this is where it belongs anyway — next to the day it prints.
-    (isToday && d.items.length
-      ? '<button type="button" data-action="dash-print" style="border:0;background:none;padding:0 0 0 6px;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec);flex-shrink:0">' +
-        esc(t('worklist.print')) +
-        '</button>'
-      : '') +
-    '</div>';
-  if (prog && prog.total) {
-    const pct = Math.round((prog.done / prog.total) * 100);
+    '<span style="flex-shrink:0;font-size:11.5px;color:' +
+    (n ? 'var(--c-text-sec)' : 'var(--c-text-muted)') +
+    '">' +
+    (n || '·') +
+    '</span></button>';
+  if (open) html += _weekDayBodyHtml(d, off, isToday);
+  return html + '</div>';
+}
+// The open day, flat and dense. The room is a label on the row rather than a
+// heading of its own — the headings were most of the old view's height, and the
+// rows are still ordered by the walk, so the list reads as a route without
+// costing a line per room. Expanding shows the rest of the same list.
+function _weekDayBodyHtml(d, off, isToday) {
+  let html = '<div style="padding:2px 0 8px 4px">';
+  const mix = rhythmMixText(d.weekday);
+  const r = rhythmOf(d.weekday);
+  if (mix || (r && r.note)) {
     html +=
-      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">' +
-      '<div style="flex:1;height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">' +
-      '<div style="width:' +
-      pct +
-      '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
-      '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
-      prog.done +
-      '/' +
-      prog.total +
-      '</span></div>';
+      '<div style="font-size:10.5px;color:var(--c-text-muted);margin:0 0 5px">' +
+      esc([mix, r && r.note].filter(Boolean).join(' · ')) +
+      '</div>';
+  }
+  if (isToday) {
+    const prog = todayProgress(d.items);
+    if (prog.total) {
+      const pct = Math.round((prog.done / prog.total) * 100);
+      html +=
+        '<div style="display:flex;align-items:center;gap:6px;margin:0 0 6px">' +
+        '<div style="flex:1;height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">' +
+        '<div style="width:' +
+        pct +
+        '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
+        '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+        prog.done +
+        '/' +
+        prog.total +
+        '</span></div>';
+    }
   }
   if (!d.items.length) {
-    return (
-      html + '<div style="padding:6px 0 10px;font-size:12px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div>'
-    );
+    return html + '<div style="font-size:11.5px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div></div>';
   }
   html += _fruitingTargetHtml(d.items);
 
+  // Ordered by the walk, so the flat list still reads as a route.
   const order = {};
   zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
-  const groups = {};
-  for (const it of d.items) {
-    const key = it.zone || '';
-    (groups[key] = groups[key] || []).push(it);
-  }
-  const keys = Object.keys(groups).sort((a, b) => {
-    // Everything without a room sinks to the bottom: it is not part of the walk.
-    if (!a) return 1;
-    if (!b) return -1;
-    return (order[a] == null ? 999 : order[a]) - (order[b] == null ? 999 : order[b]);
-  });
-  let step = 0;
-  for (const k of keys) {
-    step++;
-    const name = k ? zoneDisplayName(k) : t('rhythm.other');
+  const rank = (it) => (it.zone && order[it.zone] != null ? order[it.zone] : 999);
+  const items = [...d.items].sort((a, b) => rank(a) - rank(b));
+  const openKey = 'day' + off;
+  const full = !!_dashRoomOpen[openKey];
+  const shown = full ? items : items.slice(0, DASH_DAY_CAP);
+  for (const it of shown) html += _dashPlanRowHtml(it, true);
+  const hidden = items.length - shown.length;
+  if (hidden > 0 || full) {
     html +=
-      '<div style="font-size:11px;font-weight:600;color:var(--c-text-sec);margin:8px 0 3px">' +
-      step +
-      ' · ' +
-      esc(name) +
-      '</div>';
-    // Capped per room, not across the day. A backlog printed in full runs to
-    // nine phone screens. A single global cap would swallow whole rooms, and a
-    // room you cannot see is a room you will not walk — so every room stays on
-    // screen showing its first few, and says how many it is holding back.
-    const openKey = d.offset + '/' + (k || '_');
-    const list = _dashRoomOpen[openKey] ? groups[k] : groups[k].slice(0, DASH_ROOM_CAP);
-    for (const it of list) html += _dashPlanRowHtml(it);
-    const hidden = groups[k].length - list.length;
-    if (hidden > 0 || _dashRoomOpen[openKey]) {
-      html +=
-        '<button type="button" data-action="dash-room-more" data-room="' +
-        esc(openKey) +
-        '" aria-expanded="' +
-        !!_dashRoomOpen[openKey] +
-        '" style="border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;font-size:11.5px;color:var(--c-text-sec)">' +
-        esc(hidden > 0 ? '+ ' + t('dash.moreRows', { n: hidden }) : '− ' + t('dash.fewerRows')) +
-        '</button>';
-    }
+      '<button type="button" data-action="dash-room-more" data-room="' +
+      esc(openKey) +
+      '" aria-expanded="' +
+      full +
+      '" style="border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;font-size:11.5px;color:var(--c-text-sec)">' +
+      esc(hidden > 0 ? '+ ' + t('dash.moreRows', { n: hidden }) : '− ' + t('dash.fewerRows')) +
+      '</button>';
   }
-  return html;
+  return html + '</div>';
 }
 function _rhythmEditLink() {
   return (
@@ -4910,9 +5006,13 @@ function _rhythmEditLink() {
     '</button></div>'
   );
 }
-function _dashPlanRowHtml(it) {
+// withRoom folds the room into the row's meta line. The flat day list has no
+// room headings — they were most of its height — so the row has to say where
+// to walk, or the list stops being a route.
+function _dashPlanRowHtml(it, withRoom) {
   const btn = _planBtn(it);
-  const meta = [it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean).join(' · ');
+  const room = withRoom && it.zone ? zoneDisplayName(it.zone) : '';
+  const meta = [room, it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean).join(' · ');
   return (
     // The left edge carries the species colour, as it did before the redesign —
     // it is how a row is recognised at a glance without reading the id. Overdue
