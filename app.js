@@ -970,6 +970,7 @@ function go(page, btnId) {
   if (page === 'lab') {
     renderDashLabStock();
     renderCultures();
+    renderGrainBatches();
   }
   if (page === 'inv') {
     renderInvStock();
@@ -1065,6 +1066,7 @@ function refresh() {
   if (id === 'lab') {
     renderDashLabStock();
     renderCultures();
+    renderGrainBatches();
   }
   if (id === 'inv') renderInvStock();
   if (id === 'zones') renderZones();
@@ -7145,7 +7147,7 @@ function openMoveBatchModal(batchId) {
 // data-sort on its headers is the whole job — the click wiring, the arrows and
 // the persistence are shared rather than copied per table, which is how batches
 // and cultures ended up with two near-identical listeners.
-const SORT_TABLES = { batches: 'batches-body', cultures: 'cultures-body', harvests: 'harvest-body' };
+const SORT_TABLES = { batches: 'batches-body', cultures: 'cultures-body', harvests: 'harvest-body', grain: 'grain-body' };
 const tableSort = (() => {
   const empty = {};
   for (const k in SORT_TABLES) empty[k] = null;
@@ -7270,6 +7272,79 @@ function _groupBatchRows(rows) {
   return out;
 }
 
+// One row of the batch table. Extracted from renderBatches so the grain list
+// in Labor renders identical rows rather than a divergent copy — and so this
+// template can be edited without splicing into the middle of a 3,000-character
+// literal, which is how it got corrupted once before.
+function batchRowHtml(b) {
+      const { status } = getStatus(b.batchId);
+      const sub = b.substrate
+        ? [
+            `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
+            b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
+            b.substrate.gypsum
+              ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
+              : ''
+          ].join('')
+        : '<span style="color:#ccc;font-size:11px">—</span>';
+      // Source is two things now: the culture on the batch row, and any grain
+      // bags written off for it (recorded in the scan log, not on the batch).
+      const _spawn = spawnSourceFor(b.batchId);
+      const _srcParts = [];
+      if (b.sourceId)
+        _srcParts.push(`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
+      if (_spawn.length)
+        _srcParts.push(
+          `<span style="font-family:monospace;font-size:10px;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
+        );
+      const src = _srcParts.length
+        ? _srcParts.join('<br>')
+        : '<span style="color:#ccc;font-size:11px">—</span>';
+      const note = b.notes
+        ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
+        : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
+      const bst = (b.strainText || '').trim();
+      const strainDisplay = bst ? esc(bst) : !b.strainId && b.strain ? esc(b.strain) : '—';
+      const canMove = status !== 'DONE';
+      const moveBtn = canMove
+        ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
+        : '';
+      // data-mlabel attrs are surfaced as ::before labels in the mobile
+      // card layout (styles.css "Batches table — mobile card mode").
+      return {
+        status,
+        html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id" style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td data-mlabel="${esc(t('th.due'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
+      };
+}
+
+// Grain spawn, listed in Labor. Same rows as the batch table — it is the same
+// kind of object — but its own list, because making spawn is lab work and
+// mixing 22 jars into 116 blocks made both harder to read.
+function renderGrainBatches() {
+  const body = document.getElementById('grain-body');
+  if (!body) return;
+  const q = (document.getElementById('grain-q')?.value || '').toLowerCase();
+  const rows = batches.filter((b) => {
+    if (b.batchType !== 'grain') return false;
+    return (
+      !q ||
+      b.batchId.toLowerCase().includes(q) ||
+      (b.species || '').toLowerCase().includes(q) ||
+      (b.strain || '').toLowerCase().includes(q)
+    );
+  });
+  updateSortIndicators('grain', tableSort.grain);
+  const sorted = applyTableSort(rows, tableSort.grain, (b, k) => {
+    if (k === 'status') return getStatus(b.batchId).status;
+    if (k === 'qty') return Number(b.qty) || 0;
+    return b[k];
+  });
+  // Grouped by stage like the batch list, so a jar still colonising and one
+  // ready to use are not read as the same thing.
+  body.innerHTML =
+    _groupBatchRows(sorted.map((b) => batchRowHtml(b))) ||
+    '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
+}
 function renderBatches() {
   const q = (document.getElementById('batch-q').value || '').toLowerCase(),
     body = document.getElementById('batches-body');
@@ -7287,6 +7362,10 @@ function renderBatches() {
     return;
   }
   const filtered = batches.filter((b) => {
+    // Grain spawn is lab work, not production — it lives under Labor now, so
+    // Chargen shows blocks only and stops being 22 rows of jars mixed in with
+    // 116 rows of blocks.
+    if (b.batchType === 'grain') return false;
     const matchesQ =
       !q ||
       b.batchId.toLowerCase().includes(q) ||
@@ -7362,48 +7441,7 @@ function renderBatches() {
   _rbLastRenderFp = renderFp;
   // Each row is returned with its status so _groupBatchRows can bucket it by
   // stage; the row markup itself is unchanged.
-  const _rowsByStage = sorted.map((b) => {
-    {
-        const { status } = getStatus(b.batchId);
-        const sub = b.substrate
-          ? [
-              `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
-              b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
-              b.substrate.gypsum
-                ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
-                : ''
-            ].join('')
-          : '<span style="color:#ccc;font-size:11px">—</span>';
-        // Source is two things now: the culture on the batch row, and any grain
-        // bags written off for it (recorded in the scan log, not on the batch).
-        const _spawn = spawnSourceFor(b.batchId);
-        const _srcParts = [];
-        if (b.sourceId)
-          _srcParts.push(`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
-        if (_spawn.length)
-          _srcParts.push(
-            `<span style="font-family:monospace;font-size:10px;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
-          );
-        const src = _srcParts.length
-          ? _srcParts.join('<br>')
-          : '<span style="color:#ccc;font-size:11px">—</span>';
-        const note = b.notes
-          ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
-          : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-        const bst = (b.strainText || '').trim();
-        const strainDisplay = bst ? esc(bst) : !b.strainId && b.strain ? esc(b.strain) : '—';
-        const canMove = status !== 'DONE';
-        const moveBtn = canMove
-          ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
-          : '';
-        // data-mlabel attrs are surfaced as ::before labels in the mobile
-        // card layout (styles.css "Batches table — mobile card mode").
-        return {
-          status,
-          html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id" style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td data-mlabel="${esc(t('th.due'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
-        };
-    }
-  });
+  const _rowsByStage = sorted.map((b) => batchRowHtml(b));
   body.innerHTML = _groupBatchRows(_rowsByStage) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
 }
 let locColor = {};
@@ -18955,7 +18993,7 @@ function initEventListeners() {
   $('batch-archive-filter').addEventListener('change', renderBatches);
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.
-  const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests };
+  const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests, grain: renderGrainBatches };
   for (const table in SORT_TABLES) {
     const body = document.getElementById(SORT_TABLES[table]);
     const thead = body && body.closest('table') ? body.closest('table').tHead : null;
@@ -19014,6 +19052,11 @@ function initEventListeners() {
   $('st-lab-cultures').addEventListener('click', () => {
     openStab('lab', 'cultures');
   });
+  $('st-lab-grain').addEventListener('click', () => {
+    openStab('lab', 'grain');
+    renderGrainBatches();
+  });
+  $('grain-q').addEventListener('input', renderGrainBatches);
   $('st-lab-work').addEventListener('click', () => msQuickLaborNew());
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');

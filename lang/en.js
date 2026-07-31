@@ -613,6 +613,7 @@ window.LANG['en'] = {
   'th.created': 'Created',
   'th.notes': 'Notes',
   // Lab
+  'lab.grain': 'Grain spawn',
   'lab.cultures': 'Cultures',
   'lab.logWork': 'Lab work',
   'lab.lineage': 'Lineage',
