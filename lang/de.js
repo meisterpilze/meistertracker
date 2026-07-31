@@ -413,6 +413,8 @@ window.LANG['de'] = {
   'dash.destFull': '{zone} wäre mit {n} Beuteln über der Kapazität ({cap}).',
   'rhythm.title': 'Wochenrhythmus',
   'rhythm.edit': 'Wochenrhythmus bearbeiten',
+  'rhythm.qtyPh': 'Anzahl',
+  'rhythm.notePh': 'Notiz (optional)',
   'rhythm.guess': 'geschätzt',
   'rhythm.suggested': 'Vorschlag aus deinen bisherigen Buchungen — anpassen und speichern.',
   'rhythm.saved': 'Wochenrhythmus gespeichert',

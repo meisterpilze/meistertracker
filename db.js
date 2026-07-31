@@ -1646,6 +1646,32 @@ const MIGRATIONS = [
       theme   TEXT NOT NULL
     )`);
     }
+  },
+  {
+    version: 57,
+    description: 'Let a rhythm day carry a target and a Sorte, so it reads as a job rather than a label',
+    fn(db) {
+      // "Monday is substrate day" is a category, not an instruction. What makes
+      // it a task is how much and of what: "45 blocks of Blue Oyster".
+      //
+      // The quantity lives here; the mixture does not. Sorten already carry a
+      // full recipe — bag weight, hardwood/wheatbran/gypsum split, incubation
+      // days — and the create dialog already builds batches from it. Storing a
+      // strain_id means the rhythm always states the mixture that Sorte
+      // currently uses, instead of a copy that silently goes stale the first
+      // time somebody corrects the recipe.
+      //
+      // No foreign key: a Sorte that is deleted should leave the day pointing
+      // at nothing and still be editable, not make the row unreadable. Readers
+      // resolve the id and fall back to the bare quantity.
+      const cols = db
+        .prepare('PRAGMA table_info(week_rhythm)')
+        .all()
+        .map((c) => c.name);
+      if (!cols.includes('target_qty')) db.exec('ALTER TABLE week_rhythm ADD COLUMN target_qty INTEGER');
+      if (!cols.includes('strain_id')) db.exec('ALTER TABLE week_rhythm ADD COLUMN strain_id INTEGER');
+      if (!cols.includes('note')) db.exec('ALTER TABLE week_rhythm ADD COLUMN note TEXT');
+    }
   }
 ];
 
@@ -2089,11 +2115,18 @@ function readAll(db, opts = {}) {
   // Barcodes
   const barcodes = getAllBarcodes(db);
 
-  // Weekday → theme. Sent as a plain object keyed by getDay() so the client can
-  // look a day up directly; an empty object means no rhythm has been set yet,
-  // which is what makes the editor offer one derived from history.
+  // Weekday → {theme, targetQty, strainId, note}, keyed by getDay() so the
+  // client can look a day up directly. An empty object means no rhythm has been
+  // set yet, which is what makes the editor offer one derived from history.
   const weekRhythm = {};
-  for (const r of db.prepare('SELECT weekday, theme FROM week_rhythm').all()) weekRhythm[r.weekday] = r.theme;
+  for (const r of db.prepare('SELECT weekday, theme, target_qty, strain_id, note FROM week_rhythm').all()) {
+    weekRhythm[r.weekday] = {
+      theme: r.theme,
+      targetQty: r.target_qty || null,
+      strainId: r.strain_id || null,
+      note: r.note || null
+    };
+  }
 
   const version = getDataVersion(db);
   return {
@@ -4772,16 +4805,39 @@ function setWeekRhythm(db, map) {
   for (const k of Object.keys(map)) {
     const day = Number(k);
     if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error('Not a weekday: ' + k);
-    const theme = map[k];
+    // A day is either a bare theme string (how this started) or an object
+    // carrying the detail that turns it into a job. Both are accepted so an
+    // older client, or the suggestion path, cannot fail against a newer server.
+    const v = map[k];
+    const entry = v && typeof v === 'object' && !Array.isArray(v) ? v : { theme: v };
+    const theme = entry.theme;
     if (theme === null || theme === undefined || theme === '') continue;
     if (!WEEK_THEMES.includes(theme)) throw new Error('Unknown theme: ' + theme);
-    rows.push([day, theme]);
+
+    let qty = null;
+    if (entry.targetQty !== null && entry.targetQty !== undefined && entry.targetQty !== '') {
+      const n = Number(entry.targetQty);
+      if (!Number.isInteger(n) || n < 0) throw new Error('Target must be a whole number of 0 or more');
+      if (n > 100000) throw new Error('Target is implausibly large');
+      // 0 means "no target set", same as blank — every reader tests truthiness.
+      qty = n === 0 ? null : n;
+    }
+    let strainId = null;
+    if (entry.strainId !== null && entry.strainId !== undefined && entry.strainId !== '') {
+      const n = Number(entry.strainId);
+      if (!Number.isInteger(n) || n <= 0) throw new Error('Not a Sorte id: ' + entry.strainId);
+      strainId = n;
+    }
+    const note = entry.note == null ? null : String(entry.note).trim().slice(0, 200) || null;
+    rows.push([day, theme, qty, strainId, note]);
   }
   db.exec('BEGIN');
   try {
     db.prepare('DELETE FROM week_rhythm').run();
-    const ins = db.prepare('INSERT INTO week_rhythm(weekday, theme) VALUES(?, ?)');
-    for (const [day, theme] of rows) ins.run(day, theme);
+    const ins = db.prepare(
+      'INSERT INTO week_rhythm(weekday, theme, target_qty, strain_id, note) VALUES(?, ?, ?, ?, ?)'
+    );
+    for (const r of rows) ins.run(r[0], r[1], r[2], r[3], r[4]);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
