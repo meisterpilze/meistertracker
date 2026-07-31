@@ -602,6 +602,19 @@ Pushes a signed summary of recorded harvests and upcoming batches to a URL you c
 
 The timer restarts on save. The last outcome stays visible at the top of the page, so a feed that quietly stopped delivering shows up instead of failing in silence.
 
+### If a shop sells from this (release mode)
+
+Leave it off and the feed reports what was harvested. That is a production figure, and it stops being true the moment produce is sold anywhere the till is not this database — which, for most growers, is every market day.
+
+Switch on **Only report what is released for sale** and fill the table underneath: per species, how many kilos a shop may sell, and until when. Then put that amount in its own crate. Sales from the rest can no longer make the published number wrong, so there is nothing to keep up to date between harvests — which is the only version of this that survives a busy Saturday.
+
+Two consequences worth knowing before flipping it:
+
+- **The payload becomes version 2.** A receiver built for version 1 should reject it, because ignoring the new list means publishing produce you kept back. Check the receiver first.
+- **Nothing is released until you say so.** Right after switching on, the feed reports an empty release list. That is the safe direction, but it does mean the shop shows nothing until the first amount is entered.
+
+`HARVEST_WEBHOOK_RELEASE_MODE=1` is the environment-variable equivalent. The amounts themselves are always in the database — they are per-harvest decisions, not configuration.
+
 ### Setup — from a file instead
 
 For installs where configuration is baked into an image or handled by whatever starts the process, the same settings exist as environment variables. They apply whenever the stored config is **off**; enabling it in Settings takes over, and the page says which of the two is in charge. The two are never merged — a URL from one place and a secret from the other is a configuration nobody can read off a single screen.

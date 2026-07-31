@@ -742,6 +742,25 @@ window.LANG['en'] = {
   'harvestFeed.neverSent': 'Enabled, but nothing delivered yet.',
   'harvestFeed.envActive':
     'The feed is running from environment variables (HARVEST_WEBHOOK_URL). What you set here takes effect once you enable it here — this form then wins.',
+  'harvestFeed.releaseMode': 'Only report what is released for sale',
+  'harvestFeed.releaseModeHint':
+    'Without this the feed reports what was harvested — a figure that stops being true the moment you sell anything at a market. With it, the feed reports only the amounts you set aside below, so sales elsewhere cannot make it wrong.',
+  'harvestFeed.releaseTitle': 'Released for sale',
+  'harvestFeed.releaseDesc':
+    'How much of each species a shop may sell — a set-aside, not a stock level. Put that amount in its own crate and sell everything else from the rest: then a walk-in customer or a busy market Saturday cannot make the published figure wrong, and there is nothing to keep up to date. The date is the safety net. Fresh produce does not keep, and the usual mistake is not a wrong number but a forgotten one.',
+  'harvestFeed.colSpecies': 'Species',
+  'harvestFeed.colHarvested': 'Harvested',
+  'harvestFeed.colRelease': 'Release (kg)',
+  'harvestFeed.colUntil': 'Valid until',
+  'harvestFeed.addSpecies': 'Another species …',
+  'harvestFeed.add': 'Add',
+  'harvestFeed.clear': 'Clear',
+  'harvestFeed.expired': 'expired',
+  'harvestFeed.noRelease': 'Nothing harvested and nothing released yet.',
+  'harvestFeed.badAmount': 'One of the amounts is not a number of 0 or more.',
+  'harvestFeed.alreadyListed': 'That species is already in the list.',
+  'harvestFeed.saving': 'Saving …',
+  'harvestFeed.nothingChanged': 'Nothing changed.',
   'duckdns.title': 'DuckDNS dynamic DNS',
   'duckdns.desc':
     'Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated automatically every 5 minutes.',

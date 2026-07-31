@@ -614,3 +614,98 @@ describe('due dates', () => {
     assert.ok(!out.planned.some((e) => e.species === 'Enoki'));
   });
 });
+
+// ── Release for sale ─────────────────────────────────────────────────────────
+//
+// `harvested` says what came off the racks. It only ever grows, so it stops
+// being the truth the moment anything is sold anywhere else — and at a market
+// stand nobody records sales. Release mode replaces the published figure with
+// an amount someone deliberately set aside, which no cash sale can reach.
+describe('release for sale', () => {
+  let d, p;
+  const REL = { ...CFG, releaseMode: true };
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.insertHarvest(d, {
+      time: daysFromNow(-1) + 'T08:00:00',
+      batch: 'B1',
+      species: 'Oyster',
+      strain: 'Blue',
+      grams: 6200
+    });
+  });
+  after(() => {
+    try {
+      fs.unlinkSync(p);
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('changes nothing while it is off', () => {
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: null });
+    const out = feed.buildPayload(d, CFG, NOW);
+    assert.equal(out.version, 1, 'a lab not using releases must keep sending fassung 1');
+    assert.ok(!('released' in out), 'no list, no version bump, no surprise for an existing receiver');
+  });
+
+  it('sends the released amount under its own key, and bumps the version', () => {
+    const out = feed.buildPayload(d, REL, NOW);
+    assert.equal(out.version, 2, 'a receiver must be able to tell that `harvested` is no longer the sellable figure');
+    assert.deepEqual(out.released, [{ species: 'Oyster', grams: 2000 }]);
+    // The production fact stays untouched next to it: 6.2 kg were harvested,
+    // 2 kg may be sold. Merging the two would destroy the more useful one.
+    assert.equal(out.harvested[0].grams, 6200);
+  });
+
+  it('keeps a release that has outlived its harvest window', () => {
+    // Set two kilos aside on Monday for Saturday's market and by Thursday the
+    // harvest has aged out of freshDays — while the crate is still standing
+    // there. The person who put it there is the better source than the window.
+    const later = new Date(NOW.getTime() + 10 * 86400000);
+    const out = feed.buildPayload(d, REL, later);
+    assert.equal(out.harvested.length, 0, 'the harvest itself is long out of the window');
+    assert.deepEqual(out.released, [{ species: 'Oyster', grams: 2000 }]);
+  });
+
+  it('drops a release that has run out', () => {
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: daysFromNow(-1) });
+    const out = feed.buildPayload(d, REL, NOW);
+    assert.deepEqual(out.released, [], 'yesterday cannot still be selling today');
+  });
+
+  it('counts the last day as still valid', () => {
+    // Off-by-one in the wrong direction here means the market Saturday is over
+    // before it starts.
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: daysFromNow(0) });
+    const out = feed.buildPayload(d, REL, NOW);
+    assert.equal(out.released.length, 1, 'valid *until* today includes today');
+    assert.equal(out.released[0].validUntil, daysFromNow(0), 'the receiver needs the date to expire it as well');
+  });
+
+  it('leaves out an amount of zero rather than reporting it as zero', () => {
+    // "Released, none left" and "not released" mean different things to a shop,
+    // and only one of them is a number worth publishing.
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 0, validUntil: null });
+    const out = feed.buildPayload(d, REL, NOW);
+    assert.deepEqual(out.released, []);
+  });
+
+  it('expires at the end of the local day, not the UTC one', () => {
+    // East of Greenwich the UTC day ends first: at 00:30 in Berlin it is still
+    // yesterday in UTC, and a release valid "until yesterday" would go on
+    // selling for another two hours. The direction of that error is what
+    // decides this — the other way round costs nobody anything.
+    const tz = process.env.TZ;
+    try {
+      process.env.TZ = 'Europe/Berlin';
+      const justAfterMidnightInBerlin = new Date('2026-07-30T22:30:00.000Z');
+      db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: '2026-07-30' });
+      const out = feed.buildPayload(d, REL, justAfterMidnightInBerlin);
+      assert.deepEqual(out.released, [], 'it is already the 31st where the mushrooms are');
+    } finally {
+      process.env.TZ = tz;
+    }
+  });
+});

@@ -315,7 +315,27 @@ Species, strain, gram totals and dates. **No batch ids, no bag ids, no customers
 Two things it deliberately does not do:
 
 - **It does not estimate yields.** Planned entries carry a species and a date, never an amount. How much a block gives varies too much between flushes, and a number that reaches a customer becomes a promise. Recorded harvests are measured, so those do carry grams.
-- **It does not subtract reservations.** If half of Thursday's harvest is already promised to a restaurant, publish the remainder — but what counts as promised differs per lab and is not tracked here. Do that subtraction in the receiving system, where the commitments live.
+- **It does not subtract reservations.** If half of Thursday's harvest is already promised to a restaurant, publish the remainder — but what counts as promised differs per lab and is not tracked here. Do that subtraction in the receiving system, where the commitments live, or use release mode below, which asks the question the other way round.
+
+#### Release mode: what may be sold, not what was harvested
+
+`harvested` is a production fact, and it only ever grows. That makes it the wrong number for a shop the moment you sell anything anywhere else: three kilos over the counter on Saturday, and the feed still reports Friday's harvest until it ages out of the window. Recording every sale would fix the arithmetic and will not happen — a market stand takes cash, not keystrokes.
+
+Release mode publishes a **set-aside** instead. In *Settings → Harvest feed → Released for sale* you enter, per species, how much a shop may sell and until when. Put that amount in its own crate and sell everything else from the rest, and no walk-in customer can make the published figure wrong — there is nothing to keep up to date. The payload then calls itself version 2 and carries a second list:
+
+```json
+{
+  "version": 2,
+  "harvested": [{ "species": "Oyster", "grams": 6200 }],
+  "released": [{ "species": "Oyster", "grams": 2000, "validUntil": "2026-08-02" }]
+}
+```
+
+The version bump is the point: a receiver that publishes `harvested` and ignores `released` would offer produce you deliberately kept back. That is a change of meaning, not a new optional field, so a receiver built for version 1 is expected to reject it rather than guess. Labs that leave release mode off keep sending version 1 and their receivers notice nothing.
+
+`validUntil` is optional and worth setting. Fresh produce does not keep, and the realistic mistake is not a wrong number but a forgotten one — last week's release quietly selling mushrooms that were eaten days ago. An expired release counts as zero here; a receiver holding an old payload should apply the same rule at serving time, since the lab machine may simply be switched off.
+
+A release outlives its harvest window on purpose. Set two kilos aside on Monday for Saturday's market and by Thursday the harvest has dropped out of `freshDays` while the crate is still standing there. The person who put it there is the better source than the window arithmetic.
 
 Every request is signed: `X-Meistertracker-Signature: sha256=<HMAC-SHA256 of "<timestamp>.<body>">` plus `X-Meistertracker-Timestamp`. Signing the timestamp together with the body is what makes a captured request useless later — reject anything outside your tolerance window and it cannot be replayed. The secret is not optional; the feed refuses to start without one, because a forged *"we have 40 kg"* is worse than no feed at all.
 
