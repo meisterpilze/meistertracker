@@ -417,6 +417,7 @@ window.LANG['de'] = {
   'dash.destFull': '{zone} wäre mit {n} Beuteln über der Kapazität ({cap}).',
   'rhythm.title': 'Wochenrhythmus',
   'rhythm.edit': 'Wochenrhythmus bearbeiten',
+  'rhythm.setQty': '+ Menge',
   'rhythm.targetEdit': 'Menge für diesen Tag ändern',
   'rhythm.targetPrompt': 'Wie viele am {date}? (ändert nur diesen Tag, nicht den Wochenrhythmus)',
   'rhythm.targetSaved': 'Menge für diesen Tag gespeichert',
