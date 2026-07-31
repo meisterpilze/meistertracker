@@ -223,6 +223,10 @@ window.LANG['pt'] = {
   'harvest.enterWeight': 'Insira o peso em gramas',
   'harvest.cancelled': 'Colheita cancelada.',
   // Dashboard
+  'cat.create': 'Preparar',
+  'cat.move': 'Mover',
+  'cat.harvest': 'Colher',
+  'cat.overdue': '{n} em atraso',
   'dash.totalBatches': 'Total de lotes',
   'dash.totalHarvested': 'Total colhido',
   'dash.alerts': 'Alertas',

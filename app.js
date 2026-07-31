@@ -4439,9 +4439,6 @@ function fruitingFill(zoneId, incoming) {
 // How many rows the open day shows. Six leaves the whole week on one screen
 // with a day open; the rest is one tap away rather than pushed off the bottom.
 const DASH_DAY_CAP = 6;
-// How many rows a non-selected column previews. Four keeps seven columns the
-// same rough height, so the week reads as a row rather than a ragged skyline.
-const DASH_COL_CAP = 4;
 const _dashRoomOpen = {};
 function toggleDashRoom(key) {
   _dashRoomOpen[key] = !_dashRoomOpen[key];
@@ -4992,8 +4989,34 @@ function _weekColBodyHtml(d, off, sel) {
     '</div>'
   );
 }
+// What a row actually asks you to do, which is not the same as what it is. A
+// colonised grain jar and a rhythm target both mean "make blocks today", so
+// they belong together even though one is a batch and the other is a plan.
+const PLAN_CATS = ['create', 'move', 'harvest', 'other'];
+const PLAN_CAT_LABEL = { create: 'cat.create', move: 'cat.move', harvest: 'cat.harvest', other: 'rhythm.other' };
+const PLAN_CAT_COLOR = {
+  create: 'var(--c-accent)',
+  move: 'var(--c-blue-dark, var(--c-accent))',
+  harvest: 'var(--c-amber-dark)',
+  other: 'var(--c-text-muted)'
+};
+function planCategory(it) {
+  if (it.kind === 'grain') return 'create';
+  if (it.kind === 'fruiting') return 'move';
+  if (it.kind === 'harvest') return 'harvest';
+  return 'other';
+}
+function countByCategory(items) {
+  const c = {};
+  for (const it of items) c[planCategory(it)] = (c[planCategory(it)] || 0) + 1;
+  return c;
+}
 // A column's work at a glance: what, and how much. No actions — this is for
 // reading the week; the day you want to act on is one click away.
+//
+// Counts per category rather than a list of ids. In a 170px column four
+// truncated batch ids say almost nothing; "3 Umziehen · 2 Ernten" says what the
+// day is. The ids are in the open day, where there is room for them.
 function _weekColPreviewHtml(d) {
   const task = rhythmTaskOn(d.date);
   let html = '';
@@ -5007,18 +5030,27 @@ function _weekColPreviewHtml(d) {
   if (!d.items.length && !html) {
     return '<div style="padding:3px 2px;color:var(--c-text-muted);font-size:10px">' + esc(t('rhythm.nothing')) + '</div>';
   }
-  const shown = d.items.slice(0, DASH_COL_CAP);
-  for (const it of shown) {
+  const counts = countByCategory(d.items);
+  const overdue = d.items.filter((i) => i.overdue).length;
+  for (const cat of PLAN_CATS) {
+    if (!counts[cat]) continue;
     html +=
-      '<div style="padding:2px;border-left:2px solid ' +
-      (it.overdue ? 'var(--c-red-dark)' : spColor(it.species)) +
-      ';margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px">' +
-      esc(it.label) +
+      '<div style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
+      PLAN_CAT_COLOR[cat] +
+      ';margin-bottom:2px;font-size:10px">' +
+      '<span style="font-weight:700;flex-shrink:0">' +
+      counts[cat] +
+      '</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-sec)">' +
+      esc(t(PLAN_CAT_LABEL[cat])) +
+      '</span></div>';
+  }
+  // Late work is the one thing that should pull the eye across the week.
+  if (overdue) {
+    html +=
+      '<div style="font-size:10px;color:var(--c-red-dark);padding:1px 2px">' +
+      esc(t('cat.overdue', { n: overdue })) +
       '</div>';
   }
-  const hidden = d.items.length - shown.length;
-  // Never silently truncate, even in a preview.
-  if (hidden > 0) html += '<div style="font-size:10px;color:var(--c-text-muted);padding:1px 2px">+ ' + hidden + '</div>';
   return html;
 }
 // The open day, flat and dense. The room is a label on the row rather than a
@@ -5070,7 +5102,24 @@ function _weekDayBodyHtml(d, off, isToday) {
   const openKey = 'day' + off;
   const full = !!_dashRoomOpen[openKey];
   const shown = full ? items : items.slice(0, DASH_DAY_CAP);
-  for (const it of shown) html += _dashPlanRowHtml(it, true);
+  // Grouped by what you would be doing, in the order the day runs: make blocks,
+  // move what is ready, harvest what is out. Within a category the rows keep
+  // their walking order, so the route survives the grouping.
+  let lastCat = '';
+  for (const it of PLAN_CATS.flatMap((c) => shown.filter((x) => planCategory(x) === c))) {
+    const cat = planCategory(it);
+    if (cat !== lastCat) {
+      lastCat = cat;
+      html +=
+        '<div style="display:flex;align-items:baseline;gap:5px;font-size:10.5px;font-weight:600;color:var(--c-text-sec);margin:7px 0 2px">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:' +
+        PLAN_CAT_COLOR[cat] +
+        ';flex-shrink:0"></span>' +
+        esc(t(PLAN_CAT_LABEL[cat])) +
+        '</div>';
+    }
+    html += _dashPlanRowHtml(it, true);
+  }
   const hidden = items.length - shown.length;
   if (hidden > 0 || full) {
     html +=
@@ -7298,7 +7347,7 @@ function _groupBatchRows(rows) {
     const closed = !!_batchGroupClosed[k];
     const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : k;
     out +=
-      '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg-soft,transparent)">' +
+      '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
       '<button type="button" data-action="batch-group" data-key="' +
       esc(k) +
       '" aria-expanded="' +
