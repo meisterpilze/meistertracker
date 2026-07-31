@@ -1780,6 +1780,58 @@ tr:hover td {
   border-radius: 3px;
   background: #f59e0b;
 }
+/* ── Dashboard week grid ──────────────────────────────────────────────────
+   Seven days across, each column carrying its own work, so the whole week is
+   readable without opening anything. The day headers and the day bodies are
+   both direct grid children rather than the body sitting inside its header's
+   column — that is what lets a narrow screen collapse to one open day spanning
+   the full width, from the same markup. */
+.wk {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 8px;
+}
+/* The column comes in as --col rather than an inline grid-column, because an
+   inline declaration outranks any stylesheet rule — including the media query
+   below, which then silently failed to widen the open day and left it in a
+   43px column on a phone. */
+.wk-h {
+  grid-row: 1;
+  grid-column: var(--col);
+  min-width: 0;
+  padding: 4px 1px 5px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid var(--c-border);
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.15;
+  overflow: hidden;
+}
+.wk-h.sel {
+  border-bottom-color: var(--c-accent);
+  background: var(--c-bg-soft, transparent);
+}
+.wk-b {
+  grid-row: 2;
+  grid-column: var(--col);
+  min-width: 0;
+  font-size: 11px;
+}
+/* Below this the seven columns are too narrow to hold a task list, so the grid
+   keeps its header strip and only the chosen day opens, spanning every column.
+   768px matches the breakpoint the rest of the dashboard already uses. */
+@media (max-width: 768px) {
+  .wk-b {
+    display: none;
+  }
+  .wk-b.sel {
+    display: block;
+    grid-column: 1 / -1;
+  }
+}
 .todo-row {
   display: flex;
   align-items: flex-start;
