@@ -7714,10 +7714,159 @@ async function loadHarvestFeedSettings() {
     // A stored secret is never sent back to the page. The placeholder says one
     // exists; leaving the field empty on save keeps it.
     sec.placeholder = cfg.hasSecret ? '••••••••••' : '';
+    document.getElementById('harvestfeed-releasemode').checked = !!cfg.releaseMode;
     renderHarvestFeedBanner(cfg);
+    loadHarvestReleases();
   } catch (e) {
     /* non-admin */
   }
+}
+
+// ── Released for sale ────────────────────────────────────────────────────────
+//
+// One row per species: how much of it the feed may offer. The rows are not only
+// the ones already released — species harvested inside the fresh window are
+// listed too, at zero, because "what did we harvest that nobody has released
+// yet" is the question this screen exists to answer, and it cannot be answered
+// by a list that only shows what has already been decided.
+async function loadHarvestReleases() {
+  const body = document.getElementById('harvestrelease-body');
+  if (!body) return;
+  try {
+    const r = await authFetch('/api/harvest-feed/release');
+    if (!r.ok) return;
+    const data = await r.json();
+    const rows = new Map();
+    for (const rec of data.recent || []) rows.set(rec.species, { species: rec.species, harvested: rec.grams });
+    for (const rel of data.releases || []) {
+      const row = rows.get(rel.species) || { species: rel.species, harvested: null };
+      rows.set(rel.species, { ...row, ...rel });
+    }
+    renderHarvestReleases([...rows.values()].sort((a, b) => a.species.localeCompare(b.species)));
+  } catch (e) {
+    /* non-admin */
+  }
+}
+
+function renderHarvestReleases(rows) {
+  const body = document.getElementById('harvestrelease-body');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="5" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
+    return;
+  }
+  body.innerHTML = rows
+    .map((row) => {
+      // Kilograms in the form, grams on the wire. The scale reads grams and the
+      // feed carries grams; a shop lists kilos. Converting in one place beats a
+      // unit that changes meaning halfway through the stack.
+      const kg = row.grams ? (row.grams / 1000).toFixed(2) : '';
+      const harvested = row.harvested == null ? '—' : (row.harvested / 1000).toFixed(2) + ' kg';
+      const warn = row.expired ? ' style="color:var(--c-red-dark)"' : '';
+      return (
+        '<tr data-species="' +
+        esc(row.species) +
+        '" data-harvested="' +
+        (row.harvested == null ? '' : row.harvested) +
+        // What was loaded, so saving can tell an edit from an untouched row.
+        '" data-was-kg="' +
+        kg +
+        '" data-was-until="' +
+        esc(row.validUntil || '') +
+        '"><td>' +
+        esc(row.species) +
+        (row.expired ? ' <span' + warn + '>(' + esc(t('harvestFeed.expired')) + ')</span>' : '') +
+        '</td><td style="color:var(--c-text-muted)">' +
+        harvested +
+        '</td><td><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
+        kg +
+        '"></td><td><input type="date" class="hr-until" style="width:150px" value="' +
+        esc(row.validUntil || '') +
+        '"></td><td><button class="btn btn-sm hr-clear" data-i18n="harvestFeed.clear">' +
+        esc(t('harvestFeed.clear')) +
+        '</button></td></tr>'
+      );
+    })
+    .join('');
+  body.querySelectorAll('.hr-clear').forEach((b) =>
+    b.addEventListener('click', () => {
+      const tr = b.closest('tr');
+      tr.querySelector('.hr-kg').value = '';
+      tr.querySelector('.hr-until').value = '';
+    })
+  );
+}
+
+function showHarvestReleaseResult(msg, color) {
+  const el = document.getElementById('harvestrelease-result');
+  el.style.display = 'block';
+  el.style.color = color || 'var(--c-text-muted)';
+  el.textContent = msg;
+}
+
+async function saveHarvestReleases() {
+  const rows = [...document.querySelectorAll('#harvestrelease-body tr[data-species]')];
+  const bad = rows.find((tr) => {
+    const v = tr.querySelector('.hr-kg').value.trim();
+    return v !== '' && !(Number(v) >= 0);
+  });
+  if (bad) {
+    showHarvestReleaseResult(t('harvestFeed.badAmount'), 'var(--c-red-dark)');
+    return;
+  }
+  // Only the rows somebody actually touched. Posting all of them would stamp
+  // `updated` on decisions nobody revisited — and it would create a zero row for
+  // every species ever harvested, turning the table into a list of everything
+  // that was never released.
+  const changed = rows.filter((tr) => {
+    const kg = tr.querySelector('.hr-kg').value.trim();
+    const until = tr.querySelector('.hr-until').value;
+    return kg !== tr.dataset.wasKg || until !== tr.dataset.wasUntil;
+  });
+  if (!changed.length) {
+    showHarvestReleaseResult(t('harvestFeed.nothingChanged'), 'var(--c-text-muted)');
+    return;
+  }
+  showHarvestReleaseResult(t('harvestFeed.saving'), 'var(--c-text-muted)');
+  try {
+    for (const tr of changed) {
+      const raw = tr.querySelector('.hr-kg').value.trim();
+      await apiPost('/api/harvest-feed/release', {
+        species: tr.dataset.species,
+        grams: raw === '' ? 0 : Math.round(Number(raw) * 1000),
+        validUntil: tr.querySelector('.hr-until').value || null
+      });
+    }
+    showHarvestReleaseResult(t('harvestFeed.saved'), 'var(--c-green-dark)');
+    loadHarvestReleases();
+  } catch (e) {
+    showHarvestReleaseResult(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  }
+}
+
+function addHarvestReleaseRow() {
+  const input = document.getElementById('harvestrelease-new');
+  const species = input.value.trim();
+  if (!species) return;
+  const body = document.getElementById('harvestrelease-body');
+  if (body.querySelector('tr[data-species="' + CSS.escape(species) + '"]')) {
+    showHarvestReleaseResult(t('harvestFeed.alreadyListed'), 'var(--c-amber-dark)');
+    input.value = '';
+    return;
+  }
+  // Straight into the table rather than straight to the server: a species typed
+  // by hand is usually a typo waiting to happen, and an empty row that is never
+  // saved costs nothing.
+  const existing = [...body.querySelectorAll('tr[data-species]')].map((tr) => ({
+    species: tr.dataset.species,
+    // Carried in the row rather than refetched: re-rendering must not quietly
+    // turn every "2.40 kg harvested" into a dash.
+    harvested: tr.dataset.harvested === '' ? null : Number(tr.dataset.harvested),
+    grams: Math.round(Number(tr.querySelector('.hr-kg').value || 0) * 1000),
+    validUntil: tr.querySelector('.hr-until').value || null
+  }));
+  existing.push({ species, harvested: null, grams: 0, validUntil: null });
+  renderHarvestReleases(existing.sort((a, b) => a.species.localeCompare(b.species)));
+  input.value = '';
 }
 
 function renderHarvestFeedBanner(cfg) {
@@ -7791,7 +7940,8 @@ async function saveHarvestFeedSettings() {
     plannedDays: parseInt(document.getElementById('harvestfeed-planned').value, 10),
     leadDays: parseInt(document.getElementById('harvestfeed-lead').value, 10),
     strain: document.getElementById('harvestfeed-strain').checked,
-    site: document.getElementById('harvestfeed-site').value.trim()
+    site: document.getElementById('harvestfeed-site').value.trim(),
+    releaseMode: document.getElementById('harvestfeed-releasemode').checked
   };
   if (secret) cfg.secret = secret;
   try {
@@ -18493,6 +18643,11 @@ function initEventListeners() {
   $('harvestfeed-gen-btn').addEventListener('click', generateHarvestFeedSecret);
   $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));
   $('harvestfeed-preview-btn').addEventListener('click', () => testHarvestFeed(true));
+  $('harvestrelease-save-btn').addEventListener('click', saveHarvestReleases);
+  $('harvestrelease-add-btn').addEventListener('click', addHarvestReleaseRow);
+  $('harvestrelease-new').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addHarvestReleaseRow();
+  });
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);

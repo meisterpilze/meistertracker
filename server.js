@@ -8145,7 +8145,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           plannedDays: clampInt(data.plannedDays, 0, 365, 28),
           leadDays: clampInt(data.leadDays, 0, 365, 0),
           strain: data.strain !== false,
-          site: String(data.site || '').trim()
+          site: String(data.site || '').trim(),
+          releaseMode: !!data.releaseMode
         };
         // Validated before saving, not at the next tick: a rejected URL that is
         // already stored would leave the feed off with the reason buried in a
@@ -8192,9 +8193,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     try {
       // No config yet is the normal state for someone looking before deciding.
       // Defaults let them see the shape without filling the form first.
-      const shape = cfg || { freshDays: 3, plannedDays: 28, leadDays: 0, strain: true, site: '' };
+      const shape = cfg || {
+        freshDays: 3,
+        plannedDays: 28,
+        leadDays: 0,
+        strain: true,
+        site: '',
+        // Even with the feed still off, the switch is the one setting whose
+        // effect people want to see before committing to it — it decides
+        // whether the payload offers a harvest or a set-aside.
+        releaseMode: db.getHarvestFeedCfg(database).releaseMode
+      };
       const payload = harvestFeed.buildPayload(database, shape);
-      jsonOk(res, { payload, harvested: payload.harvested.length, planned: payload.planned.length });
+      jsonOk(res, {
+        payload,
+        harvested: payload.harvested.length,
+        planned: payload.planned.length,
+        released: payload.released ? payload.released.length : null
+      });
     } catch (err) {
       safeErr(res, err);
     }
@@ -8229,10 +8245,88 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // answered by looking rather than by trusting the description.
           harvested: r.payload.harvested.length,
           planned: r.payload.planned.length,
+          released: r.payload.released ? r.payload.released.length : null,
           payload: r.payload
         });
       })
       .catch((err) => safeErr(res, err));
+    return;
+  }
+  // -- Release for sale --
+  //
+  // The amounts the feed may offer, and the species it could plausibly be about.
+  // The second list is the point of the screen: after a harvest the question is
+  // "how much of this goes to the shop", and it is a much easier question when
+  // the species are already in front of you with what was weighed in next to
+  // them. Typing them from memory is how a species ends up missing for a week.
+  if (req.method === 'GET' && req.url === '/api/harvest-feed/release') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const cfg = db.getHarvestFeedCfg(database);
+      const days = Math.max(0, Number(cfg.freshDays) || 0);
+      const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10) + 'T00:00:00';
+      const recent = database
+        .prepare(
+          `SELECT species, SUM(grams) AS grams, MAX(time) AS last
+             FROM harvests
+            WHERE time >= ? AND species IS NOT NULL AND species <> ''
+            GROUP BY species HAVING SUM(grams) > 0
+            ORDER BY species`
+        )
+        .all(since)
+        .map((r) => ({ species: r.species, grams: Math.round(r.grams), last: r.last }));
+      jsonOk(res, { releaseMode: cfg.releaseMode, freshDays: days, releases: db.listHarvestReleases(database), recent });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/harvest-feed/release') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const species = String(data.species || '').trim();
+        if (!species) {
+          jsonErr(res, 400, 'species is required');
+          return;
+        }
+        if (data.remove) {
+          db.deleteHarvestRelease(database, species);
+          log('info', 'Harvest release removed', { actor: req.authUser.username, species });
+          jsonOk(res, { removed: true, releases: db.listHarvestReleases(database) });
+          return;
+        }
+        const grams = Number(data.grams);
+        if (!Number.isFinite(grams) || grams < 0) {
+          jsonErr(res, 400, 'grams must be a number of 0 or more');
+          return;
+        }
+        // Ten tonnes of one species set aside for a shop is a slipped decimal
+        // point, not a harvest. Rejecting beats clamping: a clamped number looks
+        // like it was accepted and is wrong by an order of magnitude.
+        if (grams > 10_000_000) {
+          jsonErr(res, 400, 'grams looks like a typo — that is over ten tonnes');
+          return;
+        }
+        db.setHarvestRelease(database, {
+          species,
+          grams,
+          validUntil: data.validUntil || null,
+          note: data.note || ''
+        });
+        log('info', 'Harvest release set', { actor: req.authUser.username, species, grams });
+        jsonOk(res, { releases: db.listHarvestReleases(database) });
+      } catch (err) {
+        // setHarvestRelease throws on a malformed date; that is a bad request,
+        // not a server fault, and the message says which field.
+        if (/setHarvestRelease/.test(err.message)) jsonErr(res, 400, err.message.replace('setHarvestRelease: ', ''));
+        else safeErr(res, err);
+      }
+    });
     return;
   }
 

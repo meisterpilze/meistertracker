@@ -1575,3 +1575,75 @@ describe('db – zone capacity', () => {
     assert.equal(z.maxCapacity, 77);
   });
 });
+
+// ── Release for sale ─────────────────────────────────────────────────────────
+describe('db – harvest releases', () => {
+  let d, p;
+  const today = (() => {
+    const n = new Date();
+    const q = (x) => String(x).padStart(2, '0');
+    return `${n.getFullYear()}-${q(n.getMonth() + 1)}-${q(n.getDate())}`;
+  })();
+  const dayOffset = (n) => {
+    const x = new Date();
+    x.setDate(x.getDate() + n);
+    const q = (v) => String(v).padStart(2, '0');
+    return `${x.getFullYear()}-${q(x.getMonth() + 1)}-${q(x.getDate())}`;
+  };
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('stores one release per species and overwrites rather than duplicating', () => {
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: today });
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2500, validUntil: today });
+    const all = db.listHarvestReleases(d);
+    assert.equal(all.length, 1);
+    assert.equal(all[0].grams, 2500);
+  });
+
+  it('lists an expired release rather than hiding it', () => {
+    // Hiding it would answer "why is this not on the site?" with silence. The
+    // list is where someone looks for that answer.
+    db.setHarvestRelease(d, { species: 'Shiitake', grams: 1000, validUntil: dayOffset(-1) });
+    const row = db.listHarvestReleases(d).find((r) => r.species === 'Shiitake');
+    assert.equal(row.expired, true);
+    assert.ok(!db.activeHarvestReleases(d).has('Shiitake'), 'expired must not be sellable');
+  });
+
+  it('treats no end date as no expiry', () => {
+    db.setHarvestRelease(d, { species: 'Enoki', grams: 500, validUntil: null });
+    assert.ok(db.activeHarvestReleases(d).has('Enoki'));
+    assert.equal(db.listHarvestReleases(d).find((r) => r.species === 'Enoki').expired, false);
+  });
+
+  it('refuses a malformed date instead of storing something it cannot compare', () => {
+    // valid_until is compared as a string. '1.8.2026' sorts before every
+    // ISO date there is, so a release stored that way is expired the moment it
+    // is written — silently, and looking perfectly fine in the form.
+    assert.throws(() => db.setHarvestRelease(d, { species: 'Oyster', grams: 100, validUntil: '1.8.2026' }), /validUntil/);
+  });
+
+  it('refuses a negative amount', () => {
+    assert.throws(() => db.setHarvestRelease(d, { species: 'Oyster', grams: -1 }), /grams/);
+  });
+
+  it('drops releases when the growing data is reset', () => {
+    // A release outliving the harvests it refers to would go on offering
+    // produce that no record shows ever existed.
+    db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: null });
+    db.resetOperationalData(d, { growing: true });
+    assert.deepEqual(db.listHarvestReleases(d), []);
+  });
+
+  it('removes a single release on request', () => {
+    db.setHarvestRelease(d, { species: 'Pink', grams: 800, validUntil: null });
+    assert.equal(db.deleteHarvestRelease(d, 'Pink'), 1);
+    assert.equal(db.deleteHarvestRelease(d, 'Pink'), 0, 'removing twice is not an error, just nothing');
+  });
+});

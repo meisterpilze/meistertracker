@@ -745,6 +745,25 @@ window.LANG['de'] = {
   'harvestFeed.neverSent': 'Aktiv, aber noch nichts geliefert.',
   'harvestFeed.envActive':
     'Der Feed läuft über Umgebungsvariablen (HARVEST_WEBHOOK_URL). Was hier steht, gilt erst, wenn du ihn hier aktivierst — dann hat dieses Formular Vorrang.',
+  'harvestFeed.releaseMode': 'Nur melden, was für den Verkauf freigegeben ist',
+  'harvestFeed.releaseModeHint':
+    'Ohne diesen Haken meldet der Feed die Erntemenge — eine Zahl, die nicht mehr stimmt, sobald am Marktstand etwas verkauft wird. Mit ihm meldet der Feed nur die Mengen, die du unten zurücklegst; Verkäufe anderswo können sie dann nicht mehr falsch machen.',
+  'harvestFeed.releaseTitle': 'Für den Verkauf freigegeben',
+  'harvestFeed.releaseDesc':
+    'Wie viel von einer Art ein Shop verkaufen darf — eine zurückgelegte Menge, kein Bestand. Leg sie in eine eigene Kiste und verkauf alles andere aus dem Rest: dann macht weder Laufkundschaft noch ein voller Markttag die veröffentlichte Zahl falsch, und es gibt nichts nachzupflegen. Das Datum ist die Absicherung. Frische Ware hält nicht, und der übliche Fehler ist keine falsche Zahl, sondern eine vergessene.',
+  'harvestFeed.colSpecies': 'Art',
+  'harvestFeed.colHarvested': 'Geerntet',
+  'harvestFeed.colRelease': 'Freigabe (kg)',
+  'harvestFeed.colUntil': 'Gültig bis',
+  'harvestFeed.addSpecies': 'Weitere Art …',
+  'harvestFeed.add': 'Hinzufügen',
+  'harvestFeed.clear': 'Leeren',
+  'harvestFeed.expired': 'abgelaufen',
+  'harvestFeed.noRelease': 'Noch nichts geerntet und nichts freigegeben.',
+  'harvestFeed.badAmount': 'Eine Menge ist keine Zahl ab 0.',
+  'harvestFeed.alreadyListed': 'Die Art steht schon in der Liste.',
+  'harvestFeed.saving': 'Wird gespeichert …',
+  'harvestFeed.nothingChanged': 'Nichts geändert.',
   'duckdns.title': 'DuckDNS Dynamic DNS',
   'duckdns.desc':
     'Verbinde deinen Server mit einer kostenlosen DuckDNS-Domain f\u00fcr Zugriff \u00fcber das Internet. Die \u00f6ffentliche IP wird automatisch alle 5 Minuten aktualisiert.',
