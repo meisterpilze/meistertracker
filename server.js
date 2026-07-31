@@ -7341,12 +7341,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
+      const body = data || {};
+      // Either field, or both: adjusting what a day asks for and recording what
+      // it produced are the same kind of edit to the same row.
+      if (body.doneQty === undefined && body.targetQty === undefined) {
+        jsonErr(res, 400, 'doneQty or targetQty is required');
+        return;
+      }
       try {
-        const n = db.setRhythmProgress(database, data && data.date, data && data.doneQty);
+        const out = { ok: true };
+        // Target first: it may create the row that progress is then recorded on.
+        if (body.targetQty !== undefined) out.targetQty = db.setRhythmTarget(database, body.date, body.targetQty);
+        if (body.doneQty !== undefined) out.doneQty = db.setRhythmProgress(database, body.date, body.doneQty);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, doneQty: n });
+        jsonOk(res, out);
       } catch (err) {
-        if (/Not a date|whole number|No planned work|implausibly large/.test(err.message)) {
+        if (/Not a date|whole number|No planned work|No rhythm on|implausibly large|Target/.test(err.message)) {
           jsonErr(res, 400, err.message);
           return;
         }
