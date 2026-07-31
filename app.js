@@ -750,6 +750,17 @@ function onNotifItemClick(e) {
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
+  } else if (linkType === 'customer' && linkId) {
+    // An eBay account-closure request. The server records it and raises this
+    // notification but deliberately never erases on its own, so this alert is the
+    // whole trail — and clicking it used to fall through every branch after
+    // marking it read, so the only pointer to the request destroyed itself and
+    // the admin landed nowhere. Take them to the Kunden table with the row
+    // highlighted, which is where the erase actually happens.
+    go('orders', 'n-orders');
+    openStab('orders', 'customers');
+    _ohHighlightCustomer = parseInt(linkId, 10) || null;
+    renderOrdersCustomers();
   }
 }
 
@@ -1214,34 +1225,94 @@ function renderOrdersMapping() {
     });
 }
 
+// Set when an eBay account-closure notification is clicked, so the row that the
+// request is about is findable in a 200-row table. Cleared on the next render.
+let _ohHighlightCustomer = null;
 function renderOrdersCustomers() {
   const body = $('orders-customers-body');
   if (!body) return;
-  body.innerHTML = _ohEmpty(6, t('common.loading'));
+  // /api/customers is behind requireShipping, not requireAdmin, so packers load
+  // this table too. Gate the header with the cells — otherwise they get a titled,
+  // permanently empty column stealing width on a table already wide enough to
+  // need horizontal scrolling on a phone. Same pattern as showAdminNav().
+  const isAdmin = !!(currentUser && currentUser.role === 'admin');
+  const privacyTh = document.getElementById('orders-customers-privacy-th');
+  if (privacyTh) privacyTh.hidden = !isAdmin;
+  const cols = isAdmin ? 7 : 6;
+  body.innerHTML = _ohEmpty(cols, t('common.loading'));
   apiGet('/api/customers')
     .then((d) => {
       const rows = d.items || [];
       if (!rows.length) {
-        body.innerHTML = _ohEmpty(6, t('orders.noCustomers'));
+        body.innerHTML = _ohEmpty(cols, t('orders.noCustomers'));
         return;
       }
       body.innerHTML = rows
         .map((c) => {
           const chans = (c.channels || '').split(',').filter(Boolean).map(_ohChannel).join(' ');
           const ltv = c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00';
+          // Ask the server, do not infer. `!c.name && !c.email` looked equivalent
+          // but was wrong for exactly the population this feature serves: eBay
+          // masks the buyer email and carries identity in customer_identities, so
+          // those customers have neither column and were never erased — yet they
+          // rendered as "already erased" while their shipping address, phone and
+          // raw payload sat in orders, with no way to run the erasure. Manual
+          // entry and CSV import without those columns produce the same shape.
+          // erased_at is written only by eraseCustomer.
+          const erased = !!c.erasedAt;
+          // btn-r is the repo's destructive style (delete batch, remove member,
+          // delete camera). No inline padding: it would override the coarse-pointer
+          // rule that gives every .btn-sm a 44px target, which is not something the
+          // most destructive control in the app should opt out of.
+          const privacy = !isAdmin
+            ? ''
+            : erased
+              ? `<span style="font-size:11px;color:var(--c-text-muted)">${esc(t('orders.erased'))}</span>`
+              : `<button type="button" class="btn btn-sm btn-r" data-action="oh-erase-customer" data-id="${esc(String(c.id))}" data-name="${esc(c.name || c.email || String(c.id))}">${esc(t('orders.erase'))}</button>`;
+          // Arrived here from an account-closure notification: mark the row the
+          // request is about, otherwise it is one of up to 200 and the admin has
+          // only an id to go on.
+          const hit = _ohHighlightCustomer && c.id === _ohHighlightCustomer;
           return (
-            `<tr><td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
+            `<tr${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
+            `<td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
             `<td>${chans}</td><td>${c.orderCount || 0}</td>` +
             `<td><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
             `<td style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
-            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td></tr>`
+            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td>` +
+            (isAdmin ? `<td>${privacy}</td>` : '') +
+            '</tr>'
           );
         })
         .join('');
+      // Consumed by this render; a later visit must not re-highlight whatever
+      // row now holds that id.
+      _ohHighlightCustomer = null;
     })
     .catch(() => {
-      body.innerHTML = _ohEmpty(6, t('common.error'));
+      body.innerHTML = _ohEmpty(cols, t('common.error'));
     });
+}
+// Carry out a marketplace account-closure request. This is the authenticated
+// counterpart to the eBay deletion endpoint, which records such requests and
+// notifies admins but never erases on its own — that endpoint is unauthenticated
+// by necessity, so anyone able to reach the host would otherwise be able to
+// destroy a customer's order history with one request.
+//
+// Irreversible: the server NULLs the customer's name and email, every ship_*
+// field on their orders, and the raw_json that could have restored them. The
+// order rows themselves survive, so revenue history stays intact.
+function eraseCustomer(id, name) {
+  confirm2(t('orders.eraseTitle'), t('orders.eraseMsg', { name }), t('orders.eraseYes'), () => {
+    apiPost('/api/customers/erase', { customerId: Number(id) }).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      setFb('ok', t('orders.eraseDone', { name, n: (r && r.orders) || 0 }));
+      renderOrdersCustomers();
+    });
+  });
 }
 
 // ── Versand: order list + buy-label modal ──
@@ -1397,7 +1468,9 @@ function ordersActionHandler(e) {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const action = btn.dataset.action;
-  if (action === 'oh-filter') {
+  if (action === 'oh-erase-customer') {
+    eraseCustomer(btn.dataset.id, btn.dataset.name);
+  } else if (action === 'oh-filter') {
     setOrdersFilter(btn.dataset.filter || '');
   } else if (action === 'oh-goto-mapping') {
     openStab('orders', 'mapping');

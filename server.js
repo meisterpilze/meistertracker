@@ -6909,15 +6909,28 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'POST' && url === '/api/customers/erase') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
-      const vr = validateRequired(data, ['customerId']);
-      if (vr) {
-        jsonErr(res, 400, vr);
+      // validateRequired only rejects undefined/null/'' — 0 and an unknown id
+      // both sailed through, eraseCustomer short-circuited, and the route then
+      // logged "erased" and answered ok, so the audit trail collected entries for
+      // erasures that never happened and the admin closed the ticket.
+      const id = Number(data.customerId);
+      if (!Number.isInteger(id) || id <= 0) {
+        jsonErr(res, 400, 'customerId must be a positive integer');
         return;
       }
       try {
-        const r = db.eraseCustomer(database, data.customerId);
+        const r = db.eraseCustomer(database, id);
+        if (!r.found) {
+          jsonErr(res, 404, 'no such customer');
+          return;
+        }
+        // eraseCustomer hands back who it erased, captured before the write.
+        // Logging only the id left the one durable record of an irreversible
+        // erase unable to say whose data it was — by the time this line runs,
+        // nothing in the database resolves that id back to a person.
         log('warn', 'customer data erased by admin', {
-          customerId: data.customerId,
+          customerId: id,
+          subject: r.subject,
           orders: r.orders,
           by: req.authUser.username
         });
