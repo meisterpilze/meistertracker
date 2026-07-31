@@ -295,6 +295,7 @@ window.LANG['pt'] = {
   'dash.destFull': '{zone} ficaria com {n} sacos, acima da capacidade de {cap}.',
   'rhythm.title': 'Ritmo semanal',
   'rhythm.edit': 'Editar ritmo semanal',
+  'rhythm.guess': 'estimado',
   'rhythm.suggested': 'Sugerido a partir do que já registaste — ajusta e guarda.',
   'rhythm.saved': 'Ritmo semanal guardado',
   'rhythm.theme.substrate': 'Substrato',

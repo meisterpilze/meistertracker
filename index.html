@@ -1733,8 +1733,6 @@
                 + Lab work
               </button>
             </div>
-            <!-- Today at a glance: actionable counts; tap a chip to jump to its list -->
-            <div id="dash-summary" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap"></div>
 
             <!-- Batch tasks + Alerts side by side -->
             <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
@@ -1815,18 +1813,6 @@
                 </details>
               </div>
 
-              <!-- Ready to harvest (fruiting batches — separated from Batch tasks to keep it uncluttered) -->
-              <div
-                class="card"
-                id="dash-harvest-tasks-card"
-                style="padding: 12px 16px; flex: 1; min-width: 0; display: none"
-              >
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                  <div class="sec" style="margin: 0" data-i18n="harvest.readyToHarvest">Ready to harvest</div>
-                  <span id="dash-harvest-count" style="font-size: 11px; color: var(--c-text-muted)"></span>
-                </div>
-                <div id="dash-harvest-tasks"></div>
-              </div>
 
               <!-- Alerts (inventory + overdue batches + capacity) -->
               <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
@@ -1842,12 +1828,19 @@
                    instruction alongside the dated work instead of a separate table. -->
             </div>
 
+
+
+          </div>
+          <!-- end dash-farm-section -->
+
+          <!-- Charts section — visible in Overview mode only -->
+          <div id="dash-charts-section" style="display: none">
+            <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
             <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
             <details class="dash-collapse" id="dc-kpi">
               <summary class="dash-collapse-sum" data-i18n="dash.kpiSection">Kennzahlen</summary>
               <div id="metrics" style="margin-bottom: 10px"></div>
             </details>
-
             <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
             <details class="dash-collapse" id="dc-status">
               <summary class="dash-collapse-sum" data-i18n="dash.liveStatus">Live batch status</summary>
@@ -1864,7 +1857,6 @@
               </div>
               <div id="dash-locations"></div>
             </details>
-
             <!-- ── LAB section ── collapsible -->
             <details class="dash-collapse" id="dc-lab">
               <summary class="dash-collapse-sum dash-collapse-lab">
@@ -1885,11 +1877,6 @@
               </summary>
               <div id="dash-lab-stock"></div>
             </details>
-          </div>
-          <!-- end dash-farm-section -->
-
-          <!-- Charts section — visible in Overview mode only -->
-          <div id="dash-charts-section" style="display: none">
             <!-- Top bar: Period toggle + CSV download -->
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
               <div class="ov-period-toggle" style="margin-bottom: 0">
