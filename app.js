@@ -4521,21 +4521,6 @@ function rhythmArrears(today) {
     .map((x) => Object.assign({}, x, { outstanding: x.targetQty - (x.doneQty || 0) }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
-// "45× Blue Oyster" — what the day is actually asking for. The mixture is not
-// stored on the day: it is read live off the Sorte, so correcting a recipe
-// updates every day that points at it instead of leaving stale copies behind.
-function rhythmPlanText(weekday) {
-  const r = rhythmOf(weekday);
-  if (!r) return '';
-  const ms = r.strainId ? mushroomStrains.find((m) => m.id === r.strainId) : null;
-  const parts = [];
-  // "45× Lions Mane" reads as an order; a bare "12×" with nothing after it is
-  // just a dangling multiplier, so the × only appears when it multiplies something.
-  if (r.targetQty) parts.push(ms ? r.targetQty + '×' : String(r.targetQty));
-  if (ms) parts.push(ms.name);
-  if (!parts.length && r.note) return r.note;
-  return parts.join(' ');
-}
 // The recipe behind the plan, for the day that is actually open. Empty when no
 // Sorte is chosen or that Sorte carries no substrate recipe.
 function rhythmMixText(weekday) {
@@ -4935,47 +4920,60 @@ function renderDashBatchTasks() {
     return;
   }
   const sel = _dashDayOffset >= 0 && _dashDayOffset < 7 ? _dashDayOffset : 0;
-  // Every day is a row, and every row states its plan and its load. Only the
-  // open one lists its work — a tab strip showed one day at full height and
-  // hid the other six, which answered "what is today" but never "what is the
-  // week", and cost most of a phone screen doing it.
-  el.innerHTML = week.map((d, i) => _weekDayRowHtml(d, i, i === sel)).join('') + _rhythmEditLink();
+  // The week reads across, not down. Seven columns of ~50px fit a 375px phone,
+  // so the whole week is one glance rather than a list to scroll — an
+  // overloaded Thursday is visible on Monday without opening anything.
+  el.innerHTML =
+    _weekGridHtml(week, sel) + _weekDayBodyHtml(week[sel], sel, sel === 0) + _rhythmEditLink();
 }
-function _weekDayRowHtml(d, off, open) {
-  const isToday = off === 0;
-  const th = themeFor(d.weekday);
-  const plan = rhythmPlanText(d.weekday);
-  const n = d.items.length;
-  // The header line: which day, what it is for, what was planned, how much
-  // generated work landed on it. One line, so seven of them still fit.
-  let html =
-    '<div style="border-bottom:0.5px solid var(--c-border)">' +
-    '<button type="button" data-action="dash-day" data-off="' +
-    off +
-    '" aria-expanded="' +
-    open +
-    '" style="width:100%;display:flex;align-items:baseline;gap:6px;padding:6px 2px;border:0;background:' +
-    (open ? 'var(--c-bg-soft,transparent)' : 'transparent') +
-    ';cursor:pointer;font-family:inherit;text-align:left">' +
-    '<span style="width:52px;flex-shrink:0;font-size:12px;font-weight:' +
-    (isToday ? '700' : '500') +
-    ';color:' +
-    (isToday ? 'var(--c-accent)' : 'var(--c-text)') +
-    '">' +
-    esc(t('rhythm.day.' + d.weekday)) +
-    '</span>' +
-    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--c-text-sec)">' +
-    esc(weekThemeLabel(th.theme)) +
-    (plan ? ' <span style="color:var(--c-text)">· ' + esc(plan) + '</span>' : '') +
-    (th.suggested ? ' <span style="color:var(--c-text-muted)">(' + esc(t('rhythm.guess')) + ')</span>' : '') +
-    '</span>' +
-    '<span style="flex-shrink:0;font-size:11.5px;color:' +
-    (n ? 'var(--c-text-sec)' : 'var(--c-text-muted)') +
-    '">' +
-    (n || '·') +
-    '</span></button>';
-  if (open) html += _weekDayBodyHtml(d, off, isToday);
-  return html + '</div>';
+function _weekGridHtml(week, sel) {
+  return (
+    '<div role="tablist" style="display:flex;gap:2px;margin-bottom:8px">' +
+    week
+      .map((d, i) => {
+        const on = i === sel;
+        const isToday = i === 0;
+        const th = themeFor(d.weekday);
+        const task = rhythmTaskOn(d.date);
+        // The number is the day's own load: what the rhythm asks for if it asks
+        // for anything, otherwise how much generated work landed on it.
+        const n = task && task.targetQty ? task.targetQty : d.items.length;
+        const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
+        return (
+          '<button type="button" role="tab" data-action="dash-day" data-off="' +
+          i +
+          '" aria-selected="' +
+          on +
+          '" title="' +
+          esc(t('rhythm.day.' + d.weekday) + (short ? ' · ' + short : '')) +
+          '" style="flex:1;min-width:0;padding:4px 1px 5px;border:1px solid transparent;border-bottom:2px solid ' +
+          (on ? 'var(--c-accent)' : 'var(--c-border)') +
+          ';border-radius:6px 6px 0 0;background:' +
+          (on ? 'var(--c-bg-soft,transparent)' : 'transparent') +
+          ';cursor:pointer;font-family:inherit;line-height:1.15;overflow:hidden">' +
+          '<span style="display:block;font-size:13px;font-weight:700;color:' +
+          (n ? (on ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
+          '">' +
+          (n || '·') +
+          '</span>' +
+          '<span style="display:block;font-size:9.5px;font-weight:' +
+          (isToday ? '700' : '600') +
+          ';color:' +
+          (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
+          '">' +
+          esc(t('rhythm.day.' + d.weekday)) +
+          '</span>' +
+          // The theme is what makes it a week rather than seven counts. Clipped
+          // rather than wrapped: at 50px a wrapped word would push the columns
+          // to different heights and the strip would stop reading as a row.
+          '<span style="display:block;font-size:8.5px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          esc(short || '·') +
+          '</span></button>'
+        );
+      })
+      .join('') +
+    '</div>'
+  );
 }
 // The open day, flat and dense. The room is a label on the row rather than a
 // heading of its own — the headings were most of the old view's height, and the
@@ -4985,12 +4983,12 @@ function _weekDayBodyHtml(d, off, isToday) {
   let html = '<div style="padding:2px 0 8px 4px">';
   const mix = rhythmMixText(d.weekday);
   const r = rhythmOf(d.weekday);
-  if (mix || (r && r.note)) {
-    html +=
-      '<div style="font-size:10.5px;color:var(--c-text-muted);margin:0 0 5px">' +
-      esc([mix, r && r.note].filter(Boolean).join(' · ')) +
-      '</div>';
-  }
+  // The column strip is too narrow to say a theme is only a guess, so the open
+  // day says it. An unconfirmed suggestion must never read as a decision.
+  const th = themeFor(d.weekday);
+  const bits = [th.suggested && th.theme ? weekThemeLabel(th.theme) + ' (' + t('rhythm.guess') + ')' : '', mix, r && r.note];
+  const line = bits.filter(Boolean).join(' · ');
+  if (line) html += '<div style="font-size:10.5px;color:var(--c-text-muted);margin:0 0 5px">' + esc(line) + '</div>';
   // The day's own planned job, and — on today only — whatever earlier days
   // still owe. Arrears belong on today because that is when they can be done.
   const own = rhythmTaskOn(d.date);
@@ -5061,10 +5059,19 @@ function _rhythmTaskRowHtml(task, outstanding) {
     '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;--sp-color:' +
     (late ? 'var(--c-red-dark)' : ms ? spColor(ms.name) : 'var(--c-accent)') +
     '">' +
+    // The amount is the thing that changes week to week, so it is the thing you
+    // can tap. Editing it here changes this date only — the recurring rhythm is
+    // the usual amount, and one busy Monday must not rewrite every Monday after.
     '<div style="flex:1;min-width:0">' +
-    '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    '<button type="button" data-action="rhythm-target" data-date="' +
+    esc(task.date) +
+    '" data-target="' +
+    target +
+    '" title="' +
+    esc(t('rhythm.targetEdit')) +
+    '" style="display:block;width:100%;text-align:left;border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:12px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     esc(label) +
-    '</div>' +
+    '</button>' +
     '<div style="font-size:11px;color:' +
     (late ? 'var(--c-red-dark)' : 'var(--c-text-muted)') +
     '">' +
@@ -5085,6 +5092,35 @@ function _rhythmTaskRowHtml(task, outstanding) {
         '</button>') +
     '</div>'
   );
+}
+// Change what this one date is asking for. The recurring rhythm is the usual
+// amount; this is the week that differs. Says so explicitly, because "45" being
+// editable in two places is exactly the kind of thing that gets misread.
+function editRhythmTarget(date, target) {
+  if (!date) return;
+  prompt2(t('rhythm.targetPrompt', { date: fmtDt(date) }), String(target || ''), function (raw) {
+    if (raw === null || raw === undefined) return;
+    const s = String(raw).trim();
+    if (s === '') return;
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < 0) {
+      setFb('err', t('rhythm.logBad'));
+      return;
+    }
+    apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
+      if (res && res.error) {
+        alert(res.error);
+        return;
+      }
+      const row = rhythmTasks.find((x) => x.date === date);
+      if (row) row.targetQty = n;
+      // A future date had no row until now; the server just made one, and the
+      // next load will bring it. Re-render from what we know meanwhile.
+      else rhythmTasks.push({ date, weekday: new Date(date).getDay(), theme: '', targetQty: n, doneQty: 0 });
+      setFb('ok', t('rhythm.targetSaved'));
+      renderDashBatchTasks();
+    });
+  });
 }
 // Ask how many were actually made, and send the absolute figure. Pre-filled
 // with the target rather than 0: the common answer is "all of them", and the
@@ -18803,6 +18839,10 @@ function initEventListeners() {
     }
     if (action === 'rhythm-log') {
       logRhythmProgress(el.dataset.date, Number(el.dataset.target), Number(el.dataset.done));
+      return;
+    }
+    if (action === 'rhythm-target') {
+      editRhythmTarget(el.dataset.date, Number(el.dataset.target));
       return;
     }
     if (action === 'dash-print') {

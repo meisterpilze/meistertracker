@@ -1879,6 +1879,72 @@ describe('db – rhythm tasks carry forward', () => {
     assert.ok(!tasks().some((x) => x.date < ymd(daysAgo(14))), 'a snapshot older than the window exists');
   });
 
+  // ── one day's amount, without touching the recurring rhythm ───────────────
+  it('changes one day without changing the template or its neighbours', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmTarget(d, day, 60);
+    assert.equal(tasks().find((x) => x.date === day).targetQty, 60);
+    assert.ok(
+      tasks().every((x) => x.date === day || x.targetQty === 45),
+      'editing one day changed another'
+    );
+    // The template is the usual amount and must be untouched, or every future
+    // Monday quietly inherits this one busy Monday.
+    const tpl = db.readAll(d).weekRhythm;
+    assert.ok(
+      Object.keys(tpl).every((k) => tpl[k].targetQty === 45),
+      'editing one day rewrote the weekly rhythm'
+    );
+  });
+
+  it('creates the row for a future date that has none yet', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const soon = ymd(daysAgo(-3));
+    assert.ok(!tasks().some((x) => x.date === soon), 'a future date was already snapshotted');
+    db.setRhythmTarget(d, soon, 60);
+    const row = tasks().find((x) => x.date === soon);
+    assert.equal(row.targetQty, 60);
+    // Seeded from the template, so it is a real job rather than a bare number.
+    assert.equal(row.theme, 'substrate', 'the new row lost its theme');
+    assert.equal(row.strainId, 3, 'the new row lost its Sorte');
+    assert.equal(row.doneQty, 0);
+  });
+
+  it('keeps what was already recorded when the amount is corrected', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmProgress(d, day, 30);
+    db.setRhythmTarget(d, day, 60);
+    assert.equal(tasks().find((x) => x.date === day).doneQty, 30, 'correcting the target discarded the progress');
+  });
+
+  it('treats zero as clearing the day rather than as a job for nothing', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    db.setRhythmTarget(d, day, 0);
+    assert.equal(tasks().find((x) => x.date === day).targetQty, null);
+  });
+
+  it('refuses a bad amount, a bad date, or a day with no rhythm at all', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    assert.throws(() => db.setRhythmTarget(d, day, -1), /Target/);
+    assert.throws(() => db.setRhythmTarget(d, day, 2.5), /Target/);
+    assert.throws(() => db.setRhythmTarget(d, 'Montag', 10), /Not a date/);
+    assert.equal(tasks().find((x) => x.date === day).targetQty, 45, 'a rejected edit still changed the day');
+    // A future date whose weekday is free has no job to give an amount to.
+    const m = {};
+    for (let i = 0; i < 7; i++) m[i] = { theme: 'free' };
+    db.setWeekRhythm(d, m);
+    assert.throws(() => db.setRhythmTarget(d, ymd(daysAgo(-5)), 10), /No rhythm on/);
+  });
+
   it('surfaces the tasks through readAll', () => {
     everyDay(45);
     const all = db.readAll(d).rhythmTasks;
