@@ -241,6 +241,10 @@ let REF_GROUPS = [];
 // (server reads LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env). Default
 // 400×240 = 50×30mm at 203dpi (Zebra GK420d small label).
 const labelDims = { widthDots: 400, heightDots: 240 };
+// Whether the harvest feed reports releases, from /api/data harvestRelease.
+// Default off, so a server that does not send the flag hides the field rather
+// than offering one that goes nowhere.
+const harvestRelease = { on: false };
 const KNOWN_ZONE_I18N = {
   SPAWN: 'dash.zoneSpawn',
   INC: 'dash.zoneInc',
@@ -594,6 +598,7 @@ function applyData(d) {
   if (d.notifications && typeof d.notifications.unread === 'number') {
     renderNotifBadge(d.notifications.unread);
   }
+  harvestRelease.on = !!(d.harvestRelease && d.harvestRelease.on);
 }
 function defaultInventory() {
   return {
@@ -7753,6 +7758,14 @@ function showHarvestPanel(bagId, batchId) {
   document.getElementById('hp-lbl').textContent = t('harvest.logHarvest') + ' \u2014 ' + bagId;
   document.getElementById('hp-bag').value = bagId;
   document.getElementById('hp-grams').value = '';
+  // Never carried over from the last bag. A weight gets re-typed every time, but
+  // a release that looks already-filled gets confirmed by reflex — and that sets
+  // the same produce aside twice.
+  document.getElementById('hp-release').value = '';
+  // Hidden unless the feed actually reports releases. A field that takes a number
+  // and does nothing with it is worse than no field: the crate gets packed and
+  // nothing publishes it.
+  document.getElementById('hp-release-wrap').style.display = harvestRelease.on ? '' : 'none';
   closeCamScan();
   closeScanModal();
   document.getElementById('harvest-panel').style.display = 'block';
@@ -7764,6 +7777,17 @@ function confirmHarvest(keepScanning) {
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
     alert(t('harvest.enterWeight'));
+    return;
+  }
+  // Only when the field is on screen. Reading it regardless would send whatever
+  // a previous session left in the DOM.
+  const rel = harvestRelease.on ? parseDecimal(document.getElementById('hp-release').value) || 0 : 0;
+  // Caught here as well as on the server, because here it is still fixable: the
+  // panel stays open with the number in it. The server rejecting it after the
+  // scan modal has moved on is a message about a bag that is already back on the
+  // shelf.
+  if (rel > g) {
+    alert(t('harvest.releaseTooHigh'));
     return;
   }
   const p = scan.harvestBag;
@@ -7778,7 +7802,10 @@ function confirmHarvest(keepScanning) {
     flush: f
   };
   harvests.push(hEntry);
-  apiPost('/api/harvests', hEntry).then((r) => {
+  // `release` travels in the request but not in `hEntry`: the local array mirrors
+  // the harvests table, and a field that exists on the client's copy and not in
+  // the database is how the two quietly drift apart.
+  apiPost('/api/harvests', rel > 0 ? { ...hEntry, release: rel } : hEntry).then((r) => {
     if (r && r.error) {
       // Roll back local state so user sees accurate harvest totals
       const i = harvests.lastIndexOf(hEntry);
@@ -7786,7 +7813,13 @@ function confirmHarvest(keepScanning) {
       setFb('err', t('common.error') + ': ' + r.error);
       renderHarvests();
       updateSD();
+      return;
     }
+    // The harvest is stored either way — only the release failed. Saying so
+    // matters because the crate is already packed: without this the produce sits
+    // there and the shop never hears about it.
+    if (r && r.releaseError) setFb('err', t('harvest.releaseFailed') + ': ' + r.releaseError);
+    else if (r && r.released) setFb('ok', t('harvest.releasedTotal', { kg: (r.released.grams / 1000).toFixed(2) }));
   });
   // Track in sessionEntries so session summary counts HARVEST and it appears in the log
   const sEntry = {

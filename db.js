@@ -4113,6 +4113,62 @@ function setHarvestRelease(db, { species, grams, validUntil, note }) {
   incrementDataVersion(db);
 }
 
+/**
+ * Put more of a species aside, straight from the scale.
+ *
+ * The twin of setHarvestRelease, and the difference is the whole point: this one
+ * **adds**. Two harvests in one afternoon both go into the same crate, so a set
+ * would silently overwrite the first — and the person typing the second number
+ * is looking at a bag, not at the table. setHarvestRelease stays for that table,
+ * where someone can see the number they are replacing.
+ *
+ * An expired or emptied row is not extended, it is **replaced**. A release that
+ * has run out is a crate that is gone; adding to it would otherwise land grams
+ * behind a date already in the past, where nothing publishes them and nobody
+ * can see why. Same for a row sitting at zero.
+ *
+ * `days` sets the expiry for a row that starts fresh. An existing, still-valid
+ * row keeps its own date: a crate that should be empty on Wednesday does not
+ * become fresher because something was added on Wednesday. Extending is a
+ * decision, and it belongs in the table where it is visible.
+ *
+ * @returns {{grams: number, validUntil: string|null, fresh: boolean}} the row as
+ *   it now stands, and whether this call started it.
+ */
+function addHarvestRelease(db, { species, grams, days }, at) {
+  const name = String(species || '').trim();
+  if (!name) throw new Error('addHarvestRelease: species required');
+  const g = Number(grams);
+  if (!Number.isFinite(g) || g <= 0) throw new Error('addHarvestRelease: grams must be a number > 0');
+
+  const now = at || new Date();
+  const today = localDay(now);
+  const row = db.prepare('SELECT grams, valid_until FROM harvest_release WHERE species = ?').get(name);
+  const running = !!row && row.grams > 0 && !(row.valid_until && row.valid_until < today);
+
+  if (running) {
+    db.prepare('UPDATE harvest_release SET grams = grams + ?, updated = ? WHERE species = ?').run(
+      g,
+      now.toISOString(),
+      name
+    );
+  } else {
+    const n = Math.floor(Number(days));
+    let until = null;
+    if (Number.isFinite(n) && n > 0) {
+      const d = new Date(now.getTime());
+      d.setDate(d.getDate() + n);
+      until = localDay(d);
+    }
+    setHarvestRelease(db, { species: name, grams: g, validUntil: until, note: '' });
+    return { grams: g, validUntil: until, fresh: true };
+  }
+
+  incrementDataVersion(db);
+  const after = db.prepare('SELECT grams, valid_until FROM harvest_release WHERE species = ?').get(name);
+  return { grams: after.grams, validUntil: after.valid_until || null, fresh: false };
+}
+
 function deleteHarvestRelease(db, species) {
   const info = db.prepare('DELETE FROM harvest_release WHERE species = ?').run(String(species || ''));
   if (info.changes) incrementDataVersion(db);
@@ -7434,6 +7490,7 @@ module.exports = {
   listHarvestReleases,
   activeHarvestReleases,
   setHarvestRelease,
+  addHarvestRelease,
   deleteHarvestRelease,
   updateDuckdnsStatus,
   getPrintBridgeCfg,

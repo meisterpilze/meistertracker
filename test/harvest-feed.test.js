@@ -709,3 +709,105 @@ describe('release for sale', () => {
     }
   });
 });
+
+// ── Releasing straight from the scale ────────────────────────────────────────
+//
+// The settings table replaces a number; this one adds to it. That difference is
+// the whole reason the function exists: two harvests in one afternoon go into the
+// same crate, and the person typing the second number is looking at a bag rather
+// than at the table.
+describe('adding to a release', () => {
+  let d, p;
+
+  // Local, not UTC — the same clock addHarvestRelease reads. A test that builds
+  // its expected date in UTC passes in London and fails in Berlin after 22:00,
+  // which is the least useful kind of red.
+  function localDay(at) {
+    const q = (n) => String(n).padStart(2, '0');
+    return `${at.getFullYear()}-${q(at.getMonth() + 1)}-${q(at.getDate())}`;
+  }
+  function daysFrom(at, n) {
+    const q = new Date(at.getTime());
+    q.setDate(q.getDate() + n);
+    return localDay(q);
+  }
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    try {
+      fs.unlinkSync(p);
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('creates the row and dates it freshDays out', () => {
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 1500, days: 3 }, NOW);
+    assert.equal(r.grams, 1500);
+    assert.equal(r.fresh, true, 'the caller needs to know this started an episode');
+    assert.equal(r.validUntil, daysFrom(NOW, 3), 'produce that stops counting as fresh stops being sellable');
+  });
+
+  it('adds to a running release instead of replacing it', () => {
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 500, days: 3 }, NOW);
+    assert.equal(r.grams, 2000, 'two bags into one crate is 2 kg, not the second bag');
+    assert.equal(r.fresh, false);
+  });
+
+  it('leaves a running release its own expiry', () => {
+    // A crate that should be empty on Wednesday does not become fresher because
+    // something was added to it on Wednesday. Extending is a decision and belongs
+    // in the table, where it is visible.
+    const later = new Date(NOW.getTime() + 2 * 86400000);
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 100, days: 3 }, later);
+    assert.equal(r.validUntil, daysFrom(NOW, 3), 'not pushed out to later + 3');
+    assert.equal(r.grams, 2100);
+  });
+
+  it('starts over on an expired row rather than adding behind a past date', () => {
+    // The bug this prevents: grams land on a row whose date is already gone, so
+    // nothing publishes them and nothing says why. An expired release is a crate
+    // that is gone — the next one is a new crate.
+    db.setHarvestRelease(d, { species: 'Shiitake', grams: 800, validUntil: daysFrom(NOW, -1) });
+    const r = db.addHarvestRelease(d, { species: 'Shiitake', grams: 300, days: 3 }, NOW);
+    assert.equal(r.grams, 300, 'not 1100 — yesterday is not part of today');
+    assert.equal(r.fresh, true);
+    assert.equal(r.validUntil, daysFrom(NOW, 3));
+  });
+
+  it('starts over on a row sitting at zero', () => {
+    // Zero is how the table says "sold out / never mind". Adding to it should
+    // begin an episode, not resurrect the old date.
+    db.setHarvestRelease(d, { species: 'Chestnut', grams: 0, validUntil: daysFrom(NOW, 30) });
+    const r = db.addHarvestRelease(d, { species: 'Chestnut', grams: 400, days: 3 }, NOW);
+    assert.equal(r.grams, 400);
+    assert.equal(r.fresh, true);
+    assert.equal(r.validUntil, daysFrom(NOW, 3), 'the stale 30-day date does not survive');
+  });
+
+  it('leaves a new row open-ended when there is no window', () => {
+    // freshDays 0 means the operator switched the window off. Inventing an expiry
+    // would silently drop produce; the table is where a date gets set then.
+    const r = db.addHarvestRelease(d, { species: 'Reishi', grams: 250, days: 0 }, NOW);
+    assert.equal(r.validUntil, null);
+  });
+
+  it('refuses what cannot be a crate', () => {
+    assert.throws(() => db.addHarvestRelease(d, { species: '', grams: 100, days: 3 }), /species required/);
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 0, days: 3 }), /> 0/);
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: -5, days: 3 }), /> 0/);
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 'lots', days: 3 }), /> 0/);
+  });
+
+  it('reaches the feed as one line per species', () => {
+    // The end of the chain, and the reason B1 in the receiver's review mattered:
+    // two lines for one species make two cards with separate amounts, and a stock
+    // cap downstream then reads the last instead of the sum.
+    const out = feed.buildPayload(d, { ...CFG, releaseMode: true }, NOW);
+    const arten = out.released.map((r) => r.species);
+    assert.deepEqual(arten, [...new Set(arten)].sort(), 'one line per species, sorted');
+    assert.equal(out.released.find((r) => r.species === 'Oyster').grams, 2100);
+  });
+});

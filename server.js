@@ -5660,6 +5660,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Expose label dimensions so the client's ZPL builder can adapt
     // without a separate round-trip. Static for the process lifetime.
     payload.labelDims = { widthDots: LABEL_WIDTH_DOTS, heightDots: LABEL_HEIGHT_DOTS };
+    // One boolean, so the harvest form knows whether to offer "release for sale".
+    // It rides along here rather than on its own endpoint because the form opens
+    // from a barcode scan — a request at that moment costs the very second the
+    // scan is meant to save. Toggling the mode bumps data_version, so the ETag
+    // above changes and a cached client does not keep the stale answer.
+    try {
+      payload.harvestRelease = { on: db.getHarvestFeedCfg(database).releaseMode };
+    } catch {
+      /* config table absent on an old database — the form simply stays hidden */
+    }
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
@@ -6536,14 +6546,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { grams: 'number', flush: 'number' });
+      const vt = validateTypes(data, { grams: 'number', flush: 'number', release: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
       }
-      const vrng = validateRanges(data, { grams: { min: 0, max: 1000000 }, flush: { min: 1, max: 100 } });
+      const vrng = validateRanges(data, {
+        grams: { min: 0, max: 1000000 },
+        flush: { min: 1, max: 100 },
+        release: { min: 0, max: 1000000 }
+      });
       if (vrng) {
         jsonErr(res, 400, vrng);
+        return;
+      }
+      // You cannot set aside more than you just weighed. The crate can hold more
+      // than this one bag, but the field says "of this, release" — so a number
+      // above the harvest is a slipped comma, not an intention, and it would
+      // publish produce nobody has.
+      if (data.release > data.grams) {
+        jsonErr(res, 400, 'release must be <= grams');
         return;
       }
       const vd = validateDate(data.time, 'time');
@@ -6553,8 +6575,32 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const id = db.insertHarvest(database, data);
+        // The release is a second, independent write, and it must not be able to
+        // lose the harvest. A harvest that was weighed is a fact; a release is a
+        // decision about it. So the insert happens first and its own errors
+        // travel normally, while a failing release is reported alongside the id
+        // rather than in place of it.
+        let released = null;
+        let releaseError = null;
+        if (data.release > 0) {
+          try {
+            const cfg = db.getHarvestFeedCfg(database);
+            // Off means off. Accepting the number here and storing it anyway
+            // would set produce aside that no feed reports — invisible work.
+            if (!cfg.releaseMode) releaseError = 'release mode is off';
+            else if (!data.species) releaseError = 'species required to release';
+            else
+              released = db.addHarvestRelease(database, {
+                species: data.species,
+                grams: data.release,
+                days: cfg.freshDays
+              });
+          } catch (err) {
+            releaseError = err.message;
+          }
+        }
         broadcastSSE(res);
-        jsonOk(res, { id });
+        jsonOk(res, { id, released, releaseError });
       } catch (err) {
         safeErr(res, err);
       }
