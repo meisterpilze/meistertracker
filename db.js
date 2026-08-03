@@ -1702,6 +1702,22 @@ const MIGRATIONS = [
     )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_rhythm_task_date ON rhythm_task(date)');
     }
+  },
+  {
+    version: 59,
+    description: 'Release permission: per-user can_release capability (set produce aside for sale)',
+    fn(db) {
+      // Twin of can_ship, and for the same reason. What a release does is leave
+      // the building: it decides the amount a shop may offer, so it is not the
+      // same act as weighing a bag even though it happens in the same second.
+      //
+      // Default 0, so the migration itself grants nothing. Admins qualify
+      // without the column, exactly as with can_ship.
+      const cols = db.prepare('PRAGMA table_info(users)').all();
+      if (!cols.some((c) => c.name === 'can_release')) {
+        db.exec('ALTER TABLE users ADD COLUMN can_release INTEGER DEFAULT 0');
+      }
+    }
   }
 ];
 
@@ -2854,7 +2870,7 @@ function createSession(db, userId) {
 function getSession(db, token) {
   return db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship
+      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship, u.can_release
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
@@ -2938,7 +2954,7 @@ function countUsers(db) {
 }
 
 function listUsers(db) {
-  return db.prepare('SELECT id, username, role, can_ship, created FROM users ORDER BY id').all();
+  return db.prepare('SELECT id, username, role, can_ship, can_release, created FROM users ORDER BY id').all();
 }
 
 function deleteUser(db, userId) {
@@ -2966,6 +2982,12 @@ function updateUserPassword(db, userId, hash, salt) {
 // Grant/revoke the per-user shipping capability (admins always qualify regardless).
 function setUserCanShip(db, userId, canShip) {
   db.prepare('UPDATE users SET can_ship = ? WHERE id = ?').run(canShip ? 1 : 0, userId);
+  incrementDataVersion(db);
+}
+
+// Grant/revoke the per-user release capability (admins always qualify regardless).
+function setUserCanRelease(db, userId, canRelease) {
+  db.prepare('UPDATE users SET can_release = ? WHERE id = ?').run(canRelease ? 1 : 0, userId);
   incrementDataVersion(db);
 }
 
@@ -4098,7 +4120,39 @@ function activeHarvestReleases(db, at) {
   return out;
 }
 
-function setHarvestRelease(db, { species, grams, validUntil, note }) {
+/**
+ * May this user set produce aside for sale?
+ *
+ * Twin of requireShipping()'s rule in server.js, and here for the same reason it
+ * exists there: recording a harvest is lab work that every worker does, but a
+ * release names the quantity a shop may publicly offer. Every other write to
+ * `harvest_release` sits behind requireAdmin, so without this the harvest route
+ * would be a way around it.
+ *
+ * Not requireAdmin, though. The whole point of releasing at the scale is that the
+ * person holding the bag does it, and that person is usually not an admin —
+ * admin-only would move the decision back to a desk, which is the arrangement this
+ * feature replaced. So: a capability an admin grants, exactly like can_ship.
+ */
+function mayRelease(actor) {
+  if (!actor) return false;
+  return actor.role === 'admin' || actor.can_release === 1;
+}
+
+/**
+ * Whether the feed reports releases at all — and nothing else.
+ *
+ * getHarvestFeedCfg() returns the feed's HMAC secret alongside this flag, so any
+ * caller that only needs the flag is one careless spread away from publishing the
+ * secret. This reads the single column instead, which removes the possibility
+ * rather than relying on the next reader noticing.
+ */
+function getHarvestReleaseMode(db) {
+  const row = db.prepare('SELECT release_mode FROM harvest_feed_config WHERE id = 1').get();
+  return !!row && row.release_mode === 1;
+}
+
+function setHarvestRelease(db, { species, grams, validUntil, note }, at) {
   const name = String(species || '').trim();
   if (!name) throw new Error('setHarvestRelease: species required');
   const g = Number(grams);
@@ -4109,8 +4163,88 @@ function setHarvestRelease(db, { species, grams, validUntil, note }) {
     `INSERT INTO harvest_release(species, grams, valid_until, note, updated) VALUES(?,?,?,?,?)
      ON CONFLICT(species) DO UPDATE SET grams=excluded.grams, valid_until=excluded.valid_until,
                                         note=excluded.note, updated=excluded.updated`
-  ).run(name, g, until, String(note || '').slice(0, 200), new Date().toISOString());
+    // `at` and not the wall clock, so a row's `updated` cannot contradict the
+    // window derived from the same instant. listHarvestReleases shows `updated`
+    // in the settings table, where a back-dated release stamped "now" reads as a
+    // system that disagrees with itself.
+  ).run(name, g, until, String(note || '').slice(0, 200), (at || new Date()).toISOString());
   incrementDataVersion(db);
+}
+
+/**
+ * Put more of a species aside, straight from the scale.
+ *
+ * The twin of setHarvestRelease, and the difference is the whole point: this one
+ * **adds**. Two harvests in one afternoon both go into the same crate, so a set
+ * would silently overwrite the first — and the person typing the second number
+ * is looking at a bag, not at the table. setHarvestRelease stays for that table,
+ * where someone can see the number they are replacing.
+ *
+ * An expired or emptied row is not extended, it is **replaced**. A release that
+ * has run out is a crate that is gone; adding to it would otherwise land grams
+ * behind a date already in the past, where nothing publishes them and nobody
+ * can see why. Same for a row sitting at zero.
+ *
+ * `days` sets the expiry for a row that starts fresh, and defaults to the feed's
+ * own freshness window. An existing, still-valid row keeps its own date: a crate
+ * that should be empty on Wednesday does not become fresher because something was
+ * added on Wednesday. Extending is a decision, and it belongs in the table where
+ * it is visible.
+ *
+ * ⚠️ Both gates live **here** and not in the route: whoever records a harvest next
+ * — a second endpoint, the MCP tool, an importer — inherits them instead of having
+ * to remember them.
+ *
+ * `actor` is **required**, and that is the point rather than an inconvenience. A
+ * release decides the amount a shop may publicly offer, so it is the one part of
+ * recording a harvest that is not a lab act. An optional permission argument is
+ * one a caller forgets; a required one refuses to run without an answer.
+ *
+ * @param {{role?: string, can_release?: number}} arg1.actor who is asking. Admin,
+ *   or a user an admin granted `can_release`.
+ * @returns {{grams: number, validUntil: string|null, fresh: boolean}} the row as
+ *   it now stands, and whether this call started it.
+ */
+function addHarvestRelease(db, { species, grams, days, actor }, at) {
+  const name = String(species || '').trim();
+  if (!name) throw new Error('addHarvestRelease: species required');
+  const g = Number(grams);
+  if (!Number.isFinite(g) || g <= 0) throw new Error('addHarvestRelease: grams must be a number > 0');
+  if (!mayRelease(actor)) throw new Error('addHarvestRelease: not allowed to release for sale');
+  if (!getHarvestReleaseMode(db)) throw new Error('addHarvestRelease: release mode is off');
+
+  const now = at || new Date();
+  const today = localDay(now);
+  const row = db.prepare('SELECT grams, valid_until FROM harvest_release WHERE species = ?').get(name);
+  const running = !!row && row.grams > 0 && !(row.valid_until && row.valid_until < today);
+
+  if (running) {
+    db.prepare('UPDATE harvest_release SET grams = grams + ?, updated = ? WHERE species = ?').run(
+      g,
+      now.toISOString(),
+      name
+    );
+    incrementDataVersion(db);
+    // No second SELECT: better-sqlite3 is synchronous, so nothing can have
+    // interleaved between the read above and this add. Re-reading would only
+    // suggest the arithmetic is in doubt and send the next reader hunting for a
+    // concurrency story that is not there.
+    return { grams: row.grams + g, validUntil: row.valid_until || null, fresh: false };
+  }
+
+  // `>= 0`, not `> 0`. freshDays 0 is a real setting — only today's harvests count
+  // as fresh — and it has to mean "expires tonight", not "never expires". The
+  // likely error is the forgotten release, so the fail-safe direction is a window
+  // that closes; an open-ended crate is the one outcome the date exists to avoid.
+  const n = Math.floor(Number(days === undefined || days === null ? getHarvestFeedCfg(db).freshDays : days));
+  let until = null;
+  if (Number.isFinite(n) && n >= 0) {
+    const d = new Date(now.getTime());
+    d.setDate(d.getDate() + n);
+    until = localDay(d);
+  }
+  setHarvestRelease(db, { species: name, grams: g, validUntil: until, note: '' }, now);
+  return { grams: g, validUntil: until, fresh: true };
 }
 
 function deleteHarvestRelease(db, species) {
@@ -6461,6 +6595,10 @@ const SAFE_ERROR_PREFIXES = [
   'Rack has ',
   'Zone name ',
   'Cannot delete:',
+  // Release for sale — db.js. Operator-facing on purpose: "release mode is off"
+  // and "species required" are the two things worth reading back at the scale,
+  // and a generic message there would leave a packed crate unexplained.
+  'addHarvestRelease:',
   // Photo upload — server.js (every message is prefixed `photo:`)
   'photo:'
 ];
@@ -7397,6 +7535,7 @@ module.exports = {
   SESSION_TTL_MS,
   updateUserPassword,
   setUserCanShip,
+  setUserCanRelease,
   resetUserPassword,
   insertBatch,
   updateBatchField,
@@ -7431,9 +7570,12 @@ module.exports = {
   getHarvestFeedCfg,
   updateHarvestFeedCfg,
   updateHarvestFeedStatus,
+  mayRelease,
+  getHarvestReleaseMode,
   listHarvestReleases,
   activeHarvestReleases,
   setHarvestRelease,
+  addHarvestRelease,
   deleteHarvestRelease,
   updateDuckdnsStatus,
   getPrintBridgeCfg,

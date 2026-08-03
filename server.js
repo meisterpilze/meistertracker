@@ -5147,7 +5147,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // PATCH /api/users/:id — admin sets per-user capabilities (currently can_ship)
+  // PATCH /api/users/:id — admin sets per-user capabilities (can_ship, can_release)
   if (url.match(/^\/api\/users\/\d+$/) && req.method === 'PATCH') {
     if (requireAdmin(req, res)) return;
     const userId = parseInt(url.split('/').pop(), 10);
@@ -5163,6 +5163,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             actor: req.authUser.username,
             userId,
             canShip: !!data.canShip
+          });
+        }
+        if (data && data.canRelease !== undefined) {
+          db.setUserCanRelease(database, userId, !!data.canRelease);
+          // Logged for the same reason the shipping grant is: this one decides who
+          // may change a number the public sees.
+          log('info', 'User release permission updated', {
+            actor: req.authUser.username,
+            userId,
+            canRelease: !!data.canRelease
           });
         }
         jsonOk(res, { ok: true });
@@ -5660,6 +5670,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Expose label dimensions so the client's ZPL builder can adapt
     // without a separate round-trip. Static for the process lifetime.
     payload.labelDims = { widthDots: LABEL_WIDTH_DOTS, heightDots: LABEL_HEIGHT_DOTS };
+    // One boolean, so the harvest form knows whether to offer "release for sale".
+    // It rides along here rather than on its own endpoint because the form opens
+    // from a barcode scan — a request at that moment costs the very second the
+    // scan is meant to save. Toggling the mode bumps data_version, so the ETag
+    // above changes and a cached client does not keep the stale answer.
+    //
+    // ⚠️ getHarvestReleaseMode and not getHarvestFeedCfg: the latter returns the
+    // feed's HMAC secret in the same object, and this payload goes to every
+    // authenticated client every 30 seconds. Reading the one column means a
+    // careless spread here cannot publish the secret.
+    //
+    // The permission is part of the answer, not a separate one. A worker without
+    // it would otherwise get a field that fails on every save — the same "input
+    // that does nothing" the field was designed to avoid. This is presentation
+    // only; the check that matters runs in addHarvestRelease.
+    try {
+      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) && db.mayRelease(req.authUser) };
+    } catch {
+      /* config table absent on an old database — the form simply stays hidden */
+    }
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
@@ -6536,14 +6566,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { grams: 'number', flush: 'number' });
+      const vt = validateTypes(data, { grams: 'number', flush: 'number', release: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
       }
-      const vrng = validateRanges(data, { grams: { min: 0, max: 1000000 }, flush: { min: 1, max: 100 } });
+      const vrng = validateRanges(data, {
+        grams: { min: 0, max: 1000000 },
+        flush: { min: 1, max: 100 },
+        release: { min: 0, max: 1000000 }
+      });
       if (vrng) {
         jsonErr(res, 400, vrng);
+        return;
+      }
+      // You cannot set aside more than you just weighed. The crate can hold more
+      // than this one bag, but the field says "of this, release" — so a number
+      // above the harvest is a slipped comma, not an intention, and it would
+      // publish produce nobody has.
+      //
+      // The decision itself lives in harvest-feed.js so a test can reach it; only
+      // the choice of status code belongs to the route.
+      const relProblem = harvestFeed.releaseProblem(data);
+      if (relProblem && relProblem.fatal) {
+        jsonErr(res, 400, relProblem.reason);
         return;
       }
       const vd = validateDate(data.time, 'time');
@@ -6553,8 +6599,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const id = db.insertHarvest(database, data);
+        // The release is a second, independent write, and it must not be able to
+        // lose the harvest. A harvest that was weighed is a fact; a release is a
+        // decision about it. So the insert happens first and its own errors
+        // travel normally, while a failing release is reported alongside the id
+        // rather than in place of it.
+        let released = null;
+        let releaseError = null;
+        if (data.release > 0) {
+          if (relProblem) releaseError = relProblem.reason;
+          else
+            try {
+              // Release mode, the permission check and the freshness window all
+              // come from inside addHarvestRelease now, so every caller gets the
+              // same gates without having to remember any of them.
+              //
+              // `actor` is what closes the hole this route opened: POST /api/harvests
+              // is open to every authenticated user by design — weighing bags is
+              // what the lab does all day — while every other write to
+              // harvest_release sits behind requireAdmin. Passing the session
+              // through means the release obeys that boundary while the harvest
+              // itself stays open.
+              released = db.addHarvestRelease(database, {
+                species: data.species,
+                grams: data.release,
+                actor: req.authUser
+              });
+            } catch (err) {
+              // Same discipline as safeErr(): only a whitelisted message goes to
+              // the client, anything else is logged and generalised. Without the
+              // log an unexpected release failure left no trace at all, which is
+              // the worst case here — the crate is packed and nothing says why the
+              // shop never heard about it.
+              const msg = String((err && err.message) || '');
+              if (db.isSafeError(msg)) releaseError = msg.replace('addHarvestRelease: ', '');
+              else {
+                log('error', 'Harvest release failed', {
+                  error: msg,
+                  stack: err && err.stack,
+                  species: data.species
+                });
+                releaseError = 'release failed — see server log';
+              }
+            }
+        }
         broadcastSSE(res);
-        jsonOk(res, { id });
+        jsonOk(res, { id, released, releaseError });
       } catch (err) {
         safeErr(res, err);
       }

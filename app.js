@@ -241,6 +241,10 @@ let REF_GROUPS = [];
 // (server reads LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env). Default
 // 400×240 = 50×30mm at 203dpi (Zebra GK420d small label).
 const labelDims = { widthDots: 400, heightDots: 240 };
+// Whether the harvest feed reports releases, from /api/data harvestRelease.
+// Default off, so a server that does not send the flag hides the field rather
+// than offering one that goes nowhere.
+const harvestRelease = { on: false };
 const KNOWN_ZONE_I18N = {
   SPAWN: 'dash.zoneSpawn',
   INC: 'dash.zoneInc',
@@ -594,6 +598,7 @@ function applyData(d) {
   if (d.notifications && typeof d.notifications.unread === 'number') {
     renderNotifBadge(d.notifications.unread);
   }
+  harvestRelease.on = !!(d.harvestRelease && d.harvestRelease.on);
 }
 function defaultInventory() {
   return {
@@ -7753,6 +7758,14 @@ function showHarvestPanel(bagId, batchId) {
   document.getElementById('hp-lbl').textContent = t('harvest.logHarvest') + ' \u2014 ' + bagId;
   document.getElementById('hp-bag').value = bagId;
   document.getElementById('hp-grams').value = '';
+  // Never carried over from the last bag. A weight gets re-typed every time, but
+  // a release that looks already-filled gets confirmed by reflex — and that sets
+  // the same produce aside twice.
+  document.getElementById('hp-release').value = '';
+  // Hidden unless the feed actually reports releases. A field that takes a number
+  // and does nothing with it is worse than no field: the crate gets packed and
+  // nothing publishes it.
+  document.getElementById('hp-release-wrap').style.display = harvestRelease.on ? '' : 'none';
   closeCamScan();
   closeScanModal();
   document.getElementById('harvest-panel').style.display = 'block';
@@ -7764,6 +7777,17 @@ function confirmHarvest(keepScanning) {
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
     alert(t('harvest.enterWeight'));
+    return;
+  }
+  // Only when the field is on screen. Reading it regardless would send whatever
+  // a previous session left in the DOM.
+  const rel = harvestRelease.on ? parseDecimal(document.getElementById('hp-release').value) || 0 : 0;
+  // Caught here as well as on the server, because here it is still fixable: the
+  // panel stays open with the number in it. The server rejecting it after the
+  // scan modal has moved on is a message about a bag that is already back on the
+  // shelf.
+  if (rel > g) {
+    alert(t('harvest.releaseTooHigh'));
     return;
   }
   const p = scan.harvestBag;
@@ -7778,7 +7802,10 @@ function confirmHarvest(keepScanning) {
     flush: f
   };
   harvests.push(hEntry);
-  apiPost('/api/harvests', hEntry).then((r) => {
+  // `release` travels in the request but not in `hEntry`: the local array mirrors
+  // the harvests table, and a field that exists on the client's copy and not in
+  // the database is how the two quietly drift apart.
+  apiPost('/api/harvests', rel > 0 ? { ...hEntry, release: rel } : hEntry).then((r) => {
     if (r && r.error) {
       // Roll back local state so user sees accurate harvest totals
       const i = harvests.lastIndexOf(hEntry);
@@ -7786,7 +7813,28 @@ function confirmHarvest(keepScanning) {
       setFb('err', t('common.error') + ': ' + r.error);
       renderHarvests();
       updateSD();
+      return;
     }
+    // The harvest is stored either way — only the release failed. Saying so
+    // matters because the crate is already packed: without this the produce sits
+    // there and the shop never hears about it.
+    //
+    // `noModal: true` on both, like the five other call sites that fire from a
+    // callback. Without it setFb() runs openScanModal(), and by the time this
+    // resolves the worker has usually scanned the next bag — so the overlay would
+    // reopen over a panel already being typed into, and on a phone it would leave
+    // body.overflow pinned to hidden.
+    //
+    // The message names the bag and calls the figure a total, because the number
+    // that comes back is the whole crate and not this bag's contribution: 500 g on
+    // top of 2 kg answers "2.5 kg", and read as "just released" that looks like a
+    // slipped comma.
+    if (r && r.releaseError)
+      setFb('err', t('harvest.releaseFailed', { bag: p.bagId }) + ': ' + r.releaseError, { noModal: true });
+    else if (r && r.released)
+      setFb('ok', t('harvest.releasedTotal', { bag: p.bagId, kg: (r.released.grams / 1000).toFixed(2) }), {
+        noModal: true
+      });
   });
   // Track in sessionEntries so session summary counts HARVEST and it appears in the log
   const sEntry = {
@@ -15939,11 +15987,11 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
@@ -15960,6 +16008,12 @@ function onUsersTableClick(e) {
     if (Number.isFinite(sid)) toggleUserShip(sid, ship.checked);
     return;
   }
+  const rel = e.target.closest('input[data-action="toggle-release"]');
+  if (rel) {
+    const rid = parseInt(rel.dataset.userId, 10);
+    if (Number.isFinite(rid)) toggleUserRelease(rid, rel.checked);
+    return;
+  }
   const btn = e.target.closest('button[data-action="delete-user"]');
   if (!btn) return;
   const id = parseInt(btn.dataset.userId, 10);
@@ -15973,6 +16027,26 @@ async function toggleUserShip(id, canShip) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ canShip })
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+  loadUsersTab();
+}
+
+// Grant/revoke the release capability. Same shape as toggleUserShip, and the
+// reload matters for the same reason: the checkbox must end up showing what the
+// server stored, not what was clicked.
+async function toggleUserRelease(id, canRelease) {
+  try {
+    const r = await authFetch('/api/users/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canRelease })
     });
     if (!r.ok) {
       const d = await r.json();
