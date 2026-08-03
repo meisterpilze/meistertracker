@@ -345,8 +345,8 @@ window.LANG['en'] = {
     'How much of this is set aside for sale — it goes out with the harvest feed. Leave empty if none of it is sold.',
   'harvest.releasePlaceholder': 'grams',
   'harvest.releaseTooHigh': 'You cannot release more than you harvested',
-  'harvest.releaseFailed': 'Harvest saved, release was not',
-  'harvest.releasedTotal': '{kg} kg released',
+  'harvest.releaseFailed': '{bag}: harvest saved, release was not',
+  'harvest.releasedTotal': '{bag}: {kg} kg released in total',
   // Dashboard
   'cat.create': 'Make blocks',
   'cat.move': 'Move',

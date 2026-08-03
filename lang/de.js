@@ -345,8 +345,8 @@ window.LANG['de'] = {
     'Menge, die für den Verkauf zurückgelegt wird — sie geht in den Ernte-Feed. Leer lassen, wenn nichts davon verkauft wird.',
   'harvest.releasePlaceholder': 'Gramm',
   'harvest.releaseTooHigh': 'Es kann nicht mehr freigegeben werden als geerntet wurde',
-  'harvest.releaseFailed': 'Ernte gespeichert, Freigabe nicht',
-  'harvest.releasedTotal': '{kg} kg freigegeben',
+  'harvest.releaseFailed': '{bag}: Ernte gespeichert, Freigabe nicht',
+  'harvest.releasedTotal': '{bag}: {kg} kg insgesamt freigegeben',
   // Dashboard
   'cat.create': 'Ansetzen',
   'cat.move': 'Umziehen',

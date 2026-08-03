@@ -227,8 +227,8 @@ window.LANG['pt'] = {
     'Quantidade reservada para venda — vai no feed de colheita. Deixe vazio se nada disto for vendido.',
   'harvest.releasePlaceholder': 'gramas',
   'harvest.releaseTooHigh': 'Não é possível liberar mais do que foi colhido',
-  'harvest.releaseFailed': 'Colheita guardada, liberação não',
-  'harvest.releasedTotal': '{kg} kg liberados',
+  'harvest.releaseFailed': '{bag}: colheita guardada, liberação não',
+  'harvest.releasedTotal': '{bag}: {kg} kg liberados no total',
   // Dashboard
   'cat.create': 'Preparar',
   'cat.move': 'Mover',

@@ -734,12 +734,32 @@ describe('adding to a release', () => {
 
   before(() => {
     ({ db: d, path: p } = tmpDb());
+    // The gate lives in addHarvestRelease, so it has to be open for the rest of
+    // this block. Everything else here is the default config.
+    db.updateHarvestFeedCfg(d, { releaseMode: true, freshDays: 3 });
   });
   after(() => {
     try {
       fs.unlinkSync(p);
     } catch {
       /* best effort */
+    }
+  });
+
+  it('refuses while release mode is off', () => {
+    // The gate belongs to the writer and not to the route: whoever records a
+    // harvest next inherits it instead of having to remember it.
+    const { db: off, path: offPath } = tmpDb();
+    try {
+      assert.throws(() => db.addHarvestRelease(off, { species: 'Oyster', grams: 100 }), /release mode is off/);
+      assert.deepEqual(db.listHarvestReleases(off), [], 'and nothing is written');
+    } finally {
+      off.close();
+      try {
+        fs.unlinkSync(offPath);
+      } catch {
+        /* best effort */
+      }
     }
   });
 
@@ -787,11 +807,27 @@ describe('adding to a release', () => {
     assert.equal(r.validUntil, daysFrom(NOW, 3), 'the stale 30-day date does not survive');
   });
 
-  it('leaves a new row open-ended when there is no window', () => {
-    // freshDays 0 means the operator switched the window off. Inventing an expiry
-    // would silently drop produce; the table is where a date gets set then.
+  it('treats freshDays 0 as expiring tonight, not as never expiring', () => {
+    // The dangerous reading of 0 is "no window", because the likely error is the
+    // forgotten release and an open-ended crate is what the date exists to prevent.
+    // 0 means only today's harvests count as fresh — so the release ends with today.
     const r = db.addHarvestRelease(d, { species: 'Reishi', grams: 250, days: 0 }, NOW);
-    assert.equal(r.validUntil, null);
+    assert.equal(r.validUntil, localDay(NOW), 'not null — an unbounded release is the one outcome to avoid');
+  });
+
+  it('falls back to the configured window when days is not given', () => {
+    // The route no longer passes freshDays, so the default has to come from here or
+    // every caller has to remember it.
+    const r = db.addHarvestRelease(d, { species: 'Enoki', grams: 300 }, NOW);
+    assert.equal(r.validUntil, daysFrom(NOW, 3), 'freshDays 3 from the stored config');
+  });
+
+  it('stamps `updated` from the injected clock, not the wall clock', () => {
+    // A back-dated release whose `updated` says "now" is a row that contradicts its
+    // own window, and listHarvestReleases shows both in the settings table.
+    db.addHarvestRelease(d, { species: 'Maitake', grams: 700 }, NOW);
+    const row = db.listHarvestReleases(d).find((x) => x.species === 'Maitake');
+    assert.equal(row.updated, NOW.toISOString());
   });
 
   it('refuses what cannot be a crate', () => {
@@ -809,5 +845,51 @@ describe('adding to a release', () => {
     const arten = out.released.map((r) => r.species);
     assert.deepEqual(arten, [...new Set(arten)].sort(), 'one line per species, sorted');
     assert.equal(out.released.find((r) => r.species === 'Oyster').grams, 2100);
+  });
+});
+
+// ── The two guards the route used to hold inline ──────────────────────────────
+//
+// Extracted so they can be tested at all: this repo has no HTTP-level harness, so
+// as long as these lived inside the request handler, inverting either comparison
+// stayed green. They are the guards against the two failure modes the field was
+// built for — a slipped comma, and a release with nothing to key it to.
+describe('releaseProblem', () => {
+  it('says nothing when there is no release to check', () => {
+    // Absent, zero and negative all mean "this harvest sets nothing aside", and
+    // none of them should produce a complaint about grams or species.
+    for (const release of [undefined, null, 0, -1]) {
+      assert.equal(feed.releaseProblem({ release, grams: 500 }), null, String(release));
+    }
+  });
+
+  it('passes a release that fits, with a species', () => {
+    assert.equal(feed.releaseProblem({ release: 500, grams: 3000, species: 'Oyster' }), null);
+    assert.equal(feed.releaseProblem({ release: 3000, grams: 3000, species: 'Oyster' }), null, 'all of it is fine');
+  });
+
+  it('rejects more released than weighed, fatally', () => {
+    // Fatal because the harvest itself is wrong: 200 g weighed and 2000 g released
+    // is a slipped comma, and storing it would publish produce nobody has.
+    const p = feed.releaseProblem({ release: 2000, grams: 200, species: 'Oyster' });
+    assert.equal(p.reason, 'release must be <= grams');
+    assert.equal(p.fatal, true, 'a bad request — the harvest must not be stored either');
+  });
+
+  it('reports a missing species without condemning the harvest', () => {
+    // Not fatal: a weighed harvest is a fact whatever happens to the release, and
+    // losing it over a missing species name would be the worse trade.
+    for (const species of [undefined, null, '']) {
+      const p = feed.releaseProblem({ release: 500, grams: 3000, species });
+      assert.equal(p.reason, 'species required to release');
+      assert.equal(p.fatal, false, 'the harvest is still stored, the release is reported next to it');
+    }
+  });
+
+  it('checks the amount before the species', () => {
+    // Both wrong at once has to answer with the fatal one, or a slipped comma gets
+    // stored while the reply talks about a species name.
+    const p = feed.releaseProblem({ release: 2000, grams: 200, species: '' });
+    assert.equal(p.fatal, true);
   });
 });

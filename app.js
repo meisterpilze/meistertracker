@@ -7818,8 +7818,23 @@ function confirmHarvest(keepScanning) {
     // The harvest is stored either way — only the release failed. Saying so
     // matters because the crate is already packed: without this the produce sits
     // there and the shop never hears about it.
-    if (r && r.releaseError) setFb('err', t('harvest.releaseFailed') + ': ' + r.releaseError);
-    else if (r && r.released) setFb('ok', t('harvest.releasedTotal', { kg: (r.released.grams / 1000).toFixed(2) }));
+    //
+    // `noModal: true` on both, like the five other call sites that fire from a
+    // callback. Without it setFb() runs openScanModal(), and by the time this
+    // resolves the worker has usually scanned the next bag — so the overlay would
+    // reopen over a panel already being typed into, and on a phone it would leave
+    // body.overflow pinned to hidden.
+    //
+    // The message names the bag and calls the figure a total, because the number
+    // that comes back is the whole crate and not this bag's contribution: 500 g on
+    // top of 2 kg answers "2.5 kg", and read as "just released" that looks like a
+    // slipped comma.
+    if (r && r.releaseError)
+      setFb('err', t('harvest.releaseFailed', { bag: p.bagId }) + ': ' + r.releaseError, { noModal: true });
+    else if (r && r.released)
+      setFb('ok', t('harvest.releasedTotal', { bag: p.bagId, kg: (r.released.grams / 1000).toFixed(2) }), {
+        noModal: true
+      });
   });
   // Track in sessionEntries so session summary counts HARVEST and it appears in the log
   const sEntry = {

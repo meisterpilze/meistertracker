@@ -5665,8 +5665,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // from a barcode scan — a request at that moment costs the very second the
     // scan is meant to save. Toggling the mode bumps data_version, so the ETag
     // above changes and a cached client does not keep the stale answer.
+    //
+    // ⚠️ getHarvestReleaseMode and not getHarvestFeedCfg: the latter returns the
+    // feed's HMAC secret in the same object, and this payload goes to every
+    // authenticated client every 30 seconds. Reading the one column means a
+    // careless spread here cannot publish the secret.
     try {
-      payload.harvestRelease = { on: db.getHarvestFeedCfg(database).releaseMode };
+      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) };
     } catch {
       /* config table absent on an old database — the form simply stays hidden */
     }
@@ -6564,8 +6569,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // than this one bag, but the field says "of this, release" — so a number
       // above the harvest is a slipped comma, not an intention, and it would
       // publish produce nobody has.
-      if (data.release > data.grams) {
-        jsonErr(res, 400, 'release must be <= grams');
+      //
+      // The decision itself lives in harvest-feed.js so a test can reach it; only
+      // the choice of status code belongs to the route.
+      const relProblem = harvestFeed.releaseProblem(data);
+      if (relProblem && relProblem.fatal) {
+        jsonErr(res, 400, relProblem.reason);
         return;
       }
       const vd = validateDate(data.time, 'time');
@@ -6583,21 +6592,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         let released = null;
         let releaseError = null;
         if (data.release > 0) {
-          try {
-            const cfg = db.getHarvestFeedCfg(database);
-            // Off means off. Accepting the number here and storing it anyway
-            // would set produce aside that no feed reports — invisible work.
-            if (!cfg.releaseMode) releaseError = 'release mode is off';
-            else if (!data.species) releaseError = 'species required to release';
-            else
-              released = db.addHarvestRelease(database, {
-                species: data.species,
-                grams: data.release,
-                days: cfg.freshDays
-              });
-          } catch (err) {
-            releaseError = err.message;
-          }
+          if (relProblem) releaseError = relProblem.reason;
+          else
+            try {
+              // Release mode and the freshness window both come from inside
+              // addHarvestRelease now, so every caller gets the same gate and the
+              // same expiry without having to remember either.
+              released = db.addHarvestRelease(database, { species: data.species, grams: data.release });
+            } catch (err) {
+              // Same discipline as safeErr(): only a whitelisted message goes to
+              // the client, anything else is logged and generalised. Without the
+              // log an unexpected release failure left no trace at all, which is
+              // the worst case here — the crate is packed and nothing says why the
+              // shop never heard about it.
+              const msg = String((err && err.message) || '');
+              if (db.isSafeError(msg)) releaseError = msg.replace('addHarvestRelease: ', '');
+              else {
+                log('error', 'Harvest release failed', {
+                  error: msg,
+                  stack: err && err.stack,
+                  species: data.species
+                });
+                releaseError = 'release failed — see server log';
+              }
+            }
         }
         broadcastSSE(res);
         jsonOk(res, { id, released, releaseError });

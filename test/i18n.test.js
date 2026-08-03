@@ -66,10 +66,16 @@ function usedKeys() {
  * Without this, the two lists drift the moment someone adds `data-i18n-alt`: the
  * markup gets translated, the check stays quiet, and we are back where we started
  * — with a test that reports success over an unchecked attribute.
+ *
+ * ⚠️ Both quote styles and stray whitespace, and the count is asserted by the
+ * caller. A regex that only knew single quotes would return nothing the day
+ * someone wrote `querySelectorAll("[data-i18n-alt]")` — and returning nothing
+ * makes this guard pass, which is the precise blind spot it was written to close.
+ * Finding no selectors at all has to be the loud failure, not the quiet one.
  */
 function translatedAttrs() {
   const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
-  return [...app.matchAll(/querySelectorAll\('\[data-i18n(-[a-z-]+)?\]'\)/g)].map((m) => m[1] || '');
+  return [...app.matchAll(/querySelectorAll\(\s*['"`]\[data-i18n(-[a-z-]+)?\]['"`]\s*\)/g)].map((m) => m[1] || '');
 }
 
 // {n}, {sum}, {time} … — a translation that drops one renders the placeholder
@@ -99,7 +105,15 @@ describe('translations', () => {
   // keys exist — which is how 25 keys behind `-title` and `-aria-label` went
   // unverified for as long as they did.
   it('reads every data-i18n attribute the application translates', () => {
-    const missed = translatedAttrs().filter((a) => !I18N_ATTRS.includes(a));
+    const found = translatedAttrs();
+    // Before comparing: an empty or shrunken result is the failure mode that would
+    // otherwise pass silently. If the selectors move, get renamed, or stop matching
+    // this regex, the comparison below has nothing to disagree with.
+    assert.ok(
+      found.length >= I18N_ATTRS.length,
+      'only found ' + found.length + ' data-i18n selectors in app.js, expected at least ' + I18N_ATTRS.length
+    );
+    const missed = found.filter((a) => !I18N_ATTRS.includes(a));
     assert.deepEqual(
       missed,
       [],

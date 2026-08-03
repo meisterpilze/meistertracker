@@ -4098,7 +4098,20 @@ function activeHarvestReleases(db, at) {
   return out;
 }
 
-function setHarvestRelease(db, { species, grams, validUntil, note }) {
+/**
+ * Whether the feed reports releases at all — and nothing else.
+ *
+ * getHarvestFeedCfg() returns the feed's HMAC secret alongside this flag, so any
+ * caller that only needs the flag is one careless spread away from publishing the
+ * secret. This reads the single column instead, which removes the possibility
+ * rather than relying on the next reader noticing.
+ */
+function getHarvestReleaseMode(db) {
+  const row = db.prepare('SELECT release_mode FROM harvest_feed_config WHERE id = 1').get();
+  return !!row && row.release_mode === 1;
+}
+
+function setHarvestRelease(db, { species, grams, validUntil, note }, at) {
   const name = String(species || '').trim();
   if (!name) throw new Error('setHarvestRelease: species required');
   const g = Number(grams);
@@ -4109,7 +4122,11 @@ function setHarvestRelease(db, { species, grams, validUntil, note }) {
     `INSERT INTO harvest_release(species, grams, valid_until, note, updated) VALUES(?,?,?,?,?)
      ON CONFLICT(species) DO UPDATE SET grams=excluded.grams, valid_until=excluded.valid_until,
                                         note=excluded.note, updated=excluded.updated`
-  ).run(name, g, until, String(note || '').slice(0, 200), new Date().toISOString());
+    // `at` and not the wall clock, so a row's `updated` cannot contradict the
+    // window derived from the same instant. listHarvestReleases shows `updated`
+    // in the settings table, where a back-dated release stamped "now" reads as a
+    // system that disagrees with itself.
+  ).run(name, g, until, String(note || '').slice(0, 200), (at || new Date()).toISOString());
   incrementDataVersion(db);
 }
 
@@ -4127,10 +4144,16 @@ function setHarvestRelease(db, { species, grams, validUntil, note }) {
  * behind a date already in the past, where nothing publishes them and nobody
  * can see why. Same for a row sitting at zero.
  *
- * `days` sets the expiry for a row that starts fresh. An existing, still-valid
- * row keeps its own date: a crate that should be empty on Wednesday does not
- * become fresher because something was added on Wednesday. Extending is a
- * decision, and it belongs in the table where it is visible.
+ * `days` sets the expiry for a row that starts fresh, and defaults to the feed's
+ * own freshness window. An existing, still-valid row keeps its own date: a crate
+ * that should be empty on Wednesday does not become fresher because something was
+ * added on Wednesday. Extending is a decision, and it belongs in the table where
+ * it is visible.
+ *
+ * ⚠️ The release-mode gate lives **here** and not in the route. Whoever records a
+ * harvest next — a second endpoint, the MCP tool, an importer — inherits it
+ * instead of having to remember it, and setting produce aside that no feed reports
+ * is exactly the invisible work this check exists to prevent.
  *
  * @returns {{grams: number, validUntil: string|null, fresh: boolean}} the row as
  *   it now stands, and whether this call started it.
@@ -4140,6 +4163,7 @@ function addHarvestRelease(db, { species, grams, days }, at) {
   if (!name) throw new Error('addHarvestRelease: species required');
   const g = Number(grams);
   if (!Number.isFinite(g) || g <= 0) throw new Error('addHarvestRelease: grams must be a number > 0');
+  if (!getHarvestReleaseMode(db)) throw new Error('addHarvestRelease: release mode is off');
 
   const now = at || new Date();
   const today = localDay(now);
@@ -4152,21 +4176,27 @@ function addHarvestRelease(db, { species, grams, days }, at) {
       now.toISOString(),
       name
     );
-  } else {
-    const n = Math.floor(Number(days));
-    let until = null;
-    if (Number.isFinite(n) && n > 0) {
-      const d = new Date(now.getTime());
-      d.setDate(d.getDate() + n);
-      until = localDay(d);
-    }
-    setHarvestRelease(db, { species: name, grams: g, validUntil: until, note: '' });
-    return { grams: g, validUntil: until, fresh: true };
+    incrementDataVersion(db);
+    // No second SELECT: better-sqlite3 is synchronous, so nothing can have
+    // interleaved between the read above and this add. Re-reading would only
+    // suggest the arithmetic is in doubt and send the next reader hunting for a
+    // concurrency story that is not there.
+    return { grams: row.grams + g, validUntil: row.valid_until || null, fresh: false };
   }
 
-  incrementDataVersion(db);
-  const after = db.prepare('SELECT grams, valid_until FROM harvest_release WHERE species = ?').get(name);
-  return { grams: after.grams, validUntil: after.valid_until || null, fresh: false };
+  // `>= 0`, not `> 0`. freshDays 0 is a real setting — only today's harvests count
+  // as fresh — and it has to mean "expires tonight", not "never expires". The
+  // likely error is the forgotten release, so the fail-safe direction is a window
+  // that closes; an open-ended crate is the one outcome the date exists to avoid.
+  const n = Math.floor(Number(days === undefined || days === null ? getHarvestFeedCfg(db).freshDays : days));
+  let until = null;
+  if (Number.isFinite(n) && n >= 0) {
+    const d = new Date(now.getTime());
+    d.setDate(d.getDate() + n);
+    until = localDay(d);
+  }
+  setHarvestRelease(db, { species: name, grams: g, validUntil: until, note: '' }, now);
+  return { grams: g, validUntil: until, fresh: true };
 }
 
 function deleteHarvestRelease(db, species) {
@@ -6517,6 +6547,10 @@ const SAFE_ERROR_PREFIXES = [
   'Rack has ',
   'Zone name ',
   'Cannot delete:',
+  // Release for sale — db.js. Operator-facing on purpose: "release mode is off"
+  // and "species required" are the two things worth reading back at the scale,
+  // and a generic message there would leave a packed crate unexplained.
+  'addHarvestRelease:',
   // Photo upload — server.js (every message is prefixed `photo:`)
   'photo:'
 ];
@@ -7487,6 +7521,7 @@ module.exports = {
   getHarvestFeedCfg,
   updateHarvestFeedCfg,
   updateHarvestFeedStatus,
+  getHarvestReleaseMode,
   listHarvestReleases,
   activeHarvestReleases,
   setHarvestRelease,

@@ -470,11 +470,33 @@ function stop() {
   timer = null;
 }
 
+/**
+ * May this harvest carry the release it claims? `null` if it may, a reason if not.
+ *
+ * Pure, and that is the point: the two guards here are the ones the field exists
+ * to protect — a slipped comma, and a release with no species to key it to — and
+ * this repo has no HTTP-level harness that could pin them inside a route handler.
+ * Inverting either comparison would otherwise stay green.
+ *
+ * `fatal` says which side of the harvest the answer falls on, because the two are
+ * not the same kind of wrong. More released than weighed is a bad request and the
+ * harvest never happened. A missing species is reported *next to* a stored
+ * harvest: a weighed harvest is a fact either way, and losing it to a quibble
+ * about the release would be the worse trade.
+ */
+function releaseProblem({ release, grams, species }) {
+  if (!(Number(release) > 0)) return null;
+  if (Number(release) > Number(grams)) return { reason: 'release must be <= grams', fatal: true };
+  if (!species) return { reason: 'species required to release', fatal: false };
+  return null;
+}
+
 module.exports = {
   readConfig,
   storedConfig,
   resolveConfig,
   buildPayload,
+  releaseProblem,
   sign,
   post,
   sendOnce,
