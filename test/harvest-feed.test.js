@@ -718,6 +718,9 @@ describe('release for sale', () => {
 // than at the table.
 describe('adding to a release', () => {
   let d, p;
+  // Every call carries a permitted actor, so a missing-permission throw can never
+  // be what makes one of these pass. The permission itself is exercised below.
+  const ADMIN = { role: 'admin' };
 
   // Local, not UTC — the same clock addHarvestRelease reads. A test that builds
   // its expected date in UTC passes in London and fails in Berlin after 22:00,
@@ -751,7 +754,10 @@ describe('adding to a release', () => {
     // harvest next inherits it instead of having to remember it.
     const { db: off, path: offPath } = tmpDb();
     try {
-      assert.throws(() => db.addHarvestRelease(off, { species: 'Oyster', grams: 100 }), /release mode is off/);
+      assert.throws(
+        () => db.addHarvestRelease(off, { species: 'Oyster', grams: 100, actor: ADMIN }),
+        /release mode is off/
+      );
       assert.deepEqual(db.listHarvestReleases(off), [], 'and nothing is written');
     } finally {
       off.close();
@@ -764,14 +770,14 @@ describe('adding to a release', () => {
   });
 
   it('creates the row and dates it freshDays out', () => {
-    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 1500, days: 3 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 1500, days: 3, actor: ADMIN }, NOW);
     assert.equal(r.grams, 1500);
     assert.equal(r.fresh, true, 'the caller needs to know this started an episode');
     assert.equal(r.validUntil, daysFrom(NOW, 3), 'produce that stops counting as fresh stops being sellable');
   });
 
   it('adds to a running release instead of replacing it', () => {
-    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 500, days: 3 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 500, days: 3, actor: ADMIN }, NOW);
     assert.equal(r.grams, 2000, 'two bags into one crate is 2 kg, not the second bag');
     assert.equal(r.fresh, false);
   });
@@ -781,7 +787,7 @@ describe('adding to a release', () => {
     // something was added to it on Wednesday. Extending is a decision and belongs
     // in the table, where it is visible.
     const later = new Date(NOW.getTime() + 2 * 86400000);
-    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 100, days: 3 }, later);
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 100, days: 3, actor: ADMIN }, later);
     assert.equal(r.validUntil, daysFrom(NOW, 3), 'not pushed out to later + 3');
     assert.equal(r.grams, 2100);
   });
@@ -791,7 +797,7 @@ describe('adding to a release', () => {
     // nothing publishes them and nothing says why. An expired release is a crate
     // that is gone — the next one is a new crate.
     db.setHarvestRelease(d, { species: 'Shiitake', grams: 800, validUntil: daysFrom(NOW, -1) });
-    const r = db.addHarvestRelease(d, { species: 'Shiitake', grams: 300, days: 3 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Shiitake', grams: 300, days: 3, actor: ADMIN }, NOW);
     assert.equal(r.grams, 300, 'not 1100 — yesterday is not part of today');
     assert.equal(r.fresh, true);
     assert.equal(r.validUntil, daysFrom(NOW, 3));
@@ -801,7 +807,7 @@ describe('adding to a release', () => {
     // Zero is how the table says "sold out / never mind". Adding to it should
     // begin an episode, not resurrect the old date.
     db.setHarvestRelease(d, { species: 'Chestnut', grams: 0, validUntil: daysFrom(NOW, 30) });
-    const r = db.addHarvestRelease(d, { species: 'Chestnut', grams: 400, days: 3 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Chestnut', grams: 400, days: 3, actor: ADMIN }, NOW);
     assert.equal(r.grams, 400);
     assert.equal(r.fresh, true);
     assert.equal(r.validUntil, daysFrom(NOW, 3), 'the stale 30-day date does not survive');
@@ -811,30 +817,33 @@ describe('adding to a release', () => {
     // The dangerous reading of 0 is "no window", because the likely error is the
     // forgotten release and an open-ended crate is what the date exists to prevent.
     // 0 means only today's harvests count as fresh — so the release ends with today.
-    const r = db.addHarvestRelease(d, { species: 'Reishi', grams: 250, days: 0 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Reishi', grams: 250, days: 0, actor: ADMIN }, NOW);
     assert.equal(r.validUntil, localDay(NOW), 'not null — an unbounded release is the one outcome to avoid');
   });
 
   it('falls back to the configured window when days is not given', () => {
     // The route no longer passes freshDays, so the default has to come from here or
     // every caller has to remember it.
-    const r = db.addHarvestRelease(d, { species: 'Enoki', grams: 300 }, NOW);
+    const r = db.addHarvestRelease(d, { species: 'Enoki', grams: 300, actor: ADMIN }, NOW);
     assert.equal(r.validUntil, daysFrom(NOW, 3), 'freshDays 3 from the stored config');
   });
 
   it('stamps `updated` from the injected clock, not the wall clock', () => {
     // A back-dated release whose `updated` says "now" is a row that contradicts its
     // own window, and listHarvestReleases shows both in the settings table.
-    db.addHarvestRelease(d, { species: 'Maitake', grams: 700 }, NOW);
+    db.addHarvestRelease(d, { species: 'Maitake', grams: 700, actor: ADMIN }, NOW);
     const row = db.listHarvestReleases(d).find((x) => x.species === 'Maitake');
     assert.equal(row.updated, NOW.toISOString());
   });
 
   it('refuses what cannot be a crate', () => {
-    assert.throws(() => db.addHarvestRelease(d, { species: '', grams: 100, days: 3 }), /species required/);
-    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 0, days: 3 }), /> 0/);
-    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: -5, days: 3 }), /> 0/);
-    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 'lots', days: 3 }), /> 0/);
+    assert.throws(
+      () => db.addHarvestRelease(d, { species: '', grams: 100, days: 3, actor: ADMIN }),
+      /species required/
+    );
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 0, days: 3, actor: ADMIN }), /> 0/);
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: -5, days: 3, actor: ADMIN }), /> 0/);
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 'lots', days: 3, actor: ADMIN }), /> 0/);
   });
 
   it('reaches the feed as one line per species', () => {
@@ -891,5 +900,101 @@ describe('releaseProblem', () => {
     // stored while the reply talks about a species name.
     const p = feed.releaseProblem({ release: 2000, grams: 200, species: '' });
     assert.equal(p.fatal, true);
+  });
+});
+
+// ── Who may set produce aside ─────────────────────────────────────────────────
+//
+// The hole this closes: POST /api/harvests is open to every authenticated user by
+// design — weighing bags is what a lab does all day — while every other write to
+// harvest_release sits behind requireAdmin. Without a check, the harvest route was
+// a way around that boundary, and what lands on the far side of it is the quantity
+// a shop publicly offers.
+//
+// Not requireAdmin, though: the point of releasing at the scale is that the person
+// holding the bag does it, and that person is usually not an admin. So a capability
+// an admin grants, exactly like can_ship.
+describe('release permission', () => {
+  let d, p;
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.updateHarvestFeedCfg(d, { releaseMode: true, freshDays: 3 });
+  });
+  after(() => {
+    d.close();
+    try {
+      fs.unlinkSync(p);
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('lets an admin through', () => {
+    assert.equal(db.mayRelease({ role: 'admin' }), true);
+    assert.equal(db.mayRelease({ role: 'admin', can_release: 0 }), true, 'the role wins over the column');
+  });
+
+  it('lets a granted user through', () => {
+    assert.equal(db.mayRelease({ role: 'user', can_release: 1 }), true);
+  });
+
+  it('refuses everyone else', () => {
+    // The default. A user created without the grant has can_release 0, and that is
+    // what the migration leaves behind for existing accounts too.
+    assert.equal(db.mayRelease({ role: 'user', can_release: 0 }), false);
+    assert.equal(db.mayRelease({ role: 'user' }), false, 'absent is not permitted');
+    assert.equal(db.mayRelease(null), false);
+    assert.equal(db.mayRelease(undefined), false, 'a forgotten actor is refused, not waved through');
+    // Truthiness would be the tempting shortcut and the wrong one: a string from a
+    // JSON body must not buy the capability.
+    assert.equal(db.mayRelease({ role: 'user', can_release: '1' }), false);
+    assert.equal(db.mayRelease({ role: 'admin ' }), false, 'no fuzzy role matching');
+  });
+
+  it('refuses to write without a permitted actor, and writes nothing', () => {
+    assert.throws(
+      () => db.addHarvestRelease(d, { species: 'Oyster', grams: 2000, actor: { role: 'user' } }),
+      /not allowed to release/
+    );
+    assert.throws(() => db.addHarvestRelease(d, { species: 'Oyster', grams: 2000 }), /not allowed to release/);
+    assert.deepEqual(db.listHarvestReleases(d), [], 'a refused release leaves no row behind');
+  });
+
+  it('checks the permission before the release mode', () => {
+    // Order matters for what the operator reads back. Someone without the grant
+    // should be told that, not sent to look at a feed setting they cannot see.
+    const { db: off, path: offPath } = tmpDb();
+    try {
+      assert.throws(
+        () => db.addHarvestRelease(off, { species: 'Oyster', grams: 100, actor: { role: 'user' } }),
+        /not allowed to release/
+      );
+    } finally {
+      off.close();
+      try {
+        fs.unlinkSync(offPath);
+      } catch {
+        /* best effort */
+      }
+    }
+  });
+
+  it('writes once the grant is there', () => {
+    const r = db.addHarvestRelease(d, { species: 'Oyster', grams: 2000, actor: { role: 'user', can_release: 1 } }, NOW);
+    assert.equal(r.grams, 2000);
+  });
+
+  it('grants and revokes through setUserCanRelease', () => {
+    // createUser returns {username, role, created} and no id, so the row is looked
+    // up rather than assumed — listUsers is also what the admin screen reads.
+    db.createUser(d, 'worker', 'pw-for-a-test-only', 'user');
+    const row = () => db.listUsers(d).find((x) => x.username === 'worker');
+    const id = row().id;
+    assert.equal(row().can_release, 0, 'nobody starts with it');
+    db.setUserCanRelease(d, id, true);
+    assert.equal(row().can_release, 1);
+    db.setUserCanRelease(d, id, false);
+    assert.equal(row().can_release, 0, 'and it can be taken back');
   });
 });

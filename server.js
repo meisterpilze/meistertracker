@@ -5147,7 +5147,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // PATCH /api/users/:id — admin sets per-user capabilities (currently can_ship)
+  // PATCH /api/users/:id — admin sets per-user capabilities (can_ship, can_release)
   if (url.match(/^\/api\/users\/\d+$/) && req.method === 'PATCH') {
     if (requireAdmin(req, res)) return;
     const userId = parseInt(url.split('/').pop(), 10);
@@ -5163,6 +5163,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             actor: req.authUser.username,
             userId,
             canShip: !!data.canShip
+          });
+        }
+        if (data && data.canRelease !== undefined) {
+          db.setUserCanRelease(database, userId, !!data.canRelease);
+          // Logged for the same reason the shipping grant is: this one decides who
+          // may change a number the public sees.
+          log('info', 'User release permission updated', {
+            actor: req.authUser.username,
+            userId,
+            canRelease: !!data.canRelease
           });
         }
         jsonOk(res, { ok: true });
@@ -5670,8 +5680,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // feed's HMAC secret in the same object, and this payload goes to every
     // authenticated client every 30 seconds. Reading the one column means a
     // careless spread here cannot publish the secret.
+    //
+    // The permission is part of the answer, not a separate one. A worker without
+    // it would otherwise get a field that fails on every save — the same "input
+    // that does nothing" the field was designed to avoid. This is presentation
+    // only; the check that matters runs in addHarvestRelease.
     try {
-      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) };
+      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) && db.mayRelease(req.authUser) };
     } catch {
       /* config table absent on an old database — the form simply stays hidden */
     }
@@ -6595,10 +6610,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           if (relProblem) releaseError = relProblem.reason;
           else
             try {
-              // Release mode and the freshness window both come from inside
-              // addHarvestRelease now, so every caller gets the same gate and the
-              // same expiry without having to remember either.
-              released = db.addHarvestRelease(database, { species: data.species, grams: data.release });
+              // Release mode, the permission check and the freshness window all
+              // come from inside addHarvestRelease now, so every caller gets the
+              // same gates without having to remember any of them.
+              //
+              // `actor` is what closes the hole this route opened: POST /api/harvests
+              // is open to every authenticated user by design — weighing bags is
+              // what the lab does all day — while every other write to
+              // harvest_release sits behind requireAdmin. Passing the session
+              // through means the release obeys that boundary while the harvest
+              // itself stays open.
+              released = db.addHarvestRelease(database, {
+                species: data.species,
+                grams: data.release,
+                actor: req.authUser
+              });
             } catch (err) {
               // Same discipline as safeErr(): only a whitelisted message goes to
               // the client, anything else is logged and generalised. Without the

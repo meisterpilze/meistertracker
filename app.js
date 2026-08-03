@@ -15987,11 +15987,11 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
@@ -16008,6 +16008,12 @@ function onUsersTableClick(e) {
     if (Number.isFinite(sid)) toggleUserShip(sid, ship.checked);
     return;
   }
+  const rel = e.target.closest('input[data-action="toggle-release"]');
+  if (rel) {
+    const rid = parseInt(rel.dataset.userId, 10);
+    if (Number.isFinite(rid)) toggleUserRelease(rid, rel.checked);
+    return;
+  }
   const btn = e.target.closest('button[data-action="delete-user"]');
   if (!btn) return;
   const id = parseInt(btn.dataset.userId, 10);
@@ -16021,6 +16027,26 @@ async function toggleUserShip(id, canShip) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ canShip })
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert(d.error || 'Failed');
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+  loadUsersTab();
+}
+
+// Grant/revoke the release capability. Same shape as toggleUserShip, and the
+// reload matters for the same reason: the checkbox must end up showing what the
+// server stored, not what was clicked.
+async function toggleUserRelease(id, canRelease) {
+  try {
+    const r = await authFetch('/api/users/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canRelease })
     });
     if (!r.ok) {
       const d = await r.json();
