@@ -1230,6 +1230,24 @@
           ><span data-i18n="nav.strains">Pilzsorten</span>
         </button>
         <div class="sb-group-label" data-i18n="nav.sales">Verkauf</div>
+        <button class="sb-btn" id="n-pickups">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="4" width="18" height="17" rx="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <path d="M9 15l2 2 4-4" /></svg
+          ><span data-i18n="nav.pickups">Abholungen</span>
+        </button>
         <button class="sb-btn" id="n-orders-inbox">
           <svg
             width="18"
@@ -5364,6 +5382,36 @@
             <button class="btn btn-green" id="btn-add-zone" style="margin-top: 10px" data-i18n="zones.add">
               Zone hinzufügen
             </button>
+          </div>
+        </div>
+        <!-- Pickups: collection slots the harvest-feed receiver reported back.
+             Read-only. The receiver took the booking and repeats every open
+             pickup until this end confirms it, so anything edited here would
+             be overwritten by the next reply. -->
+        <div class="page" id="p-pickups">
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+              <div class="sec" data-i18n="pickups.title" style="margin: 0">Abholungen</div>
+              <span id="pickups-count" style="font-size: 12px; color: var(--c-text-muted)"></span>
+            </div>
+            <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px" data-i18n="pickups.desc">
+              Abholtermine, die der Empfänger des Ernte-Feeds zurückgemeldet hat. Zeiten sind Ortszeit des jeweiligen
+              Abholorts. Diese Liste wird hier nicht bearbeitet.
+            </p>
+            <div style="overflow-x: auto">
+              <table id="t-pickups">
+                <thead>
+                  <tr>
+                    <th data-i18n="pickups.th.when">Wann</th>
+                    <th data-i18n="pickups.th.place">Ort</th>
+                    <th data-i18n="pickups.th.order">Bestellung</th>
+                    <th data-i18n="pickups.th.items">Positionen</th>
+                    <th data-i18n="pickups.th.state">Stand</th>
+                  </tr>
+                </thead>
+                <tbody id="pickups-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

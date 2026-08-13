@@ -31,6 +31,21 @@ window.LANG['de'] = {
   'nav.ordersDemand': 'Was muss ich machen',
   'nav.ordersMapping': 'Produkte',
   'nav.ordersCustomers': 'Kunden',
+  'nav.pickups': 'Abholungen',
+  // Pickups — reported back by the harvest feed receiver
+  'pickups.title': 'Abholungen',
+  'pickups.desc':
+    'Abholtermine, die der Empfänger des Ernte-Feeds zurückgemeldet hat. Zeiten sind Ortszeit des jeweiligen Abholorts. Diese Liste wird hier nicht bearbeitet.',
+  'pickups.th.when': 'Wann',
+  'pickups.th.place': 'Ort',
+  'pickups.th.order': 'Bestellung',
+  'pickups.th.items': 'Positionen',
+  'pickups.th.state': 'Stand',
+  'pickups.count': '{n} Abholungen',
+  'pickups.none': 'Keine Abholungen gemeldet',
+  'pickups.overbooked': 'Überbucht',
+  'pickups.confirmed': 'Bestätigt',
+  'pickups.pending': 'Noch nicht bestätigt',
   // Order hub (Phase 0)
   'orders.inbox': 'Bestellungen',
   'orders.tomake': 'Was muss ich machen',

@@ -31,6 +31,21 @@ window.LANG['en'] = {
   'nav.ordersDemand': 'To make',
   'nav.ordersMapping': 'Products',
   'nav.ordersCustomers': 'Customers',
+  'nav.pickups': 'Pickups',
+  // Pickups — reported back by the harvest feed receiver
+  'pickups.title': 'Pickups',
+  'pickups.desc':
+    'Collection slots the harvest feed receiver reported back. Times are local to each pickup place. This list is not edited here.',
+  'pickups.th.when': 'When',
+  'pickups.th.place': 'Place',
+  'pickups.th.order': 'Order',
+  'pickups.th.items': 'Items',
+  'pickups.th.state': 'State',
+  'pickups.count': '{n} pickups',
+  'pickups.none': 'No pickups reported',
+  'pickups.overbooked': 'Overbooked',
+  'pickups.confirmed': 'Confirmed',
+  'pickups.pending': 'Not yet confirmed',
   // Order hub (Phase 0)
   'orders.inbox': 'Orders',
   'orders.tomake': 'What to make',
