@@ -893,7 +893,7 @@ const PICKUP = {
   order: '#1042',
   slot: '2026-08-15-0900',
   slotText: 'Sa 15.08., 9–10 Uhr',
-  place: 'Marktstand Erlangen',
+  place: 'Marktstand',
   from: '2026-08-15T09:00',
   to: '2026-08-15T10:00',
   zone: 'Europe/Berlin',
@@ -1158,7 +1158,7 @@ describe('pickups round trip', () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, PICKUP.id);
     assert.equal(rows[0].order, '#1042');
-    assert.equal(rows[0].place, 'Marktstand Erlangen');
+    assert.equal(rows[0].place, 'Marktstand');
     assert.deepEqual(rows[0].items, [{ kind: 'Austernpilz', grams: 2000 }]);
     assert.equal(rows[0].overbooked, false);
   });
