@@ -207,6 +207,27 @@ CREATE TABLE IF NOT EXISTS harvest_release (
   updated     TEXT NOT NULL
 );
 
+-- Pickups the receiver of the harvest feed reported back. See migration v59.
+-- The id is the receiver's own key, and the whole reason this is an upsert: the
+-- same pickup arrives in every reply until we confirm it.
+CREATE TABLE IF NOT EXISTS pickups (
+  id         TEXT PRIMARY KEY,
+  order_ref  TEXT,
+  slot       TEXT,
+  slot_text  TEXT,
+  place      TEXT,
+  from_time  TEXT,
+  to_time    TEXT,
+  tz         TEXT,
+  items      TEXT,
+  overbooked INTEGER NOT NULL DEFAULT 0,
+  received   TEXT NOT NULL,
+  updated    TEXT NOT NULL,
+  acked_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pickups_open ON pickups(acked_at);
+CREATE INDEX IF NOT EXISTS idx_pickups_from ON pickups(from_time);
+
 -- Camera dashboard (admin-only WIP). The Python mushroom_camera module
 -- owns the camera_measurements / snapshots / flags / labels tables and
 -- creates them in its own ensure_schema(); the two below are also created
@@ -1701,6 +1722,49 @@ const MIGRATIONS = [
       updated    TEXT
     )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_rhythm_task_date ON rhythm_task(date)');
+    }
+  },
+  {
+    version: 59,
+    description: 'Pickups reported back by the harvest feed receiver, keyed by the id it assigns',
+    fn(db) {
+      // The harvest feed pushes numbers out and throws the answer away. That is
+      // one useful message short: the system that took an order knows when the
+      // customer said they would collect it, and this machine has no inbound
+      // route to be told. Reading the reply to a request we already make costs
+      // no open port, no certificate and no changing home IP.
+      //
+      // `id` comes from the receiver and is the primary key on purpose. There is
+      // no delivery guarantee in either direction, so the receiver repeats every
+      // open pickup in every reply until we confirm it — which only works if
+      // storing the same one twice leaves one row. Upsert, not insert.
+      //
+      // `from_time`/`to_time` are LOCAL wall-clock times, stored exactly as they
+      // arrived, with the zone next to them in `tz`. Converting to server time
+      // would be a lie the moment the two machines disagree about their offset,
+      // and "9–10" is what the customer was told.
+      //
+      // `acked_at` is what closes the loop: NULL means stored here but not yet
+      // confirmed to the receiver. Those ids ride along on the next push, and
+      // only a push that actually succeeded may set this — confirming a message
+      // that never arrived is how a pickup goes missing on both sides.
+      db.exec(`CREATE TABLE IF NOT EXISTS pickups (
+      id         TEXT PRIMARY KEY,
+      order_ref  TEXT,
+      slot       TEXT,
+      slot_text  TEXT,
+      place      TEXT,
+      from_time  TEXT,
+      to_time    TEXT,
+      tz         TEXT,
+      items      TEXT,
+      overbooked INTEGER NOT NULL DEFAULT 0,
+      received   TEXT NOT NULL,
+      updated    TEXT NOT NULL,
+      acked_at   TEXT
+    )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_pickups_open ON pickups(acked_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_pickups_from ON pickups(from_time)');
     }
   }
 ];
@@ -3525,6 +3589,10 @@ function resetOperationalData(db, opts) {
       wipe('orders');
       wipe('customer_identities');
       wipe('customers');
+      // A pickup names the order it is for. With the orders gone it is a time
+      // and a place for something nobody can look up. Unconfirmed ones the
+      // receiver still holds open come back on the next reply anyway.
+      wipe('pickups');
     }
     if (opts.planning) {
       wipe('calendar_event_assignees');
@@ -4117,6 +4185,199 @@ function deleteHarvestRelease(db, species) {
   const info = db.prepare('DELETE FROM harvest_release WHERE species = ?').run(String(species || ''));
   if (info.changes) incrementDataVersion(db);
   return info.changes;
+}
+
+// -- Pickups --
+//
+// Rows here originate outside this machine: they arrive in the reply to an
+// outbound harvest feed push. harvest-feed.js validates the protocol before
+// anything gets this far; the clamps below are the second fence, so that a
+// caller which skipped that step still cannot write an unbounded string.
+//
+// The whole table is upsert-by-id. See migration v59 for why.
+
+/** How many pickup rows this table will hold. See storePickup(). */
+const PICKUP_MAX_ROWS = 5000;
+const PICKUP_TEXT_MAX = 200;
+
+function clampText(v, max) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).slice(0, max || PICKUP_TEXT_MAX);
+  return s || null;
+}
+
+/**
+ * Store one pickup, keyed by its id.
+ *
+ * Returns 'inserted', 'updated' or 'unchanged'. The caller uses that to decide
+ * whether anything worth telling anyone about happened: a receiver repeats every
+ * open pickup on every push, so most writes here are a no-op and must not look
+ * like news.
+ *
+ * A row that arrives again after it was confirmed goes back to unconfirmed.
+ * That is deliberate. Still being sent means the receiver never registered the
+ * confirmation, and confirming again is cheap; the alternative is a pickup that
+ * repeats forever because we decided once that we had already answered.
+ */
+function storePickup(db, p) {
+  const id = String((p && p.id) || '').trim();
+  if (!id) throw new Error('storePickup: id required');
+  if (id.length > 128) throw new Error('storePickup: id too long');
+
+  const next = {
+    order_ref: clampText(p.order, 64),
+    slot: clampText(p.slot, 64),
+    slot_text: clampText(p.slotText, 120),
+    place: clampText(p.place, 120),
+    from_time: clampText(p.from, 32),
+    to_time: clampText(p.to, 32),
+    tz: clampText(p.zone, 64),
+    // Stored as JSON rather than a child table: the list is small, it is never
+    // queried across rows, and it belongs to whoever sent it — a schema for
+    // someone else's line items would go stale without anyone noticing.
+    items: p.items && p.items.length ? JSON.stringify(p.items).slice(0, 8000) : null,
+    overbooked: p.overbooked === true ? 1 : 0
+  };
+
+  const now = new Date().toISOString();
+  const old = db.prepare('SELECT * FROM pickups WHERE id = ?').get(id);
+  if (!old) {
+    // A receiver that invents a fresh id every time would otherwise grow this
+    // file without limit. Refusing beats deleting the oldest: the ones already
+    // here have been shown to someone, and dropping those to make room for junk
+    // is the wrong way round.
+    const total = db.prepare('SELECT COUNT(*) AS c FROM pickups').get().c;
+    if (total >= PICKUP_MAX_ROWS) throw new Error('storePickup: pickup table is full (' + total + ' rows)');
+    db.prepare(
+      `INSERT INTO pickups(id, order_ref, slot, slot_text, place, from_time, to_time, tz, items,
+                           overbooked, received, updated, acked_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL)`
+    ).run(
+      id,
+      next.order_ref,
+      next.slot,
+      next.slot_text,
+      next.place,
+      next.from_time,
+      next.to_time,
+      next.tz,
+      next.items,
+      next.overbooked,
+      now,
+      now
+    );
+    incrementDataVersion(db);
+    return 'inserted';
+  }
+
+  const same = Object.keys(next).every((k) => (old[k] ?? null) === next[k]);
+  if (same && old.acked_at === null) return 'unchanged';
+
+  db.prepare(
+    `UPDATE pickups SET order_ref=?, slot=?, slot_text=?, place=?, from_time=?, to_time=?, tz=?,
+                        items=?, overbooked=?, updated=?, acked_at=NULL
+      WHERE id=?`
+  ).run(
+    next.order_ref,
+    next.slot,
+    next.slot_text,
+    next.place,
+    next.from_time,
+    next.to_time,
+    next.tz,
+    next.items,
+    next.overbooked,
+    now,
+    id
+  );
+  // Re-arming the confirmation is not something a screen should redraw for.
+  if (!same) incrementDataVersion(db);
+  return 'updated';
+}
+
+/** The ids stored here that the receiver has not been told about yet. */
+function unackedPickupIds(db, limit) {
+  const n = Math.max(1, Math.min(1000, Number(limit) || 500));
+  return db
+    .prepare('SELECT id FROM pickups WHERE acked_at IS NULL ORDER BY received LIMIT ?')
+    .all(n)
+    .map((r) => r.id);
+}
+
+/**
+ * Mark ids as confirmed to the receiver.
+ *
+ * Only ever called after a push that succeeded. A confirmation recorded for a
+ * request that never arrived makes the receiver's copy and ours disagree with
+ * nothing left to reconcile them.
+ */
+function ackPickups(db, ids) {
+  if (!Array.isArray(ids) || !ids.length) return 0;
+  const at = new Date().toISOString();
+  const stmt = db.prepare('UPDATE pickups SET acked_at=? WHERE id=? AND acked_at IS NULL');
+  let n = 0;
+  db.exec('BEGIN');
+  try {
+    for (const id of ids) n += stmt.run(at, String(id)).changes;
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return n;
+}
+
+function parseItems(raw) {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    // Written by this file, so this should not happen — but a row nobody can
+    // read must not take the whole list down with it.
+    return [];
+  }
+}
+
+/**
+ * Every stored pickup, soonest first.
+ *
+ * Rows without a time sort last rather than first: a pickup with no window is
+ * the odd one out, not the most urgent thing on the screen.
+ */
+function listPickups(db, opts) {
+  const o = opts || {};
+  const limit = Math.max(1, Math.min(500, Number(o.limit) || 200));
+  return db
+    .prepare(
+      `SELECT * FROM pickups
+        ORDER BY CASE WHEN from_time IS NULL THEN 1 ELSE 0 END, from_time, received
+        LIMIT ?`
+    )
+    .all(limit)
+    .map((r) => ({
+      id: r.id,
+      order: r.order_ref || null,
+      slot: r.slot || null,
+      slotText: r.slot_text || null,
+      place: r.place || null,
+      from: r.from_time || null,
+      to: r.to_time || null,
+      zone: r.tz || null,
+      items: parseItems(r.items),
+      overbooked: r.overbooked === 1,
+      received: r.received,
+      updated: r.updated,
+      acked: r.acked_at !== null,
+      ackedAt: r.acked_at || null
+    }));
+}
+
+function countPickups(db) {
+  const row = db
+    .prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN acked_at IS NULL THEN 1 ELSE 0 END) AS open FROM pickups')
+    .get();
+  return { total: row.total || 0, unconfirmed: row.open || 0 };
 }
 
 // -- Print Bridge Config --
@@ -7435,6 +7696,11 @@ module.exports = {
   activeHarvestReleases,
   setHarvestRelease,
   deleteHarvestRelease,
+  storePickup,
+  unackedPickupIds,
+  ackPickups,
+  listPickups,
+  countPickups,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
