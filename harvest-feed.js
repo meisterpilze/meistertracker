@@ -1,7 +1,7 @@
 'use strict';
 // Outbound harvest feed — push a summary of what has been harvested and what is
-// coming to a URL you configure. One direction only: this module opens
-// connections, it never accepts any.
+// coming to a URL you configure. This module opens connections; it never accepts
+// any. No inbound endpoint, no open port, no certificate on this side.
 //
 // Why a lab might want this: the harvest numbers already live here, and the
 // places that need them (your own website, a CSA/box scheme, a co-op listing, a
@@ -11,9 +11,27 @@
 // handful of numbers.
 //
 //     lab machine  ──POST(signed)──▶  whatever you run  ──▶  customers
+//                  ◀──── reply ─────
 //
-// Nothing reaches back. If this machine is off, the receiver keeps the last
-// payload it got; its consumers see older numbers instead of an outage.
+// If this machine is off, the receiver keeps the last payload it got; its
+// consumers see older numbers instead of an outage.
+//
+// ── What comes back ──────────────────────────────────────────────────────────
+//
+// The reply to that POST, and nothing else. It may carry `pickups` — collection
+// slots the receiver has taken bookings for — which are stored here and shown
+// on the Pickups page. Note what this does and does not change:
+//
+//   still true   nothing can reach this machine unbidden. There is no listener,
+//                no port and no route in; the reply exists only because this
+//                side asked a question and is still holding the socket open.
+//   now false    "nothing comes back". Data from the far end does reach the
+//                database, which makes the reply a trust boundary — see "The
+//                reply" further down for what that costs and what it buys.
+//
+// A push is finished the moment the receiver answers 2xx. Whatever is in the
+// body is a second, separate question, and a bad answer to it never turns a
+// delivered payload into a failed one.
 //
 // ── What leaves the building ─────────────────────────────────────────────────
 //
@@ -327,6 +345,25 @@ function buildPayload(database, cfg, now) {
       .map((r) => trim({ species: r.species, grams: Math.round(r.grams), validUntil: r.validUntil || null }));
   }
 
+  // The ids we hold and have not confirmed yet, so the receiver can stop
+  // repeating them. Omitted entirely when there is nothing to confirm: a
+  // receiver that knows nothing about pickups should never see the field, and
+  // an empty array is a claim ("I have none") where absence is silence.
+  //
+  // Sending is not confirming. These are marked as confirmed only after a push
+  // carrying them actually succeeded — see acknowledge() in start().
+  try {
+    const done = database
+      .prepare('SELECT id FROM pickups WHERE acked_at IS NULL ORDER BY received LIMIT ?')
+      .all(MAX_ACK_PER_PUSH)
+      .map((r) => r.id);
+    if (done.length) payload.pickupsDone = done;
+  } catch {
+    // No pickups table yet — a database mid-migration, or one this feature has
+    // never run against. The harvest numbers are the point of this payload and
+    // they must still go out.
+  }
+
   if (cfg.site) payload.site = cfg.site;
   return payload;
 }
@@ -341,6 +378,213 @@ function trim(obj) {
 /** `sha256=<hex>` over `${timestamp}.${body}` — see "Signature" up top. */
 function sign(secret, timestamp, body) {
   return 'sha256=' + crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+}
+
+// ── The reply ────────────────────────────────────────────────────────────────
+//
+// Everything above this line goes out. What follows comes back, and it is the
+// only place in this program where data from the far end travels towards the
+// lab machine — so it is treated as hostile until every field has proven
+// otherwise. Four rules, in order of how much they save you:
+//
+//   1. A push that got a 2xx has succeeded. What is in the body is a second and
+//      separate question, and no answer to it may turn a delivered payload into
+//      a failed one. The numbers are out; that was the job.
+//   2. The body is capped *before* it is read, not measured after. A receiver
+//      that answers with a gigabyte should cost a few kilobytes and a log line.
+//   3. Anything not named below is dropped — not stored-and-ignored, dropped.
+//   4. Every length and every count is bounded, because "the receiver would not
+//      do that" is not a property of a network.
+
+const REPLY_MAX_BYTES = 64 * 1024;
+const MAX_PICKUPS = 200;
+const MAX_ITEMS_PER_PICKUP = 50;
+// How many confirmations ride along on one push. A backlog larger than this
+// drains over the following ticks rather than inflating a single request.
+const MAX_ACK_PER_PUSH = 500;
+// The receiver assigns these. Narrow on purpose: an id is a key, not a label,
+// and this covers what a key needs while leaving nothing to escape into.
+const ID_RE = /^[A-Za-z0-9_.:@#/+-]{1,128}$/;
+// Local wall-clock — no offset, no Z. The zone travels in its own field, and a
+// value that looks like an instant would invite exactly the conversion that
+// must not happen.
+const LOCAL_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+// "Europe/Berlin", "UTC".
+const ZONE_RE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/;
+
+/** A bounded string, or null. Control characters never make it through. */
+function str(v, max) {
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/[\x00-\x1f\x7f]/g, ' ').trim();
+  return s ? s.slice(0, max) : null;
+}
+
+/**
+ * One pickup, rebuilt field by field from an untrusted object.
+ *
+ * Rebuilt, not filtered: the result is a fresh object holding only what was
+ * recognised, so a field nobody thought about cannot ride along to whatever
+ * reads this next. Returns null when the entry is unusable, which for anything
+ * without a valid id it is — the id is what makes storing it twice safe.
+ */
+function onePickup(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+  if (!ID_RE.test(id)) return null;
+
+  const out = { id, overbooked: raw.overbooked === true };
+  const order = str(raw.order, 64);
+  if (order) out.order = order;
+  const slot = str(raw.slot, 64);
+  if (slot) out.slot = slot;
+  const slotText = str(raw.slotText, 120);
+  if (slotText) out.slotText = slotText;
+  const place = str(raw.place, 120);
+  if (place) out.place = place;
+
+  const from = str(raw.from, 32);
+  if (from && LOCAL_TIME_RE.test(from)) out.from = from;
+  const to = str(raw.to, 32);
+  if (to && LOCAL_TIME_RE.test(to)) out.to = to;
+  const zone = str(raw.zone, 64);
+  if (zone && ZONE_RE.test(zone)) out.zone = zone;
+
+  const items = [];
+  if (Array.isArray(raw.items)) {
+    for (const it of raw.items.slice(0, MAX_ITEMS_PER_PICKUP)) {
+      if (!it || typeof it !== 'object') continue;
+      const kind = str(it.kind, 80);
+      // A line with no name is not a line, and a weight that is negative or
+      // measured in tonnes is a bug at the far end. Either would end up on a
+      // picking list, so neither is stored.
+      if (!kind) continue;
+      const grams = Number(it.grams);
+      if (!Number.isFinite(grams) || grams < 0 || grams > 10_000_000) continue;
+      items.push({ kind, grams: Math.round(grams) });
+    }
+  }
+  if (items.length) out.items = items;
+  return out;
+}
+
+/**
+ * Validate a reply body. Never throws; returns whatever survived.
+ *
+ * `dropped` is not decoration for a diagnostics screen. A receiver whose
+ * pickups all fail validation looks exactly like a receiver that has none, and
+ * those two need very different fixing.
+ */
+function parseReply(text) {
+  const empty = { pickups: [], dropped: 0 };
+  if (!text) return empty;
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    // Not repeated into the log: a body that is not JSON is frequently an HTML
+    // error page, and the interesting part is that it was not JSON.
+    return { ...empty, error: 'reply is not JSON' };
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...empty, error: 'reply is not an object' };
+  // No pickups field at all is the ordinary case — every receiver written
+  // before this existed answers that way, and it is not an error.
+  if (raw.pickups === undefined || raw.pickups === null) return empty;
+  if (!Array.isArray(raw.pickups)) return { ...empty, error: 'pickups is not a list' };
+
+  const seen = new Set();
+  const pickups = [];
+  let dropped = 0;
+  // Entries past the cap are never examined, only counted.
+  const over = Math.max(0, raw.pickups.length - MAX_PICKUPS);
+  for (const entry of raw.pickups.slice(0, MAX_PICKUPS)) {
+    const p = onePickup(entry);
+    if (!p) {
+      dropped++;
+      continue;
+    }
+    // The same id twice in one reply: first wins, so which one that is does not
+    // depend on the order rows happen to be written in.
+    if (seen.has(p.id)) {
+      dropped++;
+      continue;
+    }
+    seen.add(p.id);
+    pickups.push(p);
+  }
+  const out = { pickups, dropped: dropped + over };
+  if (over) out.error = `reply carried more than ${MAX_PICKUPS} pickups`;
+  return out;
+}
+
+/**
+ * Read at most REPLY_MAX_BYTES, and stop pulling the moment that is passed.
+ *
+ * Deliberately not res.text(): that reads whatever arrives and only then lets
+ * you measure it, which is the wrong order when the point of the measurement is
+ * to not have the thing in memory.
+ */
+async function readCapped(res) {
+  const stream = res.body;
+  if (stream && typeof stream.getReader === 'function') {
+    const reader = stream.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > REPLY_MAX_BYTES) {
+          // Hang up rather than drain politely. Whatever is still coming is
+          // going to be discarded anyway.
+          await reader.cancel().catch(() => {});
+          return { tooBig: true };
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // cancel() already released it.
+      }
+    }
+    return { text: Buffer.concat(chunks).toString('utf8') };
+  }
+  // No stream to meter: a response with no body, or a stand-in in a test.
+  if (typeof res.text === 'function') {
+    const text = await res.text();
+    return text.length > REPLY_MAX_BYTES ? { tooBig: true } : { text };
+  }
+  return { text: null };
+}
+
+/**
+ * The whole reply path: content type, size, JSON, fields.
+ *
+ * Content-Type has to say JSON before a single byte of body is pulled. A
+ * receiver answering an API call with an HTML error page is the everyday shape
+ * of a misconfigured proxy, and handing that to a parser wastes time at best.
+ * A reply with no content type at all is silence, not an error — that is what
+ * every receiver written before this feature existed sends back.
+ */
+async function readReply(res) {
+  const headers = res && res.headers;
+  const get = headers && typeof headers.get === 'function' ? (k) => headers.get(k) : () => null;
+  const ctype = get('content-type');
+  if (!ctype) return { pickups: [], dropped: 0 };
+  if (!/^application\/(json|[\w.+-]+\+json)\s*(;|$)/i.test(ctype.trim()))
+    return { pickups: [], dropped: 0, error: 'reply is ' + str(ctype.split(';')[0], 60) + ', not JSON' };
+
+  const declared = Number(get('content-length'));
+  // The cheapest guard there is: the receiver said how big it is, and it is too
+  // big, so nothing needs reading.
+  if (Number.isFinite(declared) && declared > REPLY_MAX_BYTES)
+    return { pickups: [], dropped: 0, error: `reply declared ${declared} bytes, over the ${REPLY_MAX_BYTES} limit` };
+
+  const body = await readCapped(res);
+  if (body.tooBig) return { pickups: [], dropped: 0, error: `reply exceeded ${REPLY_MAX_BYTES} bytes` };
+  return parseReply(body.text);
 }
 
 /**
@@ -372,7 +616,18 @@ async function post(cfg, payload, deps) {
         body,
         signal: controller.signal
       });
-      if (res.ok) return { ok: true, status: res.status, attempts: attempt };
+      if (res.ok) {
+        const out = { ok: true, status: res.status, attempts: attempt };
+        // Rule 1 up in "The reply", made concrete: the payload is delivered the
+        // moment the receiver says 2xx, so reading what it sent back gets its
+        // own try/catch and there is no path from in here to ok:false.
+        try {
+          out.reply = await readReply(res);
+        } catch (e) {
+          out.reply = { pickups: [], dropped: 0, error: e.message };
+        }
+        return out;
+      }
       last = 'HTTP ' + res.status;
       // 4xx means the receiver understood us and said no — a bad secret, a
       // wrong path, a payload it rejects. Retrying hammers it without ever
@@ -397,6 +652,88 @@ async function sendOnce(database, cfg, deps) {
 }
 
 /**
+ * Write the outcome where Settings can show it.
+ *
+ * A log line only helps someone who already suspects a problem; "last delivery:
+ * 3 days ago" on the screen is what makes a feed that quietly stopped visible
+ * at all. Recording it must never take the caller down with it.
+ */
+function note(database, dbApi, ok, error) {
+  if (!database || !dbApi || typeof dbApi.updateHarvestFeedStatus !== 'function') return;
+  try {
+    dbApi.updateHarvestFeedStatus(database, { at: new Date().toISOString(), ok, error });
+  } catch {
+    // Bookkeeping around a push that already happened.
+  }
+}
+
+/**
+ * Take delivery of whatever came back, and confirm what went out.
+ *
+ * Order matters and only one order is right. Confirming comes first, and covers
+ * exactly the ids a *successful* push carried: those the receiver has now
+ * definitely heard about. Anything arriving after that genuinely is a repeat,
+ * and re-arms itself in storePickup().
+ *
+ * Confirming what a failed push carried would be the bug this ordering exists
+ * to prevent — the receiver never heard, drops the pickup from its next reply
+ * anyway, and the two sides quietly disagree with nothing left to reconcile
+ * them.
+ *
+ * Best-effort throughout, like note(): the push has happened, and none of this
+ * may throw its way out to the timer.
+ */
+function receive(database, dbApi, log, r) {
+  if (!database || !dbApi || typeof dbApi.storePickup !== 'function') return;
+  try {
+    if (r.ok && Array.isArray(r.payload.pickupsDone) && r.payload.pickupsDone.length)
+      dbApi.ackPickups(database, r.payload.pickupsDone);
+
+    const reply = r.reply;
+    if (!reply) return;
+    if (reply.error) log('warn', 'Harvest feed reply not usable', { error: reply.error, dropped: reply.dropped });
+    if (!reply.pickups.length) return;
+
+    let fresh = 0;
+    for (const p of reply.pickups) {
+      // One unusable row must not cost the other nineteen. A full table throws
+      // here, which is the one case worth a line of its own.
+      try {
+        if (dbApi.storePickup(database, p) !== 'unchanged') fresh++;
+      } catch (e) {
+        log('warn', 'Pickup rejected', { id: p.id, error: e.message });
+      }
+    }
+    // Silence when nothing moved: this runs every quarter of an hour and a
+    // receiver repeats its open pickups every single time.
+    if (fresh) log('info', 'Pickups received', { stored: fresh, of: reply.pickups.length });
+  } catch (e) {
+    log('warn', 'Harvest feed reply not stored', { error: e.message });
+  }
+}
+
+/**
+ * One complete exchange: build, send, record the outcome, take delivery.
+ *
+ * The timer calls this and so do the tests, so the confirmation ordering that
+ * receive() describes is exercised by the same code path that runs in
+ * production rather than by a reimplementation of it.
+ */
+async function deliver({ database, cfg, dbApi, log, deps }) {
+  const r = await sendOnce(database, cfg, deps);
+  if (r.ok)
+    log('info', 'Harvest feed sent', {
+      harvested: r.payload.harvested.length,
+      planned: r.payload.planned.length,
+      attempts: r.attempts
+    });
+  else log('warn', 'Harvest feed failed', { error: r.error, attempts: r.attempts });
+  note(database, dbApi, r.ok, r.error);
+  receive(database, dbApi, log, r);
+  return r;
+}
+
+/**
  * Start the timer. Safe to call when the feature is off (no URL) — it says so
  * once and does nothing. Returns true when a timer is running.
  *
@@ -404,7 +741,7 @@ async function sendOnce(database, cfg, deps) {
  * staging copy usually inherits the production .env, and two servers posting
  * contradictory snapshots to one receiver is worse than one posting none.
  */
-function start({ database, env, log, skip, dbApi }) {
+function start({ database, env, log, skip, dbApi, deps }) {
   stop();
   let cfg;
   try {
@@ -419,18 +756,6 @@ function start({ database, env, log, skip, dbApi }) {
     return false;
   }
 
-  // Write the outcome where Settings can show it. A log line only helps someone
-  // who already suspects a problem; "last delivery: 3 days ago" on the screen is
-  // what makes a feed that quietly stopped visible at all.
-  const note = (ok, error) => {
-    if (!database || !dbApi || typeof dbApi.updateHarvestFeedStatus !== 'function') return;
-    try {
-      dbApi.updateHarvestFeedStatus(database, { at: new Date().toISOString(), ok, error });
-    } catch {
-      // Recording the outcome must never take the timer down with it.
-    }
-  };
-
   const tick = async () => {
     if (inFlight) {
       log('warn', 'Harvest feed still sending — tick skipped');
@@ -438,20 +763,12 @@ function start({ database, env, log, skip, dbApi }) {
     }
     inFlight = true;
     try {
-      const r = await sendOnce(database, cfg);
-      if (r.ok)
-        log('info', 'Harvest feed sent', {
-          harvested: r.payload.harvested.length,
-          planned: r.payload.planned.length,
-          attempts: r.attempts
-        });
-      else log('warn', 'Harvest feed failed', { error: r.error, attempts: r.attempts });
-      note(r.ok, r.error);
+      await deliver({ database, cfg, dbApi, log, deps });
     } catch (e) {
       // buildPayload can throw if the schema is mid-migration. Log, keep the
       // timer.
       log('error', 'Harvest feed error', { error: e.message });
-      note(false, e.message);
+      note(database, dbApi, false, e.message);
     } finally {
       inFlight = false;
     }
@@ -478,10 +795,15 @@ module.exports = {
   sign,
   post,
   sendOnce,
+  deliver,
+  parseReply,
+  readReply,
   start,
   stop,
   VERSION,
-  VERSION_RELEASE
+  VERSION_RELEASE,
+  REPLY_MAX_BYTES,
+  MAX_PICKUPS
 };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
