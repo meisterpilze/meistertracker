@@ -2140,7 +2140,10 @@ function checkCaldavAuth(req) {
 
 // ── CalDAV category calendars with colors matching web calendar ──
 const CALDAV_CATEGORY_CALS = {
-  meisterpilze: { displayName: 'Meisterpilze (Aufgaben)', color: '#16a34a' },
+  // The key is the on-disk directory and URL segment and cannot be renamed
+  // without breaking every existing subscription; the display name is what the
+  // calendar client actually shows, so it carries no operator name.
+  meisterpilze: { displayName: 'Aufgaben (geteilt)', color: '#16a34a' },
   faelligkeiten: { displayName: 'Fälligkeiten', color: '#ef4444' },
   aufgaben: { displayName: 'Aufgaben', color: '#3b82f6' },
   'eigene-termine': { displayName: 'Eigene Termine', color: '#22c55e' },
@@ -2938,7 +2941,7 @@ function _doAutoSyncAllCaldav(data) {
         }
       }
     } catch (e) {
-      log('warn', 'CalDAV: failed to clean migrated events from meisterpilze', { error: e.message });
+      log('warn', 'CalDAV: failed to clean migrated events from the shared calendar', { error: e.message });
     }
     // Clean orphaned VTODOs in personal calendars
     const categoryCals = new Set(Object.keys(CALDAV_CATEGORY_CALS));
@@ -3243,7 +3246,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
         <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
-        <d:displayname>Meisterpilze</d:displayname>
+        <d:displayname>Meistertracker</d:displayname>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -3974,7 +3977,7 @@ function handleGet(parts, req, res) {
   // GET on a calendar collection — return empty (clients use PROPFIND/REPORT)
   if (parts.length <= 2) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Meisterpilze CalDAV Server');
+    res.end('Meistertracker CalDAV Server');
     return;
   }
 

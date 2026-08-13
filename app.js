@@ -10619,7 +10619,7 @@ async function downloadBackup() {
     a.href = URL.createObjectURL(blob);
     const cd = r.headers.get('content-disposition') || '';
     const m = cd.match(/filename="(.+?)"/);
-    a.download = m ? m[1] : 'meisterpilze_backup.enc';
+    a.download = m ? m[1] : 'meistertracker_backup.enc';
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus(st, 'Backup downloaded.', true);
@@ -11226,7 +11226,7 @@ async function printQrSheet(items, title) {
   sheet.innerHTML = '';
   const hdr = document.createElement('div');
   hdr.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
-  hdr.textContent = 'Meisterpilze — QR Codes: ' + title;
+  hdr.textContent = 'QR Codes: ' + title;
   sheet.appendChild(hdr);
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:0 8px';
@@ -14655,7 +14655,7 @@ async function printRef() {
   const useQR = document.getElementById('ref-qr').checked;
   const title = document.createElement('div');
   title.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
-  title.textContent = 'Meisterpilze — Reference ' + (useQR ? 'QR Codes' : 'Barcodes');
+  title.textContent = 'Reference ' + (useQR ? 'QR Codes' : 'Barcodes');
   sheet.appendChild(title);
   let delay = 0;
   for (const group of REF_GROUPS) {
