@@ -3235,9 +3235,26 @@ function deleteBatchById(db, batchId, userId) {
       // Math.max(deltaKg, -cur), so creating a batch while short and then deleting
       // it left a permanent surplus. Both drift the running total upward and never
       // self-correct, so cap the credit at the recorded deduction for this batch.
+      //
+      // Every deduction, which means 'batch-grow' as well as 'batch'.
+      // addBagsToBatch logs its substrate under 'batch-grow', while
+      // computeBatchMaterialDeltas above reads the bags table and therefore
+      // already counts the added bags. Counting the enlargement on the way out
+      // but not on the way back in meant the extra substrate was deducted and
+      // never returned: create a batch, add bags, delete it, and the difference
+      // stayed missing from the shelf for good. That is a wrong number in the
+      // one place the lab orders stock from, and it compounds per batch.
+      //
+      // This does not over-credit. The credit stays a Math.min against what was
+      // actually taken, so it is capped against a larger, truer figure rather
+      // than being turned into a sum — the two cases the cap exists for both
+      // still hold: an MCP batch created with deltas = null still credits back
+      // nothing, and a batch created while stock was short still nets to zero.
       const takenByMat = {};
       for (const r of db
-        .prepare("SELECT mat, SUM(delta_kg) AS total FROM inventory_log WHERE ref = ? AND type = 'batch' GROUP BY mat")
+        .prepare(
+          "SELECT mat, SUM(delta_kg) AS total FROM inventory_log WHERE ref = ? AND type IN ('batch','batch-grow') GROUP BY mat"
+        )
         .all(batchId))
         takenByMat[r.mat] = Math.abs(r.total || 0);
       for (const d of deltas) {
