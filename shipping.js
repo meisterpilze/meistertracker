@@ -8,9 +8,15 @@
 
 const SENDCLOUD_BASE = 'https://panel.sendcloud.sc/api/v2';
 
-// Meisterpilze ships within the EU only (no UK, no Switzerland). A destination is
-// resolved to an ISO-3166 alpha-2 code and then checked against this EU-27
-// allowlist; anything else is refused before a billable label is ever bought.
+// EU-only shipping: a destination is resolved to an ISO-3166 alpha-2 code and
+// checked against this EU-27 allowlist, so a non-EU address is refused before a
+// billable label is ever bought.
+//
+// NOTE: this is a hardcoded business policy, not a product rule. A lab outside
+// the EU — Switzerland, the UK, the US — cannot buy a label at all, because its
+// own home market is rejected here before Sendcloud is even asked. The right
+// home for it is shipping_config (which already carries provider, sender address
+// and default method); until then, forks shipping elsewhere must edit this set.
 const _EU_ISO2 = new Set([
   'AT',
   'BE',

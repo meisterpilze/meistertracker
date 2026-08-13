@@ -790,6 +790,92 @@ describe('db – addBagsToBatch deducts inventory (I-23)', () => {
     assert.ok(mats.has('wheatbran'));
   });
 
+  // Deleting a batch that was enlarged has to give back the substrate the
+  // enlargement took, too.
+  //
+  // The credit-back is capped at what the batch actually took out — a good rule,
+  // guarding two real cases (an MCP batch created with deltas = null deducted
+  // nothing, and a deduction made while stock was short gets clamped). But the
+  // cap only counted rows logged as 'batch', while addBagsToBatch logs under
+  // 'batch-grow'. Meanwhile the amount being credited is recomputed from the
+  // bags table, which does include the added bags. Counted on the way out, not
+  // on the way back in: the extra substrate simply stayed missing.
+  //
+  // That is a wrong number in the one place the lab orders stock from, it never
+  // self-corrects, and it compounds with every enlarged batch that gets binned.
+  it('gives back the substrate an enlargement took, not just the original', () => {
+    db.applyInventoryDelta(d, 'hardwood', 1000, 'delivery', 'seed-del');
+    db.applyInventoryDelta(d, 'wheatbran', 1000, 'delivery', 'seed-del');
+    const start = db.readAll(d).inventory.stock;
+
+    db.insertBatch(d, {
+      batchId: 'DEL-GROW',
+      species: 'Pleurotus ostreatus',
+      strain: 'HK35',
+      qty: 10,
+      days: 21,
+      substrate: { hardwood: 75, wheatbran: 25, rh: 0, gypsum: false },
+      bagKg: 3,
+      batchType: 'block',
+      created: '2024-01-01T00:00:00Z',
+      due: '2024-01-22T00:00:00Z',
+      bags: Array.from({ length: 10 }, (_, i) => 'DEL-GROW-' + String(i + 1).padStart(2, '0'))
+    });
+    // 10 bags × 3 kg = 30 kg wet, 75/25 → 22.5 hw + 7.5 wb, logged as 'batch'
+    // the way the create flow does it.
+    db.applyInventoryDelta(d, 'hardwood', -22.5, 'batch', 'DEL-GROW');
+    db.applyInventoryDelta(d, 'wheatbran', -7.5, 'batch', 'DEL-GROW');
+
+    // 5 more bags × 3 kg = 15 kg → 11.25 hw + 3.75 wb, logged as 'batch-grow'.
+    db.addBagsToBatch(
+      d,
+      'DEL-GROW',
+      Array.from({ length: 5 }, (_, i) => 'DEL-GROW-' + String(i + 11).padStart(2, '0')),
+      15
+    );
+    const afterGrow = db.readAll(d).inventory.stock;
+    assert.ok(Math.abs(start.hardwood - afterGrow.hardwood - 33.75) < 1e-6, 'setup: 33.75 kg hardwood taken in total');
+
+    db.deleteBatchById(d, 'DEL-GROW');
+    const end = db.readAll(d).inventory.stock;
+    assert.ok(
+      Math.abs(end.hardwood - start.hardwood) < 1e-6,
+      `hardwood must return to ${start.hardwood}, got ${end.hardwood}`
+    );
+    assert.ok(
+      Math.abs(end.wheatbran - start.wheatbran) < 1e-6,
+      `wheatbran must return to ${start.wheatbran}, got ${end.wheatbran}`
+    );
+  });
+
+  // The cap is still a cap. Widening which rows it counts must not turn it into
+  // a sum — this is the case it was written for, and it has to keep working.
+  it('still credits back nothing for a batch that never deducted anything', () => {
+    const start = db.readAll(d).inventory.stock;
+    // deltas = null is what the MCP create_batch tool passes: no deduction made.
+    db.insertBatch(
+      d,
+      {
+        batchId: 'MCP-NODEDUCT',
+        species: 'Pleurotus ostreatus',
+        strain: 'HK35',
+        qty: 4,
+        days: 21,
+        substrate: { hardwood: 75, wheatbran: 25, rh: 0, gypsum: false },
+        bagKg: 3,
+        batchType: 'block',
+        created: '2024-01-01T00:00:00Z',
+        due: '2024-01-22T00:00:00Z',
+        bags: ['MCP-NODEDUCT-01', 'MCP-NODEDUCT-02', 'MCP-NODEDUCT-03', 'MCP-NODEDUCT-04']
+      },
+      null
+    );
+    db.deleteBatchById(d, 'MCP-NODEDUCT');
+    const end = db.readAll(d).inventory.stock;
+    assert.ok(Math.abs(end.hardwood - start.hardwood) < 1e-6, 'deleting it must not invent stock');
+    assert.ok(Math.abs(end.wheatbran - start.wheatbran) < 1e-6, 'deleting it must not invent stock');
+  });
+
   it('addBagsToBatch records userId in inventory_log when supplied', () => {
     db.createUser(d, 'grow_bob', 'pass1234', 'admin');
     const u = db.getUserByUsername(d, 'grow_bob');
