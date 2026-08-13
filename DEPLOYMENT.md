@@ -591,6 +591,8 @@ Pushes a signed summary of recorded harvests and upcoming batches to a URL you c
 
 **Nothing is opened up.** No inbound endpoint, no port, no dependency on your public IP. The server dials out; that is the whole surface.
 
+The receiver may, however, answer — the reply can carry pickups back, which land on the **Pickups** page. Data from the far end therefore does reach the database, over a socket this side opened and is still holding. The body is validated as untrusted input (JSON only, 64 KB cap applied before it is read, every field bounded, unknown fields dropped), and a malformed reply never turns a delivered push into a failed one. See **README.md → Pickups** for the shape.
+
 ### Setup — in the browser
 
 **Settings → Harvest feed.** No shell, no file, no restart.
@@ -689,6 +691,9 @@ The timestamp check is the half that stops replays; without it a captured reques
 | Receiver gets a 401 back from your own check | Verify over the **raw** body, not a re-serialized object; `JSON.stringify` of a parsed payload will not byte-match. |
 | `harvested` is empty but you harvested today | Check `HARVEST_WEBHOOK_FRESH_DAYS`, and that the harvest rows carry a species. |
 | `planned` is empty | Only `block` batches with bags, a due date inside the window, and no harvest recorded yet appear there. |
+| `Harvest feed reply not usable` in the log | The receiver answered, and the body did not survive validation. The message says why — `reply is text/html, not JSON` is usually a proxy in front of the receiver returning an error page. *Send one now* in Settings shows the same detail. |
+| The Pickups page stays empty although the receiver sends some | Look at *Send one now*: it reports both the reply error and how many entries were dropped. Dropped entries usually mean no usable `id`, or a `from`/`to` carrying an offset — those must be local wall-clock, with the zone in `zone`. |
+| The receiver keeps resending a pickup it was told about | It is only confirmed after a push that succeeded. Check the feed is actually delivering; a failed push deliberately confirms nothing. |
 
 ## Quick Reference
 

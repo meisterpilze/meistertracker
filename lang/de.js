@@ -772,7 +772,7 @@ window.LANG['de'] = {
   // DuckDNS / Let's Encrypt / Server
   'harvestFeed.title': 'Ernte-Feed',
   'harvestFeed.desc':
-    'Schickt eine Zusammenfassung des Erntestands und der kommenden Chargen an eine Adresse deiner Wahl — eigene Website, Abo-Kiste, Chat-Bot. Nur in eine Richtung: Dieser Server sendet, es kommt nichts herein. Keine Chargen- oder Beutelnummern, keine Kundendaten, kein Scan-Verlauf.',
+    'Schickt eine Zusammenfassung des Erntestands und der kommenden Chargen an eine Adresse deiner Wahl — eigene Website, Abo-Kiste, Chat-Bot. Dieser Server baut die Verbindung auf; erreichbar wird er dadurch nicht. In der Antwort darf der Empfänger Abholtermine zurückmelden, die unter „Abholungen" landen. Keine Chargen- oder Beutelnummern, keine Kundendaten, kein Scan-Verlauf.',
   'harvestFeed.enable': 'Ernte-Feed aktivieren',
   'harvestFeed.url': 'Adresse des Empfängers',
   'harvestFeed.urlHint':

@@ -685,7 +685,7 @@ window.LANG['pt'] = {
   // DuckDNS / Let's Encrypt / Server
   'harvestFeed.title': 'Feed de colheita',
   'harvestFeed.desc':
-    'Envia um resumo do que foi colhido e do que está a chegar para um URL à tua escolha — o teu site, um cabaz por subscrição, um bot de conversa. Só num sentido: este servidor envia, nada entra. Sem identificadores de lotes ou sacos, sem clientes, sem histórico de leituras.',
+    'Envia um resumo do que foi colhido e do que está a chegar para um URL à tua escolha — o teu site, um cabaz por subscrição, um bot de conversa. É este servidor que abre a ligação; ninguém lhe chega por iniciativa própria. Na resposta, o destinatário pode comunicar levantamentos, que aparecem em Levantamentos. Sem identificadores de lotes ou sacos, sem clientes, sem histórico de leituras.',
   'harvestFeed.enable': 'Ativar feed de colheita',
   'harvestFeed.url': 'URL do recetor',
   'harvestFeed.urlHint':
