@@ -150,6 +150,44 @@ describe('harvest feed config', () => {
   });
 });
 
+// The list behind the release picker. It replaced a text field, and the text
+// field cost a real sale: "Lions Mane" was typed where the batch says "Lions
+// Mane (LM)", so the release matched nothing at the receiving end and the shop
+// went on showing an empty shelf — no error on either side.
+describe('known species', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    db.insertHarvest(d, { time: daysFromNow(-1) + 'T08:00:00', batch: 'B1', species: 'Oyster (OY)', grams: 1000 });
+    // Planned only, never harvested — the case that matters. Produce is set
+    // aside before it comes off the rack all the time.
+    block(d, 'B9', 'Lions Mane (LM)', 'XXX', dueAt(4), ['B9-1']);
+  });
+  after(() => {
+    d.close();
+    try {
+      fs.unlinkSync(p);
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('offers what a batch plans, not only what a scale has seen', () => {
+    assert.deepEqual(db.listKnownSpecies(d), ['Lions Mane (LM)', 'Oyster (OY)']);
+  });
+
+  it('offers the species verbatim, because the receiver matches on it literally', () => {
+    const alle = db.listKnownSpecies(d);
+    assert.ok(alle.includes('Lions Mane (LM)'), 'the code in brackets is part of the key, not decoration');
+    assert.ok(!alle.includes('Lions Mane'), 'the bare name is a different string and matches nothing');
+  });
+
+  it('says nothing twice, however many harvests a species has', () => {
+    db.insertHarvest(d, { time: daysFromNow(0) + 'T09:00:00', batch: 'B1', species: 'Oyster (OY)', grams: 500 });
+    assert.deepEqual(db.listKnownSpecies(d), ['Lions Mane (LM)', 'Oyster (OY)']);
+  });
+});
+
 describe('harvest feed payload', () => {
   let d, p;
   before(() => {

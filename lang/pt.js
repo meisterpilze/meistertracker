@@ -729,6 +729,8 @@ window.LANG['pt'] = {
   'harvestFeed.colRelease': 'Libertar (kg)',
   'harvestFeed.colUntil': 'V\u00e1lido at\u00e9',
   'harvestFeed.addSpecies': 'Outra esp\u00e9cie \u2026',
+  'harvestFeed.allListed': 'Todas as esp\u00e9cies conhecidas j\u00e1 est\u00e3o na lista',
+  'harvestFeed.noSpecies': 'Ainda nenhuma esp\u00e9cie registada \u2014 inicia um lote ou colhe',
   'harvestFeed.add': 'Adicionar',
   'harvestFeed.clear': 'Limpar',
   'harvestFeed.expired': 'expirado',

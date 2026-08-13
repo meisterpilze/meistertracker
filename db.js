@@ -4218,6 +4218,34 @@ function localDay(at) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/**
+ * Every species string this database has ever used, verbatim.
+ *
+ * The species string is a join key: the feed sends it as it stands ("Lions Mane
+ * (LM)") and a receiver matches on it literally. Offering this list instead of a
+ * text field is what stops a hand-typed "Lions Mane" from being recorded as a
+ * release that matches nothing and disappears without an error.
+ *
+ * ⚠️ Both tables, not just `harvests`. Produce is regularly set aside before it
+ * comes off the rack — a Saturday market is planned that way — and a species
+ * that is only planned has no harvest row yet. Reading `harvests` alone would
+ * leave exactly those out of the list, which sends the person back to typing.
+ *
+ * Same columns buildPayload() reads, and that is the point: what can be picked
+ * is what the receiver will be matching on.
+ */
+function listKnownSpecies(db) {
+  return db
+    .prepare(
+      `SELECT species FROM harvests WHERE species IS NOT NULL AND species <> ''
+       UNION
+       SELECT species FROM batches  WHERE species IS NOT NULL AND species <> ''
+       ORDER BY species`
+    )
+    .all()
+    .map((r) => r.species);
+}
+
 /** Every release, expired ones included — they are the interesting ones in a list. */
 function listHarvestReleases(db, at) {
   const today = localDay(at);
@@ -7982,6 +8010,7 @@ module.exports = {
   updateHarvestFeedStatus,
   mayRelease,
   listHarvestReleases,
+  listKnownSpecies,
   activeHarvestReleases,
   setHarvestRelease,
   addHarvestRelease,

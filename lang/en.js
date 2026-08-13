@@ -813,6 +813,8 @@ window.LANG['en'] = {
   'harvestFeed.colRelease': 'Release (kg)',
   'harvestFeed.colUntil': 'Valid until',
   'harvestFeed.addSpecies': 'Another species …',
+  'harvestFeed.allListed': 'Every known species is already listed',
+  'harvestFeed.noSpecies': 'No species recorded yet — start a batch or harvest one',
   'harvestFeed.add': 'Add',
   'harvestFeed.clear': 'Clear',
   'harvestFeed.expired': 'expired',

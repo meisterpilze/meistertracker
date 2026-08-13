@@ -8482,7 +8482,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       jsonOk(res, {
         freshDays: days,
         releases: db.listHarvestReleases(database),
-        recent
+        recent,
+        known: db.listKnownSpecies(database)
       });
     } catch (err) {
       safeErr(res, err);

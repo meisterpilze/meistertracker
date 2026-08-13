@@ -4564,13 +4564,15 @@
                 </table>
               </div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px">
-                <input
-                  type="text"
-                  id="harvestrelease-new"
-                  style="max-width: 240px"
-                  data-i18n-placeholder="harvestFeed.addSpecies"
-                  placeholder="Add another species"
-                />
+                <!--
+                  A list and not a text field. The species string is a join key:
+                  the feed sends "Lions Mane (LM)" because that is what the batch
+                  says, and a receiver matches on it literally. Typed by hand it
+                  became "Lions Mane", matched nothing, and the release vanished
+                  without an error anywhere — the shop just kept showing nothing.
+                  Only species this database has actually recorded can be picked.
+                -->
+                <select id="harvestrelease-new" style="max-width: 260px"></select>
                 <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
                 <span style="flex: 1"></span>
                 <button id="harvestrelease-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>

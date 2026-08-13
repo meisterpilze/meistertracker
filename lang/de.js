@@ -816,6 +816,8 @@ window.LANG['de'] = {
   'harvestFeed.colRelease': 'Freigabe (kg)',
   'harvestFeed.colUntil': 'Gültig bis',
   'harvestFeed.addSpecies': 'Weitere Art …',
+  'harvestFeed.allListed': 'Alle bekannten Arten stehen schon in der Liste',
+  'harvestFeed.noSpecies': 'Noch keine Art erfasst — erst ansetzen oder ernten',
   'harvestFeed.add': 'Hinzufügen',
   'harvestFeed.clear': 'Leeren',
   'harvestFeed.expired': 'abgelaufen',
