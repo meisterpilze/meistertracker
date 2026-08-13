@@ -1351,6 +1351,11 @@ function _pickupWhen(p) {
 }
 
 function renderPickups() {
+  // The upper half of the page. Not awaited: the two halves come from different
+  // routes and neither needs the other, so making the bookings wait on the
+  // release table would only add a stall to the half people open this page for.
+  loadHarvestReleases();
+
   const body = $('pickups-body');
   if (!body) return;
   const count = $('pickups-count');
@@ -8620,7 +8625,6 @@ async function loadHarvestFeedSettings() {
     // exists; leaving the field empty on save keeps it.
     sec.placeholder = cfg.hasSecret ? '••••••••••' : '';
     renderHarvestFeedBanner(cfg);
-    loadHarvestReleases();
   } catch (e) {
     /* non-admin */
   }
@@ -8636,10 +8640,12 @@ async function loadHarvestFeedSettings() {
 async function loadHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!body) return;
+  const karte = document.getElementById('harvestrelease-card');
   try {
     const r = await authFetch('/api/harvest-feed/release');
     if (!r.ok) return;
     const data = await r.json();
+    if (karte) karte.style.display = '';
     const rows = new Map();
     for (const rec of data.recent || []) rows.set(rec.species, { species: rec.species, harvested: rec.grams });
     for (const rel of data.releases || []) {

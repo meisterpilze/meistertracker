@@ -4538,58 +4538,6 @@
                 ></pre>
               </div>
             </div>
-            <div class="card">
-              <div class="sec" data-i18n="harvestFeed.releaseTitle">Released for sale</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
-                data-i18n="harvestFeed.releaseDesc"
-              >
-                How much of each species a shop may sell — a set-aside, not a stock level. Put that amount in its own
-                crate and sell everything else from the rest: then a walk-in customer or a busy market Saturday cannot
-                make the published figure wrong, and there is nothing to keep up to date. The date is the safety net.
-                Fresh produce does not keep, and the usual mistake is not a wrong number but a forgotten one.
-              </p>
-              <div style="overflow-x: auto">
-                <table id="t-harvestrelease" style="min-width: 520px">
-                  <thead>
-                    <tr>
-                      <th data-i18n="harvestFeed.colSpecies">Species</th>
-                      <th data-i18n="harvestFeed.colHarvested">Harvested</th>
-                      <th data-i18n="harvestFeed.colRelease">Release (kg)</th>
-                      <th data-i18n="harvestFeed.colUntil">Valid until</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="harvestrelease-body"></tbody>
-                </table>
-              </div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px">
-                <!--
-                  A list and not a text field. The species string is a join key:
-                  the feed sends "Lions Mane (LM)" because that is what the batch
-                  says, and a receiver matches on it literally. Typed by hand it
-                  became "Lions Mane", matched nothing, and the release vanished
-                  without an error anywhere — the shop just kept showing nothing.
-                  Only species this database has actually recorded can be picked.
-                -->
-                <select id="harvestrelease-new" style="max-width: 260px"></select>
-                <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
-                <span style="flex: 1"></span>
-                <button id="harvestrelease-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
-              </div>
-              <div
-                id="harvestrelease-result"
-                style="
-                  font-size: 12px;
-                  color: var(--c-text-muted);
-                  padding: 6px 10px;
-                  background: var(--c-bg);
-                  border-radius: 7px;
-                  display: none;
-                  margin-top: 8px;
-                "
-              ></div>
-            </div>
           </div>
           <!-- Drucker -->
           <div class="sp" id="sp-settings-printer">
@@ -5393,11 +5341,75 @@
             </button>
           </div>
         </div>
-        <!-- Pickups: collection slots the harvest-feed receiver reported back.
-             Read-only. The receiver took the booking and repeats every open
-             pickup until this end confirms it, so anything edited here would
-             be overwritten by the next reply. -->
+        <!-- One page, two halves, and they are the same working day: above, what
+             may be sold; below, who is coming to collect it. Deciding the first
+             without seeing the second is how a Saturday gets oversold.
+
+             The release table used to live in Settings. It does not belong
+             there: settings are entered once and left alone, and this is filled
+             in after every harvest. Anything entered daily behind an
+             administration screen is eventually not entered at all.
+
+             The lower half stays read-only. The harvest-feed receiver took the
+             booking and repeats every open pickup until this end confirms it,
+             so anything edited there would be overwritten by the next reply. -->
         <div class="page" id="p-pickups">
+          <!-- Hidden until the release route answers. It is admin-only, and on
+               this page — unlike Settings — the reader may well not be one. An
+               empty table with headings would read as "nothing released today",
+               which is a different and worse answer than "not yours to see". -->
+          <div class="card" id="harvestrelease-card" style="display: none">
+            <div class="sec" data-i18n="harvestFeed.releaseTitle">Released for sale</div>
+            <p
+              style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              data-i18n="harvestFeed.releaseDesc"
+            >
+              How much of each species a shop may sell — a set-aside, not a stock level. Put that amount in its own
+              crate and sell everything else from the rest: then a walk-in customer or a busy market Saturday cannot
+              make the published figure wrong, and there is nothing to keep up to date. The date is the safety net.
+              Fresh produce does not keep, and the usual mistake is not a wrong number but a forgotten one.
+            </p>
+            <div style="overflow-x: auto">
+              <table id="t-harvestrelease" style="min-width: 520px">
+                <thead>
+                  <tr>
+                    <th data-i18n="harvestFeed.colSpecies">Species</th>
+                    <th data-i18n="harvestFeed.colHarvested">Harvested</th>
+                    <th data-i18n="harvestFeed.colRelease">Release (kg)</th>
+                    <th data-i18n="harvestFeed.colUntil">Valid until</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="harvestrelease-body"></tbody>
+              </table>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px">
+              <!--
+                A list and not a text field. The species string is a join key:
+                the feed sends "Lions Mane (LM)" because that is what the batch
+                says, and a receiver matches on it literally. Typed by hand it
+                became "Lions Mane", matched nothing, and the release vanished
+                without an error anywhere — the shop just kept showing nothing.
+                Only species this database has actually recorded can be picked.
+              -->
+              <select id="harvestrelease-new" style="max-width: 260px"></select>
+              <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
+              <span style="flex: 1"></span>
+              <button id="harvestrelease-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
+            </div>
+            <div
+              id="harvestrelease-result"
+              style="
+                font-size: 12px;
+                color: var(--c-text-muted);
+                padding: 6px 10px;
+                background: var(--c-bg);
+                border-radius: 7px;
+                display: none;
+                margin-top: 8px;
+              "
+            ></div>
+          </div>
           <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
               <div class="sec" data-i18n="pickups.title" style="margin: 0">Abholungen</div>
