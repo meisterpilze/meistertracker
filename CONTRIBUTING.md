@@ -42,7 +42,8 @@ This is the only supported way to start the server (see in-repo notes — it han
    npm run format:check
    ```
    `npm run lint:fix` and `npm run format` will auto-fix most issues.
-4. Push your branch and open a Pull Request. The PR template will ask you to confirm tests, lint, and format are green, and that you license the change under AGPL-3.0-or-later.
+4. Sign off each commit (`git commit -s`) — see [Sign your work](#sign-your-work) below.
+5. Push your branch and open a Pull Request. The PR template will ask you to confirm tests, lint, and format are green, and that you license the change under AGPL-3.0-or-later.
 
 ## Code style
 
@@ -63,7 +64,41 @@ Meistertracker is licensed under **AGPL-3.0-or-later**. By submitting a contribu
 - You are the author of the contribution, **or** you have the right to submit it under this licence.
 - You agree your contribution is licensed under AGPL-3.0-or-later.
 
-There is no separate CLA. The PR template asks you to tick this box explicitly.
+There is no CLA and no copyright assignment. You keep the copyright in what you wrote; we
+only need it on record that you had the right to send it. That record is the sign-off below.
+
+## Sign your work
+
+Every commit needs a `Signed-off-by` line. It is the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/) — the same
+one-paragraph statement the Linux kernel uses. Signing off says: this contribution is mine
+to give, or I have the right to pass it on under AGPL-3.0-or-later, and I understand that
+it and my sign-off are public and kept forever.
+
+Git writes the line for you when you pass `-s`:
+
+```sh
+git commit -s -m "fix(scan): drop trailing whitespace from barcode input"
+```
+
+which appends
+
+```
+Signed-off-by: Jane Doe <jane@example.com>
+```
+
+Use your real name and an address that reaches you — pseudonyms don't work, because the
+point of the line is that someone can be asked. The name comes from your Git config:
+
+```sh
+git config --global user.name "Jane Doe"
+git config --global user.email "jane@example.com"
+```
+
+Forgot on the last commit? `git commit --amend -s --no-edit`. On several? Sign them all
+with `git rebase --signoff origin/main`, then force-push your branch.
+
+No signature, no GPG key, no account anywhere — just the line.
 
 ## What's currently maintained
 
