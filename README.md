@@ -388,7 +388,7 @@ The receiver is the side that took the booking, so it is the side that knows whe
       "order": "#1042",
       "slot": "2026-08-15-0900",
       "slotText": "Sa 15.08., 9–10 Uhr",
-      "place": "Marktstand Erlangen",
+      "place": "Marktstand",
       "from": "2026-08-15T09:00",
       "to": "2026-08-15T10:00",
       "zone": "Europe/Berlin",
