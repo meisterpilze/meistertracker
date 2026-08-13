@@ -19,4 +19,5 @@
 
 - [ ] I have read [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [ ] I am the author of these changes and license them under **AGPL-3.0-or-later**
+- [ ] Every commit is signed off (`git commit -s`) — [DCO 1.1](https://developercertificate.org/)
 - [ ] No secrets, credentials, or production data are included in the diff
