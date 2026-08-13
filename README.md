@@ -365,17 +365,33 @@ The receiver is the side that took the booking, so it is the side that knows whe
 
 `id` is yours to assign and is the only required field. It is the primary key here, so **repeat every open pickup in every reply until it is confirmed** — storing the same one twice leaves one row. That is the delivery guarantee, and it is the only one either side gets.
 
-Confirmation comes back on the next push, in a field that appears only when there is something to confirm:
+#### Withdrawing one again
+
+A customer cancels after the pickup was already stored here. You cannot reach in and delete it — there is no route to the lab machine, which is the whole point — so name the id in the same reply:
+
+```json
+{ "ok": true, "pickupsCancelled": ["p_2026-08-15-0900_1042"] }
+```
+
+A plain list of ids, present only when there are any. The pickup is removed here, and the withdrawal is then confirmed through the same `pickupsDone` list a booking uses — so **repeat a withdrawal in every reply until you see its id come back**, exactly as with a booking.
+
+Send it whether or not you think the booking arrived. An id this end never held costs nothing: it removes nothing, is not an error, and is still confirmed so you can stop repeating it. That is deliberate, because you cannot tell whether your earlier reply got through.
+
+Two orderings are fixed, so you can rely on them: if one reply names the same id in both lists, the **withdrawal wins**; and a booking in a *later* reply **reopens** an id that was withdrawn earlier, because the newest statement about an id is the one that holds.
+
+#### Confirmation
+
+Both kinds come back on the next push, in a field that appears only when there is something to confirm:
 
 ```json
 { "version": 1, "generatedAt": "…", "harvested": [], "planned": [], "pickupsDone": ["p_2026-08-15-0900_1042"] }
 ```
 
-An id in `pickupsDone` has been stored here durably, and only a push that actually succeeded sets that flag — so a lost request costs a repeat, never a pickup. Once you see an id there you can stop sending that pickup. If you keep sending it, it stays confirmed on every round; nothing breaks, it is just noise.
+An id in `pickupsDone` has been stored — or removed — here durably, and only a push that actually succeeded sets that flag, so a lost request costs a repeat and never a pickup. Once you see an id there you can stop sending it. If you keep sending it, it stays confirmed on every round; nothing breaks, it is just noise.
 
 `from` and `to` are **local wall-clock at the pickup place** — no offset, no `Z` — which is why `zone` travels beside them. Meistertracker stores and displays them exactly as they arrive and never converts them; a value carrying its own offset is rejected rather than reinterpreted. "9–10" is what the customer was told, and it should still say that on a screen in another timezone.
 
-Everything else is optional and bounded. The reply body must be `application/json` and at most 64 KB, at most 200 pickups, at most 50 items each; strings are truncated; unknown fields are dropped; a pickup without a usable `id` is discarded. A reply that is malformed, oversized or not JSON at all is logged and ignored — **it never turns a delivered push into a failed one**. The numbers are out; the reply is a second, separate question.
+Everything else is optional and bounded. The reply body must be `application/json` and at most 64 KB, at most 200 pickups and 200 withdrawals, at most 50 items per pickup; strings are truncated; unknown fields are dropped; a pickup or withdrawal without a usable `id` is discarded. The two lists are read independently, so a garbled `pickupsCancelled` never costs you the bookings beside it, or the other way round. A reply that is malformed, oversized or not JSON at all is logged and ignored — **it never turns a delivered push into a failed one**. The numbers are out; the reply is a second, separate question.
 
 They appear under **Pickups** in the sidebar and at `GET /api/pickups`. The list is read-only: the receiver owns it, and an edit here would be overwritten by the next reply that repeats the same id.
 
