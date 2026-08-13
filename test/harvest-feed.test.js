@@ -663,6 +663,63 @@ describe('stored config', () => {
   });
 });
 
+// ── One entry per offer, not one per batch ───────────────────────────────────
+//
+// The planned list is what a shop shows as "coming soon". It carries a species,
+// maybe a strain, and a date — deliberately no amount, because a yield estimate
+// reaches a customer as a promise.
+//
+// Without grouping, each batch produced its own entry, so four blocks of one
+// species due the same day published four identical lines. That let anyone
+// reading the feed count batches. It is a cadence signal rather than a volume
+// one — batch sizes differ severalfold — but it is a number nobody meant to
+// publish, and the receiver renders the same offer four times.
+describe('planned entries are per offer', () => {
+  let t;
+  before(() => {
+    t = tmpDb();
+    // Three blocks, same species, same strain, same due date.
+    block(t.db, 'P1', 'Oyster', 'Blue', dueAt(6), ['P1-01']);
+    block(t.db, 'P2', 'Oyster', 'Blue', dueAt(6), ['P2-01', 'P2-02', 'P2-03', 'P2-04', 'P2-05']);
+    block(t.db, 'P3', 'Oyster', 'Blue', dueAt(6), ['P3-01', 'P3-02']);
+    // Same species and day, different strain — two offers while strain names
+    // are on, one once they are switched off.
+    block(t.db, 'P4', 'Oyster', 'Pink', dueAt(6), ['P4-01']);
+    // Same species, a different day: genuinely a separate offer.
+    block(t.db, 'P5', 'Oyster', 'Blue', dueAt(9), ['P5-01']);
+  });
+  after(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  it('collapses several batches of one species due the same day', () => {
+    const out = feed.buildPayload(t.db, CFG, NOW);
+    const blue = out.planned.filter((e) => e.strain === 'Blue' && e.expectedFrom === daysFromNow(6));
+    assert.equal(blue.length, 1, 'three batches, one offer — the count must not leak the batch count');
+  });
+
+  it('still keeps genuinely different offers apart', () => {
+    const out = feed.buildPayload(t.db, CFG, NOW);
+    assert.equal(out.planned.filter((e) => e.strain === 'Pink').length, 1, 'a different strain is its own offer');
+    assert.equal(
+      out.planned.filter((e) => e.expectedFrom === daysFromNow(9)).length,
+      1,
+      'a different date is its own offer'
+    );
+    assert.equal(out.planned.length, 3);
+  });
+
+  // Grouping in SQL alone does not cover this: the two strains are distinct
+  // rows and only collapse once the name is dropped on the way out.
+  it('does not republish the same entry twice when strain names are off', () => {
+    const out = feed.buildPayload(t.db, { ...CFG, strain: false }, NOW);
+    const sameDay = out.planned.filter((e) => e.expectedFrom === daysFromNow(6));
+    assert.equal(sameDay.length, 1, 'Blue and Pink are one entry once the strain is dropped');
+    assert.equal('strain' in sameDay[0], false);
+  });
+});
+
 // ── Due dates as the application really stores them ──────────────────────────
 //
 // Found in production on the first real run: "Last attempt failed — Invalid

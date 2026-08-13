@@ -284,30 +284,47 @@ function buildPayload(database, cfg, now) {
     // read yield NULL and drop out instead of throwing, and `BETWEEN` on a
     // plain date stops cutting the last day short — a timestamp on the final
     // day sorts after the bare date and was silently excluded.
+    // GROUP BY, because one entry per batch is a different statement than one
+    // entry per offer. Four blocks of the same species due the same day used to
+    // produce four identical entries, so anyone reading the feed could count
+    // batches — and this feed deliberately reports no amounts at all. It is a
+    // cadence signal rather than a volume one (batch sizes differ severalfold),
+    // but it is still a number nobody meant to publish, and on the receiving
+    // end it lists the same offer four times.
+    //
+    // `harvested` already draws this line: one entry per species, on the
+    // grounds that splitting by batch would "split one offer in two".
     const rows = database
       .prepare(
-        `SELECT b.batch_id, b.species, b.strain, date(b.due) AS due_date
+        `SELECT b.species, b.strain, date(b.due) AS due_date
            FROM batches b
           WHERE b.batch_type = 'block'
             AND date(b.due) BETWEEN ? AND ?
             AND b.species IS NOT NULL AND b.species <> ''
             AND EXISTS (SELECT 1 FROM bags g WHERE g.batch_id = b.batch_id)
             AND NOT EXISTS (SELECT 1 FROM harvests h WHERE h.batch = b.batch_id)
+          GROUP BY b.species, b.strain, date(b.due)
           ORDER BY date(b.due), b.species`
       )
       .all(today, until);
+    const seen = new Set();
     for (const r of rows) {
       // Belt and braces: date() already filtered the unreadable ones, and a
       // single bad row must never cost the whole feed.
       const tag = new Date(r.due_date + 'T00:00:00Z');
       if (Number.isNaN(tag.getTime())) continue;
-      planned.push(
-        trim({
-          species: r.species,
-          strain: cfg.strain ? r.strain || null : null,
-          expectedFrom: shiftDate(tag, cfg.leadDays)
-        })
-      );
+      const entry = trim({
+        species: r.species,
+        strain: cfg.strain ? r.strain || null : null,
+        expectedFrom: shiftDate(tag, cfg.leadDays)
+      });
+      // The SQL grouping is not enough on its own: with strain names switched
+      // off, two strains of one species collapse into the same entry only after
+      // the name is dropped here. Dedupe on what actually goes out.
+      const key = JSON.stringify(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      planned.push(entry);
     }
   }
 
