@@ -12066,13 +12066,19 @@ function renderNbGrainBanner() {
 }
 
 // ─── CULTURES ────────────────────────────────────────────────
+// The class comes from a lookup, so it is safe by construction — the label does
+// not. Both of these render a value straight from the cultures table, and both
+// go into the page via innerHTML, so an unescaped label is stored XSS that
+// fires on render with no click involved. Escaping here rather than at the
+// call sites covers all of them at once, and covers rows already in the
+// database, which validating new writes cannot.
 const ctBadge = (t) => {
   const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g' };
-  return `<span class="badge ${m[t] || ''}">${t}</span>`;
+  return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
 const csBadge = (s) => {
   const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', contam: 'badge-contam' };
-  return `<span class="badge ${m[s] || ''}">${s}</span>`;
+  return `<span class="badge ${m[s] || ''}">${esc(s)}</span>`;
 };
 // Culture strain display: show only explicit strainText,
 // fall back to legacy free-text strain field for historical rows without strain_id.

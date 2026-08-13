@@ -591,6 +591,11 @@ function validateTimeOfDay(value, fieldName) {
   return null;
 }
 // Validate enum membership
+// Culture types and statuses, as the client renders them into badges. The five
+// types mirror VALID_CULTURE_PARENT_TYPES in db.js — GS included, which the MCP
+// tool's shorter enum leaves out.
+const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
@@ -6582,6 +6587,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
           if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
             jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
+            return;
+          }
+          // `id` was pinned here from the start; `type` and `status` never were,
+          // and both are rendered as badges in the client. The MCP path has
+          // enforced these enums all along — this is its forgotten twin.
+          // Belt to the client's braces: the escaping in ctBadge/csBadge is what
+          // actually stops the injection, this keeps the data clean.
+          //
+          // Five types, not the MCP tool's four: GS is a real type in
+          // VALID_CULTURE_PARENT_TYPES, and validating against the shorter list
+          // would start rejecting cultures the lab already has.
+          const ve =
+            validateEnum(c.type, CULTURE_TYPES, 'culture type') ||
+            validateEnum(c.status, CULTURE_STATUSES, 'culture status');
+          if (ve) {
+            jsonErr(res, 400, ve);
             return;
           }
         }
