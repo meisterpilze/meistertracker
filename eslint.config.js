@@ -31,6 +31,12 @@ module.exports = [
         // on every eBay/Etsy/Sendcloud request; both files were outside the lint
         // scope until now, so the missing declaration never surfaced.
         AbortSignal: 'readonly',
+        // The fetch response types. The harvest feed reply tests build real
+        // Response objects rather than hand-rolled stand-ins, because the size
+        // cap reads an actual body stream — a plain object with a `text()` on it
+        // would exercise a fallback path instead of the one that runs.
+        Response: 'readonly',
+        Headers: 'readonly',
       }
     },
     rules: {

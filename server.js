@@ -1260,8 +1260,13 @@ startDuckdnsUpdater();
 // Off unless HARVEST_WEBHOOK_URL is set. Pushes a signed summary of recorded
 // harvests and upcoming batches to a URL you choose, so a shop, a listing page
 // or a chat bot can answer "what do you have today?" without this machine being
-// reachable from the internet. Nothing comes back in — see harvest-feed.js for
-// the payload and the reasoning.
+// reachable from the internet.
+//
+// The reply to that push may carry pickups back — collection slots the receiver
+// took bookings for. Still no inbound route: no listener, no port, no way to
+// reach this machine unbidden. What changed is that data from the far end now
+// reaches the database, which makes the reply a trust boundary. See
+// harvest-feed.js for the payload, the validation, and the reasoning.
 //
 // Skipped in worktree mode for the same reason as DuckDNS: a second copy of the
 // server usually inherits the same .env, and two of them posting different
@@ -8431,10 +8436,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       jsonErr(res, 400, 'The harvest feed is off — enable and save it first');
       return;
     }
+    // deliver(), not sendOnce(): a test that skipped storing and confirming
+    // would exercise a path the timer never takes, and the half it skipped is
+    // exactly the half people need to see working. Pressing this puts any
+    // pickups the receiver is holding straight onto the Pickups page.
     harvestFeed
-      .sendOnce(database, cfg)
+      .deliver({ database, cfg, dbApi: db, log })
       .then((r) => {
-        db.updateHarvestFeedStatus(database, { at: new Date().toISOString(), ok: r.ok, error: r.error });
         log('info', 'Harvest feed test', { actor: req.authUser.username, ok: r.ok });
         jsonOk(res, {
           ok: r.ok,
@@ -8445,7 +8453,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           harvested: r.payload.harvested.length,
           planned: r.payload.planned.length,
           released: r.payload.released ? r.payload.released.length : null,
-          payload: r.payload
+          payload: r.payload,
+          // And what came back. Without this, a receiver that returns pickups
+          // in a shape this end rejects is indistinguishable from one that
+          // returns none — both look like a working feed and an empty page,
+          // and there is nowhere else to see the difference.
+          //
+          // `reply.error` is the useful half: "reply is text/html, not JSON"
+          // names a misconfigured proxy in five words. `dropped` names the
+          // other failure, where the pickups arrived and did not survive
+          // validation.
+          reply: r.reply || null
         });
       })
       .catch((err) => safeErr(res, err));
@@ -8531,6 +8549,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         else safeErr(res, err);
       }
     });
+    return;
+  }
+
+  // -- Pickups --
+  //
+  // What the feed receiver reported back: who is collecting what, when and
+  // where. Read-only on purpose — the receiver owns this list, it is the side
+  // that took the booking, and a row edited here would be overwritten by the
+  // next reply that repeats it.
+  //
+  // Any signed-in user, not admin-only. This is work to be prepared for, so the
+  // person packing the crate needs it as much as the owner does, and the
+  // protocol carries no name, address or contact of any kind.
+  if (req.method === 'GET' && req.url.split('?')[0] === '/api/pickups') {
+    try {
+      jsonOk(res, { items: db.listPickups(database), counts: db.countPickups(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
 
