@@ -334,7 +334,9 @@ Full setup walkthrough plus troubleshooting in **DEPLOYMENT.md → Section 10**.
 
 [`harvest-feed.js`](harvest-feed.js) posts a small, signed summary of your harvest situation to a URL you configure. The problem it solves: the numbers already live in this database, but the systems that need them — your own website, a CSA or box scheme, a co-op listing, a chat bot answering *"what do you have today?"* — live elsewhere. Copying them by hand goes stale within a day, and pointing those systems at the lab machine means exposing it to the internet.
 
-**One direction only.** This module opens connections; it never accepts any. No inbound endpoint is added, no port needs opening, and a changing home IP does not matter. If the lab machine is off, the receiver keeps the last payload — its consumers see older numbers rather than an outage.
+**This machine opens the connection; nothing can reach it unbidden.** No inbound endpoint is added, no port needs opening, and a changing home IP does not matter. If the lab machine is off, the receiver keeps the last payload — its consumers see older numbers rather than an outage.
+
+What the receiver *can* do is answer. The reply to that POST may carry pickups back (see **Pickups** below), which means data from the far end does reach this database — over a socket this side opened and is still holding, but reaching it all the same. That makes the reply body a trust boundary, and it is treated as one.
 
 ```json
 {
@@ -372,6 +374,62 @@ The version bump is the point: a receiver that publishes `harvested` and ignores
 `validUntil` is optional and worth setting. Fresh produce does not keep, and the realistic mistake is not a wrong number but a forgotten one — last week's release quietly selling mushrooms that were eaten days ago. An expired release counts as zero here; a receiver holding an old payload should apply the same rule at serving time, since the lab machine may simply be switched off.
 
 A release outlives its harvest window on purpose. Set two kilos aside on Monday for Saturday's market and by Thursday the harvest has dropped out of `freshDays` while the crate is still standing there. The person who put it there is the better source than the window arithmetic.
+
+#### Pickups: what the receiver may report back
+
+The receiver is the side that took the booking, so it is the side that knows when a customer said they would collect. It reports that in the reply to a push this end already makes — no open port, no certificate, no route into the lab:
+
+```json
+{
+  "ok": true,
+  "pickups": [
+    {
+      "id": "p_2026-08-15-0900_1042",
+      "order": "#1042",
+      "slot": "2026-08-15-0900",
+      "slotText": "Sa 15.08., 9–10 Uhr",
+      "place": "Marktstand Erlangen",
+      "from": "2026-08-15T09:00",
+      "to": "2026-08-15T10:00",
+      "zone": "Europe/Berlin",
+      "items": [{ "kind": "Austernpilz", "grams": 2000 }],
+      "overbooked": false
+    }
+  ]
+}
+```
+
+`id` is yours to assign and is the only required field. It is the primary key here, so **repeat every open pickup in every reply until it is confirmed** — storing the same one twice leaves one row. That is the delivery guarantee, and it is the only one either side gets.
+
+#### Withdrawing one again
+
+A customer cancels after the pickup was already stored here. You cannot reach in and delete it — there is no route to the lab machine, which is the whole point — so name the id in the same reply:
+
+```json
+{ "ok": true, "pickupsCancelled": ["p_2026-08-15-0900_1042"] }
+```
+
+A plain list of ids, present only when there are any. The pickup is removed here, and the withdrawal is then confirmed through the same `pickupsDone` list a booking uses — so **repeat a withdrawal in every reply until you see its id come back**, exactly as with a booking.
+
+Send it whether or not you think the booking arrived. An id this end never held costs nothing: it removes nothing, is not an error, and is still confirmed so you can stop repeating it. That is deliberate, because you cannot tell whether your earlier reply got through.
+
+Two orderings are fixed, so you can rely on them: if one reply names the same id in both lists, the **withdrawal wins**; and a booking in a *later* reply **reopens** an id that was withdrawn earlier, because the newest statement about an id is the one that holds.
+
+#### Confirmation
+
+Both kinds come back on the next push, in a field that appears only when there is something to confirm:
+
+```json
+{ "version": 1, "generatedAt": "…", "harvested": [], "planned": [], "pickupsDone": ["p_2026-08-15-0900_1042"] }
+```
+
+An id in `pickupsDone` has been stored — or removed — here durably, and only a push that actually succeeded sets that flag, so a lost request costs a repeat and never a pickup. Once you see an id there you can stop sending it. If you keep sending it, it stays confirmed on every round; nothing breaks, it is just noise.
+
+`from` and `to` are **local wall-clock at the pickup place** — no offset, no `Z` — which is why `zone` travels beside them. Meistertracker stores and displays them exactly as they arrive and never converts them; a value carrying its own offset is rejected rather than reinterpreted. "9–10" is what the customer was told, and it should still say that on a screen in another timezone.
+
+Everything else is optional and bounded. The reply body must be `application/json` and at most 64 KB, at most 200 pickups and 200 withdrawals, at most 50 items per pickup; strings are truncated; unknown fields are dropped; a pickup or withdrawal without a usable `id` is discarded. The two lists are read independently, so a garbled `pickupsCancelled` never costs you the bookings beside it, or the other way round. A reply that is malformed, oversized or not JSON at all is logged and ignored — **it never turns a delivered push into a failed one**. The numbers are out; the reply is a second, separate question.
+
+They appear under **Pickups** in the sidebar and at `GET /api/pickups`. The list is read-only: the receiver owns it, and an edit here would be overwritten by the next reply that repeats the same id.
 
 Every request is signed: `X-Meistertracker-Signature: sha256=<HMAC-SHA256 of "<timestamp>.<body>">` plus `X-Meistertracker-Timestamp`. Signing the timestamp together with the body is what makes a captured request useless later — reject anything outside your tolerance window and it cannot be replayed. The secret is not optional; the feed refuses to start without one, because a forged *"we have 40 kg"* is worse than no feed at all.
 

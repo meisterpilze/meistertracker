@@ -31,6 +31,21 @@ window.LANG['de'] = {
   'nav.ordersDemand': 'Was muss ich machen',
   'nav.ordersMapping': 'Produkte',
   'nav.ordersCustomers': 'Kunden',
+  'nav.pickups': 'Abholungen',
+  // Pickups — reported back by the harvest feed receiver
+  'pickups.title': 'Abholungen',
+  'pickups.desc':
+    'Abholtermine, die der Empfänger des Ernte-Feeds zurückgemeldet hat. Zeiten sind Ortszeit des jeweiligen Abholorts. Diese Liste wird hier nicht bearbeitet.',
+  'pickups.th.when': 'Wann',
+  'pickups.th.place': 'Ort',
+  'pickups.th.order': 'Bestellung',
+  'pickups.th.items': 'Positionen',
+  'pickups.th.state': 'Stand',
+  'pickups.count': '{n} Abholungen',
+  'pickups.none': 'Keine Abholungen gemeldet',
+  'pickups.overbooked': 'Überbucht',
+  'pickups.confirmed': 'Bestätigt',
+  'pickups.pending': 'Noch nicht bestätigt',
   // Order hub (Phase 0)
   'orders.inbox': 'Bestellungen',
   'orders.tomake': 'Was muss ich machen',
@@ -764,7 +779,7 @@ window.LANG['de'] = {
   // DuckDNS / Let's Encrypt / Server
   'harvestFeed.title': 'Ernte-Feed',
   'harvestFeed.desc':
-    'Schickt eine Zusammenfassung des Erntestands und der kommenden Chargen an eine Adresse deiner Wahl — eigene Website, Abo-Kiste, Chat-Bot. Nur in eine Richtung: Dieser Server sendet, es kommt nichts herein. Keine Chargen- oder Beutelnummern, keine Kundendaten, kein Scan-Verlauf.',
+    'Schickt eine Zusammenfassung des Erntestands und der kommenden Chargen an eine Adresse deiner Wahl — eigene Website, Abo-Kiste, Chat-Bot. Dieser Server baut die Verbindung auf; erreichbar wird er dadurch nicht. In der Antwort darf der Empfänger Abholtermine zurückmelden, die unter „Abholungen" landen. Keine Chargen- oder Beutelnummern, keine Kundendaten, kein Scan-Verlauf.',
   'harvestFeed.enable': 'Ernte-Feed aktivieren',
   'harvestFeed.url': 'Adresse des Empfängers',
   'harvestFeed.urlHint':

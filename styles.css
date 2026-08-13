@@ -1387,6 +1387,13 @@ body.has-worktree-banner .mobile-topbar {
   background: var(--c-red-light);
   color: var(--c-red-dark);
 }
+/* Overbooked pickup slot: the same red as a cancellation, under its own name.
+   Borrowing .oh-st-cancelled would put "cancelled" in the markup for something
+   that is the opposite of cancelled — more orders than the slot holds. */
+.oh-st-over {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
 .oh-fchip {
   font-size: 12px;
   font-weight: 600;

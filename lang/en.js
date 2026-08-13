@@ -31,6 +31,21 @@ window.LANG['en'] = {
   'nav.ordersDemand': 'To make',
   'nav.ordersMapping': 'Products',
   'nav.ordersCustomers': 'Customers',
+  'nav.pickups': 'Pickups',
+  // Pickups — reported back by the harvest feed receiver
+  'pickups.title': 'Pickups',
+  'pickups.desc':
+    'Collection slots the harvest feed receiver reported back. Times are local to each pickup place. This list is not edited here.',
+  'pickups.th.when': 'When',
+  'pickups.th.place': 'Place',
+  'pickups.th.order': 'Order',
+  'pickups.th.items': 'Items',
+  'pickups.th.state': 'State',
+  'pickups.count': '{n} pickups',
+  'pickups.none': 'No pickups reported',
+  'pickups.overbooked': 'Overbooked',
+  'pickups.confirmed': 'Confirmed',
+  'pickups.pending': 'Not yet confirmed',
   // Order hub (Phase 0)
   'orders.inbox': 'Orders',
   'orders.tomake': 'What to make',
@@ -761,7 +776,7 @@ window.LANG['en'] = {
   // DuckDNS / Let's Encrypt / Server
   'harvestFeed.title': 'Harvest feed',
   'harvestFeed.desc':
-    'Push a summary of what you have harvested and what is coming to a URL you choose — your own website, a box scheme, a chat bot. One direction only: this server sends, nothing reaches in. No batch or bag ids, no customers, no scan history.',
+    'Push a summary of what you have harvested and what is coming to a URL you choose — your own website, a box scheme, a chat bot. This server opens the connection; nothing can reach it unbidden. In its reply the receiver may report pickups back, which show up under Pickups. No batch or bag ids, no customers, no scan history.',
   'harvestFeed.enable': 'Enable harvest feed',
   'harvestFeed.url': 'Receiver URL',
   'harvestFeed.urlHint':

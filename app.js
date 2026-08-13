@@ -949,7 +949,8 @@ const PAGES = {
   cal: 'n-cal',
   settings: 'n-settings',
   strains: 'n-strains',
-  orders: 'n-orders-inbox'
+  orders: 'n-orders-inbox',
+  pickups: 'n-pickups'
 };
 function go(page, btnId) {
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
@@ -993,6 +994,7 @@ function go(page, btnId) {
   if (page === 'settings') renderLog();
   if (page === 'strains') renderStrains();
   if (page === 'orders') renderOrders();
+  if (page === 'pickups') renderPickups();
   updateTodoBadge();
   sbCloseMobile();
 }
@@ -1078,6 +1080,9 @@ function refresh() {
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
   if (id === 'orders') _refreshOrdersActive();
+  // Pickups arrive on the feed's own schedule, not on any action taken here, so
+  // this page has no other way to notice that something changed.
+  if (id === 'pickups') renderPickups();
   updateTodoBadge();
 }
 
@@ -1315,6 +1320,82 @@ function renderOrdersCustomers() {
       body.innerHTML = _ohEmpty(cols, t('common.error'));
     });
 }
+// ═══ PICKUPS ═══════════════════════════════════════════════════════════════
+// Collection slots the harvest-feed receiver reported back in its reply. Every
+// value on this page came from outside this machine, so every value goes
+// through esc() — including the ones that "obviously" cannot contain markup,
+// because the reason they cannot is a validation rule in another file that
+// somebody may relax later.
+//
+// Read-only by design. The receiver took the booking and repeats each open
+// pickup until this end confirms it; an edit here would be overwritten by the
+// next reply that carried the same id.
+
+/**
+ * The window, as the customer was told it.
+ *
+ * slotText is the receiver's own wording and wins whenever it is there — it
+ * already reads the way the confirmation email did. The fallback assembles
+ * from/to, which are LOCAL wall-clock at the pickup place: printed as they
+ * arrived, never parsed into a Date. Feeding them to the browser's clock would
+ * reinterpret them in whoever-is-looking's timezone and silently move a 9 a.m.
+ * pickup by an hour or two.
+ */
+function _pickupWhen(p) {
+  if (p.slotText) return esc(p.slotText);
+  if (!p.from) return '—';
+  const day = p.from.slice(0, 10);
+  const fromTime = p.from.slice(11, 16);
+  const toTime = p.to ? p.to.slice(11, 16) : '';
+  return esc(day + ' ' + fromTime + (toTime ? '–' + toTime : ''));
+}
+
+function renderPickups() {
+  const body = $('pickups-body');
+  if (!body) return;
+  const count = $('pickups-count');
+  body.innerHTML = _ohEmpty(5, t('common.loading'));
+  apiGet('/api/pickups')
+    .then((d) => {
+      const rows = d.items || [];
+      if (count) count.textContent = rows.length ? t('pickups.count', { n: rows.length }) : '';
+      if (!rows.length) {
+        body.innerHTML = _ohEmpty(5, t('pickups.none'));
+        return;
+      }
+      body.innerHTML = rows
+        .map((p) => {
+          const items = (p.items || [])
+            .map((it) => esc(it.kind) + ' ' + Math.round(it.grams) + ' g')
+            .join('<br>');
+          // The zone belongs next to the time or the time means nothing. A
+          // pickup in another country is exactly when the label earns its width.
+          const zone = p.zone ? `<div style="font-size:11px;color:var(--c-text-muted)">${esc(p.zone)}</div>` : '';
+          // Two different states, and only one of them is a problem. Overbooked
+          // is the receiver saying it sold more of that slot than it should
+          // have; unconfirmed just means the next push has not gone out yet.
+          const state = p.overbooked
+            ? `<span class="oh-st oh-st-over">${esc(t('pickups.overbooked'))}</span>`
+            : p.acked
+              ? `<span class="oh-st oh-st-ready">${esc(t('pickups.confirmed'))}</span>`
+              : `<span style="font-size:11px;color:var(--c-text-muted)">${esc(t('pickups.pending'))}</span>`;
+          return (
+            '<tr>' +
+            `<td><strong>${_pickupWhen(p)}</strong>${zone}</td>` +
+            `<td>${esc(p.place || '—')}</td>` +
+            `<td>${esc(p.order || '—')}</td>` +
+            `<td style="font-size:12px">${items || '—'}</td>` +
+            `<td>${state}</td>` +
+            '</tr>'
+          );
+        })
+        .join('');
+    })
+    .catch(() => {
+      body.innerHTML = _ohEmpty(5, t('common.error'));
+    });
+}
+
 // Carry out a marketplace account-closure request. This is the authenticated
 // counterpart to the eBay deletion endpoint, which records such requests and
 // notifies admins but never erases on its own — that endpoint is unauthenticated
@@ -18938,6 +19019,9 @@ function initEventListeners() {
   $('n-strains').addEventListener('click', () => {
     go('strains', 'n-strains');
     renderStrains();
+  });
+  $('n-pickups').addEventListener('click', () => {
+    go('pickups', 'n-pickups');
   });
   // "Verkauf" group: four top-level entries that open the orders page at the
   // matching view (the sub-tab bar is hidden; openStab still fires the render).
