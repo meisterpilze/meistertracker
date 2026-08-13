@@ -134,7 +134,17 @@ function checkUrl(url, label) {
   } catch {
     throw new Error(label + ' is not a URL: ' + url);
   }
-  const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+  // Credentials in the URL would be copied into the config row and, from there,
+  // into every "Harvest feed started" log line. The secret is deliberately kept
+  // out of the logs; a password smuggled in via the URL would walk straight
+  // back in. The receiver authenticates the HMAC, so it never needs these.
+  if (parsed.username || parsed.password)
+    throw new Error(label + ' must not carry credentials in the URL — the feed authenticates with the shared secret');
+  // URL.hostname keeps the brackets on an IPv6 literal ('[::1]', not '::1'), so
+  // comparing against the bare form never matched and http://[::1]:PORT/ was
+  // rejected as "not https" — the one loopback address this is meant to allow.
+  const host = parsed.hostname;
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
     throw new Error(label + ' must be https (http is allowed for localhost only): ' + url);
 }
@@ -292,30 +302,47 @@ function buildPayload(database, cfg, now) {
     // read yield NULL and drop out instead of throwing, and `BETWEEN` on a
     // plain date stops cutting the last day short — a timestamp on the final
     // day sorts after the bare date and was silently excluded.
+    // GROUP BY, because one entry per batch is a different statement than one
+    // entry per offer. Four blocks of the same species due the same day used to
+    // produce four identical entries, so anyone reading the feed could count
+    // batches — and this feed deliberately reports no amounts at all. It is a
+    // cadence signal rather than a volume one (batch sizes differ severalfold),
+    // but it is still a number nobody meant to publish, and on the receiving
+    // end it lists the same offer four times.
+    //
+    // `harvested` already draws this line: one entry per species, on the
+    // grounds that splitting by batch would "split one offer in two".
     const rows = database
       .prepare(
-        `SELECT b.batch_id, b.species, b.strain, date(b.due) AS due_date
+        `SELECT b.species, b.strain, date(b.due) AS due_date
            FROM batches b
           WHERE b.batch_type = 'block'
             AND date(b.due) BETWEEN ? AND ?
             AND b.species IS NOT NULL AND b.species <> ''
             AND EXISTS (SELECT 1 FROM bags g WHERE g.batch_id = b.batch_id)
             AND NOT EXISTS (SELECT 1 FROM harvests h WHERE h.batch = b.batch_id)
+          GROUP BY b.species, b.strain, date(b.due)
           ORDER BY date(b.due), b.species`
       )
       .all(today, until);
+    const seen = new Set();
     for (const r of rows) {
       // Belt and braces: date() already filtered the unreadable ones, and a
       // single bad row must never cost the whole feed.
       const tag = new Date(r.due_date + 'T00:00:00Z');
       if (Number.isNaN(tag.getTime())) continue;
-      planned.push(
-        trim({
-          species: r.species,
-          strain: cfg.strain ? r.strain || null : null,
-          expectedFrom: shiftDate(tag, cfg.leadDays)
-        })
-      );
+      const entry = trim({
+        species: r.species,
+        strain: cfg.strain ? r.strain || null : null,
+        expectedFrom: shiftDate(tag, cfg.leadDays)
+      });
+      // The SQL grouping is not enough on its own: with strain names switched
+      // off, two strains of one species collapse into the same entry only after
+      // the name is dropped here. Dedupe on what actually goes out.
+      const key = JSON.stringify(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      planned.push(entry);
     }
   }
 
@@ -659,6 +686,15 @@ async function post(cfg, payload, deps) {
     try {
       const res = await doFetch(cfg.url, {
         method: 'POST',
+        // The receiver does not get to choose where the report actually lands.
+        // Without this, fetch defaults to `follow`: a 308 from the receiver
+        // re-sends the POST — body and X-Meistertracker-Signature intact, since
+        // only Authorization/Cookie are stripped on an origin change — to
+        // whatever host Location names, plain-HTTP hosts on the LAN included.
+        // checkUrl only ever runs when the config is saved, so a redirect
+        // target is a target nobody vetted. "Push-only, and to exactly the
+        // configured address" is the promise; following a hop breaks it.
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'meistertracker-harvest-feed/' + VERSION,
@@ -679,6 +715,17 @@ async function post(cfg, payload, deps) {
           out.reply = { pickups: [], dropped: 0, error: e.message };
         }
         return out;
+      }
+      // With redirect:'manual' a 3xx arrives here instead of being chased.
+      // Retrying cannot help — the receiver is pointing somewhere else and will
+      // keep doing so — and each retry is another copy of the payload aimed at
+      // an unvetted URL. Stop, and say what to fix.
+      if (res.status >= 300 && res.status < 400) {
+        return {
+          ok: false,
+          error: 'HTTP ' + res.status + ' redirect refused — set the feed URL to the receiver’s final address',
+          attempts: attempt
+        };
       }
       last = 'HTTP ' + res.status;
       // 4xx means the receiver understood us and said no — a bad secret, a
@@ -865,11 +912,33 @@ function stop() {
   timer = null;
 }
 
+/**
+ * May this harvest carry the release it claims? `null` if it may, a reason if not.
+ *
+ * Pure, and that is the point: the two guards here are the ones the field exists
+ * to protect — a slipped comma, and a release with no species to key it to — and
+ * this repo has no HTTP-level harness that could pin them inside a route handler.
+ * Inverting either comparison would otherwise stay green.
+ *
+ * `fatal` says which side of the harvest the answer falls on, because the two are
+ * not the same kind of wrong. More released than weighed is a bad request and the
+ * harvest never happened. A missing species is reported *next to* a stored
+ * harvest: a weighed harvest is a fact either way, and losing it to a quibble
+ * about the release would be the worse trade.
+ */
+function releaseProblem({ release, grams, species }) {
+  if (!(Number(release) > 0)) return null;
+  if (Number(release) > Number(grams)) return { reason: 'release must be <= grams', fatal: true };
+  if (!species) return { reason: 'species required to release', fatal: false };
+  return null;
+}
+
 module.exports = {
   readConfig,
   storedConfig,
   resolveConfig,
   buildPayload,
+  releaseProblem,
   sign,
   post,
   sendOnce,

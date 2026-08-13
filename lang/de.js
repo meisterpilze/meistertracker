@@ -355,6 +355,13 @@ window.LANG['de'] = {
   'harvest.cancel': 'Abbrechen',
   'harvest.enterWeight': 'Bitte ein Gewicht in Gramm eingeben',
   'harvest.cancelled': 'Ernte abgebrochen.',
+  'harvest.release': 'Davon freigeben',
+  'harvest.releaseHint':
+    'Menge, die für den Verkauf zurückgelegt wird — sie geht in den Ernte-Feed. Leer lassen, wenn nichts davon verkauft wird.',
+  'harvest.releasePlaceholder': 'Gramm',
+  'harvest.releaseTooHigh': 'Es kann nicht mehr freigegeben werden als geerntet wurde',
+  'harvest.releaseFailed': '{bag}: Ernte gespeichert, Freigabe nicht',
+  'harvest.releasedTotal': '{bag}: {kg} kg insgesamt freigegeben',
   // Dashboard
   'cat.create': 'Ansetzen',
   'cat.move': 'Umziehen',

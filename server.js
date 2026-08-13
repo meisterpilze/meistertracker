@@ -124,6 +124,30 @@ function getClientIP(req) {
   return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
 }
 
+/**
+ * May this caller run first-time setup without the setup token?
+ *
+ * The loopback shortcut exists for the operator standing at the machine. Behind
+ * a reverse proxy it stops meaning that: `proxy_pass http://localhost:3000`
+ * makes the TCP peer 127.0.0.1 for *every* request, so the shortcut would wave
+ * the entire network through to claim the first admin account on an
+ * uninitialised install. Measured against a real proxy before this was pinned:
+ * setup succeeded from a LAN address, and set TRUST_PROXY=true — exactly what
+ * DEPLOYMENT.md tells a Path B operator to do — and it still succeeded.
+ *
+ * getClientIP() is deliberately NOT used here. It trusts the first
+ * X-Forwarded-For entry, and nginx's $proxy_add_x_forwarded_for appends the
+ * real address after the client's, so the first entry is attacker-supplied:
+ * sending `X-Forwarded-For: 127.0.0.1` would restore the hole. When a proxy is
+ * in front, there is no way to recognise the operator from the socket, so the
+ * token — printed to the log on first start — becomes the only way in.
+ */
+function setupFromLoopback(remoteAddress, trustProxy) {
+  if (trustProxy) return false;
+  const ip = remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 // I-17: serialize backup restores. Two admins kicking off concurrent
@@ -591,6 +615,11 @@ function validateTimeOfDay(value, fieldName) {
   return null;
 }
 // Validate enum membership
+// Culture types and statuses, as the client renders them into badges. The five
+// types mirror VALID_CULTURE_PARENT_TYPES in db.js — GS included, which the MCP
+// tool's shorter enum leaves out.
+const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
@@ -2145,7 +2174,10 @@ function checkCaldavAuth(req) {
 
 // ── CalDAV category calendars with colors matching web calendar ──
 const CALDAV_CATEGORY_CALS = {
-  meisterpilze: { displayName: 'Meisterpilze (Aufgaben)', color: '#16a34a' },
+  // The key is the on-disk directory and URL segment and cannot be renamed
+  // without breaking every existing subscription; the display name is what the
+  // calendar client actually shows, so it carries no operator name.
+  meisterpilze: { displayName: 'Aufgaben (geteilt)', color: '#16a34a' },
   faelligkeiten: { displayName: 'Fälligkeiten', color: '#ef4444' },
   aufgaben: { displayName: 'Aufgaben', color: '#3b82f6' },
   'eigene-termine': { displayName: 'Eigene Termine', color: '#22c55e' },
@@ -2943,7 +2975,7 @@ function _doAutoSyncAllCaldav(data) {
         }
       }
     } catch (e) {
-      log('warn', 'CalDAV: failed to clean migrated events from meisterpilze', { error: e.message });
+      log('warn', 'CalDAV: failed to clean migrated events from the shared calendar', { error: e.message });
     }
     // Clean orphaned VTODOs in personal calendars
     const categoryCals = new Set(Object.keys(CALDAV_CATEGORY_CALS));
@@ -3248,7 +3280,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
         <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
-        <d:displayname>Meisterpilze</d:displayname>
+        <d:displayname>Meistertracker</d:displayname>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -3979,7 +4011,7 @@ function handleGet(parts, req, res) {
   // GET on a calendar collection — return empty (clients use PROPFIND/REPORT)
   if (parts.length <= 2) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Meisterpilze CalDAV Server');
+    res.end('Meistertracker CalDAV Server');
     return;
   }
 
@@ -4918,7 +4950,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     //   2. The request carries the in-memory setup token printed to logs
     //      on first start (operator who can read PM2/journald).
     const ip = req.socket.remoteAddress || '';
-    const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const isLoopback = setupFromLoopback(ip, TRUST_PROXY);
     const presentedToken = req.headers['x-setup-token'] || '';
     let tokenOk = false;
     if (SETUP_TOKEN && typeof presentedToken === 'string' && presentedToken.length === SETUP_TOKEN.length) {
@@ -5152,7 +5184,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // PATCH /api/users/:id — admin sets per-user capabilities (currently can_ship)
+  // PATCH /api/users/:id — admin sets per-user capabilities (can_ship, can_release)
   if (url.match(/^\/api\/users\/\d+$/) && req.method === 'PATCH') {
     if (requireAdmin(req, res)) return;
     const userId = parseInt(url.split('/').pop(), 10);
@@ -5168,6 +5200,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             actor: req.authUser.username,
             userId,
             canShip: !!data.canShip
+          });
+        }
+        if (data && data.canRelease !== undefined) {
+          db.setUserCanRelease(database, userId, !!data.canRelease);
+          // Logged for the same reason the shipping grant is: this one decides who
+          // may change a number the public sees.
+          log('info', 'User release permission updated', {
+            actor: req.authUser.username,
+            userId,
+            canRelease: !!data.canRelease
           });
         }
         jsonOk(res, { ok: true });
@@ -5665,6 +5707,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Expose label dimensions so the client's ZPL builder can adapt
     // without a separate round-trip. Static for the process lifetime.
     payload.labelDims = { widthDots: LABEL_WIDTH_DOTS, heightDots: LABEL_HEIGHT_DOTS };
+    // One boolean, so the harvest form knows whether to offer "release for sale".
+    // It rides along here rather than on its own endpoint because the form opens
+    // from a barcode scan — a request at that moment costs the very second the
+    // scan is meant to save. Toggling the mode bumps data_version, so the ETag
+    // above changes and a cached client does not keep the stale answer.
+    //
+    // ⚠️ getHarvestReleaseMode and not getHarvestFeedCfg: the latter returns the
+    // feed's HMAC secret in the same object, and this payload goes to every
+    // authenticated client every 30 seconds. Reading the one column means a
+    // careless spread here cannot publish the secret.
+    //
+    // The permission is part of the answer, not a separate one. A worker without
+    // it would otherwise get a field that fails on every save — the same "input
+    // that does nothing" the field was designed to avoid. This is presentation
+    // only; the check that matters runs in addHarvestRelease.
+    try {
+      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) && db.mayRelease(req.authUser) };
+    } catch {
+      /* config table absent on an old database — the form simply stays hidden */
+    }
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
@@ -6541,14 +6603,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { grams: 'number', flush: 'number' });
+      const vt = validateTypes(data, { grams: 'number', flush: 'number', release: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
       }
-      const vrng = validateRanges(data, { grams: { min: 0, max: 1000000 }, flush: { min: 1, max: 100 } });
+      const vrng = validateRanges(data, {
+        grams: { min: 0, max: 1000000 },
+        flush: { min: 1, max: 100 },
+        release: { min: 0, max: 1000000 }
+      });
       if (vrng) {
         jsonErr(res, 400, vrng);
+        return;
+      }
+      // You cannot set aside more than you just weighed. The crate can hold more
+      // than this one bag, but the field says "of this, release" — so a number
+      // above the harvest is a slipped comma, not an intention, and it would
+      // publish produce nobody has.
+      //
+      // The decision itself lives in harvest-feed.js so a test can reach it; only
+      // the choice of status code belongs to the route.
+      const relProblem = harvestFeed.releaseProblem(data);
+      if (relProblem && relProblem.fatal) {
+        jsonErr(res, 400, relProblem.reason);
         return;
       }
       const vd = validateDate(data.time, 'time');
@@ -6558,8 +6636,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const id = db.insertHarvest(database, data);
+        // The release is a second, independent write, and it must not be able to
+        // lose the harvest. A harvest that was weighed is a fact; a release is a
+        // decision about it. So the insert happens first and its own errors
+        // travel normally, while a failing release is reported alongside the id
+        // rather than in place of it.
+        let released = null;
+        let releaseError = null;
+        if (data.release > 0) {
+          if (relProblem) releaseError = relProblem.reason;
+          else
+            try {
+              // Release mode, the permission check and the freshness window all
+              // come from inside addHarvestRelease now, so every caller gets the
+              // same gates without having to remember any of them.
+              //
+              // `actor` is what closes the hole this route opened: POST /api/harvests
+              // is open to every authenticated user by design — weighing bags is
+              // what the lab does all day — while every other write to
+              // harvest_release sits behind requireAdmin. Passing the session
+              // through means the release obeys that boundary while the harvest
+              // itself stays open.
+              released = db.addHarvestRelease(database, {
+                species: data.species,
+                grams: data.release,
+                actor: req.authUser
+              });
+            } catch (err) {
+              // Same discipline as safeErr(): only a whitelisted message goes to
+              // the client, anything else is logged and generalised. Without the
+              // log an unexpected release failure left no trace at all, which is
+              // the worst case here — the crate is packed and nothing says why the
+              // shop never heard about it.
+              const msg = String((err && err.message) || '');
+              if (db.isSafeError(msg)) releaseError = msg.replace('addHarvestRelease: ', '');
+              else {
+                log('error', 'Harvest release failed', {
+                  error: msg,
+                  stack: err && err.stack,
+                  species: data.species
+                });
+                releaseError = 'release failed — see server log';
+              }
+            }
+        }
         broadcastSSE(res);
-        jsonOk(res, { id });
+        jsonOk(res, { id, released, releaseError });
       } catch (err) {
         safeErr(res, err);
       }
@@ -6584,6 +6706,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
           if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
             jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
+            return;
+          }
+          // `id` was pinned here from the start; `type` and `status` never were,
+          // and both are rendered as badges in the client. The MCP path has
+          // enforced these enums all along — this is its forgotten twin.
+          // Belt to the client's braces: the escaping in ctBadge/csBadge is what
+          // actually stops the injection, this keeps the data clean.
+          //
+          // Five types, not the MCP tool's four: GS is a real type in
+          // VALID_CULTURE_PARENT_TYPES, and validating against the shorter list
+          // would start rejecting cultures the lab already has.
+          const ve =
+            validateEnum(c.type, CULTURE_TYPES, 'culture type') ||
+            validateEnum(c.status, CULTURE_STATUSES, 'culture status');
+          if (ve) {
+            jsonErr(res, 400, ve);
             return;
           }
         }

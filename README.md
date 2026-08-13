@@ -145,6 +145,42 @@ PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the ne
 
 The scan bar works on every tab. Scanners must be in USB Keyboard mode.
 
+## 📍 Where things are — zones, racks, and the scan that records it
+
+Locations are two levels deep. A **zone** is a room or a tent (`SPAWN`, `INC`, `TENT1…3`, `CONTAM` out of the box, renameable in Settings → Zones). A **rack** belongs to a zone and is whatever shelving unit you can point at and name. Both get a numeric barcode automatically, from the same registry that numbers bags and cultures — you never invent a code by hand.
+
+**Scan the rack, not the zone.** A zone answers "which tent", which is rarely the question you have at 7 a.m. with a crate in your arms. The app nudges you: scan a zone that has racks under it and the feedback turns amber and names one of its racks as an example. Zone-level scans still work — for a tent you deliberately do not shelf-sort, that is the right granularity.
+
+### The labels you need already print themselves
+
+Print tab → **Reference barcodes** renders every action, zone and rack as Code 128 or QR (one toggle) on ordinary paper:
+
+- Hang the **action** codes (ADD, MOVE, MOVE_BATCH, REMOVE, HARVEST, CONTAM) at each station.
+- Cut out the **rack** codes and tape one to each rack end, at the height a hand passes.
+- Bag and culture labels come off the Zebra when the batch is created; they are the other half of every scan.
+
+That is the whole hardware requirement for location tracking: paper, tape, and a printer you already own.
+
+### The truth is in the database, and a human puts it there
+
+There is no automatic localization in Meistertracker, and that is a deliberate limit rather than a missing feature. A block's position changes when someone picks it up, so the moment of handling is the only moment at which anything reliable is known — and it is already the moment a hand is on the block. Radio and camera approaches were evaluated for this lab and do not survive the conditions: dense metal racking puts neighbouring racks inside each other's read range, the fruiting rooms run at ~90 % humidity with active fogging, and blocks behind other blocks are invisible to any fixed lens. Commercial systems in this industry that do track single units track them the same way this one does — a scan on contact, against a location hierarchy.
+
+The practical consequence is worth stating plainly: **a move nobody scans did not happen**, as far as every dashboard, rack-occupancy chart and MCP answer is concerned. And for multi-row racks, blocks reachable only by moving other blocks are realistically tracked *per rack*, not per slot.
+
+### Making the scan cheap enough that it always happens
+
+The scan bar is a plain text field with focus, so anything that types is a scanner. That leaves three options, in ascending order of how well they survive a real shift:
+
+| | Good for | Costs you |
+|---|---|---|
+| **Phone/tablet camera** | starting today, occasional corrections | a free hand, decent light, and a second or two of aiming per code |
+| **Corded USB scanner** | a fixed station — packing bench, harvest scale | tethers the workflow to one spot |
+| **Wearable ring / back-of-hand scanner** (Bluetooth HID) | walking the racks, both hands full | a few hundred euros, once |
+
+The wearable is the one that changes the day. It pairs to the phone or tablet as a keyboard, needs no app and no integration work, and reads the same paper labels you already printed — the block code and the rack code, one trigger each, without putting the crate down. When location data drifts in a lab, the cause is almost never that the software could not represent the position; it is that recording it cost more attention than the worker had free.
+
+Where paper labels genuinely stop working — soaked, fogged over, or scuffed past reading in the fruiting rooms — NFC tags on the racks are the next step up, because a tap tolerates wet and dark. Reach for that only once you have watched paper fail, not before.
+
 ## 🏷️ Label Printing (Zebra ZPL · 50×30 mm · 203 dpi)
 
 The server sends ZPL directly to the printer via the Windows print spooler — no browser dialog needed.

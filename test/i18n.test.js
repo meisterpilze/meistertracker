@@ -36,17 +36,46 @@ function loadDictionaries() {
   return global.window.LANG;
 }
 
-// `data-i18n`, `data-i18n-html` and `data-i18n-placeholder` in the markup, plus
-// `t('…')` in the application code — including the `t('…', { n })` form, which an
-// earlier version of this pattern walked straight past, leaving 170 calls
-// unchecked. Keys assembled at runtime (`t('a.' + x)`) stay out of reach of any
-// regex; the dictionary-parity test below is what covers those.
+// Every `data-i18n*` attribute the application actually translates, plus `t('…')`
+// in the code — including the `t('…', { n })` form, which an earlier version of
+// this pattern walked straight past, leaving 170 calls unchecked. Keys assembled
+// at runtime (`t('a.' + x)`) stay out of reach of any regex; the dictionary-parity
+// test below is what covers those.
+//
+// ⚠️ The list of suffixes is not decoration — it has to match applyI18n() in
+// app.js. It read `-html` and `-placeholder` only, while app.js has translated
+// `-title` and `-aria-label` for a long time: 25 keys behind 39 attributes were
+// never checked here. Nothing was actually missing, which is the point — the test
+// could not have told us either way, and a tooltip or a screen-reader label
+// carrying a raw identifier is the exact failure this file exists to catch. It is
+// just harder to notice than a button, so it is *more* worth a test, not less.
+const I18N_ATTRS = ['', '-html', '-placeholder', '-title', '-aria-label'];
+
 function usedKeys() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
-  const fromHtml = [...html.matchAll(/data-i18n(?:-html|-placeholder)?="([^"]+)"/g)].map((m) => m[1]);
+  const attrs = new RegExp('data-i18n(?:' + I18N_ATTRS.filter(Boolean).join('|') + ')?="([^"]+)"', 'g');
+  const fromHtml = [...html.matchAll(attrs)].map((m) => m[1]);
   const fromApp = [...app.matchAll(/\bt\('([^']+)'\s*[,)]/g)].map((m) => m[1]);
   return [...new Set([...fromHtml, ...fromApp])];
+}
+
+/**
+ * The suffixes app.js really translates, read out of its own selectors.
+ *
+ * Without this, the two lists drift the moment someone adds `data-i18n-alt`: the
+ * markup gets translated, the check stays quiet, and we are back where we started
+ * — with a test that reports success over an unchecked attribute.
+ *
+ * ⚠️ Both quote styles and stray whitespace, and the count is asserted by the
+ * caller. A regex that only knew single quotes would return nothing the day
+ * someone wrote `querySelectorAll("[data-i18n-alt]")` — and returning nothing
+ * makes this guard pass, which is the precise blind spot it was written to close.
+ * Finding no selectors at all has to be the loud failure, not the quiet one.
+ */
+function translatedAttrs() {
+  const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+  return [...app.matchAll(/querySelectorAll\(\s*['"`]\[data-i18n(-[a-z-]+)?\]['"`]\s*\)/g)].map((m) => m[1] || '');
 }
 
 // {n}, {sum}, {time} … — a translation that drops one renders the placeholder
@@ -69,6 +98,27 @@ describe('translations', () => {
 
   it('finds keys to check — a silent zero would make this test useless', () => {
     assert.ok(used.length > 1000, 'only found ' + used.length + ' keys, the extraction is probably broken');
+  });
+
+  // The guard on the guard. Every attribute app.js translates has to be one this
+  // file reads, or that attribute is being translated without anyone checking the
+  // keys exist — which is how 25 keys behind `-title` and `-aria-label` went
+  // unverified for as long as they did.
+  it('reads every data-i18n attribute the application translates', () => {
+    const found = translatedAttrs();
+    // Before comparing: an empty or shrunken result is the failure mode that would
+    // otherwise pass silently. If the selectors move, get renamed, or stop matching
+    // this regex, the comparison below has nothing to disagree with.
+    assert.ok(
+      found.length >= I18N_ATTRS.length,
+      'only found ' + found.length + ' data-i18n selectors in app.js, expected at least ' + I18N_ATTRS.length
+    );
+    const missed = found.filter((a) => !I18N_ATTRS.includes(a));
+    assert.deepEqual(
+      missed,
+      [],
+      'app.js translates data-i18n' + missed.join(', data-i18n') + ' — add it to I18N_ATTRS or those keys go unchecked'
+    );
   });
 
   it('translates every key the interface asks for, in every language', () => {

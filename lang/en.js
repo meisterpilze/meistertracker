@@ -355,6 +355,13 @@ window.LANG['en'] = {
   'harvest.cancel': 'Cancel',
   'harvest.enterWeight': 'Enter a weight in grams',
   'harvest.cancelled': 'Harvest cancelled.',
+  'harvest.release': 'Release for sale',
+  'harvest.releaseHint':
+    'How much of this is set aside for sale — it goes out with the harvest feed. Leave empty if none of it is sold.',
+  'harvest.releasePlaceholder': 'grams',
+  'harvest.releaseTooHigh': 'You cannot release more than you harvested',
+  'harvest.releaseFailed': '{bag}: harvest saved, release was not',
+  'harvest.releasedTotal': '{bag}: {kg} kg released in total',
   // Dashboard
   'cat.create': 'Make blocks',
   'cat.move': 'Move',
