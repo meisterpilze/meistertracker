@@ -124,6 +124,30 @@ function getClientIP(req) {
   return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
 }
 
+/**
+ * May this caller run first-time setup without the setup token?
+ *
+ * The loopback shortcut exists for the operator standing at the machine. Behind
+ * a reverse proxy it stops meaning that: `proxy_pass http://localhost:3000`
+ * makes the TCP peer 127.0.0.1 for *every* request, so the shortcut would wave
+ * the entire network through to claim the first admin account on an
+ * uninitialised install. Measured against a real proxy before this was pinned:
+ * setup succeeded from a LAN address, and set TRUST_PROXY=true — exactly what
+ * DEPLOYMENT.md tells a Path B operator to do — and it still succeeded.
+ *
+ * getClientIP() is deliberately NOT used here. It trusts the first
+ * X-Forwarded-For entry, and nginx's $proxy_add_x_forwarded_for appends the
+ * real address after the client's, so the first entry is attacker-supplied:
+ * sending `X-Forwarded-For: 127.0.0.1` would restore the hole. When a proxy is
+ * in front, there is no way to recognise the operator from the socket, so the
+ * token — printed to the log on first start — becomes the only way in.
+ */
+function setupFromLoopback(remoteAddress, trustProxy) {
+  if (trustProxy) return false;
+  const ip = remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 // I-17: serialize backup restores. Two admins kicking off concurrent
@@ -4921,7 +4945,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     //   2. The request carries the in-memory setup token printed to logs
     //      on first start (operator who can read PM2/journald).
     const ip = req.socket.remoteAddress || '';
-    const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const isLoopback = setupFromLoopback(ip, TRUST_PROXY);
     const presentedToken = req.headers['x-setup-token'] || '';
     let tokenOk = false;
     if (SETUP_TOKEN && typeof presentedToken === 'string' && presentedToken.length === SETUP_TOKEN.length) {
