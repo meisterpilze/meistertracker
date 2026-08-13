@@ -124,6 +124,30 @@ function getClientIP(req) {
   return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
 }
 
+/**
+ * May this caller run first-time setup without the setup token?
+ *
+ * The loopback shortcut exists for the operator standing at the machine. Behind
+ * a reverse proxy it stops meaning that: `proxy_pass http://localhost:3000`
+ * makes the TCP peer 127.0.0.1 for *every* request, so the shortcut would wave
+ * the entire network through to claim the first admin account on an
+ * uninitialised install. Measured against a real proxy before this was pinned:
+ * setup succeeded from a LAN address, and set TRUST_PROXY=true — exactly what
+ * DEPLOYMENT.md tells a Path B operator to do — and it still succeeded.
+ *
+ * getClientIP() is deliberately NOT used here. It trusts the first
+ * X-Forwarded-For entry, and nginx's $proxy_add_x_forwarded_for appends the
+ * real address after the client's, so the first entry is attacker-supplied:
+ * sending `X-Forwarded-For: 127.0.0.1` would restore the hole. When a proxy is
+ * in front, there is no way to recognise the operator from the socket, so the
+ * token — printed to the log on first start — becomes the only way in.
+ */
+function setupFromLoopback(remoteAddress, trustProxy) {
+  if (trustProxy) return false;
+  const ip = remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
 let database = db.openDb(DB_FILE);
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 // I-17: serialize backup restores. Two admins kicking off concurrent
@@ -591,6 +615,11 @@ function validateTimeOfDay(value, fieldName) {
   return null;
 }
 // Validate enum membership
+// Culture types and statuses, as the client renders them into badges. The five
+// types mirror VALID_CULTURE_PARENT_TYPES in db.js — GS included, which the MCP
+// tool's shorter enum leaves out.
+const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
@@ -2140,7 +2169,10 @@ function checkCaldavAuth(req) {
 
 // ── CalDAV category calendars with colors matching web calendar ──
 const CALDAV_CATEGORY_CALS = {
-  meisterpilze: { displayName: 'Meisterpilze (Aufgaben)', color: '#16a34a' },
+  // The key is the on-disk directory and URL segment and cannot be renamed
+  // without breaking every existing subscription; the display name is what the
+  // calendar client actually shows, so it carries no operator name.
+  meisterpilze: { displayName: 'Aufgaben (geteilt)', color: '#16a34a' },
   faelligkeiten: { displayName: 'Fälligkeiten', color: '#ef4444' },
   aufgaben: { displayName: 'Aufgaben', color: '#3b82f6' },
   'eigene-termine': { displayName: 'Eigene Termine', color: '#22c55e' },
@@ -2938,7 +2970,7 @@ function _doAutoSyncAllCaldav(data) {
         }
       }
     } catch (e) {
-      log('warn', 'CalDAV: failed to clean migrated events from meisterpilze', { error: e.message });
+      log('warn', 'CalDAV: failed to clean migrated events from the shared calendar', { error: e.message });
     }
     // Clean orphaned VTODOs in personal calendars
     const categoryCals = new Set(Object.keys(CALDAV_CATEGORY_CALS));
@@ -3243,7 +3275,7 @@ function handlePropfind(parts, body, req, res) {
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
         <d:current-user-principal><d:href>/caldav/principal/</d:href></d:current-user-principal>
-        <d:displayname>Meisterpilze</d:displayname>
+        <d:displayname>Meistertracker</d:displayname>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
@@ -3974,7 +4006,7 @@ function handleGet(parts, req, res) {
   // GET on a calendar collection — return empty (clients use PROPFIND/REPORT)
   if (parts.length <= 2) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Meisterpilze CalDAV Server');
+    res.end('Meistertracker CalDAV Server');
     return;
   }
 
@@ -4913,7 +4945,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     //   2. The request carries the in-memory setup token printed to logs
     //      on first start (operator who can read PM2/journald).
     const ip = req.socket.remoteAddress || '';
-    const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const isLoopback = setupFromLoopback(ip, TRUST_PROXY);
     const presentedToken = req.headers['x-setup-token'] || '';
     let tokenOk = false;
     if (SETUP_TOKEN && typeof presentedToken === 'string' && presentedToken.length === SETUP_TOKEN.length) {
@@ -6579,6 +6611,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           }
           if (typeof c.id !== 'string' || !/^[A-Za-z0-9_\-@.:]{1,200}$/.test(c.id)) {
             jsonErr(res, 400, 'culture id must be alphanumeric with - _ @ . : (max 200 chars)');
+            return;
+          }
+          // `id` was pinned here from the start; `type` and `status` never were,
+          // and both are rendered as badges in the client. The MCP path has
+          // enforced these enums all along — this is its forgotten twin.
+          // Belt to the client's braces: the escaping in ctBadge/csBadge is what
+          // actually stops the injection, this keeps the data clean.
+          //
+          // Five types, not the MCP tool's four: GS is a real type in
+          // VALID_CULTURE_PARENT_TYPES, and validating against the shorter list
+          // would start rejecting cultures the lab already has.
+          const ve =
+            validateEnum(c.type, CULTURE_TYPES, 'culture type') ||
+            validateEnum(c.status, CULTURE_STATUSES, 'culture status');
+          if (ve) {
+            jsonErr(res, 400, ve);
             return;
           }
         }
