@@ -1953,3 +1953,150 @@ describe('db – rhythm tasks carry forward', () => {
     assert.equal(all[0].targetQty, 45);
   });
 });
+
+// ── Pickups (v59) ────────────────────────────────────────────────────────────
+//
+// Rows that originate outside this machine: they arrive in the reply to an
+// outbound harvest feed push. harvest-feed.js validates the protocol; what is
+// checked here is the storage contract underneath it, which has to hold even
+// when a caller skipped that step.
+describe('db – pickups', () => {
+  let d, p;
+  const PICKUP = {
+    id: 'p_2026-08-15-0900_1042',
+    order: '#1042',
+    slot: '2026-08-15-0900',
+    slotText: 'Sa 15.08., 9–10 Uhr',
+    place: 'Marktstand Erlangen',
+    from: '2026-08-15T09:00',
+    to: '2026-08-15T10:00',
+    zone: 'Europe/Berlin',
+    items: [{ kind: 'Austernpilz', grams: 2000 }],
+    overbooked: false
+  };
+
+  beforeEach(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  afterEach(() => {
+    d.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(p + s, { force: true });
+  });
+
+  it('stores one and reads it back whole', () => {
+    assert.equal(db.storePickup(d, PICKUP), 'inserted');
+    const rows = db.listPickups(d);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, PICKUP.id);
+    assert.equal(rows[0].order, '#1042');
+    assert.equal(rows[0].zone, 'Europe/Berlin');
+    assert.deepEqual(rows[0].items, [{ kind: 'Austernpilz', grams: 2000 }]);
+    assert.equal(rows[0].acked, false, 'nothing is confirmed until a push carries it');
+  });
+
+  it('the same pickup twice is one row, and says nothing changed', () => {
+    // The whole design rests on this: the receiver repeats every open pickup in
+    // every reply, so a second arrival must be free rather than a duplicate.
+    assert.equal(db.storePickup(d, PICKUP), 'inserted');
+    assert.equal(db.storePickup(d, PICKUP), 'unchanged');
+    assert.equal(db.countPickups(d).total, 1);
+  });
+
+  it('an edited pickup updates in place', () => {
+    db.storePickup(d, PICKUP);
+    assert.equal(db.storePickup(d, { ...PICKUP, place: 'Hofladen' }), 'updated');
+    const rows = db.listPickups(d);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].place, 'Hofladen');
+  });
+
+  it('keeps the date it was first seen across updates', () => {
+    db.storePickup(d, PICKUP);
+    const first = db.listPickups(d)[0].received;
+    db.storePickup(d, { ...PICKUP, place: 'Hofladen' });
+    assert.equal(db.listPickups(d)[0].received, first, 'received is when it arrived, not when it last changed');
+  });
+
+  it('refuses a pickup with no id — there would be nothing to make a repeat safe', () => {
+    assert.throws(() => db.storePickup(d, {}), /id required/);
+    assert.throws(() => db.storePickup(d, { id: '   ' }), /id required/);
+    assert.throws(() => db.storePickup(d, { id: 'x'.repeat(200) }), /too long/);
+  });
+
+  it('clamps a long field instead of storing it whole', () => {
+    // Second fence. The protocol layer bounds these already; a caller that
+    // skipped it still must not be able to write an unbounded string.
+    db.storePickup(d, { id: 'p_1', place: 'x'.repeat(9000), order: 'y'.repeat(9000) });
+    const row = db.listPickups(d)[0];
+    assert.ok(row.place.length <= 120);
+    assert.ok(row.order.length <= 64);
+  });
+
+  it('confirms only what has not been confirmed yet, and counts what it did', () => {
+    db.storePickup(d, { id: 'p_1' });
+    db.storePickup(d, { id: 'p_2' });
+    assert.deepEqual(db.unackedPickupIds(d).sort(), ['p_1', 'p_2']);
+    assert.equal(db.ackPickups(d, ['p_1', 'p_2']), 2);
+    assert.equal(db.ackPickups(d, ['p_1', 'p_2']), 0, 'confirming twice changes nothing');
+    assert.deepEqual(db.unackedPickupIds(d), []);
+    assert.equal(db.countPickups(d).unconfirmed, 0);
+  });
+
+  it('ignores an id it has never seen rather than inventing a row for it', () => {
+    assert.equal(db.ackPickups(d, ['p_nothing']), 0);
+    assert.equal(db.countPickups(d).total, 0);
+  });
+
+  it('re-arms the confirmation when a confirmed pickup arrives again', () => {
+    // Still being sent means the confirmation never registered at the far end.
+    db.storePickup(d, PICKUP);
+    db.ackPickups(d, [PICKUP.id]);
+    assert.equal(db.storePickup(d, PICKUP), 'updated');
+    assert.deepEqual(db.unackedPickupIds(d), [PICKUP.id]);
+  });
+
+  it('sorts the soonest first and puts the ones with no time last', () => {
+    // A pickup with no window is the odd one out, not the most urgent thing on
+    // the screen.
+    db.storePickup(d, { id: 'p_late', from: '2026-08-20T09:00' });
+    db.storePickup(d, { id: 'p_none' });
+    db.storePickup(d, { id: 'p_soon', from: '2026-08-15T09:00' });
+    assert.deepEqual(
+      db.listPickups(d).map((r) => r.id),
+      ['p_soon', 'p_late', 'p_none']
+    );
+  });
+
+  it('holds a bounded number of rows, and keeps taking updates once full', () => {
+    // A receiver inventing a fresh id every reply would otherwise grow this
+    // file without limit. Refusing beats evicting: the rows already here have
+    // been shown to someone, and dropping those to make room for junk is the
+    // wrong way round.
+    const now = new Date().toISOString();
+    const stmt = d.prepare('INSERT INTO pickups(id, overbooked, received, updated) VALUES(?,0,?,?)');
+    d.exec('BEGIN');
+    for (let i = 0; i < 5000; i++) stmt.run('bulk_' + i, now, now);
+    d.exec('COMMIT');
+
+    assert.throws(() => db.storePickup(d, { id: 'p_one_too_many' }), /full/);
+    assert.equal(
+      db.storePickup(d, { id: 'bulk_0', place: 'still editable' }),
+      'updated',
+      'a full table must not stop an existing pickup from being corrected'
+    );
+  });
+
+  it('goes away with the orders it belongs to', () => {
+    // A pickup names the order it is for. With the orders gone it is a time and
+    // a place for something nobody can look up.
+    db.storePickup(d, PICKUP);
+    db.resetOperationalData(d, { orders: true });
+    assert.equal(db.countPickups(d).total, 0);
+  });
+
+  it('survives a growing reset, which has nothing to do with it', () => {
+    db.storePickup(d, PICKUP);
+    db.resetOperationalData(d, { growing: true });
+    assert.equal(db.countPickups(d).total, 1);
+  });
+});

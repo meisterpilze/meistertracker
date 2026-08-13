@@ -4,7 +4,7 @@
 //
 // No network. `post()` takes an injected fetch so the transport can be exercised
 // without one — a test that needs a receiver is a test nobody runs.
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const path = require('path');
@@ -707,5 +707,399 @@ describe('release for sale', () => {
     } finally {
       process.env.TZ = tz;
     }
+  });
+});
+
+// ── The reply ────────────────────────────────────────────────────────────────
+//
+// The reply body is the only path in this program where data from the far end
+// reaches the database, so it carries the most tests in this file. Two
+// properties matter more than all the rest, and each has cases of its own:
+//
+//   A bad reply never fails a good push. The payload is out; what came back is
+//   a second and separate question, and answering it badly must not rewrite the
+//   answer to the first one.
+//
+//   Storing the same pickup twice leaves one row. The receiver repeats every
+//   open pickup on every push until it is confirmed, so this is the ordinary
+//   path through the code and not an edge case.
+
+/** A response the way fetch actually produces one — real headers, real stream. */
+function jsonReply(body, extraHeaders) {
+  return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+    headers: { 'content-type': 'application/json', ...(extraHeaders || {}) }
+  });
+}
+
+const PICKUP = {
+  id: 'p_2026-08-15-0900_1042',
+  order: '#1042',
+  slot: '2026-08-15-0900',
+  slotText: 'Sa 15.08., 9–10 Uhr',
+  place: 'Marktstand Erlangen',
+  from: '2026-08-15T09:00',
+  to: '2026-08-15T10:00',
+  zone: 'Europe/Berlin',
+  items: [{ kind: 'Austernpilz', grams: 2000 }],
+  overbooked: false
+};
+
+describe('feed reply – validation', () => {
+  it('keeps a well-formed pickup whole', () => {
+    const r = feed.parseReply(JSON.stringify({ ok: true, pickups: [PICKUP] }));
+    assert.equal(r.dropped, 0);
+    assert.deepEqual(r.pickups[0], PICKUP);
+  });
+
+  it('drops fields nobody asked for', () => {
+    // Rebuilt field by field rather than filtered, so something nobody thought
+    // of cannot ride along to whatever reads this next.
+    const r = feed.parseReply(
+      JSON.stringify({ pickups: [{ ...PICKUP, note: 'hi', price: 9.9, customer: 'Anna Meier' }] })
+    );
+    assert.deepEqual(Object.keys(r.pickups[0]).sort(), Object.keys(PICKUP).sort());
+    assert.equal(r.pickups[0].customer, undefined);
+    assert.equal(r.pickups[0].price, undefined);
+  });
+
+  it('throws away a pickup with no usable id — the id is what makes a repeat safe', () => {
+    const r = feed.parseReply(
+      JSON.stringify({
+        pickups: [
+          { ...PICKUP, id: '' },
+          { ...PICKUP, id: 'has spaces' },
+          { ...PICKUP, id: 42 }
+        ]
+      })
+    );
+    assert.deepEqual(r.pickups, []);
+    assert.equal(r.dropped, 3, 'dropping without counting looks like a receiver with nothing to say');
+  });
+
+  it('keeps the first of a repeated id, so the winner does not depend on order', () => {
+    const r = feed.parseReply(
+      JSON.stringify({
+        pickups: [
+          { ...PICKUP, place: 'first' },
+          { ...PICKUP, place: 'second' }
+        ]
+      })
+    );
+    assert.equal(r.pickups.length, 1);
+    assert.equal(r.pickups[0].place, 'first');
+    assert.equal(r.dropped, 1);
+  });
+
+  it('survives a body that is not JSON at all', () => {
+    const r = feed.parseReply('<html><body>502 Bad Gateway</body></html>');
+    assert.deepEqual(r.pickups, []);
+    assert.match(r.error, /not JSON/);
+  });
+
+  it('survives a body that is JSON but not an object', () => {
+    assert.match(feed.parseReply('[1,2,3]').error, /not an object/);
+    assert.match(feed.parseReply('"nope"').error, /not an object/);
+  });
+
+  it('treats a reply with no pickups field as silence, not as an error', () => {
+    // Every receiver written before this feature existed answers exactly this
+    // way, and none of them should start producing warnings because of it.
+    const r = feed.parseReply(JSON.stringify({ ok: true }));
+    assert.deepEqual(r.pickups, []);
+    assert.equal(r.error, undefined);
+  });
+
+  it('refuses a pickups field that is not a list', () => {
+    assert.match(feed.parseReply(JSON.stringify({ pickups: { a: 1 } })).error, /not a list/);
+  });
+
+  it('caps how many pickups one reply may carry, and says so', () => {
+    const many = Array.from({ length: feed.MAX_PICKUPS + 50 }, (_, i) => ({ ...PICKUP, id: 'p_' + i }));
+    const r = feed.parseReply(JSON.stringify({ pickups: many }));
+    assert.equal(r.pickups.length, feed.MAX_PICKUPS);
+    assert.equal(r.dropped, 50);
+    assert.match(r.error, /more than/);
+  });
+
+  it('drops item lines that are not usable and keeps the ones that are', () => {
+    const r = feed.parseReply(
+      JSON.stringify({
+        pickups: [
+          {
+            ...PICKUP,
+            items: [
+              { kind: 'Austernpilz', grams: 2000 },
+              { kind: '', grams: 500 },
+              { kind: 'Negative', grams: -5 },
+              { kind: 'Absurd', grams: 99999999999 },
+              { kind: 'NotANumber', grams: 'lots' },
+              'not an object',
+              null
+            ]
+          }
+        ]
+      })
+    );
+    assert.deepEqual(r.pickups[0].items, [{ kind: 'Austernpilz', grams: 2000 }]);
+  });
+
+  it('refuses a from/to that carries its own offset', () => {
+    // The whole point of shipping `zone` separately is that these are local
+    // wall-clock. A value that looks like an instant invites exactly the
+    // conversion that must not happen, so it is not stored at all.
+    const r = feed.parseReply(
+      JSON.stringify({ pickups: [{ ...PICKUP, from: '2026-08-15T09:00+02:00', to: '2026-08-15T08:00:00Z' }] })
+    );
+    assert.equal(r.pickups[0].from, undefined);
+    assert.equal(r.pickups[0].to, undefined);
+    assert.equal(r.pickups[0].id, PICKUP.id, 'a bad time is not a reason to throw the pickup away');
+  });
+
+  it('refuses a zone that is not a zone', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: [{ ...PICKUP, zone: '../../etc/passwd' }] }));
+    assert.equal(r.pickups[0].zone, undefined);
+  });
+
+  it('strips control characters out of anything that will be displayed', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: [{ ...PICKUP, place: 'Markt\u001b[31mstand\u0000' }] }));
+    assert.doesNotMatch(r.pickups[0].place, /[\u0000-\u001f\u007f]/);
+  });
+
+  it('bounds every string, so one field cannot become a megabyte', () => {
+    const r = feed.parseReply(
+      JSON.stringify({ pickups: [{ ...PICKUP, place: 'x'.repeat(50000), order: 'y'.repeat(50000) }] })
+    );
+    assert.ok(r.pickups[0].place.length <= 120);
+    assert.ok(r.pickups[0].order.length <= 64);
+  });
+
+  it('takes overbooked only from a real boolean', () => {
+    const truthy = feed.parseReply(JSON.stringify({ pickups: [{ ...PICKUP, overbooked: 'yes' }] }));
+    assert.equal(truthy.pickups[0].overbooked, false);
+    const real = feed.parseReply(JSON.stringify({ pickups: [{ ...PICKUP, overbooked: true }] }));
+    assert.equal(real.pickups[0].overbooked, true);
+  });
+});
+
+describe('feed reply – over the wire', () => {
+  const cfg = { ...CFG, timeoutMs: 200 };
+
+  it('carries a valid reply back with the result', async () => {
+    const r = await feed.post(cfg, {}, { fetch: async () => jsonReply({ ok: true, pickups: [PICKUP] }) });
+    assert.equal(r.ok, true);
+    assert.equal(r.reply.pickups.length, 1);
+  });
+
+  it('a broken reply body leaves the push successful', async () => {
+    // The single most important case in this file. The numbers reached the
+    // receiver; whether it managed to answer in JSON has nothing to do with
+    // that, and reporting a delivered feed as failed would have somebody
+    // chasing a receiver that is working perfectly well.
+    const r = await feed.post(cfg, {}, { fetch: async () => jsonReply('{"pickups": [{"id": ') });
+    assert.equal(r.ok, true, 'a delivered payload must not be reported as failed');
+    assert.equal(r.status, 200);
+    assert.match(r.reply.error, /not JSON/);
+  });
+
+  it('refuses an oversized body, and still calls the push a success', async () => {
+    const huge = JSON.stringify({ pickups: [{ id: 'p_1', place: 'x'.repeat(feed.REPLY_MAX_BYTES + 1024) }] });
+    const r = await feed.post(cfg, {}, { fetch: async () => jsonReply(huge) });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.reply.pickups, []);
+    assert.match(r.reply.error, /exceeded/);
+  });
+
+  it('refuses a declared length over the cap without reading a byte', async () => {
+    // The cheapest guard there is: the receiver said how big it is, and it is
+    // too big, so nothing needs reading at all.
+    let read = false;
+    const r = await feed.post(
+      cfg,
+      {},
+      {
+        fetch: async () => ({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json', 'content-length': '99999999' }),
+          text: async () => {
+            read = true;
+            return '{}';
+          }
+        })
+      }
+    );
+    assert.equal(r.ok, true);
+    assert.match(r.reply.error, /declared/);
+    assert.equal(read, false, 'the body was pulled despite the receiver saying how big it was');
+  });
+
+  it('refuses a body that does not claim to be JSON', async () => {
+    // A receiver answering an API call with an HTML error page is the everyday
+    // shape of a misconfigured proxy.
+    const res = new Response('<html>Gateway Timeout</html>', { headers: { 'content-type': 'text/html' } });
+    const r = await feed.post(cfg, {}, { fetch: async () => res });
+    assert.equal(r.ok, true);
+    assert.match(r.reply.error, /text\/html/);
+  });
+
+  it('treats a reply with no content type as silence', async () => {
+    const r = await feed.post(cfg, {}, { fetch: async () => ({ ok: true, status: 204 }) });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.reply.pickups, []);
+    assert.equal(r.reply.error, undefined);
+  });
+
+  it('reads no reply at all from a push that failed', async () => {
+    // Nothing was delivered, so there is nothing this end is entitled to act on.
+    const r = await feed.post(
+      cfg,
+      {},
+      { fetch: async () => new Response('{}', { status: 500 }), sleep: async () => {} }
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.reply, undefined);
+  });
+});
+
+// ── The round trip ───────────────────────────────────────────────────────────
+//
+// build → push → store → confirm on the next push, against a real database and
+// through deliver(), which is the same function the timer calls.
+describe('pickups round trip', () => {
+  let t;
+  const quiet = () => {};
+  const cfg = { ...CFG, plannedDays: 0, timeoutMs: 200 };
+
+  beforeEach(() => {
+    t = tmpDb();
+  });
+  afterEach(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  /** Push once against a receiver answering with `pickups`, keeping what we sent. */
+  async function push(pickups, sentBodies) {
+    return feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: {
+        fetch: async (_url, init) => {
+          if (sentBodies) sentBodies.push(JSON.parse(init.body));
+          return jsonReply({ ok: true, pickups });
+        },
+        sleep: async () => {}
+      }
+    });
+  }
+
+  it('stores a reported pickup, field for field', async () => {
+    await push([PICKUP]);
+    const rows = db.listPickups(t.db);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, PICKUP.id);
+    assert.equal(rows[0].order, '#1042');
+    assert.equal(rows[0].place, 'Marktstand Erlangen');
+    assert.deepEqual(rows[0].items, [{ kind: 'Austernpilz', grams: 2000 }]);
+    assert.equal(rows[0].overbooked, false);
+  });
+
+  it('leaves the local times exactly as they arrived', async () => {
+    // Not converted, not normalised, not round-tripped through a Date. The zone
+    // travels with them so the far end's wall-clock stays readable here, and
+    // "9–10" is what the customer was told.
+    await push([PICKUP]);
+    const row = db.listPickups(t.db)[0];
+    assert.equal(row.from, '2026-08-15T09:00');
+    assert.equal(row.to, '2026-08-15T10:00');
+    assert.equal(row.zone, 'Europe/Berlin');
+  });
+
+  it('the same pickup reported three times is one row', async () => {
+    // The ordinary path, not an edge case: the receiver repeats every open
+    // pickup on every push until this end confirms it.
+    await push([PICKUP]);
+    await push([PICKUP]);
+    await push([PICKUP]);
+    assert.equal(db.listPickups(t.db).length, 1);
+  });
+
+  it('an updated pickup overwrites rather than duplicating', async () => {
+    await push([PICKUP]);
+    await push([{ ...PICKUP, place: 'Hofladen', slotText: 'Sa 15.08., 10–11 Uhr' }]);
+    const rows = db.listPickups(t.db);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].place, 'Hofladen');
+  });
+
+  it('sends the stored ids back on the next push, and not on the first', async () => {
+    const sent = [];
+    await push([PICKUP], sent);
+    assert.equal(sent[0].pickupsDone, undefined, 'nothing was stored yet, so there is nothing to confirm');
+    await push([], sent);
+    assert.deepEqual(sent[1].pickupsDone, [PICKUP.id]);
+  });
+
+  it('stops sending an id once the receiver has heard it', async () => {
+    const sent = [];
+    await push([PICKUP], sent); // arrives
+    await push([], sent); // confirmed on this one
+    await push([], sent); // nothing left to say
+    assert.deepEqual(sent[1].pickupsDone, [PICKUP.id]);
+    assert.equal(sent[2].pickupsDone, undefined);
+    assert.equal(db.countPickups(t.db).unconfirmed, 0);
+  });
+
+  it('confirms nothing when the push did not get through', async () => {
+    // Confirming what a failed push carried is how a pickup goes missing on
+    // both sides at once: the receiver never heard, drops it from its next
+    // reply anyway, and then neither side has it.
+    await push([PICKUP]);
+    await feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: { fetch: async () => ({ ok: false, status: 503 }), sleep: async () => {} }
+    });
+    assert.deepEqual(db.unackedPickupIds(t.db), [PICKUP.id], 'a failed push must not count as heard');
+  });
+
+  it('confirms again when a pickup arrives after it was already confirmed', async () => {
+    // Still being sent means the confirmation never registered at the far end.
+    // Saying it again is cheap; the alternative is a pickup that repeats for
+    // ever because this end decided once that it had already answered.
+    const sent = [];
+    await push([PICKUP], sent);
+    await push([PICKUP], sent);
+    assert.deepEqual(sent[1].pickupsDone, [PICKUP.id]);
+    await push([], sent);
+    assert.deepEqual(sent[2].pickupsDone, [PICKUP.id], 'the repeat re-armed the confirmation');
+  });
+
+  it('a broken reply costs the pickups, not the push and not the harvest numbers', async () => {
+    const r = await feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: { fetch: async () => jsonReply('not json at all'), sleep: async () => {} }
+    });
+    assert.equal(r.ok, true);
+    assert.ok(Array.isArray(r.payload.harvested), 'the payload still went out');
+    assert.equal(db.listPickups(t.db).length, 0);
+  });
+
+  it('keeps the good pickups out of a reply that also carries junk', async () => {
+    await push([PICKUP, { id: '' }, { nope: 1 }, { ...PICKUP, id: 'p_second' }]);
+    assert.deepEqual(
+      db
+        .listPickups(t.db)
+        .map((r) => r.id)
+        .sort(),
+      [PICKUP.id, 'p_second'].sort()
+    );
   });
 });
