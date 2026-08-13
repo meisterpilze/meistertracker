@@ -5710,23 +5710,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // One boolean, so the harvest form knows whether to offer "release for sale".
     // It rides along here rather than on its own endpoint because the form opens
     // from a barcode scan — a request at that moment costs the very second the
-    // scan is meant to save. Toggling the mode bumps data_version, so the ETag
-    // above changes and a cached client does not keep the stale answer.
+    // scan is meant to save.
     //
-    // ⚠️ getHarvestReleaseMode and not getHarvestFeedCfg: the latter returns the
-    // feed's HMAC secret in the same object, and this payload goes to every
-    // authenticated client every 30 seconds. Reading the one column means a
-    // careless spread here cannot publish the secret.
-    //
-    // The permission is part of the answer, not a separate one. A worker without
-    // it would otherwise get a field that fails on every save — the same "input
-    // that does nothing" the field was designed to avoid. This is presentation
-    // only; the check that matters runs in addHarvestRelease.
-    try {
-      payload.harvestRelease = { on: db.getHarvestReleaseMode(database) && db.mayRelease(req.authUser) };
-    } catch {
-      /* config table absent on an old database — the form simply stays hidden */
-    }
+    // Only the permission is left to ask about. Release itself is no longer a
+    // mode that can be off: what may be sold is always a hand-entered decision.
+    // A worker without the permission would otherwise get a field that fails on
+    // every save — the same "input that does nothing" the field was designed to
+    // avoid. This is presentation only; the check that matters runs in
+    // addHarvestRelease.
+    payload.harvestRelease = { on: db.mayRelease(req.authUser) };
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
@@ -8349,8 +8341,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           plannedDays: clampInt(data.plannedDays, 0, 365, 28),
           leadDays: clampInt(data.leadDays, 0, 365, 0),
           strain: data.strain !== false,
-          site: String(data.site || '').trim(),
-          releaseMode: !!data.releaseMode
+          site: String(data.site || '').trim()
         };
         // Validated before saving, not at the next tick: a rejected URL that is
         // already stored would leave the feed off with the reason buried in a
@@ -8402,11 +8393,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         plannedDays: 28,
         leadDays: 0,
         strain: true,
-        site: '',
-        // Even with the feed still off, the switch is the one setting whose
-        // effect people want to see before committing to it — it decides
-        // whether the payload offers a harvest or a set-aside.
-        releaseMode: db.getHarvestFeedCfg(database).releaseMode
+        site: ''
       };
       const payload = harvestFeed.buildPayload(database, shape);
       jsonOk(res, {
@@ -8493,7 +8480,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         .all(since)
         .map((r) => ({ species: r.species, grams: Math.round(r.grams), last: r.last }));
       jsonOk(res, {
-        releaseMode: cfg.releaseMode,
         freshDays: days,
         releases: db.listHarvestReleases(database),
         recent

@@ -4158,7 +4158,6 @@ function getHarvestFeedCfg(db) {
     leadDays: row.lead_days ?? 0,
     strain: row.strain !== 0,
     site: row.site || '',
-    releaseMode: row.release_mode === 1,
     lastAt: row.last_at || null,
     lastOk: row.last_ok === null || row.last_ok === undefined ? null : row.last_ok === 1,
     lastError: row.last_error || null
@@ -4181,7 +4180,11 @@ function updateHarvestFeedCfg(db, cfg) {
     cfg.leadDays ?? 0,
     cfg.strain === false ? 0 : 1,
     cfg.site || '',
-    cfg.releaseMode ? 1 : 0
+    // The column stays and is always 1. Dropping it would cost a migration, and
+    // an older build reading this database would read the missing switch as
+    // "off" and go back to publishing harvest totals — the exact failure this
+    // change exists to remove.
+    1
   );
   incrementDataVersion(db);
 }
@@ -4268,19 +4271,6 @@ function mayRelease(actor) {
   return actor.role === 'admin' || actor.can_release === 1;
 }
 
-/**
- * Whether the feed reports releases at all — and nothing else.
- *
- * getHarvestFeedCfg() returns the feed's HMAC secret alongside this flag, so any
- * caller that only needs the flag is one careless spread away from publishing the
- * secret. This reads the single column instead, which removes the possibility
- * rather than relying on the next reader noticing.
- */
-function getHarvestReleaseMode(db) {
-  const row = db.prepare('SELECT release_mode FROM harvest_feed_config WHERE id = 1').get();
-  return !!row && row.release_mode === 1;
-}
-
 function setHarvestRelease(db, { species, grams, validUntil, note }, at) {
   const name = String(species || '').trim();
   if (!name) throw new Error('setHarvestRelease: species required');
@@ -4340,7 +4330,6 @@ function addHarvestRelease(db, { species, grams, days, actor }, at) {
   const g = Number(grams);
   if (!Number.isFinite(g) || g <= 0) throw new Error('addHarvestRelease: grams must be a number > 0');
   if (!mayRelease(actor)) throw new Error('addHarvestRelease: not allowed to release for sale');
-  if (!getHarvestReleaseMode(db)) throw new Error('addHarvestRelease: release mode is off');
 
   const now = at || new Date();
   const today = localDay(now);
@@ -7992,7 +7981,6 @@ module.exports = {
   updateHarvestFeedCfg,
   updateHarvestFeedStatus,
   mayRelease,
-  getHarvestReleaseMode,
   listHarvestReleases,
   activeHarvestReleases,
   setHarvestRelease,

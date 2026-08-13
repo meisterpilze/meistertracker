@@ -8619,7 +8619,6 @@ async function loadHarvestFeedSettings() {
     // A stored secret is never sent back to the page. The placeholder says one
     // exists; leaving the field empty on save keeps it.
     sec.placeholder = cfg.hasSecret ? '••••••••••' : '';
-    document.getElementById('harvestfeed-releasemode').checked = !!cfg.releaseMode;
     renderHarvestFeedBanner(cfg);
     loadHarvestReleases();
   } catch (e) {
@@ -8845,8 +8844,7 @@ async function saveHarvestFeedSettings() {
     plannedDays: parseInt(document.getElementById('harvestfeed-planned').value, 10),
     leadDays: parseInt(document.getElementById('harvestfeed-lead').value, 10),
     strain: document.getElementById('harvestfeed-strain').checked,
-    site: document.getElementById('harvestfeed-site').value.trim(),
-    releaseMode: document.getElementById('harvestfeed-releasemode').checked
+    site: document.getElementById('harvestfeed-site').value.trim()
   };
   if (secret) cfg.secret = secret;
   try {

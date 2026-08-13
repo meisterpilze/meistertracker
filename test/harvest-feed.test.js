@@ -288,7 +288,7 @@ describe('harvest feed payload', () => {
 
   it('is valid JSON with a version, so a receiver can refuse what it cannot read', () => {
     const out = feed.buildPayload(d, CFG, NOW);
-    assert.equal(out.version, feed.VERSION);
+    assert.equal(out.version, feed.VERSION_RELEASE);
     assert.equal(out.generatedAt, NOW.toISOString());
     assert.deepEqual(JSON.parse(JSON.stringify(out)), out);
   });
@@ -780,7 +780,7 @@ describe('due dates', () => {
 // an amount someone deliberately set aside, which no cash sale can reach.
 describe('release for sale', () => {
   let d, p;
-  const REL = { ...CFG, releaseMode: true };
+  const REL = { ...CFG };
 
   before(() => {
     ({ db: d, path: p } = tmpDb());
@@ -800,11 +800,34 @@ describe('release for sale', () => {
     }
   });
 
-  it('changes nothing while it is off', () => {
+  it('carries the list even when nobody has released anything', () => {
+    // The empty list is the point. It used to be an absent field, and an absent
+    // field reads as "this lab does not do releases" — which is how a harvest
+    // total ends up in a shop window. Present and empty says "nothing is for
+    // sale yet", and there is no way to configure that back into silence.
+    const leer = tmpDb();
+    try {
+      const out = feed.buildPayload(leer.db, CFG, NOW);
+      assert.equal(out.version, 2, 'there is no fassung 1 left to fall back to');
+      assert.deepEqual(out.released, [], 'a statement, not a gap');
+    } finally {
+      leer.db.close();
+      try {
+        fs.unlinkSync(leer.path);
+      } catch {
+        /* best effort */
+      }
+    }
+  });
+
+  it('reports the released amount without being switched on first', () => {
     db.setHarvestRelease(d, { species: 'Oyster', grams: 2000, validUntil: null });
     const out = feed.buildPayload(d, CFG, NOW);
-    assert.equal(out.version, 1, 'a lab not using releases must keep sending fassung 1');
-    assert.ok(!('released' in out), 'no list, no version bump, no surprise for an existing receiver');
+    assert.deepEqual(
+      out.released,
+      [{ species: 'Oyster', grams: 2000 }],
+      'CFG is the plain default config — entering an amount is the whole act'
+    );
   });
 
   it('sends the released amount under its own key, and bumps the version', () => {
@@ -1518,9 +1541,9 @@ describe('adding to a release', () => {
 
   before(() => {
     ({ db: d, path: p } = tmpDb());
-    // The gate lives in addHarvestRelease, so it has to be open for the rest of
-    // this block. Everything else here is the default config.
-    db.updateHarvestFeedCfg(d, { releaseMode: true, freshDays: 3 });
+    // freshDays decides the date a release is stamped with, so the rest of this
+    // block needs it fixed. Everything else here is the default config.
+    db.updateHarvestFeedCfg(d, { freshDays: 3 });
   });
   after(() => {
     try {
@@ -1530,20 +1553,22 @@ describe('adding to a release', () => {
     }
   });
 
-  it('refuses while release mode is off', () => {
-    // The gate belongs to the writer and not to the route: whoever records a
-    // harvest next inherits it instead of having to remember it.
-    const { db: off, path: offPath } = tmpDb();
+  it('works on an untouched database, with nothing to switch on first', () => {
+    // There used to be a mode gate here, and it was the reason a release could
+    // be entered at the scale and silently go nowhere. Nothing stands between
+    // the amount and the feed any more except the permission.
+    const { db: frisch, path: frischPath } = tmpDb();
     try {
-      assert.throws(
-        () => db.addHarvestRelease(off, { species: 'Oyster', grams: 100, actor: ADMIN }),
-        /release mode is off/
+      const r = db.addHarvestRelease(frisch, { species: 'Oyster', grams: 100, actor: ADMIN }, NOW);
+      assert.equal(r.grams, 100);
+      assert.deepEqual(
+        db.listHarvestReleases(frisch).map((x) => x.species),
+        ['Oyster']
       );
-      assert.deepEqual(db.listHarvestReleases(off), [], 'and nothing is written');
     } finally {
-      off.close();
+      frisch.close();
       try {
-        fs.unlinkSync(offPath);
+        fs.unlinkSync(frischPath);
       } catch {
         /* best effort */
       }
@@ -1631,7 +1656,7 @@ describe('adding to a release', () => {
     // The end of the chain, and the reason B1 in the receiver's review mattered:
     // two lines for one species make two cards with separate amounts, and a stock
     // cap downstream then reads the last instead of the sum.
-    const out = feed.buildPayload(d, { ...CFG, releaseMode: true }, NOW);
+    const out = feed.buildPayload(d, CFG, NOW);
     const arten = out.released.map((r) => r.species);
     assert.deepEqual(arten, [...new Set(arten)].sort(), 'one line per species, sorted');
     assert.equal(out.released.find((r) => r.species === 'Oyster').grams, 2100);
@@ -1700,7 +1725,7 @@ describe('release permission', () => {
 
   before(() => {
     ({ db: d, path: p } = tmpDb());
-    db.updateHarvestFeedCfg(d, { releaseMode: true, freshDays: 3 });
+    db.updateHarvestFeedCfg(d, { freshDays: 3 });
   });
   after(() => {
     d.close();

@@ -805,9 +805,6 @@ window.LANG['en'] = {
   'harvestFeed.neverSent': 'Enabled, but nothing delivered yet.',
   'harvestFeed.envActive':
     'The feed is running from environment variables (HARVEST_WEBHOOK_URL). What you set here takes effect once you enable it here — this form then wins.',
-  'harvestFeed.releaseMode': 'Only report what is released for sale',
-  'harvestFeed.releaseModeHint':
-    'Without this the feed reports what was harvested — a figure that stops being true the moment you sell anything at a market. With it, the feed reports only the amounts you set aside below, so sales elsewhere cannot make it wrong.',
   'harvestFeed.releaseTitle': 'Released for sale',
   'harvestFeed.releaseDesc':
     'How much of each species a shop may sell — a set-aside, not a stock level. Put that amount in its own crate and sell everything else from the rest: then a walk-in customer or a busy market Saturday cannot make the published figure wrong, and there is nothing to keep up to date. The date is the safety net. Fresh produce does not keep, and the usual mistake is not a wrong number but a forgotten one.',
