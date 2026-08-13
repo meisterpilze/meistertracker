@@ -1954,7 +1954,7 @@ describe('db – rhythm tasks carry forward', () => {
   });
 });
 
-// ── Pickups (v59) ────────────────────────────────────────────────────────────
+// ── Pickups (v60) ────────────────────────────────────────────────────────────
 //
 // Rows that originate outside this machine: they arrive in the reply to an
 // outbound harvest feed push. harvest-feed.js validates the protocol; what is
@@ -2101,7 +2101,7 @@ describe('db – pickups', () => {
   });
 });
 
-// ── Withdrawn pickups (v60) ──────────────────────────────────────────────────
+// ── Withdrawn pickups (v61) ──────────────────────────────────────────────────
 //
 // The pickup row is deleted and a receipt stays behind. The receipt is not
 // bookkeeping for its own sake: a withdrawal has to be confirmed on the next

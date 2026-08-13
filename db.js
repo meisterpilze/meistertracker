@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS harvest_release (
   updated     TEXT NOT NULL
 );
 
--- Pickups the receiver of the harvest feed reported back. See migration v59.
+-- Pickups the receiver of the harvest feed reported back. See migration v60.
 -- The id is the receiver's own key, and the whole reason this is an upsert: the
 -- same pickup arrives in every reply until we confirm it.
 CREATE TABLE IF NOT EXISTS pickups (
@@ -228,7 +228,7 @@ CREATE TABLE IF NOT EXISTS pickups (
 CREATE INDEX IF NOT EXISTS idx_pickups_open ON pickups(acked_at);
 CREATE INDEX IF NOT EXISTS idx_pickups_from ON pickups(from_time);
 
--- Pickups the receiver has withdrawn. See migration v60: the pickup row is
+-- Pickups the receiver has withdrawn. See migration v61: the pickup row is
 -- deleted, and this is the receipt that keeps the withdrawal confirmable.
 CREATE TABLE IF NOT EXISTS pickup_cancellations (
   id       TEXT PRIMARY KEY,
@@ -1734,7 +1734,7 @@ const MIGRATIONS = [
     }
   },
   {
-    version: 59,
+    version: 60,
     description: 'Pickups reported back by the harvest feed receiver, keyed by the id it assigns',
     fn(db) {
       // The harvest feed pushes numbers out and throws the answer away. That is
@@ -1777,7 +1777,7 @@ const MIGRATIONS = [
     }
   },
   {
-    version: 60,
+    version: 61,
     description: 'Withdrawn pickups: delete the row, keep a receipt so the withdrawal can be confirmed',
     fn(db) {
       // A customer cancels after the pickup was already stored here. The
@@ -4238,7 +4238,7 @@ function deleteHarvestRelease(db, species) {
 // anything gets this far; the clamps below are the second fence, so that a
 // caller which skipped that step still cannot write an unbounded string.
 //
-// The whole table is upsert-by-id. See migration v59 for why.
+// The whole table is upsert-by-id. See migration v60 for why.
 
 /** How many pickup rows this table will hold. See storePickup(). */
 const PICKUP_MAX_ROWS = 5000;
