@@ -7,6 +7,7 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -103,6 +104,30 @@ describe('harvest feed config', () => {
     assert.throws(
       () => feed.readConfig({ HARVEST_WEBHOOK_URL: 'not a url', HARVEST_WEBHOOK_SECRET: 'k' }),
       /not a URL/
+    );
+  });
+
+  // URL.hostname keeps the brackets on an IPv6 literal, so a check written
+  // against the bare '::1' silently rejected the one address it meant to allow.
+  it('allows plain http to IPv6 loopback, brackets and all', () => {
+    const cfg = feed.readConfig({ HARVEST_WEBHOOK_URL: 'http://[::1]:8787/x', HARVEST_WEBHOOK_SECRET: 'k' });
+    assert.equal(cfg.url, 'http://[::1]:8787/x');
+  });
+
+  // Credentials in the URL get stored in the config row and logged with it, so
+  // a password smuggled in this way undoes the care taken to keep the secret
+  // out of the logs. The receiver authenticates the HMAC and never needs them.
+  it('refuses credentials in the URL', () => {
+    assert.throws(
+      () => feed.readConfig({ HARVEST_WEBHOOK_URL: 'https://user:pw@a.test/x', HARVEST_WEBHOOK_SECRET: 'k' }),
+      /credentials/
+    );
+  });
+
+  it('refuses a URL that carries only a username', () => {
+    assert.throws(
+      () => feed.readConfig({ HARVEST_WEBHOOK_URL: 'https://user@a.test/x', HARVEST_WEBHOOK_SECRET: 'k' }),
+      /credentials/
     );
   });
 
@@ -320,6 +345,81 @@ describe('harvest feed transport', () => {
       }
     );
     assert.equal(JSON.stringify(seen).includes(cfg.secret), false);
+  });
+
+  it('asks fetch not to follow redirects at all', async () => {
+    let seen = null;
+    await feed.post(
+      cfg,
+      { a: 1 },
+      {
+        fetch: async (url, init) => {
+          seen = init;
+          return { ok: true, status: 200 };
+        }
+      }
+    );
+    assert.equal(seen.redirect, 'manual');
+  });
+
+  it('gives up at once on a 308 — a receiver pointing elsewhere does not fix itself', async () => {
+    let calls = 0;
+    const res = await feed.post(
+      cfg,
+      {},
+      {
+        fetch: async () => {
+          calls++;
+          return { ok: false, status: 308 };
+        },
+        sleep: async () => {}
+      }
+    );
+    assert.equal(res.ok, false);
+    assert.equal(calls, 1, 'no retry — each attempt is another copy aimed at a URL nobody vetted');
+    assert.match(res.error, /redirect refused/);
+  });
+
+  // The promise this feed makes is "push-only, and to exactly the configured
+  // address". fetch follows redirects by default, and only Authorization and
+  // Cookie are stripped when the origin changes — X-Meistertracker-Signature
+  // and the body are not. So before this was pinned down, a receiver could
+  // answer 308 and have every later report delivered, intact and signed, to a
+  // host nobody configured and checkUrl never saw. Two loopback servers and the
+  // real fetch, because an injected one cannot prove what the real one does.
+  it('does not let the receiver redirect the report to another host', async () => {
+    const collected = [];
+    const collector = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        collected.push({ method: req.method, body });
+        res.writeHead(200);
+        res.end('ok');
+      });
+    });
+    await new Promise((r) => collector.listen(0, '127.0.0.1', r));
+    const collectorPort = collector.address().port;
+
+    const receiver = http.createServer((req, res) => {
+      res.writeHead(308, { Location: 'http://127.0.0.1:' + collectorPort + '/collect' });
+      res.end();
+    });
+    await new Promise((r) => receiver.listen(0, '127.0.0.1', r));
+
+    try {
+      const res = await feed.post(
+        { ...CFG, url: 'http://127.0.0.1:' + receiver.address().port + '/feed', timeoutMs: 2000 },
+        { harvested: [{ species: 'Austernpilz', grams: 4200 }] },
+        { sleep: async () => {} }
+      );
+      assert.equal(res.ok, false, 'a redirect is a failed delivery, not a successful one');
+      assert.match(res.error, /redirect refused/);
+      assert.deepEqual(collected, [], 'the report must never reach a host the configuration never named');
+    } finally {
+      collector.close();
+      receiver.close();
+    }
   });
 
   it('retries a 500 and reports how often it tried', async () => {

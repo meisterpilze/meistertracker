@@ -116,7 +116,17 @@ function checkUrl(url, label) {
   } catch {
     throw new Error(label + ' is not a URL: ' + url);
   }
-  const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+  // Credentials in the URL would be copied into the config row and, from there,
+  // into every "Harvest feed started" log line. The secret is deliberately kept
+  // out of the logs; a password smuggled in via the URL would walk straight
+  // back in. The receiver authenticates the HMAC, so it never needs these.
+  if (parsed.username || parsed.password)
+    throw new Error(label + ' must not carry credentials in the URL — the feed authenticates with the shared secret');
+  // URL.hostname keeps the brackets on an IPv6 literal ('[::1]', not '::1'), so
+  // comparing against the bare form never matched and http://[::1]:PORT/ was
+  // rejected as "not https" — the one loopback address this is meant to allow.
+  const host = parsed.hostname;
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
     throw new Error(label + ' must be https (http is allowed for localhost only): ' + url);
 }
@@ -363,6 +373,15 @@ async function post(cfg, payload, deps) {
     try {
       const res = await doFetch(cfg.url, {
         method: 'POST',
+        // The receiver does not get to choose where the report actually lands.
+        // Without this, fetch defaults to `follow`: a 308 from the receiver
+        // re-sends the POST — body and X-Meistertracker-Signature intact, since
+        // only Authorization/Cookie are stripped on an origin change — to
+        // whatever host Location names, plain-HTTP hosts on the LAN included.
+        // checkUrl only ever runs when the config is saved, so a redirect
+        // target is a target nobody vetted. "Push-only, and to exactly the
+        // configured address" is the promise; following a hop breaks it.
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'meistertracker-harvest-feed/' + VERSION,
@@ -373,6 +392,17 @@ async function post(cfg, payload, deps) {
         signal: controller.signal
       });
       if (res.ok) return { ok: true, status: res.status, attempts: attempt };
+      // With redirect:'manual' a 3xx arrives here instead of being chased.
+      // Retrying cannot help — the receiver is pointing somewhere else and will
+      // keep doing so — and each retry is another copy of the payload aimed at
+      // an unvetted URL. Stop, and say what to fix.
+      if (res.status >= 300 && res.status < 400) {
+        return {
+          ok: false,
+          error: 'HTTP ' + res.status + ' redirect refused — set the feed URL to the receiver’s final address',
+          attempts: attempt
+        };
+      }
       last = 'HTTP ' + res.status;
       // 4xx means the receiver understood us and said no — a bad secret, a
       // wrong path, a payload it rejects. Retrying hammers it without ever
