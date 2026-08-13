@@ -350,16 +350,29 @@ function buildPayload(database, cfg, now) {
   // receiver that knows nothing about pickups should never see the field, and
   // an empty array is a claim ("I have none") where absence is silence.
   //
+  // Bookings and withdrawals go in the same list. From the receiver's side
+  // there is one question — did the other end take this in? — and it has to
+  // stop repeating either kind on the same answer.
+  //
   // Sending is not confirming. These are marked as confirmed only after a push
-  // carrying them actually succeeded — see acknowledge() in start().
+  // carrying them actually succeeded — see receive().
+  //
+  // ⚠️ Twin of db.unackedPickupIds(). A test asserts the two agree; changing
+  // what counts as unconfirmed means changing it in both.
   try {
     const done = database
-      .prepare('SELECT id FROM pickups WHERE acked_at IS NULL ORDER BY received LIMIT ?')
+      .prepare(
+        `SELECT id FROM (
+             SELECT id, received AS ord FROM pickups WHERE acked_at IS NULL
+             UNION ALL
+             SELECT id, at AS ord FROM pickup_cancellations WHERE acked_at IS NULL
+           ) ORDER BY ord LIMIT ?`
+      )
       .all(MAX_ACK_PER_PUSH)
       .map((r) => r.id);
-    if (done.length) payload.pickupsDone = done;
+    if (done.length) payload.pickupsDone = [...new Set(done)];
   } catch {
-    // No pickups table yet — a database mid-migration, or one this feature has
+    // No pickups tables yet — a database mid-migration, or one this feature has
     // never run against. The harvest numbers are the point of this payload and
     // they must still go out.
   }
@@ -398,6 +411,9 @@ function sign(secret, timestamp, body) {
 
 const REPLY_MAX_BYTES = 64 * 1024;
 const MAX_PICKUPS = 200;
+// Withdrawals are bare ids, so a reply can hold as many as it has bookings —
+// the whole open list could be cancelled at once.
+const MAX_CANCELLED = 200;
 const MAX_ITEMS_PER_PICKUP = 50;
 // How many confirmations ride along on one push. A backlog larger than this
 // drains over the following ticks rather than inflating a single request.
@@ -475,7 +491,7 @@ function onePickup(raw) {
  * those two need very different fixing.
  */
 function parseReply(text) {
-  const empty = { pickups: [], dropped: 0 };
+  const empty = { pickups: [], cancelled: [], dropped: 0 };
   if (!text) return empty;
   let raw;
   try {
@@ -486,33 +502,69 @@ function parseReply(text) {
     return { ...empty, error: 'reply is not JSON' };
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...empty, error: 'reply is not an object' };
-  // No pickups field at all is the ordinary case — every receiver written
-  // before this existed answers that way, and it is not an error.
-  if (raw.pickups === undefined || raw.pickups === null) return empty;
-  if (!Array.isArray(raw.pickups)) return { ...empty, error: 'pickups is not a list' };
 
-  const seen = new Set();
-  const pickups = [];
+  // The two lists are read independently and neither can take the other down
+  // with it. They say different things — this is open, this is withdrawn — and
+  // a receiver that garbles one has still told the truth with the other.
+  const problems = [];
   let dropped = 0;
-  // Entries past the cap are never examined, only counted.
-  const over = Math.max(0, raw.pickups.length - MAX_PICKUPS);
-  for (const entry of raw.pickups.slice(0, MAX_PICKUPS)) {
-    const p = onePickup(entry);
-    if (!p) {
-      dropped++;
-      continue;
+
+  const pickups = [];
+  // No pickups field at all is the ordinary case: every receiver written before
+  // this existed answers that way, and it is not an error.
+  if (raw.pickups !== undefined && raw.pickups !== null) {
+    if (!Array.isArray(raw.pickups)) problems.push('pickups is not a list');
+    else {
+      // Entries past the cap are never examined, only counted.
+      const over = Math.max(0, raw.pickups.length - MAX_PICKUPS);
+      if (over) problems.push(`reply carried more than ${MAX_PICKUPS} pickups`);
+      dropped += over;
+      const seen = new Set();
+      for (const entry of raw.pickups.slice(0, MAX_PICKUPS)) {
+        const p = onePickup(entry);
+        if (!p) {
+          dropped++;
+          continue;
+        }
+        // The same id twice in one reply: first wins, so which one that is does
+        // not depend on the order rows happen to be written in.
+        if (seen.has(p.id)) {
+          dropped++;
+          continue;
+        }
+        seen.add(p.id);
+        pickups.push(p);
+      }
     }
-    // The same id twice in one reply: first wins, so which one that is does not
-    // depend on the order rows happen to be written in.
-    if (seen.has(p.id)) {
-      dropped++;
-      continue;
-    }
-    seen.add(p.id);
-    pickups.push(p);
   }
-  const out = { pickups, dropped: dropped + over };
-  if (over) out.error = `reply carried more than ${MAX_PICKUPS} pickups`;
+
+  // Withdrawals: a bare list of ids, nothing else. There is nothing to describe
+  // about a pickup that is no longer happening.
+  const cancelled = [];
+  if (raw.pickupsCancelled !== undefined && raw.pickupsCancelled !== null) {
+    if (!Array.isArray(raw.pickupsCancelled)) problems.push('pickupsCancelled is not a list');
+    else {
+      const over = Math.max(0, raw.pickupsCancelled.length - MAX_CANCELLED);
+      if (over) problems.push(`reply carried more than ${MAX_CANCELLED} cancellations`);
+      dropped += over;
+      const seen = new Set();
+      for (const entry of raw.pickupsCancelled.slice(0, MAX_CANCELLED)) {
+        // Numbers, objects and nulls are not ids. Same shape as everywhere else
+        // — an id that would be refused as a booking cannot be honoured as a
+        // withdrawal either.
+        const id = typeof entry === 'string' ? entry.trim() : '';
+        if (!ID_RE.test(id) || seen.has(id)) {
+          dropped++;
+          continue;
+        }
+        seen.add(id);
+        cancelled.push(id);
+      }
+    }
+  }
+
+  const out = { pickups, cancelled, dropped };
+  if (problems.length) out.error = problems.join('; ');
   return out;
 }
 
@@ -692,7 +744,6 @@ function receive(database, dbApi, log, r) {
     const reply = r.reply;
     if (!reply) return;
     if (reply.error) log('warn', 'Harvest feed reply not usable', { error: reply.error, dropped: reply.dropped });
-    if (!reply.pickups.length) return;
 
     let fresh = 0;
     for (const p of reply.pickups) {
@@ -704,9 +755,36 @@ function receive(database, dbApi, log, r) {
         log('warn', 'Pickup rejected', { id: p.id, error: e.message });
       }
     }
+
+    // Withdrawals last, and that ordering is a decision rather than an
+    // accident. Should one reply somehow name the same id in both lists, the
+    // withdrawal is the statement that has to survive: packing a crate for a
+    // cancelled order costs produce, and not packing one for an order that is
+    // still live costs a phone call.
+    //
+    // Applied to the database before it can appear in `pickupsDone` — same
+    // ordering as a booking, same reason. Confirming a withdrawal this end has
+    // not carried out means the receiver stops repeating it while the pickup is
+    // still sitting in the list.
+    let withdrawn = { removed: 0, recorded: 0, skipped: 0 };
+    if (reply.cancelled && reply.cancelled.length && typeof dbApi.cancelPickups === 'function') {
+      try {
+        withdrawn = dbApi.cancelPickups(database, reply.cancelled);
+      } catch (e) {
+        log('warn', 'Pickup withdrawals not applied', { error: e.message });
+      }
+    }
+
     // Silence when nothing moved: this runs every quarter of an hour and a
-    // receiver repeats its open pickups every single time.
-    if (fresh) log('info', 'Pickups received', { stored: fresh, of: reply.pickups.length });
+    // receiver repeats its open pickups every single time. A withdrawal that
+    // removed nothing is the same non-event — the id was never here, which the
+    // receiver cannot know and reports anyway.
+    if (fresh || withdrawn.removed)
+      log('info', 'Pickups received', {
+        stored: fresh,
+        of: reply.pickups.length,
+        withdrawn: withdrawn.removed
+      });
   } catch (e) {
     log('warn', 'Harvest feed reply not stored', { error: e.message });
   }
@@ -803,7 +881,8 @@ module.exports = {
   VERSION,
   VERSION_RELEASE,
   REPLY_MAX_BYTES,
-  MAX_PICKUPS
+  MAX_PICKUPS,
+  MAX_CANCELLED
 };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────

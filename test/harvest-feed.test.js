@@ -1103,3 +1103,233 @@ describe('pickups round trip', () => {
     );
   });
 });
+
+// ── Withdrawals ──────────────────────────────────────────────────────────────
+//
+// A customer cancels after the pickup was already stored here. The receiver
+// cannot reach in and delete it — there is no route to this machine, which is
+// the entire point — so it names the id in its next reply instead.
+//
+// The failure this prevents is concrete: without it the pickup stands in the
+// list for ever and somebody packs a crate for nobody.
+describe('feed reply – withdrawals', () => {
+  it('reads a plain list of ids', () => {
+    const r = feed.parseReply(JSON.stringify({ ok: true, pickupsCancelled: ['p_1', 'p_2'] }));
+    assert.deepEqual(r.cancelled, ['p_1', 'p_2']);
+    assert.equal(r.error, undefined);
+  });
+
+  it('holds the same ids to the same shape a booking has to meet', () => {
+    // An id that would be refused as a booking cannot be honoured as a
+    // withdrawal either, or the two lists disagree about what an id is.
+    const r = feed.parseReply(
+      JSON.stringify({ pickupsCancelled: [42, {}, null, 'has spaces', 'x'.repeat(200), '', 'p_good'] })
+    );
+    assert.deepEqual(r.cancelled, ['p_good']);
+    assert.equal(r.dropped, 6);
+  });
+
+  it('collapses a repeated id', () => {
+    const r = feed.parseReply(JSON.stringify({ pickupsCancelled: ['p_a', 'p_a', 'p_a'] }));
+    assert.deepEqual(r.cancelled, ['p_a']);
+  });
+
+  it('caps how many one reply may carry', () => {
+    const many = Array.from({ length: feed.MAX_CANCELLED + 60 }, (_, i) => 'p_' + i);
+    const r = feed.parseReply(JSON.stringify({ pickupsCancelled: many }));
+    assert.equal(r.cancelled.length, feed.MAX_CANCELLED);
+    assert.equal(r.dropped, 60);
+    assert.match(r.error, /more than/);
+  });
+
+  it('refuses a field that is not a list, without touching the pickups beside it', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: [PICKUP], pickupsCancelled: 'p_1' }));
+    assert.equal(r.pickups.length, 1, 'a garbled withdrawal list must not cost the bookings');
+    assert.deepEqual(r.cancelled, []);
+    assert.match(r.error, /pickupsCancelled is not a list/);
+  });
+
+  it('survives the mirror case — broken pickups, usable withdrawals', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: 'nope', pickupsCancelled: ['p_1'] }));
+    assert.deepEqual(r.cancelled, ['p_1']);
+    assert.match(r.error, /pickups is not a list/);
+  });
+
+  it('reports both problems when both lists are garbage', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: 7, pickupsCancelled: 9 }));
+    assert.match(r.error, /pickups is not a list/);
+    assert.match(r.error, /pickupsCancelled is not a list/);
+  });
+
+  it('is silent about a reply that carries no withdrawals at all', () => {
+    const r = feed.parseReply(JSON.stringify({ pickups: [PICKUP] }));
+    assert.deepEqual(r.cancelled, []);
+    assert.equal(r.error, undefined);
+  });
+});
+
+describe('pickups round trip – withdrawals', () => {
+  let t;
+  const quiet = () => {};
+  const cfg = { ...CFG, plannedDays: 0, timeoutMs: 200 };
+
+  beforeEach(() => {
+    t = tmpDb();
+  });
+  afterEach(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  /** Push once against a receiver answering with `body`, keeping what we sent. */
+  async function push(body, sentBodies) {
+    return feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: {
+        fetch: async (_url, init) => {
+          if (sentBodies) sentBodies.push(JSON.parse(init.body));
+          return jsonReply({ ok: true, ...body });
+        },
+        sleep: async () => {}
+      }
+    });
+  }
+
+  it('a withdrawal removes the stored pickup', async () => {
+    await push({ pickups: [PICKUP] });
+    assert.equal(db.listPickups(t.db).length, 1);
+    await push({ pickupsCancelled: [PICKUP.id] });
+    assert.deepEqual(db.listPickups(t.db), [], 'the crate must stop being on the list');
+  });
+
+  it('a withdrawal for an id that never arrived does nothing and does not throw', async () => {
+    // The ordinary case, not an error. The receiver reports a withdrawal
+    // whether or not its earlier reply got through, because it cannot tell.
+    await push({ pickups: [PICKUP] });
+    const r = await push({ pickupsCancelled: ['p_never_seen_here'] });
+    assert.equal(r.ok, true);
+    assert.equal(db.listPickups(t.db).length, 1, 'the pickup that was here is untouched');
+    assert.equal(db.listPickups(t.db)[0].id, PICKUP.id);
+  });
+
+  it('withdrawing twice is the same as withdrawing once', async () => {
+    await push({ pickups: [PICKUP] });
+    await push({ pickupsCancelled: [PICKUP.id] });
+    const r = await push({ pickupsCancelled: [PICKUP.id] });
+    assert.equal(r.ok, true);
+    assert.equal(db.listPickups(t.db).length, 0);
+    assert.equal(db.countPickups(t.db).withdrawn, 1, 'one withdrawal, however often it is repeated');
+  });
+
+  it('confirms a withdrawal through the same list a booking uses', async () => {
+    const sent = [];
+    await push({ pickups: [PICKUP] }, sent);
+    await push({}, sent); // confirms the booking
+    await push({ pickupsCancelled: [PICKUP.id] }, sent);
+    await push({}, sent);
+    assert.deepEqual(sent[3].pickupsDone, [PICKUP.id], 'the receiver stops repeating only once it hears this');
+  });
+
+  it('stops naming a withdrawal once the receiver has heard it', async () => {
+    const sent = [];
+    await push({ pickupsCancelled: [PICKUP.id] }, sent);
+    await push({}, sent); // confirms the withdrawal
+    await push({}, sent);
+    assert.deepEqual(sent[1].pickupsDone, [PICKUP.id]);
+    assert.equal(sent[2].pickupsDone, undefined);
+    assert.equal(db.countPickups(t.db).unconfirmed, 0);
+  });
+
+  it('confirms a withdrawal for an id it never held, or the receiver repeats for ever', async () => {
+    const sent = [];
+    await push({ pickupsCancelled: ['p_never_seen_here'] }, sent);
+    await push({}, sent);
+    assert.deepEqual(sent[1].pickupsDone, ['p_never_seen_here']);
+  });
+
+  it('confirms nothing about a withdrawal when the push did not get through', async () => {
+    await push({ pickupsCancelled: [PICKUP.id] });
+    await feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: { fetch: async () => ({ ok: false, status: 503 }), sleep: async () => {} }
+    });
+    assert.deepEqual(db.unackedPickupIds(t.db), [PICKUP.id]);
+  });
+
+  it('takes bookings and withdrawals out of one and the same reply', async () => {
+    await push({ pickups: [PICKUP, { ...PICKUP, id: 'p_second' }] });
+    await push({ pickups: [{ ...PICKUP, id: 'p_third' }], pickupsCancelled: [PICKUP.id] });
+    assert.deepEqual(
+      db
+        .listPickups(t.db)
+        .map((r) => r.id)
+        .sort(),
+      ['p_second', 'p_third']
+    );
+  });
+
+  it('lets the withdrawal win when one reply says both about the same id', async () => {
+    // Packing a crate for a cancelled order costs produce; not packing one for
+    // an order that is still live costs a phone call. The cheaper mistake wins.
+    await push({ pickups: [PICKUP], pickupsCancelled: [PICKUP.id] });
+    assert.deepEqual(db.listPickups(t.db), []);
+  });
+
+  it('a later booking reopens a withdrawn id, and clears the stale receipt', async () => {
+    const sent = [];
+    await push({ pickupsCancelled: [PICKUP.id] }, sent);
+    await push({ pickups: [PICKUP] }, sent);
+    assert.equal(db.listPickups(t.db).length, 1, 'the newest statement about an id is the one that holds');
+    assert.equal(
+      db.countPickups(t.db).withdrawn,
+      0,
+      'the receipt would otherwise confirm a withdrawal that was undone'
+    );
+  });
+
+  it('a garbled withdrawal list costs neither the push nor the bookings beside it', async () => {
+    const r = await feed.deliver({
+      database: t.db,
+      cfg,
+      dbApi: db,
+      log: quiet,
+      deps: {
+        fetch: async () => jsonReply({ ok: true, pickups: [PICKUP], pickupsCancelled: { nope: 1 } }),
+        sleep: async () => {}
+      }
+    });
+    assert.equal(r.ok, true);
+    assert.equal(db.listPickups(t.db).length, 1);
+  });
+
+  it('a giant withdrawal list is capped rather than swallowed whole', async () => {
+    await push({ pickups: [PICKUP] });
+    const many = Array.from({ length: 5000 }, (_, i) => 'p_bulk_' + i);
+    const r = await push({ pickupsCancelled: many });
+    assert.equal(r.ok, true);
+    assert.ok(db.countPickups(t.db).withdrawn <= feed.MAX_CANCELLED);
+  });
+
+  it('agrees with db.unackedPickupIds about what is still outstanding', async () => {
+    // buildPayload runs its own SQL rather than calling the helper, so the two
+    // can drift. They are twins by comment; this makes them twins by test.
+    const sent = [];
+    await push({ pickups: [PICKUP, { ...PICKUP, id: 'p_second' }] }, sent);
+    // This one confirms both bookings and takes a withdrawal for an id that was
+    // never here — so what is outstanding afterwards is a mixture of the two
+    // tables, which is exactly where the two queries could disagree.
+    await push({ pickupsCancelled: ['p_third_never_seen'] }, sent);
+
+    const fromDb = db.unackedPickupIds(t.db).slice().sort();
+    await push({}, sent);
+    const fromPayload = (sent[2].pickupsDone || []).slice().sort();
+    assert.deepEqual(fromPayload, fromDb);
+    assert.deepEqual(fromDb, ['p_third_never_seen'], 'the bookings were confirmed by the push that carried them');
+  });
+});

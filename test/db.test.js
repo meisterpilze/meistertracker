@@ -2100,3 +2100,116 @@ describe('db – pickups', () => {
     assert.equal(db.countPickups(d).total, 1);
   });
 });
+
+// ── Withdrawn pickups (v60) ──────────────────────────────────────────────────
+//
+// The pickup row is deleted and a receipt stays behind. The receipt is not
+// bookkeeping for its own sake: a withdrawal has to be confirmed on the next
+// push exactly like a booking, and deleting the row leaves nothing to carry
+// that obligation.
+describe('db – pickup withdrawals', () => {
+  let d, p;
+
+  beforeEach(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  afterEach(() => {
+    d.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(p + s, { force: true });
+  });
+
+  it('removes the pickup and leaves a receipt behind', () => {
+    db.storePickup(d, { id: 'p_1', place: 'Markt' });
+    const out = db.cancelPickups(d, ['p_1']);
+    assert.equal(out.removed, 1);
+    assert.equal(out.recorded, 1);
+    assert.deepEqual(db.listPickups(d), []);
+    assert.equal(db.countPickups(d).withdrawn, 1);
+  });
+
+  it('does nothing and throws nothing for an id it never held', () => {
+    // The ordinary case. The receiver reports a withdrawal whether or not its
+    // earlier reply got through, because it has no way of telling.
+    db.storePickup(d, { id: 'p_keep' });
+    const out = db.cancelPickups(d, ['p_never']);
+    assert.equal(out.removed, 0, 'nothing was there to remove');
+    assert.equal(out.recorded, 1, 'but it still has to be confirmable');
+    assert.equal(db.listPickups(d).length, 1);
+    assert.equal(db.listPickups(d)[0].id, 'p_keep');
+  });
+
+  it('is idempotent however often the same withdrawal arrives', () => {
+    db.storePickup(d, { id: 'p_1' });
+    db.cancelPickups(d, ['p_1']);
+    db.cancelPickups(d, ['p_1']);
+    db.cancelPickups(d, ['p_1']);
+    assert.equal(db.countPickups(d).withdrawn, 1);
+    assert.equal(db.listPickups(d).length, 0);
+  });
+
+  it('puts a withdrawal in the same outstanding list as a booking', () => {
+    db.storePickup(d, { id: 'p_open' });
+    db.cancelPickups(d, ['p_gone']);
+    assert.deepEqual(db.unackedPickupIds(d).sort(), ['p_gone', 'p_open']);
+  });
+
+  it('confirms a withdrawal the same way it confirms a booking', () => {
+    db.cancelPickups(d, ['p_gone']);
+    assert.equal(db.ackPickups(d, ['p_gone']), 1);
+    assert.deepEqual(db.unackedPickupIds(d), []);
+    assert.equal(db.ackPickups(d, ['p_gone']), 0, 'confirming twice changes nothing');
+  });
+
+  it('re-arms a confirmation when the withdrawal is repeated', () => {
+    // Still being sent means the confirmation never registered at the far end.
+    db.cancelPickups(d, ['p_gone']);
+    db.ackPickups(d, ['p_gone']);
+    assert.deepEqual(db.unackedPickupIds(d), []);
+    db.cancelPickups(d, ['p_gone']);
+    assert.deepEqual(db.unackedPickupIds(d), ['p_gone']);
+  });
+
+  it('drops the receipt when the id is booked again', () => {
+    // The newest statement about an id holds. A receipt left lying around would
+    // confirm a withdrawal that has since been undone.
+    db.cancelPickups(d, ['p_1']);
+    db.storePickup(d, { id: 'p_1', place: 'Markt' });
+    assert.equal(db.countPickups(d).withdrawn, 0);
+    assert.deepEqual(db.unackedPickupIds(d), ['p_1']);
+    assert.equal(db.listPickups(d).length, 1);
+  });
+
+  it('skips junk in the list without costing the ids beside it', () => {
+    db.storePickup(d, { id: 'p_real' });
+    const out = db.cancelPickups(d, ['', null, undefined, 'x'.repeat(200), 'p_real']);
+    assert.equal(out.removed, 1);
+    assert.equal(out.skipped, 4);
+    assert.deepEqual(db.listPickups(d), []);
+  });
+
+  it('takes an empty or absent list as nothing to do', () => {
+    assert.deepEqual(db.cancelPickups(d, []), { removed: 0, recorded: 0, skipped: 0 });
+    assert.deepEqual(db.cancelPickups(d, null), { removed: 0, recorded: 0, skipped: 0 });
+  });
+
+  it('holds a bounded number of receipts', () => {
+    // Same ceiling as the pickups table and for the same reason: a receiver
+    // inventing ids must not be able to grow this file without limit.
+    const now = new Date().toISOString();
+    const stmt = d.prepare('INSERT INTO pickup_cancellations(id, at) VALUES(?,?)');
+    d.exec('BEGIN');
+    for (let i = 0; i < 5000; i++) stmt.run('bulk_' + i, now);
+    d.exec('COMMIT');
+
+    db.storePickup(d, { id: 'p_real' });
+    const out = db.cancelPickups(d, ['p_real']);
+    assert.equal(out.removed, 1, 'the pickup still goes, even with no room for the receipt');
+    assert.equal(out.skipped, 1);
+  });
+
+  it('goes away with the orders it belongs to', () => {
+    db.cancelPickups(d, ['p_gone']);
+    db.resetOperationalData(d, { orders: true });
+    assert.equal(db.countPickups(d).withdrawn, 0);
+  });
+});

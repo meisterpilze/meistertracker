@@ -228,6 +228,15 @@ CREATE TABLE IF NOT EXISTS pickups (
 CREATE INDEX IF NOT EXISTS idx_pickups_open ON pickups(acked_at);
 CREATE INDEX IF NOT EXISTS idx_pickups_from ON pickups(from_time);
 
+-- Pickups the receiver has withdrawn. See migration v60: the pickup row is
+-- deleted, and this is the receipt that keeps the withdrawal confirmable.
+CREATE TABLE IF NOT EXISTS pickup_cancellations (
+  id       TEXT PRIMARY KEY,
+  at       TEXT NOT NULL,
+  acked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pickup_cancel_open ON pickup_cancellations(acked_at);
+
 -- Camera dashboard (admin-only WIP). The Python mushroom_camera module
 -- owns the camera_measurements / snapshots / flags / labels tables and
 -- creates them in its own ensure_schema(); the two below are also created
@@ -1765,6 +1774,40 @@ const MIGRATIONS = [
     )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_pickups_open ON pickups(acked_at)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_pickups_from ON pickups(from_time)');
+    }
+  },
+  {
+    version: 60,
+    description: 'Withdrawn pickups: delete the row, keep a receipt so the withdrawal can be confirmed',
+    fn(db) {
+      // A customer cancels after the pickup was already stored here. The
+      // receiver cannot reach in and delete it — that is the whole point of the
+      // architecture — so it says so in its next reply instead, and the row goes
+      // away here. Without that, the pickup stands in the list for ever and
+      // somebody packs a crate for nobody.
+      //
+      // Deleting alone is not enough, and this table is the reason. The
+      // withdrawal has to be confirmed on the next push exactly like a booking,
+      // or the receiver has no way of knowing it landed and repeats it for ever.
+      // Delete the pickup and there is nothing left to carry that obligation —
+      // so the receipt outlives the row it removed.
+      //
+      // Its own table rather than a `cancelled` flag on `pickups`: a withdrawn
+      // pickup is not a pickup, and a flag would mean every query that lists,
+      // counts or prepares work has to remember to exclude it. One that forgets
+      // shows a crate that nobody is coming for, which is the exact failure this
+      // migration exists to prevent.
+      //
+      // Rows appear here for ids that were never stored, too. The receiver
+      // reports a withdrawal whether or not its earlier reply got through,
+      // because it cannot tell — so an unknown id is the normal case, not an
+      // error, and it still needs confirming.
+      db.exec(`CREATE TABLE IF NOT EXISTS pickup_cancellations (
+      id       TEXT PRIMARY KEY,
+      at       TEXT NOT NULL,
+      acked_at TEXT
+    )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_pickup_cancel_open ON pickup_cancellations(acked_at)');
     }
   }
 ];
@@ -3593,6 +3636,7 @@ function resetOperationalData(db, opts) {
       // and a place for something nobody can look up. Unconfirmed ones the
       // receiver still holds open come back on the next reply anyway.
       wipe('pickups');
+      wipe('pickup_cancellations');
     }
     if (opts.planning) {
       wipe('calendar_event_assignees');
@@ -4240,6 +4284,11 @@ function storePickup(db, p) {
   };
 
   const now = new Date().toISOString();
+  // A booking for an id that was withdrawn earlier: the newer statement wins,
+  // and the stale receipt goes. Leaving it would put the id in `pickupsDone` as
+  // a withdrawal at the same time as the row exists as a pickup.
+  db.prepare('DELETE FROM pickup_cancellations WHERE id = ?').run(id);
+
   const old = db.prepare('SELECT * FROM pickups WHERE id = ?').get(id);
   if (!old) {
     // A receiver that invents a fresh id every time would otherwise grow this
@@ -4295,13 +4344,92 @@ function storePickup(db, p) {
   return 'updated';
 }
 
-/** The ids stored here that the receiver has not been told about yet. */
+/**
+ * Withdraw pickups the receiver has taken back.
+ *
+ * The pickup row goes; a receipt stays behind so the withdrawal can be
+ * confirmed on the next push. Both halves are idempotent, and they have to be:
+ * the receiver reports a withdrawal whether or not its earlier reply got
+ * through, because it has no way of telling. An id that was never stored here
+ * is therefore the ordinary case and not an error — it deletes nothing, records
+ * the receipt, and returns quietly.
+ *
+ * Returns what happened, because "removed 0 of 3" and "removed 3 of 3" are the
+ * difference between a receiver repeating itself and one that is out of step.
+ */
+function cancelPickups(db, ids) {
+  const out = { removed: 0, recorded: 0, skipped: 0 };
+  if (!Array.isArray(ids) || !ids.length) return out;
+  const at = new Date().toISOString();
+  const del = db.prepare('DELETE FROM pickups WHERE id = ?');
+  const known = db.prepare('SELECT 1 AS x FROM pickup_cancellations WHERE id = ?');
+  const ins = db.prepare('INSERT INTO pickup_cancellations(id, at, acked_at) VALUES(?,?,NULL)');
+  // Still being sent means the confirmation never registered at the far end, so
+  // say it again. Same reasoning as the re-arm in storePickup().
+  const rearm = db.prepare('UPDATE pickup_cancellations SET acked_at=NULL WHERE id=?');
+  let room = PICKUP_MAX_ROWS - db.prepare('SELECT COUNT(*) AS c FROM pickup_cancellations').get().c;
+  let inserted = 0;
+
+  db.exec('BEGIN');
+  try {
+    for (const raw of ids) {
+      const id = String(raw || '').trim();
+      // Junk in the list must not cost the ids beside it.
+      if (!id || id.length > 128) {
+        out.skipped++;
+        continue;
+      }
+      out.removed += del.run(id).changes;
+      if (known.get(id)) {
+        rearm.run(id);
+        out.recorded++;
+        continue;
+      }
+      // Same ceiling as the pickups table, for the same reason: a receiver
+      // inventing ids must not be able to grow this file without limit.
+      if (room <= 0) {
+        out.skipped++;
+        continue;
+      }
+      ins.run(id, at);
+      room--;
+      inserted++;
+      out.recorded++;
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  // A repeat that only re-armed a confirmation changed nothing anyone can see.
+  if (out.removed || inserted) incrementDataVersion(db);
+  return out;
+}
+
+/**
+ * The ids the receiver has not been told about yet — bookings and withdrawals
+ * alike, because it is waiting on both and stops repeating either one only when
+ * it comes back in `pickupsDone`.
+ *
+ * ⚠️ Twin of the query in buildPayload() in harvest-feed.js, which is the one
+ * that actually fills the outgoing field. A test asserts the two agree; if you
+ * change what counts as unconfirmed, change it in both.
+ */
 function unackedPickupIds(db, limit) {
   const n = Math.max(1, Math.min(1000, Number(limit) || 500));
-  return db
-    .prepare('SELECT id FROM pickups WHERE acked_at IS NULL ORDER BY received LIMIT ?')
-    .all(n)
-    .map((r) => r.id);
+  const rows = db
+    .prepare(
+      `SELECT id, ord FROM (
+           SELECT id, received AS ord FROM pickups WHERE acked_at IS NULL
+           UNION ALL
+           SELECT id, at AS ord FROM pickup_cancellations WHERE acked_at IS NULL
+         ) ORDER BY ord LIMIT ?`
+    )
+    .all(n);
+  // A booking and a withdrawal for one id cannot both be open — storePickup
+  // clears the receipt and cancelPickups deletes the pickup — but confirming
+  // the same id twice in one request would be a strange thing to send.
+  return [...new Set(rows.map((r) => r.id))];
 }
 
 /**
@@ -4314,11 +4442,15 @@ function unackedPickupIds(db, limit) {
 function ackPickups(db, ids) {
   if (!Array.isArray(ids) || !ids.length) return 0;
   const at = new Date().toISOString();
-  const stmt = db.prepare('UPDATE pickups SET acked_at=? WHERE id=? AND acked_at IS NULL');
+  const open = db.prepare('UPDATE pickups SET acked_at=? WHERE id=? AND acked_at IS NULL');
+  const gone = db.prepare('UPDATE pickup_cancellations SET acked_at=? WHERE id=? AND acked_at IS NULL');
   let n = 0;
   db.exec('BEGIN');
   try {
-    for (const id of ids) n += stmt.run(at, String(id)).changes;
+    for (const raw of ids) {
+      const id = String(raw);
+      n += open.run(at, id).changes + gone.run(at, id).changes;
+    }
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -4377,7 +4509,18 @@ function countPickups(db) {
   const row = db
     .prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN acked_at IS NULL THEN 1 ELSE 0 END) AS open FROM pickups')
     .get();
-  return { total: row.total || 0, unconfirmed: row.open || 0 };
+  const gone = db
+    .prepare(
+      'SELECT COUNT(*) AS total, SUM(CASE WHEN acked_at IS NULL THEN 1 ELSE 0 END) AS open FROM pickup_cancellations'
+    )
+    .get();
+  return {
+    total: row.total || 0,
+    // Bookings and withdrawals both wait on the same confirmation, so a caller
+    // asking "is anything outstanding?" has to be told about both.
+    unconfirmed: (row.open || 0) + (gone.open || 0),
+    withdrawn: gone.total || 0
+  };
 }
 
 // -- Print Bridge Config --
@@ -7697,6 +7840,7 @@ module.exports = {
   setHarvestRelease,
   deleteHarvestRelease,
   storePickup,
+  cancelPickups,
   unackedPickupIds,
   ackPickups,
   listPickups,
