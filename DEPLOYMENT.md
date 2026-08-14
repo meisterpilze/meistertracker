@@ -617,7 +617,7 @@ Two consequences worth knowing:
 
 **In what portions it is sold** is the second half of the same question, and it is answered in *Settings → Harvest feed → Amounts handed out*: tick the sizes you pack in — 250 g, 500 g, a kilo — or add one the list does not offer. They go out as `packSizes`, one list for every species, because portioning follows the packing bench and not the mushroom. A shop offers those amounts for each listing and leaves out whatever the release no longer covers.
 
-Ticking nothing leaves the field out of the payload entirely, and the receiver keeps using sizes of its own — which is what every receiver did before this existed. That makes it the one field here whose absence is safe: unset costs a preference, not a safeguard.
+Ticking nothing leaves the field out of the payload entirely, and a receiver then has no portions to sell produce in. ⚠️ **Expect that to mean no orders at all** — the shop this was built with shows the listing and its price, and offers no order button until sizes are set. It deliberately does not fall back on sizes of its own: a ladder nobody decided looks, in a shop window, exactly like one somebody did.
 
 > **Until 2026-08-14 this was a switch** (`HARVEST_WEBHOOK_RELEASE_MODE`, "Only report what is released for sale"), off by default. It is gone. Off, the feed published harvest totals — a number that stops being true the moment something is sold at a stall — and because it was also the quiet option, a lab that never found the checkbox published raw stock and looked fine doing it. A setting whose wrong value produces plausible-looking numbers is not a setting worth keeping. The database column stays and is always 1, so an older build reading the same file does not fall back.
 
@@ -668,7 +668,7 @@ For installs where configuration is baked into an image or handled by whatever s
 | `HARVEST_WEBHOOK_LEAD_DAYS` | `0` | Days between a batch's due date (end of incubation) and the first expected flush. Species-dependent — yours is whatever your records show. |
 | `HARVEST_WEBHOOK_STRAIN` | `1` | `0` sends species only, no strain names. |
 | `HARVEST_WEBHOOK_SITE` | — | Free-form label, passed through untouched. Useful when several sites post to one receiver. |
-| `HARVEST_WEBHOOK_PACK_SIZES` | — | The portions a release is handed out in, in grams: `250,500,1000`. One list for every species. Whole numbers from 25 to 25000, at most eight; anything else in the list is dropped. Unset means the field is absent and the receiver decides. |
+| `HARVEST_WEBHOOK_PACK_SIZES` | — | The portions a release is handed out in, in grams: `250,500,1000`. One list for every species. Whole numbers from 25 to 25000, at most eight; anything else in the list is dropped. Unset means the field is absent — and a receiving shop has nothing to sell produce in, so expect no orders until it is set. |
 | `HARVEST_WEBHOOK_TIMEOUT_MS` | `15000` | Per attempt. Three attempts with backoff; a 4xx other than 408/429 stops immediately, because a wrong secret does not fix itself. |
 
 ### Verifying the signature on the receiving side

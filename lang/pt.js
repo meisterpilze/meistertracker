@@ -729,7 +729,7 @@ window.LANG['pt'] = {
   'harvestFeed.strain': 'Incluir nomes das estirpes',
   'harvestFeed.packSizes': 'Quantidades entregues',
   'harvestFeed.packHint':
-    'Em gramas, iguais para todas as espécies. Uma loja oferece exatamente estas quantidades e omite aquelas que a libertação já não cobre. Sem nada assinalado, o feed nada diz sobre porções — o recetor continua a usar as suas.',
+    'Em gramas, iguais para todas as espécies. Uma loja oferece exatamente estas quantidades e omite aquelas que a libertação já não cobre. Sem nada assinalado, não saem porções — não há em que encomendar, e uma loja assente neste feed não aceita encomendas.',
   'harvestFeed.packAdd': 'Adicionar quantidade',
   'harvestFeed.packNewHint': 'p. ex. 400',
   'harvestFeed.packBad': 'Uma quantidade é um número inteiro de gramas entre 25 e 25000.',

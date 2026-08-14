@@ -393,7 +393,12 @@ The release says *how much*. It does not say *in what portions*, and a shop cann
 
 The receiver combines the two lists: it offers these amounts for every listing and leaves out the ones a release no longer covers, so 250 g stays on the page when 300 g are left and the kilo does not.
 
-Ticking nothing is a real answer, and the default. The field is then absent, and a receiver keeps whatever it did before — unlike an empty `released`, which is a statement, an absent `packSizes` says nothing was decided here. Nor is it a version bump: a receiver that ignores the field is correct, only less specific.
+Ticking nothing is a real answer, and the default. The field is then absent — and a receiver has no portions to sell produce in. The shop this was built with treats that as "nothing to order": the listing still shows what is available and at what price, and there is simply no order button until sizes are set.
+
+That is deliberate, and it is the second time the same lesson has been learned here. The first build fell back on a ladder of its own — multiples of 250 g — whenever no sizes arrived, and a fallback like that sits in a shop window looking exactly as authoritative as a figure somebody chose. Nobody had chosen it. An absent `packSizes` now fails visibly rather than plausibly, the same reasoning that removed the release switch.
+
+It is still not a version bump: a receiver that ignores the field is correct, only less specific.
+
 #### Pickup windows: when it can be collected
 
 A shop that knows what is for sale still cannot let anyone book a time, because nothing outside the lab knows when the lab is reachable. Those times are entered as calendar appointments in the **Abholfenster** category — with a place from *Settings → Abholorte*, optional seats, and the calendar's ordinary recurrence, so "every Saturday 9–13, except the 15th" is one entry rather than fifty. Every push then carries them:
