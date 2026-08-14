@@ -355,11 +355,11 @@ Two things it deliberately does not do:
 - **It does not estimate yields.** Planned entries carry a species and a date, never an amount. How much a block gives varies too much between flushes, and a number that reaches a customer becomes a promise. Recorded harvests are measured, so those do carry grams.
 - **It does not subtract reservations.** If half of Thursday's harvest is already promised to a restaurant, publish the remainder — but what counts as promised differs per lab and is not tracked here. Do that subtraction in the receiving system, where the commitments live, or use release mode below, which asks the question the other way round.
 
-#### Release mode: what may be sold, not what was harvested
+#### The release: what may be sold, not what was harvested
 
 `harvested` is a production fact, and it only ever grows. That makes it the wrong number for a shop the moment you sell anything anywhere else: three kilos over the counter on Saturday, and the feed still reports Friday's harvest until it ages out of the window. Recording every sale would fix the arithmetic and will not happen — a market stand takes cash, not keystrokes.
 
-Release mode publishes a **set-aside** instead. In *Settings → Harvest feed → Released for sale* you enter, per species, how much a shop may sell and until when. Put that amount in its own crate and sell everything else from the rest, and no walk-in customer can make the published figure wrong — there is nothing to keep up to date. The payload then calls itself version 2 and carries a second list:
+The feed publishes a **set-aside** instead. On the *Pickups* page, under *Released for sale*, you enter per species how much a shop may sell and until when — next to the bookings for the same day, because deciding the one without seeing the other is how a Saturday gets oversold. Put that amount in its own crate and sell everything else from the rest, and no walk-in customer can make the published figure wrong; there is nothing to keep up to date. The payload calls itself version 2 and carries a second list:
 
 ```json
 {
@@ -369,11 +369,31 @@ Release mode publishes a **set-aside** instead. In *Settings → Harvest feed �
 }
 ```
 
-The version bump is the point: a receiver that publishes `harvested` and ignores `released` would offer produce you deliberately kept back. That is a change of meaning, not a new optional field, so a receiver built for version 1 is expected to reject it rather than guess. Labs that leave release mode off keep sending version 1 and their receivers notice nothing.
+The version bump is the point: a receiver that publishes `harvested` and ignores `released` would offer produce you deliberately kept back. That is a change of meaning, not a new optional field, so a receiver built for version 1 is expected to reject it rather than guess. **Version 1 is no longer sent at all.** It used to be the default, with the release as a switch — and that switch was the quiet option, so a lab that never found it published raw stock and looked fine doing so. An empty `released` list now means exactly what it says: nothing is for sale yet.
 
 `validUntil` is optional and worth setting. Fresh produce does not keep, and the realistic mistake is not a wrong number but a forgotten one — last week's release quietly selling mushrooms that were eaten days ago. An expired release counts as zero here; a receiver holding an old payload should apply the same rule at serving time, since the lab machine may simply be switched off.
 
 A release outlives its harvest window on purpose. Set two kilos aside on Monday for Saturday's market and by Thursday the harvest has dropped out of `freshDays` while the crate is still standing there. The person who put it there is the better source than the window arithmetic.
+
+#### Amounts handed out: in what portions the release is sold
+
+The release says *how much*. It does not say *in what portions*, and a shop cannot ask — it has to put something on the page, so it invents a ladder of its own. Whatever it guesses is a guess: a farm packing 400 g trays has no way to say so, and the choice gets made for it at the far end.
+
+*Settings → Harvest feed → Amounts handed out* is where you say it. Tick the sizes you pack in — 250 g, 500 g, a kilo — or add one the list does not offer, and the payload carries them:
+
+```json
+{
+  "version": 2,
+  "packSizes": [250, 500, 1000],
+  "released": [{ "species": "Oyster", "grams": 2000, "validUntil": "2026-08-02" }]
+}
+```
+
+**One list for every species, deliberately.** Portioning follows the packing bench — which trays are on the shelf, what the scale steps in — not the mushroom in the tray. Per species it would be a field to fill in for every new Sorte for an answer that is the same every time, and the first one forgotten is a species a shop quietly offers in the wrong sizes.
+
+The receiver combines the two lists: it offers these amounts for every listing and leaves out the ones a release no longer covers, so 250 g stays on the page when 300 g are left and the kilo does not.
+
+Ticking nothing is a real answer, and the default. The field is then absent, and a receiver keeps whatever it did before — unlike an empty `released`, which is a statement, an absent `packSizes` says nothing was decided here. Nor is it a version bump: a receiver that ignores the field is correct, only less specific.
 
 #### Pickups: what the receiver may report back
 

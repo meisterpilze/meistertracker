@@ -8314,7 +8314,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // A broken env config is reported by start(); here it just means "not
         // a working env source".
       }
-      jsonOk(res, { ...rest, hasSecret: !!secret, envActive });
+      // Canonical, not as stored. The stored text is a split away from whatever
+      // is in the column, and the settings page must not offer a portion size
+      // the feed would drop on the way out — a ticked box that changes nothing
+      // is worse than no box.
+      jsonOk(res, { ...rest, packSizes: harvestFeed.packSizes(cfg.packSizes), hasSecret: !!secret, envActive });
     } catch (err) {
       safeErr(res, err);
     }
@@ -8341,7 +8345,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           plannedDays: clampInt(data.plannedDays, 0, 365, 28),
           leadDays: clampInt(data.leadDays, 0, 365, 0),
           strain: data.strain !== false,
-          site: String(data.site || '').trim()
+          site: String(data.site || '').trim(),
+          // Normalised here rather than trusted: the field is a list of grams
+          // and arrives as whatever the form or an API client sends. Anything
+          // unusable is dropped, and the response carries the stored list back
+          // so a dropped entry is visible instead of assumed saved.
+          packSizes: harvestFeed.packSizes(data.packSizes)
         };
         // Validated before saving, not at the next tick: a rejected URL that is
         // already stored would leave the feed off with the reason buried in a
@@ -8365,7 +8374,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         db.updateHarvestFeedCfg(database, next);
         const running = startHarvestFeed();
         log('info', 'Harvest feed config updated', { actor: req.authUser.username, enabled: next.enabled });
-        jsonOk(res, { running });
+        jsonOk(res, { running, packSizes: next.packSizes });
       } catch (err) {
         safeErr(res, err);
       }

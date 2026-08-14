@@ -794,6 +794,12 @@ window.LANG['de'] = {
   'harvestFeed.plannedDays': 'Vorausschau … Tage',
   'harvestFeed.leadDays': 'Vorlauf … Tage',
   'harvestFeed.strain': 'Sortennamen mitschicken',
+  'harvestFeed.packSizes': 'Mengenangaben',
+  'harvestFeed.packHint':
+    'In Gramm, für alle Arten dieselben. Ein Shop bietet genau diese Mengen an und lässt weg, wofür die Freigabe nicht mehr reicht. Nichts angekreuzt heißt: Der Feed sagt zu Mengen nichts, und die Gegenstelle bleibt bei ihren eigenen.',
+  'harvestFeed.packAdd': 'Menge hinzufügen',
+  'harvestFeed.packNewHint': 'z. B. 400',
+  'harvestFeed.packBad': 'Eine Menge ist eine ganze Grammzahl zwischen 25 und 25000.',
   'harvestFeed.site': 'Standort-Kennung (optional)',
   'harvestFeed.testNow': 'Jetzt einmal senden',
   'harvestFeed.preview': 'Zeigen, was hinausginge',

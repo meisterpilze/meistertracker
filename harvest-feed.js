@@ -83,6 +83,10 @@
 //   HARVEST_WEBHOOK_SITE          free-form label, passed through untouched.
 //                                 Useful when several sites post to one
 //                                 receiver.
+//   HARVEST_WEBHOOK_PACK_SIZES    the portions you hand a release out in, in
+//                                 grams: "250,500,1000". One ladder for every
+//                                 species — see `packSizes` below. Unset means
+//                                 no instruction, and the receiver decides.
 //   HARVEST_WEBHOOK_TIMEOUT_MS    per attempt (default 15000).
 //
 // ── Signature ────────────────────────────────────────────────────────────────
@@ -128,6 +132,61 @@ let timer = null;
 const VERSION = 1;
 const VERSION_RELEASE = 2;
 const ATTEMPTS = 3;
+
+// ── Pack sizes ───────────────────────────────────────────────────────────────
+//
+// `released` says how much may be sold. `packSizes` says in what portions it is
+// handed over: [250, 500, 1000] — grams, ascending, one ladder for every
+// species.
+//
+// It is a separate statement because it answers a different question, and the
+// far end was answering it alone. A shop has to offer *some* amount, so without
+// this it invents a ladder — ours guessed 250 g and multiples of it. That is a
+// fair guess and still a guess: a farm packing 400 g trays had no way to say so.
+//
+// **One list, not one per species.** Portioning follows the packing bench —
+// which trays are on the shelf, what the scale steps in — not the mushroom in
+// the tray. Per species it would be a field to fill in for every new Sorte, for
+// an answer that is the same every time, and the first one forgotten would be a
+// species a shop quietly offers in the wrong sizes.
+//
+// **Absent means absent.** No sizes set, no field in the payload, and the
+// receiver keeps doing what it did before. This is not the release list, where
+// silence had to be given a meaning because publishing raw stock was the
+// dangerous reading — here the worst case is a shop using its own ladder, which
+// is exactly today's behaviour.
+//
+// Not a version bump: a receiver that ignores the field is correct, only less
+// specific. Fassung 2 stays Fassung 2.
+const PACK_MIN_G = 25;
+const PACK_MAX_G = 25_000;
+const PACK_MAX_COUNT = 8;
+
+/**
+ * The canonical form of a pack-size list: ascending, deduplicated, in range.
+ *
+ * Takes what a form, an environment variable or an API body might hold — an
+ * array, "250,500,1000", a single number — and returns integers. The one place
+ * that decides what a size may be; everything else stores or sends the result.
+ *
+ * Silent about what it drops, on purpose. This runs on the way in from a UI
+ * that shows the result back, and on every read of a stored row where throwing
+ * would take the settings page down over a stray comma.
+ */
+function packSizes(raw) {
+  const parts = Array.isArray(raw) ? raw : String(raw ?? '').split(',');
+  const out = [];
+  for (const part of parts) {
+    // Number and not parseInt. parseInt('500g') is 500 and parseInt('2 kg') is
+    // 2 — it reads until it stops understanding and keeps what it had, which
+    // turns a unit somebody typed out of habit into a portion size two grams
+    // large. Number says NaN to both, and NaN is dropped.
+    const n = Number(String(part).trim());
+    if (!Number.isInteger(n) || n < PACK_MIN_G || n > PACK_MAX_G) continue;
+    if (!out.includes(n)) out.push(n);
+  }
+  return out.sort((a, b) => a - b).slice(0, PACK_MAX_COUNT);
+}
 
 /**
  * The URL check, shared by both config sources.
@@ -182,6 +241,7 @@ function readConfig(env) {
     // cannot invent one it never got.
     strain: String(env.HARVEST_WEBHOOK_STRAIN ?? '1') !== '0',
     site: String(env.HARVEST_WEBHOOK_SITE || '').trim(),
+    packSizes: packSizes(env.HARVEST_WEBHOOK_PACK_SIZES),
     timeoutMs: Math.max(1000, num(env.HARVEST_WEBHOOK_TIMEOUT_MS, 15000)),
     source: 'env'
   };
@@ -205,6 +265,10 @@ function storedConfig(row) {
     leadDays: Math.max(0, Number(row.leadDays) || 0),
     strain: row.strain !== false,
     site: String(row.site || '').trim(),
+    // Re-checked, not trusted. The stored text is canonical when it was written
+    // through the settings page, and this file must still be right for a row
+    // somebody edited with sqlite3.
+    packSizes: packSizes(row.packSizes),
     timeoutMs: 15000,
     source: 'db'
   };
@@ -376,6 +440,12 @@ function buildPayload(database, cfg, now) {
       .all(localDay(at))
       .map((r) => trim({ species: r.species, grams: Math.round(r.grams), validUntil: r.validUntil || null }))
   };
+
+  // Alongside `released`, never inside it: the same ladder for every species is
+  // the whole point, and a copy per entry invites a receiver to read the two as
+  // independent. Omitted when nothing is set — see "Pack sizes" up top.
+  const sizes = packSizes(cfg.packSizes);
+  if (sizes.length) payload.packSizes = sizes;
 
   // The ids we hold and have not confirmed yet, so the receiver can stop
   // repeating them. Omitted entirely when there is nothing to confirm: a
@@ -944,6 +1014,10 @@ module.exports = {
   resolveConfig,
   buildPayload,
   releaseProblem,
+  packSizes,
+  PACK_MIN_G,
+  PACK_MAX_G,
+  PACK_MAX_COUNT,
   sign,
   post,
   sendOnce,

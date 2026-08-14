@@ -928,6 +928,123 @@ describe('release for sale', () => {
   });
 });
 
+// ── Pack sizes ───────────────────────────────────────────────────────────────
+//
+// `released` says how much may be sold; this says in what portions it is handed
+// over. Without it the far end has to invent a ladder, because a shop cannot
+// display "somewhere between nothing and 2 kg" — ours guessed multiples of
+// 250 g, which is a fair guess and still a guess.
+//
+// One list for every species on purpose: portioning follows the packing bench,
+// not the mushroom. The tests below hold the two halves of that — the list is
+// canonical whatever it is typed as, and silence stays silence.
+describe('pack sizes', () => {
+  it('sorts, deduplicates and drops what is not a portion', () => {
+    assert.deepEqual(feed.packSizes([1000, 250, 250, 500]), [250, 500, 1000]);
+    assert.deepEqual(feed.packSizes('500, 250 ,1000'), [250, 500, 1000], 'a string is the stored shape');
+    assert.deepEqual(feed.packSizes([250.5, -250, 0, 'nonsense', null]), [], 'half a gram is not a tray');
+    assert.deepEqual(feed.packSizes([10, 30000]), [], 'below a portion and above a pallet');
+  });
+
+  it('reads a unit somebody typed out of habit as no number at all', () => {
+    // parseInt('500g') is 500, and parseInt('2 kg') is 2 — it keeps whatever it
+    // understood before it stopped. That second one is the dangerous half: a
+    // two-gram portion looks like a number and would be published as one.
+    assert.deepEqual(feed.packSizes('500g,2 kg'), []);
+  });
+
+  it('stops at eight, so a paste cannot become the ladder', () => {
+    const many = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+    assert.deepEqual(feed.packSizes(many), [100, 200, 300, 400, 500, 600, 700, 800]);
+  });
+
+  it('travels in the payload beside the release, not inside it', () => {
+    // Inside each entry it would read as a per-species figure, and the whole
+    // point is that it is not one.
+    const t = tmpDb();
+    try {
+      db.setHarvestRelease(t.db, { species: 'Oyster', grams: 2000, validUntil: null });
+      const out = feed.buildPayload(t.db, { ...CFG, packSizes: [500, 250] }, NOW);
+      assert.deepEqual(out.packSizes, [250, 500]);
+      assert.deepEqual(out.released, [{ species: 'Oyster', grams: 2000 }]);
+      assert.equal('packSizes' in out.released[0], false);
+      assert.equal(out.version, 2, 'an added field is not a new fassung');
+    } finally {
+      t.db.close();
+      fs.rmSync(t.path, { force: true });
+    }
+  });
+
+  it('says nothing when nothing is chosen', () => {
+    // Deliberately unlike `released`, which is present and empty. There an
+    // absent field meant "this lab does not do releases" and let raw stock
+    // reach a shop window; here it means "no preference", and the receiver
+    // keeps the ladder it already had.
+    const t = tmpDb();
+    try {
+      for (const cfg of [CFG, { ...CFG, packSizes: [] }, { ...CFG, packSizes: ['x'] }]) {
+        assert.equal('packSizes' in feed.buildPayload(t.db, cfg, NOW), false);
+      }
+    } finally {
+      t.db.close();
+      fs.rmSync(t.path, { force: true });
+    }
+  });
+
+  it('survives a round trip through the database', () => {
+    const t = tmpDb();
+    try {
+      db.updateHarvestFeedCfg(t.db, {
+        enabled: true,
+        url: 'https://receiver.test/x',
+        secret: 'k',
+        packSizes: [1000, 250, 500]
+      });
+      assert.deepEqual(db.getHarvestFeedCfg(t.db).packSizes, [1000, 250, 500], 'stored as given');
+      assert.deepEqual(feed.storedConfig(db.getHarvestFeedCfg(t.db)).packSizes, [250, 500, 1000]);
+    } finally {
+      t.db.close();
+      fs.rmSync(t.path, { force: true });
+    }
+  });
+
+  it('shrugs off a row somebody edited by hand', () => {
+    // A settings page that will not open is worse than a portion size that is
+    // ignored, and this column is one `sqlite3` session away from anything.
+    //
+    // The two layers do different jobs here, and the split is deliberate: the
+    // database reads the column, the feed decides what a portion may be. Only
+    // one of them holds the limits, so there is only one to change.
+    const t = tmpDb();
+    try {
+      t.db.exec(
+        "UPDATE harvest_feed_config SET enabled=1, url='https://r.test/x', secret='k', pack_sizes='250,,x,9e9'"
+      );
+      const cfg = db.getHarvestFeedCfg(t.db);
+      assert.deepEqual(cfg.packSizes, [250, 9e9], 'a split, not a check — but nothing unreadable comes through');
+      assert.deepEqual(feed.packSizes(cfg.packSizes), [250], 'what the settings page is offered');
+      assert.deepEqual(feed.storedConfig(cfg).packSizes, [250], 'and what actually goes out');
+    } finally {
+      t.db.close();
+      fs.rmSync(t.path, { force: true });
+    }
+  });
+
+  it('can be set from the environment, like every other feed option', () => {
+    const cfg = feed.readConfig({
+      HARVEST_WEBHOOK_URL: 'https://r.test/x',
+      HARVEST_WEBHOOK_SECRET: 'k',
+      HARVEST_WEBHOOK_PACK_SIZES: '250, 1000'
+    });
+    assert.deepEqual(cfg.packSizes, [250, 1000]);
+    assert.deepEqual(
+      feed.readConfig({ HARVEST_WEBHOOK_URL: 'https://r.test/x', HARVEST_WEBHOOK_SECRET: 'k' }).packSizes,
+      [],
+      'unset is a real answer'
+    );
+  });
+});
+
 // ── The reply ────────────────────────────────────────────────────────────────
 //
 // The reply body is the only path in this program where data from the far end
