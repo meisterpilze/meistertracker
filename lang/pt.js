@@ -732,7 +732,16 @@ window.LANG['pt'] = {
   'harvestFeed.allListed': 'Todas as esp\u00e9cies conhecidas j\u00e1 est\u00e3o na lista',
   'harvestFeed.noSpecies': 'Ainda nenhuma esp\u00e9cie registada \u2014 inicia um lote ou colhe',
   'harvestFeed.add': 'Adicionar',
-  'harvestFeed.clear': 'Limpar',
+  'harvestFeed.remove': 'Remover',
+  'harvestFeed.undoRemove': 'Afinal manter',
+  'harvestFeed.markedRemoved': 'será removido ao guardar',
+  'harvestFeed.removedStillListed':
+    'Uma espécie colhida recentemente continua na lista sem libertação — apenas deixa de estar libertada.',
+  'harvestFeed.pending.one': '1 alteração por guardar',
+  'harvestFeed.pending.other': '{n} alterações por guardar',
+  'harvestFeed.leaveWarn.one': '1 alteração às libertações ainda não foi guardada e será perdida. Sair mesmo assim?',
+  'harvestFeed.leaveWarn.other':
+    '{n} alterações às libertações ainda não foram guardadas e serão perdidas. Sair mesmo assim?',
   'harvestFeed.expired': 'expirado',
   'harvestFeed.noRelease': 'Ainda nada colhido e nada libertado.',
   'harvestFeed.badAmount': 'Uma das quantidades n\u00e3o \u00e9 um n\u00famero de 0 ou mais.',
