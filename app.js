@@ -8672,6 +8672,7 @@ async function loadHarvestFeedSettings() {
     document.getElementById('harvestfeed-lead').value = cfg.leadDays ?? 0;
     document.getElementById('harvestfeed-strain').checked = cfg.strain !== false;
     document.getElementById('harvestfeed-site').value = cfg.site || '';
+    renderHarvestPackSizes(Array.isArray(cfg.packSizes) ? cfg.packSizes : []);
     const sec = document.getElementById('harvestfeed-secret');
     sec.value = '';
     // A stored secret is never sent back to the page. The placeholder says one
@@ -8681,6 +8682,73 @@ async function loadHarvestFeedSettings() {
   } catch (e) {
     /* non-admin */
   }
+}
+
+// ── Amounts handed out ───────────────────────────────────────────────────────
+//
+// Which portions a release is handed over in — 250 g, 500 g, a kilo — for every
+// species at once. A shop reads this list and offers exactly these amounts,
+// leaving out whatever a release no longer covers.
+//
+// The ladder below is only what the ready-made boxes offer. It is not a rule
+// about what may be stored: anything from 25 g to 25 kg is allowed, arrives
+// through the field beside them, and comes back as a box of its own next time
+// this loads. Otherwise a farm packing 400 g trays would be stuck ticking
+// somebody else's sizes.
+const HARVEST_PACK_LADDER = [100, 250, 500, 750, 1000, 2000];
+
+/** "250 g", "1 kg" — the way it is said, not the way it is stored. */
+function packSizeLabel(g) {
+  return g >= 1000 && g % 1000 === 0 ? g / 1000 + ' kg' : g + ' g';
+}
+
+function renderHarvestPackSizes(chosen) {
+  const box = document.getElementById('harvestfeed-packs');
+  if (!box) return;
+  const ticked = new Set((chosen || []).filter((n) => Number.isInteger(n) && n > 0));
+  const all = [...new Set([...HARVEST_PACK_LADDER, ...ticked])].sort((a, b) => a - b);
+  box.innerHTML = all
+    .map(
+      (g) =>
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin:0;font-size:12px">' +
+        '<input type="checkbox" class="hf-pack" value="' +
+        g +
+        '" style="width:auto"' +
+        (ticked.has(g) ? ' checked' : '') +
+        '><span>' +
+        esc(packSizeLabel(g)) +
+        '</span></label>'
+    )
+    .join('');
+}
+
+/** What is ticked, ascending — the order a shop will show them in. */
+function harvestPackSizes() {
+  return [...document.querySelectorAll('#harvestfeed-packs .hf-pack')]
+    .filter((el) => el.checked)
+    .map((el) => parseInt(el.value, 10))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .sort((a, b) => a - b);
+}
+
+// A size the ladder does not offer. It is ticked straight away: somebody who
+// types 400 and presses Add has said what they pack in, and leaving it unticked
+// would make the button look broken.
+//
+// ⚠️ The same bounds as harvest-feed.js. They are repeated rather than fetched
+// because the message has to appear next to the field as it is typed; the
+// server checks again and drops anything that gets past this.
+function addHarvestPackSize() {
+  const field = document.getElementById('harvestfeed-pack-new');
+  const msg = document.getElementById('harvestfeed-pack-msg');
+  const n = parseInt(field.value, 10);
+  if (!Number.isInteger(n) || n < 25 || n > 25000) {
+    msg.textContent = t('harvestFeed.packBad');
+    return;
+  }
+  msg.textContent = '';
+  field.value = '';
+  renderHarvestPackSizes([...harvestPackSizes(), n]);
 }
 
 // ── Released for sale ────────────────────────────────────────────────────────
@@ -9069,7 +9137,8 @@ async function saveHarvestFeedSettings() {
     plannedDays: parseInt(document.getElementById('harvestfeed-planned').value, 10),
     leadDays: parseInt(document.getElementById('harvestfeed-lead').value, 10),
     strain: document.getElementById('harvestfeed-strain').checked,
-    site: document.getElementById('harvestfeed-site').value.trim()
+    site: document.getElementById('harvestfeed-site').value.trim(),
+    packSizes: harvestPackSizes()
   };
   if (secret) cfg.secret = secret;
   try {
@@ -19813,6 +19882,15 @@ function initEventListeners() {
   $('harvestfeed-gen-btn').addEventListener('click', generateHarvestFeedSecret);
   $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));
   $('harvestfeed-preview-btn').addEventListener('click', () => testHarvestFeed(true));
+  $('harvestfeed-pack-add').addEventListener('click', addHarvestPackSize);
+  // Enter in a number field beside a button reads as "add it", the same as in
+  // the release table below.
+  $('harvestfeed-pack-new').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addHarvestPackSize();
+    }
+  });
   $('harvestrelease-save-btn').addEventListener('click', saveHarvestReleases);
   $('harvestrelease-add-btn').addEventListener('click', addHarvestReleaseRow);
   $('harvestrelease-new').addEventListener('keydown', (e) => {

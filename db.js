@@ -193,7 +193,10 @@ CREATE TABLE IF NOT EXISTS harvest_feed_config (
   last_at      TEXT,
   last_ok      INTEGER,
   last_error   TEXT,
-  release_mode INTEGER DEFAULT 0
+  release_mode INTEGER DEFAULT 0,
+  -- The portions a release is handed out in, in grams: "250,500,1000". One
+  -- ladder for the whole farm, not one per species — see migration v62.
+  pack_sizes   TEXT DEFAULT ''
 );
 
 -- How much of a harvest the shop may sell, per species. See migration v55: the
@@ -1824,6 +1827,34 @@ const MIGRATIONS = [
       acked_at TEXT
     )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_pickup_cancel_open ON pickup_cancellations(acked_at)');
+    }
+  },
+  {
+    version: 62,
+    description: 'Pack sizes: the portions a release is handed out in, one ladder for the whole farm',
+    fn(db) {
+      // A release says how much may be sold. It does not say in what portions,
+      // and a shop cannot ask: it has to offer *something*, so it invents a
+      // ladder of its own. Ours guessed 250 g and multiples of it, which is a
+      // reasonable guess and still a guess — a farm that packs in 400 g trays
+      // had no way to say so, and the choice was silently made for it at the
+      // far end.
+      //
+      // One list for every species, deliberately. Portioning is a property of
+      // how the packing bench works — trays, bags, the scale's step — not of
+      // the mushroom in them, and a per-species table would be a form to fill
+      // in for every new Sorte for an answer that is the same every time. The
+      // release table is the one thing here filled in daily; this is filled in
+      // once.
+      //
+      // Empty is a real answer and the default: nothing chosen means nothing
+      // said, and a receiver keeps doing whatever it did before. Unlike the
+      // release switch this cannot fail quietly — a missing list costs a
+      // preference, not a safeguard.
+      const cols = db.prepare('PRAGMA table_info(harvest_feed_config)').all();
+      if (!cols.some((c) => c.name === 'pack_sizes')) {
+        db.exec("ALTER TABLE harvest_feed_config ADD COLUMN pack_sizes TEXT DEFAULT ''");
+      }
     }
   }
 ];
@@ -4145,6 +4176,27 @@ function updateDuckdnsStatus(db, fields) {
 // file towards a client: the API hands out `hasSecret` instead, and an update
 // that omits it keeps the stored one — otherwise loading the form and pressing
 // Save would silently blank it.
+/**
+ * "250,500,1000" back into [250, 500, 1000].
+ *
+ * A split and not a validator. What may go in is decided once, on the way in
+ * (harvestFeed.packSizes) — repeating the rules here would mean two places to
+ * change and one of them forgotten. Unreadable entries are dropped rather than
+ * thrown on: a hand-edited row must not make the settings page unopenable.
+ */
+function splitPackSizes(raw) {
+  return (
+    String(raw || '')
+      .split(',')
+      // ⚠️ Number and not parseInt, for the same reason as over there, and this
+      // is where it was caught: parseInt('9e9') is 9 and parseInt('500g') is 500.
+      // The feed itself re-checks the range and would have dropped the 9, so the
+      // damage was confined to the settings page — which offered a 9 g box.
+      .map((s) => Number(String(s).trim()))
+      .filter((n) => Number.isInteger(n) && n > 0)
+  );
+}
+
 function getHarvestFeedCfg(db) {
   const row = db.prepare('SELECT * FROM harvest_feed_config WHERE id = 1').get();
   if (!row) return null;
@@ -4158,6 +4210,7 @@ function getHarvestFeedCfg(db) {
     leadDays: row.lead_days ?? 0,
     strain: row.strain !== 0,
     site: row.site || '',
+    packSizes: splitPackSizes(row.pack_sizes),
     lastAt: row.last_at || null,
     lastOk: row.last_ok === null || row.last_ok === undefined ? null : row.last_ok === 1,
     lastError: row.last_error || null
@@ -4168,7 +4221,7 @@ function updateHarvestFeedCfg(db, cfg) {
   db.prepare(
     `UPDATE harvest_feed_config
         SET enabled=?, url=?, secret=?, interval_min=?, fresh_days=?,
-            planned_days=?, lead_days=?, strain=?, site=?, release_mode=?
+            planned_days=?, lead_days=?, strain=?, site=?, pack_sizes=?, release_mode=?
       WHERE id=1`
   ).run(
     cfg.enabled ? 1 : 0,
@@ -4180,6 +4233,10 @@ function updateHarvestFeedCfg(db, cfg) {
     cfg.leadDays ?? 0,
     cfg.strain === false ? 0 : 1,
     cfg.site || '',
+    // Stored as text, canonical: ascending, deduplicated, comma-separated. The
+    // caller has already put it through harvestFeed.packSizes; anything else
+    // that reaches here is written as it comes and read back leniently.
+    Array.isArray(cfg.packSizes) ? cfg.packSizes.join(',') : String(cfg.packSizes || ''),
     // The column stays and is always 1. Dropping it would cost a migration, and
     // an older build reading this database would read the missing switch as
     // "off" and go back to publishing harvest totals — the exact failure this
