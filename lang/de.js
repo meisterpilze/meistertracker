@@ -1340,6 +1340,10 @@ window.LANG['de'] = {
   'calEntry.deleteEvent': 'Event löschen?',
   'calEntry.deleteTaskMsg': 'Diese Aufgabe wird unwiderruflich gelöscht.',
   'calEntry.deleteEventMsg': 'Dieses Event wird unwiderruflich gelöscht.',
+  'calEntry.bookedTitle': 'Da kommt jemand',
+  'calEntry.bookedMsg':
+    'Für dieses Abholfenster liegen {n} Abholungen vor. Wer sie gebucht hat, erfährt von der Änderung nicht von selbst — sag ihnen Bescheid. Unter „Abholungen" steht, um wen es geht.',
+  'calEntry.bookedGoOn': 'Trotzdem ändern',
   'calEntry.deleteRecurTitle': 'Wiederkehrendes Event löschen?',
   'calEntry.deleteRecurMsg': 'Nur diesen Termin oder die gesamte Serie löschen?',
   'calEntry.deleteOccurrence': 'Nur diesen Termin',

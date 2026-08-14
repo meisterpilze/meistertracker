@@ -1262,6 +1262,10 @@ window.LANG['pt'] = {
   'calEntry.deleteEvent': 'Excluir evento?',
   'calEntry.deleteTaskMsg': 'Esta tarefa será permanentemente removida.',
   'calEntry.deleteEventMsg': 'Este evento será permanentemente removido.',
+  'calEntry.bookedTitle': 'Vem aí alguém',
+  'calEntry.bookedMsg':
+    'Esta janela tem {n} levantamentos marcados. Quem os marcou não fica a saber da alteração sozinho — avisa. Em Levantamentos vê de quem se trata.',
+  'calEntry.bookedGoOn': 'Alterar mesmo assim',
   'calEntry.deleteRecurTitle': 'Excluir evento recorrente?',
   'calEntry.deleteRecurMsg': 'Excluir apenas esta ocorrência ou a série inteira?',
   'calEntry.deleteOccurrence': 'Esta ocorrência',

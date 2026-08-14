@@ -9365,6 +9365,28 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Which pickup windows already have somebody coming --
+  //
+  // The editor asks before it moves or deletes one. Its own key is the calendar
+  // event plus the occurrence date; the booking's key is the published window
+  // id. Joining the two is this end's job — the browser must not reimplement
+  // that id, because two implementations of a key drift and a drifted key here
+  // reads as "nobody has booked this".
+  if (req.method === 'GET' && req.url === '/api/pickup-bookings') {
+    try {
+      const counts = db.pickupCountsBySlot(database);
+      const booked = [];
+      for (const w of harvestFeed.pickupWindowIndex(database, new Date())) {
+        const n = counts[w.id];
+        if (n) booked.push({ event: w.event, date: w.date, count: n });
+      }
+      jsonOk(res, { booked });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Pickup locations CRUD --
   if (req.method === 'GET' && req.url === '/api/pickup-locations') {
     try {

@@ -1330,6 +1330,10 @@ window.LANG['en'] = {
   'calEntry.deleteEvent': 'Delete event?',
   'calEntry.deleteTaskMsg': 'This task will be permanently removed.',
   'calEntry.deleteEventMsg': 'This event will be permanently removed.',
+  'calEntry.bookedTitle': 'Someone is coming',
+  'calEntry.bookedMsg':
+    '{n} pickups are booked into this window. Whoever booked them will not hear about the change by itself — tell them. Pickups lists who they are.',
+  'calEntry.bookedGoOn': 'Change anyway',
   'calEntry.deleteRecurTitle': 'Delete recurring event?',
   'calEntry.deleteRecurMsg': 'Delete only this occurrence or the entire series?',
   'calEntry.deleteOccurrence': 'This occurrence',

@@ -4816,6 +4816,23 @@ function listPickups(db, opts) {
     }));
 }
 
+/**
+ * How many bookings each slot is carrying: `{ '<slot>': n }`.
+ *
+ * The slot is the window id this end published — so this is the join between a
+ * calendar entry and the people who have arranged to turn up for it, and the
+ * reason the editor can warn before one is moved. Withdrawn pickups are deleted
+ * rather than flagged, so they are already gone from the count.
+ */
+function pickupCountsBySlot(db) {
+  const out = {};
+  for (const r of db
+    .prepare("SELECT slot, COUNT(*) AS n FROM pickups WHERE slot IS NOT NULL AND slot <> '' GROUP BY slot")
+    .all())
+    out[r.slot] = r.n;
+  return out;
+}
+
 function countPickups(db) {
   const row = db
     .prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN acked_at IS NULL THEN 1 ELSE 0 END) AS open FROM pickups')
@@ -8261,6 +8278,7 @@ module.exports = {
   ackPickups,
   listPickups,
   countPickups,
+  pickupCountsBySlot,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,

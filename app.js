@@ -1092,6 +1092,9 @@ function openStab(page, sub) {
   if (page === 'print' && sub === 'ref') renderRefBarcodes();
   if (page === 'cal' && sub === 'cal') {
     loadCalDAVImports().then(() => renderCalendar());
+    // Best effort, and deliberately not awaited: the calendar must draw whether
+    // or not this answers. With no answer the warning simply does not fire.
+    loadPickupBookings();
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
@@ -17568,11 +17571,15 @@ function handleCalendarDrop(type, id, newDateStr) {
   } else if (type === 'custom') {
     const ev = calendarEvents.find((x) => x.id === id);
     if (!ev) return;
-    ev.startDate = newDateStr;
-    ev.caldavSynced = null;
-    apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
-    renderCalendar();
-    if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
+    // A dragged window is a moved handover. Only recurrence-free events are
+    // draggable, so the whole event and the one occurrence are the same thing.
+    confirmBookedWindow(ev.id, null, () => {
+      ev.startDate = newDateStr;
+      ev.caldavSynced = null;
+      apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
+      renderCalendar();
+      if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
+    });
   }
 }
 
@@ -18018,6 +18025,41 @@ function saveBatchDueFromDetail(id) {
   closeEventDetail();
 }
 
+// ── Windows somebody has already booked into ────────────────
+// `[{event, date, count}]`, refreshed when the calendar opens. The join between
+// a calendar entry and its bookings is made on the server: a booking names the
+// window by the id the harvest feed published, and reimplementing that id here
+// would give two versions of one key. The one that drifts reads as "nobody has
+// booked this", which is the answer that gets somebody sent away at a stall.
+let pickupBookings = [];
+
+async function loadPickupBookings() {
+  const r = await apiGet('/api/pickup-bookings');
+  pickupBookings = r && Array.isArray(r.booked) ? r.booked : [];
+}
+
+/** Bookings for one occurrence, or for the whole series when `date` is null. */
+function bookedForWindow(eventId, date) {
+  return pickupBookings
+    .filter((b) => b.event === eventId && (!date || b.date === date))
+    .reduce((n, b) => n + (Number(b.count) || 0), 0);
+}
+
+/**
+ * Run `proceed`, asking first if anyone has booked into this window.
+ *
+ * Not a block — the lab may well have to cancel a market. It is the difference
+ * between deciding to and finding out afterwards.
+ */
+function confirmBookedWindow(eventId, date, proceed) {
+  const n = bookedForWindow(eventId, date);
+  if (!n) {
+    proceed();
+    return;
+  }
+  confirm2(t('calEntry.bookedTitle'), t('calEntry.bookedMsg', { n }), t('calEntry.bookedGoOn'), proceed);
+}
+
 function findSameTitleEvents(ce) {
   if (!ce || !ce.title) return [];
   return calendarEvents.filter((x) => x.id !== ce.id && !x.recurrence && x.title === ce.title);
@@ -18040,17 +18082,21 @@ function deleteCalEventFromDetail(id, date) {
       t('calEntry.deleteRecurMsg'),
       t('calEntry.deleteOccurrence'),
       t('calEntry.deleteSeries'),
-      () => {
-        if (!Array.isArray(ce.exceptionDates)) ce.exceptionDates = [];
-        if (!ce.exceptionDates.includes(date)) ce.exceptionDates.push(date);
-        renderCalendar();
-        apiDelete('/api/calendar-events/' + encodeURIComponent(id) + '?occurrence=' + encodeURIComponent(date));
-      },
-      () => {
-        calendarEvents = calendarEvents.filter((x) => x.id !== id);
-        renderCalendar();
-        apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-      }
+      // One date, so only that date's bookings are at stake…
+      () =>
+        confirmBookedWindow(id, date, () => {
+          if (!Array.isArray(ce.exceptionDates)) ce.exceptionDates = [];
+          if (!ce.exceptionDates.includes(date)) ce.exceptionDates.push(date);
+          renderCalendar();
+          apiDelete('/api/calendar-events/' + encodeURIComponent(id) + '?occurrence=' + encodeURIComponent(date));
+        }),
+      // …and here every one of them, across the whole series.
+      () =>
+        confirmBookedWindow(id, null, () => {
+          calendarEvents = calendarEvents.filter((x) => x.id !== id);
+          renderCalendar();
+          apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+        })
     );
     return;
   }
@@ -18072,11 +18118,13 @@ function deleteCalEventFromDetail(id, date) {
       return;
     }
   }
-  confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
-    calendarEvents = calendarEvents.filter((x) => x.id !== id);
-    renderCalendar();
-    apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-  });
+  confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () =>
+    confirmBookedWindow(id, null, () => {
+      calendarEvents = calendarEvents.filter((x) => x.id !== id);
+      renderCalendar();
+      apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+    })
+  );
 }
 
 function toggleTaskFromCalendar(taskId) {
@@ -18447,6 +18495,28 @@ function saveEntryEvent() {
     locationId: locationId,
     pickupCapacity: pickupCapacity
   };
+  // Somebody may already have arranged to turn up for this. Ask before the
+  // arrangement changes underneath them — but only when the change is one they
+  // would notice: a corrected title is not worth a dialog, a new time is.
+  const previous = mode === 'edit' ? calendarEvents.find((x) => x.id === ev.id) : null;
+  const movesAWindow =
+    previous &&
+    (previous.category === 'pickup' || category === 'pickup') &&
+    (previous.startDate !== ev.startDate ||
+      previous.startTime !== ev.startTime ||
+      previous.endTime !== ev.endTime ||
+      (previous.locationId || null) !== (ev.locationId || null) ||
+      (previous.recurrence || null) !== (ev.recurrence || null) ||
+      (previous.recurrenceUntil || null) !== (ev.recurrenceUntil || null) ||
+      (previous.category === 'pickup' && category !== 'pickup'));
+  if (movesAWindow) {
+    confirmBookedWindow(ev.id, null, () => applyEntryEvent(ev, mode));
+    return;
+  }
+  applyEntryEvent(ev, mode);
+}
+
+function applyEntryEvent(ev, mode) {
   if (mode === 'edit') {
     const idx = calendarEvents.findIndex((x) => x.id === ev.id);
     if (idx >= 0) {
@@ -18524,11 +18594,13 @@ function deleteEntry() {
     }
     const title = isRecurring ? t('calEntry.deleteRecurTitle') : t('calEntry.deleteEvent');
     const body = isRecurring ? t('calEntry.deleteSeriesMsg') : t('calEntry.deleteEventMsg');
-    confirm2(title, body, t('calEntry.delete'), () => {
-      calendarEvents = calendarEvents.filter((x) => x.id !== id);
-      apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-      renderCalendar();
-    });
+    confirm2(title, body, t('calEntry.delete'), () =>
+      confirmBookedWindow(id, null, () => {
+        calendarEvents = calendarEvents.filter((x) => x.id !== id);
+        apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+        renderCalendar();
+      })
+    );
   }
 }
 

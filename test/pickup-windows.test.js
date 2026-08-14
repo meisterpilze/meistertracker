@@ -369,6 +369,22 @@ describe('pickup windows – what goes out on the harvest feed', () => {
     assert.equal(feed.windowId('cev-123-ab', '2026-08-15'), 'cev-123-ab_2026-08-15');
   });
 
+  it('keeps the event id for this end, and only for this end', () => {
+    // The warning needs to know which calendar entry a booking belongs to; the
+    // receiver does not. One computation of the window id, two audiences.
+    const index = feed.pickupWindowIndex(d, new Date());
+    const published = feed.buildPickupWindows(d, new Date());
+    assert.ok(index.length > 0);
+    assert.equal(index.length, published.length);
+    assert.ok(index.every((w) => typeof w.event === 'string' && w.event.length));
+    assert.ok(!published.some((w) => 'event' in w), 'the event id must not be published');
+    // Same ids in the same order, or the join the warning makes is not a join.
+    assert.deepEqual(
+      index.map((w) => w.id),
+      published.map((w) => w.id)
+    );
+  });
+
   it('rides along on the payload, empty list included', () => {
     const { db: fresh, path: fp } = tmpDb();
     try {

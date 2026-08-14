@@ -430,6 +430,39 @@ function windowId(eventId, date) {
  * is a real answer and must survive the trip; the field is always present.
  */
 function buildPickupWindows(database, at) {
+  const rows = collectPickupWindows(database, at);
+  if (rows === null) return null;
+  // Named one by one rather than spread with the internal fields removed. This
+  // is the boundary the whole feature is careful about, and an allow-list keeps
+  // it careful: a field added upstream has to be added here on purpose before it
+  // can leave the building. `event` is the one dropped today — the lab's own
+  // screens key on it (see pickupWindowIndex), and it is nobody else's business.
+  return rows.map((w) =>
+    trim({
+      id: w.id,
+      date: w.date,
+      from: w.from,
+      to: w.to,
+      tz: w.tz,
+      place: w.place ?? null,
+      capacity: w.capacity ?? null
+    })
+  );
+}
+
+/**
+ * The same windows, with the row each one came from.
+ *
+ * For this end only. The warning before a booked window is moved has to find
+ * the bookings, and a booking names the window by the id below — so the mapping
+ * from "calendar event on this date" to "that id" must exist exactly once, and
+ * this is it.
+ */
+function pickupWindowIndex(database, at) {
+  return collectPickupWindows(database, at) || [];
+}
+
+function collectPickupWindows(database, at) {
   const from = localDay(at);
   const until = addDaysStr(from, PICKUP_WINDOW_DAYS);
   let rows;
@@ -462,6 +495,7 @@ function buildPickupWindows(database, at) {
       windows.push(
         trim({
           id: windowId(ev.id, date),
+          event: ev.id,
           date,
           from: ev.start_time,
           to: ev.end_time,
@@ -1191,6 +1225,7 @@ module.exports = {
   resolveConfig,
   buildPayload,
   buildPickupWindows,
+  pickupWindowIndex,
   windowId,
   releaseProblem,
   packSizes,
