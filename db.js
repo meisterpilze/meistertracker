@@ -4158,7 +4158,6 @@ function getHarvestFeedCfg(db) {
     leadDays: row.lead_days ?? 0,
     strain: row.strain !== 0,
     site: row.site || '',
-    releaseMode: row.release_mode === 1,
     lastAt: row.last_at || null,
     lastOk: row.last_ok === null || row.last_ok === undefined ? null : row.last_ok === 1,
     lastError: row.last_error || null
@@ -4181,7 +4180,11 @@ function updateHarvestFeedCfg(db, cfg) {
     cfg.leadDays ?? 0,
     cfg.strain === false ? 0 : 1,
     cfg.site || '',
-    cfg.releaseMode ? 1 : 0
+    // The column stays and is always 1. Dropping it would cost a migration, and
+    // an older build reading this database would read the missing switch as
+    // "off" and go back to publishing harvest totals — the exact failure this
+    // change exists to remove.
+    1
   );
   incrementDataVersion(db);
 }
@@ -4213,6 +4216,34 @@ function localDay(at) {
   const d = at || new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * Every species string this database has ever used, verbatim.
+ *
+ * The species string is a join key: the feed sends it as it stands ("Lions Mane
+ * (LM)") and a receiver matches on it literally. Offering this list instead of a
+ * text field is what stops a hand-typed "Lions Mane" from being recorded as a
+ * release that matches nothing and disappears without an error.
+ *
+ * ⚠️ Both tables, not just `harvests`. Produce is regularly set aside before it
+ * comes off the rack — a Saturday market is planned that way — and a species
+ * that is only planned has no harvest row yet. Reading `harvests` alone would
+ * leave exactly those out of the list, which sends the person back to typing.
+ *
+ * Same columns buildPayload() reads, and that is the point: what can be picked
+ * is what the receiver will be matching on.
+ */
+function listKnownSpecies(db) {
+  return db
+    .prepare(
+      `SELECT species FROM harvests WHERE species IS NOT NULL AND species <> ''
+       UNION
+       SELECT species FROM batches  WHERE species IS NOT NULL AND species <> ''
+       ORDER BY species`
+    )
+    .all()
+    .map((r) => r.species);
 }
 
 /** Every release, expired ones included — they are the interesting ones in a list. */
@@ -4266,19 +4297,6 @@ function activeHarvestReleases(db, at) {
 function mayRelease(actor) {
   if (!actor) return false;
   return actor.role === 'admin' || actor.can_release === 1;
-}
-
-/**
- * Whether the feed reports releases at all — and nothing else.
- *
- * getHarvestFeedCfg() returns the feed's HMAC secret alongside this flag, so any
- * caller that only needs the flag is one careless spread away from publishing the
- * secret. This reads the single column instead, which removes the possibility
- * rather than relying on the next reader noticing.
- */
-function getHarvestReleaseMode(db) {
-  const row = db.prepare('SELECT release_mode FROM harvest_feed_config WHERE id = 1').get();
-  return !!row && row.release_mode === 1;
 }
 
 function setHarvestRelease(db, { species, grams, validUntil, note }, at) {
@@ -4340,7 +4358,6 @@ function addHarvestRelease(db, { species, grams, days, actor }, at) {
   const g = Number(grams);
   if (!Number.isFinite(g) || g <= 0) throw new Error('addHarvestRelease: grams must be a number > 0');
   if (!mayRelease(actor)) throw new Error('addHarvestRelease: not allowed to release for sale');
-  if (!getHarvestReleaseMode(db)) throw new Error('addHarvestRelease: release mode is off');
 
   const now = at || new Date();
   const today = localDay(now);
@@ -7992,8 +8009,8 @@ module.exports = {
   updateHarvestFeedCfg,
   updateHarvestFeedStatus,
   mayRelease,
-  getHarvestReleaseMode,
   listHarvestReleases,
+  listKnownSpecies,
   activeHarvestReleases,
   setHarvestRelease,
   addHarvestRelease,

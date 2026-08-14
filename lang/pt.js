@@ -721,9 +721,6 @@ window.LANG['pt'] = {
   'harvestFeed.neverSent': 'Ativo, mas ainda sem entregas.',
   'harvestFeed.envActive':
     'O feed está a correr a partir de variáveis de ambiente (HARVEST_WEBHOOK_URL). O que definires aqui passa a valer assim que o ativares aqui — este formulário passa a mandar.',
-  'harvestFeed.releaseMode': 'Comunicar apenas o que est\u00e1 libertado para venda',
-  'harvestFeed.releaseModeHint':
-    'Sem isto o feed comunica o que foi colhido \u2014 um n\u00famero que deixa de ser verdade assim que vendes seja o que for numa feira. Com isto, o feed comunica apenas as quantidades que reservas abaixo, e as vendas noutro s\u00edtio j\u00e1 n\u00e3o o podem tornar errado.',
   'harvestFeed.releaseTitle': 'Libertado para venda',
   'harvestFeed.releaseDesc':
     'Quanto de cada esp\u00e9cie uma loja pode vender \u2014 uma quantidade reservada, n\u00e3o um stock. P\u00f5e-na numa caixa \u00e0 parte e vende tudo o resto a partir do restante: assim nem um cliente de passagem nem um s\u00e1bado de feira cheio tornam errado o n\u00famero publicado, e n\u00e3o h\u00e1 nada para andar a atualizar. A data \u00e9 a rede de seguran\u00e7a. Produto fresco n\u00e3o se aguenta, e o erro habitual n\u00e3o \u00e9 um n\u00famero errado, \u00e9 um n\u00famero esquecido.',
@@ -732,6 +729,8 @@ window.LANG['pt'] = {
   'harvestFeed.colRelease': 'Libertar (kg)',
   'harvestFeed.colUntil': 'V\u00e1lido at\u00e9',
   'harvestFeed.addSpecies': 'Outra esp\u00e9cie \u2026',
+  'harvestFeed.allListed': 'Todas as esp\u00e9cies conhecidas j\u00e1 est\u00e3o na lista',
+  'harvestFeed.noSpecies': 'Ainda nenhuma esp\u00e9cie registada \u2014 inicia um lote ou colhe',
   'harvestFeed.add': 'Adicionar',
   'harvestFeed.clear': 'Limpar',
   'harvestFeed.expired': 'expirado',

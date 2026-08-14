@@ -604,18 +604,18 @@ The receiver may, however, answer — the reply can carry pickups back, and with
 
 The timer restarts on save. The last outcome stays visible at the top of the page, so a feed that quietly stopped delivering shows up instead of failing in silence.
 
-### If a shop sells from this (release mode)
+### If a shop sells from this
 
-Leave it off and the feed reports what was harvested. That is a production figure, and it stops being true the moment produce is sold anywhere the till is not this database — which, for most growers, is every market day.
+The feed never reports a harvest total as sellable. What a shop may sell is always a **release**: an amount somebody set aside by hand, on the **Pickups** page, per species, with a date it stops counting. Put that amount in its own crate and sell everything else from the rest — then a walk-in customer or a busy market Saturday cannot make the published number wrong, and there is nothing to keep up to date between harvests.
 
-Switch on **Only report what is released for sale** and fill the table underneath: per species, how many kilos a shop may sell, and until when. Then put that amount in its own crate. Sales from the rest can no longer make the published number wrong, so there is nothing to keep up to date between harvests — which is the only version of this that survives a busy Saturday.
+The harvest totals still travel, in `harvested`. They are production data — what came off the racks — and a receiver that publishes them as stock is reading the wrong field.
 
-Two consequences worth knowing before flipping it:
+Two consequences worth knowing:
 
-- **The payload becomes version 2.** A receiver built for version 1 should reject it, because ignoring the new list means publishing produce you kept back. Check the receiver first.
-- **Nothing is released until you say so.** Right after switching on, the feed reports an empty release list. That is the safe direction, but it does mean the shop shows nothing until the first amount is entered.
+- **The payload is version 2.** A receiver built for version 1 should reject it, because ignoring the release list means publishing produce you kept back. Check the receiver before pointing this at one.
+- **Nothing is released until you say so.** A fresh install reports an empty release list, and a shop reading it shows nothing. That is the safe direction: an empty list is a statement, not a gap.
 
-`HARVEST_WEBHOOK_RELEASE_MODE=1` is the environment-variable equivalent. The amounts themselves are always in the database — they are per-harvest decisions, not configuration.
+> **Until 2026-08-14 this was a switch** (`HARVEST_WEBHOOK_RELEASE_MODE`, "Only report what is released for sale"), off by default. It is gone. Off, the feed published harvest totals — a number that stops being true the moment something is sold at a stall — and because it was also the quiet option, a lab that never found the checkbox published raw stock and looked fine doing it. A setting whose wrong value produces plausible-looking numbers is not a setting worth keeping. The database column stays and is always 1, so an older build reading the same file does not fall back.
 
 ### Setup — from a file instead
 
