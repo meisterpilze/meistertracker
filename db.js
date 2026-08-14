@@ -6051,11 +6051,32 @@ function updateMushroomStrain(db, id, data) {
   const sets = cols.map((c) => `${c}=?`).join(',');
   try {
     db.prepare(`UPDATE mushroom_strains SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
-    // Propagate name/kuerzel changes to batches and cultures that reference this strain
+    // Propagate name/kuerzel changes to batches and cultures that reference this
+    // strain.
+    //
+    // ⚠️ **The two tables do not spell this the same way, and one statement for
+    // both was the bug.** A batch is created with `species = "Name (KÜRZEL)"`
+    // and `strain` = whatever free text the grower typed for that batch
+    // ("Pride", "MP01", "XXX"). A culture is created with `species = "Name"` and
+    // `strain` = the kuerzel; its free text lives in `strain_text`. Writing the
+    // culture shape into `batches` did both kinds of damage at once: the species
+    // lost its code, and the free text was overwritten with the kuerzel.
+    //
+    // The species half reached outside the building. The harvest feed sends the
+    // species string verbatim and a shop matches on it literally, so a renamed
+    // strain quietly stopped matching — a release entered in the lab showed up
+    // nowhere, with nothing red on either side. Measured on the production
+    // database 2026-08-14: 25 batches across 8 species, every one of them with a
+    // strain_id, so every one of them renamed by this line.
+    //
+    // `batches.strain` is now left alone. It belongs to the batch and not to the
+    // strain: renaming a strain says nothing about which lineage went into a bag
+    // last April. Nothing restores what was already overwritten — that text is
+    // gone unless a backup still has it.
     if (fields.name || fields.kuerzel) {
       const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(id);
       if (ms) {
-        db.prepare('UPDATE batches SET species=?,strain=? WHERE strain_id=?').run(ms.name, ms.kuerzel, id);
+        db.prepare('UPDATE batches SET species=? WHERE strain_id=?').run(`${ms.name} (${ms.kuerzel})`, id);
         db.prepare('UPDATE cultures SET species=?,strain=? WHERE strain_id=?').run(ms.name, ms.kuerzel, id);
       }
     }
