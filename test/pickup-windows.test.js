@@ -18,6 +18,8 @@ const fs = require('fs');
 const os = require('os');
 const db = require('../db.js');
 
+const ROOT = path.join(__dirname, '..');
+
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_pickup_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
   return { path: p, db: db.openDb(p) };
@@ -140,5 +142,67 @@ describe('pickup windows – location and capacity on an event', () => {
     const ev = db.getCalendarEvents(d).find((e) => e.id === 'ev-meeting');
     assert.equal(ev.locationId, null);
     assert.equal(ev.pickupCapacity, null);
+  });
+});
+
+// A category lives in five places in server.js and one in app.js, and missing
+// from any single one of them fails quietly rather than loudly:
+//
+//   KNOWN_CATEGORIES              an imported event's category is dropped
+//   CALDAV_EVENT_CATEGORY_MAP     the window lands in "Eigene Termine"
+//   CALDAV_CATEGORY_CALS          the calendar folder is never created
+//   CALDAV_CATEGORY_COLORS        the window shows up green like everything else
+//   the cleanup list              a stale .ics survives a category change
+//
+// server.js exports nothing — it starts a server — so this reads the source,
+// the same way the migration and settings-tab guards in this suite do.
+describe('pickup category – declared everywhere a category has to be', () => {
+  let server, app, html;
+  before(() => {
+    server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+    app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  });
+
+  /** The body of a `const NAME = { … }` literal in server.js. */
+  function literal(name) {
+    const at = server.indexOf('const ' + name + ' = {');
+    assert.notEqual(at, -1, name + ' not found in server.js');
+    const end = server.indexOf('};', at);
+    assert.notEqual(end, -1, 'end of ' + name + ' not found');
+    return server.slice(at, end);
+  }
+
+  it('is a known category', () => {
+    assert.match(literal('KNOWN_CATEGORIES'), /pickup:\s*1/);
+  });
+
+  it('maps to its own CalDAV calendar', () => {
+    assert.match(literal('CALDAV_EVENT_CATEGORY_MAP'), /pickup:\s*'abholung'/);
+  });
+
+  it('has that calendar declared, so the directory gets created', () => {
+    assert.match(literal('CALDAV_CATEGORY_CALS'), /abholung:\s*\{/);
+  });
+
+  it('has a colour of its own', () => {
+    assert.match(literal('CALDAV_CATEGORY_COLORS'), /pickup:\s*'#/);
+  });
+
+  it('is cleaned up when an event moves to another category', () => {
+    // Same list the sync path walks to remove the old file. Leave 'abholung'
+    // out and a window that stopped being one stays published to subscribers.
+    const at = server.indexOf("for (const other of ['eigene-termine'");
+    assert.notEqual(at, -1, 'the CalDAV cleanup list moved — check this test');
+    assert.match(server.slice(at, at + 200), /'abholung'/);
+  });
+
+  it('is offered in the editor and coloured in the client', () => {
+    assert.match(html, /<option value="pickup"/);
+    assert.match(app, /pickup:\s*'#f59e0b'/);
+  });
+
+  it('emits the place as LOCATION on the VEVENT', () => {
+    assert.match(server, /lines\.push\('LOCATION:' \+ escapeIcsText\(place\)\)/);
   });
 });

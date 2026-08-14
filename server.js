@@ -2183,13 +2183,15 @@ const CALDAV_CATEGORY_CALS = {
   'eigene-termine': { displayName: 'Eigene Termine', color: '#22c55e' },
   meetings: { displayName: 'Meetings', color: '#8b5cf6' },
   lieferungen: { displayName: 'Lieferungen', color: '#14b8a6' },
-  wartung: { displayName: 'Wartung', color: '#64748b' }
+  wartung: { displayName: 'Wartung', color: '#64748b' },
+  abholung: { displayName: 'Abholfenster', color: '#f59e0b' }
 };
 const CALDAV_EVENT_CATEGORY_MAP = {
   custom: 'eigene-termine',
   meeting: 'meetings',
   delivery: 'lieferungen',
-  maintenance: 'wartung'
+  maintenance: 'wartung',
+  pickup: 'abholung'
 };
 const USER_CALENDAR_COLORS = ['#f97316', '#ec4899', '#eab308', '#6366f1', '#06b6d4', '#84cc16', '#d946ef'];
 
@@ -2345,7 +2347,13 @@ function computeCtag(calName) {
 }
 
 // CalDAV event color map — matches CATEGORY_COLORS in app.js
-const CALDAV_CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+const CALDAV_CATEGORY_COLORS = {
+  custom: '#16a34a',
+  meeting: '#8b5cf6',
+  delivery: '#14b8a6',
+  maintenance: '#64748b',
+  pickup: '#f59e0b'
+};
 
 // RFC 5545 PRIORITY → app priority mapping (1=highest, 9=lowest, 0=undefined)
 const CALDAV_PRIO_MAP = {
@@ -2361,8 +2369,14 @@ const CALDAV_PRIO_MAP = {
   0: 'med'
 };
 
-// Known calendar event categories
-const KNOWN_CATEGORIES = { custom: 1, meeting: 1, delivery: 1, maintenance: 1 };
+// Known calendar event categories.
+//
+// `pickup` is the odd one out and deliberately so: the other four describe work
+// this lab does to itself, while this one states when someone from outside may
+// come and collect. That statement has to be positive. Deriving it negatively —
+// block out meetings and maintenance, call the rest open — reads an empty
+// calendar as "always, including Sunday at 03:00".
+const KNOWN_CATEGORIES = { custom: 1, meeting: 1, delivery: 1, maintenance: 1, pickup: 1 };
 
 // Supported CalDAV report set XML (used in PROPFIND responses)
 const SUPPORTED_REPORT_SET =
@@ -2541,6 +2555,26 @@ function taskDueToVEVENT(task) {
 }
 
 // Convert a custom calendar event to VEVENT .ics content
+/**
+ * "Name, address" for a location id, or '' when there is none.
+ *
+ * Address included: this string goes into a VEVENT, which stays inside the lab's
+ * own calendar clients. The harvest feed sends the name alone — see
+ * buildPickupWindows() over in harvest-feed.js.
+ */
+function pickupLocationLabel(id) {
+  if (!id) return '';
+  try {
+    const l = db.getPickupLocation(database, id);
+    if (!l) return '';
+    return l.address ? l.name + ', ' + l.address : l.name;
+  } catch {
+    // A missing table on a database mid-migration. An event without its place
+    // is worth writing; a calendar sync that stops halfway is not.
+    return '';
+  }
+}
+
 function customEventToVEVENT(event) {
   const uid = event.caldavUid || 'cev-' + event.id + '@meisterpilze';
   const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
@@ -2623,6 +2657,11 @@ function customEventToVEVENT(event) {
     'Europe/Berlin'
   );
   if (exdateLine) lines.push(exdateLine);
+  // #480: a standard iCalendar property, so every subscribed client shows the
+  // place without anything further. Name and address on one line, which is what
+  // clients expect and what a map link would be built from later.
+  const place = pickupLocationLabel(event.locationId != null ? event.locationId : event.location_id);
+  if (place) lines.push('LOCATION:' + escapeIcsText(place));
   if (event.description) lines.push('DESCRIPTION:' + escapeIcsText(event.description));
   if (event.assignees && event.assignees.length) {
     for (const a of event.assignees) lines.push('ATTENDEE;CN=' + (a.username || a) + ':mailto:noreply@localhost');
@@ -2730,7 +2769,10 @@ function autoSyncCalendarEvent(ev) {
       endTime: ev.endTime || ev.end_time,
       category: ev.category,
       description: ev.description,
-      caldavUid: ev.caldavUid || ev.caldav_uid
+      caldavUid: ev.caldavUid || ev.caldav_uid,
+      // Both spellings arrive here: readAll() hands out camelCase, while the
+      // PATCH route re-reads the raw row and passes that.
+      locationId: ev.locationId != null ? ev.locationId : ev.location_id
     };
     const aMap = db.getAllCalendarEventAssignees(database);
     normalized.assignees = aMap.get(ev.id) || [];
@@ -2738,7 +2780,7 @@ function autoSyncCalendarEvent(ev) {
     const { uid, ics } = customEventToVEVENT(normalized);
     writeIcsFile(calSlug, uid + '.ics', ics);
     // Clean from other category calendars in case category changed
-    for (const other of ['eigene-termine', 'meetings', 'lieferungen', 'wartung', 'meisterpilze']) {
+    for (const other of ['eigene-termine', 'meetings', 'lieferungen', 'wartung', 'abholung', 'meisterpilze']) {
       if (other !== calSlug) deleteIcsFile(other, uid + '.ics');
     }
   } catch (e) {

@@ -5189,6 +5189,11 @@ function listPickupLocations(db) {
   return db.prepare('SELECT * FROM pickup_locations ORDER BY sort_order, name').all();
 }
 
+function getPickupLocation(db, id) {
+  if (!id) return null;
+  return db.prepare('SELECT * FROM pickup_locations WHERE id=?').get(id) || null;
+}
+
 function upsertPickupLocation(db, l) {
   const name = String(l.name || '').trim();
   if (!name) throw new Error('name is required');
@@ -8276,6 +8281,7 @@ module.exports = {
   upsertSupplier,
   deleteSupplier,
   listPickupLocations,
+  getPickupLocation,
   upsertPickupLocation,
   deactivatePickupLocation,
   insertCalendarEvent,

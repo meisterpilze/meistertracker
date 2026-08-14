@@ -394,6 +394,7 @@
               <option value="meeting" data-i18n="calEntry.cat.meeting">Meeting</option>
               <option value="delivery" data-i18n="calEntry.cat.delivery">Lieferung</option>
               <option value="maintenance" data-i18n="calEntry.cat.maintenance">Wartung</option>
+              <option value="pickup" data-i18n="calEntry.cat.pickup">Abholfenster</option>
             </select>
           </div>
           <div id="cal-entry-prio-wrap">
@@ -458,6 +459,26 @@
           <div id="cal-entry-recurrence-until-wrap" style="display: none">
             <label data-i18n="calEntry.recurrenceUntil">Wiederholen bis (optional)</label>
             <input type="date" id="cal-entry-recurrence-until" />
+          </div>
+        </div>
+        <!-- Ort und Plätze. Der Ort steht jedem Termin frei; die Plätze gibt es
+             nur beim Abholfenster, weil nur dort jemand von außen einen davon
+             belegt. -->
+        <div class="g2" id="cal-entry-place-wrap" style="margin-bottom: 8px; display: none">
+          <div>
+            <label data-i18n="calEntry.place">Ort</label>
+            <select id="cal-entry-location"></select>
+          </div>
+          <div id="cal-entry-capacity-wrap" style="display: none">
+            <label data-i18n="calEntry.capacity">Plätze (optional)</label>
+            <input
+              type="number"
+              id="cal-entry-capacity"
+              min="0"
+              step="1"
+              data-i18n-placeholder="calEntry.capacityPh"
+              placeholder="leer = unbegrenzt"
+            />
           </div>
         </div>
         <div style="margin-bottom: 8px">

@@ -17792,12 +17792,15 @@ function openEventDetail(ev) {
         t('calEntry.until') +
         ' ' +
         new Date(ce.endDate).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    const place = ce.locationId ? pickupLocations.find((l) => l.id === ce.locationId) : null;
+    if (place) meta += ' · ' + place.name;
     metaEl.textContent = meta;
     const catLabels = {
       custom: t('calEntry.cat.custom'),
       meeting: t('calEntry.cat.meeting'),
       delivery: t('calEntry.cat.delivery'),
-      maintenance: t('calEntry.cat.maintenance')
+      maintenance: t('calEntry.cat.maintenance'),
+      pickup: t('calEntry.cat.pickup')
     };
     const recLabels = {
       daily: t('calEntry.rec.daily'),
@@ -17814,6 +17817,14 @@ function openEventDetail(ev) {
       badges +=
         '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
         esc(recLabels[ce.recurrence] || ce.recurrence) +
+        '</span>';
+    // Seats, but only where they mean something. A window with no number takes
+    // as many as turn up, and saying "unbegrenzt" on every ordinary appointment
+    // would be noise.
+    if (ce.category === 'pickup' && ce.pickupCapacity !== null && ce.pickupCapacity !== undefined)
+      badges +=
+        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">' +
+        esc(t('calDetail.seats', { n: ce.pickupCapacity })) +
         '</span>';
     badgesEl.innerHTML = badges;
     const teamList = Array.isArray(ce.teamAssignees) ? ce.teamAssignees : [];
@@ -18089,8 +18100,35 @@ function deleteTaskFromCalendar(taskId) {
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+const CATEGORY_COLORS = {
+  custom: '#16a34a',
+  meeting: '#8b5cf6',
+  delivery: '#14b8a6',
+  maintenance: '#64748b',
+  pickup: '#f59e0b'
+};
 let calEntryType = 'task';
+
+// Fill the location dropdown. Retired locations are offered only when the event
+// being edited already points at one — otherwise a window would silently lose
+// its place the first time somebody opened it to change the time.
+function fillEntryLocationSelect(selectedId) {
+  const sel = document.getElementById('cal-entry-location');
+  if (!sel) return;
+  const chosen = selectedId ? Number(selectedId) : null;
+  const options = pickupLocations.filter((l) => l.active !== false || l.id === chosen);
+  sel.innerHTML =
+    `<option value="">${esc(t('calEntry.placeNone'))}</option>` +
+    options
+      .map(
+        (l) =>
+          `<option value="${l.id}"${l.id === chosen ? ' selected' : ''}>${esc(l.name)}${
+            l.active === false ? ' (' + t('pickupLoc.retired') + ')' : ''
+          }</option>`
+      )
+      .join('');
+  sel.value = chosen ? String(chosen) : '';
+}
 
 function setEntryType(type) {
   const isTask = type === 'task';
@@ -18104,6 +18142,12 @@ function setEntryType(type) {
   document.getElementById('cal-entry-private-wrap').style.display = isTask ? 'flex' : 'none';
   const recWrap = document.getElementById('cal-entry-recurrence-wrap');
   if (recWrap) recWrap.style.display = 'grid';
+  // A place belongs to any appointment; the seat count only to a pickup window,
+  // which is the only kind somebody outside the lab books into.
+  const placeWrap = document.getElementById('cal-entry-place-wrap');
+  if (placeWrap) placeWrap.style.display = isTask ? 'none' : 'grid';
+  const capWrap = document.getElementById('cal-entry-capacity-wrap');
+  if (capWrap) capWrap.style.display = type === 'pickup' ? '' : 'none';
   document.getElementById('cal-entry-name').placeholder = isTask ? t('calEntry.namePhTask') : t('calEntry.namePhEvent');
   toggleEntryTimeInputs();
   toggleRecurrenceUntil();
@@ -18151,6 +18195,9 @@ function openEntryModal(type, date, time, existing) {
     document.getElementById('cal-entry-start-time').value = existing.startTime || '09:00';
     document.getElementById('cal-entry-end-time').value = existing.endTime || '10:00';
     setEntryType(existing.category || 'custom');
+    fillEntryLocationSelect(existing.locationId);
+    document.getElementById('cal-entry-capacity').value =
+      existing.pickupCapacity === null || existing.pickupCapacity === undefined ? '' : existing.pickupCapacity;
     document.getElementById('cal-entry-desc').value = existing.description || '';
     calEvSelectedAssignees = Array.isArray(existing.teamAssignees) ? existing.teamAssignees.slice() : [];
     renderAssigneePicker();
@@ -18179,6 +18226,8 @@ function openEntryModal(type, date, time, existing) {
     document.getElementById('cal-entry-recurrence').value = '';
     document.getElementById('cal-entry-recurrence-until').value = '';
     toggleRecurrenceUntil();
+    fillEntryLocationSelect(null);
+    document.getElementById('cal-entry-capacity').value = '';
     document.getElementById('cal-entry-del-btn').style.display = 'none';
   }
   document.getElementById('cal-ev-assignee-dropdown').style.display = 'none';
@@ -18363,6 +18412,12 @@ function saveEntryEvent() {
   const recurrence = document.getElementById('cal-entry-recurrence').value || null;
   const recurrenceUntil = recurrence ? document.getElementById('cal-entry-recurrence-until').value || null : null;
   const teamAssignees = calEvSelectedAssignees.slice();
+  const locationId = Number(document.getElementById('cal-entry-location').value) || null;
+  // Only a pickup window has a seat count; anything else must not carry one
+  // out of a field the user could not see. The empty string stays null
+  // (uncapped) while a typed 0 survives as 0 (open, but taking nobody).
+  const capRaw = document.getElementById('cal-entry-capacity').value;
+  const pickupCapacity = category === 'pickup' && capRaw !== '' && capRaw != null ? Number(capRaw) : null;
   const ev = {
     id:
       mode === 'edit'
@@ -18383,7 +18438,9 @@ function saveEntryEvent() {
     recurrence: recurrence,
     recurrenceUntil: recurrenceUntil,
     teamAssignees: teamAssignees,
-    assignees: []
+    assignees: [],
+    locationId: locationId,
+    pickupCapacity: pickupCapacity
   };
   if (mode === 'edit') {
     const idx = calendarEvents.findIndex((x) => x.id === ev.id);
@@ -18404,7 +18461,12 @@ function saveEntryEvent() {
       color: ev.color,
       recurrence: ev.recurrence,
       recurrenceUntil: ev.recurrenceUntil,
-      teamAssignees: ev.teamAssignees
+      teamAssignees: ev.teamAssignees,
+      // '' rather than null: updateCalendarEvent skips a field only when the key
+      // is absent, and both spellings normalise to NULL — but sending '' keeps
+      // "clear the place again" expressible through the same path that set it.
+      locationId: ev.locationId === null ? '' : ev.locationId,
+      pickupCapacity: ev.pickupCapacity === null ? '' : ev.pickupCapacity
     });
   } else {
     calendarEvents.push(ev);
