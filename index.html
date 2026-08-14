@@ -4495,6 +4495,55 @@
                   <input type="checkbox" id="harvestfeed-strain" style="width: auto" />
                   <span data-i18n="harvestFeed.strain">Include strain names</span>
                 </label>
+                <!--
+                  One ladder for every species, and that is the point rather
+                  than a shortcut: portions follow the packing bench — which
+                  trays are on the shelf, what the scale steps in — not the
+                  mushroom in the tray. Per species this would be a field to
+                  fill in for every new Sorte, for an answer that is the same
+                  every time, and the first one forgotten is a species a shop
+                  quietly offers in the wrong sizes.
+
+                  Ticked boxes rather than a text field, because this is a
+                  choice and not a sentence. The row below adds a size the list
+                  does not offer, so a farm that packs 400 g trays is not stuck
+                  with somebody else's ladder.
+                -->
+                <div>
+                  <label
+                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="harvestFeed.packSizes"
+                    >Amounts handed out</label
+                  >
+                  <div
+                    id="harvestfeed-packs"
+                    style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center"
+                  ></div>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px">
+                    <input
+                      type="number"
+                      id="harvestfeed-pack-new"
+                      min="25"
+                      max="25000"
+                      step="5"
+                      style="width: 110px"
+                      data-i18n-placeholder="harvestFeed.packNewHint"
+                      placeholder="e.g. 400"
+                    />
+                    <button id="harvestfeed-pack-add" class="btn btn-sm" data-i18n="harvestFeed.packAdd">
+                      Add size
+                    </button>
+                    <span id="harvestfeed-pack-msg" style="font-size: 11px; color: var(--c-red-dark)"></span>
+                  </div>
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.packHint"
+                  >
+                    In grams, the same for every species. A shop offers these amounts and hides the ones a release no
+                    longer covers. Tick nothing and the feed says nothing about portions — the receiving side then keeps
+                    using its own.
+                  </div>
+                </div>
                 <div>
                   <label
                     style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
