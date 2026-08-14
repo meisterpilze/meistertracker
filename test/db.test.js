@@ -1092,9 +1092,15 @@ describe('db – mushroom strains CRUD', () => {
     const strainId = list[0].id;
     db.updateMushroomStrain(d, strainId, { name: 'Pleurotus ostreatus Kings', kuerzel: 'KINGS' });
 
+    // ⚠️ Diese beiden Zeilen standen bis zum 2026-08-14 auf der Kulturform —
+    // `species` ohne Kürzel und `strain` als Kürzel — und hielten damit den
+    // Fehler fest, statt ihn zu finden. Eine Charge trägt die Art **mit**
+    // Kürzel, weil der Ernte-Feed genau diesen String verschickt und ein Shop
+    // wörtlich darauf vergleicht; und `strain` ist ihr freier Text, der der
+    // Charge gehört und nicht der Sorte.
     const b = db.readBatchById(d, 'SB-001');
-    assert.equal(b.species, 'Pleurotus ostreatus Kings');
-    assert.equal(b.strain, 'KINGS');
+    assert.equal(b.species, 'Pleurotus ostreatus Kings (KINGS)');
+    assert.equal(b.strain, 'WRONG', 'die Umbenennung darf den Strain-Text der Charge nicht anfassen');
     assert.equal(b.strainName, 'Pleurotus ostreatus Kings');
     assert.equal(b.strainKuerzel, 'KINGS');
 

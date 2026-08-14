@@ -638,8 +638,9 @@ describe('MCP mushroom strains tool layer', () => {
     // All MCP read paths should now see the new values
     const listed = db.getAllBatches(d).find((b) => b.batchId === bagStmt);
     assert.ok(listed);
-    assert.equal(listed.species, 'Shiitake Kalliopi');
-    assert.equal(listed.strain, 'KAL');
+    // Mit Kürzel: Eine Charge trägt die Art in der Form, die der Ernte-Feed
+    // verschickt und ein Empfänger wörtlich vergleicht.
+    assert.equal(listed.species, 'Shiitake Kalliopi (KAL)');
     assert.equal(listed.strainName, 'Shiitake Kalliopi');
     assert.equal(listed.strainKuerzel, 'KAL');
 
