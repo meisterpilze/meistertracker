@@ -18135,7 +18135,12 @@ function setEntryType(type) {
   calEntryType = isTask ? 'task' : 'event';
   document.getElementById('cal-entry-type-select').value = type;
   document.getElementById('cal-entry-enddate-wrap').style.display = isTask ? 'none' : '';
-  document.getElementById('cal-entry-allday-wrap').style.display = '';
+  // A pickup window without a clock is not a window: "Saturday" is not something
+  // anyone can book into, and the feed skips such a row — silently, from the
+  // author's point of view. So the option is not offered rather than explained.
+  const isPickup = type === 'pickup';
+  if (isPickup) document.getElementById('cal-entry-allday').checked = false;
+  document.getElementById('cal-entry-allday-wrap').style.display = isPickup ? 'none' : '';
   document.getElementById('cal-entry-prio-wrap').style.display = isTask ? '' : 'none';
   document.getElementById('cal-entry-task-assign-wrap').style.display = isTask ? '' : 'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display = isTask ? 'none' : '';

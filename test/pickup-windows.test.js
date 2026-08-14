@@ -17,6 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const db = require('../db.js');
+const feed = require('../harvest-feed.js');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -204,5 +205,186 @@ describe('pickup category – declared everywhere a category has to be', () => {
 
   it('emits the place as LOCATION on the VEVENT', () => {
     assert.match(server, /lines\.push\('LOCATION:' \+ escapeIcsText\(place\)\)/);
+  });
+
+  it('does not offer all-day for a pickup window', () => {
+    // The feed skips a window with no clock, and from the author's side that is
+    // silent. The editor takes the option away instead of explaining it later.
+    assert.match(app, /const isPickup = type === 'pickup';/);
+    assert.match(app, /if \(isPickup\) document\.getElementById\('cal-entry-allday'\)\.checked = false;/);
+  });
+});
+
+// The export. Two constraints from #481 carry the weight here, and both are the
+// kind that pass review and fail in the field:
+//
+//   the key is event id + occurrence date, never the id alone
+//   title and description do not leave the building
+describe('pickup windows – what goes out on the harvest feed', () => {
+  let d, p, locId;
+
+  // The builder works in the machine's own day, like the release window does.
+  const today = () => {
+    const at = new Date();
+    const q = (n) => String(n).padStart(2, '0');
+    return `${at.getFullYear()}-${q(at.getMonth() + 1)}-${q(at.getDate())}`;
+  };
+  const inDays = (n) => {
+    const dt = new Date(today() + 'T00:00:00Z');
+    dt.setUTCDate(dt.getUTCDate() + n);
+    return dt.toISOString().slice(0, 10);
+  };
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    locId = db.upsertPickupLocation(d, { name: 'Marktstand Erlangen', address: 'Marktplatz 1, 91054 Erlangen' });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  const window = (id, extra) =>
+    db.insertCalendarEvent(
+      d,
+      {
+        id,
+        title: 'Anna übernimmt, Bernd hat frei',
+        description: 'Schlüssel liegt beim Nachbarn',
+        startDate: inDays(2),
+        allDay: false,
+        startTime: '09:00',
+        endTime: '12:00',
+        category: 'pickup',
+        locationId: locId,
+        created: new Date().toISOString(),
+        ...extra
+      },
+      []
+    );
+
+  it('exports one window per occurrence, keyed by event AND date', () => {
+    window('cev-weekly', { recurrence: 'weekly' });
+    const out = feed.buildPickupWindows(d, new Date());
+    const mine = out.filter((w) => w.id.startsWith('cev-weekly'));
+    // Four weeks of horizon, so the first occurrence plus three repeats.
+    assert.ok(mine.length >= 4, 'expected the recurrence to expand, got ' + mine.length);
+    const ids = new Set(mine.map((w) => w.id));
+    // The whole point. Key on the row alone and every Friday is the same window,
+    // so one booking takes all of them — and nobody finds out until a handover.
+    assert.equal(ids.size, mine.length, 'occurrences must not share an id');
+    assert.equal(mine[0].id, 'cev-weekly_' + inDays(2));
+    assert.equal(mine[1].date, inDays(9));
+  });
+
+  it('never lets the title or the description out', () => {
+    const out = feed.buildPickupWindows(d, new Date());
+    const asText = JSON.stringify(out);
+    assert.ok(!asText.includes('Anna'), 'a staff note reached the payload through the title');
+    assert.ok(!asText.includes('Nachbarn'), 'a staff note reached the payload through the description');
+    // And nothing else creeps in later either: an allow-list, not a deny-list,
+    // because the field that gets added without thinking is the free-text one.
+    const allowed = new Set(['id', 'date', 'from', 'to', 'tz', 'place', 'capacity']);
+    for (const w of out) {
+      for (const k of Object.keys(w)) assert.ok(allowed.has(k), 'unexpected field on a published window: ' + k);
+    }
+  });
+
+  it('sends the place by name, and leaves the address at home', () => {
+    const out = feed.buildPickupWindows(d, new Date());
+    assert.equal(out[0].place, 'Marktstand Erlangen');
+    assert.ok(!JSON.stringify(out).includes('Marktplatz 1'), 'the address must not leave the lab');
+  });
+
+  it('drops an occurrence that was cancelled', () => {
+    window('cev-exc', { recurrence: 'weekly', exceptionDates: [inDays(9)] });
+    const dates = feed
+      .buildPickupWindows(d, new Date())
+      .filter((w) => w.id.startsWith('cev-exc'))
+      .map((w) => w.date);
+    assert.ok(dates.includes(inDays(2)));
+    assert.ok(!dates.includes(inDays(9)), 'an exception date is an occurrence that does not exist');
+    assert.ok(dates.includes(inDays(16)));
+  });
+
+  it('omits capacity when uncapped and keeps a zero', () => {
+    window('cev-uncapped');
+    window('cev-zero', { pickupCapacity: 0 });
+    window('cev-eight', { pickupCapacity: 8 });
+    const out = feed.buildPickupWindows(d, new Date());
+    const one = (id) => out.find((w) => w.id.startsWith(id));
+    assert.ok(!('capacity' in one('cev-uncapped')), 'absent means uncapped');
+    assert.equal(one('cev-zero').capacity, 0, 'a window that takes nobody is not an uncapped one');
+    assert.equal(one('cev-eight').capacity, 8);
+  });
+
+  it('skips a window with no clock on it', () => {
+    window('cev-allday', { allDay: true, startTime: null, endTime: null });
+    const out = feed.buildPickupWindows(d, new Date());
+    assert.ok(!out.some((w) => w.id.startsWith('cev-allday')), '"Saturday" is not a slot anyone can book');
+  });
+
+  it('ignores everything that is not a pickup window', () => {
+    db.insertCalendarEvent(
+      d,
+      {
+        id: 'cev-meeting',
+        title: 'Jour fixe',
+        startDate: inDays(1),
+        allDay: false,
+        startTime: '10:00',
+        endTime: '11:00',
+        category: 'meeting',
+        created: new Date().toISOString()
+      },
+      []
+    );
+    const out = feed.buildPickupWindows(d, new Date());
+    assert.ok(!out.some((w) => w.id.startsWith('cev-meeting')));
+  });
+
+  it('stops at the horizon and ignores what is already past', () => {
+    window('cev-past', { startDate: inDays(-3) });
+    window('cev-far', { startDate: inDays(120) });
+    const out = feed.buildPickupWindows(d, new Date());
+    assert.ok(!out.some((w) => w.id.startsWith('cev-past')));
+    assert.ok(!out.some((w) => w.id.startsWith('cev-far')));
+  });
+
+  it('carries the zone, because 09:00 on its own is not a time', () => {
+    const out = feed.buildPickupWindows(d, new Date());
+    assert.equal(out[0].tz, 'Europe/Berlin');
+  });
+
+  it('folds an id a receiver could not accept, without merging two of them', () => {
+    // CalDAV ids look like this, and the receiver's charset is [A-Za-z0-9_-].
+    const a = feed.windowId('abc@example.com', '2026-08-15');
+    const b = feed.windowId('abc.example.com', '2026-08-15');
+    assert.match(a, /^[A-Za-z0-9_-]+$/);
+    assert.ok(a.length <= 64);
+    // Folded naively these two become the same string, and two markets become
+    // one window with one set of seats.
+    assert.notEqual(a, b);
+    // An ordinary id is left legible.
+    assert.equal(feed.windowId('cev-123-ab', '2026-08-15'), 'cev-123-ab_2026-08-15');
+  });
+
+  it('rides along on the payload, empty list included', () => {
+    const { db: fresh, path: fp } = tmpDb();
+    try {
+      const payload = feed.buildPayload(
+        fresh,
+        { freshDays: 3, plannedDays: 28, leadDays: 0, strain: true },
+        new Date()
+      );
+      // Present-but-empty is a statement ("nothing bookable"); absent would mean
+      // "this software cannot say", which is the only case a receiver may answer
+      // by falling back to a hand-kept list.
+      assert.ok(Array.isArray(payload.pickupWindows));
+      assert.equal(payload.pickupWindows.length, 0);
+    } finally {
+      fresh.close();
+      fs.unlinkSync(fp);
+    }
   });
 });

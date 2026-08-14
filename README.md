@@ -394,6 +394,34 @@ The release says *how much*. It does not say *in what portions*, and a shop cann
 The receiver combines the two lists: it offers these amounts for every listing and leaves out the ones a release no longer covers, so 250 g stays on the page when 300 g are left and the kilo does not.
 
 Ticking nothing is a real answer, and the default. The field is then absent, and a receiver keeps whatever it did before — unlike an empty `released`, which is a statement, an absent `packSizes` says nothing was decided here. Nor is it a version bump: a receiver that ignores the field is correct, only less specific.
+#### Pickup windows: when it can be collected
+
+A shop that knows what is for sale still cannot let anyone book a time, because nothing outside the lab knows when the lab is reachable. Those times are entered as calendar appointments in the **Abholfenster** category — with a place from *Settings → Abholorte*, optional seats, and the calendar's ordinary recurrence, so "every Saturday 9–13, except the 15th" is one entry rather than fifty. Every push then carries them:
+
+```json
+{
+  "pickupWindows": [
+    {
+      "id": "cev-1755-ab12_2026-08-15",
+      "date": "2026-08-15",
+      "from": "09:00",
+      "to": "13:00",
+      "tz": "Europe/Berlin",
+      "place": "Marktstand Erlangen",
+      "capacity": 8
+    }
+  ]
+}
+```
+
+Four things about this list are worth relying on:
+
+- **`id` is the event *and* the date.** A recurring entry is one row with many occurrences. Key a booking on the row alone and every Saturday becomes the same window — one booking then fills all of them, and nobody finds out until somebody stands at a stall. The id is opaque; do not parse it, just carry it back in `slot`.
+- **No title, no description.** Those are free text in an internal tool and end up holding staff notes. What leaves is the shape of the window — when, where, how many — and a receiver composes its own label from that. The location's address stays in the lab too; only its name travels.
+- **The list is complete for its horizon (four weeks) and replaces whatever you hold.** It is not a set of changes. Empty means *nothing bookable*, which is a real answer.
+- **Absent is different from empty.** A missing `pickupWindows` field means the lab is running a build that cannot state any — the only case where falling back to a hand-kept list is right. It is not a version bump: a receiver that ignores the field behaves exactly as before.
+
+`capacity` is optional: absent means as many as turn up, and `0` means the window exists but takes nobody — a difference worth keeping, because collapsing the two publishes an open window. An entry with no clock on it is skipped, and the editor does not offer an all-day pickup window for that reason.
 
 #### Pickups: what the receiver may report back
 
