@@ -824,6 +824,11 @@ window.LANG['de'] = {
   'harvestFeed.markedRemoved': 'wird beim Speichern entfernt',
   'harvestFeed.removedStillListed':
     'Kürzlich geerntete Arten bleiben ohne Freigabe in der Liste stehen — sie sind dann nur nicht mehr freigegeben.',
+  'harvestFeed.pending.one': '1 Änderung noch nicht gespeichert',
+  'harvestFeed.pending.other': '{n} Änderungen noch nicht gespeichert',
+  'harvestFeed.leaveWarn.one': '1 Änderung an den Freigaben ist noch nicht gespeichert und geht verloren. Trotzdem weg?',
+  'harvestFeed.leaveWarn.other':
+    '{n} Änderungen an den Freigaben sind noch nicht gespeichert und gehen verloren. Trotzdem weg?',
   'harvestFeed.expired': 'abgelaufen',
   'harvestFeed.noRelease': 'Noch nichts geerntet und nichts freigegeben.',
   'harvestFeed.badAmount': 'Eine Menge ist keine Zahl ab 0.',

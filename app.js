@@ -952,7 +952,60 @@ const PAGES = {
   orders: 'n-orders-inbox',
   pickups: 'n-pickups'
 };
+// ─── UNSAVED WORK ────────────────────────────────────────────────────────────
+//
+// Most of this application writes as it goes: a scan is a scan, a move is a
+// move, and there is nothing to forget. A few screens cannot work that way,
+// because what they store is read by somebody outside this building the moment
+// it lands — a release amount typed as 50 on the way to 5 reaches a shop window
+// before the second digit does. Those screens keep a Save button, and register
+// here so that the button's one weakness is covered: the edit nobody pressed it
+// for.
+//
+// Two doors, both guarded. `go()` is the way to another page; `beforeunload` is
+// the tab, the reload and the back button.
+const leaveGuards = [];
+
+/**
+ * @param {() => string|null} ask the question to put to the user, or null when
+ *   nothing is pending.
+ * @param {() => void} [discard] run once leaving is confirmed. Without it the
+ *   screen would go on treating the dropped edits as pending and keep refusing
+ *   the refresh that would put it right.
+ */
+function guardUnsaved(ask, discard) {
+  leaveGuards.push({ ask, discard });
+}
+
+// A guard that throws must not lock the application on one page.
+function askGuard(g) {
+  try {
+    return g.ask();
+  } catch (e) {
+    return null;
+  }
+}
+
+/** True when walking away is fine — nothing pending, or it was confirmed. */
+function mayLeavePage() {
+  // Ask every pending guard before discarding any of them: a "cancel" on the
+  // second question must not leave the first one's edits already thrown away.
+  const offen = leaveGuards.map((g) => [g, askGuard(g)]).filter(([, frage]) => frage);
+  for (const [, frage] of offen) if (!window.confirm(frage)) return false;
+  for (const [g] of offen) if (g.discard) g.discard();
+  return true;
+}
+
+// The browser writes its own wording here and ignores ours — the string only has
+// to be non-empty. The sentence people actually read is the one in mayLeavePage().
+window.addEventListener('beforeunload', (e) => {
+  if (!leaveGuards.some((g) => askGuard(g))) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
 function go(page, btnId) {
+  if (!mayLeavePage()) return;
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
@@ -8638,6 +8691,20 @@ async function loadHarvestFeedSettings() {
 // yet" is the question this screen exists to answer, and it cannot be answered
 // by a list that only shows what has already been decided.
 //
+// ── Why this table saves on a button and not on every keystroke ──────────────
+//
+// A number here is the amount a shop may publicly offer, and the feed carries it
+// out within one interval. Saving as it is typed would publish 50 on the way to
+// 5, and a wrong figure in a shop window cannot be taken back by fixing the
+// field afterwards — somebody has already read it.
+//
+// What a Save button costs is the edit nobody saved, and this screen pays that
+// in three places instead of pretending it does not exist: a touched row is
+// marked, the count of pending changes sits next to the button, and every way
+// out — another page, the tab, a background refresh — has to get past it. The
+// last one is not hypothetical: renderPickups() runs on every `data-changed`
+// event, which is every scan by every client in the building.
+
 /**
  * The table's rows, as data.
  *
@@ -8651,6 +8718,10 @@ let harvestReleaseRows = [];
 async function loadHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!body) return;
+  // Unsaved work outranks a fresher `harvested` column. Without this line a
+  // colleague scanning a bag two rooms away redraws this table from the server
+  // and takes a half-typed release with it — no click, no keystroke, no warning.
+  if (harvestReleaseDirty()) return;
   const karte = document.getElementById('harvestrelease-card');
   try {
     const r = await authFetch('/api/harvest-feed/release');
@@ -8696,6 +8767,10 @@ function harvestReleaseChanges() {
   return harvestReleaseRows.filter((r) => r.removing || r.kg !== r.wasKg || r.until !== r.wasUntil);
 }
 
+function harvestReleaseDirty() {
+  return harvestReleaseChanges().length > 0;
+}
+
 // The species this database knows, verbatim. Held so the picker can be refilled
 // after every render without another round trip — adding a row changes what is
 // left to offer, and that has to be visible immediately or the same species can
@@ -8738,11 +8813,13 @@ function renderHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!harvestReleaseRows.length) {
     body.innerHTML = '<tr><td colspan="5" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
+    updateHarvestReleasePending();
     return;
   }
   body.innerHTML = harvestReleaseRows
     .map((row, i) => {
       const harvested = row.harvested == null ? '—' : (row.harvested / 1000).toFixed(2) + ' kg';
+      const touched = row.removing || row.kg !== row.wasKg || row.until !== row.wasUntil;
       // A marked row keeps its numbers on screen, struck through and labelled.
       // Blanking the two fields is what the old button did, and it is why
       // "clear" got read as "remove": afterwards the row looks like a species
@@ -8753,7 +8830,9 @@ function renderHarvestReleases() {
         esc(row.species) +
         '" data-i="' +
         i +
-        '"><td' +
+        '"' +
+        (touched ? ' style="background:var(--c-amber-light)"' : '') +
+        '><td' +
         durch +
         '>' +
         esc(row.species) +
@@ -8782,14 +8861,16 @@ function renderHarvestReleases() {
     const row = harvestReleaseRows[Number(tr.dataset.i)];
     const kg = tr.querySelector('.hr-kg');
     const until = tr.querySelector('.hr-until');
-    // `input` and not `change`: the array is what Save reads, so it has to be
-    // right without waiting for the field to be left. On `change` a number typed
-    // and then clicked straight past goes nowhere.
+    // `input` and not `change`: the mark and the count have to follow the typing.
+    // On `change` they arrive when the field is left, which is exactly the moment
+    // somebody who is done here walks away from an unsaved table.
     kg.addEventListener('input', () => {
       row.kg = kg.value.trim();
+      markHarvestReleaseRow(tr, row);
     });
     until.addEventListener('input', () => {
       row.until = until.value;
+      markHarvestReleaseRow(tr, row);
     });
     const weg = tr.querySelector('.hr-remove');
     if (weg) weg.addEventListener('click', () => removeHarvestReleaseRow(row));
@@ -8800,6 +8881,15 @@ function renderHarvestReleases() {
         renderHarvestReleases();
       });
   });
+  updateHarvestReleasePending();
+}
+
+// Repaints one row instead of the table: a redraw while somebody is typing takes
+// the caret with it.
+function markHarvestReleaseRow(tr, row) {
+  const touched = row.removing || row.kg !== row.wasKg || row.until !== row.wasUntil;
+  tr.style.background = touched ? 'var(--c-amber-light)' : '';
+  updateHarvestReleasePending();
 }
 
 /**
@@ -8818,6 +8908,15 @@ function removeHarvestReleaseRow(row) {
   else harvestReleaseRows = harvestReleaseRows.filter((r) => r !== row);
   renderHarvestReleases();
   fillHarvestReleasePicker();
+}
+
+// How much is typed but not stored, next to the button that would store it.
+function updateHarvestReleasePending() {
+  const el = document.getElementById('harvestrelease-pending');
+  if (!el) return;
+  const n = harvestReleaseChanges().length;
+  el.textContent = n ? tp('harvestFeed.pending', n) : '';
+  el.style.display = n ? '' : 'none';
 }
 
 function showHarvestReleaseResult(msg, color) {
@@ -8866,13 +8965,16 @@ async function saveHarvestReleases() {
       t('harvestFeed.saved') + (bleibt ? ' ' + t('harvestFeed.removedStillListed') : ''),
       'var(--c-green-dark)'
     );
-    // What was just written is what the rows now start from, so a second Save on
-    // an untouched table has nothing left to send.
+    // Clean first, then reload: loadHarvestReleases() refuses to redraw while
+    // anything is pending, and that refusal is what keeps a background refresh
+    // off a half-typed row. Skipping this would leave the table frozen on the
+    // values it just saved.
     for (const r of harvestReleaseRows) {
       r.wasKg = r.kg;
       r.wasUntil = r.until;
       r.removing = false;
     }
+    updateHarvestReleasePending();
     loadHarvestReleases();
   } catch (e) {
     showHarvestReleaseResult(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
@@ -19716,6 +19818,16 @@ function initEventListeners() {
   $('harvestrelease-new').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addHarvestReleaseRow();
   });
+  guardUnsaved(
+    () => (harvestReleaseDirty() ? tp('harvestFeed.leaveWarn', harvestReleaseChanges().length) : null),
+    () => {
+      // Dropped on purpose, so the table is free to redraw from the server
+      // again. Leaving the rows in place would make every later refresh a no-op
+      // and keep the count showing changes nobody intends to save.
+      harvestReleaseRows = [];
+      updateHarvestReleasePending();
+    }
+  );
   $('duckdns-update-btn').addEventListener('click', triggerDuckdnsUpdate);
   $('le-request-btn').addEventListener('click', requestLeCert);
   $('mcp-save-btn').addEventListener('click', saveMcpSettings);

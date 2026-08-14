@@ -5395,6 +5395,18 @@
               <select id="harvestrelease-new" style="max-width: 260px"></select>
               <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
               <span style="flex: 1"></span>
+              <!--
+                What is typed but not stored, spelled out next to the button that
+                would store it. This table deliberately does not save as it is
+                edited: the amount goes out to a shop within one feed interval,
+                and 50 on the way to 5 cannot be taken back by fixing the field
+                afterwards. The price of that is the edit somebody forgets, so
+                the count is put where the forgetting happens.
+              -->
+              <span
+                id="harvestrelease-pending"
+                style="font-size: 12px; color: var(--c-amber-dark); display: none"
+              ></span>
               <button id="harvestrelease-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
             </div>
             <div

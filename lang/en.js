@@ -821,6 +821,10 @@ window.LANG['en'] = {
   'harvestFeed.markedRemoved': 'will be removed on save',
   'harvestFeed.removedStillListed':
     'A species harvested recently stays in the list without a release — it is simply no longer released.',
+  'harvestFeed.pending.one': '1 change not saved yet',
+  'harvestFeed.pending.other': '{n} changes not saved yet',
+  'harvestFeed.leaveWarn.one': '1 change to the releases has not been saved and will be lost. Leave anyway?',
+  'harvestFeed.leaveWarn.other': '{n} changes to the releases have not been saved and will be lost. Leave anyway?',
   'harvestFeed.expired': 'expired',
   'harvestFeed.noRelease': 'Nothing harvested and nothing released yet.',
   'harvestFeed.badAmount': 'One of the amounts is not a number of 0 or more.',
