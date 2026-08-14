@@ -49,7 +49,8 @@ This is the only supported way to start the server (see in-repo notes — it han
 
 - **JavaScript:** ESLint (`eslint.config.js`) + Prettier (`.prettierrc`). Single quotes, semicolons, 2-space indent.
 - **Python (camera module):** PEP 8, type hints where they help.
-- **Commit messages:** short imperative subject (e.g. `fix(scan): drop trailing whitespace from barcode input`). Body optional but appreciated for the "why".
+- **Commit messages:** English, short imperative subject (e.g. `fix(scan): drop trailing whitespace from barcode input`). Body optional but appreciated for the "why". German domain terms (Charge, Sorte, Freigabe) are fine inside an English subject — they are what the UI calls those things.
+- **PR titles:** English as well. A squash merge takes its subject from the PR title whenever the branch holds more than one commit, so the title ends up in the permanent history.
 
 Don't reformat untouched files in the same PR as a logic change — it makes review harder.
 
