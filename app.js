@@ -333,6 +333,7 @@ let mushroomStrains = [],
   duckdns = {},
   zones = [],
   suppliers = [],
+  pickupLocations = [],
   weekRhythm = {},
   rhythmTasks = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
@@ -572,6 +573,7 @@ function applyData(d) {
   calendarEvents = d.calendarEvents || [];
   zones = d.zones || [];
   suppliers = d.suppliers || [];
+  pickupLocations = d.pickupLocations || [];
   weekRhythm = d.weekRhythm || {};
   rhythmTasks = d.rhythmTasks || [];
   // Build barcode registry from server data
@@ -1094,6 +1096,7 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'harvestfeed') loadHarvestFeedSettings();
+  if (page === 'settings' && sub === 'pickuplocations') renderPickupLocations();
   if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
@@ -10986,6 +10989,111 @@ function editSupplier(id) {
   document.getElementById('m-confirm').classList.add('open');
 }
 
+// ── Pickup locations ────────────────────────────────────────
+// Retired ones stay in the table, greyed out. A calendar event may still point
+// at one, and a list that hides it turns "the market we stopped doing" into a
+// blank field nobody can explain.
+//
+// The buttons are wired by delegation rather than the `onclick="fn(id)"` this
+// file otherwise uses. Not a style preference: a handler only ever named inside
+// an HTML string is invisible to ESLint, so each one costs a permanent
+// "defined but never used" warning, and the lint budget is a deliberate ratchet
+// (see eslint.config.js — 14 of the existing warnings are exactly this).
+function renderPickupLocations() {
+  const el = document.getElementById('pickuploc-list');
+  if (!el) return;
+  if (!el.dataset.wired) {
+    el.dataset.wired = '1';
+    el.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      if (btn.dataset.act === 'edit') editPickupLocation(id);
+      else if (btn.dataset.act === 'retire') retirePickupLocation(id);
+      else if (btn.dataset.act === 'reactivate') setPickupLocationActive(id, true);
+    });
+  }
+  if (!pickupLocations.length) {
+    el.innerHTML = `<p style="color:var(--c-text-muted);font-size:13px">${t('pickupLoc.none')}</p>`;
+    return;
+  }
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>${t('pickupLoc.name')}</th><th>${t('pickupLoc.address')}</th><th>${t('pickupLoc.order')}</th><th></th></tr></thead>
+    <tbody>${pickupLocations
+      .map(
+        (l) => `<tr${l.active ? '' : ' style="opacity:.55"'}>
+      <td style="font-weight:500">${esc(l.name)}${l.active ? '' : ` <span style="font-weight:400;font-size:11px;color:var(--c-text-muted)">(${t('pickupLoc.retired')})</span>`}</td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${l.address ? esc(l.address) : '-'}</td>
+      <td style="font-size:12px">${l.sortOrder}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" data-act="edit" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.edit')}</button>
+        ${
+          l.active
+            ? `<button class="btn btn-sm" data-act="retire" data-id="${l.id}" style="font-size:11px;color:var(--c-red-dark)">${t('pickupLoc.retire')}</button>`
+            : `<button class="btn btn-sm" data-act="reactivate" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.reactivate')}</button>`
+        }
+      </td>
+    </tr>`
+      )
+      .join('')}</tbody>
+  </table></div>`;
+}
+
+function editPickupLocation(id) {
+  const existing = id ? pickupLocations.find((l) => l.id === id) : null;
+  const html = `<div style="display:flex;flex-direction:column;gap:10px">
+    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" /></div>
+    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" /></div>
+    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" /></div>
+    <p style="font-size:12px;color:var(--c-text-muted);margin:0;line-height:1.5">${esc(t('pickupLoc.hint'))}</p>
+  </div>`;
+  document.getElementById('m-title').textContent = existing ? t('pickupLoc.edit') : t('pickupLoc.add');
+  document.getElementById('m-body').innerHTML = html;
+  document.getElementById('m-ok').textContent = t('common.save');
+  confirmCb = async () => {
+    const l = {
+      name: document.getElementById('ploc-name').value.trim(),
+      address: document.getElementById('ploc-address').value.trim(),
+      sortOrder: parseInt(document.getElementById('ploc-sort').value, 10) || 0,
+      active: existing ? existing.active !== false : true
+    };
+    if (!l.name) {
+      alert(t('zones.nameRequired'));
+      return;
+    }
+    if (existing) l.id = existing.id;
+    const r = await apiPost('/api/pickup-locations', l);
+    if (!r) return;
+    if (existing) Object.assign(existing, l);
+    else pickupLocations.push({ ...l, id: r.id });
+    pickupLocations.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    renderPickupLocations();
+    setFb('ok', t('pickupLoc.saved'));
+  };
+  document.getElementById('m-confirm').classList.add('open');
+}
+
+async function retirePickupLocation(id) {
+  const l = pickupLocations.find((x) => x.id === id);
+  if (!l) return;
+  if (!confirm(t('pickupLoc.confirmRetire', { name: l.name }))) return;
+  const r = await apiDelete('/api/pickup-locations/' + id);
+  if (!r) return;
+  l.active = false;
+  renderPickupLocations();
+  setFb('ok', t('pickupLoc.saved'));
+}
+
+async function setPickupLocationActive(id, active) {
+  const l = pickupLocations.find((x) => x.id === id);
+  if (!l) return;
+  const r = await apiPost('/api/pickup-locations', { ...l, active });
+  if (!r) return;
+  l.active = active;
+  renderPickupLocations();
+  setFb('ok', t('pickupLoc.saved'));
+}
+
 async function removeSupplier(id) {
   const s = suppliers.find((x) => x.id === id);
   if (!s) return;
@@ -19821,6 +19929,12 @@ function initEventListeners() {
   $('st-settings-harvestfeed').addEventListener('click', () => {
     openStab('settings', 'harvestfeed');
   });
+  // openStab() renders this sub-tab itself; a second call here would rebuild the
+  // table twice on every click.
+  $('st-settings-pickuplocations').addEventListener('click', () => {
+    openStab('settings', 'pickuplocations');
+  });
+  $('pickuploc-add-btn').addEventListener('click', () => editPickupLocation());
   $('st-settings-printer').addEventListener('click', () => {
     openStab('settings', 'printer');
     renderPrinterSettings();

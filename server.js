@@ -9323,6 +9323,63 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Pickup locations CRUD --
+  if (req.method === 'GET' && req.url === '/api/pickup-locations') {
+    try {
+      jsonOk(res, db.listPickupLocations(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/pickup-locations') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['name']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { name: 'string', address: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      // The name leaves the building on the harvest feed and ends up on a
+      // customer's screen next to a time. Short enough to fit there.
+      const vlen = validateLengths(data, { name: 120, address: 200 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      try {
+        const id = db.upsertPickupLocation(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // DELETE retires rather than removes — see db.deactivatePickupLocation.
+  const locDelMatch = req.method === 'DELETE' && req.url.match(/^\/api\/pickup-locations\/(\d+)$/);
+  if (locDelMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      db.deactivatePickupLocation(database, parseInt(locDelMatch[1]));
+      broadcastSSE(res);
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Backup Download (encrypted .db) --
   // S-04: format upgraded.
   //   v2 layout: magic(4) + version(1) + salt(32) + iv(12) + tag(16) + ciphertext

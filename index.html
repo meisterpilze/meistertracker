@@ -3618,6 +3618,9 @@
             <button class="stab" id="st-settings-caldav" data-i18n="settings.tabCaldav">CalDAV</button>
             <button class="stab" id="st-settings-duckdns" data-i18n="settings.tabDuckdns">DuckDNS</button>
             <button class="stab" id="st-settings-harvestfeed" data-i18n="settings.tabHarvestFeed">Harvest feed</button>
+            <button class="stab" id="st-settings-pickuplocations" data-i18n="settings.tabPickupLocations">
+              Abholorte
+            </button>
             <button class="stab" id="st-settings-printer" data-i18n="settings.tabPrinter">Drucker</button>
             <button class="stab" id="st-settings-mcp" style="display: none" data-i18n="settings.tabMcp">MCP</button>
             <button class="stab" id="st-settings-camera" style="display: none" data-i18n="settings.tabCamera">
@@ -4586,6 +4589,27 @@
                   "
                 ></pre>
               </div>
+            </div>
+          </div>
+          <!-- Abholorte. Next to the harvest feed on purpose: these names ride
+               out on it, and a reader wondering where the place on a published
+               window comes from looks here. -->
+          <div class="sp" id="sp-settings-pickuplocations">
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="pickupLoc.title">Abholorte</div>
+                <button class="btn btn-sm btn-p" id="pickuploc-add-btn" data-i18n="pickupLoc.add">+ Abholort</button>
+              </div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="pickupLoc.desc"
+              >
+                Orte, an denen Ware übergeben wird — die Halle, ein Marktstand, ein zweiter Standort. Ein Termin im
+                Kalender wählt einen davon aus, statt den Ort in den Titel zu tippen: getippt gibt es dieselbe
+                Schreibweise beim zweiten Mal anders, und wer den Namen draußen liest, sieht dann zwei Märkte. Der Name
+                verlässt mit dem Ernte-Feed das Haus, die Adresse nicht.
+              </p>
+              <div id="pickuploc-list"></div>
             </div>
           </div>
           <!-- Drucker -->

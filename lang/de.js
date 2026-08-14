@@ -46,6 +46,27 @@ window.LANG['de'] = {
   'pickups.overbooked': 'Überbucht',
   'pickups.confirmed': 'Bestätigt',
   'pickups.pending': 'Noch nicht bestätigt',
+  // Abholorte (Einstellungen)
+  'settings.tabPickupLocations': 'Abholorte',
+  'pickupLoc.title': 'Abholorte',
+  'pickupLoc.desc':
+    'Orte, an denen Ware übergeben wird — die Halle, ein Marktstand, ein zweiter Standort. Ein Termin im Kalender wählt einen davon aus, statt den Ort in den Titel zu tippen: getippt gibt es dieselbe Schreibweise beim zweiten Mal anders, und wer den Namen draußen liest, sieht dann zwei Märkte. Der Name verlässt mit dem Ernte-Feed das Haus, die Adresse nicht.',
+  'pickupLoc.add': '+ Abholort',
+  'pickupLoc.edit': 'Bearbeiten',
+  'pickupLoc.name': 'Name',
+  'pickupLoc.namePh': 'z.B. Marktstand Erlangen',
+  'pickupLoc.address': 'Adresse (optional)',
+  'pickupLoc.addressPh': 'z.B. Marktplatz 1, 91054 Erlangen',
+  'pickupLoc.order': 'Reihenfolge',
+  'pickupLoc.hint':
+    'Der Name steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden. Die Adresse bleibt im Haus.',
+  'pickupLoc.none': 'Noch kein Abholort angelegt',
+  'pickupLoc.saved': 'Abholort gespeichert',
+  'pickupLoc.retire': 'Stilllegen',
+  'pickupLoc.retired': 'stillgelegt',
+  'pickupLoc.reactivate': 'Wieder aufnehmen',
+  'pickupLoc.confirmRetire':
+    '„{name}" stilllegen? Der Ort ist dann bei neuen Terminen nicht mehr auswählbar. Bestehende Termine behalten ihn.',
   // Order hub (Phase 0)
   'orders.inbox': 'Bestellungen',
   'orders.tomake': 'Was muss ich machen',
