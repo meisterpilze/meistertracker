@@ -110,12 +110,21 @@ const crypto = require('crypto');
 let inFlight = false;
 let timer = null;
 
-// Fassung 1 carries `harvested`, and a receiver is free to publish it. Fassung 2
+// Fassung 1 carried `harvested`, and a receiver was free to publish it. Fassung 2
 // says a `released` list is present and that it, not `harvested`, is what may be
 // offered for sale. Ignoring that difference means publishing produce the grower
-// deliberately kept back, so it is a version bump and not a new optional field —
-// and it is only sent when release mode is actually on, so receivers of labs
-// that do not use it never see a version they were not built for.
+// deliberately kept back, so it is a version bump and not a new optional field.
+//
+// ⚠️ **Fassung 1 is no longer sent.** It used to be the default, with release
+// mode as a switch, and that switch was the bug: a harvest total is a number
+// that stops being true the moment something is sold at the stall, and no
+// setting makes it true again. Worse, it was the *quiet* option — a lab that
+// never found the checkbox published raw stock and looked fine doing it. What
+// may be sold is now always a decision somebody made by hand, and an empty
+// `released` list means exactly that: nothing is for sale yet.
+//
+// `VERSION` stays as the number Fassung 1 carried, so a receiver reading old
+// records still knows what it is looking at.
 const VERSION = 1;
 const VERSION_RELEASE = 2;
 const ATTEMPTS = 3;
@@ -173,11 +182,6 @@ function readConfig(env) {
     // cannot invent one it never got.
     strain: String(env.HARVEST_WEBHOOK_STRAIN ?? '1') !== '0',
     site: String(env.HARVEST_WEBHOOK_SITE || '').trim(),
-    // Default off. On, the feed reports only what has been explicitly released
-    // for sale — which is nothing at all until someone enters the first amount.
-    // A silent switch to "nothing available" on upgrade would be worse than the
-    // problem it solves.
-    releaseMode: String(env.HARVEST_WEBHOOK_RELEASE_MODE || '0') === '1',
     timeoutMs: Math.max(1000, num(env.HARVEST_WEBHOOK_TIMEOUT_MS, 15000)),
     source: 'env'
   };
@@ -201,7 +205,6 @@ function storedConfig(row) {
     leadDays: Math.max(0, Number(row.leadDays) || 0),
     strain: row.strain !== false,
     site: String(row.site || '').trim(),
-    releaseMode: row.releaseMode === true,
     timeoutMs: 15000,
     source: 'db'
   };
@@ -347,21 +350,23 @@ function buildPayload(database, cfg, now) {
   }
 
   const payload = {
-    version: cfg.releaseMode ? VERSION_RELEASE : VERSION,
+    version: VERSION_RELEASE,
     generatedAt: at.toISOString(),
     freshDays: cfg.freshDays,
     harvested,
-    planned
-  };
-
-  if (cfg.releaseMode) {
+    planned,
     // A separate list, not a field on `harvested`. The two answer different
     // questions — what came off the racks, and what may be sold — and only the
     // first is production data. Keeping them apart also lets a release outlive
     // its harvest window: set two kilos aside on Monday for a Saturday market
     // and by Thursday the harvest has aged out of `freshDays`, while the crate
     // is still standing there. The human who put it there is the better source.
-    payload.released = database
+    //
+    // Always present, empty list included: "nobody has released anything" is an
+    // answer, and a receiver has to be able to tell it apart from "this lab does
+    // not do releases". The second reading is what let raw harvest totals reach
+    // a shop window.
+    released: database
       .prepare(
         `SELECT species, grams, valid_until AS validUntil
            FROM harvest_release
@@ -369,8 +374,8 @@ function buildPayload(database, cfg, now) {
           ORDER BY species`
       )
       .all(localDay(at))
-      .map((r) => trim({ species: r.species, grams: Math.round(r.grams), validUntil: r.validUntil || null }));
-  }
+      .map((r) => trim({ species: r.species, grams: Math.round(r.grams), validUntil: r.validUntil || null }))
+  };
 
   // The ids we hold and have not confirmed yet, so the receiver can stop
   // repeating them. Omitted entirely when there is nothing to confirm: a

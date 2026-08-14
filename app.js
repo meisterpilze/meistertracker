@@ -1351,6 +1351,11 @@ function _pickupWhen(p) {
 }
 
 function renderPickups() {
+  // The upper half of the page. Not awaited: the two halves come from different
+  // routes and neither needs the other, so making the bookings wait on the
+  // release table would only add a stall to the half people open this page for.
+  loadHarvestReleases();
+
   const body = $('pickups-body');
   if (!body) return;
   const count = $('pickups-count');
@@ -8619,9 +8624,7 @@ async function loadHarvestFeedSettings() {
     // A stored secret is never sent back to the page. The placeholder says one
     // exists; leaving the field empty on save keeps it.
     sec.placeholder = cfg.hasSecret ? '••••••••••' : '';
-    document.getElementById('harvestfeed-releasemode').checked = !!cfg.releaseMode;
     renderHarvestFeedBanner(cfg);
-    loadHarvestReleases();
   } catch (e) {
     /* non-admin */
   }
@@ -8637,10 +8640,12 @@ async function loadHarvestFeedSettings() {
 async function loadHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!body) return;
+  const karte = document.getElementById('harvestrelease-card');
   try {
     const r = await authFetch('/api/harvest-feed/release');
     if (!r.ok) return;
     const data = await r.json();
+    if (karte) karte.style.display = '';
     const rows = new Map();
     for (const rec of data.recent || []) rows.set(rec.species, { species: rec.species, harvested: rec.grams });
     for (const rel of data.releases || []) {
@@ -8648,9 +8653,34 @@ async function loadHarvestReleases() {
       rows.set(rel.species, { ...row, ...rel });
     }
     renderHarvestReleases([...rows.values()].sort((a, b) => a.species.localeCompare(b.species)));
+    knownSpecies = data.known || [];
+    fillHarvestReleasePicker();
   } catch (e) {
     /* non-admin */
   }
+}
+
+// The species this database knows, verbatim. Held so the picker can be refilled
+// after every render without another round trip — adding a row changes what is
+// left to offer, and that has to be visible immediately or the same species can
+// be added twice.
+let knownSpecies = [];
+
+function fillHarvestReleasePicker() {
+  const wahl = document.getElementById('harvestrelease-new');
+  if (!wahl) return;
+  const body = document.getElementById('harvestrelease-body');
+  const drin = new Set([...body.querySelectorAll('tr[data-species]')].map((tr) => tr.dataset.species));
+  const offen = knownSpecies.filter((s) => !drin.has(s));
+  // Disabled with a reason beats an empty list that looks broken. "Nothing left
+  // to add" and "this database has no species yet" are different situations and
+  // the person in front of it can only act on one of them.
+  wahl.disabled = offen.length === 0;
+  wahl.innerHTML =
+    '<option value="">' +
+    esc(t(offen.length ? 'harvestFeed.addSpecies' : knownSpecies.length ? 'harvestFeed.allListed' : 'harvestFeed.noSpecies')) +
+    '</option>' +
+    offen.map((s) => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
 }
 
 function renderHarvestReleases(rows) {
@@ -8750,17 +8780,16 @@ async function saveHarvestReleases() {
 
 function addHarvestReleaseRow() {
   const input = document.getElementById('harvestrelease-new');
-  const species = input.value.trim();
+  const species = input.value;
   if (!species) return;
   const body = document.getElementById('harvestrelease-body');
   if (body.querySelector('tr[data-species="' + CSS.escape(species) + '"]')) {
     showHarvestReleaseResult(t('harvestFeed.alreadyListed'), 'var(--c-amber-dark)');
-    input.value = '';
     return;
   }
-  // Straight into the table rather than straight to the server: a species typed
-  // by hand is usually a typo waiting to happen, and an empty row that is never
-  // saved costs nothing.
+  // Straight into the table rather than straight to the server: an empty row
+  // that is never saved costs nothing, and until the amount is filled in there
+  // is nothing to save.
   const existing = [...body.querySelectorAll('tr[data-species]')].map((tr) => ({
     species: tr.dataset.species,
     // Carried in the row rather than refetched: re-rendering must not quietly
@@ -8771,7 +8800,7 @@ function addHarvestReleaseRow() {
   }));
   existing.push({ species, harvested: null, grams: 0, validUntil: null });
   renderHarvestReleases(existing.sort((a, b) => a.species.localeCompare(b.species)));
-  input.value = '';
+  fillHarvestReleasePicker();
 }
 
 function renderHarvestFeedBanner(cfg) {
@@ -8845,8 +8874,7 @@ async function saveHarvestFeedSettings() {
     plannedDays: parseInt(document.getElementById('harvestfeed-planned').value, 10),
     leadDays: parseInt(document.getElementById('harvestfeed-lead').value, 10),
     strain: document.getElementById('harvestfeed-strain').checked,
-    site: document.getElementById('harvestfeed-site').value.trim(),
-    releaseMode: document.getElementById('harvestfeed-releasemode').checked
+    site: document.getElementById('harvestfeed-site').value.trim()
   };
   if (secret) cfg.secret = secret;
   try {
