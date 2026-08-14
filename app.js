@@ -8637,6 +8637,17 @@ async function loadHarvestFeedSettings() {
 // listed too, at zero, because "what did we harvest that nobody has released
 // yet" is the question this screen exists to answer, and it cannot be answered
 // by a list that only shows what has already been decided.
+//
+/**
+ * The table's rows, as data.
+ *
+ * It used to be the other way round: the state lived in the inputs and was read
+ * back out of the DOM. That cannot survive the redraw adding a row performs, and
+ * it has nowhere to put the two things a row now has to remember — whether it
+ * was touched, and whether it is marked for removal. Neither has an input.
+ */
+let harvestReleaseRows = [];
+
 async function loadHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!body) return;
@@ -8647,17 +8658,42 @@ async function loadHarvestReleases() {
     const data = await r.json();
     if (karte) karte.style.display = '';
     const rows = new Map();
-    for (const rec of data.recent || []) rows.set(rec.species, { species: rec.species, harvested: rec.grams });
+    // `stored` is the difference between a decision and an observation. A row
+    // that only exists because something was harvested has nothing to delete.
+    for (const rec of data.recent || [])
+      rows.set(rec.species, { species: rec.species, harvested: rec.grams, grams: 0, validUntil: null, stored: false });
     for (const rel of data.releases || []) {
       const row = rows.get(rel.species) || { species: rel.species, harvested: null };
-      rows.set(rel.species, { ...row, ...rel });
+      rows.set(rel.species, { ...row, ...rel, stored: true });
     }
-    renderHarvestReleases([...rows.values()].sort((a, b) => a.species.localeCompare(b.species)));
+    harvestReleaseRows = [...rows.values()].sort((a, b) => a.species.localeCompare(b.species)).map(freshReleaseRow);
+    renderHarvestReleases();
     knownSpecies = data.known || [];
     fillHarvestReleasePicker();
   } catch (e) {
     /* non-admin */
   }
+}
+
+/**
+ * The editable half of a row, seeded from what the server sent.
+ *
+ * `wasKg` / `wasUntil` are what "unchanged" means for the whole screen: the save
+ * filter, the marks on the rows, the count next to the button and the question
+ * asked on the way out all compare against them, so they are set in one place.
+ */
+function freshReleaseRow(row) {
+  // Kilograms in the form, grams on the wire. The scale reads grams and the
+  // feed carries grams; a shop lists kilos. Converting in one place beats a
+  // unit that changes meaning halfway through the stack.
+  const kg = row.grams ? (row.grams / 1000).toFixed(2) : '';
+  const until = row.validUntil || '';
+  return { ...row, kg, until, wasKg: kg, wasUntil: until, removing: false };
+}
+
+/** Rows that would be written if Save were pressed right now. */
+function harvestReleaseChanges() {
+  return harvestReleaseRows.filter((r) => r.removing || r.kg !== r.wasKg || r.until !== r.wasUntil);
 }
 
 // The species this database knows, verbatim. Held so the picker can be refilled
@@ -8669,8 +8705,9 @@ let knownSpecies = [];
 function fillHarvestReleasePicker() {
   const wahl = document.getElementById('harvestrelease-new');
   if (!wahl) return;
-  const body = document.getElementById('harvestrelease-body');
-  const drin = new Set([...body.querySelectorAll('tr[data-species]')].map((tr) => tr.dataset.species));
+  // Including the rows marked for removal: they are still on screen, and
+  // offering one back in the picker would let the same species be added twice.
+  const drin = new Set(harvestReleaseRows.map((r) => r.species));
   const offen = knownSpecies.filter((s) => !drin.has(s));
   // Disabled with a reason beats an empty list that looks broken. "Nothing left
   // to add" and "this database has no species yet" are different situations and
@@ -8683,52 +8720,104 @@ function fillHarvestReleasePicker() {
     offen.map((s) => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
 }
 
-function renderHarvestReleases(rows) {
+/**
+ * The button at the end of a row, which depends on what removing it would mean.
+ *
+ * A species harvested inside the fresh window is listed because it was
+ * harvested, not because anybody decided anything — it comes straight back on
+ * the next load, so a button promising to remove it would be a lie. That is the
+ * one case with no button at all.
+ */
+function harvestReleaseRemoveBtn(row) {
+  if (row.removing) return '<button class="btn btn-sm hr-undo">' + esc(t('harvestFeed.undoRemove')) + '</button>';
+  if (!row.stored && row.harvested != null) return '';
+  return '<button class="btn btn-sm hr-remove">' + esc(t('harvestFeed.remove')) + '</button>';
+}
+
+function renderHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
-  if (!rows.length) {
+  if (!harvestReleaseRows.length) {
     body.innerHTML = '<tr><td colspan="5" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
     return;
   }
-  body.innerHTML = rows
-    .map((row) => {
-      // Kilograms in the form, grams on the wire. The scale reads grams and the
-      // feed carries grams; a shop lists kilos. Converting in one place beats a
-      // unit that changes meaning halfway through the stack.
-      const kg = row.grams ? (row.grams / 1000).toFixed(2) : '';
+  body.innerHTML = harvestReleaseRows
+    .map((row, i) => {
       const harvested = row.harvested == null ? '—' : (row.harvested / 1000).toFixed(2) + ' kg';
-      const warn = row.expired ? ' style="color:var(--c-red-dark)"' : '';
+      // A marked row keeps its numbers on screen, struck through and labelled.
+      // Blanking the two fields is what the old button did, and it is why
+      // "clear" got read as "remove": afterwards the row looks like a species
+      // nobody released, and nothing says what Save is about to do with it.
+      const durch = row.removing ? ' style="text-decoration:line-through;color:var(--c-text-muted)"' : '';
       return (
         '<tr data-species="' +
         esc(row.species) +
-        '" data-harvested="' +
-        (row.harvested == null ? '' : row.harvested) +
-        // What was loaded, so saving can tell an edit from an untouched row.
-        '" data-was-kg="' +
-        kg +
-        '" data-was-until="' +
-        esc(row.validUntil || '') +
-        '"><td>' +
+        '" data-i="' +
+        i +
+        '"><td' +
+        durch +
+        '>' +
         esc(row.species) +
-        (row.expired ? ' <span' + warn + '>(' + esc(t('harvestFeed.expired')) + ')</span>' : '') +
         '</td><td style="color:var(--c-text-muted)">' +
         harvested +
+        (row.removing
+          ? ' <span style="color:var(--c-amber-dark)">(' + esc(t('harvestFeed.markedRemoved')) + ')</span>'
+          : row.expired
+            ? ' <span style="color:var(--c-red-dark)">(' + esc(t('harvestFeed.expired')) + ')</span>'
+            : '') +
         '</td><td><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
-        kg +
-        '"></td><td><input type="date" class="hr-until" style="width:150px" value="' +
-        esc(row.validUntil || '') +
-        '"></td><td><button class="btn btn-sm hr-clear" data-i18n="harvestFeed.clear">' +
-        esc(t('harvestFeed.clear')) +
-        '</button></td></tr>'
+        esc(row.kg) +
+        '"' +
+        (row.removing ? ' disabled' : '') +
+        '></td><td><input type="date" class="hr-until" style="width:150px" value="' +
+        esc(row.until) +
+        '"' +
+        (row.removing ? ' disabled' : '') +
+        '></td><td>' +
+        harvestReleaseRemoveBtn(row) +
+        '</td></tr>'
       );
     })
     .join('');
-  body.querySelectorAll('.hr-clear').forEach((b) =>
-    b.addEventListener('click', () => {
-      const tr = b.closest('tr');
-      tr.querySelector('.hr-kg').value = '';
-      tr.querySelector('.hr-until').value = '';
-    })
-  );
+  body.querySelectorAll('tr[data-i]').forEach((tr) => {
+    const row = harvestReleaseRows[Number(tr.dataset.i)];
+    const kg = tr.querySelector('.hr-kg');
+    const until = tr.querySelector('.hr-until');
+    // `input` and not `change`: the array is what Save reads, so it has to be
+    // right without waiting for the field to be left. On `change` a number typed
+    // and then clicked straight past goes nowhere.
+    kg.addEventListener('input', () => {
+      row.kg = kg.value.trim();
+    });
+    until.addEventListener('input', () => {
+      row.until = until.value;
+    });
+    const weg = tr.querySelector('.hr-remove');
+    if (weg) weg.addEventListener('click', () => removeHarvestReleaseRow(row));
+    const zurueck = tr.querySelector('.hr-undo');
+    if (zurueck)
+      zurueck.addEventListener('click', () => {
+        row.removing = false;
+        renderHarvestReleases();
+      });
+  });
+}
+
+/**
+ * Take a species out of the list.
+ *
+ * A stored release is marked, not deleted on the spot. Everything else on this
+ * screen waits for Save, and a delete that did not would be the one action here
+ * that cannot be taken back by walking away from it — which is the wrong shape
+ * for the mis-click this button is closest to.
+ *
+ * A row that was never stored has nothing to delete and nothing to undo; it only
+ * ever existed in this table, so it leaves at once and the picker offers it again.
+ */
+function removeHarvestReleaseRow(row) {
+  if (row.stored) row.removing = true;
+  else harvestReleaseRows = harvestReleaseRows.filter((r) => r !== row);
+  renderHarvestReleases();
+  fillHarvestReleasePicker();
 }
 
 function showHarvestReleaseResult(msg, color) {
@@ -8739,11 +8828,7 @@ function showHarvestReleaseResult(msg, color) {
 }
 
 async function saveHarvestReleases() {
-  const rows = [...document.querySelectorAll('#harvestrelease-body tr[data-species]')];
-  const bad = rows.find((tr) => {
-    const v = tr.querySelector('.hr-kg').value.trim();
-    return v !== '' && !(Number(v) >= 0);
-  });
+  const bad = harvestReleaseRows.find((r) => !r.removing && r.kg !== '' && !(Number(r.kg) >= 0));
   if (bad) {
     showHarvestReleaseResult(t('harvestFeed.badAmount'), 'var(--c-red-dark)');
     return;
@@ -8752,26 +8837,42 @@ async function saveHarvestReleases() {
   // `updated` on decisions nobody revisited — and it would create a zero row for
   // every species ever harvested, turning the table into a list of everything
   // that was never released.
-  const changed = rows.filter((tr) => {
-    const kg = tr.querySelector('.hr-kg').value.trim();
-    const until = tr.querySelector('.hr-until').value;
-    return kg !== tr.dataset.wasKg || until !== tr.dataset.wasUntil;
-  });
+  const changed = harvestReleaseChanges();
   if (!changed.length) {
     showHarvestReleaseResult(t('harvestFeed.nothingChanged'), 'var(--c-text-muted)');
     return;
   }
   showHarvestReleaseResult(t('harvestFeed.saving'), 'var(--c-text-muted)');
   try {
-    for (const tr of changed) {
-      const raw = tr.querySelector('.hr-kg').value.trim();
+    for (const row of changed) {
+      if (row.removing) {
+        // Not `grams: 0`. A zeroed row publishes nothing either, but it stays in
+        // this table for good — which is how the list filled up with species
+        // somebody had already decided against.
+        await apiPost('/api/harvest-feed/release', { species: row.species, remove: true });
+        continue;
+      }
       await apiPost('/api/harvest-feed/release', {
-        species: tr.dataset.species,
-        grams: raw === '' ? 0 : Math.round(Number(raw) * 1000),
-        validUntil: tr.querySelector('.hr-until').value || null
+        species: row.species,
+        grams: row.kg === '' ? 0 : Math.round(Number(row.kg) * 1000),
+        validUntil: row.until || null
       });
     }
-    showHarvestReleaseResult(t('harvestFeed.saved'), 'var(--c-green-dark)');
+    // Removing a species harvested inside the fresh window leaves the row on
+    // screen — at zero, as a suggestion, which is what this table is for. Saying
+    // so beats a reload that reads as a delete which did not take.
+    const bleibt = changed.some((r) => r.removing && r.harvested != null);
+    showHarvestReleaseResult(
+      t('harvestFeed.saved') + (bleibt ? ' ' + t('harvestFeed.removedStillListed') : ''),
+      'var(--c-green-dark)'
+    );
+    // What was just written is what the rows now start from, so a second Save on
+    // an untouched table has nothing left to send.
+    for (const r of harvestReleaseRows) {
+      r.wasKg = r.kg;
+      r.wasUntil = r.until;
+      r.removing = false;
+    }
     loadHarvestReleases();
   } catch (e) {
     showHarvestReleaseResult(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
@@ -8782,24 +8883,16 @@ function addHarvestReleaseRow() {
   const input = document.getElementById('harvestrelease-new');
   const species = input.value;
   if (!species) return;
-  const body = document.getElementById('harvestrelease-body');
-  if (body.querySelector('tr[data-species="' + CSS.escape(species) + '"]')) {
+  if (harvestReleaseRows.some((r) => r.species === species)) {
     showHarvestReleaseResult(t('harvestFeed.alreadyListed'), 'var(--c-amber-dark)');
     return;
   }
   // Straight into the table rather than straight to the server: an empty row
   // that is never saved costs nothing, and until the amount is filled in there
   // is nothing to save.
-  const existing = [...body.querySelectorAll('tr[data-species]')].map((tr) => ({
-    species: tr.dataset.species,
-    // Carried in the row rather than refetched: re-rendering must not quietly
-    // turn every "2.40 kg harvested" into a dash.
-    harvested: tr.dataset.harvested === '' ? null : Number(tr.dataset.harvested),
-    grams: Math.round(Number(tr.querySelector('.hr-kg').value || 0) * 1000),
-    validUntil: tr.querySelector('.hr-until').value || null
-  }));
-  existing.push({ species, harvested: null, grams: 0, validUntil: null });
-  renderHarvestReleases(existing.sort((a, b) => a.species.localeCompare(b.species)));
+  harvestReleaseRows.push(freshReleaseRow({ species, harvested: null, grams: 0, validUntil: null, stored: false }));
+  harvestReleaseRows.sort((a, b) => a.species.localeCompare(b.species));
+  renderHarvestReleases();
   fillHarvestReleasePicker();
 }
 

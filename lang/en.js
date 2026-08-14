@@ -816,7 +816,11 @@ window.LANG['en'] = {
   'harvestFeed.allListed': 'Every known species is already listed',
   'harvestFeed.noSpecies': 'No species recorded yet — start a batch or harvest one',
   'harvestFeed.add': 'Add',
-  'harvestFeed.clear': 'Clear',
+  'harvestFeed.remove': 'Remove',
+  'harvestFeed.undoRemove': 'Keep it',
+  'harvestFeed.markedRemoved': 'will be removed on save',
+  'harvestFeed.removedStillListed':
+    'A species harvested recently stays in the list without a release — it is simply no longer released.',
   'harvestFeed.expired': 'expired',
   'harvestFeed.noRelease': 'Nothing harvested and nothing released yet.',
   'harvestFeed.badAmount': 'One of the amounts is not a number of 0 or more.',
