@@ -316,6 +316,206 @@ function localDay(at) {
   return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}`;
 }
 
+// How far ahead pickup windows are published. Not configurable, unlike the
+// harvest horizons: those answer "how much of our production do we show", which
+// is a business decision per lab. This one answers "how far ahead can somebody
+// book", and four weeks is long enough for any market rhythm while keeping a
+// recurring block from expanding into thousands of rows.
+const PICKUP_WINDOW_DAYS = 28;
+// A market lab has a handful of windows a week; four weeks of six-a-day is 168.
+// Anything past this is a runaway recurrence rather than a real schedule.
+const MAX_PICKUP_WINDOWS = 500;
+// The zone the calendar's timed events are written in — see customEventToVEVENT,
+// which hardcodes the same one on every VEVENT. Sent explicitly so the receiver
+// never has to guess: "09:00" without a zone is not a time, and a window that
+// silently moves by an hour in October is a missed handover.
+const PICKUP_TZ = 'Europe/Berlin';
+
+/** Comma-separated exception dates, as stored. Twin of db.parseExceptionDates. */
+function exceptionSet(raw) {
+  if (!raw) return new Set();
+  return new Set(
+    String(raw)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+
+/** UTC-only date arithmetic: YYYY-MM-DD in, YYYY-MM-DD out. */
+function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * n months after `base`, clamping to the target month's last day.
+ *
+ * ⚠️ Computed from the base every time, never cumulatively from the previous
+ * occurrence: adding a month to 31 January overflows to 3 March, which both
+ * skips February and shifts every later occurrence onto the 3rd. Twin of
+ * addMonthsClamped() in app.js, which carries the same warning.
+ */
+function addMonthsStr(baseStr, n) {
+  const base = new Date(baseStr + 'T00:00:00Z');
+  const m = base.getUTCMonth() + n;
+  const y = base.getUTCFullYear() + Math.floor(m / 12);
+  const tm = ((m % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(y, tm + 1, 0)).getUTCDate();
+  const day = Math.min(base.getUTCDate(), lastDay);
+  return new Date(Date.UTC(y, tm, day)).toISOString().slice(0, 10);
+}
+
+/**
+ * The dates a calendar event actually falls on, inside [from, until].
+ *
+ * A recurring block is one row with many occurrences, and `exception_dates`
+ * means "this one does not exist" — a holiday, or a market that was cancelled.
+ */
+function occurrenceDates(ev, from, until) {
+  const skip = exceptionSet(ev.exception_dates);
+  const out = [];
+  if (!ev.recurrence) {
+    if (ev.start_date >= from && ev.start_date <= until && !skip.has(ev.start_date)) out.push(ev.start_date);
+    return out;
+  }
+  const hardEnd = ev.recurrence_until || null;
+  let cur = ev.start_date;
+  let monthIdx = 0;
+  let guard = 0;
+  while (guard++ < 1000) {
+    if (cur > until) break;
+    if (hardEnd && cur > hardEnd) break;
+    if (cur >= from && !skip.has(cur)) out.push(cur);
+    if (ev.recurrence === 'daily') cur = addDaysStr(cur, 1);
+    else if (ev.recurrence === 'weekly') cur = addDaysStr(cur, 7);
+    else if (ev.recurrence === 'monthly') cur = addMonthsStr(ev.start_date, ++monthIdx);
+    else break;
+  }
+  return out;
+}
+
+/**
+ * The id one window is known by, on both sides, for good.
+ *
+ * ⚠️ Event id **plus occurrence date**. A recurring block is a single row, so
+ * keying on the row alone makes every Friday the same window — one booking then
+ * occupies all of them, and the mistake only shows up at a handover point.
+ *
+ * Kept inside `[A-Za-z0-9_-]{1,64}`, which is the narrowest charset any receiver
+ * is likely to impose (the one this feed is built against does). Ids from
+ * imported CalDAV events can carry `@` and `.`, so they are folded — and folding
+ * two different ids onto the same string would silently merge two windows, hence
+ * the digest tail whenever anything had to change.
+ */
+function windowId(eventId, date) {
+  const raw = String(eventId);
+  const safe = raw.replace(/[^A-Za-z0-9_-]/g, '-');
+  if (safe === raw && safe.length <= 43) return safe + '_' + date;
+  const digest = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 8);
+  return safe.slice(0, 34) + '-' + digest + '_' + date;
+}
+
+/**
+ * When goods can be collected — the lab's opening times, stated positively.
+ *
+ * ⚠️ **Title and description are not read here, and must not be.** They are free
+ * text in an internal tool and will end up holding staff notes ("Anna covers,
+ * Bernd is off"). What leaves is the shape of the window: when, where, how many.
+ * A receiver composes its own label from that.
+ *
+ * The list is complete for its horizon and replaces whatever the receiver holds
+ * — it is not a set of changes. Empty therefore means "nothing bookable", which
+ * is a real answer and must survive the trip; the field is always present.
+ */
+function buildPickupWindows(database, at) {
+  const rows = collectPickupWindows(database, at);
+  if (rows === null) return null;
+  // Named one by one rather than spread with the internal fields removed. This
+  // is the boundary the whole feature is careful about, and an allow-list keeps
+  // it careful: a field added upstream has to be added here on purpose before it
+  // can leave the building. `event` is the one dropped today — the lab's own
+  // screens key on it (see pickupWindowIndex), and it is nobody else's business.
+  return rows.map((w) =>
+    trim({
+      id: w.id,
+      date: w.date,
+      from: w.from,
+      to: w.to,
+      tz: w.tz,
+      place: w.place ?? null,
+      capacity: w.capacity ?? null
+    })
+  );
+}
+
+/**
+ * The same windows, with the row each one came from.
+ *
+ * For this end only. The warning before a booked window is moved has to find
+ * the bookings, and a booking names the window by the id below — so the mapping
+ * from "calendar event on this date" to "that id" must exist exactly once, and
+ * this is it.
+ */
+function pickupWindowIndex(database, at) {
+  return collectPickupWindows(database, at) || [];
+}
+
+function collectPickupWindows(database, at) {
+  const from = localDay(at);
+  const until = addDaysStr(from, PICKUP_WINDOW_DAYS);
+  let rows;
+  try {
+    rows = database
+      .prepare(
+        `SELECT e.id, e.start_date, e.start_time, e.end_time, e.all_day,
+                e.recurrence, e.recurrence_until, e.exception_dates, e.pickup_capacity,
+                l.name AS place
+           FROM calendar_events e
+           LEFT JOIN pickup_locations l ON l.id = e.location_id
+          WHERE e.category = 'pickup'
+          ORDER BY e.start_date, e.start_time`
+      )
+      .all();
+  } catch {
+    // A database that predates the pickup columns. The harvest numbers are the
+    // point of this payload and must still go out.
+    return null;
+  }
+
+  const windows = [];
+  for (const ev of rows) {
+    // A window without a clock is not a window: "Saturday" cannot be booked
+    // into, and inventing 00:00–23:59 would publish an opening time nobody
+    // stated. The editor keeps a pickup entry from being all-day; this is the
+    // guard for rows that predate it or arrived over CalDAV.
+    if (ev.all_day === 1 || !ev.start_time || !ev.end_time) continue;
+    for (const date of occurrenceDates(ev, from, until)) {
+      windows.push(
+        trim({
+          id: windowId(ev.id, date),
+          event: ev.id,
+          date,
+          from: ev.start_time,
+          to: ev.end_time,
+          tz: PICKUP_TZ,
+          // The name alone. The address stays in the building — it is on the
+          // location row for the lab's own calendar clients, not for this.
+          place: ev.place || null,
+          // Absent means uncapped. 0 is a different answer — the window exists
+          // and takes nobody — and survives trim() because only null does not.
+          capacity: ev.pickup_capacity === null || ev.pickup_capacity === undefined ? null : ev.pickup_capacity
+        })
+      );
+      if (windows.length >= MAX_PICKUP_WINDOWS) break;
+    }
+    if (windows.length >= MAX_PICKUP_WINDOWS) break;
+  }
+  windows.sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from) || a.id.localeCompare(b.id));
+  return windows;
+}
+
 /**
  * The payload, built straight from the database.
  *
@@ -446,6 +646,17 @@ function buildPayload(database, cfg, now) {
   // independent. Omitted when nothing is set — see "Pack sizes" up top.
   const sizes = packSizes(cfg.packSizes);
   if (sizes.length) payload.packSizes = sizes;
+
+  // When goods can be collected. Always present once this build can compute it,
+  // empty list included: that is what tells a receiver the difference between
+  // "this lab publishes no windows" and "this lab's software cannot state any",
+  // and only the second one justifies falling back to a hand-kept list.
+  //
+  // No version bump for it. Fassung 2 changed what an existing field *meant*, so
+  // ignoring it was unsafe; a new field is not, and bumping would have made the
+  // receiver's deployment a flag day — it rejects versions it does not know.
+  const windows = buildPickupWindows(database, at);
+  if (windows) payload.pickupWindows = windows;
 
   // The ids we hold and have not confirmed yet, so the receiver can stop
   // repeating them. Omitted entirely when there is nothing to confirm: a
@@ -1013,6 +1224,9 @@ module.exports = {
   storedConfig,
   resolveConfig,
   buildPayload,
+  buildPickupWindows,
+  pickupWindowIndex,
+  windowId,
   releaseProblem,
   packSizes,
   PACK_MIN_G,

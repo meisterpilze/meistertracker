@@ -333,6 +333,7 @@ let mushroomStrains = [],
   duckdns = {},
   zones = [],
   suppliers = [],
+  pickupLocations = [],
   weekRhythm = {},
   rhythmTasks = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
@@ -572,6 +573,7 @@ function applyData(d) {
   calendarEvents = d.calendarEvents || [];
   zones = d.zones || [];
   suppliers = d.suppliers || [];
+  pickupLocations = d.pickupLocations || [];
   weekRhythm = d.weekRhythm || {};
   rhythmTasks = d.rhythmTasks || [];
   // Build barcode registry from server data
@@ -1090,10 +1092,14 @@ function openStab(page, sub) {
   if (page === 'print' && sub === 'ref') renderRefBarcodes();
   if (page === 'cal' && sub === 'cal') {
     loadCalDAVImports().then(() => renderCalendar());
+    // Best effort, and deliberately not awaited: the calendar must draw whether
+    // or not this answers. With no answer the warning simply does not fire.
+    loadPickupBookings();
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'harvestfeed') loadHarvestFeedSettings();
+  if (page === 'settings' && sub === 'pickuplocations') renderPickupLocations();
   if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
@@ -10986,6 +10992,111 @@ function editSupplier(id) {
   document.getElementById('m-confirm').classList.add('open');
 }
 
+// ── Pickup locations ────────────────────────────────────────
+// Retired ones stay in the table, greyed out. A calendar event may still point
+// at one, and a list that hides it turns "the market we stopped doing" into a
+// blank field nobody can explain.
+//
+// The buttons are wired by delegation rather than the `onclick="fn(id)"` this
+// file otherwise uses. Not a style preference: a handler only ever named inside
+// an HTML string is invisible to ESLint, so each one costs a permanent
+// "defined but never used" warning, and the lint budget is a deliberate ratchet
+// (see eslint.config.js — 14 of the existing warnings are exactly this).
+function renderPickupLocations() {
+  const el = document.getElementById('pickuploc-list');
+  if (!el) return;
+  if (!el.dataset.wired) {
+    el.dataset.wired = '1';
+    el.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      if (btn.dataset.act === 'edit') editPickupLocation(id);
+      else if (btn.dataset.act === 'retire') retirePickupLocation(id);
+      else if (btn.dataset.act === 'reactivate') setPickupLocationActive(id, true);
+    });
+  }
+  if (!pickupLocations.length) {
+    el.innerHTML = `<p style="color:var(--c-text-muted);font-size:13px">${t('pickupLoc.none')}</p>`;
+    return;
+  }
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>${t('pickupLoc.name')}</th><th>${t('pickupLoc.address')}</th><th>${t('pickupLoc.order')}</th><th></th></tr></thead>
+    <tbody>${pickupLocations
+      .map(
+        (l) => `<tr${l.active ? '' : ' style="opacity:.55"'}>
+      <td style="font-weight:500">${esc(l.name)}${l.active ? '' : ` <span style="font-weight:400;font-size:11px;color:var(--c-text-muted)">(${t('pickupLoc.retired')})</span>`}</td>
+      <td style="font-size:12px;color:var(--c-text-sec)">${l.address ? esc(l.address) : '-'}</td>
+      <td style="font-size:12px">${l.sortOrder}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" data-act="edit" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.edit')}</button>
+        ${
+          l.active
+            ? `<button class="btn btn-sm" data-act="retire" data-id="${l.id}" style="font-size:11px;color:var(--c-red-dark)">${t('pickupLoc.retire')}</button>`
+            : `<button class="btn btn-sm" data-act="reactivate" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.reactivate')}</button>`
+        }
+      </td>
+    </tr>`
+      )
+      .join('')}</tbody>
+  </table></div>`;
+}
+
+function editPickupLocation(id) {
+  const existing = id ? pickupLocations.find((l) => l.id === id) : null;
+  const html = `<div style="display:flex;flex-direction:column;gap:10px">
+    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" /></div>
+    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" /></div>
+    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" /></div>
+    <p style="font-size:12px;color:var(--c-text-muted);margin:0;line-height:1.5">${esc(t('pickupLoc.hint'))}</p>
+  </div>`;
+  document.getElementById('m-title').textContent = existing ? t('pickupLoc.edit') : t('pickupLoc.add');
+  document.getElementById('m-body').innerHTML = html;
+  document.getElementById('m-ok').textContent = t('common.save');
+  confirmCb = async () => {
+    const l = {
+      name: document.getElementById('ploc-name').value.trim(),
+      address: document.getElementById('ploc-address').value.trim(),
+      sortOrder: parseInt(document.getElementById('ploc-sort').value, 10) || 0,
+      active: existing ? existing.active !== false : true
+    };
+    if (!l.name) {
+      alert(t('zones.nameRequired'));
+      return;
+    }
+    if (existing) l.id = existing.id;
+    const r = await apiPost('/api/pickup-locations', l);
+    if (!r) return;
+    if (existing) Object.assign(existing, l);
+    else pickupLocations.push({ ...l, id: r.id });
+    pickupLocations.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    renderPickupLocations();
+    setFb('ok', t('pickupLoc.saved'));
+  };
+  document.getElementById('m-confirm').classList.add('open');
+}
+
+async function retirePickupLocation(id) {
+  const l = pickupLocations.find((x) => x.id === id);
+  if (!l) return;
+  if (!confirm(t('pickupLoc.confirmRetire', { name: l.name }))) return;
+  const r = await apiDelete('/api/pickup-locations/' + id);
+  if (!r) return;
+  l.active = false;
+  renderPickupLocations();
+  setFb('ok', t('pickupLoc.saved'));
+}
+
+async function setPickupLocationActive(id, active) {
+  const l = pickupLocations.find((x) => x.id === id);
+  if (!l) return;
+  const r = await apiPost('/api/pickup-locations', { ...l, active });
+  if (!r) return;
+  l.active = active;
+  renderPickupLocations();
+  setFb('ok', t('pickupLoc.saved'));
+}
+
 async function removeSupplier(id) {
   const s = suppliers.find((x) => x.id === id);
   if (!s) return;
@@ -17460,11 +17571,15 @@ function handleCalendarDrop(type, id, newDateStr) {
   } else if (type === 'custom') {
     const ev = calendarEvents.find((x) => x.id === id);
     if (!ev) return;
-    ev.startDate = newDateStr;
-    ev.caldavSynced = null;
-    apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
-    renderCalendar();
-    if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
+    // A dragged window is a moved handover. Only recurrence-free events are
+    // draggable, so the whole event and the one occurrence are the same thing.
+    confirmBookedWindow(ev.id, null, () => {
+      ev.startDate = newDateStr;
+      ev.caldavSynced = null;
+      apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
+      renderCalendar();
+      if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
+    });
   }
 }
 
@@ -17684,12 +17799,15 @@ function openEventDetail(ev) {
         t('calEntry.until') +
         ' ' +
         new Date(ce.endDate).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+    const place = ce.locationId ? pickupLocations.find((l) => l.id === ce.locationId) : null;
+    if (place) meta += ' · ' + place.name;
     metaEl.textContent = meta;
     const catLabels = {
       custom: t('calEntry.cat.custom'),
       meeting: t('calEntry.cat.meeting'),
       delivery: t('calEntry.cat.delivery'),
-      maintenance: t('calEntry.cat.maintenance')
+      maintenance: t('calEntry.cat.maintenance'),
+      pickup: t('calEntry.cat.pickup')
     };
     const recLabels = {
       daily: t('calEntry.rec.daily'),
@@ -17706,6 +17824,14 @@ function openEventDetail(ev) {
       badges +=
         '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
         esc(recLabels[ce.recurrence] || ce.recurrence) +
+        '</span>';
+    // Seats, but only where they mean something. A window with no number takes
+    // as many as turn up, and saying "unbegrenzt" on every ordinary appointment
+    // would be noise.
+    if (ce.category === 'pickup' && ce.pickupCapacity !== null && ce.pickupCapacity !== undefined)
+      badges +=
+        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">' +
+        esc(t('calDetail.seats', { n: ce.pickupCapacity })) +
         '</span>';
     badgesEl.innerHTML = badges;
     const teamList = Array.isArray(ce.teamAssignees) ? ce.teamAssignees : [];
@@ -17899,6 +18025,41 @@ function saveBatchDueFromDetail(id) {
   closeEventDetail();
 }
 
+// ── Windows somebody has already booked into ────────────────
+// `[{event, date, count}]`, refreshed when the calendar opens. The join between
+// a calendar entry and its bookings is made on the server: a booking names the
+// window by the id the harvest feed published, and reimplementing that id here
+// would give two versions of one key. The one that drifts reads as "nobody has
+// booked this", which is the answer that gets somebody sent away at a stall.
+let pickupBookings = [];
+
+async function loadPickupBookings() {
+  const r = await apiGet('/api/pickup-bookings');
+  pickupBookings = r && Array.isArray(r.booked) ? r.booked : [];
+}
+
+/** Bookings for one occurrence, or for the whole series when `date` is null. */
+function bookedForWindow(eventId, date) {
+  return pickupBookings
+    .filter((b) => b.event === eventId && (!date || b.date === date))
+    .reduce((n, b) => n + (Number(b.count) || 0), 0);
+}
+
+/**
+ * Run `proceed`, asking first if anyone has booked into this window.
+ *
+ * Not a block — the lab may well have to cancel a market. It is the difference
+ * between deciding to and finding out afterwards.
+ */
+function confirmBookedWindow(eventId, date, proceed) {
+  const n = bookedForWindow(eventId, date);
+  if (!n) {
+    proceed();
+    return;
+  }
+  confirm2(t('calEntry.bookedTitle'), t('calEntry.bookedMsg', { n }), t('calEntry.bookedGoOn'), proceed);
+}
+
 function findSameTitleEvents(ce) {
   if (!ce || !ce.title) return [];
   return calendarEvents.filter((x) => x.id !== ce.id && !x.recurrence && x.title === ce.title);
@@ -17921,17 +18082,21 @@ function deleteCalEventFromDetail(id, date) {
       t('calEntry.deleteRecurMsg'),
       t('calEntry.deleteOccurrence'),
       t('calEntry.deleteSeries'),
-      () => {
-        if (!Array.isArray(ce.exceptionDates)) ce.exceptionDates = [];
-        if (!ce.exceptionDates.includes(date)) ce.exceptionDates.push(date);
-        renderCalendar();
-        apiDelete('/api/calendar-events/' + encodeURIComponent(id) + '?occurrence=' + encodeURIComponent(date));
-      },
-      () => {
-        calendarEvents = calendarEvents.filter((x) => x.id !== id);
-        renderCalendar();
-        apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-      }
+      // One date, so only that date's bookings are at stake…
+      () =>
+        confirmBookedWindow(id, date, () => {
+          if (!Array.isArray(ce.exceptionDates)) ce.exceptionDates = [];
+          if (!ce.exceptionDates.includes(date)) ce.exceptionDates.push(date);
+          renderCalendar();
+          apiDelete('/api/calendar-events/' + encodeURIComponent(id) + '?occurrence=' + encodeURIComponent(date));
+        }),
+      // …and here every one of them, across the whole series.
+      () =>
+        confirmBookedWindow(id, null, () => {
+          calendarEvents = calendarEvents.filter((x) => x.id !== id);
+          renderCalendar();
+          apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+        })
     );
     return;
   }
@@ -17953,11 +18118,13 @@ function deleteCalEventFromDetail(id, date) {
       return;
     }
   }
-  confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () => {
-    calendarEvents = calendarEvents.filter((x) => x.id !== id);
-    renderCalendar();
-    apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-  });
+  confirm2(t('calEntry.deleteEvent'), t('calEntry.deleteEventMsg'), t('calEntry.delete'), () =>
+    confirmBookedWindow(id, null, () => {
+      calendarEvents = calendarEvents.filter((x) => x.id !== id);
+      renderCalendar();
+      apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+    })
+  );
 }
 
 function toggleTaskFromCalendar(taskId) {
@@ -17981,21 +18148,59 @@ function deleteTaskFromCalendar(taskId) {
 }
 
 // ─── UNIFIED CALENDAR ENTRY MODAL ─────────────────────────────
-const CATEGORY_COLORS = { custom: '#16a34a', meeting: '#8b5cf6', delivery: '#14b8a6', maintenance: '#64748b' };
+const CATEGORY_COLORS = {
+  custom: '#16a34a',
+  meeting: '#8b5cf6',
+  delivery: '#14b8a6',
+  maintenance: '#64748b',
+  pickup: '#f59e0b'
+};
 let calEntryType = 'task';
+
+// Fill the location dropdown. Retired locations are offered only when the event
+// being edited already points at one — otherwise a window would silently lose
+// its place the first time somebody opened it to change the time.
+function fillEntryLocationSelect(selectedId) {
+  const sel = document.getElementById('cal-entry-location');
+  if (!sel) return;
+  const chosen = selectedId ? Number(selectedId) : null;
+  const options = pickupLocations.filter((l) => l.active !== false || l.id === chosen);
+  sel.innerHTML =
+    `<option value="">${esc(t('calEntry.placeNone'))}</option>` +
+    options
+      .map(
+        (l) =>
+          `<option value="${l.id}"${l.id === chosen ? ' selected' : ''}>${esc(l.name)}${
+            l.active === false ? ' (' + t('pickupLoc.retired') + ')' : ''
+          }</option>`
+      )
+      .join('');
+  sel.value = chosen ? String(chosen) : '';
+}
 
 function setEntryType(type) {
   const isTask = type === 'task';
   calEntryType = isTask ? 'task' : 'event';
   document.getElementById('cal-entry-type-select').value = type;
   document.getElementById('cal-entry-enddate-wrap').style.display = isTask ? 'none' : '';
-  document.getElementById('cal-entry-allday-wrap').style.display = '';
+  // A pickup window without a clock is not a window: "Saturday" is not something
+  // anyone can book into, and the feed skips such a row — silently, from the
+  // author's point of view. So the option is not offered rather than explained.
+  const isPickup = type === 'pickup';
+  if (isPickup) document.getElementById('cal-entry-allday').checked = false;
+  document.getElementById('cal-entry-allday-wrap').style.display = isPickup ? 'none' : '';
   document.getElementById('cal-entry-prio-wrap').style.display = isTask ? '' : 'none';
   document.getElementById('cal-entry-task-assign-wrap').style.display = isTask ? '' : 'none';
   document.getElementById('cal-entry-ev-assign-wrap').style.display = isTask ? 'none' : '';
   document.getElementById('cal-entry-private-wrap').style.display = isTask ? 'flex' : 'none';
   const recWrap = document.getElementById('cal-entry-recurrence-wrap');
   if (recWrap) recWrap.style.display = 'grid';
+  // A place belongs to any appointment; the seat count only to a pickup window,
+  // which is the only kind somebody outside the lab books into.
+  const placeWrap = document.getElementById('cal-entry-place-wrap');
+  if (placeWrap) placeWrap.style.display = isTask ? 'none' : 'grid';
+  const capWrap = document.getElementById('cal-entry-capacity-wrap');
+  if (capWrap) capWrap.style.display = type === 'pickup' ? '' : 'none';
   document.getElementById('cal-entry-name').placeholder = isTask ? t('calEntry.namePhTask') : t('calEntry.namePhEvent');
   toggleEntryTimeInputs();
   toggleRecurrenceUntil();
@@ -18043,6 +18248,9 @@ function openEntryModal(type, date, time, existing) {
     document.getElementById('cal-entry-start-time').value = existing.startTime || '09:00';
     document.getElementById('cal-entry-end-time').value = existing.endTime || '10:00';
     setEntryType(existing.category || 'custom');
+    fillEntryLocationSelect(existing.locationId);
+    document.getElementById('cal-entry-capacity').value =
+      existing.pickupCapacity === null || existing.pickupCapacity === undefined ? '' : existing.pickupCapacity;
     document.getElementById('cal-entry-desc').value = existing.description || '';
     calEvSelectedAssignees = Array.isArray(existing.teamAssignees) ? existing.teamAssignees.slice() : [];
     renderAssigneePicker();
@@ -18071,6 +18279,8 @@ function openEntryModal(type, date, time, existing) {
     document.getElementById('cal-entry-recurrence').value = '';
     document.getElementById('cal-entry-recurrence-until').value = '';
     toggleRecurrenceUntil();
+    fillEntryLocationSelect(null);
+    document.getElementById('cal-entry-capacity').value = '';
     document.getElementById('cal-entry-del-btn').style.display = 'none';
   }
   document.getElementById('cal-ev-assignee-dropdown').style.display = 'none';
@@ -18255,6 +18465,12 @@ function saveEntryEvent() {
   const recurrence = document.getElementById('cal-entry-recurrence').value || null;
   const recurrenceUntil = recurrence ? document.getElementById('cal-entry-recurrence-until').value || null : null;
   const teamAssignees = calEvSelectedAssignees.slice();
+  const locationId = Number(document.getElementById('cal-entry-location').value) || null;
+  // Only a pickup window has a seat count; anything else must not carry one
+  // out of a field the user could not see. The empty string stays null
+  // (uncapped) while a typed 0 survives as 0 (open, but taking nobody).
+  const capRaw = document.getElementById('cal-entry-capacity').value;
+  const pickupCapacity = category === 'pickup' && capRaw !== '' && capRaw != null ? Number(capRaw) : null;
   const ev = {
     id:
       mode === 'edit'
@@ -18275,8 +18491,32 @@ function saveEntryEvent() {
     recurrence: recurrence,
     recurrenceUntil: recurrenceUntil,
     teamAssignees: teamAssignees,
-    assignees: []
+    assignees: [],
+    locationId: locationId,
+    pickupCapacity: pickupCapacity
   };
+  // Somebody may already have arranged to turn up for this. Ask before the
+  // arrangement changes underneath them — but only when the change is one they
+  // would notice: a corrected title is not worth a dialog, a new time is.
+  const previous = mode === 'edit' ? calendarEvents.find((x) => x.id === ev.id) : null;
+  const movesAWindow =
+    previous &&
+    (previous.category === 'pickup' || category === 'pickup') &&
+    (previous.startDate !== ev.startDate ||
+      previous.startTime !== ev.startTime ||
+      previous.endTime !== ev.endTime ||
+      (previous.locationId || null) !== (ev.locationId || null) ||
+      (previous.recurrence || null) !== (ev.recurrence || null) ||
+      (previous.recurrenceUntil || null) !== (ev.recurrenceUntil || null) ||
+      (previous.category === 'pickup' && category !== 'pickup'));
+  if (movesAWindow) {
+    confirmBookedWindow(ev.id, null, () => applyEntryEvent(ev, mode));
+    return;
+  }
+  applyEntryEvent(ev, mode);
+}
+
+function applyEntryEvent(ev, mode) {
   if (mode === 'edit') {
     const idx = calendarEvents.findIndex((x) => x.id === ev.id);
     if (idx >= 0) {
@@ -18296,7 +18536,12 @@ function saveEntryEvent() {
       color: ev.color,
       recurrence: ev.recurrence,
       recurrenceUntil: ev.recurrenceUntil,
-      teamAssignees: ev.teamAssignees
+      teamAssignees: ev.teamAssignees,
+      // '' rather than null: updateCalendarEvent skips a field only when the key
+      // is absent, and both spellings normalise to NULL — but sending '' keeps
+      // "clear the place again" expressible through the same path that set it.
+      locationId: ev.locationId === null ? '' : ev.locationId,
+      pickupCapacity: ev.pickupCapacity === null ? '' : ev.pickupCapacity
     });
   } else {
     calendarEvents.push(ev);
@@ -18349,11 +18594,13 @@ function deleteEntry() {
     }
     const title = isRecurring ? t('calEntry.deleteRecurTitle') : t('calEntry.deleteEvent');
     const body = isRecurring ? t('calEntry.deleteSeriesMsg') : t('calEntry.deleteEventMsg');
-    confirm2(title, body, t('calEntry.delete'), () => {
-      calendarEvents = calendarEvents.filter((x) => x.id !== id);
-      apiDelete('/api/calendar-events/' + encodeURIComponent(id));
-      renderCalendar();
-    });
+    confirm2(title, body, t('calEntry.delete'), () =>
+      confirmBookedWindow(id, null, () => {
+        calendarEvents = calendarEvents.filter((x) => x.id !== id);
+        apiDelete('/api/calendar-events/' + encodeURIComponent(id));
+        renderCalendar();
+      })
+    );
   }
 }
 
@@ -19821,6 +20068,12 @@ function initEventListeners() {
   $('st-settings-harvestfeed').addEventListener('click', () => {
     openStab('settings', 'harvestfeed');
   });
+  // openStab() renders this sub-tab itself; a second call here would rebuild the
+  // table twice on every click.
+  $('st-settings-pickuplocations').addEventListener('click', () => {
+    openStab('settings', 'pickuplocations');
+  });
+  $('pickuploc-add-btn').addEventListener('click', () => editPickupLocation());
   $('st-settings-printer').addEventListener('click', () => {
     openStab('settings', 'printer');
     renderPrinterSettings();

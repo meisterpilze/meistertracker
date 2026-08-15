@@ -240,6 +240,22 @@ CREATE TABLE IF NOT EXISTS pickup_cancellations (
 );
 CREATE INDEX IF NOT EXISTS idx_pickup_cancel_open ON pickup_cancellations(acked_at);
 
+-- Places goods are handed over: the hall, a market stall, a second site. See
+-- migration v63. Typing the place into an event title works until the second
+-- spelling shows up, and from then on the same market exists twice with nothing
+-- to correct centrally — which matters more than usual here, because the name
+-- leaves the building on the harvest feed and a receiver matches it literally.
+-- Retired via the active flag, never DELETEd: an old location is still named by
+-- past pickups, and removing the row would blank the place on events that
+-- already happened there.
+CREATE TABLE IF NOT EXISTS pickup_locations (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  address    TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active     INTEGER NOT NULL DEFAULT 1
+);
+
 -- Camera dashboard (admin-only WIP). The Python mushroom_camera module
 -- owns the camera_measurements / snapshots / flags / labels tables and
 -- creates them in its own ensure_schema(); the two below are also created
@@ -290,7 +306,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   exception_dates  TEXT,
   -- I-15: SEQUENCE counter for VEVENT output (RFC 5545 §3.8.7.4). Bumped on
   -- every update so external CalDAV clients can detect changes.
-  sequence         INTEGER NOT NULL DEFAULT 0
+  sequence         INTEGER NOT NULL DEFAULT 0,
+  -- Where the appointment happens, when that is a place people come to. See
+  -- migration v63. Nullable and normally null: most appointments are in the lab
+  -- and the field stays out of the way.
+  location_id      INTEGER REFERENCES pickup_locations(id) ON DELETE SET NULL,
+  -- How many collection slots this window offers, null = uncapped. See
+  -- migration v64. A stall with a queue wants a number; a hall that is open all
+  -- afternoon does not.
+  pickup_capacity  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS calendar_event_assignees (
@@ -1856,6 +1880,56 @@ const MIGRATIONS = [
         db.exec("ALTER TABLE harvest_feed_config ADD COLUMN pack_sizes TEXT DEFAULT ''");
       }
     }
+  },
+  {
+    version: 63,
+    description: 'Pickup locations as a managed list, and a location on calendar events',
+    fn(db) {
+      // Where an appointment happens has had nowhere to live. `LOCATION:` is
+      // written today, but only on batch-due events, where it is derived from
+      // the scan log — a custom event carries no location at all.
+      //
+      // A list rather than free text on the event, for one reason that only
+      // shows up later: as soon as appointments are read outside the lab, the
+      // place is part of what another system consumes, and a receiver matches
+      // it literally. Two spellings of one market are then two markets, with
+      // nothing to correct centrally. The same mistake has already cost a
+      // release its visibility once, over a species name typed by hand.
+      //
+      // `active` and not DELETE. A location that closed is still named by every
+      // pickup that happened there; removing the row would either orphan those
+      // or, with ON DELETE SET NULL, quietly blank the place on past events.
+      db.exec(`CREATE TABLE IF NOT EXISTS pickup_locations (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL,
+      address    TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active     INTEGER NOT NULL DEFAULT 1
+    )`);
+      // The REFERENCES clause is legal on ADD COLUMN only because the default is
+      // NULL — SQLite rejects it otherwise. Nullable is also the right shape:
+      // most appointments have no location worth naming.
+      const has = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name = 'location_id'")
+        .get();
+      if (!has.c) {
+        db.exec('ALTER TABLE calendar_events ADD COLUMN location_id INTEGER REFERENCES pickup_locations(id)');
+      }
+    }
+  },
+  {
+    version: 64,
+    description: 'Capacity on a pickup window: how many collections it offers',
+    fn(db) {
+      // Null, not 0, for "as many as turn up". A hall that is open all afternoon
+      // has no meaningful number, and 0 already means something else — a window
+      // that exists but cannot be booked. Making the difference expressible here
+      // keeps the receiving end from having to guess which zero it was given.
+      const has = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('calendar_events') WHERE name = 'pickup_capacity'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE calendar_events ADD COLUMN pickup_capacity INTEGER');
+    }
   }
 ];
 
@@ -2274,7 +2348,9 @@ function readAll(db, opts = {}) {
       teamAssignees: parseTeamAssignees(r.team_assignees),
       exceptionDates: parseExceptionDates(r.exception_dates),
       assignees: assigneeMap.get(r.id) || [],
-      sequence: r.sequence || 0
+      sequence: r.sequence || 0,
+      locationId: r.location_id || null,
+      pickupCapacity: r.pickup_capacity === null || r.pickup_capacity === undefined ? null : r.pickup_capacity
     }));
 
   // Zones + Racks
@@ -2295,6 +2371,15 @@ function readAll(db, opts = {}) {
 
   // Suppliers
   const suppliers = db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
+
+  // Pickup locations. Inactive ones ride along: an event that still points at a
+  // retired location has to be able to name it rather than show a blank.
+  const pickupLocations = db
+    .prepare(
+      'SELECT id, name, address, sort_order AS sortOrder, active FROM pickup_locations ORDER BY sort_order, name'
+    )
+    .all()
+    .map((l) => ({ ...l, active: l.active === 1 }));
 
   // Barcodes
   const barcodes = getAllBarcodes(db);
@@ -2337,6 +2422,7 @@ function readAll(db, opts = {}) {
     calendarEvents,
     zones,
     suppliers,
+    pickupLocations,
     barcodes,
     version
   };
@@ -4730,6 +4816,23 @@ function listPickups(db, opts) {
     }));
 }
 
+/**
+ * How many bookings each slot is carrying: `{ '<slot>': n }`.
+ *
+ * The slot is the window id this end published — so this is the join between a
+ * calendar entry and the people who have arranged to turn up for it, and the
+ * reason the editor can warn before one is moved. Withdrawn pickups are deleted
+ * rather than flagged, so they are already gone from the count.
+ */
+function pickupCountsBySlot(db) {
+  const out = {};
+  for (const r of db
+    .prepare("SELECT slot, COUNT(*) AS n FROM pickups WHERE slot IS NOT NULL AND slot <> '' GROUP BY slot")
+    .all())
+    out[r.slot] = r.n;
+  return out;
+}
+
 function countPickups(db) {
   const row = db
     .prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN acked_at IS NULL THEN 1 ELSE 0 END) AS open FROM pickups')
@@ -5096,6 +5199,52 @@ function deleteSupplier(db, id) {
   incrementDataVersion(db);
 }
 
+// ── Pickup location CRUD ───────────────────────────────────
+// Inactive ones are listed too. The editor has to grey out the entry a past
+// event still points at rather than show that event as having no location.
+function listPickupLocations(db) {
+  return db.prepare('SELECT * FROM pickup_locations ORDER BY sort_order, name').all();
+}
+
+function getPickupLocation(db, id) {
+  if (!id) return null;
+  return db.prepare('SELECT * FROM pickup_locations WHERE id=?').get(id) || null;
+}
+
+function upsertPickupLocation(db, l) {
+  const name = String(l.name || '').trim();
+  if (!name) throw new Error('name is required');
+  const address = String(l.address || '').trim() || null;
+  const sortOrder = Number.isFinite(Number(l.sortOrder)) ? Math.trunc(Number(l.sortOrder)) : 0;
+  const active = l.active === undefined || l.active === null ? 1 : l.active ? 1 : 0;
+  if (l.id) {
+    db.prepare('UPDATE pickup_locations SET name=?,address=?,sort_order=?,active=? WHERE id=?').run(
+      name,
+      address,
+      sortOrder,
+      active,
+      l.id
+    );
+    incrementDataVersion(db);
+    return l.id;
+  }
+  const info = db
+    .prepare('INSERT INTO pickup_locations(name,address,sort_order,active) VALUES(?,?,?,?)')
+    .run(name, address, sortOrder, active);
+  incrementDataVersion(db);
+  return Number(info.lastInsertRowid);
+}
+
+/**
+ * Retire a location. Deliberately not a DELETE: events still point at it, and
+ * the ON DELETE SET NULL that would keep the database consistent would do it by
+ * blanking the place on appointments that already happened there.
+ */
+function deactivatePickupLocation(db, id) {
+  db.prepare('UPDATE pickup_locations SET active=0 WHERE id=?').run(id);
+  incrementDataVersion(db);
+}
+
 // ── Calendar Event CRUD ─────────────────────────────────────
 function serializeTeamAssignees(v) {
   if (v == null) return null;
@@ -5131,14 +5280,34 @@ function parseExceptionDates(v) {
     .filter(Boolean);
 }
 
+/** '' / 0 / rubbish → null. A dropdown left on "no location" sends the empty string. */
+function normalizeLocationId(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+}
+
+/**
+ * '' → null (uncapped), a number → itself, rubbish → null.
+ *
+ * ⚠️ 0 is kept, and is not the same answer as null: it means the window exists
+ * but takes no bookings. `|| null` would have collapsed the two.
+ */
+function normalizePickupCapacity(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.min(Math.trunc(n), 9999);
+}
+
 function insertCalendarEvent(db, ev, assigneeIds) {
   db.exec('BEGIN');
   try {
     db.prepare(
       `INSERT INTO calendar_events(id, title, description, start_date, end_date, all_day,
       start_time, end_time, category, color, caldav_uid, caldav_synced, created,
-      recurrence, recurrence_until, team_assignees, exception_dates)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      recurrence, recurrence_until, team_assignees, exception_dates, location_id, pickup_capacity)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       ev.id,
       ev.title,
@@ -5156,7 +5325,9 @@ function insertCalendarEvent(db, ev, assigneeIds) {
       ev.recurrence || null,
       ev.recurrenceUntil || null,
       serializeTeamAssignees(ev.teamAssignees),
-      serializeExceptionDates(ev.exceptionDates)
+      serializeExceptionDates(ev.exceptionDates),
+      normalizeLocationId(ev.locationId),
+      normalizePickupCapacity(ev.pickupCapacity)
     );
     if (assigneeIds && assigneeIds.length) {
       const ins = db.prepare('INSERT INTO calendar_event_assignees(event_id, user_id) VALUES(?, ?)');
@@ -5186,7 +5357,9 @@ function updateCalendarEvent(db, id, fields) {
     'recurrence',
     'recurrence_until',
     'team_assignees',
-    'exception_dates'
+    'exception_dates',
+    'location_id',
+    'pickup_capacity'
   ];
   const map = {
     startDate: 'start_date',
@@ -5198,7 +5371,9 @@ function updateCalendarEvent(db, id, fields) {
     caldavSynced: 'caldav_synced',
     recurrenceUntil: 'recurrence_until',
     teamAssignees: 'team_assignees',
-    exceptionDates: 'exception_dates'
+    exceptionDates: 'exception_dates',
+    locationId: 'location_id',
+    pickupCapacity: 'pickup_capacity'
   };
   const sets = [];
   const vals = [];
@@ -5209,6 +5384,8 @@ function updateCalendarEvent(db, id, fields) {
     if (col === 'all_day') vals.push(v ? 1 : 0);
     else if (col === 'team_assignees') vals.push(serializeTeamAssignees(v));
     else if (col === 'exception_dates') vals.push(serializeExceptionDates(v));
+    else if (col === 'location_id') vals.push(normalizeLocationId(v));
+    else if (col === 'pickup_capacity') vals.push(normalizePickupCapacity(v));
     else vals.push(v ?? null);
   }
   if (!sets.length) return;
@@ -6341,7 +6518,9 @@ function getCalendarEvents(db) {
       teamAssignees: parseTeamAssignees(r.team_assignees),
       exceptionDates: parseExceptionDates(r.exception_dates),
       assignees: assigneeMap.get(r.id) || [],
-      sequence: r.sequence || 0
+      sequence: r.sequence || 0,
+      locationId: r.location_id || null,
+      pickupCapacity: r.pickup_capacity === null || r.pickup_capacity === undefined ? null : r.pickup_capacity
     }));
 }
 function getInventory(db, logLimit) {
@@ -8099,6 +8278,7 @@ module.exports = {
   ackPickups,
   listPickups,
   countPickups,
+  pickupCountsBySlot,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
@@ -8118,6 +8298,10 @@ module.exports = {
   listSuppliers,
   upsertSupplier,
   deleteSupplier,
+  listPickupLocations,
+  getPickupLocation,
+  upsertPickupLocation,
+  deactivatePickupLocation,
   insertCalendarEvent,
   updateCalendarEvent,
   getCalendarEventById,
