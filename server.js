@@ -1276,6 +1276,7 @@ function startHarvestFeed() {
 }
 startHarvestFeed();
 
+
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
 // Pure Node.js — no bash, curl, or acme.sh required.
 // Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
@@ -8546,11 +8547,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         )
         .all(since)
         .map((r) => ({ species: r.species, grams: Math.round(r.grams), last: r.last }));
+      // `promised` is what the table was missing: how much of each release is
+      // already booked. Sent alongside rather than folded into `releases` —
+      // a release is a number somebody typed, and the screen shows what is left
+      // of it without editing it.
+      const promised = db.pickupGramsBySpecies(database);
       jsonOk(res, {
         freshDays: days,
         releases: db.listHarvestReleases(database),
         recent,
-        known: db.listKnownSpecies(database)
+        known: db.listKnownSpecies(database),
+        promised: promised.bySpecies,
+        promisedUnattributed: promised.unattributed,
+        // So the page can say "the shop has not heard this yet" instead of
+        // leaving somebody to guess. Both come from the feed's own record of
+        // its last push.
+        feed: (() => {
+          const c = db.getHarvestFeedCfg(database);
+          return {
+            enabled: !!c.enabled || !!harvestFeed.readConfig(process.env),
+            lastAt: c.lastAt || null,
+            lastOk: c.lastOk === null || c.lastOk === undefined ? null : !!c.lastOk
+          };
+        })()
       });
     } catch (err) {
       safeErr(res, err);
@@ -8618,7 +8637,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // protocol carries no name, address or contact of any kind.
   if (req.method === 'GET' && req.url.split('?')[0] === '/api/pickups') {
     try {
-      jsonOk(res, { items: db.listPickups(database), counts: db.countPickups(database) });
+      // `?past=1` asks for the finished half. The default is the half that is
+      // still work — see listPickups() for why that stopped being the same
+      // thing as "all of them, by time".
+      const past = /[?&]past=1(&|$)/.test(req.url);
+      jsonOk(res, { items: db.listPickups(database, { past }), counts: db.countPickups(database), past });
     } catch (err) {
       safeErr(res, err);
     }

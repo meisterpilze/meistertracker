@@ -5709,18 +5709,43 @@
               make the published figure wrong, and there is nothing to keep up to date. The date is the safety net.
               Fresh produce does not keep, and the usual mistake is not a wrong number but a forgotten one.
             </p>
+            <!--
+              What the shop has heard, and when. The release numbers below are
+              only true out there once a push has carried them, and this page is
+              where somebody reads them — the same banner in Settings is two
+              pages away from the person acting on the figures.
+            -->
+            <div id="harvestrelease-feed" style="display: none; font-size: 12px; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px"></div>
             <div style="overflow-x: auto">
-              <table id="t-harvestrelease" style="min-width: 520px">
+              <table id="t-harvestrelease" style="min-width: 640px">
                 <thead>
                   <tr>
                     <th data-i18n="harvestFeed.colSpecies">Species</th>
                     <th data-i18n="harvestFeed.colHarvested">Harvested</th>
                     <th data-i18n="harvestFeed.colRelease">Release (kg)</th>
+                    <!--
+                      The column the page was missing. Bookings the shop has
+                      taken, per species — shown next to the release, never
+                      subtracted from it: the release is a number somebody typed
+                      and it does not move behind their back.
+                    -->
+                    <th data-i18n="harvestFeed.colPromised">Promised</th>
+                    <th data-i18n="harvestFeed.colFree">Free</th>
                     <th data-i18n="harvestFeed.colUntil">Valid until</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody id="harvestrelease-body"></tbody>
+                <!--
+                  Bookings the feed could not tie to a release row — from a
+                  receiver older than the `species` field. Named rather than
+                  dropped: leaving them out would understate what is promised.
+                -->
+                <tfoot>
+                  <tr id="harvestrelease-unattributed" style="display: none">
+                    <td colspan="7" style="font-size: 12px; color: var(--c-amber-dark)"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px">
@@ -5765,7 +5790,16 @@
           <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
               <div class="sec" data-i18n="pickups.title" style="margin: 0">Abholungen</div>
-              <span id="pickups-count" style="font-size: 12px; color: var(--c-text-muted)"></span>
+              <div style="display: flex; align-items: center; gap: 10px">
+                <span id="pickups-count" style="font-size: 12px; color: var(--c-text-muted)"></span>
+                <!--
+                  The list used to be everything, oldest first, capped at 200 —
+                  so once enough collections had happened, next week's booking
+                  was not on the page at all. It shows what is still to come;
+                  this reaches the rest.
+                -->
+                <button class="btn btn-sm" id="pickups-past-btn" data-i18n="pickups.showPast">Vergangene zeigen</button>
+              </div>
             </div>
             <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px" data-i18n="pickups.desc">
               Abholtermine, die der Empfänger des Ernte-Feeds zurückgemeldet hat. Zeiten sind Ortszeit des jeweiligen

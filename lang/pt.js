@@ -43,6 +43,9 @@ window.LANG['pt'] = {
   'pickups.th.state': 'Estado',
   'pickups.count': '{n} levantamentos',
   'pickups.none': 'Sem levantamentos comunicados',
+  'pickups.nonePast': 'Sem levantamentos passados',
+  'pickups.showPast': 'Mostrar passados',
+  'pickups.showUpcoming': 'Mostrar pr\u00f3ximos',
   'pickups.overbooked': 'Sobrelotado',
   'pickups.confirmed': 'Confirmado',
   'pickups.pending': 'Ainda não confirmado',
@@ -758,6 +761,13 @@ window.LANG['pt'] = {
   'harvestFeed.colHarvested': 'Colhido',
   'harvestFeed.colRelease': 'Libertar (kg)',
   'harvestFeed.colUntil': 'V\u00e1lido at\u00e9',
+  'harvestFeed.colPromised': 'Reservado',
+  'harvestFeed.colFree': 'Livre',
+  'harvestFeed.promisedUnattributed':
+    'Mais {kg} kg reservados que n\u00e3o correspondem a nenhuma esp\u00e9cie acima \u2014 de levantamentos comunicados antes do envio do nome da esp\u00e9cie.',
+  'harvestFeed.shopHeard': 'A loja tem estes valores. \u00daltimo envio: {time}.',
+  'harvestFeed.shopSilent':
+    'A loja ainda n\u00e3o tem estes valores \u2014 o \u00faltimo envio ({time}) falhou. Se continuar assim, o site deixa de mostrar quantidades.',
   'harvestFeed.addSpecies': 'Outra esp\u00e9cie \u2026',
   'harvestFeed.allListed': 'Todas as esp\u00e9cies conhecidas j\u00e1 est\u00e3o na lista',
   'harvestFeed.noSpecies': 'Ainda nenhuma esp\u00e9cie registada \u2014 inicia um lote ou colhe',

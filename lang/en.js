@@ -43,6 +43,9 @@ window.LANG['en'] = {
   'pickups.th.state': 'State',
   'pickups.count': '{n} pickups',
   'pickups.none': 'No pickups reported',
+  'pickups.nonePast': 'No past pickups',
+  'pickups.showPast': 'Show past',
+  'pickups.showUpcoming': 'Show upcoming',
   'pickups.overbooked': 'Overbooked',
   'pickups.confirmed': 'Confirmed',
   'pickups.pending': 'Not yet confirmed',
@@ -842,6 +845,13 @@ window.LANG['en'] = {
   'harvestFeed.colHarvested': 'Harvested',
   'harvestFeed.colRelease': 'Release (kg)',
   'harvestFeed.colUntil': 'Valid until',
+  'harvestFeed.colPromised': 'Promised',
+  'harvestFeed.colFree': 'Free',
+  'harvestFeed.promisedUnattributed':
+    'A further {kg} kg is promised but matches no species above — from pickups reported before the species name was sent.',
+  'harvestFeed.shopHeard': 'The shop has these figures. Last sent: {time}.',
+  'harvestFeed.shopSilent':
+    'The shop does not have these figures yet — the last push ({time}) failed. If that continues, the website eventually shows no amounts at all.',
   'harvestFeed.addSpecies': 'Another species …',
   'harvestFeed.allListed': 'Every known species is already listed',
   'harvestFeed.noSpecies': 'No species recorded yet — start a batch or harvest one',

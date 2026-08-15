@@ -33,6 +33,11 @@ const ROOT = path.join(__dirname, '..');
 const TEILE = [
   [/^function esc\(s\) \{[\s\S]*?\n\}/m, 'esc()'],
   [/^let harvestReleaseRows = \[\];/m, 'harvestReleaseRows'],
+  [/^let harvestReleasePromised = \{\};/m, 'harvestReleasePromised'],
+  [/^let harvestReleaseUnattributed = 0;/m, 'harvestReleaseUnattributed'],
+  [/^let harvestReleaseFeed = null;/m, 'harvestReleaseFeed'],
+  [/^function promisedCells\(row\) \{[\s\S]*?\n\}/m, 'promisedCells()'],
+  [/^function renderHarvestReleaseUnattributed\(\) \{[\s\S]*?\n\}/m, 'renderHarvestReleaseUnattributed()'],
   [/^async function loadHarvestReleases\(\) \{[\s\S]*?\n\}/m, 'loadHarvestReleases()'],
   [/^function freshReleaseRow\(row\) \{[\s\S]*?\n\}/m, 'freshReleaseRow()'],
   [/^function harvestReleaseChanges\(\) \{[\s\S]*?\n\}/m, 'harvestReleaseChanges()'],
@@ -64,7 +69,12 @@ function laden(opts) {
 
   const log = { posts: [], fragen: [], renders: 0, ergebnis: [], geholt: 0, html: '' };
   const stub = `
-    const t = (k) => k;
+    // Der Schlüssel statt der Übersetzung — aber **mit** den eingesetzten
+    // Werten, wie das echte t() es tut. Ohne die zweite Hälfte kann ein Test nur
+    // zählen, nicht lesen: Eine Meldung, die eine Menge nennt, sähe genauso aus
+    // wie eine, die es vergisst.
+    const t = (k, params) =>
+      !params ? k : k + ' ' + Object.keys(params).map((n) => n + '=' + params[n]).join(' ');
     const tp = (k, n) => k + '.' + (n === 1 ? 'one' : 'other') + ':' + n;
     let knownSpecies = [];
     // The one element the table writes to. Recording innerHTML is what lets a
@@ -74,13 +84,23 @@ function laden(opts) {
       get innerHTML() { return log.html; },
       querySelectorAll: () => []
     };
-    const document = { getElementById: (id) => (id === 'harvestrelease-body' ? koerper : { style: {} }) };
+    // Die Fußzeile für die nicht zuzuordnenden Vormerkungen. Eigene Attrappe,
+    // weil der Aufruf in die Zelle schreibt und nicht in die Zeile — genau der
+    // Unterschied, den das voreingestellte leere Element verschluckt hätte.
+    const fussZelle = { textContent: '' };
+    const fussZeile = { style: {}, querySelector: () => fussZelle };
+    log.fuss = { zeile: fussZeile, zelle: fussZelle };
+    const document = {
+      getElementById: (id) =>
+        id === 'harvestrelease-body' ? koerper : id === 'harvestrelease-unattributed' ? fussZeile : { style: {} }
+    };
     const window = { confirm: (frage) => { log.fragen.push(frage); return log.antwort; } };
     const apiPost = async (url, body) => { log.posts.push({ url, body }); };
     const authFetch = async () => { log.geholt++; return { ok: true, json: async () => log.antwortDaten }; };
     const fillHarvestReleasePicker = () => {};
     const updateHarvestReleasePending = () => {};
     const showHarvestReleaseResult = (msg) => { log.ergebnis.push(msg); };
+    const fmtDtTime = (v) => String(v);
   `;
   const api = new Function(
     'log',
@@ -89,8 +109,9 @@ function laden(opts) {
       code +
       '\nreturn { log, guardUnsaved, mayLeavePage, leaveGuards, loadHarvestReleases, freshReleaseRow,' +
       ' harvestReleaseChanges, harvestReleaseDirty, harvestReleaseRemoveBtn, renderHarvestReleases,' +
-      ' removeHarvestReleaseRow, saveHarvestReleases,' +
-      ' rows: () => harvestReleaseRows, setRows: (r) => { harvestReleaseRows = r; } };'
+      ' removeHarvestReleaseRow, saveHarvestReleases, promisedCells,' +
+      ' rows: () => harvestReleaseRows, setRows: (r) => { harvestReleaseRows = r; },' +
+      ' setPromised: (p, rest) => { harvestReleasePromised = p; harvestReleaseUnattributed = rest || 0; } };'
   )(log);
   Object.assign(log, opts || {});
   return api;
@@ -342,5 +363,82 @@ describe('leaving a page with unsaved work', () => {
       throw new Error('broken');
     });
     assert.equal(ui.mayLeavePage(), true);
+  });
+});
+
+// ── V1: was von der Freigabe schon vergeben ist ──────────────────────────────
+//
+// Die Tabelle zeigte, wieviel ein Shop verkaufen darf, und die Liste darunter,
+// wieviel davon schon versprochen ist — und nichts zog das eine vom anderen ab.
+// Wer am Stand nach der oberen Zahl handelte, versprach bis zur Hälfte zu viel.
+describe('release table — how much of a release is already booked', () => {
+  let ui;
+  beforeEach(() => {
+    ui = laden();
+  });
+
+  it('shows what is promised and what is left of a release', () => {
+    ui.setPromised({ 'Oyster (OY)': 800 });
+    const [vorgemerkt, frei] = ui
+      .promisedCells(ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 2000, stored: true })))
+      .split('</td>');
+    assert.match(vorgemerkt, /0\.80 kg/);
+    assert.match(frei, /1\.20 kg/);
+  });
+
+  it('measures against the saved amount, not a half-typed one', () => {
+    // ⚠️ Der Kern der Spalte: Sie soll am Stand zu gebrauchen sein. Gegen eine
+    // Zahl zu rechnen, die noch in keinem Feed steht, zeigte eine freie Menge,
+    // die es nur in diesem Browser gibt.
+    ui.setPromised({ 'Oyster (OY)': 800 });
+    const row = ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 2000, stored: true }));
+    row.kg = '9.00'; // getippt, nicht gespeichert
+    assert.match(ui.promisedCells(row), /1\.20 kg/);
+  });
+
+  it('does not read as a quantity when more is promised than released', () => {
+    // Mehr versprochen als zurückgelegt ist echt und kein Rechenfehler — es ist
+    // nichts mehr da, und jemand muss entscheiden, was passiert.
+    ui.setPromised({ 'Oyster (OY)': 2500 });
+    const raus = ui.promisedCells(ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 2000, stored: true })));
+    assert.match(raus, /-0\.50 kg/);
+    assert.match(raus, /c-red-dark/, 'die Zahl steht als Warnung da, nicht als Menge');
+  });
+
+  it('leaves both cells empty for a species nobody has released', () => {
+    // „Nichts freigegeben" und „alles weg" sind verschiedene Lagen, und nur eine
+    // davon heißt aufhören zu verkaufen.
+    ui.setPromised({});
+    assert.equal(
+      ui.promisedCells(ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 0 }))).includes('0.00'),
+      false
+    );
+  });
+
+  it('never lets a booking it cannot attribute vanish silently', () => {
+    // Zu klein ist die Richtung, die Ware kostet — deshalb wird es genannt statt
+    // weggelassen. Betrifft Abholungen, die gemeldet wurden, bevor der Empfänger
+    // den Artnamen mitschickte; sie altern von selbst heraus.
+    ui.setPromised({}, 300);
+    ui.setRows([ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 2000, stored: true }))]);
+    ui.renderHarvestReleases();
+    assert.equal(ui.log.fuss.zeile.style.display, '', 'die Fußzeile steht da');
+    assert.match(ui.log.fuss.zelle.textContent, /0\.30/, 'mit der Menge, die niemandem zugeordnet werden konnte');
+  });
+
+  it('says nothing when every booking could be attributed', () => {
+    ui.setPromised({ 'Oyster (OY)': 800 }, 0);
+    ui.setRows([ui.freshReleaseRow(zeile({ species: 'Oyster (OY)', grams: 2000, stored: true }))]);
+    ui.renderHarvestReleases();
+    assert.equal(ui.log.fuss.zeile.style.display, 'none');
+  });
+
+  it('mentions them even when no release is listed at all', () => {
+    // Der frühe Rückkehrpunkt für die leere Tabelle ließ die Zeile sonst aus —
+    // ausgerechnet in der Lage, in der sie am meisten zu sagen hat.
+    ui.setPromised({}, 300);
+    ui.setRows([]);
+    ui.renderHarvestReleases();
+    assert.equal(ui.log.fuss.zeile.style.display, '');
   });
 });
