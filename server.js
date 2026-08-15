@@ -1276,6 +1276,41 @@ function startHarvestFeed() {
 }
 startHarvestFeed();
 
+/**
+ * Push now, because a release just changed.
+ *
+ * ⚠️ **The gap this closes runs the dangerous way round.** Saving a release only
+ * wrote a row; the shop heard about it whenever the timer next fired, up to a
+ * full interval later — fifteen minutes by default. Raising a release late is
+ * harmless, the shop simply offers too little for a while. *Lowering* one is
+ * not: somebody sells 1.5 kg at the stall, cuts the release from 2 kg to 0.5,
+ * and for the next quarter of an hour the shop is still taking bookings against
+ * the old figure. The lab then shows 0.5 kg released above a 1 kg pickup, and
+ * the person who typed the number had no way to know.
+ *
+ * Fire-and-forget on purpose. The save has already succeeded and the row is the
+ * source of truth; a receiver that is down must not turn a stored decision into
+ * an error message. The timer carries the same numbers along a few minutes
+ * later regardless — this only makes the common case immediate.
+ *
+ * `inFlight` inside deliver()'s caller already guards against stacking, and the
+ * feed is a snapshot rather than an event log, so a push that overlaps a tick
+ * costs nothing beyond one extra request.
+ */
+function pushHarvestFeedNow(why) {
+  if (WORKTREE_MODE) return;
+  let cfg;
+  try {
+    cfg = harvestFeed.resolveConfig({ database, env: process.env, dbApi: db });
+  } catch {
+    return; // misconfigured — startHarvestFeed() has already said so once
+  }
+  if (!cfg) return;
+  Promise.resolve()
+    .then(() => harvestFeed.deliver({ database, cfg, dbApi: db, log, deps: undefined }))
+    .catch((e) => log('warn', 'Immediate harvest feed push failed', { why, error: e.message }));
+}
+
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
 // Pure Node.js — no bash, curl, or acme.sh required.
 // Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
@@ -6714,6 +6749,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               }
             }
         }
+        // Only when something was actually set aside. A plain harvest changes
+        // nothing the feed publishes, and a push per weighed bag would be a
+        // request every few seconds on a picking afternoon.
+        if (released) pushHarvestFeedNow('release from harvest');
         broadcastSSE(res);
         jsonOk(res, { id, released, releaseError });
       } catch (err) {
@@ -8546,11 +8585,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         )
         .all(since)
         .map((r) => ({ species: r.species, grams: Math.round(r.grams), last: r.last }));
+      // `promised` is what the table was missing: how much of each release is
+      // already booked. Sent alongside rather than folded into `releases` —
+      // a release is a number somebody typed, and the screen shows what is left
+      // of it without editing it.
+      const promised = db.pickupGramsBySpecies(database);
       jsonOk(res, {
         freshDays: days,
         releases: db.listHarvestReleases(database),
         recent,
-        known: db.listKnownSpecies(database)
+        known: db.listKnownSpecies(database),
+        promised: promised.bySpecies,
+        promisedUnattributed: promised.unattributed,
+        // So the page can say "the shop has not heard this yet" instead of
+        // leaving somebody to guess. Both come from the feed's own record of
+        // its last push.
+        feed: (() => {
+          const c = db.getHarvestFeedCfg(database);
+          return {
+            enabled: !!c.enabled || !!harvestFeed.readConfig(process.env),
+            lastAt: c.lastAt || null,
+            lastOk: c.lastOk === null || c.lastOk === undefined ? null : !!c.lastOk
+          };
+        })()
       });
     } catch (err) {
       safeErr(res, err);
@@ -8573,6 +8630,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (data.remove) {
           db.deleteHarvestRelease(database, species);
           log('info', 'Harvest release removed', { actor: req.authUser.username, species });
+          pushHarvestFeedNow('release removed');
           jsonOk(res, { removed: true, releases: db.listHarvestReleases(database) });
           return;
         }
@@ -8595,6 +8653,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           note: data.note || ''
         });
         log('info', 'Harvest release set', { actor: req.authUser.username, species, grams });
+        pushHarvestFeedNow('release set');
         jsonOk(res, { releases: db.listHarvestReleases(database) });
       } catch (err) {
         // setHarvestRelease throws on a malformed date; that is a bad request,
@@ -8618,7 +8677,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // protocol carries no name, address or contact of any kind.
   if (req.method === 'GET' && req.url.split('?')[0] === '/api/pickups') {
     try {
-      jsonOk(res, { items: db.listPickups(database), counts: db.countPickups(database) });
+      // `?past=1` asks for the finished half. The default is the half that is
+      // still work — see listPickups() for why that stopped being the same
+      // thing as "all of them, by time".
+      const past = /[?&]past=1(&|$)/.test(req.url);
+      jsonOk(res, { items: db.listPickups(database, { past }), counts: db.countPickups(database), past });
     } catch (err) {
       safeErr(res, err);
     }

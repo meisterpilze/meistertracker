@@ -2018,3 +2018,161 @@ describe('harvest feed config — what a save keeps', () => {
     assert.equal(baueNext({ site: 'x'.repeat(200) }, gespeichert).site.length, 64);
   });
 });
+
+// ── V1/V2/V5: Freigabe und Abholungen auf einem Schirm ───────────────────────
+//
+// Drei Befunde vom 2026-08-15, die alle auf derselben Seite landen: Die
+// Freigabetabelle kannte die Vormerkungen nicht, die beiden Namen ließen sich
+// nicht verbinden, und die Liste wuchs, bis sie die kommenden Termine verdeckte.
+describe('pickups: what they say about a release', () => {
+  let t;
+  beforeEach(() => {
+    t = tmpDb();
+  });
+  afterEach(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  const abholung = (id, tag, posten) => ({
+    id,
+    order: '#' + id,
+    slot: 'w-' + tag,
+    slotText: tag + ', 10–12 Uhr',
+    place: 'Hofladen',
+    from: tag + 'T10:00',
+    to: tag + 'T12:00',
+    zone: 'Europe/Berlin',
+    items: posten
+  });
+
+  const tagVersetzt = (tage) => {
+    const d = new Date();
+    d.setDate(d.getDate() + tage);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+
+  it('lets the lab name through the reply boundary', () => {
+    // ⚠️ **Durch parseReply und nicht an ihm vorbei.** Genau dort steht die
+    // Erlaubnisliste, die jede Position neu aufbaut — ein Feld, das dort nicht
+    // genannt ist, kommt nie in der Datenbank an. Ein Test, der storePickup
+    // direkt ruft, prüft diese Grenze nicht und bleibt auch dann grün, wenn sie
+    // das Feld verschluckt.
+    const r = feed.parseReply(
+      JSON.stringify({
+        ok: true,
+        pickups: [{ ...PICKUP, items: [{ kind: 'Igelstachelbart', species: 'Lion (LM)', grams: 800 }] }]
+      })
+    );
+    assert.deepEqual(r.pickups[0].items, [{ kind: 'Igelstachelbart', species: 'Lion (LM)', grams: 800 }]);
+  });
+
+  it('stores a position without the lab name as it always did', () => {
+    // Additiv: Ein Empfänger, der älter ist als das Feld, ist nicht falsch.
+    const r = feed.parseReply(
+      JSON.stringify({ ok: true, pickups: [{ ...PICKUP, items: [{ kind: 'Austernpilz', grams: 500 }] }] })
+    );
+    assert.deepEqual(r.pickups[0].items, [{ kind: 'Austernpilz', grams: 500 }]);
+  });
+
+  it('adds up what is promised, per species', () => {
+    db.storePickup(
+      t.db,
+      abholung('a1', tagVersetzt(1), [{ kind: 'Igelstachelbart', species: 'Lion (LM)', grams: 800 }])
+    );
+    db.storePickup(
+      t.db,
+      abholung('a2', tagVersetzt(4), [{ kind: 'Igelstachelbart', species: 'Lion (LM)', grams: 500 }])
+    );
+    db.storePickup(t.db, abholung('a3', tagVersetzt(2), [{ kind: 'Austernpilz', species: 'Oyster (OY)', grams: 250 }]));
+    const { bySpecies, unattributed } = db.pickupGramsBySpecies(t.db);
+    assert.deepEqual(bySpecies, { 'Lion (LM)': 1300, 'Oyster (OY)': 250 });
+    assert.equal(unattributed, 0);
+  });
+
+  it('stops counting a pickup whose day has passed', () => {
+    db.storePickup(
+      t.db,
+      abholung('alt', tagVersetzt(-3), [{ kind: 'Igelstachelbart', species: 'Lion (LM)', grams: 800 }])
+    );
+    assert.deepEqual(db.pickupGramsBySpecies(t.db).bySpecies, {});
+  });
+
+  it('reports a line it cannot attribute instead of dropping it', () => {
+    // Zu wenig „vorgemerkt" heißt zu viel „frei", und das ist die Richtung, die
+    // Ware kostet. Betrifft Abholungen von vor dem 2026-08-15.
+    db.storePickup(t.db, abholung('alt', tagVersetzt(1), [{ kind: 'Igelstachelbart', grams: 300 }]));
+    const { bySpecies, unattributed } = db.pickupGramsBySpecies(t.db);
+    assert.deepEqual(bySpecies, {});
+    assert.equal(unattributed, 300);
+  });
+});
+
+describe('pickups: the list stops burying next week under last year', () => {
+  let t;
+  beforeEach(() => {
+    t = tmpDb();
+  });
+  afterEach(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  const tagVersetzt = (tage) => {
+    const d = new Date();
+    d.setDate(d.getDate() + tage);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const abholung = (id, tag) => ({
+    id,
+    order: '#' + id,
+    slot: 'w-' + id,
+    from: tag + 'T10:00',
+    to: tag + 'T12:00',
+    zone: 'Europe/Berlin',
+    items: [{ kind: 'Austernpilz', species: 'Oyster (OY)', grams: 500 }]
+  });
+
+  it('shows next week even behind 250 finished collections', () => {
+    // ⚠️ Genau der gemessene Fall: Bei 251 Zeilen endete die Seite im Juli 2025
+    // und der Termin für nächste Woche stand gar nicht mehr darauf.
+    for (let i = 1; i <= 250; i++) db.storePickup(t.db, abholung('alt-' + i, tagVersetzt(-i)));
+    db.storePickup(t.db, abholung('NEU', tagVersetzt(7)));
+    const offen = db.listPickups(t.db);
+    assert.equal(offen.length, 1, 'nur das, was noch aussteht');
+    assert.equal(offen[0].id, 'NEU');
+  });
+
+  it('keeps the finished ones reachable, newest first', () => {
+    for (let i = 1; i <= 3; i++) db.storePickup(t.db, abholung('alt-' + i, tagVersetzt(-i)));
+    const vorbei = db.listPickups(t.db, { past: true });
+    assert.equal(vorbei.length, 3);
+    assert.equal(vorbei[0].id, 'alt-1', 'der jüngste vergangene zuerst');
+  });
+
+  it('treats a pickup with no time at all as still upcoming', () => {
+    // Sie lässt sich nicht als vorbei nachweisen, und „nicht nachweisbar vorbei"
+    // gehört auf die Seite mit der Arbeit.
+    db.storePickup(t.db, { id: 'ohne-zeit', order: '#9', items: [{ kind: 'Austernpilz', grams: 100 }] });
+    assert.equal(db.listPickups(t.db).length, 1);
+    assert.equal(db.listPickups(t.db, { past: true }).length, 0);
+  });
+
+  it('prunes long-finished collections, but only once they are acknowledged', () => {
+    // ⚠️ Eine unquittierte Zeile wird noch in jeder Antwort wiederholt — sie
+    // hier zu löschen, hieße, dass beide Seiten auseinanderlaufen und nichts
+    // mehr sie zusammenbringt.
+    db.storePickup(t.db, abholung('quittiert', tagVersetzt(-200)));
+    db.storePickup(t.db, abholung('offen', tagVersetzt(-200)));
+    db.storePickup(t.db, abholung('neulich', tagVersetzt(-2)));
+    db.ackPickups(t.db, ['quittiert', 'neulich']);
+    assert.equal(db.prunePickups(t.db, { days: 90 }), 1);
+    const uebrig = db
+      .listPickups(t.db, { past: true })
+      .map((p) => p.id)
+      .sort();
+    assert.deepEqual(uebrig, ['neulich', 'offen']);
+  });
+});

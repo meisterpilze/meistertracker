@@ -4784,21 +4784,44 @@ function parseItems(raw) {
 }
 
 /**
- * Every stored pickup, soonest first.
+ * Every stored pickup — the ones still to come first, soonest of those first.
  *
- * Rows without a time sort last rather than first: a pickup with no window is
- * the odd one out, not the most urgent thing on the screen.
+ * Rows without a time sort after the upcoming ones rather than before: a pickup
+ * with no window is the odd one out, not the most urgent thing on the screen.
+ *
+ * ⚠️ **This used to sort purely by time, and that quietly broke the page.**
+ * Nothing deletes a pickup once its window has passed — the receiver drops its
+ * own copy and never says so, and `cancelPickups` only fires on a customer
+ * withdrawal. So the table grows without limit while the list shows the first
+ * 200 rows oldest-first. Measured on 2026-08-15: at 251 rows the page ended in
+ * July 2025 and next week's pickup **was not on it at all**. Two hundred
+ * finished collections were standing in front of it, and the result looks
+ * exactly like an empty calendar.
+ *
+ * `past` decides which half is asked for. The default is the half that is still
+ * work; the finished ones stay reachable rather than being hidden, because a
+ * collection somebody wants to look up afterwards is a real question.
+ *
+ * "Past" is judged by day and not to the minute — the stored times are local to
+ * their own pickup location and carry the zone separately, so a pickup earlier
+ * today counts as upcoming. Being a few hours generous keeps work on the
+ * working half of the screen, which is the harmless direction.
  */
 function listPickups(db, opts) {
   const o = opts || {};
   const limit = Math.max(1, Math.min(500, Number(o.limit) || 200));
+  const today = localDay(o.at);
+  const wo = o.past
+    ? 'WHERE from_time IS NOT NULL AND substr(from_time, 1, 10) < ?'
+    : 'WHERE from_time IS NULL OR substr(from_time, 1, 10) >= ?';
+  // The finished half reads newest-first: looking one up means looking for the
+  // most recent, not for the oldest one on record.
+  const sortierung = o.past
+    ? 'ORDER BY from_time DESC, received DESC'
+    : 'ORDER BY CASE WHEN from_time IS NULL THEN 1 ELSE 0 END, from_time, received';
   return db
-    .prepare(
-      `SELECT * FROM pickups
-        ORDER BY CASE WHEN from_time IS NULL THEN 1 ELSE 0 END, from_time, received
-        LIMIT ?`
-    )
-    .all(limit)
+    .prepare(`SELECT * FROM pickups ${wo} ${sortierung} LIMIT ?`)
+    .all(today, limit)
     .map((r) => ({
       id: r.id,
       order: r.order_ref || null,
@@ -4818,6 +4841,49 @@ function listPickups(db, opts) {
 }
 
 /**
+ * How many grams of each species are already spoken for: `{ '<species>': g }`.
+ *
+ * ⚠️ **The number the release table was missing.** That table shows how much a
+ * shop may sell; this shows how much of it is already promised to somebody. Both
+ * were on the Pickups page and neither was subtracted from the other, so the
+ * figure people acted on at the stall could be half again too high. Displayed
+ * next to the release, never subtracted from it — the release is a decision
+ * somebody typed, and it does not move behind their back.
+ *
+ * Keyed on `species`, which the receiver started sending on 2026-08-15
+ * alongside the customer-facing `kind`. Lines without it cannot be attributed
+ * and are returned under `unattributed` rather than dropped: silently leaving
+ * them out would understate what is promised, and that is the one direction
+ * that costs produce.
+ *
+ * "Still owed" is judged by **day**, not to the minute. A pickup earlier today
+ * still counts. The stored times are local to their own pickup location and
+ * carry their zone separately, so a minute-exact comparison here would need
+ * that zone — and being an hour generous on a total that exists to stop
+ * over-promising is the harmless direction.
+ */
+function pickupGramsBySpecies(db, at) {
+  const today = localDay(at);
+  const out = new Map();
+  let unattributed = 0;
+  for (const r of db.prepare('SELECT items, from_time FROM pickups').all()) {
+    // No time at all is the odd row out, and it is treated as still owed: it
+    // cannot be shown to be over.
+    if (r.from_time && r.from_time.slice(0, 10) < today) continue;
+    for (const it of parseItems(r.items)) {
+      const g = Number(it.grams);
+      if (!Number.isFinite(g) || g <= 0) continue;
+      if (!it.species) {
+        unattributed += g;
+        continue;
+      }
+      out.set(it.species, (out.get(it.species) || 0) + g);
+    }
+  }
+  return { bySpecies: Object.fromEntries(out), unattributed };
+}
+
+/**
  * How many bookings each slot is carrying: `{ '<slot>': n }`.
  *
  * The slot is the window id this end published — so this is the join between a
@@ -4832,6 +4898,38 @@ function pickupCountsBySlot(db) {
     .all())
     out[r.slot] = r.n;
   return out;
+}
+
+/**
+ * Drop pickups whose window is long past and which the receiver already knows
+ * about.
+ *
+ * ⚠️ **The table had no way to shrink.** A pickup row was only ever removed by
+ * an explicit customer withdrawal; an ordinary collection that simply happened
+ * stayed for ever. The list sorting above stops that from hiding today's work,
+ * but the row count still climbs until `storePickup` refuses at
+ * PICKUP_MAX_ROWS — and a receiver whose bookings are being rejected finds out
+ * from a log line.
+ *
+ * Two conditions, and both are needed. Long past, so nothing is thrown away
+ * that anyone is still working on or looking up. **Acknowledged**, so a row
+ * that has not yet been confirmed to the receiver survives — it is still being
+ * repeated in every reply, and deleting it here would make the two sides
+ * disagree with nothing left to reconcile them. Same rule as the receiver's own
+ * cleanup, from the other side.
+ */
+function prunePickups(db, { days = 90, at } = {}) {
+  const d = new Date((at || new Date()).getTime());
+  d.setDate(d.getDate() - Math.max(1, Math.floor(days)));
+  const grenze = localDay(d);
+  const info = db
+    .prepare(
+      `DELETE FROM pickups
+        WHERE acked_at IS NOT NULL AND from_time IS NOT NULL AND substr(from_time, 1, 10) < ?`
+    )
+    .run(grenze);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes;
 }
 
 function countPickups(db) {
@@ -8279,6 +8377,8 @@ module.exports = {
   ackPickups,
   listPickups,
   countPickups,
+  pickupGramsBySpecies,
+  prunePickups,
   pickupCountsBySlot,
   updateDuckdnsStatus,
   getPrintBridgeCfg,
