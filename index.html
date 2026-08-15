@@ -209,7 +209,7 @@
         justify-content: center;
         padding: 12px;
       "
-      onclick="if(event.target===this)msQuickClose()"
+      onclick="if (event.target === this) msQuickClose();"
     >
       <div class="card" style="max-width: 380px; width: 100%; margin: 0">
         <div class="sec" id="ms-q-title">—</div>
@@ -242,7 +242,16 @@
                 type="button"
                 aria-label="weniger"
                 onclick="msqQtyStep(-1)"
-                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+                style="
+                  width: 44px;
+                  height: 44px;
+                  flex: none;
+                  border-radius: 10px;
+                  border: 1px solid var(--c-border);
+                  background: var(--c-surface);
+                  font-size: 22px;
+                  cursor: pointer;
+                "
               >
                 −
               </button>
@@ -259,7 +268,16 @@
                 type="button"
                 aria-label="mehr"
                 onclick="msqQtyStep(1)"
-                style="width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); font-size: 22px; cursor: pointer"
+                style="
+                  width: 44px;
+                  height: 44px;
+                  flex: none;
+                  border-radius: 10px;
+                  border: 1px solid var(--c-border);
+                  background: var(--c-surface);
+                  font-size: 22px;
+                  cursor: pointer;
+                "
               >
                 +
               </button>
@@ -790,7 +808,16 @@
             type="button"
             data-wl-group="location"
             aria-pressed="true"
-            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            style="
+              flex: 1;
+              padding: 9px 10px;
+              border: 1px solid var(--c-border);
+              border-radius: 9px;
+              background: transparent;
+              font-size: 13px;
+              font-weight: 600;
+              cursor: pointer;
+            "
             data-i18n="worklist.byLocation"
           >
             Nach Ort
@@ -799,7 +826,16 @@
             type="button"
             data-wl-group="batch"
             aria-pressed="false"
-            style="flex: 1; padding: 9px 10px; border: 1px solid var(--c-border); border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer"
+            style="
+              flex: 1;
+              padding: 9px 10px;
+              border: 1px solid var(--c-border);
+              border-radius: 9px;
+              background: transparent;
+              font-size: 13px;
+              font-weight: 600;
+              cursor: pointer;
+            "
             data-i18n="worklist.byBatch"
           >
             Nach Charge
@@ -1281,7 +1317,9 @@
             stroke-linejoin="round"
           >
             <path d="M22 12h-6l-2 3h-4l-2-3H2" />
-            <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg
+            <path
+              d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
+            /></svg
           ><span data-i18n="nav.ordersInbox">Bestellungen</span>
         </button>
         <button class="sb-btn" id="n-orders-demand">
@@ -1870,7 +1908,6 @@
                 </details>
               </div>
 
-
               <!-- Alerts (inventory + overdue batches + capacity) -->
               <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
                 <div style="margin-bottom: 6px">
@@ -1884,9 +1921,6 @@
                    the Batch tasks card: same data (getSplitBatches), but read as an
                    instruction alongside the dated work instead of a separate table. -->
             </div>
-
-
-
           </div>
           <!-- end dash-farm-section -->
 
@@ -2024,12 +2058,12 @@
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
-            <!-- Pipeline per stage — the header the batch list was missing -->
-            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
+          <!-- Pipeline per stage — the header the batch list was missing -->
+          <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
             <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
             <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
-              <div id="metrics" style="margin-bottom: 10px"></div>
-            </div>
+            <div id="metrics" style="margin-bottom: 10px"></div>
+          </div>
           <div class="stabs">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
@@ -2041,7 +2075,7 @@
           <div class="sp active" id="sp-batch-list">
             <!-- Where everything currently sits, by room -->
             <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-            <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
               <div class="dash-locations-header">
                 <input
                   type="text"
@@ -2323,7 +2357,15 @@
                   id="nb-bags"
                   style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 250px; overflow-y: auto"
                 ></div>
-                <div style="border-top: 1px solid var(--c-border); margin-top: 12px; padding-top: 12px; display: flex; gap: 8px">
+                <div
+                  style="
+                    border-top: 1px solid var(--c-border);
+                    margin-top: 12px;
+                    padding-top: 12px;
+                    display: flex;
+                    gap: 8px;
+                  "
+                >
                   <button id="prt-25" class="btn btn-p" style="flex: 1" data-i18n="batch.printLabels">
                     Print labels for this batch
                   </button>
@@ -2428,7 +2470,10 @@
                   />
                 </div>
                 <div style="border-top: 1px solid var(--c-border); padding-top: 10px; margin-top: 4px">
-                  <div style="font-size: 13px; font-weight: 600; color: var(--c-text-sec)" data-i18n="strains.recHeader">
+                  <div
+                    style="font-size: 13px; font-weight: 600; color: var(--c-text-sec)"
+                    data-i18n="strains.recHeader"
+                  >
                     Standard-Anbau (optional)
                   </div>
                   <div
@@ -2465,7 +2510,15 @@
                       </label>
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.rh">Hydration %</span>
-                        <input id="ms-rec-rh" type="number" min="0" max="100" step="1" value="0" oninput="msRecNeed()" />
+                        <input
+                          id="ms-rec-rh"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="0"
+                          oninput="msRecNeed()"
+                        />
                       </label>
                     </div>
                     <div
@@ -2474,17 +2527,44 @@
                     >
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.hw">Hartholz %</span>
-                        <input id="ms-rec-hw" type="number" min="0" max="100" step="1" value="75" oninput="msRecNeed()" />
+                        <input
+                          id="ms-rec-hw"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="75"
+                          oninput="msRecNeed()"
+                        />
                       </label>
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.wb">Weizenkleie %</span>
-                        <input id="ms-rec-wb" type="number" min="0" max="100" step="1" value="25" oninput="msRecNeed()" />
+                        <input
+                          id="ms-rec-wb"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="25"
+                          oninput="msRecNeed()"
+                        />
                       </label>
                     </div>
-                    <div id="ms-rec-coirgroup" style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px">
+                    <div
+                      id="ms-rec-coirgroup"
+                      style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px"
+                    >
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.coir">Kokos %</span>
-                        <input id="ms-rec-coir" type="number" min="0" max="100" step="1" value="100" oninput="msRecNeed()" />
+                        <input
+                          id="ms-rec-coir"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="100"
+                          oninput="msRecNeed()"
+                        />
                       </label>
                     </div>
                     <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 8px">
@@ -2500,7 +2580,15 @@
                       </label>
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
-                        <input id="ms-rec-grainrh" type="number" min="0" max="100" step="1" value="52" oninput="msRecNeed()" />
+                        <input
+                          id="ms-rec-grainrh"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="52"
+                          oninput="msRecNeed()"
+                        />
                       </label>
                     </div>
                   </div>
@@ -2589,16 +2677,31 @@
                 "
               >
                 <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                  <button class="oh-fchip active" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">Alle</button>
-                  <button class="oh-fchip" data-action="oh-filter" data-filter="new" data-i18n="orders.status.new">Neu</button>
-                  <button class="oh-fchip" data-action="oh-filter" data-filter="in_production" data-i18n="orders.status.in_production">
+                  <button class="oh-fchip active" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">
+                    Alle
+                  </button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="new" data-i18n="orders.status.new">
+                    Neu
+                  </button>
+                  <button
+                    class="oh-fchip"
+                    data-action="oh-filter"
+                    data-filter="in_production"
+                    data-i18n="orders.status.in_production"
+                  >
                     In Produktion
                   </button>
-                  <button class="oh-fchip" data-action="oh-filter" data-filter="ready" data-i18n="orders.status.ready">Versandbereit</button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="ready" data-i18n="orders.status.ready">
+                    Versandbereit
+                  </button>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                  <button class="btn btn-sm" data-action="oh-manual-toggle" data-i18n="orders.addManual">+ Manuell</button>
-                  <button class="btn btn-sm" data-action="oh-import-csv" data-i18n="orders.importCsv">CSV importieren</button>
+                  <button class="btn btn-sm" data-action="oh-manual-toggle" data-i18n="orders.addManual">
+                    + Manuell
+                  </button>
+                  <button class="btn btn-sm" data-action="oh-import-csv" data-i18n="orders.importCsv">
+                    CSV importieren
+                  </button>
                   <input type="file" id="orders-csv-file" accept=".csv,text/csv" style="display: none" />
                 </div>
               </div>
@@ -2618,7 +2721,9 @@
                   <input id="oh-m-sku" data-i18n-placeholder="orders.f.sku" placeholder="SKU" />
                   <input id="oh-m-title" data-i18n-placeholder="orders.f.item" placeholder="Artikel" />
                   <input id="oh-m-qty" type="number" min="1" value="1" />
-                  <button class="btn btn-p btn-sm" data-action="oh-manual-submit" data-i18n="orders.add">Hinzufügen</button>
+                  <button class="btn btn-p btn-sm" data-action="oh-manual-submit" data-i18n="orders.add">
+                    Hinzufügen
+                  </button>
                 </div>
               </div>
 
@@ -2673,10 +2778,19 @@
             </div>
             <div class="card">
               <div
-                style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px"
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 8px;
+                  flex-wrap: wrap;
+                  margin-bottom: 8px;
+                "
               >
                 <div class="sec" style="margin: 0" data-i18n="orders.catalog">Produktkatalog</div>
-                <button class="btn btn-sm btn-p" data-action="oh-prod-new" data-i18n="orders.newProduct">+ Neues Produkt</button>
+                <button class="btn btn-sm btn-p" data-action="oh-prod-new" data-i18n="orders.newProduct">
+                  + Neues Produkt
+                </button>
               </div>
 
               <div id="orders-prod-form" class="oh-manual" style="display: none">
@@ -2738,7 +2852,10 @@
                       <input id="oh-p-rh" type="number" min="0" max="100" step="1" value="0" />
                     </label>
                   </div>
-                  <div id="oh-p-holzgroup" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px">
+                  <div
+                    id="oh-p-holzgroup"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px"
+                  >
                     <label style="font-size: 12px; color: var(--c-text-muted)">
                       <span data-i18n="orders.p.hw">Hartholz %</span>
                       <input id="oh-p-hw" type="number" min="0" max="100" step="1" value="0" />
@@ -2898,7 +3015,7 @@
               justify-content: center;
               padding: 12px;
             "
-            onclick="if(event.target===this)shipModalClose()"
+            onclick="if (event.target === this) shipModalClose();"
           >
             <div class="card" style="max-width: 480px; width: 100%; margin: 0; max-height: 92vh; overflow: auto">
               <div class="sec" data-i18n="versand.modalTitle">Label kaufen</div>
@@ -2934,7 +3051,12 @@
               <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
                 <label style="font-size: 12px; color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.country">Land</span
-                  ><input id="ship-m-country" value="DE" maxlength="2" style="text-transform: uppercase" onchange="shipLoadMethods()"
+                  ><input
+                    id="ship-m-country"
+                    value="DE"
+                    maxlength="2"
+                    style="text-transform: uppercase"
+                    onchange="shipLoadMethods()"
                 /></label>
                 <label style="font-size: 12px; color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.phone">Telefon</span><input id="ship-m-phone"
@@ -2962,25 +3084,25 @@
         </div>
 
         <div class="page" id="p-lab">
-            <!-- Lab stock — the state of the section, above its tabs -->
-            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
+          <!-- Lab stock — the state of the section, above its tabs -->
+          <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
             <!-- ── LAB section ── collapsible -->
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
-                  <line x1="9" y1="3" x2="15" y2="3" />
-                </svg>
-                <span>Lab</span>
-              <div id="dash-lab-stock"></div>
-            </div>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9 3h6v7l4 9H5l4-9V3z" />
+              <line x1="9" y1="3" x2="15" y2="3" />
+            </svg>
+            <span>Lab</span>
+            <div id="dash-lab-stock"></div>
+          </div>
           <div class="stabs">
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
@@ -2990,44 +3112,44 @@
             <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
             <button class="stab" id="st-lab-contam" data-i18n="lab.contam">Kontaminationen</button>
           </div>
-            <!-- Körnerbrut — grain spawn batches. Same columns as the batch
+          <!-- Körnerbrut — grain spawn batches. Same columns as the batch
                  table so both lists share batchRowHtml. -->
-            <div class="sp" id="sp-lab-grain">
-              <div class="card">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-                  <div class="sec" style="margin: 0" data-i18n="lab.grain">Körnerbrut</div>
-                  <span style="flex: 1"></span>
-                  <input
-                    type="text"
-                    id="grain-q"
-                    class="dash-search-inline"
-                    data-i18n-placeholder="dash.search"
-                    placeholder="Suchen..."
-                  />
-                </div>
-                <div style="overflow-x: auto">
-                  <table id="t-grain">
-                    <thead>
-                      <tr>
-                        <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
-                        <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
-                        <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
-                        <th class="sortable" data-sort="qty" data-i18n="th.qty">Qty</th>
-                        <th data-i18n="th.inc">Inc</th>
-                        <th data-i18n="th.substrate">Substrate</th>
-                        <th data-i18n="th.source">Source</th>
-                        <th class="sortable" data-sort="created" data-i18n="th.created">Created</th>
-                        <th class="sortable" data-sort="due" data-i18n="th.due">Due</th>
-                        <th class="sortable" data-sort="status" data-i18n="th.status">Status</th>
-                        <th data-i18n="th.notes">Notes</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="grain-body"></tbody>
-                  </table>
-                </div>
+          <div class="sp" id="sp-lab-grain">
+            <div class="card">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="lab.grain">Körnerbrut</div>
+                <span style="flex: 1"></span>
+                <input
+                  type="text"
+                  id="grain-q"
+                  class="dash-search-inline"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Suchen..."
+                />
+              </div>
+              <div style="overflow-x: auto">
+                <table id="t-grain">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
+                      <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
+                      <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
+                      <th class="sortable" data-sort="qty" data-i18n="th.qty">Qty</th>
+                      <th data-i18n="th.inc">Inc</th>
+                      <th data-i18n="th.substrate">Substrate</th>
+                      <th data-i18n="th.source">Source</th>
+                      <th class="sortable" data-sort="created" data-i18n="th.created">Created</th>
+                      <th class="sortable" data-sort="due" data-i18n="th.due">Due</th>
+                      <th class="sortable" data-sort="status" data-i18n="th.status">Status</th>
+                      <th data-i18n="th.notes">Notes</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="grain-body"></tbody>
+                </table>
               </div>
             </div>
+          </div>
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
             <div class="card">
@@ -3672,15 +3794,32 @@
                 </label>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="versand.publicKey"
                     >Public Key</label
                   >
-                  <input type="text" id="versand-public" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%" />
+                  <input
+                    type="text"
+                    id="versand-public"
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    style="width: 100%"
+                  />
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="versand.secretKey"
                     >Secret Key</label
                   >
@@ -3695,7 +3834,13 @@
                 <div style="display: flex; gap: 12px; flex-wrap: wrap">
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="versand.mode"
                       >Modus</label
                     >
@@ -3706,7 +3851,13 @@
                   </div>
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="versand.defWeight"
                       >Standardgewicht (g)</label
                     >
@@ -3749,7 +3900,13 @@
                 </label>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.apiKey"
                     >API-Key</label
                   >
@@ -3763,7 +3920,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.siteId"
                     >Site-ID</label
                   >
@@ -3771,7 +3934,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.accountId"
                     >Account-ID (falls erforderlich)</label
                   >
@@ -3780,7 +3949,9 @@
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
                   <button id="wix-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
                   <button id="wix-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
-                  <button id="wix-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                  <button id="wix-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">
+                    Jetzt synchronisieren
+                  </button>
                 </div>
                 <div
                   id="wix-status"
@@ -3812,7 +3983,13 @@
                 </label>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.appId"
                     >App-ID (Client-ID)</label
                   >
@@ -3820,7 +3997,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.certId"
                     >Cert-ID (Client-Secret)</label
                   >
@@ -3834,7 +4017,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.ruName"
                     >RuName (Redirect-URL-Name)</label
                   >
@@ -3842,7 +4031,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.ebayVerifyToken"
                     >Verification-Token (Kontolöschung)</label
                   >
@@ -3878,7 +4073,9 @@
                   <button id="ebay-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
                   <button id="ebay-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
                   <button id="ebay-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
-                  <button id="ebay-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                  <button id="ebay-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">
+                    Jetzt synchronisieren
+                  </button>
                 </div>
                 <div
                   id="ebay-status"
@@ -3899,8 +4096,8 @@
                 style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="channels.etsyDesc"
               >
-                Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden". Der
-                Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.
+                Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden".
+                Der Login schließt nur auf der öffentlichen Instanz (meistertracker.com) ab.
               </p>
               <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
@@ -3909,7 +4106,13 @@
                 </label>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="channels.keystring"
                     >Keystring (API-Key)</label
                   >
@@ -3919,7 +4122,9 @@
                   <button id="etsy-save-btn" class="btn btn-sm" data-i18n="common.save">Speichern</button>
                   <button id="etsy-connect-btn" class="btn btn-sm btn-p" data-i18n="channels.connect">Verbinden</button>
                   <button id="etsy-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
-                  <button id="etsy-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">Jetzt synchronisieren</button>
+                  <button id="etsy-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">
+                    Jetzt synchronisieren
+                  </button>
                 </div>
                 <div
                   id="etsy-status"
@@ -4078,9 +4283,7 @@
               </label>
               <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
                 <input type="checkbox" id="reset-orders" style="width: 22px; height: 22px; flex: none" />
-                <span style="font-size: 13px" data-i18n="reset.scopeOrders"
-                  >Orders, customers and shipments</span
-                >
+                <span style="font-size: 13px" data-i18n="reset.scopeOrders">Orders, customers and shipments</span>
               </label>
               <label style="display: flex; gap: 9px; align-items: flex-start; margin-bottom: 8px; cursor: pointer">
                 <input type="checkbox" id="reset-planning" style="width: 22px; height: 22px; flex: none" />
@@ -4444,7 +4647,13 @@
                 </label>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="harvestFeed.url"
                     >Receiver URL</label
                   >
@@ -4463,7 +4672,13 @@
                 </div>
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="harvestFeed.secret"
                     >Shared secret</label
                   >
@@ -4484,7 +4699,13 @@
                 <div style="display: flex; gap: 14px; flex-wrap: wrap">
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="harvestFeed.interval"
                       >Every … minutes</label
                     >
@@ -4492,7 +4713,13 @@
                   </div>
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="harvestFeed.freshDays"
                       >Counts as fresh for … days</label
                     >
@@ -4500,7 +4727,13 @@
                   </div>
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="harvestFeed.plannedDays"
                       >Look ahead … days</label
                     >
@@ -4508,7 +4741,13 @@
                   </div>
                   <div>
                     <label
-                      style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                      style="
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: var(--c-text-sec);
+                        display: block;
+                        margin-bottom: 4px;
+                      "
                       data-i18n="harvestFeed.leadDays"
                       >Lead time … days</label
                     >
@@ -4535,7 +4774,13 @@
                 -->
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="harvestFeed.packSizes"
                     >Amounts handed out</label
                   >
@@ -4568,13 +4813,38 @@
                     a shop built on this feed takes no orders at all.
                   </div>
                 </div>
+                <!-- Nicht der Abholort. Der Name hat schon jemanden dazu
+                     gebracht, hier den Marktstand einzutragen — deshalb steht es
+                     jetzt darunter, samt Weg zur richtigen Stelle. -->
                 <div>
                   <label
-                    style="font-size: 12px; font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
                     data-i18n="harvestFeed.site"
-                    >Site label (optional)</label
+                    >Name of this farm in the feed (optional)</label
                   >
-                  <input type="text" id="harvestfeed-site" style="max-width: 240px; width: 100%" />
+                  <input
+                    type="text"
+                    id="harvestfeed-site"
+                    maxlength="64"
+                    style="max-width: 240px; width: 100%"
+                    data-i18n-placeholder="harvestFeed.sitePh"
+                    placeholder="e.g. north-farm"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.siteHint"
+                  >
+                    Only needed when several farms send to the same receiver: it rides along in every message and says
+                    who sent it. This is not a pickup address — where goods are handed over lives under Settings →
+                    Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so
+                    changing it changes a key at the other end.
+                  </div>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
                   <button id="harvestfeed-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
@@ -4862,11 +5132,7 @@
                       style="display: none"
                       data-i18n="mcp.copy"
                     ></button>
-                    <button
-                      id="mcp-revoke-token-btn"
-                      class="btn btn-sm btn-d"
-                      data-i18n="mcp.revokeKey"
-                    ></button>
+                    <button id="mcp-revoke-token-btn" class="btn btn-sm btn-d" data-i18n="mcp.revokeKey"></button>
                   </div>
                   <div
                     style="font-size: 11px; color: var(--c-text-muted); margin-top: 4px"
@@ -4931,20 +5197,13 @@
           </div>
           <!-- Camera (admin-only WIP) -->
           <div class="sp" id="sp-settings-camera">
-            <div
-              class="card"
-              style="background: var(--c-yellow-bg, #fef3c7); border-left: 4px solid #f59e0b"
-            >
+            <div class="card" style="background: var(--c-yellow-bg, #fef3c7); border-left: 4px solid #f59e0b">
               <div class="sec" style="color: #92400e" data-i18n="cam.wipTitle">Work in progress</div>
-              <div
-                style="font-size: 12px; color: #78350f; line-height: 1.6"
-                data-i18n="cam.wipDesc"
-              >
-                The camera service runs as an external Python process
-                (<code>python -m mushroom_camera</code>). This admin tab manages the
-                cameras list, calibration values, and open flags. Calibration changes are
-                stored in the DB; the Python module currently reads env vars and will pick
-                up DB-backed values in a future update.
+              <div style="font-size: 12px; color: #78350f; line-height: 1.6" data-i18n="cam.wipDesc">
+                The camera service runs as an external Python process (<code>python -m mushroom_camera</code>). This
+                admin tab manages the cameras list, calibration values, and open flags. Calibration changes are stored
+                in the DB; the Python module currently reads env vars and will pick up DB-backed values in a future
+                update.
               </div>
             </div>
 
@@ -4969,8 +5228,8 @@
                 style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="cam.calibrationDesc"
               >
-                Tunes the detection thresholds and spatial scale of the camera pipeline.
-                Defaults match the Python module's environment variables.
+                Tunes the detection thresholds and spatial scale of the camera pipeline. Defaults match the Python
+                module's environment variables.
               </p>
               <div id="cam-calib-form" class="g2" style="gap: 10px"></div>
               <div style="display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap">
@@ -4991,34 +5250,27 @@
                 style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="cam.pxCalibDesc"
               >
-                Upload a frame with a ruler in view. Click the two endpoints of a known
-                distance, enter the real-world length in mm, and the pixels-per-mm value
-                will be computed and saved.
+                Upload a frame with a ruler in view. Click the two endpoints of a known distance, enter the real-world
+                length in mm, and the pixels-per-mm value will be computed and saved.
               </p>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <input id="cam-calib-image" type="file" accept="image/*" style="font-size: 12px" />
                 <div style="position: relative; max-width: 100%; overflow: auto">
                   <canvas
                     id="cam-calib-canvas"
-                    style="max-width: 100%; cursor: crosshair; border: 1px solid var(--c-border); border-radius: 6px; display: none"
+                    style="
+                      max-width: 100%;
+                      cursor: crosshair;
+                      border: 1px solid var(--c-border);
+                      border-radius: 6px;
+                      display: none;
+                    "
                   ></canvas>
                 </div>
-                <div
-                  id="cam-calib-px"
-                  style="font-size: 12px; color: var(--c-text-muted); display: none"
-                ></div>
+                <div id="cam-calib-px" style="font-size: 12px; color: var(--c-text-muted); display: none"></div>
                 <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
-                  <label style="font-size: 12px; margin: 0" data-i18n="cam.realDistanceMm"
-                    >Real distance (mm)</label
-                  >
-                  <input
-                    id="cam-calib-mm"
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    style="width: 100px"
-                    value="100"
-                  />
+                  <label style="font-size: 12px; margin: 0" data-i18n="cam.realDistanceMm">Real distance (mm)</label>
+                  <input id="cam-calib-mm" type="number" step="0.1" min="0.1" style="width: 100px" value="100" />
                   <button id="cam-calib-apply" class="btn btn-sm btn-p" disabled data-i18n="cam.applyPxPerMm">
                     Apply px/mm
                   </button>
@@ -5028,10 +5280,7 @@
 
             <div class="card">
               <div class="sec" data-i18n="cam.flagsTitle">Open flags</div>
-              <div
-                id="cam-flags"
-                style="font-size: 12px; color: var(--c-text-sec); line-height: 1.6"
-              ></div>
+              <div id="cam-flags" style="font-size: 12px; color: var(--c-text-sec); line-height: 1.6"></div>
             </div>
 
             <div class="card">
@@ -5066,10 +5315,7 @@
                   <input id="cam-edit-enabled" type="checkbox" style="width: auto" checked />
                   <span data-i18n="cam.fieldEnabled">Enabled</span>
                 </label>
-                <div
-                  id="cam-edit-status"
-                  style="font-size: 12px; color: var(--c-red, #b91c1c); min-height: 16px"
-                ></div>
+                <div id="cam-edit-status" style="font-size: 12px; color: var(--c-red, #b91c1c); min-height: 16px"></div>
               </div>
               <div class="modal-btns">
                 <button id="cam-edit-cancel" class="btn" data-i18n="common.cancel">Cancel</button>
@@ -5718,8 +5964,9 @@
         }
 
         function esc(s) {
-          return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
-            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+          return String(s == null ? '' : s).replace(
+            /[&<>"']/g,
+            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
           );
         }
 
@@ -5727,8 +5974,10 @@
           const border = good ? 'rgba(139,195,74,0.5)' : 'rgba(255,255,255,0.1)';
           const color = good ? '#8bc34a' : '#e0e0e0';
           return (
-            "background:rgba(255,255,255,0.05);border:1px solid " + border +
-            ";border-radius:6px;color:" + color +
+            'background:rgba(255,255,255,0.05);border:1px solid ' +
+            border +
+            ';border-radius:6px;color:' +
+            color +
             ";font-size:13px;font-family:'Space Mono',monospace;padding:4px 8px;width:100%;outline:none;box-sizing:border-box"
           );
         }
@@ -5736,9 +5985,15 @@
         function statCard(label, value, sub, accent) {
           return (
             '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:4px">' +
-              '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">' + esc(label) + '</div>' +
-              '<div style="font-size:28px;font-weight:800;color:' + (accent || '#e0e0e0') + ";font-family:'Space Mono',monospace;line-height:1\">" + esc(value) + '</div>' +
-              (sub ? '<div style="font-size:11px;color:#666">' + esc(sub) + '</div>' : '') +
+            '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">' +
+            esc(label) +
+            '</div>' +
+            '<div style="font-size:28px;font-weight:800;color:' +
+            (accent || '#e0e0e0') +
+            ";font-family:'Space Mono',monospace;line-height:1\">" +
+            esc(value) +
+            '</div>' +
+            (sub ? '<div style="font-size:11px;color:#666">' + esc(sub) + '</div>' : '') +
             '</div>'
           );
         }
@@ -5747,7 +6002,11 @@
           const pct = Math.min((value / Math.max(max, 1)) * 100, 100);
           return (
             '<div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">' +
-              '<div style="height:100%;width:' + pct + '%;background:' + (color || '#8bc34a') + ';border-radius:3px;transition:width 0.4s ease"></div>' +
+            '<div style="height:100%;width:' +
+            pct +
+            '%;background:' +
+            (color || '#8bc34a') +
+            ';border-radius:3px;transition:width 0.4s ease"></div>' +
             '</div>'
           );
         }
@@ -5763,36 +6022,51 @@
           ];
           return (
             '<div style="background:linear-gradient(135deg,#1a2410 0%,#0f1a0a 100%);border-bottom:1px solid rgba(139,195,74,0.15);padding:20px 24px 0">' +
-              '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">' +
-                '<div>' +
-                  "<div style=\"font-size:11px;color:#8bc34a;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;font-family:'Space Mono',monospace\">Meisterpilze</div>" +
-                  '<h1 style="margin:0;font-size:22px;font-weight:800;color:#f5f5f5;line-height:1.1">90-Day Growth Dashboard</h1>' +
-                '</div>' +
-                '<div style="text-align:right">' +
-                  "<div style=\"font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:" + (daysLeft < 14 ? '#ff9800' : '#8bc34a') + ';line-height:1">' + daysLeft + '</div>' +
-                  '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">days left</div>' +
-                '</div>' +
-              '</div>' +
-              '<div style="padding-bottom:16px">' +
-                progressBar(totalDays, 90) +
-                '<div style="display:flex;justify-content:space-between;margin-top:4px">' +
-                  '<span style="font-size:10px;color:#555">Day ' + totalDays + '</span>' +
-                  '<span style="font-size:10px;color:#555">Day 90</span>' +
-                '</div>' +
-              '</div>' +
-              '<div style="display:flex;gap:0">' +
-                tabs.map(function (entry) {
-                  const key = entry[0];
-                  const label = entry[1];
-                  const active = tab === key;
-                  return (
-                    '<button type="button" data-act="tab" data-tab="' + key + '" style="background:none;border:none;border-bottom:2px solid ' +
-                    (active ? '#8bc34a' : 'transparent') + ';color:' + (active ? '#8bc34a' : '#666') +
-                    ';padding:8px 16px;font-size:13px;font-weight:' + (active ? 700 : 400) +
-                    ";cursor:pointer;font-family:inherit;transition:color 0.2s\">" + esc(label) + '</button>'
-                  );
-                }).join('') +
-              '</div>' +
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">' +
+            '<div>' +
+            '<div style="font-size:11px;color:#8bc34a;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;font-family:\'Space Mono\',monospace">Meisterpilze</div>' +
+            '<h1 style="margin:0;font-size:22px;font-weight:800;color:#f5f5f5;line-height:1.1">90-Day Growth Dashboard</h1>' +
+            '</div>' +
+            '<div style="text-align:right">' +
+            "<div style=\"font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:" +
+            (daysLeft < 14 ? '#ff9800' : '#8bc34a') +
+            ';line-height:1">' +
+            daysLeft +
+            '</div>' +
+            '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">days left</div>' +
+            '</div>' +
+            '</div>' +
+            '<div style="padding-bottom:16px">' +
+            progressBar(totalDays, 90) +
+            '<div style="display:flex;justify-content:space-between;margin-top:4px">' +
+            '<span style="font-size:10px;color:#555">Day ' +
+            totalDays +
+            '</span>' +
+            '<span style="font-size:10px;color:#555">Day 90</span>' +
+            '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:0">' +
+            tabs
+              .map(function (entry) {
+                const key = entry[0];
+                const label = entry[1];
+                const active = tab === key;
+                return (
+                  '<button type="button" data-act="tab" data-tab="' +
+                  key +
+                  '" style="background:none;border:none;border-bottom:2px solid ' +
+                  (active ? '#8bc34a' : 'transparent') +
+                  ';color:' +
+                  (active ? '#8bc34a' : '#666') +
+                  ';padding:8px 16px;font-size:13px;font-weight:' +
+                  (active ? 700 : 400) +
+                  ';cursor:pointer;font-family:inherit;transition:color 0.2s">' +
+                  esc(label) +
+                  '</button>'
+                );
+              })
+              .join('') +
+            '</div>' +
             '</div>'
           );
         }
@@ -5802,7 +6076,10 @@
           const totalOrders = state.weeks.reduce((s, w) => s + (w.orders || 0), 0);
           const signed = state.restaurants.filter((r) => r.stage === 'Signed').length;
           const latestEmail = state.weeks.length
-            ? Math.max.apply(null, state.weeks.map((w) => w.emailSize || 0))
+            ? Math.max.apply(
+                null,
+                state.weeks.map((w) => w.emailSize || 0)
+              )
             : state.emailListSize;
           const wk = weekNumber();
           const target = wk * WEEK_TARGETS.posts;
@@ -5813,145 +6090,258 @@
             else break;
           }
           const priorities = [
-            { label: "Own Lion's Mane online", value: totalPosts, max: target, color: '#8bc34a', detail: totalPosts + ' posts published' },
-            { label: 'Build email list to 200', value: latestEmail, max: 200, color: '#64b5f6', detail: latestEmail + ' / 200 subscribers' },
-            { label: 'Land 1 trophy restaurant', value: signed, max: 1, color: '#ff9800', detail: signed + ' signed · ' + state.restaurants.length + ' in pipeline' }
+            {
+              label: "Own Lion's Mane online",
+              value: totalPosts,
+              max: target,
+              color: '#8bc34a',
+              detail: totalPosts + ' posts published'
+            },
+            {
+              label: 'Build email list to 200',
+              value: latestEmail,
+              max: 200,
+              color: '#64b5f6',
+              detail: latestEmail + ' / 200 subscribers'
+            },
+            {
+              label: 'Land 1 trophy restaurant',
+              value: signed,
+              max: 1,
+              color: '#ff9800',
+              detail: signed + ' signed · ' + state.restaurants.length + ' in pipeline'
+            }
           ];
           return (
             '<div style="display:flex;flex-direction:column;gap:16px">' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-                statCard('Total Posts', totalPosts, 'Target: ' + target, totalPosts >= target ? '#8bc34a' : '#ff9800') +
-                statCard('Email List', latestEmail, 'Target: 200 by Day 90', '#64b5f6') +
-                statCard('Direct Orders', totalOrders, 'This sprint', '#ce93d8') +
-                statCard('Restaurants Signed', signed, 'Target: 1 by Day 60', signed >= 1 ? '#8bc34a' : '#ff9800') +
-              '</div>' +
-              '<div style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">' +
-                '<div>' +
-                  '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px">Post Streak</div>' +
-                  '<div style="font-size:13px;color:#aaa;margin-top:2px">Weeks hitting 3+ posts in a row</div>' +
-                '</div>' +
-                "<div style=\"font-family:'Space Mono',monospace;font-size:36px;font-weight:700;color:" + (streak > 0 ? '#8bc34a' : '#555') + '">' + streak + '🔥</div>' +
-              '</div>' +
-              '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px">' +
-                '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">90-Day Priorities</div>' +
-                priorities.map(function (p) {
-                  return (
-                    '<div style="margin-bottom:12px">' +
-                      '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
-                        '<span style="font-size:13px;font-weight:600">' + esc(p.label) + '</span>' +
-                        '<span style="font-size:12px;color:#666">' + esc(p.detail) + '</span>' +
-                      '</div>' +
-                      progressBar(p.value, p.max, p.color) +
-                    '</div>'
-                  );
-                }).join('') +
-              '</div>' +
-              '<div style="background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.2);border-radius:12px;padding:14px 16px">' +
-                '<div style="font-size:11px;color:#ff9800;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Monday Check-in — Week ' + wk + '</div>' +
-                '<div style="font-size:13px;color:#aaa;line-height:1.6">3 questions only: Did I post 3x? Did the email list grow? Did I contact a restaurant?<br>Log it in <strong style="color:#e0e0e0">Weekly Log</strong> → takes 2 minutes.</div>' +
-              '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+            statCard('Total Posts', totalPosts, 'Target: ' + target, totalPosts >= target ? '#8bc34a' : '#ff9800') +
+            statCard('Email List', latestEmail, 'Target: 200 by Day 90', '#64b5f6') +
+            statCard('Direct Orders', totalOrders, 'This sprint', '#ce93d8') +
+            statCard('Restaurants Signed', signed, 'Target: 1 by Day 60', signed >= 1 ? '#8bc34a' : '#ff9800') +
+            '</div>' +
+            '<div style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">' +
+            '<div>' +
+            '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px">Post Streak</div>' +
+            '<div style="font-size:13px;color:#aaa;margin-top:2px">Weeks hitting 3+ posts in a row</div>' +
+            '</div>' +
+            "<div style=\"font-family:'Space Mono',monospace;font-size:36px;font-weight:700;color:" +
+            (streak > 0 ? '#8bc34a' : '#555') +
+            '">' +
+            streak +
+            '🔥</div>' +
+            '</div>' +
+            '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px">' +
+            '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">90-Day Priorities</div>' +
+            priorities
+              .map(function (p) {
+                return (
+                  '<div style="margin-bottom:12px">' +
+                  '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
+                  '<span style="font-size:13px;font-weight:600">' +
+                  esc(p.label) +
+                  '</span>' +
+                  '<span style="font-size:12px;color:#666">' +
+                  esc(p.detail) +
+                  '</span>' +
+                  '</div>' +
+                  progressBar(p.value, p.max, p.color) +
+                  '</div>'
+                );
+              })
+              .join('') +
+            '</div>' +
+            '<div style="background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.2);border-radius:12px;padding:14px 16px">' +
+            '<div style="font-size:11px;color:#ff9800;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Monday Check-in — Week ' +
+            wk +
+            '</div>' +
+            '<div style="font-size:13px;color:#aaa;line-height:1.6">3 questions only: Did I post 3x? Did the email list grow? Did I contact a restaurant?<br>Log it in <strong style="color:#e0e0e0">Weekly Log</strong> → takes 2 minutes.</div>' +
+            '</div>' +
             '</div>'
           );
         }
 
         function renderWeekly() {
           const headers = ['Week', 'Posts (≥3)', 'Orders (≥5)', 'Email Size', 'Restaurant'];
-          const rows = state.weeks.slice().sort((a, b) => b.number - a.number).map(function (w) {
-            return (
-              '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:10px 12px;background:' +
-              (w.current ? 'rgba(139,195,74,0.08)' : 'rgba(255,255,255,0.02)') + ';border-radius:8px;border:1px solid ' +
-              (w.current ? 'rgba(139,195,74,0.3)' : 'rgba(255,255,255,0.05)') + ';margin-bottom:6px">' +
-                "<div style=\"font-family:'Space Mono',monospace;font-size:11px;color:#8bc34a;font-weight:700\">W" + w.number + '</div>' +
-                '<div style="display:flex;flex-direction:column;gap:2px">' +
-                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Posts</div>' +
-                  '<input type="number" min="0" max="20" value="' + (w.posts ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="posts" style="' + inputStyle((w.posts || 0) >= WEEK_TARGETS.posts) + '">' +
+          const rows = state.weeks
+            .slice()
+            .sort((a, b) => b.number - a.number)
+            .map(function (w) {
+              return (
+                '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:10px 12px;background:' +
+                (w.current ? 'rgba(139,195,74,0.08)' : 'rgba(255,255,255,0.02)') +
+                ';border-radius:8px;border:1px solid ' +
+                (w.current ? 'rgba(139,195,74,0.3)' : 'rgba(255,255,255,0.05)') +
+                ';margin-bottom:6px">' +
+                '<div style="font-family:\'Space Mono\',monospace;font-size:11px;color:#8bc34a;font-weight:700">W' +
+                w.number +
                 '</div>' +
                 '<div style="display:flex;flex-direction:column;gap:2px">' +
-                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Orders</div>' +
-                  '<input type="number" min="0" value="' + (w.orders ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="orders" style="' + inputStyle((w.orders || 0) >= WEEK_TARGETS.directOrders) + '">' +
+                '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Posts</div>' +
+                '<input type="number" min="0" max="20" value="' +
+                (w.posts ?? '') +
+                '" data-act="week" data-wk="' +
+                w.number +
+                '" data-field="posts" style="' +
+                inputStyle((w.posts || 0) >= WEEK_TARGETS.posts) +
+                '">' +
                 '</div>' +
                 '<div style="display:flex;flex-direction:column;gap:2px">' +
-                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Email List</div>' +
-                  '<input type="number" min="0" value="' + (w.emailSize ?? '') + '" data-act="week" data-wk="' + w.number + '" data-field="emailSize" style="' + inputStyle(false) + '">' +
+                '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Orders</div>' +
+                '<input type="number" min="0" value="' +
+                (w.orders ?? '') +
+                '" data-act="week" data-wk="' +
+                w.number +
+                '" data-field="orders" style="' +
+                inputStyle((w.orders || 0) >= WEEK_TARGETS.directOrders) +
+                '">' +
                 '</div>' +
                 '<div style="display:flex;flex-direction:column;gap:2px">' +
-                  '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Rest. Contact</div>' +
-                  '<select data-act="week" data-wk="' + w.number + '" data-field="restaurantContact" style="' + inputStyle(w.restaurantContact === 'yes') + ';cursor:pointer">' +
-                    '<option value="no"' + (w.restaurantContact === 'no' ? ' selected' : '') + '>—</option>' +
-                    '<option value="yes"' + (w.restaurantContact === 'yes' ? ' selected' : '') + '>✓ Done</option>' +
-                  '</select>' +
+                '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Email List</div>' +
+                '<input type="number" min="0" value="' +
+                (w.emailSize ?? '') +
+                '" data-act="week" data-wk="' +
+                w.number +
+                '" data-field="emailSize" style="' +
+                inputStyle(false) +
+                '">' +
                 '</div>' +
-              '</div>'
-            );
-          }).join('');
+                '<div style="display:flex;flex-direction:column;gap:2px">' +
+                '<div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Rest. Contact</div>' +
+                '<select data-act="week" data-wk="' +
+                w.number +
+                '" data-field="restaurantContact" style="' +
+                inputStyle(w.restaurantContact === 'yes') +
+                ';cursor:pointer">' +
+                '<option value="no"' +
+                (w.restaurantContact === 'no' ? ' selected' : '') +
+                '>—</option>' +
+                '<option value="yes"' +
+                (w.restaurantContact === 'yes' ? ' selected' : '') +
+                '>✓ Done</option>' +
+                '</select>' +
+                '</div>' +
+                '</div>'
+              );
+            })
+            .join('');
           return (
             '<div>' +
-              '<div style="margin-bottom:16px">' +
-                '<div style="font-size:13px;color:#888;margin-bottom:12px">Log each Monday. Posts = Instagram/content published. Orders = direct website orders. Email List = current total. Restaurant Contact = did you reach out to at least one restaurant this week?</div>' +
-                '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;padding:4px 12px;margin-bottom:4px">' +
-                  headers.map(function (h) {
-                    return '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px">' + esc(h) + '</div>';
-                  }).join('') +
-                '</div>' +
-                rows +
-              '</div>' +
-              '<div style="margin-top:16px;padding:14px;background:rgba(255,255,255,0.02);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">' +
-                '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Starting Email List Size</div>' +
-                '<input type="number" value="' + state.emailListSize + '" data-act="emailListSize" style="' + inputStyle(false) + ';width:120px">' +
-              '</div>' +
+            '<div style="margin-bottom:16px">' +
+            '<div style="font-size:13px;color:#888;margin-bottom:12px">Log each Monday. Posts = Instagram/content published. Orders = direct website orders. Email List = current total. Restaurant Contact = did you reach out to at least one restaurant this week?</div>' +
+            '<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:8px;padding:4px 12px;margin-bottom:4px">' +
+            headers
+              .map(function (h) {
+                return (
+                  '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px">' +
+                  esc(h) +
+                  '</div>'
+                );
+              })
+              .join('') +
+            '</div>' +
+            rows +
+            '</div>' +
+            '<div style="margin-top:16px;padding:14px;background:rgba(255,255,255,0.02);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">' +
+            '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Starting Email List Size</div>' +
+            '<input type="number" value="' +
+            state.emailListSize +
+            '" data-act="emailListSize" style="' +
+            inputStyle(false) +
+            ';width:120px">' +
+            '</div>' +
             '</div>'
           );
         }
 
         function renderRestaurants() {
           const addPanel = showAdd
-            ? (
-                '<div data-rest-form style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:16px;margin-bottom:16px">' +
-                  '<div style="display:flex;flex-direction:column;gap:10px">' +
-                    '<input placeholder="Restaurant name" data-rest-input="name" style="' + inputStyle(false) + ';font-size:14px;padding:8px 12px">' +
-                    '<select data-rest-input="stage" style="' + inputStyle(false) + ';font-size:14px;padding:8px 12px;cursor:pointer">' +
-                      STAGES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
-                    '</select>' +
-                    '<input placeholder="Notes (optional)" data-rest-input="notes" style="' + inputStyle(false) + ';font-size:13px;padding:8px 12px">' +
-                    '<button type="button" data-act="rest-add" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:10px;cursor:pointer">Add Restaurant</button>' +
-                  '</div>' +
-                '</div>'
-              )
+            ? '<div data-rest-form style="background:rgba(139,195,74,0.06);border:1px solid rgba(139,195,74,0.2);border-radius:12px;padding:16px;margin-bottom:16px">' +
+              '<div style="display:flex;flex-direction:column;gap:10px">' +
+              '<input placeholder="Restaurant name" data-rest-input="name" style="' +
+              inputStyle(false) +
+              ';font-size:14px;padding:8px 12px">' +
+              '<select data-rest-input="stage" style="' +
+              inputStyle(false) +
+              ';font-size:14px;padding:8px 12px;cursor:pointer">' +
+              STAGES.map(function (s) {
+                return '<option value="' + s + '">' + s + '</option>';
+              }).join('') +
+              '</select>' +
+              '<input placeholder="Notes (optional)" data-rest-input="notes" style="' +
+              inputStyle(false) +
+              ';font-size:13px;padding:8px 12px">' +
+              '<button type="button" data-act="rest-add" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:10px;cursor:pointer">Add Restaurant</button>' +
+              '</div>' +
+              '</div>'
             : '';
           const summary = STAGES.map(function (s) {
             const count = state.restaurants.filter((r) => r.stage === s).length;
             return (
-              '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;text-align:center;border:1px solid ' + STAGE_COLOR[s] + '30">' +
-                "<div style=\"font-size:20px;font-weight:800;color:" + STAGE_COLOR[s] + ";font-family:'Space Mono',monospace\">" + count + '</div>' +
-                '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px">' + s + '</div>' +
+              '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;text-align:center;border:1px solid ' +
+              STAGE_COLOR[s] +
+              '30">' +
+              '<div style="font-size:20px;font-weight:800;color:' +
+              STAGE_COLOR[s] +
+              ";font-family:'Space Mono',monospace\">" +
+              count +
+              '</div>' +
+              '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px">' +
+              s +
+              '</div>' +
               '</div>'
             );
           }).join('');
-          const list = state.restaurants.length === 0
-            ? '<div style="text-align:center;color:#555;font-size:14px;padding:32px">No restaurants yet. Add your first target above.</div>'
-            : state.restaurants.map(function (r) {
-                return (
-                  '<div style="background:rgba(255,255,255,0.02);border:1px solid ' + STAGE_COLOR[r.stage] + '30;border-left:3px solid ' + STAGE_COLOR[r.stage] + ';border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">' +
-                    '<div style="flex:1">' +
-                      '<div style="font-weight:600;font-size:14px">' + esc(r.name) + '</div>' +
-                      (r.notes ? '<div style="font-size:12px;color:#666;margin-top:2px">' + esc(r.notes) + '</div>' : '') +
-                    '</div>' +
-                    '<select data-act="rest-stage" data-id="' + r.id + '" style="background:' + STAGE_COLOR[r.stage] + '20;border:1px solid ' + STAGE_COLOR[r.stage] + '50;border-radius:6px;color:' + STAGE_COLOR[r.stage] + ';font-size:12px;padding:4px 8px;cursor:pointer;font-weight:600">' +
-                      STAGES.map(function (s) { return '<option value="' + s + '"' + (r.stage === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
-                    '</select>' +
-                    '<button type="button" data-act="rest-del" data-id="' + r.id + '" style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0 4px">×</button>' +
-                  '</div>'
-                );
-              }).join('');
+          const list =
+            state.restaurants.length === 0
+              ? '<div style="text-align:center;color:#555;font-size:14px;padding:32px">No restaurants yet. Add your first target above.</div>'
+              : state.restaurants
+                  .map(function (r) {
+                    return (
+                      '<div style="background:rgba(255,255,255,0.02);border:1px solid ' +
+                      STAGE_COLOR[r.stage] +
+                      '30;border-left:3px solid ' +
+                      STAGE_COLOR[r.stage] +
+                      ';border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">' +
+                      '<div style="flex:1">' +
+                      '<div style="font-weight:600;font-size:14px">' +
+                      esc(r.name) +
+                      '</div>' +
+                      (r.notes
+                        ? '<div style="font-size:12px;color:#666;margin-top:2px">' + esc(r.notes) + '</div>'
+                        : '') +
+                      '</div>' +
+                      '<select data-act="rest-stage" data-id="' +
+                      r.id +
+                      '" style="background:' +
+                      STAGE_COLOR[r.stage] +
+                      '20;border:1px solid ' +
+                      STAGE_COLOR[r.stage] +
+                      '50;border-radius:6px;color:' +
+                      STAGE_COLOR[r.stage] +
+                      ';font-size:12px;padding:4px 8px;cursor:pointer;font-weight:600">' +
+                      STAGES.map(function (s) {
+                        return '<option value="' + s + '"' + (r.stage === s ? ' selected' : '') + '>' + s + '</option>';
+                      }).join('') +
+                      '</select>' +
+                      '<button type="button" data-act="rest-del" data-id="' +
+                      r.id +
+                      '" style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0 4px">×</button>' +
+                      '</div>'
+                    );
+                  })
+                  .join('');
           return (
             '<div>' +
-              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-                '<div style="font-size:13px;color:#888">Track your restaurant pipeline. Target: 1 signed by Day 60.</div>' +
-                '<button type="button" data-act="rest-toggle" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:8px 14px;cursor:pointer">+ Add</button>' +
-              '</div>' +
-              addPanel +
-              '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">' + summary + '</div>' +
-              list +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+            '<div style="font-size:13px;color:#888">Track your restaurant pipeline. Target: 1 signed by Day 60.</div>' +
+            '<button type="button" data-act="rest-toggle" style="background:#8bc34a;border:none;border-radius:8px;color:#0f1410;font-size:13px;font-weight:700;padding:8px 14px;cursor:pointer">+ Add</button>' +
+            '</div>' +
+            addPanel +
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">' +
+            summary +
+            '</div>' +
+            list +
             '</div>'
           );
         }
@@ -5960,20 +6350,24 @@
           const cards = TRACKING_LINKS.map(function (l) {
             return (
               '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px">' +
-                '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">' + esc(l.label) + '</div>' +
-                "<div style=\"font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#e0e0e0\">" + esc(l.url) + '</div>' +
+              '<div style="font-size:11px;color:#8bc34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">' +
+              esc(l.label) +
+              '</div>' +
+              '<div style="font-family:\'Space Mono\',monospace;font-size:16px;font-weight:700;color:#e0e0e0">' +
+              esc(l.url) +
+              '</div>' +
               '</div>'
             );
           }).join('');
           const empty =
             '<div style="text-align:center;color:#555;font-size:14px;padding:32px;line-height:1.6">' +
-              'No tracking links configured.<br>' +
-              'Add your own campaign short links to the <strong style="color:#888">TRACKING_LINKS</strong> list to see them here.' +
+            'No tracking links configured.<br>' +
+            'Add your own campaign short links to the <strong style="color:#888">TRACKING_LINKS</strong> list to see them here.' +
             '</div>';
           return (
             '<div style="display:flex;flex-direction:column;gap:12px">' +
-              '<div style="font-size:13px;color:#888;margin-bottom:4px">Short links you use to track which channel drives the most conversions.</div>' +
-              (TRACKING_LINKS.length ? cards : empty) +
+            '<div style="font-size:13px;color:#888;margin-bottom:4px">Short links you use to track which channel drives the most conversions.</div>' +
+            (TRACKING_LINKS.length ? cards : empty) +
             '</div>'
           );
         }
@@ -5982,14 +6376,19 @@
           const root = document.getElementById('kpi-root');
           if (!root) return;
           const body =
-            tab === 'dashboard' ? renderDashboard()
-            : tab === 'weekly' ? renderWeekly()
-            : tab === 'restaurants' ? renderRestaurants()
-            : renderLinks();
+            tab === 'dashboard'
+              ? renderDashboard()
+              : tab === 'weekly'
+                ? renderWeekly()
+                : tab === 'restaurants'
+                  ? renderRestaurants()
+                  : renderLinks();
           root.innerHTML =
-            "<div style=\"background:#0f1410;color:#e0e0e0;font-family:'DM Sans',sans-serif;border-radius:8px;overflow:hidden\">" +
-              renderHeader() +
-              '<div style="padding:20px 24px">' + body + '</div>' +
+            '<div style="background:#0f1410;color:#e0e0e0;font-family:\'DM Sans\',sans-serif;border-radius:8px;overflow:hidden">' +
+            renderHeader() +
+            '<div style="padding:20px 24px">' +
+            body +
+            '</div>' +
             '</div>';
         }
 
@@ -6042,7 +6441,8 @@
             save();
             if (field === 'posts') t.setAttribute('style', inputStyle(val >= WEEK_TARGETS.posts));
             else if (field === 'orders') t.setAttribute('style', inputStyle(val >= WEEK_TARGETS.directOrders));
-            else if (field === 'restaurantContact') t.setAttribute('style', inputStyle(val === 'yes') + ';cursor:pointer');
+            else if (field === 'restaurantContact')
+              t.setAttribute('style', inputStyle(val === 'yes') + ';cursor:pointer');
           } else if (act === 'emailListSize') {
             state.emailListSize = Number(t.value) || 0;
             save();
