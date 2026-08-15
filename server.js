@@ -8392,7 +8392,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // and arrives as whatever the form or an API client sends. Anything
           // unusable is dropped, and the response carries the stored list back
           // so a dropped entry is visible instead of assumed saved.
-          packSizes: harvestFeed.packSizes(data.packSizes)
+          //
+          // ⚠️ **Absent means "leave it alone", the same rule as `secret`.** An
+          // empty list is a decision — it stops a shop taking orders — and a
+          // client that has never heard of this field must not be able to make
+          // it by omission. Anything that saved this config before the field
+          // existed, or a curl one-liner changing the interval, would otherwise
+          // clear the sizes and take the order button off the shop with it. To
+          // clear them on purpose, send `packSizes: []`.
+          packSizes: data.packSizes === undefined ? current.packSizes : harvestFeed.packSizes(data.packSizes)
         };
         // Validated before saving, not at the next tick: a rejected URL that is
         // already stored would leave the feed off with the reason buried in a

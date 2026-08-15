@@ -26,7 +26,9 @@ const TEILE = [
   [/^function packSizeLabel\(g\) \{[\s\S]*?\n\}/m, 'packSizeLabel()'],
   [/^function renderHarvestPackSizes\(chosen\) \{[\s\S]*?\n\}/m, 'renderHarvestPackSizes()'],
   [/^function harvestPackSizes\(\) \{[\s\S]*?\n\}/m, 'harvestPackSizes()'],
-  [/^function addHarvestPackSize\(\) \{[\s\S]*?\n\}/m, 'addHarvestPackSize()']
+  [/^function addHarvestPackSize\(\) \{[\s\S]*?\n\}/m, 'addHarvestPackSize()'],
+  [/^function isOwnPackSize\(g\) \{[\s\S]*?\n\}/m, 'isOwnPackSize()'],
+  [/^function removeHarvestPackSize\(g\) \{[\s\S]*?\n\}/m, 'removeHarvestPackSize()']
 ];
 
 /**
@@ -72,7 +74,8 @@ function laden() {
     stub +
       '\n' +
       code +
-      '\nreturn { log, renderHarvestPackSizes, harvestPackSizes, addHarvestPackSize, packSizeLabel };'
+      '\nreturn { log, renderHarvestPackSizes, harvestPackSizes, addHarvestPackSize, removeHarvestPackSize,' +
+      ' isOwnPackSize, packSizeLabel };'
   )(log);
 }
 
@@ -120,6 +123,44 @@ describe('pack sizes — the boxes', () => {
       assert.equal(ui.log.meldung.textContent, 'harvestFeed.packBad', bad + ' should be refused');
       assert.deepEqual(ui.harvestPackSizes(), [250]);
     }
+  });
+
+  it('offers a way out for a size somebody added', () => {
+    // The complaint that produced this test: you could add a size and not get
+    // rid of it. Unticking did work — an unticked size is not saved — but only
+    // the next load cleared the box, so a mistyped 4000 sat there looking
+    // permanent, and "add" without a visible "remove" is half a feature.
+    ui.renderHarvestPackSizes([250, 4000]);
+    assert.match(ui.log.html, /class="hf-pack-del" data-size="4000"/, 'the × is on the size somebody typed');
+    assert.equal(/class="hf-pack-del" data-size="250"/.test(ui.log.html), false, 'and not on a ladder size');
+
+    ui.removeHarvestPackSize(4000);
+    assert.deepEqual(ui.harvestPackSizes(), [250]);
+    assert.equal(/value="4000"/.test(ui.log.html), false, 'the box is gone on the spot, not after a reload');
+  });
+
+  it('keeps what else was ticked when one is removed', () => {
+    ui.renderHarvestPackSizes([250, 400, 1000]);
+    ui.removeHarvestPackSize(400);
+    assert.deepEqual(ui.harvestPackSizes(), [250, 1000]);
+  });
+
+  it('leaves a ladder size in place when it is unticked', () => {
+    // Removing it is not a thing that could mean anything: it is an offer, not
+    // an entry. Unticking is the whole of it, and the box stays to be ticked.
+    assert.equal(ui.isOwnPackSize(500), false);
+    assert.equal(ui.isOwnPackSize(400), true);
+    ui.renderHarvestPackSizes([]);
+    assert.match(ui.log.html, /value="500"/);
+    assert.deepEqual(ui.harvestPackSizes(), []);
+  });
+
+  it('marks the × so it says which size it removes', () => {
+    // Five identical "Remove" buttons in a screen reader's list say nothing
+    // about which is which.
+    ui.renderHarvestPackSizes([400]);
+    assert.match(ui.log.html, /aria-label="harvestFeed\.packRemove — 400 g"/);
+    assert.match(ui.log.html, /title="harvestFeed\.packRemove — 400 g"/);
   });
 
   it('says a size the way somebody would say it', () => {
