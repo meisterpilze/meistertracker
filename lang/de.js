@@ -43,6 +43,9 @@ window.LANG['de'] = {
   'pickups.th.state': 'Stand',
   'pickups.count': '{n} Abholungen',
   'pickups.none': 'Keine Abholungen gemeldet',
+  'pickups.nonePast': 'Keine vergangenen Abholungen',
+  'pickups.showPast': 'Vergangene zeigen',
+  'pickups.showUpcoming': 'Kommende zeigen',
   'pickups.overbooked': 'Überbucht',
   'pickups.confirmed': 'Bestätigt',
   'pickups.pending': 'Noch nicht bestätigt',
@@ -849,6 +852,13 @@ window.LANG['de'] = {
   'harvestFeed.colHarvested': 'Geerntet',
   'harvestFeed.colRelease': 'Freigabe (kg)',
   'harvestFeed.colUntil': 'Gültig bis',
+  'harvestFeed.colPromised': 'Davon vorgemerkt',
+  'harvestFeed.colFree': 'Frei',
+  'harvestFeed.promisedUnattributed':
+    'Zusätzlich {kg} kg vorgemerkt, die zu keiner Sorte oben passen — aus Abholungen, die noch ohne Artnamen gemeldet wurden.',
+  'harvestFeed.shopHeard': 'Der Shop kennt diese Zahlen. Zuletzt gesendet: {time}.',
+  'harvestFeed.shopSilent':
+    'Der Shop hat diese Zahlen noch nicht — die letzte Sendung ({time}) ist fehlgeschlagen. Bleibt es dabei, zeigt die Website irgendwann gar keine Mengen mehr.',
   'harvestFeed.addSpecies': 'Weitere Art …',
   'harvestFeed.allListed': 'Alle bekannten Arten stehen schon in der Liste',
   'harvestFeed.noSpecies': 'Noch keine Art erfasst — erst ansetzen oder ernten',

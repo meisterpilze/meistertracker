@@ -1409,6 +1409,11 @@ function _pickupWhen(p) {
   return esc(day + ' ' + fromTime + (toTime ? '–' + toTime : ''));
 }
 
+// Which half of the list is on screen. Not remembered across a reload: the half
+// that is still work is what this page is opened for, and coming back to a
+// screen full of finished collections is the state this switch exists to end.
+let pickupsPast = false;
+
 function renderPickups() {
   // The upper half of the page. Not awaited: the two halves come from different
   // routes and neither needs the other, so making the bookings wait on the
@@ -1418,13 +1423,18 @@ function renderPickups() {
   const body = $('pickups-body');
   if (!body) return;
   const count = $('pickups-count');
+  const schalter = $('pickups-past-btn');
+  if (schalter) schalter.textContent = t(pickupsPast ? 'pickups.showUpcoming' : 'pickups.showPast');
   body.innerHTML = _ohEmpty(5, t('common.loading'));
-  apiGet('/api/pickups')
+  apiGet('/api/pickups' + (pickupsPast ? '?past=1' : ''))
     .then((d) => {
       const rows = d.items || [];
       if (count) count.textContent = rows.length ? t('pickups.count', { n: rows.length }) : '';
       if (!rows.length) {
-        body.innerHTML = _ohEmpty(5, t('pickups.none'));
+        // Two different empties. "Nothing booked" is news; "nothing has
+        // happened yet" is not, and telling them apart stops an empty past
+        // list from reading like a lost one.
+        body.innerHTML = _ohEmpty(5, t(pickupsPast ? 'pickups.nonePast' : 'pickups.none'));
         return;
       }
       body.innerHTML = rows
@@ -8828,6 +8838,12 @@ function addHarvestPackSize() {
  * was touched, and whether it is marked for removal. Neither has an input.
  */
 let harvestReleaseRows = [];
+// Grams already booked, keyed by species; grams the feed could not attribute to
+// one; and what the feed last managed to send. All three are read-only — see
+// loadHarvestReleases() for why they do not live on the rows.
+let harvestReleasePromised = {};
+let harvestReleaseUnattributed = 0;
+let harvestReleaseFeed = null;
 
 async function loadHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
@@ -8851,8 +8867,16 @@ async function loadHarvestReleases() {
       const row = rows.get(rel.species) || { species: rel.species, harvested: null };
       rows.set(rel.species, { ...row, ...rel, stored: true });
     }
+    // How much of each release is already booked, and how much the feed could
+    // not attribute. Held next to the rows rather than merged into them: it is
+    // an observation about the bookings, not part of the release someone typed,
+    // and merging the two is how a display value ends up being saved.
+    harvestReleasePromised = data.promised || {};
+    harvestReleaseUnattributed = Number(data.promisedUnattributed) || 0;
+    harvestReleaseFeed = data.feed || null;
     harvestReleaseRows = [...rows.values()].sort((a, b) => a.species.localeCompare(b.species)).map(freshReleaseRow);
     renderHarvestReleases();
+    renderHarvestReleaseFeed();
     knownSpecies = data.known || [];
     fillHarvestReleasePicker();
   } catch (e) {
@@ -8926,8 +8950,11 @@ function harvestReleaseRemoveBtn(row) {
 function renderHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!harvestReleaseRows.length) {
-    body.innerHTML = '<tr><td colspan="5" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
     updateHarvestReleasePending();
+    // Also here: bookings that match no release row are exactly what an empty
+    // table needs to mention, not what it may leave out.
+    renderHarvestReleaseUnattributed();
     return;
   }
   body.innerHTML = harvestReleaseRows
@@ -8961,7 +8988,9 @@ function renderHarvestReleases() {
         esc(row.kg) +
         '"' +
         (row.removing ? ' disabled' : '') +
-        '></td><td><input type="date" class="hr-until" style="width:150px" value="' +
+        '></td>' +
+        promisedCells(row) +
+        '<td><input type="date" class="hr-until" style="width:150px" value="' +
         esc(row.until) +
         '"' +
         (row.removing ? ' disabled' : '') +
@@ -8971,6 +9000,7 @@ function renderHarvestReleases() {
       );
     })
     .join('');
+  renderHarvestReleaseUnattributed();
   body.querySelectorAll('tr[data-i]').forEach((tr) => {
     const row = harvestReleaseRows[Number(tr.dataset.i)];
     const kg = tr.querySelector('.hr-kg');
@@ -8996,6 +9026,89 @@ function renderHarvestReleases() {
       });
   });
   updateHarvestReleasePending();
+}
+
+/**
+ * The two read-only cells: how much of this release is booked, and what is left.
+ *
+ * ⚠️ **Against the saved figure, not the one being typed.** `row.wasKg` is what
+ * the shop is working from; `row.kg` is a half-finished edit. Subtracting
+ * bookings from an unsaved number would show a free amount that exists only in
+ * this browser, and the whole point of the column is that somebody can trust it
+ * at the stall.
+ *
+ * A row nobody has released yet has nothing to be free of, so both cells stay
+ * empty rather than reading 0,00 kg — "none released" and "all gone" are
+ * different situations and only one of them means stop selling.
+ */
+function promisedCells(row) {
+  const still = Number(harvestReleasePromised[row.species]) || 0;
+  const released = Number(row.wasKg) * 1000;
+  const muted = 'color:var(--c-text-muted)';
+  if (!(released > 0) && !still) return '<td style="' + muted + '">—</td><td style="' + muted + '">—</td>';
+  const frei = released - still;
+  // Negative is real and not an arithmetic slip: more is promised than was set
+  // aside. It reads as a warning rather than a quantity, because there is
+  // nothing left to hand out and somebody has to decide what happens.
+  const freiFarbe = frei > 0 ? '' : 'color:var(--c-red-dark);font-weight:600';
+  return (
+    '<td style="' + muted + '">' + (still ? (still / 1000).toFixed(2) + ' kg' : '—') + '</td>' +
+    '<td style="' + freiFarbe + '">' + (frei / 1000).toFixed(2) + ' kg</td>'
+  );
+}
+
+/**
+ * Bookings that could not be tied to a release row.
+ *
+ * They come from a receiver that predates the `species` field, so the line
+ * disappears by itself as those pickups age out. Named rather than dropped:
+ * leaving them out would make "promised" too small, and too small is the number
+ * that costs produce.
+ */
+function renderHarvestReleaseUnattributed() {
+  const zeile = document.getElementById('harvestrelease-unattributed');
+  if (!zeile) return;
+  if (!harvestReleaseUnattributed) {
+    zeile.style.display = 'none';
+    return;
+  }
+  zeile.style.display = '';
+  // The cell, not the row: writing textContent onto the <tr> would replace the
+  // <td> with a text node and the browser would drop it back out of the table.
+  zeile.querySelector('td').textContent = t('harvestFeed.promisedUnattributed', {
+    kg: (harvestReleaseUnattributed / 1000).toFixed(2)
+  });
+}
+
+/**
+ * Whether the shop has actually heard the numbers in this table.
+ *
+ * ⚠️ **The same facts exist in Settings, two pages away.** That is where they
+ * were, and it made the outage case read backwards: the service stops
+ * publishing amounts once a push is late, while this table went on showing
+ * releases exactly as before. The person looking at the figures is here.
+ *
+ * No threshold is hard-coded. How long the receiver waits before it goes quiet
+ * is its setting, not ours; "last sent at 11:42" is true without knowing it.
+ */
+function renderHarvestReleaseFeed() {
+  const el = document.getElementById('harvestrelease-feed');
+  if (!el) return;
+  const f = harvestReleaseFeed;
+  if (!f || !f.enabled) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  const gut = f.lastOk === true;
+  el.style.background = gut ? 'var(--c-primary-light)' : 'var(--c-amber-light)';
+  el.style.border = '1px solid ' + (gut ? 'var(--c-green-border)' : 'var(--c-amber-border)');
+  el.style.color = gut ? 'var(--c-green-dark)' : 'var(--c-amber-dark)';
+  el.textContent = !f.lastAt
+    ? t('harvestFeed.neverSent')
+    : gut
+      ? t('harvestFeed.shopHeard', { time: fmtDtTime(f.lastAt) })
+      : t('harvestFeed.shopSilent', { time: fmtDtTime(f.lastAt) });
 }
 
 // Repaints one row instead of the table: a redraw while somebody is typing takes
@@ -19599,7 +19712,15 @@ function initEventListeners() {
     go('strains', 'n-strains');
     renderStrains();
   });
+  const pickupsSchalter = $('pickups-past-btn');
+  if (pickupsSchalter)
+    pickupsSchalter.addEventListener('click', () => {
+      pickupsPast = !pickupsPast;
+      renderPickups();
+    });
   $('n-pickups').addEventListener('click', () => {
+    // Always back to the upcoming half when the page is opened afresh.
+    pickupsPast = false;
     go('pickups', 'n-pickups');
   });
   // "Verkauf" group: four top-level entries that open the orders page at the

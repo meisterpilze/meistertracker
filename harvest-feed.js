@@ -791,7 +791,17 @@ function onePickup(raw) {
       if (!kind) continue;
       const grams = Number(it.grams);
       if (!Number.isFinite(grams) || grams < 0 || grams > 10_000_000) continue;
-      items.push({ kind, grams: Math.round(grams) });
+      // `kind` is what the customer was shown ("Igelstachelbart"); `species` is
+      // the string this database keys a release on ("Igelstachelbart (IGS)").
+      // They differ on purpose — a shop does not print our shorthand — and the
+      // mapping between them lives in the receiver, not here.
+      //
+      // Without it the two halves of the Pickups page cannot be added up: the
+      // release table is keyed one way and the bookings the other, so nobody
+      // can see how much of a release is already spoken for. Optional, because
+      // a receiver that predates the field is not wrong, only less useful.
+      const species = str(it.species, 120);
+      items.push(species ? { kind, species, grams: Math.round(grams) } : { kind, grams: Math.round(grams) });
     }
   }
   if (items.length) out.items = items;
@@ -1107,6 +1117,19 @@ function receive(database, dbApi, log, r) {
         withdrawn = dbApi.cancelPickups(database, reply.cancelled);
       } catch (e) {
         log('warn', 'Pickup withdrawals not applied', { error: e.message });
+      }
+    }
+
+    // Long-finished collections go, so the table cannot grow until storePickup
+    // starts refusing new ones. Here rather than on a timer of its own: this
+    // runs on every push, it is already best-effort, and a pruning pass that
+    // needs its own schedule is one that stops running when the feature is off.
+    if (typeof dbApi.prunePickups === 'function') {
+      try {
+        const weg = dbApi.prunePickups(database);
+        if (weg) log('info', 'Old pickups pruned', { removed: weg });
+      } catch (e) {
+        log('warn', 'Pickup pruning skipped', { error: e.message });
       }
     }
 
