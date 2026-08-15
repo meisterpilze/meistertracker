@@ -8708,14 +8708,22 @@ function packSizeLabel(g) {
   return g >= 1000 && g % 1000 === 0 ? g / 1000 + ' kg' : g + ' g';
 }
 
+// A size somebody typed in, rather than one of the ready-made boxes. It is the
+// only kind that can be got rid of entirely — untick a ladder size and the box
+// stays, because it is an offer; untick a size of your own and there is nothing
+// left to offer.
+function isOwnPackSize(g) {
+  return !HARVEST_PACK_LADDER.includes(g);
+}
+
 function renderHarvestPackSizes(chosen) {
   const box = document.getElementById('harvestfeed-packs');
   if (!box) return;
   const ticked = new Set((chosen || []).filter((n) => Number.isInteger(n) && n > 0));
   const all = [...new Set([...HARVEST_PACK_LADDER, ...ticked])].sort((a, b) => a - b);
   box.innerHTML = all
-    .map(
-      (g) =>
+    .map((g) => {
+      const feld =
         '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin:0;font-size:12px">' +
         '<input type="checkbox" class="hf-pack" value="' +
         g +
@@ -8723,9 +8731,41 @@ function renderHarvestPackSizes(chosen) {
         (ticked.has(g) ? ' checked' : '') +
         '><span>' +
         esc(packSizeLabel(g)) +
-        '</span></label>'
-    )
+        '</span></label>';
+      // ⚠️ The × sits beside the label and not inside it. Inside, every click on
+      // it would also toggle the checkbox it is meant to remove — a button that
+      // does its job and one other thing on the way out.
+      if (!isOwnPackSize(g)) return feld;
+      const weg = t('harvestFeed.packRemove') + ' — ' + packSizeLabel(g);
+      return (
+        '<span style="display:flex;align-items:center;gap:2px">' +
+        feld +
+        '<button type="button" class="hf-pack-del" data-size="' +
+        g +
+        '" title="' +
+        esc(weg) +
+        '" aria-label="' +
+        esc(weg) +
+        '" style="background:none;border:0;padding:0 2px;cursor:pointer;font-size:15px;line-height:1;color:var(--c-text-muted)">×</button>' +
+        '</span>'
+      );
+    })
     .join('');
+}
+
+/**
+ * Take a self-added size out of the list.
+ *
+ * Unticking would do it too — an unticked size is not saved — but only the next
+ * load would clear the box, so a mistyped 4000 sits there looking permanent
+ * until then. Adding something you cannot see yourself remove is half a
+ * feature.
+ *
+ * A ladder size has no × for the same reason: unticking it is the whole of what
+ * "remove" could mean, and the box stays because it is still on offer.
+ */
+function removeHarvestPackSize(g) {
+  renderHarvestPackSizes(harvestPackSizes().filter((n) => n !== g));
 }
 
 /** What is ticked, ascending — the order a shop will show them in. */
@@ -20136,6 +20176,12 @@ function initEventListeners() {
   $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));
   $('harvestfeed-preview-btn').addEventListener('click', () => testHarvestFeed(true));
   $('harvestfeed-pack-add').addEventListener('click', addHarvestPackSize);
+  // Am Behälter und nicht am Knopf: Die Kästen werden bei jeder Änderung neu
+  // gezeichnet, ein Zuhörer am einzelnen × wäre danach weg.
+  $('harvestfeed-packs').addEventListener('click', (e) => {
+    const weg = e.target.closest('.hf-pack-del');
+    if (weg) removeHarvestPackSize(parseInt(weg.dataset.size, 10));
+  });
   // Enter in a number field beside a button reads as "add it", the same as in
   // the release table below.
   $('harvestfeed-pack-new').addEventListener('keydown', (e) => {

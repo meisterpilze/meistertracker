@@ -1872,9 +1872,10 @@ const MIGRATIONS = [
       // once.
       //
       // Empty is a real answer and the default: nothing chosen means nothing
-      // said, and a receiver keeps doing whatever it did before. Unlike the
-      // release switch this cannot fail quietly — a missing list costs a
-      // preference, not a safeguard.
+      // sent, and a receiver has no portions to sell produce in. Unlike the
+      // release switch, that cannot fail quietly — a shop with no sizes has no
+      // button, which is loud, and the alternative was a ladder nobody decided
+      // sitting in a shop window looking authoritative.
       const cols = db.prepare('PRAGMA table_info(harvest_feed_config)').all();
       if (!cols.some((c) => c.name === 'pack_sizes')) {
         db.exec("ALTER TABLE harvest_feed_config ADD COLUMN pack_sizes TEXT DEFAULT ''");

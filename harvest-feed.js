@@ -150,11 +150,13 @@ const ATTEMPTS = 3;
 // an answer that is the same every time, and the first one forgotten would be a
 // species a shop quietly offers in the wrong sizes.
 //
-// **Absent means absent.** No sizes set, no field in the payload, and the
-// receiver keeps doing what it did before. This is not the release list, where
-// silence had to be given a meaning because publishing raw stock was the
-// dangerous reading — here the worst case is a shop using its own ladder, which
-// is exactly today's behaviour.
+// **Absent means absent.** No sizes set, no field in the payload — and a
+// receiver has nothing to sell produce in. That is the intended direction, and
+// it is deliberately not a quiet one: the shop this was built with stops taking
+// orders entirely rather than falling back on a ladder of its own. It used to
+// fall back, and the fallback was the problem — multiples of 250 g that nobody
+// had decided, sitting in a shop window looking exactly as authoritative as a
+// figure somebody chose. Same lesson as the release switch above.
 //
 // Not a version bump: a receiver that ignores the field is correct, only less
 // specific. Fassung 2 stays Fassung 2.
