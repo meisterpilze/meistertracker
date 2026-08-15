@@ -815,6 +815,7 @@ window.LANG['en'] = {
   'harvestFeed.packHint':
     'In grams, the same for every species. A shop offers these amounts and hides the ones a release no longer covers. Tick nothing and no portions go out — then there is nothing to order produce in, and a shop built on this feed takes no orders at all.',
   'harvestFeed.packAdd': 'Add size',
+  'harvestFeed.packRemove': 'Remove this size',
   'harvestFeed.packNewHint': 'e.g. 400',
   'harvestFeed.packBad': 'A size is a whole number of grams between 25 and 25000.',
   'harvestFeed.site': 'Site label (optional)',

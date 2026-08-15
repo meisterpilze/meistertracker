@@ -819,6 +819,7 @@ window.LANG['de'] = {
   'harvestFeed.packHint':
     'In Gramm, für alle Arten dieselben. Ein Shop bietet genau diese Mengen an und lässt weg, wofür die Freigabe nicht mehr reicht. Nichts angekreuzt heißt: Es gehen keine Portionen hinaus — dann gibt es nichts, worin bestellt werden könnte, und ein Shop, der auf diesem Feed aufsetzt, nimmt gar keine Bestellung an.',
   'harvestFeed.packAdd': 'Menge hinzufügen',
+  'harvestFeed.packRemove': 'Diese Menge entfernen',
   'harvestFeed.packNewHint': 'z. B. 400',
   'harvestFeed.packBad': 'Eine Menge ist eine ganze Grammzahl zwischen 25 und 25000.',
   'harvestFeed.site': 'Standort-Kennung (optional)',

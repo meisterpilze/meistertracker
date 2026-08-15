@@ -1959,3 +1959,53 @@ describe('release permission', () => {
     assert.equal(row().can_release, 0, 'and it can be taken back');
   });
 });
+
+// ── Saving the config: what an omitted field means ───────────────────────────
+//
+// The settings route builds one object out of the request body and the stored
+// row, and two of its fields are not simply "take what was sent". `secret` has
+// always been one: loading the form and pressing Save must not blank it, since
+// the page never gets the stored value back to send.
+//
+// `packSizes` is the second, and it earns it the hard way. An empty list is a
+// decision — with no sizes a shop takes no orders at all — so a client that has
+// never heard of the field must not be able to make that decision by leaving it
+// out. Anything that saved this config before the field existed, or a curl
+// one-liner nudging the interval, would otherwise clear the sizes and take the
+// order button off the shop with it.
+//
+// server.js starts a server on require, so the object is lifted out of the
+// source and built on its own — the same approach test/setup-guard.test.js
+// takes for the setup predicate.
+describe('harvest feed config — what a save keeps', () => {
+  let baueNext;
+  before(() => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const körper = src.match(/const next = \{[\s\S]*?\n {8}\};/);
+    assert.ok(körper, 'the config object is gone from server.js — has the route been rewritten?');
+    const clamp = src.match(/^function clampInt\(raw, min, max, fallback\) \{[\s\S]*?\n\}/m);
+    assert.ok(clamp, 'clampInt is gone from server.js');
+    const fn = new Function('data', 'current', 'harvestFeed', clamp[0] + '\n' + körper[0] + '\nreturn next;');
+    baueNext = (data, current) => fn(data, current, feed);
+  });
+
+  const gespeichert = { secret: 'k', packSizes: [250, 500], site: '', url: 'https://r.test/x' };
+
+  it('keeps the stored sizes when the body does not mention them', () => {
+    assert.deepEqual(baueNext({ url: 'https://r.test/x' }, gespeichert).packSizes, [250, 500]);
+  });
+
+  it('clears them for a body that says so', () => {
+    // The one way to end up with none, and it takes saying it.
+    assert.deepEqual(baueNext({ packSizes: [] }, gespeichert).packSizes, []);
+  });
+
+  it('takes a new list as sent, canonical', () => {
+    assert.deepEqual(baueNext({ packSizes: [1000, 250, 250] }, gespeichert).packSizes, [250, 1000]);
+  });
+
+  it('does the same for the secret, which is the older half of this rule', () => {
+    assert.equal(baueNext({}, gespeichert).secret, 'k');
+    assert.equal(baueNext({ secret: 'neu' }, gespeichert).secret, 'neu');
+  });
+});
