@@ -734,7 +734,10 @@ window.LANG['pt'] = {
   'harvestFeed.packRemove': 'Remover esta quantidade',
   'harvestFeed.packNewHint': 'p. ex. 400',
   'harvestFeed.packBad': 'Uma quantidade é um número inteiro de gramas entre 25 e 25000.',
-  'harvestFeed.site': 'Etiqueta do local (opcional)',
+  'harvestFeed.site': 'Nome desta quinta no feed (opcional)',
+  'harvestFeed.siteHint':
+    'Só é preciso quando várias quintas enviam para o mesmo destinatário: segue em cada mensagem e diz quem a enviou. Não é um local de levantamento — onde a mercadoria é entregue fica em Definições → Locais de levantamento e escolhe-se na entrada do calendário. O destinatário compara este texto literalmente, por isso alterá-lo altera uma chave do outro lado.',
+  'harvestFeed.sitePh': 'p. ex. quinta-norte',
   'harvestFeed.testNow': 'Enviar um agora',
   'harvestFeed.preview': 'Mostrar o que seria enviado',
   'harvestFeed.building': 'A preparar …',
@@ -1117,8 +1120,7 @@ window.LANG['pt'] = {
   'mcp.apiKey': 'Chave de API (scripts / automação)',
   'mcp.generateKey': 'Gerar chave de API',
   'mcp.revokeKey': 'Revogar chave',
-  'mcp.revokeKeyConfirm':
-    'Revogar a chave de API MCP atual? Scripts existentes que a utilizam deixarão de funcionar.',
+  'mcp.revokeKeyConfirm': 'Revogar a chave de API MCP atual? Scripts existentes que a utilizam deixarão de funcionar.',
   'mcp.keyRevoked': 'Chave de API revogada.',
   'mcp.keyHint':
     'Para scripts ou ferramentas que não suportam OAuth. Use como Bearer token no header Authorization. A chave é exibida apenas uma vez.',

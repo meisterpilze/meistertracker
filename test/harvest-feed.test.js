@@ -2008,4 +2008,13 @@ describe('harvest feed config — what a save keeps', () => {
     assert.equal(baueNext({}, gespeichert).secret, 'k');
     assert.equal(baueNext({ secret: 'neu' }, gespeichert).secret, 'neu');
   });
+
+  it('keeps the farm name short and on one line', () => {
+    // It goes out in every payload and a receiver matches it literally, so a
+    // newline pasted in from a spreadsheet is a different farm over there —
+    // and nothing on this side would have said so.
+    assert.equal(baueNext({ site: '  hof-nord\n ' }, gespeichert).site, 'hof-nord');
+    assert.equal(baueNext({ site: 'hof\tnord' }, gespeichert).site, 'hof nord');
+    assert.equal(baueNext({ site: 'x'.repeat(200) }, gespeichert).site.length, 64);
+  });
 });

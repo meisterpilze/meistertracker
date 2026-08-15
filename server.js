@@ -8387,7 +8387,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           plannedDays: clampInt(data.plannedDays, 0, 365, 28),
           leadDays: clampInt(data.leadDays, 0, 365, 0),
           strain: data.strain !== false,
-          site: String(data.site || '').trim(),
+          // Capped and stripped of control characters. It is a short name, it
+          // goes out in every payload, and a receiver matches it literally —
+          // a stray newline pasted in from a spreadsheet is then a different
+          // farm as far as the other end is concerned, and nothing here would
+          // have said so.
+          site: String(data.site || '')
+            .replace(/[\u0000-\u001f\u007f]/g, ' ')
+            .trim()
+            .slice(0, 64),
           // Normalised here rather than trusted: the field is a list of grams
           // and arrives as whatever the form or an API client sends. Anything
           // unusable is dropped, and the response carries the stored list back

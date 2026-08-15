@@ -225,7 +225,8 @@ window.LANG['de'] = {
   'strains.empty': 'Noch keine Pilzsorten angelegt.',
   'strains.recipe': 'Rezept (füllt Charge & Labor automatisch)',
   'strains.recHeader': 'Standard-Anbau (optional)',
-  'strains.recHint': 'Vorlage, die neue Chargen automatisch vorausfüllt. Kann leer bleiben — nur nötig, damit „+ Charge" diese Sorte anbietet.',
+  'strains.recHint':
+    'Vorlage, die neue Chargen automatisch vorausfüllt. Kann leer bleiben — nur nötig, damit „+ Charge" diese Sorte anbietet.',
   'strains.recCopyNone': '— Rezept von anderer Sorte übernehmen —',
   'strains.recFruitDays': 'Erntetage',
   'strains.recType': 'Anbau-Art',
@@ -254,7 +255,8 @@ window.LANG['de'] = {
   'msq.recNoGrainKg': 'Rezept unvollständig: keine Körnermenge hinterlegt.',
   'msq.recBadSplit': 'Rezept unvollständig: Hartholz + Weizenkleie ergeben {sum}%, nicht 100%.',
   'msq.noRecipesTitle': 'Noch kein Rezept hinterlegt',
-  'msq.noRecipesMsg': 'Keine Pilzsorte hat bisher ein Produktionsrezept. Ohne Rezept kann keine Charge angelegt werden.',
+  'msq.noRecipesMsg':
+    'Keine Pilzsorte hat bisher ein Produktionsrezept. Ohne Rezept kann keine Charge angelegt werden.',
   'msq.noRecipesGo': 'Zu den Pilzsorten',
   'msq.laborPreview': '{n} Kultur(en) werden angelegt.',
   'msq.grainKg': 'kg pro Beutel',
@@ -606,7 +608,8 @@ window.LANG['de'] = {
   'inoc.already': '{id} ist bereits in der Liste',
   'inoc.notUsable': '{id} ist keine verfügbare Kultur oder Körnerbrut',
   'inoc.spentTitle': 'Beimpfmaterial verbraucht?',
-  'inoc.spentMsg': 'Wurde {names} für {id} vollständig verbraucht?\n\nJa entfernt es aus dem Bestand. Nein lässt es unverändert.',
+  'inoc.spentMsg':
+    'Wurde {names} für {id} vollständig verbraucht?\n\nJa entfernt es aus dem Bestand. Nein lässt es unverändert.',
   'inoc.spentYes': 'Ja, verbraucht',
   'batch.notes': 'Notizen (optional)',
   'batch.idPreview': 'Chargen-ID Vorschau',
@@ -822,7 +825,10 @@ window.LANG['de'] = {
   'harvestFeed.packRemove': 'Diese Menge entfernen',
   'harvestFeed.packNewHint': 'z. B. 400',
   'harvestFeed.packBad': 'Eine Menge ist eine ganze Grammzahl zwischen 25 und 25000.',
-  'harvestFeed.site': 'Standort-Kennung (optional)',
+  'harvestFeed.site': 'Name dieses Betriebs im Feed (optional)',
+  'harvestFeed.siteHint':
+    'Nur nötig, wenn mehrere Betriebe an denselben Empfänger senden: Die Kennung reist in jeder Meldung mit und sagt, von wem sie kommt. Das ist kein Abholort — wo Ware übergeben wird, steht unter Einstellungen → Abholorte und wird am Kalendereintrag ausgewählt. Ein Empfänger vergleicht diesen Text wörtlich; wer ihn ändert, ändert drüben einen Schlüssel.',
+  'harvestFeed.sitePh': 'z. B. hof-nord',
   'harvestFeed.testNow': 'Jetzt einmal senden',
   'harvestFeed.preview': 'Zeigen, was hinausginge',
   'harvestFeed.building': 'Wird zusammengestellt …',
@@ -854,7 +860,8 @@ window.LANG['de'] = {
     'Kürzlich geerntete Arten bleiben ohne Freigabe in der Liste stehen — sie sind dann nur nicht mehr freigegeben.',
   'harvestFeed.pending.one': '1 Änderung noch nicht gespeichert',
   'harvestFeed.pending.other': '{n} Änderungen noch nicht gespeichert',
-  'harvestFeed.leaveWarn.one': '1 Änderung an den Freigaben ist noch nicht gespeichert und geht verloren. Trotzdem weg?',
+  'harvestFeed.leaveWarn.one':
+    '1 Änderung an den Freigaben ist noch nicht gespeichert und geht verloren. Trotzdem weg?',
   'harvestFeed.leaveWarn.other':
     '{n} Änderungen an den Freigaben sind noch nicht gespeichert und gehen verloren. Trotzdem weg?',
   'harvestFeed.expired': 'abgelaufen',
@@ -940,7 +947,8 @@ window.LANG['de'] = {
   'reset.errNoScope': 'Nichts ausgewählt.',
   'reset.errPhrase': 'Zum Bestätigen "{phrase}" eintippen.',
   'reset.confirmTitle': 'Wirklich alles löschen?',
-  'reset.confirmMsg': 'Wird gelöscht: {what}. Das lässt sich nicht rückgängig machen — vorher wird ein Backup gespeichert.',
+  'reset.confirmMsg':
+    'Wird gelöscht: {what}. Das lässt sich nicht rückgängig machen — vorher wird ein Backup gespeichert.',
   'reset.running': 'Backup wird gespeichert, dann wird gelöscht…',
   'reset.done': '{rows} Einträge gelöscht. Backup: {backup}',
   'reset.failed': 'Fehlgeschlagen: {err}',

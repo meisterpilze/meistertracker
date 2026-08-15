@@ -64,8 +64,7 @@ window.LANG['en'] = {
   'pickupLoc.retire': 'Retire',
   'pickupLoc.retired': 'retired',
   'pickupLoc.reactivate': 'Reinstate',
-  'pickupLoc.confirmRetire':
-    'Retire "{name}"? New appointments can no longer pick it. Existing ones keep it.',
+  'pickupLoc.confirmRetire': 'Retire "{name}"? New appointments can no longer pick it. Existing ones keep it.',
   // Order hub (Phase 0)
   'orders.inbox': 'Orders',
   'orders.tomake': 'What to make',
@@ -224,7 +223,8 @@ window.LANG['en'] = {
   'strains.empty': 'No strains defined yet.',
   'strains.recipe': 'Recipe (auto-fills Charge & Lab)',
   'strains.recHeader': 'Standard grow (optional)',
-  'strains.recHint': 'Template that pre-fills new batches. Can stay empty — only needed so this strain offers + Charge.',
+  'strains.recHint':
+    'Template that pre-fills new batches. Can stay empty — only needed so this strain offers + Charge.',
   'strains.recCopyNone': '— Copy recipe from another strain —',
   'strains.recFruitDays': 'Harvest days',
   'strains.recType': 'Grow type',
@@ -818,7 +818,10 @@ window.LANG['en'] = {
   'harvestFeed.packRemove': 'Remove this size',
   'harvestFeed.packNewHint': 'e.g. 400',
   'harvestFeed.packBad': 'A size is a whole number of grams between 25 and 25000.',
-  'harvestFeed.site': 'Site label (optional)',
+  'harvestFeed.site': 'Name of this farm in the feed (optional)',
+  'harvestFeed.siteHint':
+    'Only needed when several farms send to the same receiver: it rides along in every message and says who sent it. This is not a pickup address — where goods are handed over lives under Settings → Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so changing it changes a key at the other end.',
+  'harvestFeed.sitePh': 'e.g. north-farm',
   'harvestFeed.testNow': 'Send one now',
   'harvestFeed.preview': 'Show what would be sent',
   'harvestFeed.building': 'Building …',
