@@ -1277,38 +1277,31 @@ function startHarvestFeed() {
 startHarvestFeed();
 
 /**
- * Push now, because a release just changed.
+ * Tell the feed a release changed, so the shop hears it now.
  *
  * ⚠️ **The gap this closes runs the dangerous way round.** Saving a release only
  * wrote a row; the shop heard about it whenever the timer next fired, up to a
- * full interval later — fifteen minutes by default. Raising a release late is
- * harmless, the shop simply offers too little for a while. *Lowering* one is
- * not: somebody sells 1.5 kg at the stall, cuts the release from 2 kg to 0.5,
- * and for the next quarter of an hour the shop is still taking bookings against
- * the old figure. The lab then shows 0.5 kg released above a 1 kg pickup, and
- * the person who typed the number had no way to know.
+ * full interval later. Raising a release late is harmless — the shop offers too
+ * little for a while. *Lowering* one is not: somebody sells 1.5 kg at the stall,
+ * cuts the release from 2 kg to 0.5, and for the next quarter of an hour the
+ * shop is still taking bookings against the old figure. The lab then shows
+ * 0.5 kg released above a 1 kg pickup, and the person who typed the number had
+ * no way to know.
  *
- * Fire-and-forget on purpose. The save has already succeeded and the row is the
- * source of truth; a receiver that is down must not turn a stored decision into
- * an error message. The timer carries the same numbers along a few minutes
- * later regardless — this only makes the common case immediate.
+ * Fire-and-forget. The save has already succeeded and the row is the source of
+ * truth; a receiver that is down must not turn a stored decision into an error
+ * message. The timer carries the same numbers a few minutes later regardless.
  *
- * `inFlight` inside deliver()'s caller already guards against stacking, and the
- * feed is a snapshot rather than an event log, so a push that overlaps a tick
- * costs nothing beyond one extra request.
+ * The guarding lives in harvest-feed.js — see pushNow() for why calling
+ * deliver() from here was wrong.
  */
 function pushHarvestFeedNow(why) {
-  if (WORKTREE_MODE) return;
-  let cfg;
-  try {
-    cfg = harvestFeed.resolveConfig({ database, env: process.env, dbApi: db });
-  } catch {
-    return; // misconfigured — startHarvestFeed() has already said so once
-  }
-  if (!cfg) return;
-  Promise.resolve()
-    .then(() => harvestFeed.deliver({ database, cfg, dbApi: db, log, deps: undefined }))
-    .catch((e) => log('warn', 'Immediate harvest feed push failed', { why, error: e.message }));
+  harvestFeed
+    .pushNow({ database, env: process.env, log, dbApi: db, skip: WORKTREE_MODE })
+    .then((wie) => {
+      if (wie === 'busy') log('info', 'Harvest feed already sending — immediate push folded in', { why });
+    })
+    .catch((e) => log('warn', 'Immediate harvest feed push errored', { why, error: e.message }));
 }
 
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
