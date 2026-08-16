@@ -1224,6 +1224,51 @@ function stop() {
 }
 
 /**
+ * Push once, right now, without waiting for the timer.
+ *
+ * For the moment a release changes: the shop should not go on offering an
+ * amount somebody has just corrected. Everything else about it is the ordinary
+ * push.
+ *
+ * ⚠️ **Through the same `inFlight` guard as the timer, and that is the whole
+ * reason this function exists** rather than a `deliver()` call at the call
+ * site. It was one at first, and it bypassed the guard: two pushes could then
+ * be in the air together, and the receiver's replay protection rejects the
+ * second of two requests that share a unix-second timestamp. That 409 is
+ * recorded by note() as a failed push — so a *successful* delivery would leave
+ * "the shop has not heard this" on the screen, which is the one thing that
+ * display exists to get right.
+ *
+ * Skipping is the correct outcome, not a loss: a push already in flight is
+ * carrying the same row, and the payload is a snapshot rather than an event
+ * log. Returns what happened so a caller can log it; never throws.
+ */
+async function pushNow({ database, env, log, dbApi, deps, skip }) {
+  if (skip) return 'skipped';
+  let cfg;
+  try {
+    cfg = resolveConfig({ database, env, dbApi });
+  } catch {
+    // Misconfigured. start() has already said so once; saying it again on every
+    // save would bury the line that matters.
+    return 'off';
+  }
+  if (!cfg) return 'off';
+  if (inFlight) return 'busy';
+  inFlight = true;
+  try {
+    await deliver({ database, cfg, dbApi, log, deps });
+    return 'sent';
+  } catch (e) {
+    log('warn', 'Immediate harvest feed push failed', { error: e.message });
+    note(database, dbApi, false, e.message);
+    return 'failed';
+  } finally {
+    inFlight = false;
+  }
+}
+
+/**
  * May this harvest carry the release it claims? `null` if it may, a reason if not.
  *
  * Pure, and that is the point: the two guards here are the ones the field exists
@@ -1265,6 +1310,7 @@ module.exports = {
   readReply,
   start,
   stop,
+  pushNow,
   VERSION,
   VERSION_RELEASE,
   REPLY_MAX_BYTES,
