@@ -2052,16 +2052,32 @@ describe('db – rhythm tasks carry forward', () => {
 // outbound harvest feed push. harvest-feed.js validates the protocol; what is
 // checked here is the storage contract underneath it, which has to hold even
 // when a caller skipped that step.
+// ⚠️ **Kein festes Datum in einer Abholung.** Die Vorlage stand auf
+// `2026-08-15`, und seit `listPickups()` voreingestellt nur noch Kommendes
+// zeigt (Befund V5), wurde daraus eine Zeitbombe: Am Nachmittag des 15. waren
+// alle Tests grün, um 03:05 des 16. fielen vierzehn durch. Ein Datum, das
+// gestern noch heute war, prüft heute etwas anderes.
+//
+// Deshalb relativ zur Uhr, wie `ebenAngekommen()` es auf der Gegenseite tut.
+// Wer die Vergangenheit braucht, sagt es mit einer negativen Zahl.
+function tagIn(tage) {
+  const d = new Date();
+  d.setDate(d.getDate() + tage);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+const ABHOLTAG = tagIn(3);
+
 describe('db – pickups', () => {
   let d, p;
   const PICKUP = {
-    id: 'p_2026-08-15-0900_1042',
+    id: `p_${ABHOLTAG}-0900_1042`,
     order: '#1042',
-    slot: '2026-08-15-0900',
-    slotText: 'Sa 15.08., 9–10 Uhr',
+    slot: `${ABHOLTAG}-0900`,
+    slotText: '9–10 Uhr',
     place: 'Marktstand',
-    from: '2026-08-15T09:00',
-    to: '2026-08-15T10:00',
+    from: `${ABHOLTAG}T09:00`,
+    to: `${ABHOLTAG}T10:00`,
     zone: 'Europe/Berlin',
     items: [{ kind: 'Austernpilz', grams: 2000 }],
     overbooked: false
@@ -2152,7 +2168,7 @@ describe('db – pickups', () => {
     // the screen.
     db.storePickup(d, { id: 'p_late', from: '2026-08-20T09:00' });
     db.storePickup(d, { id: 'p_none' });
-    db.storePickup(d, { id: 'p_soon', from: '2026-08-15T09:00' });
+    db.storePickup(d, { id: 'p_soon', from: `${ABHOLTAG}T09:00` });
     assert.deepEqual(
       db.listPickups(d).map((r) => r.id),
       ['p_soon', 'p_late', 'p_none']

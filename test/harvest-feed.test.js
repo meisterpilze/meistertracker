@@ -1066,14 +1066,30 @@ function jsonReply(body, extraHeaders) {
   });
 }
 
+// ⚠️ **Kein festes Datum in einer Abholung.** Die Vorlage stand auf
+// `2026-08-15`, und seit `listPickups()` voreingestellt nur noch Kommendes
+// zeigt (Befund V5), wurde daraus eine Zeitbombe: Am Nachmittag des 15. waren
+// alle Tests grün, um 03:05 des 16. fielen vierzehn durch. Ein Datum, das
+// gestern noch heute war, prüft heute etwas anderes.
+//
+// Deshalb relativ zur Uhr, wie `ebenAngekommen()` es auf der Gegenseite tut.
+// Wer die Vergangenheit braucht, sagt es mit einer negativen Zahl.
+function tagIn(tage) {
+  const d = new Date();
+  d.setDate(d.getDate() + tage);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+const ABHOLTAG = tagIn(3);
+
 const PICKUP = {
-  id: 'p_2026-08-15-0900_1042',
+  id: `p_${ABHOLTAG}-0900_1042`,
   order: '#1042',
-  slot: '2026-08-15-0900',
-  slotText: 'Sa 15.08., 9–10 Uhr',
+  slot: `${ABHOLTAG}-0900`,
+  slotText: '9–10 Uhr',
   place: 'Marktstand',
-  from: '2026-08-15T09:00',
-  to: '2026-08-15T10:00',
+  from: `${ABHOLTAG}T09:00`,
+  to: `${ABHOLTAG}T10:00`,
   zone: 'Europe/Berlin',
   items: [{ kind: 'Austernpilz', grams: 2000 }],
   overbooked: false
@@ -1183,7 +1199,7 @@ describe('feed reply – validation', () => {
     // wall-clock. A value that looks like an instant invites exactly the
     // conversion that must not happen, so it is not stored at all.
     const r = feed.parseReply(
-      JSON.stringify({ pickups: [{ ...PICKUP, from: '2026-08-15T09:00+02:00', to: '2026-08-15T08:00:00Z' }] })
+      JSON.stringify({ pickups: [{ ...PICKUP, from: `${ABHOLTAG}T09:00+02:00`, to: `${ABHOLTAG}T08:00:00Z` }] })
     );
     assert.equal(r.pickups[0].from, undefined);
     assert.equal(r.pickups[0].to, undefined);
@@ -1347,8 +1363,8 @@ describe('pickups round trip', () => {
     // "9–10" is what the customer was told.
     await push([PICKUP]);
     const row = db.listPickups(t.db)[0];
-    assert.equal(row.from, '2026-08-15T09:00');
-    assert.equal(row.to, '2026-08-15T10:00');
+    assert.equal(row.from, `${ABHOLTAG}T09:00`);
+    assert.equal(row.to, `${ABHOLTAG}T10:00`);
     assert.equal(row.zone, 'Europe/Berlin');
   });
 
@@ -2174,5 +2190,75 @@ describe('pickups: the list stops burying next week under last year', () => {
       .map((p) => p.id)
       .sort();
     assert.deepEqual(uebrig, ['neulich', 'offen']);
+  });
+});
+
+describe('the immediate push shares the timer guard', () => {
+  let t;
+  beforeEach(() => {
+    t = tmpDb();
+  });
+  afterEach(() => {
+    t.db.close();
+    for (const s of ['', '-shm', '-wal']) fs.rmSync(t.path + s, { force: true });
+  });
+
+  const quiet = () => {};
+  const umgebung = {
+    HARVEST_WEBHOOK_URL: 'https://receiver.test/ernte',
+    HARVEST_WEBHOOK_SECRET: 'geheim',
+    HARVEST_WEBHOOK_PLANNED_DAYS: '0'
+  };
+
+  it('does not start a second push while one is in the air', async () => {
+    // ⚠️ **The reason pushNow() exists instead of a deliver() call.** Two pushes
+    // in the air share a unix-second timestamp, the receiver's replay guard
+    // rejects the second, and note() writes that 409 down as a failed push — so
+    // a delivery that worked would leave "the shop has not heard this" on the
+    // Pickups page. That display exists to be right about exactly this.
+    let laufend = 0;
+    let gleichzeitig = 0;
+    let loesen;
+    const haengt = new Promise((f) => {
+      loesen = f;
+    });
+    const deps = {
+      fetch: async () => {
+        laufend++;
+        gleichzeitig = Math.max(gleichzeitig, laufend);
+        await haengt;
+        laufend--;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+      },
+      sleep: async () => {}
+    };
+
+    const erste = feed.pushNow({ database: t.db, env: umgebung, log: quiet, dbApi: db, deps });
+    // Die zweite kommt, während die erste noch am Draht hängt.
+    const zweite = await feed.pushNow({ database: t.db, env: umgebung, log: quiet, dbApi: db, deps });
+    assert.equal(zweite, 'busy', 'die zweite Sendung wird gefaltet, nicht gestartet');
+    loesen();
+    assert.equal(await erste, 'sent');
+    assert.equal(gleichzeitig, 1, 'nie zwei Sendungen gleichzeitig am Draht');
+  });
+
+  it('frees the guard again afterwards, even when the push fails', async () => {
+    // Sonst wäre eine einzige gescheiterte Sofort-Sendung das Ende des Feeds:
+    // Der Takt prüft dieselbe Sperre.
+    const kaputt = { fetch: async () => ({ ok: false, status: 500, text: async () => '' }), sleep: async () => {} };
+    await feed.pushNow({ database: t.db, env: umgebung, log: quiet, dbApi: db, deps: kaputt });
+    const gut = {
+      fetch: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) }),
+      sleep: async () => {}
+    };
+    assert.equal(await feed.pushNow({ database: t.db, env: umgebung, log: quiet, dbApi: db, deps: gut }), 'sent');
+  });
+
+  it('says nothing and does nothing when the feed is off', async () => {
+    assert.equal(await feed.pushNow({ database: t.db, env: {}, log: quiet, dbApi: db }), 'off');
+  });
+
+  it('stays out of the way in worktree mode', async () => {
+    assert.equal(await feed.pushNow({ database: t.db, env: umgebung, log: quiet, dbApi: db, skip: true }), 'skipped');
   });
 });
