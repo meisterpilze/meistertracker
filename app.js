@@ -5101,6 +5101,15 @@ function _weekHeadHtml(d, off, sel) {
   // anything, otherwise how much generated work landed on it.
   const n = task && task.targetQty ? task.targetQty : d.items.length;
   const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
+  // Weekday *and* calendar date, on every column. The strip is laid out like a
+  // week, so the bold number below it was read as the date — which made a busy
+  // day look like the 129th and a quiet day ("·") look like a day with no date
+  // at all. The date is the one thing here that always exists, so it is stated;
+  // the number underneath stays what it always was, the day's load.
+  //
+  // The app's own weekday label rather than the locale's, so the strip and the
+  // rhythm editor call Sunday the same thing.
+  const dayLabel = t('rhythm.day.' + d.weekday) + ' ' + d.date.getDate();
   return (
     '<button type="button" role="tab" data-action="dash-day" data-off="' +
     off +
@@ -5111,19 +5120,24 @@ function _weekHeadHtml(d, off, sel) {
     '" style="--col:' +
     (off + 1) +
     '" title="' +
-    esc(t('rhythm.day.' + d.weekday) + (short ? ' · ' + short : '')) +
+    esc(
+      d.date.toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' }) +
+        (short ? ' · ' + short : '')
+    ) +
     '">' +
-    '<span style="display:block;font-size:13px;font-weight:700;color:' +
-    (n ? (sel ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
-    '">' +
-    (n || '·') +
-    '</span>' +
+    // Date line first: it names the column. Clipped like the theme line below —
+    // "Mi 16" is short, but a phone column is only ~43px wide.
     '<span style="display:block;font-size:9.5px;font-weight:' +
     (isToday ? '700' : '600') +
     ';color:' +
     (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
+    ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    esc(dayLabel) +
+    '</span>' +
+    '<span style="display:block;font-size:13px;font-weight:700;color:' +
+    (n ? (sel ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
     '">' +
-    esc(t('rhythm.day.' + d.weekday)) +
+    (n || '·') +
     '</span>' +
     // Clipped rather than wrapped: a wrapped word would push the columns to
     // different heights and the strip would stop reading as a row.
