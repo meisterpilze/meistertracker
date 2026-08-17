@@ -9419,6 +9419,29 @@ async function saveDuckdnsSettings() {
     showDuckdnsStatus('Fehler: ' + e.message, 'var(--c-red-dark)');
   }
 }
+// The auto-renewal box sits in the Let's Encrypt card, but the only button that
+// ever persisted it is Save in the DuckDNS card above — tick it, reload, and the
+// tick was gone. Save on change instead, and send the stored domain rather than
+// the field above it so a half-typed DuckDNS edit can't ride along unasked.
+async function saveLeEnabled() {
+  const box = document.getElementById('duckdns-le-enabled');
+  const want = box.checked;
+  try {
+    const r = await authFetch('/api/duckdns/config');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const cur = await r.json();
+    const res = await apiPost('/api/duckdns/config', {
+      enabled: !!cur.enabled,
+      domain: cur.domain || '',
+      leEnabled: want
+    });
+    if (res.error) throw new Error(res.error);
+    showLeStatus(t('duckdns.saved'), 'var(--c-green-dark)');
+  } catch (e) {
+    box.checked = !want;
+    showLeStatus(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  }
+}
 async function triggerDuckdnsUpdate() {
   const btn = document.getElementById('duckdns-update-btn');
   btn.disabled = true;
@@ -20316,6 +20339,7 @@ function initEventListeners() {
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
   $('btn-migrate-strain-text').addEventListener('click', runStrainTextMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
+  $('duckdns-le-enabled').addEventListener('change', saveLeEnabled);
   $('harvestfeed-save-btn').addEventListener('click', saveHarvestFeedSettings);
   $('harvestfeed-gen-btn').addEventListener('click', generateHarvestFeedSecret);
   $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));
