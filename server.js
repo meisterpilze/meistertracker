@@ -403,16 +403,53 @@ function precompressStaticAssets() {
     }
   }
 }
+// Files already reported as having a stale compressed copy, so the warning is
+// logged once per asset per boot instead of once per request.
+const _staleCompressed = new Set();
+
 // Pick the best encoding based on Accept-Encoding. Returns { encoding, path }
-// or null if the client doesn't accept any pre-compressed variant or the
-// compressed file is missing on disk.
+// or null if the client doesn't accept any pre-compressed variant, or the
+// compressed variant is missing — or is older than the source it was made
+// from.
+//
+// That last case is the one that bites. precompressStaticAssets() runs at
+// startup and nowhere else, so editing app.js under a running server leaves
+// last boot's app.js.br on disk. Serving it silently hands every browser the
+// previous build: the edit is on disk, the file mtime is new, a hard reload
+// changes nothing, and the only symptom is that the change appears not to have
+// been made. Compare mtimes and drop to the uncompressed source instead —
+// bigger on the wire, but it is the code the operator actually wrote. Restart
+// to get compression back.
 function pickEncoding(acceptEncoding, filePath) {
   if (!acceptEncoding) return null;
   const ae = String(acceptEncoding).toLowerCase();
-  if (ae.includes('br') && fs.existsSync(filePath + '.br')) {
+  let srcMtime;
+  try {
+    srcMtime = fs.statSync(filePath).mtimeMs;
+  } catch {
+    // No source to compare against — let the caller read filePath and 404.
+    return null;
+  }
+  const usable = (variant) => {
+    let s;
+    try {
+      s = fs.statSync(variant);
+    } catch {
+      return false; // never precompressed, or cleaned away
+    }
+    if (s.mtimeMs >= srcMtime) return true;
+    if (!_staleCompressed.has(variant)) {
+      _staleCompressed.add(variant);
+      log('warn', 'Stale pre-compressed asset, serving uncompressed — restart to recompress', {
+        file: path.basename(variant)
+      });
+    }
+    return false;
+  };
+  if (ae.includes('br') && usable(filePath + '.br')) {
     return { encoding: 'br', path: filePath + '.br' };
   }
-  if (ae.includes('gzip') && fs.existsSync(filePath + '.gz')) {
+  if (ae.includes('gzip') && usable(filePath + '.gz')) {
     return { encoding: 'gzip', path: filePath + '.gz' };
   }
   return null;
