@@ -5101,15 +5101,25 @@ function _weekHeadHtml(d, off, sel) {
   // anything, otherwise how much generated work landed on it.
   const n = task && task.targetQty ? task.targetQty : d.items.length;
   const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
-  // Weekday *and* calendar date, on every column. The strip is laid out like a
-  // week, so the bold number below it was read as the date — which made a busy
-  // day look like the 129th and a quiet day ("·") look like a day with no date
-  // at all. The date is the one thing here that always exists, so it is stated;
-  // the number underneath stays what it always was, the day's load.
+  // Weekday label over a big day number — the same shape as the month and week
+  // calendars (.cal-week-hdr-cell), because this strip is read as a calendar.
+  // It used to put the day's *load* in that slot, so a busy day read as "the
+  // 129th" and a day with no load showed a bare "·" and looked undated.
   //
   // The app's own weekday label rather than the locale's, so the strip and the
   // rhythm editor call Sunday the same thing.
-  const dayLabel = t('rhythm.day.' + d.weekday) + ' ' + d.date.getDate();
+  const dayName = t('rhythm.day.' + d.weekday);
+  // Load and theme share the foot line: how much work, and what kind. The count
+  // keeps its weight so the week is still scannable by load, but it no longer
+  // sits where a date belongs. Empty stays a blank line rather than a "·" — a
+  // quiet day is not missing data — but the line is held open with a nbsp so
+  // the seven columns keep the same height.
+  const foot = [
+    n ? '<span style="font-weight:700;color:var(--c-text-sec)">' + n + '</span>' : '',
+    short ? esc(short) : ''
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     '<button type="button" role="tab" data-action="dash-day" data-off="' +
     off +
@@ -5125,24 +5135,24 @@ function _weekHeadHtml(d, off, sel) {
         (short ? ' · ' + short : '')
     ) +
     '">' +
-    // Date line first: it names the column. Clipped like the theme line below —
-    // "Mi 16" is short, but a phone column is only ~43px wide.
     '<span style="display:block;font-size:9.5px;font-weight:' +
     (isToday ? '700' : '600') +
     ';color:' +
     (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
     ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-    esc(dayLabel) +
+    esc(dayName) +
     '</span>' +
-    '<span style="display:block;font-size:13px;font-weight:700;color:' +
-    (n ? (sel ? 'var(--c-accent)' : 'var(--c-text)') : 'var(--c-text-muted)') +
+    // The date, never conditional and never a placeholder — it is the one thing
+    // a day column always has.
+    '<span style="display:block;font-size:13px;font-weight:700;letter-spacing:-0.3px;color:' +
+    (isToday || sel ? 'var(--c-accent)' : 'var(--c-text)') +
     '">' +
-    (n || '·') +
+    d.date.getDate() +
     '</span>' +
     // Clipped rather than wrapped: a wrapped word would push the columns to
     // different heights and the strip would stop reading as a row.
-    '<span style="display:block;font-size:8.5px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-    esc(short || '·') +
+    '<span style="display:block;font-size:9px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    (foot || '&nbsp;') +
     '</span></button>'
   );
 }
