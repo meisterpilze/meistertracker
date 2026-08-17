@@ -147,6 +147,77 @@ describe('server – P-01 static asset compression', () => {
     assert.ok(br.length < gz.length, 'brotli should beat gzip on JS');
   });
 
+  // The variants are only written at boot, so an asset edited under a running
+  // server leaves a stale .br/.gz behind. Serving it hands the browser the
+  // previous build with nothing to show anything is wrong, which is a very
+  // expensive kind of quiet. pickEncoding must notice and decline.
+  //
+  // Lifted out of server.js and run for real rather than grepped for, because
+  // the failure this guards is behavioural: requiring server.js would boot a
+  // listener, so the function is extracted by brace-matching its source.
+  describe('pickEncoding freshness', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'server.js'), 'utf8');
+    const start = src.indexOf('function pickEncoding(');
+    assert.ok(start !== -1, 'pickEncoding should exist in server.js');
+    let depth = 0,
+      end = start;
+    for (let i = src.indexOf('{', start); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+    // fs/path come from this file's scope; log is stubbed and _staleCompressed
+    // is a throwaway Set — the once-per-boot warning is a side effect, not the
+    // contract under test.
+    const pickEncoding = new Function('fs', 'path', 'log', '_staleCompressed', 'return ' + src.slice(start, end))(
+      fs,
+      path,
+      () => {},
+      new Set()
+    );
+
+    let dir, asset;
+    before(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mt_enc_'));
+      asset = path.join(dir, 'app.js');
+      fs.writeFileSync(asset, 'console.log(1)');
+      for (const ext of ['.br', '.gz']) fs.writeFileSync(asset + ext, 'stale');
+    });
+    after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    const age = (p, deltaMs) => {
+      const t = fs.statSync(asset).mtime;
+      fs.utimesSync(p, t, new Date(t.getTime() + deltaMs));
+    };
+
+    it('serves the compressed variant when it is at least as new as the source', () => {
+      age(asset + '.br', 1000);
+      age(asset + '.gz', 1000);
+      assert.deepEqual(pickEncoding('br, gzip', asset), { encoding: 'br', path: asset + '.br' });
+      assert.deepEqual(pickEncoding('gzip', asset), { encoding: 'gzip', path: asset + '.gz' });
+    });
+
+    it('falls back to the source when the compressed variant is older', () => {
+      age(asset + '.br', -1000);
+      age(asset + '.gz', -1000);
+      assert.equal(pickEncoding('br, gzip', asset), null, 'a stale .br must not be served');
+      assert.equal(pickEncoding('gzip', asset), null, 'a stale .gz must not be served');
+    });
+
+    it('prefers gzip over a stale brotli rather than giving up on compression', () => {
+      age(asset + '.br', -1000);
+      age(asset + '.gz', 1000);
+      assert.deepEqual(pickEncoding('br, gzip', asset), { encoding: 'gzip', path: asset + '.gz' });
+    });
+
+    it('returns null when the variant is missing or the client accepts nothing', () => {
+      assert.equal(pickEncoding('', asset), null);
+      assert.equal(pickEncoding('br', path.join(dir, 'nope.js')), null);
+    });
+  });
+
   it('Vary: Accept-Encoding is set on compressible responses (manifest check)', () => {
     // The static-file handler in server.js writes Vary: Accept-Encoding for
     // every compressible MIME type, regardless of whether a compressed
