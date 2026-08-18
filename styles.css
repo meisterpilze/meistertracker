@@ -1644,6 +1644,10 @@ textarea:focus {
   background: #fef3c7;
   color: #92400e;
 }
+.badge-sy {
+  background: #cffafe;
+  color: #155e75;
+}
 .badge-active {
   background: #dcfce7;
   color: #166534;

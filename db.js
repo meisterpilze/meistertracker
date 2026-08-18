@@ -2075,6 +2075,20 @@ const MIGRATIONS = [
       // Jars, because that is how liquid culture is counted.
       addCol('mushroom_strains', 'min_lc', 'INTEGER DEFAULT 0');
     }
+  },
+  {
+    version: 70,
+    description: 'Liquid syringes as a lab type of their own',
+    fn(db) {
+      // A syringe is not a jar. It is filled from one, kept separately, counted
+      // separately and sold, so a farm holding twenty jars and no syringes is not
+      // the same as one holding both — which is all the old shared LC type could
+      // say.
+      const has = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('inventory') WHERE name='lab_thresh_sy'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_sy INTEGER DEFAULT 0');
+    }
   }
 ];
 
@@ -2462,7 +2476,8 @@ function readAll(db, opts = {}) {
       PD: inv.lab_thresh_pd || 0,
       LC: inv.lab_thresh_lc || 0,
       G2G: inv.lab_thresh_g2g || 0,
-      GS: inv.lab_thresh_gs || 0
+      GS: inv.lab_thresh_gs || 0,
+      SY: inv.lab_thresh_sy || 0
     },
     log: invLog
   };
@@ -2936,7 +2951,7 @@ function writeAll(db, incoming, opts) {
         UPDATE inventory SET
           thresh_hardwood=?, thresh_wheatbran=?, thresh_gypsum=?, thresh_grain=?,
           avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?, avg_grain_rh_pct=?,
-          lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?
+          lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?, lab_thresh_sy=?
         WHERE id=1
       `
       ).run(
@@ -2954,7 +2969,8 @@ function writeAll(db, incoming, opts) {
         lt.PD ?? 0,
         lt.LC ?? 0,
         lt.G2G ?? 0,
-        lt.GS ?? 0
+        lt.GS ?? 0,
+        lt.SY ?? 0
       );
     }
 
@@ -4522,7 +4538,10 @@ const VALID_CULTURE_PARENT_TYPES = {
   PD: ['MC', 'PD'],
   LC: ['MC', 'PD', 'LC'],
   G2G: ['MC', 'PD', 'LC', 'G2G', 'GS'],
-  GS: ['MC', 'PD', 'LC', 'G2G', 'GS']
+  GS: ['MC', 'PD', 'LC', 'G2G', 'GS'],
+  // A syringe is drawn from something liquid or from a plate — never from grain,
+  // which cannot be drawn into a syringe at all.
+  SY: ['MC', 'PD', 'LC']
 };
 
 function validateCultureParent(db, type, parentId) {
@@ -5896,8 +5915,8 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
 function updateLabThresholds(db, labThresholds) {
   const lt = labThresholds || {};
   db.prepare(
-    `UPDATE inventory SET lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=? WHERE id=1`
-  ).run(lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0);
+    `UPDATE inventory SET lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?, lab_thresh_sy=? WHERE id=1`
+  ).run(lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0, lt.SY ?? 0);
   incrementDataVersion(db);
 }
 
@@ -7325,7 +7344,8 @@ function getInventory(db, logLimit) {
       PD: inv.lab_thresh_pd || 0,
       LC: inv.lab_thresh_lc || 0,
       G2G: inv.lab_thresh_g2g || 0,
-      GS: inv.lab_thresh_gs || 0
+      GS: inv.lab_thresh_gs || 0,
+      SY: inv.lab_thresh_sy || 0
     },
     log: logRows.map((r) => ({
       time: r.time,

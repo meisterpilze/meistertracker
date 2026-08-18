@@ -613,7 +613,7 @@ function defaultInventory() {
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
     avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 },
-    labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 },
+    labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 },
     log: []
   };
 }
@@ -5874,14 +5874,24 @@ function buildHarvestTasks() {
 
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
-const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
-const LAB_LABELS = { MC: 'Mother cultures', PD: 'Petri dishes', LC: 'Liquid cultures', G2G: 'G2G', GS: null };
+const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
+// MC has been the slant all along — the German interface has said "Slants" for as
+// long as it has existed while the English said "Mother cultures", so a screenshot
+// in one language named something you could not find in the other.
+const LAB_LABELS = {
+  MC: 'Slants',
+  PD: 'Petri dishes',
+  LC: 'Liquid cultures',
+  G2G: 'G2G',
+  GS: null,
+  SY: 'Liquid syringes'
+};
 function getLabLabel(type) {
   if (type === 'GS') return t('lab.gsLabel');
   return LAB_LABELS[type] || type;
 }
 function getLabStockCounts() {
-  const counts = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  const counts = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   cultures
     .filter((c) => c.status === 'active')
     .forEach((c) => {
@@ -5923,7 +5933,7 @@ function strainMinFor(type, entry) {
 }
 
 function getLabStrainBreakdown() {
-  const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {} };
+  const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {}, SY: {} };
   cultures
     .filter((c) => c.status === 'active')
     .forEach((c) => {
@@ -5971,12 +5981,13 @@ const LAB_TYPE_COLORS = {
   PD: { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' },
   LC: { bg: '#dcfce7', fg: '#166534', accent: '#22c55e' },
   G2G: { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' },
-  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' }
+  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' },
+  SY: { bg: '#cffafe', fg: '#155e75', accent: '#06b6d4' }
 };
 function renderDashLabStock() {
   const el = document.getElementById('dash-lab-stock');
   if (!el) return;
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const counts = getLabStockCounts();
   const breakdown = getLabStrainBreakdown();
   el.innerHTML =
@@ -6037,7 +6048,7 @@ function renderDashLabStock() {
     '</div>';
 }
 function setLabMin(type) {
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const cur = inventory.labThresholds[type] || 0;
   const hint = type === 'GS' ? ' (kg per strain)' : '';
   const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type) + hint, cur);
@@ -13430,7 +13441,7 @@ function renderNbGrainBanner() {
 // call sites covers all of them at once, and covers rows already in the
 // database, which validating new writes cannot.
 const ctBadge = (t) => {
-  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g' };
+  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g', SY: 'badge-sy' };
   return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
 const csBadge = (s) => {
@@ -13590,6 +13601,14 @@ function lwUpdate() {
       fillParentSelect(['MC', 'PD']);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtyFlasks');
+    } else if (type === 'SY') {
+      // Drawn from anything liquid or from a plate, which is the same set the
+      // lineage rules in db.js allow — grain cannot go into a syringe.
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.sourceLcPdMc');
+      fillParentSelect(['MC', 'PD', 'LC']);
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtySyringes');
     } else {
       pr.style.display = 'none';
       sr.style.display = 'none';
