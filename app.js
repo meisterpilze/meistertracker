@@ -805,9 +805,16 @@ async function markAllNotifRead() {
   renderNotifList(_notifItems);
 }
 
+// The label is one line and clips rather than wraps, because a second line
+// moved the Admin button above it. The title carries whatever did not fit.
+function setSyncLabel(text) {
+  const el = document.getElementById('sync-label');
+  el.textContent = text;
+  el.title = text;
+}
 function setSyncStatus(cls, msg) {
   document.getElementById('sync-dot').className = 'sync-dot ' + cls;
-  document.getElementById('sync-label').textContent = msg;
+  setSyncLabel(msg);
   const m = document.getElementById('sync-dot-m');
   if (m) m.className = 'sync-dot ' + cls;
   if (cls === 'ok') lastSyncTime = Date.now();
@@ -817,7 +824,7 @@ setInterval(() => {
   if (!lastSyncTime) return;
   const dot = document.getElementById('sync-dot');
   if (!dot || !dot.classList.contains('ok')) return;
-  document.getElementById('sync-label').textContent = t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) });
+  setSyncLabel(t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
 }, 5000);
 let _polling = false;
 let _lastEtag = null;

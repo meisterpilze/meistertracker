@@ -1665,7 +1665,10 @@ window.LANG['en'] = {
   'strains.deleteMsg': 'Really delete strain "{name}"?',
   'strains.delete': 'Delete',
   // Sync
-  'sync.syncedAt': 'Synced \u00b7 {time}',
+  // The time alone: the word in front of it lived on a row that has to stay one
+  // line tall — see .sb-sync-label. A prefix added here gets clipped, not
+  // wrapped.
+  'sync.syncedAt': '{time}',
   // DuckDNS / Let\'s Encrypt / Server
   'duckdns.noUpdateYet': 'DuckDNS enabled but no IP update yet.',
   'duckdns.currentCert': 'Current certificate: ',

@@ -1684,7 +1684,9 @@ window.LANG['pt'] = {
   'strains.deleteMsg': 'Excluir mesmo a variedade "{name}"?',
   'strains.delete': 'Excluir',
   // Sync
-  'sync.syncedAt': 'Sincronizado \u00b7 {time}',
+  // Só a hora: a palavra à frente estava numa linha que tem de continuar com uma
+  // só linha — ver .sb-sync-label. Um prefixo aqui é cortado, não quebrado.
+  'sync.syncedAt': '{time}',
   // DuckDNS / Let\'s Encrypt / Server
   'duckdns.noUpdateYet': 'DuckDNS ativado, mas ainda sem atualiza\u00e7\u00e3o de IP.',
   'duckdns.currentCert': 'Certificado atual: ',

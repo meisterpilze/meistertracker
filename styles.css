@@ -269,10 +269,20 @@ body.admin-mode #n-settings .sb-ico-back {
   gap: 8px;
   padding: 8px 12px;
 }
+/* One line, always. The text under it changes every five seconds — "gerade
+   eben", then "vor 12 Min." — and wrapping to a second line made the row taller
+   and pushed the Admin button above it up by a line. A navigation button that
+   moves while nobody touches it is one the hand has to re-aim at, and it moved
+   on a timer. min-width: 0 is what lets a flex child shrink far enough to
+   ellipsize instead of forcing the row wider. */
 .sb-sync-label {
   font-size: 11px;
   color: var(--c-text-muted);
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sb-lang-sel {
   width: auto;

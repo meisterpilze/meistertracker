@@ -1689,7 +1689,10 @@ window.LANG['de'] = {
   'strains.deleteMsg': 'Pilzsorte "{name}" wirklich l\u00f6schen?',
   'strains.delete': 'L\u00f6schen',
   // Sync
-  'sync.syncedAt': 'Synchronisiert \u00b7 {time}',
+  // Nur die Zeit: Das Wort davor stand in einer Zeile, die eine Zeile hoch
+  // bleiben muss — siehe .sb-sync-label. Ein Präfix hier wird abgeschnitten,
+  // nicht umgebrochen.
+  'sync.syncedAt': '{time}',
   // DuckDNS / Let\'s Encrypt / Server
   'duckdns.noUpdateYet': 'DuckDNS aktiviert, aber noch kein IP-Update durchgef\u00fchrt.',
   'duckdns.currentCert': 'Aktuelles Zertifikat: ',
