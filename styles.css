@@ -4677,6 +4677,20 @@ tr:hover td {
   }
 }
 
+/* Clearance for the two thumb-zone buttons. They are gated on the pointer, not
+   on width, so the 56 px reserved above for the bottom-nav misses them twice:
+   on a phone they reach higher than the bar, and on a coarse-pointer tablet
+   past 768 px there is no bar and no reserve at all. The speed-dial governs —
+   it sits 72 px up and stands 56 px tall, so its top edge is 128 px above the
+   bottom. Without this the last stretch of any long page hides underneath;
+   Admin → Kanäle put its "Jetzt synchronisieren" button there.
+   Must stay after the bottom-nav rule: same specificity, later wins. */
+@media (pointer: coarse) and (hover: none) {
+  .content-wrap {
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0));
+  }
+}
+
 /* ═══ CONTAMINATION REPORT MODAL ═══════════════════════════════
    Capture flow: type chips, severity row, 80x80 photo tiles. Photos
    are compressed to ~200KB JPEG client-side before submit (canvas
