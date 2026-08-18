@@ -373,3 +373,51 @@ describe('looking into a mix after the fact', () => {
     assert.equal(db.getSubstrateBatch(d, 'SUB-TEST'), null);
   });
 });
+
+describe('a write-off records who did it', () => {
+  let d, p, bo, uid;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    d.prepare('INSERT INTO users(username,hash,salt,role,created) VALUES(?,?,?,?,?)').run(
+      'Jonas',
+      'h',
+      's',
+      'admin',
+      new Date().toISOString()
+    );
+    uid = d.prepare("SELECT id FROM users WHERE username='Jonas'").get().id;
+    bo = seedStrain(d, 'Blue Oyster', 'BO', { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 62 });
+    for (const [mat, v] of [['hardwood', 600], ['wheatbran', 200], ['gypsum', 20], ['grain', 60]]) {
+      db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', uid);
+    }
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('names the person who threw the substrate away', () => {
+    // Worth knowing later, and it makes the actor an argument the function uses
+    // rather than one it merely carries — which is how the linter found it.
+    db.createSubstrateBatch(d, { subId: 'W1', recipeStrainId: bo, targetKg: 100 }, uid);
+    db.writeOffSubstrateBatch(d, 'W1', 'kontaminiert', uid);
+    const notes = db.getSubstrateBatch(d, 'W1').notes;
+    assert.match(notes, /kontaminiert/);
+    assert.match(notes, /100\.0 kg/);
+    assert.match(notes, /Jonas/);
+  });
+
+  it('still works when nobody is attached, as on the MCP path', () => {
+    db.createSubstrateBatch(d, { subId: 'W2', recipeStrainId: bo, targetKg: 50 }, null);
+    db.writeOffSubstrateBatch(d, 'W2', 'Rest weg', null);
+    const notes = db.getSubstrateBatch(d, 'W2').notes;
+    assert.match(notes, /Rest weg/);
+    assert.doesNotMatch(notes, /—\s*$/, 'no dangling separator when there is no name');
+  });
+
+  it('survives a user id that no longer exists', () => {
+    db.createSubstrateBatch(d, { subId: 'W3', recipeStrainId: bo, targetKg: 50 }, null);
+    assert.ok(db.writeOffSubstrateBatch(d, 'W3', 'weg', 99999));
+    assert.match(db.getSubstrateBatch(d, 'W3').notes, /weg/);
+  });
+});

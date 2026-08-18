@@ -3645,8 +3645,16 @@ function writeOffSubstrateBatch(db, subId, note, userId) {
       return false;
     }
     const lost = row.remaining_kg;
+    // Who threw away 100 kg of substrate is worth knowing later, and it makes the
+    // actor an argument this function actually uses rather than one it carries.
+    const who = userId
+      ? (db.prepare('SELECT username FROM users WHERE id=?').get(userId) || {}).username
+      : null;
     const stamp =
-      '[' + new Date().toISOString().slice(0, 10) + '] ' + (note || 'verworfen') + ' (' + lost.toFixed(1) + ' kg)';
+      '[' + new Date().toISOString().slice(0, 10) + '] ' +
+      (note || 'verworfen') +
+      ' (' + lost.toFixed(1) + ' kg)' +
+      (who ? ' — ' + who : '');
     db.prepare(
       "UPDATE substrate_batches SET status='written_off', remaining_kg=0, notes = CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes || ' · ' || ? END WHERE sub_id=?"
     ).run(stamp, stamp, subId);
@@ -3697,18 +3705,6 @@ function _recalcSubstrateRemaining(db, subId, excludeBatchId) {
     subId
   );
   return { row, taken, remaining, over: taken > row.target_kg + 1e-9 };
-}
-
-// Move kilograms out of a mix. Caller holds the transaction.
-//
-// Overdrawing is allowed and recorded honestly: a mix can come out heavier than
-// the arithmetic said, and refusing the bags that exist would push the operator
-// into not recording them at all. remaining_kg floors at zero so the shelf never
-// shows substrate that is demonstrably gone.
-function drawSubstrateNoTxn(db, subId, kg) {
-  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
-  if (!row) throw new Error('Substrat-Charge nicht gefunden: ' + subId);
-  return _recalcSubstrateRemaining(db, subId);
 }
 
 function deleteSubstrateBatch(db, subId, userId) {
@@ -3891,7 +3887,9 @@ function insertBatch(db, b, deltas, userId) {
         (b.substrate && b.substrate.corn) || 0,
         b.batchId
       );
-      drawSubstrateNoTxn(db, b.substrateBatch.subId, b.substrateBatch.drawKg);
+      // The kilograms are already on the batch row, so the remainder is derived
+      // rather than passed — one authority for it instead of two.
+      _recalcSubstrateRemaining(db, b.substrateBatch.subId);
     }
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const item of b.bags || []) {
@@ -4058,7 +4056,7 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
       // they cost now is more of that mix, plus the spawn to inoculate them.
       db.prepare('UPDATE batches SET substrate_kg = substrate_kg + ? WHERE batch_id=?').run(addedWetKg, batchId);
       const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(batch.substrate_batch_id);
-      if (sub) drawSubstrateNoTxn(db, sub.sub_id, addedWetKg);
+      if (sub) _recalcSubstrateRemaining(db, sub.sub_id);
       const ms = batch.strain_id
         ? db.prepare('SELECT rec_spawn_pct FROM mushroom_strains WHERE id=?').get(batch.strain_id)
         : null;
