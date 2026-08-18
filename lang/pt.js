@@ -739,6 +739,9 @@ window.LANG['pt'] = {
   'harvestFeed.generate': 'Gerar',
   'harvestFeed.generated': 'Gerado — copia agora e guarda. Depois já não pode ser lido.',
   'harvestFeed.interval': 'A cada … minutos',
+  'harvestFeed.connTitle': 'Para onde vai',
+  'harvestFeed.connDesc':
+    'O endereço para onde as mensagens seguem e a chave com que vão assinadas — escrito uma vez e depois deixado em paz.',
   'harvestFeed.offerTitle': 'O que é oferecido',
   'harvestFeed.offerDesc':
     'A mercadoria e não a ligação: durante quantos dias uma colheita conta como fresca, com que antecedência uma colheita planeada é anunciada e em que porções é entregue. Uma loja constrói a sua montra a partir daqui, e estes valores seguem em cada mensagem que sai.',
@@ -757,7 +760,7 @@ window.LANG['pt'] = {
   'harvestFeed.siteHint':
     'Só é preciso quando várias quintas enviam para o mesmo destinatário: segue em cada mensagem e diz quem a enviou. Não é um local de levantamento — onde a mercadoria é entregue fica em Definições → Locais de levantamento e escolhe-se na entrada do calendário. O destinatário compara este texto literalmente, por isso alterá-lo altera uma chave do outro lado.',
   'harvestFeed.sitePh': 'p. ex. quinta-norte',
-  'harvestFeed.saveHint': 'Os dois cartões são uma só definição e são guardados em conjunto.',
+  'harvestFeed.saveHint': 'Os três cartões são uma só definição e são guardados em conjunto.',
   'harvestFeed.testNow': 'Enviar um agora',
   'harvestFeed.preview': 'Mostrar o que seria enviado',
   'harvestFeed.building': 'A preparar …',
