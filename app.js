@@ -533,6 +533,10 @@ async function loadData() {
     lastSyncTime = Date.now();
     setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
     refresh();
+    // The remaining-kilogram figures are what the next Charge gets planned
+    // against, so they have to move with every sync — but they come down inside
+    // /api/data now rather than costing a second round-trip on every SSE event.
+    if (typeof refreshSubstrateBatches === 'function') refreshSubstrateBatches(d.substrateBatches);
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   }
@@ -609,7 +613,7 @@ function defaultInventory() {
     // Average substrate composition used for "~X bags" estimates
     // These are editable in the Inventory → Stock tab
     avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 },
-    labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 },
+    labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 },
     log: []
   };
 }
@@ -1070,6 +1074,7 @@ function openStab(page, sub) {
     // Refill every time: bags get consumed and created between visits.
     inocRender('nb');
   }
+  if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
@@ -1839,7 +1844,8 @@ const _OH_MAT_KEY = {
   hardwood: 'inv.hardwood',
   wheatbran: 'inv.wheatBran',
   gypsum: 'inv.gypsum',
-  coir: 'inv.coir'
+  coir: 'inv.coir',
+  corn: 'inv.corn'
 };
 function _ohMatName(mat) {
   return t(_OH_MAT_KEY[mat] || mat);
@@ -1998,7 +2004,7 @@ function renderInventoryCard() {
   if (!body) return;
   const stock = (inventory && inventory.stock) || {};
   const thr = (inventory && inventory.thresholds) || {};
-  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir'];
+  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir', 'corn'];
   body.innerHTML = mats
     .map((m) => {
       const have = stock[m] || 0;
@@ -2046,6 +2052,10 @@ document.getElementById('m-ok').onclick = () => {
   if (confirmCb) confirmCb();
   closeConfirm();
 };
+document.getElementById('si-close').onclick = closeSubstrateInfo;
+document.getElementById('m-subinfo').addEventListener('click', (e) => {
+  if (e.target.id === 'm-subinfo') closeSubstrateInfo();
+});
 document.getElementById('m-confirm').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm') closeConfirm();
 });
@@ -5864,14 +5874,24 @@ function buildHarvestTasks() {
 
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
-const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
-const LAB_LABELS = { MC: 'Mother cultures', PD: 'Petri dishes', LC: 'Liquid cultures', G2G: 'G2G', GS: null };
+const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
+// MC has been the slant all along — the German interface has said "Slants" for as
+// long as it has existed while the English said "Mother cultures", so a screenshot
+// in one language named something you could not find in the other.
+const LAB_LABELS = {
+  MC: 'Slants',
+  PD: 'Petri dishes',
+  LC: 'Liquid cultures',
+  G2G: 'G2G',
+  GS: null,
+  SY: 'Liquid syringes'
+};
 function getLabLabel(type) {
   if (type === 'GS') return t('lab.gsLabel');
   return LAB_LABELS[type] || type;
 }
 function getLabStockCounts() {
-  const counts = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  const counts = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   cultures
     .filter((c) => c.status === 'active')
     .forEach((c) => {
@@ -5888,8 +5908,32 @@ function getLabStockCounts() {
     });
   return counts;
 }
+// A Sorte counts as in production while one of its Chargen is still running.
+// Building the lab list only out of what is in stock hid the one case worth
+// seeing: a Sorte being grown right now with no spawn left to grow it from.
+function strainsInProduction() {
+  const out = new Map();
+  for (const b of batches || []) {
+    const { status } = getStatus(b.batchId);
+    if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) continue;
+    const name = b.strainName || b.species || 'Unknown';
+    const kz = b.strainKuerzel || b.strain || '';
+    out.set(name + '|' + kz, { name, kz, desc: b.strainDescriptor || '' });
+  }
+  return out;
+}
+
+// The minimum a Sorte should never fall below, in the unit that type is
+// counted in: kilograms for grain spawn, jars for liquid culture.
+function strainMinFor(type, entry) {
+  if (type !== 'GS' && type !== 'LC') return 0;
+  const ms = (mushroomStrains || []).find((m) => (entry.kz && m.kuerzel === entry.kz) || m.name === entry.name);
+  if (!ms) return 0;
+  return (type === 'GS' ? ms.minSpawnKg : ms.minLc) || 0;
+}
+
 function getLabStrainBreakdown() {
-  const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {} };
+  const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {}, SY: {} };
   cultures
     .filter((c) => c.status === 'active')
     .forEach((c) => {
@@ -5917,6 +5961,19 @@ function getLabStrainBreakdown() {
         breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
       }
     });
+  // Every Sorte being grown right now gets a row for the two things it cannot
+  // be grown without, even at zero — a missing row reads as "fine" and is the
+  // exact opposite.
+  for (const [key, sp] of strainsInProduction()) {
+    for (const type of ['GS', 'LC']) {
+      if (!breakdown[type][key]) {
+        breakdown[type][key] = { name: sp.name, kz: sp.kz, desc: sp.desc, count: 0, color: spColor(sp.name) };
+      }
+    }
+  }
+  for (const type of ['GS', 'LC']) {
+    for (const entry of Object.values(breakdown[type])) entry.min = strainMinFor(type, entry);
+  }
   return breakdown;
 }
 const LAB_TYPE_COLORS = {
@@ -5924,12 +5981,13 @@ const LAB_TYPE_COLORS = {
   PD: { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' },
   LC: { bg: '#dcfce7', fg: '#166534', accent: '#22c55e' },
   G2G: { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' },
-  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' }
+  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' },
+  SY: { bg: '#cffafe', fg: '#155e75', accent: '#06b6d4' }
 };
 function renderDashLabStock() {
   const el = document.getElementById('dash-lab-stock');
   if (!el) return;
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const counts = getLabStockCounts();
   const breakdown = getLabStrainBreakdown();
   el.innerHTML =
@@ -5941,19 +5999,27 @@ function renderDashLabStock() {
       const tc = LAB_TYPE_COLORS[type];
       const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
       const strainTotal = strains.reduce((sum, s) => sum + s.count, 0);
-      // For GS, low = any strain below min kg; for others, low = total count below min
-      const low = type === 'GS' ? min > 0 && strains.some((s) => s.count < min) : min > 0 && count < min;
+      // Grain spawn and liquid culture are judged per Sorte against that Sorte's
+      // own minimum: a farm holding 60 kg of oyster spawn and none of shiitake is
+      // not "fine on average", it is out of shiitake.
+      const perStrain = type === 'GS' || type === 'LC';
+      const low = perStrain
+        ? strains.some((x) => x.min > 0 && x.count < x.min)
+        : min > 0 && count < min;
       const strainRows = strains
         .map((s) => {
           const pct =
             (type === 'GS' ? strainTotal : count) > 0
               ? Math.round((s.count / (type === 'GS' ? strainTotal : count)) * 100)
               : 0;
-          const strainLow = type === 'GS' && min > 0 && s.count < min;
+          const strainLow = perStrain && s.min > 0 && s.count < s.min;
+          const unit = type === 'GS' ? ' kg' : '';
+          const shown = Number.isInteger(s.count) ? s.count : s.count.toFixed(1);
+          const against = s.min > 0 ? '<span style="color:var(--c-text-muted);font-weight:400">/' + s.min + '</span>' : '';
           return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
         <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(s.desc) + '</span>' : ''}</span>
-        <span style="font-size:11px;font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${type === 'GS' ? (Number.isInteger(s.count) ? s.count : s.count.toFixed(1)) + ' kg' : s.count}</span>
+        <span style="font-size:11px;font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${strainLow ? 'var(--c-red)' : s.color};border-radius:3px"></div></div>
       </div>`;
         })
@@ -5982,7 +6048,7 @@ function renderDashLabStock() {
     '</div>';
 }
 function setLabMin(type) {
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0 };
+  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const cur = inventory.labThresholds[type] || 0;
   const hint = type === 'GS' ? ' (kg per strain)' : '';
   const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type) + hint, cur);
@@ -6840,6 +6906,14 @@ function createBatch() {
     alert(t('batch.fillQty'));
     return;
   }
+  // v67: portioned out of an existing mix. None of the composition and delta
+  // machinery below applies — that substrate was booked when it was mixed, and
+  // the server takes the kilograms out of the mix and charges only the spawn.
+  const _sbSel = document.getElementById('nb-substrate-batch');
+  if (_sbSel && _sbSel.value) {
+    createBatchFromSubstrate(genBatchId(sp), _sbSel.value, strainId, qty, bagKg || ms.recBagKg || 5, days, st, strainText);
+    return;
+  }
   if (!bagKg) {
     alert(t('batch.enterWeight'));
     return;
@@ -7067,6 +7141,526 @@ function createBatch() {
     _res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 }
+// ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
+// Two cards, because there are two steps and they cost different things. The
+// mix card turns kilograms of finished substrate into a shopping list and books
+// it against the shelf. The Charge card spends kilograms of an existing mix and
+// books only the spawn. Neither computes anything the server does not: the
+// browser posts a recipe and an amount, and the figures come back.
+let _sbTimer = null;
+let _sbLast = null;
+let _sbList = [];
+
+function sbPreviewSoon() {
+  clearTimeout(_sbTimer);
+  _sbTimer = setTimeout(sbPreview, 250);
+}
+
+async function sbPreview() {
+  const out = document.getElementById('sb-out');
+  const btn = document.getElementById('sb-go');
+  if (!out) return;
+  const recipeStrainId = parseInt(document.getElementById('sb-recipe').value, 10);
+  const kg = parseDecimal(document.getElementById('sb-kg').value) || 0;
+  _sbLast = null;
+  if (btn) btn.disabled = true;
+  if (!recipeStrainId || kg <= 0) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
+    return;
+  }
+  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg });
+  if (!r || r.error) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
+    return;
+  }
+  if (!r.hasRecipe) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc(t('sub.noRecipe')) + '</div>';
+    return;
+  }
+  const m = r.mix;
+  _sbLast = { recipeStrainId, kg, mix: m, label: r.recipeLabel };
+  if (btn) btn.disabled = false;
+  const stock = (inventory && inventory.stock) || {};
+  // Red when the shelf cannot cover the line. The server clamps a deduction to
+  // what is actually there, so an unnoticed shortfall does not merely mean a
+  // short mix — the missing kilos are never booked at all.
+  const row = (label, val, unit, mat, dec) => {
+    const short = mat && val > (stock[mat] || 0);
+    return (
+      '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
+      esc(label) +
+      '</td><td style="padding:2px 0;text-align:right;font-weight:600' +
+      (short ? ';color:var(--c-red-dark)' : '') +
+      '">' +
+      val.toFixed(dec == null ? 1 : dec) +
+      ' ' +
+      unit +
+      (short ? ' ⚠' : '') +
+      '</td></tr>'
+    );
+  };
+  // Round to whole seconds first, then split. Rounding the seconds against a
+  // separately floored minute prints 10:60 for anything just under the minute.
+  const _secs = Math.round(m.waterMinutes * 60);
+  const mm = Math.floor(_secs / 60);
+  const ss = String(_secs % 60).padStart(2, '0');
+  out.innerHTML =
+    '<table style="font-size:13px;border-collapse:collapse">' +
+    row(t('sub.dryMix'), m.dryKg, 'kg') +
+    row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
+    row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
+    (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
+    row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
+    row(t('sub.water'), m.waterL, 'L') +
+    '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
+    esc(t('sub.waterTime')) +
+    '</td><td style="padding:2px 0;text-align:right;font-weight:600">' +
+    mm +
+    ':' +
+    ss +
+    ' min</td></tr>' +
+    row(t('sub.moisture'), m.moisturePct, '%') +
+    '</table>' +
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:6px">' +
+    esc(t('sub.noSpawnHint')) +
+    '</div>';
+}
+
+async function createSubstrateBatchUI() {
+  const st = document.getElementById('sb-status');
+  if (!_sbLast) {
+    setStatus(st, t('sub.pickBoth'), false);
+    return;
+  }
+  const subId = sbGenId();
+  confirm2(
+    t('sub.confirmTitle'),
+    t('sub.confirmMsg', { kg: _sbLast.kg.toFixed(0), recipe: _sbLast.label, id: subId }),
+    t('sub.create'),
+    async () => {
+      setStatus(st, t('sub.running'), true);
+      const r = await apiPost('/api/substrate-batches', {
+        subId,
+        recipeStrainId: _sbLast.recipeStrainId,
+        targetKg: _sbLast.kg,
+        notes: (document.getElementById('sb-notes').value || '').trim()
+      });
+      if (!r || r.error) {
+        setStatus(st, t('sub.failed', { err: (r && r.error) || '?' }), false);
+        return;
+      }
+      setStatus(st, t('sub.done', { id: r.subId, kg: _sbLast.kg.toFixed(0) }), true);
+      document.getElementById('sb-notes').value = '';
+      await loadData();
+      await refreshSubstrateBatches();
+      sbPreview();
+    }
+  );
+}
+
+// SUB-<ddmmyy>-<nn>, counted against the mixes already made today so two mixes
+// on one day cannot collide.
+function sbGenId() {
+  const dt = todayStr();
+  const n = _sbList.filter((s) => s.subId.startsWith('SUB-' + dt)).length;
+  return 'SUB-' + dt + '-' + String(n + 1).padStart(2, '0');
+}
+
+// The mixes ride along in /api/data, which is already fetched on every sync, so
+// this only goes to the network when something asks for them out of band (after
+// a write, before loadData has caught up).
+async function refreshSubstrateBatches(fromPayload) {
+  const r = fromPayload || (await apiGet('/api/substrate-batches'));
+  _sbList = Array.isArray(r) ? r : [];
+  renderSubstrateList();
+  fillSubstrateSelect();
+  renderSubstrateTab();
+}
+
+function renderSubstrateList() {
+  const el = document.getElementById('sb-list');
+  if (!el) return;
+  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  if (!open.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
+    return;
+  }
+  el.innerHTML =
+    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    open
+      .map((s) => {
+        const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
+        return (
+          '<tr style="border-top:1px solid var(--c-border)">' +
+          '<td style="padding:5px 8px 5px 0;font-family:monospace;font-weight:600">' +
+          esc(s.subId) +
+          '</td>' +
+          '<td style="padding:5px 8px 5px 0;color:var(--c-text-sec)">' +
+          esc(s.recipeLabel) +
+          '</td>' +
+          '<td style="padding:5px 8px 5px 0;white-space:nowrap">' +
+          s.remainingKg.toFixed(1) +
+          ' / ' +
+          s.targetKg.toFixed(0) +
+          ' kg</td>' +
+          '<td style="padding:5px 0;width:70px"><div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden">' +
+          '<div style="height:100%;border-radius:3px;background:var(--c-accent);width:' +
+          pct.toFixed(0) +
+          '%"></div></div></td>' +
+          '</tr>'
+        );
+      })
+      .join('') +
+    '</table>';
+}
+
+function fillSubstrateSelect() {
+  const sel = document.getElementById('nb-substrate-batch');
+  if (!sel) return;
+  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  const opts =
+    '<option value="">' +
+    t('sub.selectNone') +
+    '</option>' +
+    open
+      .map(
+        (s) =>
+          `<option value="${esc(s.subId)}">${esc(s.subId)} — ${esc(s.recipeLabel)} — ${s.remainingKg.toFixed(1)} kg</option>`
+      )
+      .join('');
+  if (sel.innerHTML === opts) return;
+  const cur = sel.value;
+  sel.innerHTML = opts;
+  if (cur) sel.value = cur;
+  nbSubstrateChanged();
+}
+
+// Picking a mix switches the Charge form into "portion out of this" mode: the
+// substrate section is no longer an input, because the bags are made of what was
+// actually mixed and not of whatever the Sorte's recipe says today.
+function nbSubstrateChanged() {
+  const sel = document.getElementById('nb-substrate-batch');
+  const box = document.getElementById('nb-substrate-info');
+  if (!sel || !box) return;
+  const s = _sbList.find((x) => x.subId === sel.value);
+  const subSection = document.getElementById('nb-sub-section');
+  if (subSection) subSection.style.display = s ? 'none' : '';
+  if (!s) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = '';
+  nbSubstrateNeed();
+}
+
+// Live "this many bags eats this much of the mix" line.
+function nbSubstrateNeed() {
+  const sel = document.getElementById('nb-substrate-batch');
+  const box = document.getElementById('nb-substrate-info');
+  if (!sel || !box) return;
+  const s = _sbList.find((x) => x.subId === sel.value);
+  if (!s) return;
+  const qty = parseInt(document.getElementById('nb-qty').value, 10) || 0;
+  const strainId = parseInt(document.getElementById('nb-strain-sel').value, 10);
+  const ms = mushroomStrains.find((x) => x.id === strainId);
+  // The same field createBatch submits, not the recipe behind it. Reading the
+  // recipe here while the form carries a different weight quoted one draw and
+  // booked another — 20 bags read as 100 kg and took 60.
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || (ms && ms.recBagKg) || 5;
+  const need = qty * bagKg;
+  const left = s.remainingKg - need;
+  const spawn = need * (((ms && ms.recSpawnPct) || 0) / 100);
+  box.innerHTML =
+    '<div style="font-size:12px;line-height:1.7">' +
+    '<div>' +
+    esc(t('sub.mixComposition', { hw: s.composition.hardwoodPct, wb: s.composition.wheatbranPct, rh: s.composition.rhPct })) +
+    '</div>' +
+    '<div>' +
+    esc(t('sub.drawLine', { qty: qty, bagKg: bagKg, need: need.toFixed(1) })) +
+    '</div>' +
+    '<div style="font-weight:600' +
+    (left < -0.0001 ? ';color:var(--c-red-dark)' : '') +
+    '">' +
+    esc(
+      left < -0.0001
+        ? t('sub.overdraw', { over: Math.abs(left).toFixed(1) })
+        : t('sub.leftAfter', { left: left.toFixed(1) })
+    ) +
+    '</div>' +
+    (spawn > 0 ? '<div>' + esc(t('sub.spawnLine', { kg: spawn.toFixed(2) })) + '</div>' : '') +
+    '</div>';
+}
+
+// Post a Charge that is portioned out of a mix. Separate from createBatch's main
+// body because none of it applies: no composition to validate, no deltas to
+// compute, and the substrate comes out of a named mix rather than off the shelf.
+function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, strain, strainText) {
+  const s = _sbList.find((x) => x.subId === subId);
+  const need = qty * bagKg;
+  const go = async () => {
+    const r = await apiPost('/api/batches/from-substrate', {
+      batchId,
+      subId,
+      strainId,
+      qty,
+      bagKg,
+      days,
+      strain,
+      strainText,
+      notes: (document.getElementById('nb-notes').value || '').trim()
+    });
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await loadData();
+    await refreshSubstrateBatches();
+    nbSubstrateNeed();
+    alert(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
+  };
+  // A mix can come out heavier than the arithmetic said, so this warns rather
+  // than blocks — but it has to be said out loud, because the leftover figure is
+  // what the next Charge will be planned against.
+  if (s && need > s.remainingKg + 1e-9) {
+    confirm2(
+      t('sub.overdrawTitle'),
+      t('sub.overdrawMsg', { need: need.toFixed(1), left: s.remainingKg.toFixed(1) }),
+      t('batch.create'),
+      go
+    );
+    return;
+  }
+  go();
+}
+
+
+// ─── SUBSTRATE MIX: LIST AND DETAIL (v67) ────────────────────
+// The mix card on "Neue Charge" shows what is still usable, because that is what
+// you plan against. This tab shows all of them, spent ones included, because
+// that is what you count and where you look when one has gone wrong.
+const SB_STATUS = { open: 'sub.stOpen', used: 'sub.stUsed', written_off: 'sub.stBad' };
+const SB_STATUS_COLOR = { open: 'var(--c-accent)', used: 'var(--c-text-muted)', written_off: 'var(--c-red)' };
+
+function renderSubstrateTab() {
+  const box = document.getElementById('sb-tab-list');
+  const sum = document.getElementById('sb-tab-summary');
+  if (!box) return;
+  const showSpent = (document.getElementById('sb-show-spent') || {}).checked;
+  _sbBuildCounts();
+  const all = _sbList;
+  const rows = showSpent ? all : all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
+  if (sum) {
+    const open = all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
+    const bad = all.filter((s) => s.status === 'written_off');
+    sum.textContent = t('sub.summary', {
+      total: all.length,
+      open: open.length,
+      kg: open.reduce((a, s) => a + s.remainingKg, 0).toFixed(1),
+      bad: bad.length
+    });
+  }
+  if (!rows.length) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
+    return;
+  }
+  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
+    .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
+    .join('');
+  box.innerHTML =
+    '<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    '<thead><tr style="text-align:left;color:var(--c-text-sec)">' +
+    head +
+    '</tr></thead><tbody>' +
+    rows.map(_sbRowHtml).join('') +
+    '</tbody></table></div>';
+}
+
+function _sbRowHtml(s) {
+  const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
+  const col = SB_STATUS_COLOR[s.status] || 'var(--c-text-muted)';
+  const cell = (inner, extra) => '<td style="padding:6px 8px 6px 0;' + (extra || '') + '">' + inner + '</td>';
+  return (
+    '<tr style="border-top:1px solid var(--c-border);cursor:pointer" onclick="openSubstrateInfo(' +
+    JSON.stringify(s.subId).replace(/"/g, '&quot;') +
+    ')">' +
+    cell(esc(s.subId), 'font-family:monospace;font-weight:600') +
+    cell(esc(s.recipeLabel), 'color:var(--c-text-sec)') +
+    cell(fmtDtShort(s.created), 'white-space:nowrap') +
+    cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
+    cell(
+      s.remainingKg.toFixed(1) +
+        ' kg<div style="height:4px;border-radius:2px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:2px;width:60px">' +
+        '<div style="height:100%;border-radius:2px;background:' +
+        col +
+        ';width:' +
+        pct.toFixed(0) +
+        '%"></div></div>',
+      'white-space:nowrap'
+    ) +
+    cell(
+      '<span style="font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;color:#fff;background:' +
+        col +
+        '">' +
+        esc(t(SB_STATUS[s.status] || s.status)) +
+        '</span>'
+    ) +
+    cell(_sbDrawnCount(s.subId), 'color:var(--c-text-muted)') +
+    '</tr>'
+  );
+}
+
+// The Chargen already loaded carry the link, so counting them costs no request —
+// but counting them per row walked the whole list once per mix. One pass, built
+// when the table renders, answers every row.
+let _sbCounts = new Map();
+function _sbBuildCounts() {
+  _sbCounts = new Map();
+  for (const b of batches || []) {
+    if (!b.substrateSubId) continue;
+    _sbCounts.set(b.substrateSubId, (_sbCounts.get(b.substrateSubId) || 0) + 1);
+  }
+}
+function _sbDrawnCount(subId) {
+  return _sbCounts.get(subId) || '—';
+}
+
+async function openSubstrateInfo(subId) {
+  const body = document.getElementById('si-body');
+  const acts = document.getElementById('si-actions');
+  document.getElementById('si-title').textContent = subId;
+  body.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">…</div>';
+  acts.innerHTML = '';
+  document.getElementById('m-subinfo').classList.add('open');
+  const s = await apiGet('/api/substrate-batches/' + encodeURIComponent(subId));
+  if (!s || s.error) {
+    body.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((s && s.error) || '?') + '</div>';
+    return;
+  }
+  const line = (label, val) =>
+    '<tr><td style="padding:2px 12px 2px 0;color:var(--c-text-sec)">' +
+    esc(label) +
+    '</td><td style="padding:2px 0;font-weight:600">' +
+    val +
+    '</td></tr>';
+  const kg = (v, d) => v.toFixed(d == null ? 1 : d) + ' kg';
+  const c = s.composition;
+  let html =
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">' +
+    esc(t('sub.madeOn', { date: fmtDt(s.created), recipe: s.recipeLabel })) +
+    '</div>' +
+    '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+    esc(t('sub.howMade')) +
+    '</div>' +
+    '<table style="font-size:13px;border-collapse:collapse;margin-bottom:10px">' +
+    line(t('sub.targetKg'), kg(s.targetKg, 0)) +
+    line(t('sub.blend'), c.hardwoodPct + ' / ' + c.wheatbranPct + (c.cornPct ? ' / ' + c.cornPct : '') + ' %') +
+    line(t('sub.dryMix'), kg(s.dryKg)) +
+    line(t('sub.pellets'), kg(s.pelletsKg)) +
+    line(t('sub.bran'), kg(s.branKg)) +
+    (s.cornKg > 0.005 ? line(t('sub.corn'), kg(s.cornKg)) : '') +
+    line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
+    line(t('sub.water'), s.waterL.toFixed(1) + ' L') +
+    line(t('sub.moisture'), s.moisturePct.toFixed(1) + ' %') +
+    '</table>';
+  // What the shelf actually gave up, read from the ledger rather than recomputed.
+  // A mix made while stock was short booked less than the recipe asked for, and
+  // that gap is exactly what somebody looking at a bad batch needs to see.
+  if (s.ledger && s.ledger.length) {
+    html +=
+      '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+      esc(t('sub.booked')) +
+      '</div><div style="font-size:12px;color:var(--c-text-sec);margin-bottom:10px">' +
+      s.ledger.map((l) => esc(_ohMatName(l.mat)) + ' ' + Math.abs(l.deltaKg).toFixed(2) + ' kg').join(' · ') +
+      '</div>';
+  }
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' + esc(t('sub.drawnBy')) + '</div>';
+  if (!s.drawn.length) {
+    html += '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.drawnNone')) + '</div>';
+  } else {
+    html +=
+      '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+      s.drawn
+        .map(
+          (b) =>
+            '<tr style="border-top:1px solid var(--c-border)">' +
+            '<td style="padding:4px 8px 4px 0;font-family:monospace">' +
+            esc(b.batchId) +
+            '</td><td style="padding:4px 8px 4px 0">' +
+            esc(b.species) +
+            '</td><td style="padding:4px 8px 4px 0;white-space:nowrap">' +
+            b.qty +
+            ' × ' +
+            b.bagKg +
+            ' kg</td><td style="padding:4px 0;white-space:nowrap;font-weight:600">' +
+            b.substrateKg.toFixed(1) +
+            ' kg</td></tr>'
+        )
+        .join('') +
+      '</table>';
+  }
+  html +=
+    '<div style="margin-top:10px;font-size:13px;font-weight:600">' +
+    esc(t('sub.leftNow', { kg: s.remainingKg.toFixed(1), of: s.targetKg.toFixed(0) })) +
+    '</div>';
+  if (s.notes) html += '<div style="margin-top:6px;font-size:12px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
+  body.innerHTML = html;
+  // Two different mistakes need two different answers, and offering both at once
+  // invites the wrong one. Nothing made from it yet: it can be removed cleanly,
+  // materials back on the shelf — that is a mis-entry. Something already made
+  // from it: the pellets are gone whatever happens, so the honest action is to
+  // stop it being offered, not to pretend it never existed.
+  const act = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-sm ' + cls;
+    b.textContent = label;
+    b.onclick = fn;
+    acts.appendChild(b);
+  };
+  if (!s.drawn.length) {
+    act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
+  } else if (s.status === 'open' && s.remainingKg > 0.0001) {
+    act(t('sub.writeOff'), 'btn-r', () => writeOffSubstrate(s.subId, s.remainingKg.toFixed(1)));
+  }
+}
+
+// No Charge was ever made from this mix, so removing it is a clean reversal: the
+// pellets, bran and gypsum go back on the shelf exactly as the ledger booked
+// them out. The right answer for a mix entered by mistake or as a test.
+function deleteSubstrate(subId) {
+  closeSubstrateInfo();
+  confirm2(t('sub.deleteTitle'), t('sub.deleteMsg', { id: subId }), t('sub.delete'), async () => {
+    const r = await apiDelete('/api/substrate-batches/' + encodeURIComponent(subId));
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await loadData();
+    await refreshSubstrateBatches();
+  });
+}
+
+function closeSubstrateInfo() {
+  document.getElementById('m-subinfo').classList.remove('open');
+}
+
+// A mix that soured, or a remainder that got thrown out. Nothing goes back to
+// the shelf — the pellets were mixed and are gone either way. What changes is
+// that it stops being offered and stops counting as substrate anyone can use.
+function writeOffSubstrate(subId, leftKg) {
+  closeSubstrateInfo();
+  confirm2(t('sub.writeOffTitle'), t('sub.writeOffMsg', { id: subId, kg: leftKg }), t('sub.writeOff'), async () => {
+    const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(subId) + '/write-off', {
+      note: t('sub.writeOffNote')
+    });
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await refreshSubstrateBatches();
+  });
+}
+
 // Print all labels for the just-created batch straight from the success panel,
 // so the common "create → print everything" path skips the hop to the Print
 // page. Uses the current default label mode + QR from the Print controls; the
@@ -9419,6 +10013,29 @@ async function saveDuckdnsSettings() {
     showDuckdnsStatus('Fehler: ' + e.message, 'var(--c-red-dark)');
   }
 }
+// The auto-renewal box sits in the Let's Encrypt card, but the only button that
+// ever persisted it is Save in the DuckDNS card above — tick it, reload, and the
+// tick was gone. Save on change instead, and send the stored domain rather than
+// the field above it so a half-typed DuckDNS edit can't ride along unasked.
+async function saveLeEnabled() {
+  const box = document.getElementById('duckdns-le-enabled');
+  const want = box.checked;
+  try {
+    const r = await authFetch('/api/duckdns/config');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const cur = await r.json();
+    const res = await apiPost('/api/duckdns/config', {
+      enabled: !!cur.enabled,
+      domain: cur.domain || '',
+      leEnabled: want
+    });
+    if (res.error) throw new Error(res.error);
+    showLeStatus(t('duckdns.saved'), 'var(--c-green-dark)');
+  } catch (e) {
+    box.checked = !want;
+    showLeStatus(t('common.error') + ': ' + e.message, 'var(--c-red-dark)');
+  }
+}
 async function triggerDuckdnsUpdate() {
   const btn = document.getElementById('duckdns-update-btn');
   btn.disabled = true;
@@ -10663,10 +11280,10 @@ function clearLog() {
 }
 
 // ─── INVENTORY ───────────────────────────────────────────────
-const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain' };
-const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8' };
-const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff' };
-const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff' };
+const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal' };
+const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207' };
+const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8' };
+const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a' };
 
 function invLog(mat, deltaKg, type, ref, time) {
   if (!inventory.log) inventory.log = [];
@@ -11967,7 +12584,7 @@ function fillStrainSelects() {
     '</option>' +
     mushroomStrains.map((ms) => `<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
   const hint = mushroomStrains.length === 0;
-  ['nb-strain-sel', 'lw-st'].forEach((id) => {
+  ['nb-strain-sel', 'lw-st', 'sb-recipe'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     // Skip rewrite when options are unchanged: SSE-pushed re-syncs (any other
@@ -12114,6 +12731,12 @@ function editMStrain(id) {
   sv('ms-rec-hw', ms.recHardwoodPct || 0);
   sv('ms-rec-wb', ms.recWheatbranPct || 0);
   sv('ms-rec-coir', ms.recCoirPct || 0);
+  sv('ms-rec-corn', ms.recCornPct || 0);
+  sv('ms-rec-gyppct', ms.recGypsumPct || 0);
+  sv('ms-rec-spawn', ms.recSpawnPct || 0);
+  sv('ms-min-spawn', ms.minSpawnKg || 0);
+  sv('ms-min-lc', ms.minLc || 0);
+  msRecShowRef(ms);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!ms.recGypsum;
   sv('ms-rec-grainkg', ms.recGrainKg || 0);
@@ -12146,6 +12769,15 @@ function cancelMStrain() {
   sv('ms-rec-hw', 75);
   sv('ms-rec-wb', 25);
   sv('ms-rec-coir', 100);
+  // The recipe sheet puts 1 kg of gypsum in every 100 kg of dry mix, and this
+  // farm spawns at a flat 5% — so a blank Sorte starts there rather than at 0,
+  // which would silently mix without either.
+  sv('ms-rec-corn', 0);
+  sv('ms-rec-gyppct', 1);
+  sv('ms-rec-spawn', 5);
+  sv('ms-min-spawn', 0);
+  sv('ms-min-lc', 0);
+  msRecShowRef(null);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = false;
   sv('ms-rec-grainkg', 0);
@@ -12190,7 +12822,15 @@ function _msReadRecipe() {
     recHardwoodPct: v('ms-rec-hw'),
     recWheatbranPct: v('ms-rec-wb'),
     recCoirPct: v('ms-rec-coir'),
-    recGypsum: chk('ms-rec-gyp'),
+    recCornPct: v('ms-rec-corn'),
+    recGypsumPct: v('ms-rec-gyppct'),
+    recSpawnPct: v('ms-rec-spawn'),
+    // The old flag and the new share have to agree, or a Charge created the
+    // per-bag way would skip gypsum that the mix puts in — same recipe, two
+    // answers depending on which screen made it.
+    recGypsum: chk('ms-rec-gyp') || v('ms-rec-gyppct') > 0,
+    minSpawnKg: v('ms-min-spawn'),
+    minLc: v('ms-min-lc'),
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
     recIncDays: v('ms-rec-days'),
@@ -12299,6 +12939,12 @@ function msRecCopyFrom() {
   sv('ms-rec-hw', src.recHardwoodPct || 0);
   sv('ms-rec-wb', src.recWheatbranPct || 0);
   sv('ms-rec-coir', src.recCoirPct || 0);
+  sv('ms-rec-corn', src.recCornPct || 0);
+  sv('ms-rec-gyppct', src.recGypsumPct || 0);
+  sv('ms-rec-spawn', src.recSpawnPct || 0);
+  sv('ms-min-spawn', src.minSpawnKg || 0);
+  sv('ms-min-lc', src.minLc || 0);
+  msRecShowRef(src);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!src.recGypsum;
   sv('ms-rec-grainkg', src.recGrainKg || 0);
@@ -12307,6 +12953,17 @@ function msRecCopyFrom() {
   sv('ms-rec-fruitdays', src.recFruitDays || 0);
   sel.value = '';
   msRecTypeChange();
+}
+function msRecShowRef(ms) {
+  const el = document.getElementById('ms-rec-ref');
+  if (!el) return;
+  const colon = ms && ms.recColonText;
+  const steril = ms && ms.recSterilText;
+  if (!colon && !steril) {
+    el.textContent = '';
+    return;
+  }
+  el.textContent = t('strains.recRef', { colon: colon || '—', steril: steril || '—' });
 }
 function msRecipeSummary(ms) {
   const type = ms.recBatchType || '';
@@ -12750,6 +13407,8 @@ function msQuickConfirm() {
 }
 
 function nbStrainChanged() {
+  // The mix line below quotes block weight and spawn rate off the Sorte.
+  if (typeof nbSubstrateNeed === 'function') setTimeout(nbSubstrateNeed, 0);
   nbPreview();
 }
 function renderNbGrainBanner() {
@@ -12782,7 +13441,7 @@ function renderNbGrainBanner() {
 // call sites covers all of them at once, and covers rows already in the
 // database, which validating new writes cannot.
 const ctBadge = (t) => {
-  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g' };
+  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g', SY: 'badge-sy' };
   return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
 const csBadge = (s) => {
@@ -12942,6 +13601,14 @@ function lwUpdate() {
       fillParentSelect(['MC', 'PD']);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtyFlasks');
+    } else if (type === 'SY') {
+      // Drawn from anything liquid or from a plate, which is the same set the
+      // lineage rules in db.js allow — grain cannot go into a syringe.
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.sourceLcPdMc');
+      fillParentSelect(['MC', 'PD', 'LC']);
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtySyringes');
     } else {
       pr.style.display = 'none';
       sr.style.display = 'none';
@@ -19987,6 +20654,7 @@ function initEventListeners() {
     openStab('batch', 'list');
   });
   $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
+  $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });
@@ -20316,6 +20984,7 @@ function initEventListeners() {
   $('btn-migrate-batch-ids').addEventListener('click', runBatchIdMigration);
   $('btn-migrate-strain-text').addEventListener('click', runStrainTextMigration);
   $('duckdns-save-btn').addEventListener('click', saveDuckdnsSettings);
+  $('duckdns-le-enabled').addEventListener('change', saveLeEnabled);
   $('harvestfeed-save-btn').addEventListener('click', saveHarvestFeedSettings);
   $('harvestfeed-gen-btn').addEventListener('click', generateHarvestFeedSecret);
   $('harvestfeed-test-btn').addEventListener('click', () => testHarvestFeed(false));

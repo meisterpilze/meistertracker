@@ -1931,6 +1931,164 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE calendar_events ADD COLUMN pickup_capacity INTEGER');
     }
+  },
+  {
+    version: 65,
+    description: 'Recipe constants for a substrate mix, and corn meal as a stocked material',
+    fn(db) {
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+
+      // Maitake is the only recipe with corn meal in it, which is exactly why it
+      // has to be a real material: 5% of a 200 kg run is 4.7 kg that currently
+      // leaves the building with nothing recording that it did.
+      addCol('inventory', 'stock_corn', 'REAL DEFAULT 0');
+      addCol('inventory', 'thresh_corn', 'REAL DEFAULT 0');
+      // Bagged pellets and bran arrive with moisture already in them, so the dry
+      // mix needed to hit a target hydration is larger than (1 - moisture)
+      // suggests. Ignoring it under-books every mix by roughly 8%. Site-wide
+      // because it is a property of the delivery, not of the species.
+      addCol('inventory', 'residual_pct', 'REAL DEFAULT 9');
+      // Only used to turn litres of water into a hose time on the batch card.
+      addCol('inventory', 'water_flow_lmin', 'REAL DEFAULT 10');
+
+      // Recipe constants the pre-existing rec_* set could not express.
+      // rec_gypsum (0/1) stays for the older per-bag path; rec_gypsum_pct is the
+      // share of the dry mix, which is what a mix run actually needs.
+      addCol('mushroom_strains', 'rec_corn_pct', 'REAL DEFAULT 0');
+      addCol('mushroom_strains', 'rec_gypsum_pct', 'REAL DEFAULT 0');
+      addCol('mushroom_strains', 'rec_spawn_pct', 'REAL DEFAULT 0');
+      // Ranges, kept as text on purpose. "45-70 d + browning" is the honest
+      // answer for shiitake and no single integer replaces it without lying.
+      // rec_inc_days keeps driving the due date; this is the reference beside it.
+      addCol('mushroom_strains', 'rec_colon_text', "TEXT DEFAULT ''");
+      addCol('mushroom_strains', 'rec_steril_text', "TEXT DEFAULT ''");
+    }
+  },
+  {
+    version: 66,
+    description: 'Reserved — recipe figures are seeded by a script, not by a migration',
+    fn() {
+      // Deliberately does nothing.
+      //
+      // This used to write one farm's blends, block size and spawn rate onto every
+      // strain whose Kuerzel matched. Two things wrong with that. Another lab runs
+      // this code — see FORKING.md, and the test that keeps the operator name out
+      // of the product — and their oyster recipe is not this one. And an operator
+      // who had already tuned rec_* had it silently overwritten on upgrade, with no
+      // record of what it had been.
+      //
+      // The version number stays, so installations that already ran it are not
+      // asked to run something different under the same number. The figures moved
+      // to scripts/seed-substrate-recipes.js, which shows what it would change and
+      // only writes when told to.
+    }
+  },
+  {
+    version: 67,
+    description: 'Substrate batches: mixed once, drawn from many times',
+    fn(db) {
+      // The substrate is mixed in bulk and portioned into bags afterwards, often
+      // across several species out of one mix. Charging the raw materials per bag
+      // therefore books the same pellets twice over: once when the mix is made
+      // and again for every bag drawn from it. This table is the mix itself —
+      // species-neutral, because at mixing time nobody has decided yet what will
+      // be grown in it.
+      //
+      // remaining_kg is the whole point. A 200 kg mix that gives 20 blue oyster
+      // blocks still has 100 kg in it, and that 100 kg is real stock: it exists,
+      // it cost money, and it will be gone in three days if nobody uses it.
+      // Deriving it from the bags each time would work until a bag batch is
+      // deleted, so it is stored and moved explicitly instead.
+      db.exec(`CREATE TABLE IF NOT EXISTS substrate_batches (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      sub_id           TEXT NOT NULL UNIQUE,
+      -- The recipe this was mixed to. Species-neutral in use: any Sorte may draw
+      -- from it. Kept as a reference AND as a label snapshot, so renaming a Sorte
+      -- later does not rewrite what a past mix says it was.
+      recipe_strain_id INTEGER REFERENCES mushroom_strains(id) ON DELETE SET NULL,
+      recipe_label     TEXT NOT NULL DEFAULT '',
+      target_kg        REAL NOT NULL,
+      remaining_kg     REAL NOT NULL,
+      -- The blend as mixed, not as the recipe reads today.
+      hardwood_pct     REAL DEFAULT 0,
+      wheatbran_pct    REAL DEFAULT 0,
+      corn_pct         REAL DEFAULT 0,
+      gypsum_pct       REAL DEFAULT 0,
+      rh_pct           REAL DEFAULT 0,
+      -- What it took and what it measured, so the card never re-derives it.
+      dry_kg           REAL DEFAULT 0,
+      pellets_kg       REAL DEFAULT 0,
+      bran_kg          REAL DEFAULT 0,
+      corn_kg          REAL DEFAULT 0,
+      gypsum_kg        REAL DEFAULT 0,
+      water_l          REAL DEFAULT 0,
+      moisture_pct     REAL DEFAULT 0,
+      notes            TEXT DEFAULT '',
+      created          TEXT NOT NULL,
+      status           TEXT NOT NULL DEFAULT 'open'
+    )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_subbatch_status ON substrate_batches(status, created)');
+
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // NULL means the pre-v67 arrangement: a Charge that carries its own
+      // substrate and was charged for it per bag. Those keep working untouched.
+      addCol('batches', 'substrate_batch_id', 'INTEGER REFERENCES substrate_batches(id) ON DELETE SET NULL');
+      // How much was actually taken, stored rather than recomputed from qty ×
+      // bag_kg: bags can be added or removed afterwards, and the draw that was
+      // booked has to be the one that gets returned.
+      addCol('batches', 'substrate_kg', 'REAL DEFAULT 0');
+      // Maitake is 76/19/5 — without this the corn share has nowhere to live.
+      addCol('batches', 'sub_corn', 'REAL DEFAULT 0');
+    }
+  },
+  {
+    version: 68,
+    description: 'Index the link from a Charge to the mix it came out of',
+    fn(db) {
+      // readAll joins batches to substrate_batches on every /api/data, which is
+      // every SSE event, and the remaining figure is recomputed from the Chargen
+      // referencing a mix on every draw and every delete. Both walked the whole
+      // batches table without this.
+      db.exec('CREATE INDEX IF NOT EXISTS idx_batch_subbatch ON batches(substrate_batch_id)');
+    }
+  },
+  {
+    version: 69,
+    description: 'Per-Sorte minimum holdings of grain spawn and liquid culture',
+    fn(db) {
+      // The lab already compared grain spawn per Sorte against a minimum, but
+      // the minimum was one number for the whole farm and it was never set, so
+      // nothing was ever flagged. Shiitake needs 45-70 days of notice and an
+      // oyster needs a fortnight; one number cannot mean both.
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // Kilograms, because that is how grain spawn is counted everywhere else.
+      addCol('mushroom_strains', 'min_spawn_kg', 'REAL DEFAULT 0');
+      // Jars, because that is how liquid culture is counted.
+      addCol('mushroom_strains', 'min_lc', 'INTEGER DEFAULT 0');
+    }
+  },
+  {
+    version: 70,
+    description: 'Liquid syringes as a lab type of their own',
+    fn(db) {
+      // A syringe is not a jar. It is filled from one, kept separately, counted
+      // separately and sold, so a farm holding twenty jars and no syringes is not
+      // the same as one holding both — which is all the old shared LC type could
+      // say.
+      const has = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('inventory') WHERE name='lab_thresh_sy'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_sy INTEGER DEFAULT 0');
+    }
   }
 ];
 
@@ -2111,7 +2269,17 @@ function readAll(db, opts = {}) {
   // of running bagStmt.all() once per batch (the audit-flagged N+1 — at 200
   // batches that was 200 statement executions every time readAll fired,
   // and readAll is called by /api/data which polls on each SSE event).
-  const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
+  // The mix is joined in by name rather than by id: the client needs something
+  // it can match against the substrate list, and the numeric key means nothing
+  // on that side.
+  const batchRows = db
+    .prepare(
+      `SELECT b.*, sb.sub_id AS substrate_sub_id
+         FROM batches b
+         LEFT JOIN substrate_batches sb ON sb.id = b.substrate_batch_id
+        ORDER BY b.created`
+    )
+    .all();
   const bagsByBatch = new Map();
   for (const b of db.prepare('SELECT batch_id, bag_id, bag_kg FROM bags ORDER BY batch_id, bag_id').all()) {
     let arr = bagsByBatch.get(b.batch_id);
@@ -2136,9 +2304,14 @@ function readAll(db, opts = {}) {
       strainDescriptor: ms ? ms.description || null : null,
       qty: r.qty,
       days: r.days,
+      // v67: which mix this Charge was portioned out of, so the substrate tab
+      // can count its Chargen without asking the server once per row.
+      substrateSubId: r.substrate_sub_id || null,
+      substrateKg: r.substrate_kg || 0,
       substrate: {
         hardwood: r.sub_hardwood,
         wheatbran: r.sub_wheatbran,
+        corn: r.sub_corn || 0,
         coir: r.sub_coir || 0,
         rh: r.sub_rh,
         gypsum: r.sub_gypsum === 1 ? true : false
@@ -2279,14 +2452,16 @@ function readAll(db, opts = {}) {
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
-      coir: inv.stock_coir || 0
+      coir: inv.stock_coir || 0,
+      corn: inv.stock_corn || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
-      coir: { minKg: inv.thresh_coir || 0 }
+      coir: { minKg: inv.thresh_coir || 0 },
+      corn: { minKg: inv.thresh_corn || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -2301,7 +2476,8 @@ function readAll(db, opts = {}) {
       PD: inv.lab_thresh_pd || 0,
       LC: inv.lab_thresh_lc || 0,
       G2G: inv.lab_thresh_g2g || 0,
-      GS: inv.lab_thresh_gs || 0
+      GS: inv.lab_thresh_gs || 0,
+      SY: inv.lab_thresh_sy || 0
     },
     log: invLog
   };
@@ -2409,6 +2585,10 @@ function readAll(db, opts = {}) {
   const version = getDataVersion(db);
   return {
     mushroomStrains,
+    // Carried in the main payload rather than fetched separately: the client needs
+    // the remaining kilograms on every sync, and /api/data is already the request
+    // every sync makes.
+    substrateBatches: listSubstrateBatches(db),
     batches,
     scanLog,
     manualTasks,
@@ -2771,7 +2951,7 @@ function writeAll(db, incoming, opts) {
         UPDATE inventory SET
           thresh_hardwood=?, thresh_wheatbran=?, thresh_gypsum=?, thresh_grain=?,
           avg_hw_pct=?, avg_wb_pct=?, avg_rh_pct=?, avg_bag_kg=?, avg_grain_bag_kg=?, avg_grain_rh_pct=?,
-          lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?
+          lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?, lab_thresh_sy=?
         WHERE id=1
       `
       ).run(
@@ -2789,7 +2969,8 @@ function writeAll(db, incoming, opts) {
         lt.PD ?? 0,
         lt.LC ?? 0,
         lt.G2G ?? 0,
-        lt.GS ?? 0
+        lt.GS ?? 0,
+        lt.SY ?? 0
       );
     }
 
@@ -3229,6 +3410,429 @@ function resetUserPassword(db, userId, newPassword) {
 // the same transaction as the batch + bag inserts. Atomicity guarantee: if
 // any delta or insert fails, the batch row, bag rows, inventory mutations,
 // and inventory_log entries are all rolled back.
+// ─── Substrate batches (v67) ──────────────────────────────────────────
+// Two levels, because that is how the substrate actually moves. A mix is made
+// once, in bulk, from raw materials — that is the only step that touches the
+// shelf. Bags are then portioned out of that mix, possibly for several species,
+// and cost nothing further except the spawn they are inoculated with.
+//
+// Everything below keeps those two apart: computeMixBatch prices a mix,
+// createSubstrateBatch books it, and drawSubstrate moves kilograms out of it.
+
+// Price a mix. `rec` is a blend, not a species — the substrate does not know
+// what will be grown in it. Spawn is deliberately absent: it belongs to the bag
+// batch, where the species is finally known.
+//
+// The subtlety is `residualPct`. Bagged pellets and bran already carry moisture,
+// so reaching a target hydration takes more dry mix than (1 - moisture) implies.
+// Leaving it out under-books every run by roughly 8% — on a 200 kg shiitake mix
+// that is 7.6 kg of pellets and bran that never leave the books.
+function computeMixBatch(rec, targetKg, opts) {
+  const num = (v, def) => (Number.isFinite(+v) ? +v : def);
+  const target = num(targetKg, 0);
+  if (!(target > 0)) throw new Error('Zielmenge muss groesser als 0 kg sein');
+  const o = opts || {};
+  const R = num(o.residualPct, 9) / 100;
+  const flow = num(o.flowLmin, 10);
+
+  const bran = num(rec.branPct, 0) / 100;
+  const corn = num(rec.cornPct, 0) / 100;
+  const gyp = num(rec.gypsumPct, 0) / 100;
+  const moist = num(rec.moisturePct, 0) / 100;
+
+  // Pellets are the remainder so the three shares can never total anything but
+  // 100%. A blend that leaves nothing over is a data error, not a 0 kg order.
+  // The base is whatever the blend is not: pellets on a hardwood recipe, coir
+  // on a CVG one. Taking the remainder rather than storing it keeps the shares
+  // from drifting into a blend that does not total 100%.
+  const baseMat = (rec.substrate || 'holzkleie') === 'cvg' ? 'coir' : 'hardwood';
+  const pelletShare = 1 - bran - corn;
+  if (pelletShare <= 0) {
+    throw new Error(
+      'Kleie + Maismehl ergeben ' + ((bran + corn) * 100).toFixed(0) + '% — kein Anteil fuer Pellets uebrig'
+    );
+  }
+  if (!(moist > 0 && moist < 1)) throw new Error('Zielfeuchte muss zwischen 0 und 100 % liegen');
+  const denom = 1 + gyp - R;
+  if (!(denom > 0)) throw new Error('Restfeuchte zu hoch fuer dieses Rezept');
+
+  const dryKg = (target * (1 - moist)) / denom;
+  const waterL = target - dryKg * (1 + gyp);
+  // Negative water means the delivery is already wetter than the recipe target.
+  // Clamping silently would hand over a mix that cannot reach spec.
+  if (waterL < 0) {
+    throw new Error(
+      'Zielfeuchte ' +
+        (moist * 100).toFixed(1) +
+        ' % liegt unter der Restfeuchte der Sackware (' +
+        (R * 100).toFixed(1) +
+        ' %)'
+    );
+  }
+
+  const pelletsKg = dryKg * pelletShare;
+  const branKg = dryKg * bran;
+  const cornKg = dryKg * corn;
+  const gypsumKg = dryKg * gyp;
+
+  const deltas = [];
+  const push = (mat, kg) => {
+    if (kg > 0) deltas.push({ mat, deltaKg: -kg, type: 'mix' });
+  };
+  push(baseMat, pelletsKg);
+  push('wheatbran', branKg);
+  push('corn', cornKg);
+  push('gypsum', gypsumKg);
+
+  return {
+    targetKg: target,
+    dryKg,
+    pelletsKg,
+    branKg,
+    cornKg,
+    gypsumKg,
+    waterL,
+    // What the mix will actually measure once the residual moisture is in it —
+    // the figure to check the halogen analyser against, not the recipe target.
+    // Named so the card and the detail view can label the line honestly rather
+    // than always calling it pellets.
+    baseMat,
+    moisturePct: ((waterL + dryKg * R) / target) * 100,
+    waterMinutes: flow > 0 ? waterL / flow : 0,
+    hardwoodPct: pelletShare * 100,
+    wheatbranPct: bran * 100,
+    cornPct: corn * 100,
+    gypsumPct: gyp * 100,
+    rhPct: moist * 100,
+    deltas
+  };
+}
+
+// Read a Sorte's recipe as a blend, plus the site-wide assumptions. Returns null
+// when the Sorte has no usable recipe — Reishi and Cordyceps ship that way.
+function getMixRecipe(db, strainId) {
+  const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
+  if (!ms) throw new Error('Pilzsorte nicht gefunden');
+  // A mix needs a hydration target; without one there is no arithmetic to do.
+  // Gypsum is NOT required — CVG blends legitimately use none, and demanding it
+  // reported a complete recipe as missing and sent the operator to re-enter one
+  // that was already there.
+  if (!(ms.rec_rh_pct > 0)) return null;
+  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  return {
+    strain: ms,
+    recipe: {
+      // Which base the blend is built on. Without it every mix was priced as
+      // hardwood pellets, so a coir recipe drained the wrong shelf entirely.
+      substrate: ms.rec_substrate || 'holzkleie',
+      branPct: ms.rec_wheatbran_pct || 0,
+      cornPct: ms.rec_corn_pct || 0,
+      gypsumPct: ms.rec_gypsum_pct || 0,
+      moisturePct: ms.rec_rh_pct || 0
+    },
+    spawnPct: ms.rec_spawn_pct || 0,
+    blockKg: ms.rec_bag_kg || 0,
+    opts: {
+      residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
+    }
+  };
+}
+
+// Mix a batch of substrate. This is the only step that draws raw materials.
+function createSubstrateBatch(db, b, userId) {
+  const found = getMixRecipe(db, b.recipeStrainId);
+  if (!found) throw new Error('Diese Sorte hat noch kein Rezept. Bitte zuerst ein Rezept speichern.');
+  const mix = computeMixBatch(found.recipe, b.targetKg, found.opts);
+  const created = b.created || new Date().toISOString();
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      `INSERT INTO substrate_batches
+         (sub_id, recipe_strain_id, recipe_label, target_kg, remaining_kg,
+          hardwood_pct, wheatbran_pct, corn_pct, gypsum_pct, rh_pct,
+          dry_kg, pellets_kg, bran_kg, corn_kg, gypsum_kg, water_l, moisture_pct,
+          notes, created, status)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open')`
+    ).run(
+      b.subId,
+      b.recipeStrainId,
+      found.strain.name + ' (' + found.strain.kuerzel + ')',
+      mix.targetKg,
+      mix.targetKg,
+      mix.hardwoodPct,
+      mix.wheatbranPct,
+      mix.cornPct,
+      mix.gypsumPct,
+      mix.rhPct,
+      mix.dryKg,
+      mix.pelletsKg,
+      mix.branKg,
+      mix.cornKg,
+      mix.gypsumKg,
+      mix.waterL,
+      mix.moisturePct,
+      b.notes || '',
+      created
+    );
+    for (const d of mix.deltas) {
+      applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, 'mix', b.subId, userId || null);
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return { subId: b.subId, mix };
+}
+
+function _mapSubstrateRow(r) {
+  return {
+    subId: r.sub_id,
+    recipeStrainId: r.recipe_strain_id,
+    recipeLabel: r.recipe_label,
+    targetKg: r.target_kg,
+    remainingKg: r.remaining_kg,
+    usedKg: r.target_kg - r.remaining_kg,
+    composition: {
+      hardwoodPct: r.hardwood_pct,
+      wheatbranPct: r.wheatbran_pct,
+      cornPct: r.corn_pct,
+      gypsumPct: r.gypsum_pct,
+      rhPct: r.rh_pct
+    },
+    dryKg: r.dry_kg,
+    pelletsKg: r.pellets_kg,
+    branKg: r.bran_kg,
+    cornKg: r.corn_kg,
+    gypsumKg: r.gypsum_kg,
+    waterL: r.water_l,
+    moisturePct: r.moisture_pct,
+    notes: r.notes || '',
+    created: r.created,
+    status: r.status
+  };
+}
+
+// Everything a mix is: how it was made, what has come out of it, and what is
+// left. The Chargen matter as much as the recipe — a mix that went wrong is
+// diagnosed by what was made from it, not by re-reading its percentages.
+function getSubstrateBatch(db, subId) {
+  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const drawn = db
+    .prepare(
+      `SELECT batch_id, species, strain, strain_text, qty, bag_kg, substrate_kg, created, due
+         FROM batches WHERE substrate_batch_id=? ORDER BY created`
+    )
+    .all(row.id)
+    .map((b) => ({
+      batchId: b.batch_id,
+      species: b.species,
+      strain: b.strain_text || b.strain || '',
+      qty: b.qty,
+      bagKg: b.bag_kg,
+      substrateKg: b.substrate_kg,
+      created: b.created,
+      due: b.due
+    }));
+  // What the mix actually took off the shelf, as booked — not as computed.
+  const ledger = db
+    .prepare(
+      "SELECT mat, delta_kg AS deltaKg, time FROM inventory_log WHERE ref = ? AND type IN ('mix','mix-delete') ORDER BY id"
+    )
+    .all(subId);
+  return { ..._mapSubstrateRow(row), drawn, ledger };
+}
+
+// A mix that went bad, or a remainder that got thrown out. No credit goes
+// back to the shelf: the pellets were mixed and are gone either way. What
+// changes is that it stops being offered to new Chargen and stops counting
+// as substrate anybody can still use.
+function writeOffSubstrateBatch(db, subId, note, userId) {
+  db.exec('BEGIN');
+  try {
+    const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+    if (!row) {
+      db.exec('ROLLBACK');
+      return false;
+    }
+    const lost = row.remaining_kg;
+    // Who threw away 100 kg of substrate is worth knowing later, and it makes the
+    // actor an argument this function actually uses rather than one it carries.
+    const who = userId ? (db.prepare('SELECT username FROM users WHERE id=?').get(userId) || {}).username : null;
+    const stamp =
+      '[' +
+      new Date().toISOString().slice(0, 10) +
+      '] ' +
+      (note || 'verworfen') +
+      ' (' +
+      lost.toFixed(1) +
+      ' kg)' +
+      (who ? ' — ' + who : '');
+    db.prepare(
+      "UPDATE substrate_batches SET status='written_off', remaining_kg=0, notes = CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes || ' · ' || ? END WHERE sub_id=?"
+    ).run(stamp, stamp, subId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return { lostKg: lost };
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+function listSubstrateBatches(db, opts) {
+  const o = opts || {};
+  const where = o.openOnly ? " WHERE status='open' AND remaining_kg > 0.0001" : '';
+  return db
+    .prepare('SELECT * FROM substrate_batches' + where + ' ORDER BY created DESC')
+    .all()
+    .map(_mapSubstrateRow);
+}
+
+// What a mix still holds is not a running total to be nudged up and down — it
+// is derivable from the Chargen made out of it, and deriving it is what makes
+// the two directions agree. The old add-and-cap arithmetic got both edges
+// wrong: an overdrawn Charge handed back more than the mix had ever held, and
+// a returned Charge silently reopened a mix that had been written off.
+//
+// `excludeBatchId` exists for the delete path, which has to recompute while the
+// row it is removing is still there.
+//
+// Caller holds the transaction.
+function _recalcSubstrateRemaining(db, subId, excludeBatchId) {
+  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const taken = db
+    .prepare(
+      'SELECT COALESCE(SUM(substrate_kg), 0) AS kg FROM batches WHERE substrate_batch_id = ? AND batch_id IS NOT ?'
+    )
+    .get(row.id, excludeBatchId || null).kg;
+  const remaining = Math.max(0, row.target_kg - taken);
+  // A mix declared unusable stays unusable. Handing a Charge back to it must
+  // not quietly put contaminated substrate back on the shelf.
+  const off = row.status === 'written_off';
+  const status = off ? 'written_off' : remaining > 0.0001 ? 'open' : 'used';
+  db.prepare('UPDATE substrate_batches SET remaining_kg=?, status=? WHERE sub_id=?').run(
+    off ? 0 : remaining,
+    status,
+    subId
+  );
+  return { row, taken, remaining, over: taken > row.target_kg + 1e-9 };
+}
+
+function deleteSubstrateBatch(db, subId, userId) {
+  db.exec('BEGIN');
+  try {
+    const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+    if (!row) {
+      db.exec('ROLLBACK');
+      return false;
+    }
+    const users = db.prepare('SELECT COUNT(*) c FROM batches WHERE substrate_batch_id=?').get(row.id).c;
+    if (users > 0) {
+      throw new Error(
+        'Diese Substrat-Charge wird von ' + users + ' Charge(n) verwendet und kann nicht geloescht werden'
+      );
+    }
+    // Credit back exactly what the ledger says this mix took — not a recomputed
+    // figure. applyInventoryDeltaNoTxn clamps a deduction to available stock, so
+    // a mix made while short took less than it asked for, and reversing the ask
+    // would invent the difference.
+    const taken = db
+      .prepare("SELECT mat, -SUM(delta_kg) AS kg FROM inventory_log WHERE ref=? AND type='mix' GROUP BY mat")
+      .all(subId);
+    for (const t of taken) {
+      if (t.kg > 0) applyInventoryDeltaNoTxn(db, t.mat, t.kg, 'mix-delete', subId, userId || null);
+    }
+    db.prepare('DELETE FROM substrate_batches WHERE sub_id=?').run(subId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return true;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+// Create a Charge of bags out of an existing mix. The substrate is already paid
+// for, so the only thing booked here is the spawn — which is why this needs the
+// species and the mix does not.
+function createBagBatchFromSubstrate(db, b, userId) {
+  const sub = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(b.subId);
+  if (!sub) throw new Error('Substrat-Charge nicht gefunden: ' + b.subId);
+  const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(b.strainId);
+  if (!ms) throw new Error('Pilzsorte nicht gefunden');
+
+  const qty = Number(b.qty);
+  if (!Number.isFinite(qty) || qty < 1) throw new Error('qty must be >= 1');
+  const bagKg = Number.isFinite(+b.bagKg) && +b.bagKg > 0 ? +b.bagKg : ms.rec_bag_kg || 5;
+  const drawKg = qty * bagKg;
+  const spawnKg = drawKg * ((ms.rec_spawn_pct || 0) / 100);
+
+  const days = Number.isFinite(+b.days) && +b.days >= 1 ? +b.days : ms.rec_inc_days || 14;
+  const created = b.created || new Date().toISOString();
+  const due = b.due || new Date(new Date(created).getTime() + days * 86400000).toISOString();
+
+  const deltas = spawnKg > 0 ? [{ mat: 'grain', deltaKg: -spawnKg, type: 'spawn' }] : [];
+  const res = insertBatch(
+    db,
+    {
+      batchId: b.batchId,
+      strainId: b.strainId,
+      strain: b.strain || 'XXX',
+      qty,
+      days,
+      bagKg,
+      batchType: 'block',
+      sourceId: b.sourceId || null,
+      notes: b.notes || '',
+      strainText: b.strainText || '',
+      created,
+      due,
+      // The composition is the mix's, not the species' — the bags are made of
+      // what was actually mixed, even if the Sorte's recipe has moved on since.
+      substrate: {
+        hardwood: sub.hardwood_pct,
+        wheatbran: sub.wheatbran_pct,
+        corn: sub.corn_pct,
+        rh: sub.rh_pct,
+        gypsum: sub.gypsum_pct > 0
+      },
+      bags: b.bags && b.bags.length ? b.bags : _defaultBagIds(b.batchId, qty),
+      // insertBatch performs the draw inside its own transaction. Doing it here
+      // afterwards would leave a window where the bags exist and the mix still
+      // says it is full — and the two disagreeing is the exact bookkeeping error
+      // this whole change is meant to remove.
+      substrateBatch: { subId: b.subId, id: sub.id, drawKg }
+    },
+    deltas,
+    userId
+  );
+  const after = db.prepare('SELECT remaining_kg FROM substrate_batches WHERE sub_id=?').get(b.subId);
+  return {
+    ...res,
+    drawKg,
+    spawnKg,
+    // The due date is worked out here from the Sorte's incubation days, so the
+    // caller has no other way to learn it — and the calendar push drops any
+    // batch that arrives without one.
+    created,
+    due,
+    remainingKg: after ? after.remaining_kg : 0,
+    over: drawKg > sub.remaining_kg + 1e-9
+  };
+}
+
+function _defaultBagIds(batchId, n) {
+  const width = String(n).length;
+  const out = [];
+  for (let i = 1; i <= n; i++) out.push(batchId + '-' + String(i).padStart(width, '0'));
+  return out;
+}
+
 function insertBatch(db, b, deltas, userId) {
   if (!Number.isFinite(b.qty) || b.qty < 1) throw new Error('qty must be >= 1');
   if (!Number.isFinite(b.days) || b.days < 1) throw new Error('days must be >= 1');
@@ -3252,8 +3856,11 @@ function insertBatch(db, b, deltas, userId) {
     const sub0 = b.substrate || {};
     const hw0 = sub0.hardwood || 0;
     const wb0 = sub0.wheatbran || 0;
-    if ((hw0 || wb0) && Math.abs(hw0 + wb0 - 100) > 0.01) {
-      throw new Error('Substrate composition must total 100% (got ' + (hw0 + wb0).toFixed(1) + '%)');
+    // v67: corn meal is part of the dry blend on the maitake recipe (76/19/5),
+    // so it counts towards the 100% exactly as pellets and bran do.
+    const cm0 = sub0.corn || 0;
+    if ((hw0 || wb0 || cm0) && Math.abs(hw0 + wb0 + cm0 - 100) > 0.01) {
+      throw new Error('Substrate composition must total 100% (got ' + (hw0 + wb0 + cm0).toFixed(1) + '%)');
     }
   }
   db.exec('BEGIN');
@@ -3286,6 +3893,20 @@ function insertBatch(db, b, deltas, userId) {
       sub.coir || 0,
       b.grainKg || 0
     );
+    // v67: a Charge portioned out of a mix records which mix and how much,
+    // and takes those kilograms out of it here — inside this transaction, so
+    // bags and remaining substrate can never disagree.
+    if (b.substrateBatch) {
+      db.prepare(`UPDATE batches SET substrate_batch_id=?, substrate_kg=?, sub_corn=? WHERE batch_id=?`).run(
+        b.substrateBatch.id,
+        b.substrateBatch.drawKg,
+        (b.substrate && b.substrate.corn) || 0,
+        b.batchId
+      );
+      // The kilograms are already on the batch row, so the remainder is derived
+      // rather than passed — one authority for it instead of two.
+      _recalcSubstrateRemaining(db, b.substrateBatch.subId);
+    }
     const ins = db.prepare('INSERT INTO bags(bag_id,batch_id,bag_kg) VALUES(?,?,?)');
     for (const item of b.bags || []) {
       if (typeof item === 'string') {
@@ -3446,9 +4067,22 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
     // deltas are clamped against current stock by applyInventoryDeltaNoTxn —
     // the same lenient behaviour insertBatch already has when stock is short.
     const addedWetKg = weight * newBags.length;
-    const deltas = computeBatchMaterialDeltasForKg(batch, addedWetKg);
-    for (const d of deltas) {
-      applyInventoryDeltaNoTxn(db, d.mat, -d.deltaKg, 'batch-grow', batchId, userId || null);
+    if (batch.substrate_batch_id) {
+      // The substrate for these bags was bought when the mix was made. What
+      // they cost now is more of that mix, plus the spawn to inoculate them.
+      db.prepare('UPDATE batches SET substrate_kg = substrate_kg + ? WHERE batch_id=?').run(addedWetKg, batchId);
+      const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(batch.substrate_batch_id);
+      if (sub) _recalcSubstrateRemaining(db, sub.sub_id);
+      const ms = batch.strain_id
+        ? db.prepare('SELECT rec_spawn_pct FROM mushroom_strains WHERE id=?').get(batch.strain_id)
+        : null;
+      const spawnKg = addedWetKg * (((ms && ms.rec_spawn_pct) || 0) / 100);
+      if (spawnKg > 0) applyInventoryDeltaNoTxn(db, 'grain', -spawnKg, 'spawn', batchId, userId || null);
+    } else {
+      const deltas = computeBatchMaterialDeltasForKg(batch, addedWetKg);
+      for (const d of deltas) {
+        applyInventoryDeltaNoTxn(db, d.mat, -d.deltaKg, 'batch-grow', batchId, userId || null);
+      }
     }
 
     // Assign numeric barcodes to new bags
@@ -3468,12 +4102,26 @@ function deleteBatchById(db, batchId, userId) {
     // Read batch before deleting so we can reverse inventory deductions
     const row = db
       .prepare(
-        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh, sub_coir, grain_kg FROM batches WHERE batch_id=?'
+        'SELECT qty, bag_kg, batch_type, sub_hardwood, sub_wheatbran, sub_rh, sub_gypsum, grain_rh, sub_coir, grain_kg, substrate_batch_id, substrate_kg FROM batches WHERE batch_id=?'
       )
       .get(batchId);
     if (row) {
       row.batch_id = batchId;
-      const deltas = computeBatchMaterialDeltas(db, row);
+      // A Charge drawn from a mix never took raw materials — it took kilograms
+      // of finished substrate, and those go back to the mix rather than to the
+      // shelf. Only the spawn it was inoculated with is a shelf credit, and the
+      // capped-at-what-was-taken logic below already handles that from the ledger.
+      if (row.substrate_batch_id && row.substrate_kg > 0) {
+        const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(row.substrate_batch_id);
+        if (sub) _recalcSubstrateRemaining(db, sub.sub_id, batchId);
+      }
+      const deltas = row.substrate_batch_id
+        ? db
+            .prepare(
+              "SELECT mat, -SUM(delta_kg) AS deltaKg FROM inventory_log WHERE ref = ? AND type = 'spawn' GROUP BY mat"
+            )
+            .all(batchId)
+        : computeBatchMaterialDeltas(db, row);
       // Only credit back what this batch actually took out. The MCP create_batch
       // tool deliberately passes deltas = null, so a batch created that way never
       // deducted anything — reversing its computed composition on delete invented
@@ -3500,7 +4148,7 @@ function deleteBatchById(db, batchId, userId) {
       const takenByMat = {};
       for (const r of db
         .prepare(
-          "SELECT mat, SUM(delta_kg) AS total FROM inventory_log WHERE ref = ? AND type IN ('batch','batch-grow') GROUP BY mat"
+          "SELECT mat, SUM(delta_kg) AS total FROM inventory_log WHERE ref = ? AND type IN ('batch','batch-grow','spawn') GROUP BY mat"
         )
         .all(batchId))
         takenByMat[r.mat] = Math.abs(r.total || 0);
@@ -3777,6 +4425,9 @@ function resetOperationalData(db, opts) {
       wipe('scan_log');
       wipe('bags');
       wipe('batches');
+      // The mixes go with the bags: what is left of a mix is a physical thing
+      // on a shelf, and a clean slate means that shelf was emptied too.
+      wipe('substrate_batches');
       wipe('cultures');
       // Barcodes pointing at rows we just cleared; zone and rack barcodes stay valid.
       wipe('barcodes', "entity_type IN ('bag','culture','batch')");
@@ -3887,7 +4538,10 @@ const VALID_CULTURE_PARENT_TYPES = {
   PD: ['MC', 'PD'],
   LC: ['MC', 'PD', 'LC'],
   G2G: ['MC', 'PD', 'LC', 'G2G', 'GS'],
-  GS: ['MC', 'PD', 'LC', 'G2G', 'GS']
+  GS: ['MC', 'PD', 'LC', 'G2G', 'GS'],
+  // A syringe is drawn from something liquid or from a plate — never from grain,
+  // which cannot be drawn into a syringe at all.
+  SY: ['MC', 'PD', 'LC']
 };
 
 function validateCultureParent(db, type, parentId) {
@@ -5170,7 +5824,7 @@ function getOrderForShipping(db, id) {
 }
 
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -5261,8 +5915,8 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
 function updateLabThresholds(db, labThresholds) {
   const lt = labThresholds || {};
   db.prepare(
-    `UPDATE inventory SET lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=? WHERE id=1`
-  ).run(lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0);
+    `UPDATE inventory SET lab_thresh_mc=?, lab_thresh_pd=?, lab_thresh_lc=?, lab_thresh_g2g=?, lab_thresh_gs=?, lab_thresh_sy=? WHERE id=1`
+  ).run(lt.MC ?? 0, lt.PD ?? 0, lt.LC ?? 0, lt.G2G ?? 0, lt.GS ?? 0, lt.SY ?? 0);
   incrementDataVersion(db);
 }
 
@@ -6300,8 +6954,26 @@ function _strainRecipeFields(d) {
     rec_grain_rh_pct: num(d.recGrainRhPct, 52),
     rec_inc_days: num(d.recIncDays, 14),
     // 0 = not set; the harvest card then shows tent days without a target.
-    rec_fruit_days: num(d.recFruitDays, 0)
+    rec_fruit_days: num(d.recFruitDays, 0),
+    // v65 — the mix-run half of the recipe.
+    rec_corn_pct: num(d.recCornPct, 0),
+    rec_gypsum_pct: num(d.recGypsumPct, 0),
+    rec_spawn_pct: num(d.recSpawnPct, 0),
+    rec_colon_text: typeof d.recColonText === 'string' ? d.recColonText : '',
+    rec_steril_text: typeof d.recSterilText === 'string' ? d.recSterilText : ''
   };
+}
+
+// Minimum holdings are NOT recipe fields, and putting them there cost a recipe.
+// updateMushroomStrain writes the entire rec_* set as soon as any recipe key is
+// present, so editing only a minimum wrote zeros over the blend. They are
+// written only when the caller actually sends them.
+function _strainMinFields(d) {
+  const num = (v, def) => (Number.isFinite(+v) ? +v : def);
+  const out = {};
+  if ('minSpawnKg' in d) out.min_spawn_kg = num(d.minSpawnKg, 0);
+  if ('minLc' in d) out.min_lc = num(d.minLc, 0);
+  return out;
 }
 
 function listMushroomStrains(db) {
@@ -6328,7 +7000,16 @@ function listMushroomStrains(db) {
       recGrainRhPct: r.rec_grain_rh_pct != null ? r.rec_grain_rh_pct : 52,
       recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14,
       // v51 — expected days in the fruiting tent; 0 = not set.
-      recFruitDays: r.rec_fruit_days || 0
+      recFruitDays: r.rec_fruit_days || 0,
+      // v65 — mix-run recipe constants.
+      recCornPct: r.rec_corn_pct || 0,
+      recGypsumPct: r.rec_gypsum_pct || 0,
+      recSpawnPct: r.rec_spawn_pct || 0,
+      recColonText: r.rec_colon_text || '',
+      recSterilText: r.rec_steril_text || '',
+      // v69 — minimum holdings, per Sorte.
+      minSpawnKg: r.min_spawn_kg || 0,
+      minLc: r.min_lc || 0
     }));
 }
 
@@ -6337,7 +7018,7 @@ function createMushroomStrain(db, data) {
   if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
-  const rec = _strainRecipeFields(data);
+  const rec = { ..._strainRecipeFields(data), ..._strainMinFields(data || {}) };
   const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
   const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
@@ -6375,9 +7056,15 @@ function updateMushroomStrain(db, id, data) {
     'recGrainKg',
     'recGrainRhPct',
     'recIncDays',
-    'recFruitDays'
+    'recFruitDays',
+    'recCornPct',
+    'recGypsumPct',
+    'recSpawnPct',
+    'recColonText',
+    'recSterilText'
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
+  Object.assign(fields, _strainMinFields(data || {}));
   if (!Object.keys(fields).length) return;
   fields.updated = now;
   const cols = Object.keys(fields);
@@ -6633,14 +7320,16 @@ function getInventory(db, logLimit) {
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
-      coir: inv.stock_coir || 0
+      coir: inv.stock_coir || 0,
+      corn: inv.stock_corn || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
-      coir: { minKg: inv.thresh_coir || 0 }
+      coir: { minKg: inv.thresh_coir || 0 },
+      corn: { minKg: inv.thresh_corn || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -6655,7 +7344,8 @@ function getInventory(db, logLimit) {
       PD: inv.lab_thresh_pd || 0,
       LC: inv.lab_thresh_lc || 0,
       G2G: inv.lab_thresh_g2g || 0,
-      GS: inv.lab_thresh_gs || 0
+      GS: inv.lab_thresh_gs || 0,
+      SY: inv.lab_thresh_sy || 0
     },
     log: logRows.map((r) => ({
       time: r.time,
@@ -8219,7 +8909,8 @@ function computeProductionDemand(db) {
     hardwood: inv.stock_hardwood || 0,
     wheatbran: inv.stock_wheatbran || 0,
     gypsum: inv.stock_gypsum || 0,
-    coir: inv.stock_coir || 0
+    coir: inv.stock_coir || 0,
+    corn: inv.stock_corn || 0
   };
 
   return rows
@@ -8344,6 +9035,14 @@ module.exports = {
   deleteScanEntryById,
   clearScanLog,
   resetOperationalData,
+  computeMixBatch,
+  getMixRecipe,
+  createSubstrateBatch,
+  listSubstrateBatches,
+  getSubstrateBatch,
+  writeOffSubstrateBatch,
+  deleteSubstrateBatch,
+  createBagBatchFromSubstrate,
   insertHarvest,
   insertCultures,
   updateCulture,

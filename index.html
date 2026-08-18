@@ -224,6 +224,7 @@
             <option value="MC">MC — Slant</option>
             <option value="PD">PD — Petri</option>
             <option value="LC">LC — Liquid Culture</option>
+            <option value="SY">SY — Liquid Syringe</option>
             <option value="KB">G — Grainspawn</option>
           </select>
         </div>
@@ -765,6 +766,23 @@
 
     <!-- Zone check (stocktake): tick off the bags you actually find in a zone,
          then fix whatever the app still expects there but you didn't. -->
+    <!-- How a mix was made, and what came out of it. -->
+    <div class="modal-bg" id="m-subinfo" role="dialog" aria-modal="true" aria-labelledby="si-title" hidden>
+      <div class="modal" style="max-width: 560px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+          <h3 id="si-title">Ansatz</h3>
+          <button id="si-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="si-body"></div>
+        <div id="si-actions" style="margin-top: 14px"></div>
+      </div>
+    </div>
+
     <div class="modal-bg" id="m-zonecheck" role="dialog" aria-modal="true" aria-labelledby="zc-title" hidden>
       <div class="modal" style="max-width: 560px">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px">
@@ -2069,6 +2087,7 @@
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
                  sp-batch-new panel stays in the DOM as that dialog's backing form. -->
             <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
+            <button class="stab" id="st-batch-substrate" data-i18n="sub.tab">Substrat-Ansätze</button>
             <button class="stab" id="st-batch-harvest" data-i18n="batch.harvests">Harvests</button>
           </div>
           <!-- All batches -->
@@ -2148,8 +2167,68 @@
               </div>
             </div>
           </div>
+          <!-- Every mix ever made, open and spent. Not front and center: this is
+               where you go to count them and to find the one that went wrong. -->
+          <div class="sp" id="sp-batch-substrate">
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+                <div class="sec" data-i18n="sub.allTitle">Substrat-Ansätze</div>
+                <label style="font-size: 12px; color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
+                  <input type="checkbox" id="sb-show-spent" style="width: auto" onchange="renderSubstrateTab()" />
+                  <span data-i18n="sub.showSpent">Verbrauchte anzeigen</span>
+                </label>
+              </div>
+              <div id="sb-tab-summary" style="font-size: 12px; color: var(--c-text-sec); margin: 4px 0 10px"></div>
+              <div id="sb-tab-list"></div>
+            </div>
+          </div>
           <!-- New batch -->
           <div class="sp" id="sp-batch-new">
+            <!-- Step one: mix substrate in bulk. Species-neutral — the recipe is
+                 only the blend it is mixed to, and any Sorte may draw from it.
+                 This is the only place raw materials leave the shelf. -->
+            <div class="card" id="sb-card" style="margin-bottom: 10px; border: 1px solid var(--c-accent)">
+              <div class="sec" data-i18n="sub.title">Substrat ansetzen</div>
+              <div style="font-size: 12px; color: var(--c-text-sec); margin: 4px 0 10px" data-i18n="sub.desc">
+                Menge fertiges Substrat und Rezept angeben. Nur dieser Schritt bucht Pellets, Kleie und Gips vom Lager
+                ab — die Chargen darunter ziehen dann Kilo aus dem Ansatz.
+              </div>
+              <div class="g2">
+                <div>
+                  <label data-i18n="sub.recipe">Rezept</label>
+                  <select id="sb-recipe" onchange="sbPreview()"></select>
+                </div>
+                <div>
+                  <label data-i18n="sub.targetKg">kg fertiges Substrat</label>
+                  <input
+                    type="number"
+                    id="sb-kg"
+                    min="1"
+                    step="10"
+                    value="200"
+                    inputmode="decimal"
+                    oninput="sbPreviewSoon()"
+                  />
+                </div>
+              </div>
+              <div id="sb-out" style="margin-top: 10px"></div>
+              <div style="margin-top: 8px">
+                <label data-i18n="sub.notes">Notiz</label>
+                <input type="text" id="sb-notes" maxlength="200" />
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap">
+                <button id="sb-go" class="btn btn-p" onclick="createSubstrateBatchUI()" data-i18n="sub.create">
+                  Ansatz anlegen
+                </button>
+                <span id="sb-status" style="font-size: 12px; color: var(--c-text-sec)"></span>
+              </div>
+              <div style="margin-top: 12px; border-top: 1px solid var(--c-border); padding-top: 8px">
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px" data-i18n="sub.openMixes">
+                  Offene Ansätze
+                </div>
+                <div id="sb-list"></div>
+              </div>
+            </div>
             <div class="g2">
               <div class="card">
                 <div class="sec" data-i18n="batch.createNew">Create new batch</div>
@@ -2228,17 +2307,24 @@
                       Produkt wählen → Substrat, Kokos & Grain werden automatisch berechnet.
                     </div>
                   </div>
+                  <!-- v67: pick a mix and this Charge is portioned out of it —
+                       no substrate is booked, only the spawn. -->
+                  <div style="margin-bottom: 8px">
+                    <label data-i18n="sub.fromMix">Aus Substrat-Ansatz</label>
+                    <select id="nb-substrate-batch" onchange="nbSubstrateChanged()"></select>
+                    <div id="nb-substrate-info" style="display: none; margin-top: 6px"></div>
+                  </div>
                   <div class="g2">
                     <div>
                       <label data-i18n="batch.qty">Qty (bags)</label
-                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-qty" value="10" />
+                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-qty" value="10" oninput="nbSubstrateNeed()" />
                     </div>
                     <div>
                       <label data-i18n="batch.incDays">Incubation days</label
                       ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-days" value="14" />
                     </div>
                   </div>
-                  <details style="background: var(--c-bg); border-radius: 8px; padding: 10px">
+                  <details id="nb-sub-section" style="background: var(--c-bg); border-radius: 8px; padding: 10px">
                     <summary style="font-size: 12px; color: var(--c-text-sec); cursor: pointer">
                       <span data-i18n="batch.substrate">Substrate</span>
                       <!-- Filled by nbSubSum() so the composition that will actually be
@@ -2523,7 +2609,7 @@
                     </div>
                     <div
                       id="ms-rec-holzgroup"
-                      style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px"
+                      style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px"
                     >
                       <label style="font-size: 12px; color: var(--c-text-muted)">
                         <span data-i18n="orders.p.hw">Hartholz %</span>
@@ -2549,6 +2635,20 @@
                           oninput="msRecNeed()"
                         />
                       </label>
+                      <!-- Only maitake uses this (76/19/5), but it has to be enterable
+                           or that recipe cannot be expressed at all. -->
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="strains.recCornPct">Maismehl %</span>
+                        <input
+                          id="ms-rec-corn"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="0"
+                          oninput="msRecNeed()"
+                        />
+                      </label>
                     </div>
                     <div
                       id="ms-rec-coirgroup"
@@ -2571,6 +2671,33 @@
                       <input type="checkbox" id="ms-rec-gyp" style="width: auto" oninput="msRecNeed()" />
                       <span data-i18n="orders.p.gypsum">Gips (~1%)</span>
                     </label>
+                    <!-- The two figures a bulk mix needs and a single bag does not:
+                         how much gypsum goes in per dry kilo, and how much spawn the
+                         finished substrate is inoculated at. -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px">
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="strains.recGypsumPct">Gips % vom Trockenmix</span>
+                        <input id="ms-rec-gyppct" type="number" min="0" max="20" step="0.5" value="0" oninput="msRecNeed()" />
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="strains.recSpawnPct">Körnerbrut % vom Substrat</span>
+                        <input id="ms-rec-spawn" type="number" min="0" max="20" step="0.5" value="0" oninput="msRecNeed()" />
+                      </label>
+                    </div>
+                    <div id="ms-rec-ref" style="font-size: 11px; color: var(--c-text-muted); margin-top: 6px"></div>
+                    <!-- What the lab should never be without while this Sorte is
+                         being grown. Per Sorte because shiitake needs two months of
+                         notice and an oyster needs a fortnight. -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px">
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="strains.minSpawn">Mindestbestand Körnerbrut (kg)</span>
+                        <input id="ms-min-spawn" type="number" min="0" step="1" value="0" />
+                      </label>
+                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                        <span data-i18n="strains.minLc">Mindestbestand Flüssigkultur (Gläser)</span>
+                        <input id="ms-min-lc" type="number" min="0" step="1" value="0" />
+                      </label>
+                    </div>
                   </div>
                   <div id="ms-rec-graingroup" style="display: none; margin-top: 8px">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
@@ -3161,6 +3288,7 @@
                     <option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
                     <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option>
                     <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
+                    <option value="SY" data-i18n="lab.syringes">Liquid syringes</option>
                   </select>
                   <select id="cult-stat" style="width: auto; font-size: 12px; padding: 4px 8px">
                     <option value="all" data-i18n="lab.allStatuses">All statuses</option>
@@ -3214,6 +3342,7 @@
                         <option value="MC" data-i18n="lab.registerMC">Register mother culture</option>
                         <option value="PD" data-i18n="lab.pdTransfer">Petri dish transfer</option>
                         <option value="LC" data-i18n="lab.lcPrep">Liquid culture prep</option>
+                        <option value="SY" data-i18n="lab.syPrep">Fill liquid syringes</option>
                         <option value="G2G" data-i18n="lab.g2g">Grain-to-grain (G2G)</option>
                         <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
                       </select>

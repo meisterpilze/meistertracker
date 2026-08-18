@@ -2067,6 +2067,16 @@ function tagIn(tage) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 const ABHOLTAG = tagIn(3);
+// Der zweite Termin des Sortiertests, und er muss **echt nach** ABHOLTAG liegen.
+// Er stand fest auf `2026-08-20`: am 17.08.2026 fiel er mit ABHOLTAG auf
+// denselben Tag, der Sortierschlüssel war gleich, und `received` entschied —
+// also die Einfügereihenfolge, und die stellt den späteren Termin nach vorn. Ab
+// dem 18. lag er sogar echt vor ABHOLTAG, und der Test prüfte das Gegenteil
+// seines Namens. Dieselbe Zeitbombe wie oben, eine Ebene tiefer: Es genügt
+// nicht, dass ein Datum mitläuft — die Datumsangaben eines Tests müssen ihre
+// Reihenfolge untereinander behalten. Deshalb stehen beide hier nebeneinander,
+// wer an der einen Zahl dreht, sieht die andere.
+const SPAETERER_ABHOLTAG = tagIn(10);
 
 describe('db – pickups', () => {
   let d, p;
@@ -2166,7 +2176,10 @@ describe('db – pickups', () => {
   it('sorts the soonest first and puts the ones with no time last', () => {
     // A pickup with no window is the odd one out, not the most urgent thing on
     // the screen.
-    db.storePickup(d, { id: 'p_late', from: '2026-08-20T09:00' });
+    //
+    // Beide Termine hängen an der Uhr, und der Abstand zwischen ihnen ist der
+    // eigentliche Prüfgegenstand — siehe SPAETERER_ABHOLTAG.
+    db.storePickup(d, { id: 'p_late', from: `${SPAETERER_ABHOLTAG}T09:00` });
     db.storePickup(d, { id: 'p_none' });
     db.storePickup(d, { id: 'p_soon', from: `${ABHOLTAG}T09:00` });
     assert.deepEqual(
