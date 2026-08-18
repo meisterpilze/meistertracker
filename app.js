@@ -12439,6 +12439,10 @@ function editMStrain(id) {
   sv('ms-rec-hw', ms.recHardwoodPct || 0);
   sv('ms-rec-wb', ms.recWheatbranPct || 0);
   sv('ms-rec-coir', ms.recCoirPct || 0);
+  sv('ms-rec-corn', ms.recCornPct || 0);
+  sv('ms-rec-gyppct', ms.recGypsumPct || 0);
+  sv('ms-rec-spawn', ms.recSpawnPct || 0);
+  msRecShowRef(ms);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!ms.recGypsum;
   sv('ms-rec-grainkg', ms.recGrainKg || 0);
@@ -12471,6 +12475,13 @@ function cancelMStrain() {
   sv('ms-rec-hw', 75);
   sv('ms-rec-wb', 25);
   sv('ms-rec-coir', 100);
+  // The recipe sheet puts 1 kg of gypsum in every 100 kg of dry mix, and this
+  // farm spawns at a flat 5% — so a blank Sorte starts there rather than at 0,
+  // which would silently mix without either.
+  sv('ms-rec-corn', 0);
+  sv('ms-rec-gyppct', 1);
+  sv('ms-rec-spawn', 5);
+  msRecShowRef(null);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = false;
   sv('ms-rec-grainkg', 0);
@@ -12515,7 +12526,13 @@ function _msReadRecipe() {
     recHardwoodPct: v('ms-rec-hw'),
     recWheatbranPct: v('ms-rec-wb'),
     recCoirPct: v('ms-rec-coir'),
-    recGypsum: chk('ms-rec-gyp'),
+    recCornPct: v('ms-rec-corn'),
+    recGypsumPct: v('ms-rec-gyppct'),
+    recSpawnPct: v('ms-rec-spawn'),
+    // The old flag and the new share have to agree, or a Charge created the
+    // per-bag way would skip gypsum that the mix puts in — same recipe, two
+    // answers depending on which screen made it.
+    recGypsum: chk('ms-rec-gyp') || v('ms-rec-gyppct') > 0,
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
     recIncDays: v('ms-rec-days'),
@@ -12624,6 +12641,10 @@ function msRecCopyFrom() {
   sv('ms-rec-hw', src.recHardwoodPct || 0);
   sv('ms-rec-wb', src.recWheatbranPct || 0);
   sv('ms-rec-coir', src.recCoirPct || 0);
+  sv('ms-rec-corn', src.recCornPct || 0);
+  sv('ms-rec-gyppct', src.recGypsumPct || 0);
+  sv('ms-rec-spawn', src.recSpawnPct || 0);
+  msRecShowRef(src);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!src.recGypsum;
   sv('ms-rec-grainkg', src.recGrainKg || 0);
@@ -12632,6 +12653,17 @@ function msRecCopyFrom() {
   sv('ms-rec-fruitdays', src.recFruitDays || 0);
   sel.value = '';
   msRecTypeChange();
+}
+function msRecShowRef(ms) {
+  const el = document.getElementById('ms-rec-ref');
+  if (!el) return;
+  const colon = ms && ms.recColonText;
+  const steril = ms && ms.recSterilText;
+  if (!colon && !steril) {
+    el.textContent = '';
+    return;
+  }
+  el.textContent = t('strains.recRef', { colon: colon || '—', steril: steril || '—' });
 }
 function msRecipeSummary(ms) {
   const type = ms.recBatchType || '';
