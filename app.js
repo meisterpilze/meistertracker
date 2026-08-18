@@ -4266,22 +4266,12 @@ function printWorkList() {
 // "+ Ernte erfassen" from the speed-dial. Harvests used to have their own card;
 // they are rows in the day plan now, so this opens the day they sit on and
 // flashes the card holding it rather than pointing at a card that is gone.
+// "Ernte erfassen" used to scroll to the task card and flash it for 1.5 s —
+// which told the worker where to look but left them with nothing to type into,
+// because the only way to actually record a harvest was to scan a bag. It now
+// opens the harvest flow, where the bag is picked from a list.
 function dashGoHarvest() {
-  const card = document.getElementById('dash-batch-tasks-card');
-  const week = buildWeekPlan();
-  const day = week.findIndex((d) => d.items.some((i) => i.kind === 'harvest'));
-  if (!card || day < 0) {
-    setFb('info', t('dash.harvestNoFruiting'));
-    return;
-  }
-  setDashDay(day);
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const prev = card.style.boxShadow;
-  card.style.transition = 'box-shadow 0.3s ease';
-  card.style.boxShadow = '0 0 0 3px var(--c-amber, #f59e0b)';
-  setTimeout(() => {
-    card.style.boxShadow = prev || '';
-  }, 1500);
+  wkfOpen('harvest');
 }
 // Warnungen is for problems you can't see anywhere else on the dashboard: low
 // stock, lab issues, zones at capacity. It deliberately does NOT restate
@@ -5582,8 +5572,11 @@ function _planBtn(it) {
   const id = esc(it.batchId || '');
   if (it.kind === 'fruiting' || it.kind === 'grain') return it.task ? dashTaskBtn(it.task) : '';
   if (it.kind === 'harvest') {
+    // Opens the harvest flow on this batch instead of navigating to the batch
+    // page. The row says "Ernte erfassen", so it should record a harvest — the
+    // jump to a list was one more place where the button and the job differed.
     return (
-      '<button class="btn btn-sm" data-action="go-to-batch" data-batch="' +
+      '<button class="btn btn-sm" data-action="harvest-batch" data-batch="' +
       id +
       '" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
       esc(t('harvest.logHarvest')) +
@@ -8376,9 +8369,12 @@ function toggleBatchBags(batchId) {
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
         const wTag = showW ? `<span style="font-size:8px;color:#888;margin-left:1px">${esc(bw)}kg</span>` : '';
-        return `<span style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
+        // A button, not a span: this chip is the only way into the bag sheet
+        // that does not involve a barcode, and the sheet is where moving,
+        // harvesting, reporting and the history live. On a laptop it is the way in.
+        return `<button type="button" class="bag-open-chip" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px;cursor:pointer${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
       ${esc(num)}${wTag} <span style="font-size:9px;color:${color};font-weight:600">${esc(loc)}</span>
-    </span>`;
+    </button>`;
       })
       .join('') +
     '</div>';
@@ -20388,7 +20384,7 @@ function initEventListeners() {
   });
   // Mobile bottom-nav buttons delegate to their sidebar counterparts so any
   // side effects (e.g. n-batch resetting batchAttentionFilter) stay in one place.
-  ['bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
+  ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());
@@ -20632,6 +20628,10 @@ function initEventListeners() {
         break;
       case 'toggle-bags':
         toggleBatchBags(batch);
+        break;
+      case 'harvest-batch':
+        wkfOpen('harvest');
+        wkfPickBatch(batch);
         break;
       case 'open-note':
         openNote(batch);
@@ -21200,3 +21200,499 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!afabWrap.contains(e.target)) setAfabOpen(false);
   });
 });
+
+// ═══ ARBEITSGÄNGE ════════════════════════════════════════════════════════════
+// The launcher page and the click-driven flows behind it.
+//
+// Every job in here already existed — it just could only be started by scanning
+// a barcode. openBagInfo() had exactly one caller, inside the scan engine, and
+// the harvest panel's bag field is readonly, so on a laptop (which never scans
+// here) most of the app was unreachable. These flows reach the same functions
+// from a list instead. The scanner still works and is still faster on the
+// tablet; it is no longer the only door.
+//
+// One modal shell (#m-work-flow) carries all of them, so picking a batch looks
+// the same whether you are harvesting, moving or reporting a contamination.
+
+const WKF = {
+  kind: null, // 'harvest' | 'move' | 'contam'
+  step: null, // 'pick' | 'detail' | 'done'
+  batchId: null,
+  grams: {}, // bagId -> raw input string (harvest)
+  flush: 1,
+  releaseAll: false,
+  dest: null, // destination zone id (move)
+  receipt: null
+};
+
+function wkf(id) {
+  return document.getElementById(id);
+}
+
+// Where a bag sits right now. The last placement scan wins; a REMOVE or no
+// entry at all means it is not on a shelf, so it is not offered for work.
+function wkBagZone(lastByBag, bagId) {
+  const last = lastByBag.get(String(bagId).toUpperCase());
+  if (!last || last.action === 'REMOVE' || !last.to) return null;
+  return toZone(last.to);
+}
+
+// What a bag has already yielded. Shown in the harvest list so a second flush
+// starts from what the first one brought instead of looking like a fresh bag.
+function wkBagHarvested(bagId) {
+  const k = String(bagId).toUpperCase();
+  let grams = 0;
+  let lastFlush = 0;
+  for (const h of harvests) {
+    if (String(h.bag || '').toUpperCase() !== k) continue;
+    grams += Number(h.grams) || 0;
+    lastFlush = Math.max(lastFlush, Number(h.flush) || 1);
+  }
+  return { grams, lastFlush };
+}
+
+// Batches that still have bags standing somewhere, newest first. `roles` limits
+// it to zone roles that make sense for the job (harvest only offers fruiting).
+function wkLiveBatches(roles) {
+  const lastByBag = buildLastScanByBag();
+  const out = [];
+  for (const b of batches) {
+    const bags = b.bags || [];
+    if (!bags.length) continue;
+    const perZone = {};
+    let live = 0;
+    for (const bag of bags) {
+      const z = wkBagZone(lastByBag, bag);
+      if (!z) continue;
+      const role = (ZONE_BY_ID[z] || {}).role;
+      if (roles && roles.indexOf(role) === -1) continue;
+      perZone[z] = (perZone[z] || 0) + 1;
+      live++;
+    }
+    if (!live) continue;
+    const zoneId = Object.keys(perZone).sort((a, c) => perZone[c] - perZone[a])[0];
+    out.push({ batch: b, live, zoneId, zoneName: (ZONE_BY_ID[zoneId] || {}).name || zoneId });
+  }
+  out.sort((a, c) => String(c.batch.created || '').localeCompare(String(a.batch.created || '')));
+  return out;
+}
+
+// Bags of one batch that are still standing, with their zone and history.
+function wkLiveBags(batchId, roles) {
+  const b = batches.find((x) => x.batchId === batchId);
+  if (!b) return [];
+  const lastByBag = buildLastScanByBag();
+  const out = [];
+  for (const bag of b.bags || []) {
+    const z = wkBagZone(lastByBag, bag);
+    if (!z) continue;
+    const role = (ZONE_BY_ID[z] || {}).role;
+    if (roles && roles.indexOf(role) === -1) continue;
+    out.push({ bag, zoneId: z, zoneName: (ZONE_BY_ID[z] || {}).name || z, ...wkBagHarvested(bag) });
+  }
+  return out;
+}
+
+// ─── Modal shell ─────────────────────────────────────────────────────────────
+
+function wkfOpen(kind) {
+  WKF.kind = kind;
+  WKF.step = 'pick';
+  WKF.batchId = null;
+  WKF.grams = {};
+  WKF.flush = 1;
+  WKF.releaseAll = false;
+  WKF.dest = null;
+  WKF.receipt = null;
+  wkf('m-work-flow').classList.add('open');
+  wkfRender();
+}
+
+function wkfClose() {
+  wkf('m-work-flow').classList.remove('open');
+  WKF.kind = null;
+  WKF.step = null;
+}
+
+function wkfBack() {
+  if (WKF.step === 'detail') {
+    WKF.step = 'pick';
+    WKF.batchId = null;
+    wkfRender();
+    return;
+  }
+  wkfClose();
+}
+
+function wkfTitle() {
+  if (WKF.step === 'done') return t('work.receiptTitle');
+  if (WKF.kind === 'harvest') return t('work.harvest');
+  if (WKF.kind === 'move') return t('work.move');
+  if (WKF.kind === 'contam') return t('work.contam');
+  return '';
+}
+
+// Step chips. They exist so a worker can see how far along the job is and that
+// it will end — a two-step form with no end in sight is where people bail out.
+function wkfStepChips() {
+  const labels =
+    WKF.kind === 'harvest'
+      ? [t('work.stepBatch'), t('work.stepGrams'), t('work.stepBooked')]
+      : WKF.kind === 'move'
+        ? [t('work.stepBatch'), t('work.stepTarget'), t('work.stepBooked')]
+        : [t('work.stepBatch'), t('work.stepReport')];
+  const at = WKF.step === 'pick' ? 0 : WKF.step === 'detail' ? 1 : 2;
+  return (
+    '<div class="wkf-chips">' +
+    labels
+      .map((l, i) => {
+        const cls = i < at ? 'wkf-chip done' : i === at ? 'wkf-chip now' : 'wkf-chip';
+        return `<span class="${cls}">${i < at ? '&#10003; ' : ''}${esc(l)}</span>`;
+      })
+      .join('') +
+    '</div>'
+  );
+}
+
+function wkfRender() {
+  if (!WKF.kind) return;
+  wkf('wkf-title').textContent = wkfTitle();
+  wkf('wkf-back').hidden = WKF.step !== 'detail';
+  wkf('wkf-steps').innerHTML = WKF.step === 'done' ? '' : wkfStepChips();
+  if (WKF.step === 'pick') return wkfRenderPick();
+  if (WKF.step === 'detail') return WKF.kind === 'harvest' ? wkfRenderHarvest() : wkfRenderMove();
+  if (WKF.step === 'done') return wkfRenderReceipt();
+}
+
+// ─── Step 1: which batch ─────────────────────────────────────────────────────
+
+function wkfRenderPick() {
+  const roles = WKF.kind === 'harvest' ? ['fruiting'] : null;
+  const rows = wkLiveBatches(roles);
+  const hint =
+    WKF.kind === 'harvest'
+      ? t('work.pickHarvestHint')
+      : WKF.kind === 'move'
+        ? t('work.pickMoveHint')
+        : t('work.pickContamHint');
+  if (!rows.length) {
+    wkf('wkf-body').innerHTML =
+      '<div class="wkf-empty">' +
+      esc(WKF.kind === 'harvest' ? t('work.noFruiting') : t('work.noBatches')) +
+      '</div>';
+    wkf('wkf-foot').innerHTML = `<button class="btn" onclick="wkfClose()">${esc(t('work.close'))}</button>`;
+    return;
+  }
+  wkf('wkf-body').innerHTML =
+    `<div class="wkf-hint">${esc(hint)}</div>` +
+    '<div class="wkf-list">' +
+    rows
+      .map(
+        (r) => `<button type="button" class="wkf-row" onclick="wkfPickBatch('${esc(r.batch.batchId)}')">
+        <span class="wkf-row-id">${esc(r.batch.batchId)}</span>
+        <span class="wkf-row-meta">${esc(r.batch.species || '')} &middot; ${r.live} ${esc(t('work.bags'))}</span>
+        <span class="wkf-row-zone">${esc(r.zoneName)}</span>
+      </button>`
+      )
+      .join('') +
+    '</div>';
+  wkf('wkf-foot').innerHTML = `<button class="btn" onclick="wkfClose()">${esc(t('work.cancel'))}</button>`;
+}
+
+function wkfPickBatch(batchId) {
+  WKF.batchId = batchId;
+  // The contamination report is already a finished dialog — it only ever lacked
+  // a way in that wasn't a scan. So this flow hands over and gets out of the way.
+  if (WKF.kind === 'contam') {
+    wkfClose();
+    openContamReport(null, batchId, null);
+    return;
+  }
+  if (WKF.kind === 'harvest') {
+    const bags = wkLiveBags(batchId, ['fruiting']);
+    // Default to the flush after the furthest one already booked on this batch:
+    // a second wave is the normal reason to come back to the same bags.
+    WKF.flush = Math.max(1, bags.reduce((m, x) => Math.max(m, x.lastFlush), 0) + (bags.some((x) => x.lastFlush) ? 1 : 0));
+    WKF.grams = {};
+  }
+  WKF.step = 'detail';
+  wkfRender();
+}
+
+// ─── Step 2a: harvest — one row per bag ──────────────────────────────────────
+
+function wkfRenderHarvest() {
+  const bags = wkLiveBags(WKF.batchId, ['fruiting']);
+  const b = batches.find((x) => x.batchId === WKF.batchId);
+  if (!bags.length) {
+    wkf('wkf-body').innerHTML = `<div class="wkf-empty">${esc(t('work.noBagsInZone'))}</div>`;
+    wkf('wkf-foot').innerHTML = `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>`;
+    return;
+  }
+  const relRow = harvestRelease.on
+    ? `<label class="wkf-check"><input type="checkbox" id="wkf-release-all" ${WKF.releaseAll ? 'checked' : ''}
+         onchange="WKF.releaseAll = this.checked" /> <span>${esc(t('work.releaseAll'))}</span></label>`
+    : '';
+  wkf('wkf-body').innerHTML =
+    `<div class="wkf-hint">${esc(t('work.gramsHint'))}</div>
+     <div class="wkf-bar">
+       <label>${esc(t('harvest.flush'))}</label>
+       <input type="number" id="wkf-flush" min="1" value="${WKF.flush}" inputmode="numeric"
+              onchange="WKF.flush = Math.max(1, parseInt(this.value, 10) || 1); this.value = WKF.flush" />
+       <span class="wkf-bar-sp">${esc(b ? b.species || '' : '')}</span>
+     </div>
+     ${relRow}
+     <div class="wkf-bags">` +
+    bags
+      .map((x) => {
+        const prev = x.grams
+          ? `<span class="wkf-prev">${esc(t('work.already', { g: Math.round(x.grams) }))}</span>`
+          : '<span class="wkf-prev"></span>';
+        const val = WKF.grams[x.bag] != null ? esc(String(WKF.grams[x.bag])) : '';
+        return `<div class="wkf-bag">
+          <span class="wkf-bag-id">${esc(x.bag)}</span>
+          ${prev}
+          <input type="text" inputmode="decimal" class="wkf-g" data-bag="${esc(x.bag)}" value="${val}"
+                 placeholder="0" aria-label="${esc(t('harvest.grams'))} ${esc(x.bag)}" />
+          <span class="wkf-unit">g</span>
+        </div>`;
+      })
+      .join('') +
+    '</div>' +
+    `<div class="wkf-sum"><b id="wkf-total">0</b> <span id="wkf-total-sub">${esc(t('work.sumEmpty'))}</span></div>`;
+  wkf('wkf-foot').innerHTML =
+    `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>` +
+    `<button class="btn btn-p" id="wkf-book" data-wk="book-harvest">${esc(t('work.book'))}</button>`;
+  wkfUpdateTotal();
+}
+
+function wkfGramsInput(el) {
+  WKF.grams[el.dataset.bag] = el.value;
+  wkfUpdateTotal();
+}
+
+// Live total. Bags left empty are not booked at all — that is what makes the
+// list safe to walk down: you fill in the ones you actually picked.
+function wkfUpdateTotal() {
+  let total = 0;
+  let n = 0;
+  for (const k of Object.keys(WKF.grams)) {
+    const g = parseDecimal(WKF.grams[k]);
+    if (g && g > 0) {
+      total += g;
+      n++;
+    }
+  }
+  const el = wkf('wkf-total');
+  if (!el) return;
+  el.textContent = total ? (total >= 1000 ? (total / 1000).toFixed(2) + ' kg' : Math.round(total) + ' g') : '0';
+  wkf('wkf-total-sub').textContent = n ? t('work.sumFrom', { n }) : t('work.sumEmpty');
+  const book = wkf('wkf-book');
+  if (book) book.disabled = n === 0;
+}
+
+function wkfBookHarvest() {
+  const b = batches.find((x) => x.batchId === WKF.batchId);
+  if (!b) return;
+  const picked = [];
+  for (const bag of Object.keys(WKF.grams)) {
+    const g = parseDecimal(WKF.grams[bag]);
+    if (g && g > 0) picked.push({ bag, grams: g });
+  }
+  if (!picked.length) return;
+  const time = new Date().toISOString();
+  const flush = WKF.flush;
+  let total = 0;
+  const entries = picked.map((p) => {
+    total += p.grams;
+    return { time, batch: b.batchId, bag: p.bag, species: b.species, strain: b.strain, grams: p.grams, flush };
+  });
+  // Mirror the single-bag panel: push locally so the totals update at once, and
+  // roll the entry back if the server refuses it.
+  entries.forEach((e) => {
+    harvests.push(e);
+    const body = WKF.releaseAll ? { ...e, release: e.grams } : e;
+    apiPost('/api/harvests', body).then((r) => {
+      if (r && r.error) {
+        const i = harvests.lastIndexOf(e);
+        if (i >= 0) harvests.splice(i, 1);
+        setFb('err', t('common.error') + ': ' + r.error, { noModal: true });
+        if (typeof renderHarvests === 'function') renderHarvests();
+        return;
+      }
+      if (r && r.releaseError) setFb('err', t('harvest.releaseFailed', { bag: e.bag }) + ': ' + r.releaseError, { noModal: true });
+    });
+    const sEntry = {
+      time,
+      action: 'HARVEST',
+      batch: b.batchId,
+      bag: e.bag,
+      from: null,
+      to: null,
+      species: b.species,
+      strain: b.strain,
+      grams: e.grams,
+      flush,
+      _tempId: 's' + ++_scanTempIdCounter
+    };
+    if (!sessionStartTime) sessionStartTime = Date.now();
+    sessionEntries.push(sEntry);
+  });
+  const left = wkLiveBags(WKF.batchId, ['fruiting']).filter((x) => !WKF.grams[x.bag] || !parseDecimal(WKF.grams[x.bag]));
+  WKF.receipt = {
+    headline: t('work.receiptHarvest', {
+      kg: total >= 1000 ? (total / 1000).toFixed(2) + ' kg' : Math.round(total) + ' g',
+      species: b.species || ''
+    }),
+    lines: [
+      [t('work.rBatch'), b.batchId],
+      [t('work.rBags'), t('work.rBagsVal', { n: picked.length, total: (b.bags || []).length, flush })],
+      [t('work.rReleased'), WKF.releaseAll ? t('work.rReleasedYes') : t('work.rReleasedNo')],
+      [t('work.rBy'), (currentUser && currentUser.username) || '—']
+    ],
+    next: left.length ? { label: t('work.nextHarvest', { n: left.length }), action: 'harvest-again' } : null
+  };
+  WKF.step = 'done';
+  wkfRender();
+  if (typeof renderHarvests === 'function') renderHarvests();
+  if (typeof updateSD === 'function') updateSD();
+  if (typeof renderStatus === 'function') renderStatus();
+}
+
+// ─── Step 2b: move — where to ────────────────────────────────────────────────
+
+function wkfRenderMove() {
+  const b = batches.find((x) => x.batchId === WKF.batchId);
+  const bags = wkLiveBags(WKF.batchId, null);
+  const here = bags.length ? bags[0].zoneId : null;
+  const targets = zones.filter((z) => z.id !== here);
+  wkf('wkf-body').innerHTML =
+    `<div class="wkf-hint">${esc(t('work.moveHint', { n: bags.length, batch: WKF.batchId }))}</div>` +
+    '<div class="wkf-zones">' +
+    targets
+      .map(
+        (z) => `<button type="button" class="wkf-zone${WKF.dest === z.id ? ' sel' : ''}"
+          onclick="WKF.dest='${esc(z.id)}'; wkfRender()">
+          <span class="wkf-zone-dot" style="background:${esc(z.color || '#94a3b8')}"></span>
+          <span class="wkf-zone-n">${esc(z.name || z.id)}</span>
+        </button>`
+      )
+      .join('') +
+    '</div>';
+  wkf('wkf-foot').innerHTML =
+    `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>` +
+    `<button class="btn btn-p" data-wk="book-move" ${WKF.dest ? '' : 'disabled'}>${esc(t('work.book'))}</button>`;
+  if (b && !bags.length) wkf('wkf-body').innerHTML = `<div class="wkf-empty">${esc(t('work.noBagsStanding'))}</div>`;
+}
+
+function wkfBookMove() {
+  const b = batches.find((x) => x.batchId === WKF.batchId);
+  if (!b || !WKF.dest) return;
+  const destZone = ZONE_BY_ID[WKF.dest] || {};
+  moveBatchTo(b, WKF.dest, function (moved, skipped) {
+    WKF.receipt = {
+      headline: t('work.receiptMove', { n: moved, zone: destZone.name || WKF.dest }),
+      lines: [
+        [t('work.rBatch'), b.batchId],
+        [t('work.rMoved'), String(moved)],
+        [t('work.rSkipped'), String(skipped || 0)],
+        [t('work.rBy'), (currentUser && currentUser.username) || '—']
+      ],
+      next: null
+    };
+    WKF.step = 'done';
+    wkfRender();
+    if (typeof renderBatches === 'function') renderBatches();
+    if (typeof renderStatus === 'function') renderStatus();
+    if (typeof updateSD === 'function') updateSD();
+  });
+}
+
+// ─── Step 3: the receipt ─────────────────────────────────────────────────────
+// Shown after every flow. A worker who is new needs to see that something was
+// booked, what it changed, and what the obvious next move is — otherwise the
+// only feedback is a form that closed.
+
+function wkfRenderReceipt() {
+  const r = WKF.receipt;
+  if (!r) return wkfClose();
+  wkf('wkf-body').innerHTML =
+    `<div class="wkf-receipt">
+       <div class="wkf-r-head"><span class="wkf-r-tick">&#10003;</span><b>${esc(r.headline)}</b></div>
+       <div class="wkf-r-lines">` +
+    r.lines.map((l) => `<div><span class="wkf-r-k">${esc(l[0])}</span><span>${esc(l[1])}</span></div>`).join('') +
+    '</div></div>';
+  wkf('wkf-foot').innerHTML =
+    (r.next ? `<button class="btn btn-p" data-wk="receipt-next">${esc(r.next.label)}</button>` : '') +
+    `<button class="btn" onclick="wkfClose()">${esc(t('work.done'))}</button>`;
+}
+
+function wkfReceiptNext() {
+  const r = WKF.receipt;
+  if (r && r.next && r.next.action === 'harvest-again') {
+    const batchId = WKF.batchId;
+    wkfOpen('harvest');
+    wkfPickBatch(batchId);
+    return;
+  }
+  wkfClose();
+}
+
+// ─── Launcher wiring ─────────────────────────────────────────────────────────
+
+// Körnerbrut is a Laborarbeit type in the data model, so it opens the same
+// guided dialog with its type preselected rather than getting a second one.
+function wkOpenGrain() {
+  msQuickLaborNew();
+  const sel = document.getElementById('ms-q-labtype');
+  if (sel) {
+    sel.value = 'KB';
+    if (typeof msQuickLabTypeChanged === 'function') msQuickLabTypeChanged();
+  }
+}
+
+function wkOpenSubstrate() {
+  go('batch', 'n-batch');
+  openStab('batch', 'substrate');
+}
+
+(function wireWorkSteps() {
+  const tiles = [
+    ['wk-t-lab', msQuickLaborNew],
+    ['wk-t-grain', wkOpenGrain],
+    ['wk-t-batch', msQuickChargeNew],
+    ['wk-t-sub', wkOpenSubstrate],
+    ['wk-t-move', () => wkfOpen('move')],
+    ['wk-t-harvest', () => wkfOpen('harvest')],
+    ['wk-t-contam', () => wkfOpen('contam')]
+  ];
+  tiles.forEach(([id, fn]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  });
+  const today = document.getElementById('wk-goto-today');
+  if (today) today.addEventListener('click', () => go('dash', 'n-dash'));
+  const nav = document.getElementById('n-work');
+  if (nav) nav.addEventListener('click', () => go('work', 'n-work'));
+  const close = document.getElementById('wkf-close');
+  if (close) close.addEventListener('click', wkfClose);
+  const back = document.getElementById('wkf-back');
+  if (back) back.addEventListener('click', wkfBack);
+  const bg = document.getElementById('m-work-flow');
+  if (bg) {
+    bg.addEventListener('click', (e) => {
+      if (e.target === bg) return wkfClose();
+      // Delegated so the rendered bodies stay plain markup: an inline onclick on
+      // generated HTML hides the call from every tool that reads this file.
+      const act = e.target.closest('[data-wk]');
+      if (!act) return;
+      if (act.dataset.wk === 'book-harvest') wkfBookHarvest();
+      else if (act.dataset.wk === 'book-move') wkfBookMove();
+      else if (act.dataset.wk === 'receipt-next') wkfReceiptNext();
+    });
+    bg.addEventListener('input', (e) => {
+      const g = e.target.closest('.wkf-g');
+      if (g) wkfGramsInput(g);
+    });
+  }
+})();
