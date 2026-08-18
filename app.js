@@ -1030,6 +1030,10 @@ function go(page, btnId) {
   if (page !== 'settings') lastMainPage = { page, btnId };
   // Admin borrows the sidebar on a desktop; styles.css reads this flag.
   document.body.classList.toggle('admin-mode', page === 'settings');
+  // The footer button changes job with it. Sighted users read that off the
+  // arrow and the green; a screen reader reads only the label, so say it.
+  const adminBtn = document.getElementById('n-settings');
+  if (adminBtn) adminBtn.setAttribute('aria-label', t(page === 'settings' ? 'nav.adminBack' : 'nav.admin'));
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
@@ -20515,16 +20519,15 @@ function initEventListeners() {
   $('sb-admin-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.sb-btn');
     if (!btn) return;
-    if (btn.id === 'sn-back') {
-      go(lastMainPage.page, lastMainPage.btnId);
-      return;
-    }
     const stab = document.getElementById('st-settings-' + btn.dataset.sub);
     if (stab) stab.click();
     sbCloseMobile();
   });
+  // In and out through the same button. Pressing Admin a second time is the
+  // way back, which is where a thumb already is and where the eye last looked.
   $('n-settings').addEventListener('click', () => {
-    go('settings', 'n-settings');
+    if (document.body.classList.contains('admin-mode')) go(lastMainPage.page, lastMainPage.btnId);
+    else go('settings', 'n-settings');
   });
   $('sync-dot').addEventListener('click', loadData);
   $('lang-sel').addEventListener('change', function () {

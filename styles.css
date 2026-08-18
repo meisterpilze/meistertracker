@@ -237,9 +237,25 @@ body.admin-mode .sb-nav {
 body.admin-mode .sb-admin-nav {
   display: block;
 }
-.sb-admin-back {
-  color: var(--c-text-muted);
-  margin-bottom: 6px;
+/* The footer button is the door, and one door needs one place: the same spot
+   leads in and back out again. Solid green while inside says which side of it
+   you are standing on, and the arrow replacing the gear says what pressing it
+   does — a gear that navigates away would be telling you the wrong thing. */
+#n-settings .sb-ico-back {
+  display: none;
+}
+body.admin-mode #n-settings {
+  background: var(--c-primary);
+  color: #fff;
+}
+body.admin-mode #n-settings svg {
+  stroke: #fff;
+}
+body.admin-mode #n-settings .sb-ico-admin {
+  display: none;
+}
+body.admin-mode #n-settings .sb-ico-back {
+  display: block;
 }
 @media (min-width: 769px) {
   body.admin-mode #p-settings > .stabs {
