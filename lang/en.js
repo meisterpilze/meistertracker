@@ -1702,7 +1702,7 @@ window.LANG['en'] = {
   // Inventory cards
   'inv.lowStock': 'LOW STOCK',
   'inv.shortageWarn': 'Not enough stock for this batch:',
-  'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the difference is logged as used.)',
+  'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the missing amount is not recorded.)',
   'inv.alertBelow': 'Alert below {n}kg',
   'inv.logDelivery': '+ Log delivery',
   'inv.grainBagsEst': '\u2248 {n} grain bags @ {kg}kg each',

@@ -1722,7 +1722,7 @@ window.LANG['pt'] = {
   // Inventory cards
   'inv.lowStock': 'ESTOQUE BAIXO',
   'inv.shortageWarn': 'Estoque insuficiente para este lote:',
-  'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a diferença é registrada como usada.)',
+  'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a quantidade em falta não é registrada.)',
   'inv.alertBelow': 'Alerta abaixo de {n}kg',
   'inv.logDelivery': '+ Registar entrega',
   'inv.grainBagsEst': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',

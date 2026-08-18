@@ -1726,8 +1726,7 @@ window.LANG['de'] = {
   // Inventory cards
   'inv.lowStock': 'NIEDRIGER BESTAND',
   'inv.shortageWarn': 'Nicht genug Bestand f\u00fcr diese Charge:',
-  'inv.shortageProceed':
-    'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die Differenz wird als verbraucht protokolliert.)',
+  'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die fehlende Menge wird nicht erfasst.)',
   'inv.alertBelow': 'Alarm unter {n}kg',
   'inv.logDelivery': '+ Lieferung erfassen',
   'inv.grainBagsEst': '\u2248 {n} Getreidebeutel \u00e0 {kg}kg',
