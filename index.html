@@ -4986,7 +4986,13 @@
               </div>
             </div>
           </div>
-          <!-- Harvest feed -->
+          <!-- Harvest feed in two cards, and the seam is the point: above, where the
+               messages go and how they are signed — typed once and then left alone;
+               below, what the farm sells, which is read and changed by whoever
+               writes the shop window. As one list a pack size sat between a shared
+               secret and a polling interval, and the two kinds of setting were told
+               apart only by reading every label. It stays one config with one Save,
+               at the foot of both cards. -->
           <div class="sp" id="sp-settings-harvestfeed">
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.title">Harvest feed</div>
@@ -5059,21 +5065,69 @@
                     numbers from someone else's — without it, anyone could post "we have 40 kg" and it would look real.
                   </div>
                 </div>
-                <div style="display: flex; gap: 14px; flex-wrap: wrap">
-                  <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
-                      data-i18n="harvestFeed.interval"
-                      >Every … minutes</label
-                    >
-                    <input type="number" id="harvestfeed-interval" min="1" max="1440" style="width: 90px" />
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.interval"
+                    >Every … minutes</label
+                  >
+                  <input type="number" id="harvestfeed-interval" min="1" max="1440" style="width: 90px" />
+                </div>
+                <!-- Nicht der Abholort. Der Name hat schon jemanden dazu
+                     gebracht, hier den Marktstand einzutragen — deshalb der Weg
+                     zur richtigen Stelle im Hinweis darunter. Er steht bei der
+                     Verbindung, weil er einer ist: der Schlüssel, an dem der
+                     Empfänger den Absender erkennt, keine Angabe zur Ware. -->
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.site"
+                    >Name of this farm in the feed (optional)</label
+                  >
+                  <input
+                    type="text"
+                    id="harvestfeed-site"
+                    maxlength="64"
+                    style="max-width: 240px; width: 100%"
+                    data-i18n-placeholder="harvestFeed.sitePh"
+                    placeholder="e.g. north-farm"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.siteHint"
+                  >
+                    Only needed when several farms send to the same receiver: it rides along in every message and says
+                    who sent it. This is not a pickup address — where goods are handed over lives under Settings →
+                    Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so
+                    changing it changes a key at the other end.
                   </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="harvestFeed.offerTitle">What is on offer</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="harvestFeed.offerDesc"
+              >
+                The goods rather than the connection: how long a harvest counts as fresh, how far ahead a planned one is
+                announced, and the portions it is handed over in. A shop builds its window out of these, and they ride
+                along in every message that goes out.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div style="display: flex; gap: 14px; flex-wrap: wrap">
                   <div>
                     <label
                       style="
@@ -5176,40 +5230,17 @@
                     a shop built on this feed takes no orders at all.
                   </div>
                 </div>
-                <!-- Nicht der Abholort. Der Name hat schon jemanden dazu
-                     gebracht, hier den Marktstand einzutragen — deshalb steht es
-                     jetzt darunter, samt Weg zur richtigen Stelle. -->
-                <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
-                    data-i18n="harvestFeed.site"
-                    >Name of this farm in the feed (optional)</label
-                  >
-                  <input
-                    type="text"
-                    id="harvestfeed-site"
-                    maxlength="64"
-                    style="max-width: 240px; width: 100%"
-                    data-i18n-placeholder="harvestFeed.sitePh"
-                    placeholder="e.g. north-farm"
-                  />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
-                    data-i18n="harvestFeed.siteHint"
-                  >
-                    Only needed when several farms send to the same receiver: it rides along in every message and says
-                    who sent it. This is not a pickup address — where goods are handed over lives under Settings →
-                    Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so
-                    changing it changes a key at the other end.
-                  </div>
-                </div>
-                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+              </div>
+            </div>
+            <div class="card">
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="harvestFeed.saveHint"
+              >
+                Both cards are one setting and are saved together.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap">
                   <button id="harvestfeed-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
                   <button id="harvestfeed-test-btn" class="btn btn-sm" data-i18n="harvestFeed.testNow">
                     Send one now
