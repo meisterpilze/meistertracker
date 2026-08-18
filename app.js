@@ -7296,7 +7296,10 @@ function nbSubstrateNeed() {
   const qty = parseInt(document.getElementById('nb-qty').value, 10) || 0;
   const strainId = parseInt(document.getElementById('nb-strain-sel').value, 10);
   const ms = mushroomStrains.find((x) => x.id === strainId);
-  const bagKg = (ms && ms.recBagKg) || 5;
+  // The same field createBatch submits, not the recipe behind it. Reading the
+  // recipe here while the form carries a different weight quoted one draw and
+  // booked another — 20 bags read as 100 kg and took 60.
+  const bagKg = parseDecimal(document.getElementById('nb-weight').value) || (ms && ms.recBagKg) || 5;
   const need = qty * bagKg;
   const left = s.remainingKg - need;
   const spawn = need * (((ms && ms.recSpawnPct) || 0) / 100);
