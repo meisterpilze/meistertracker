@@ -220,26 +220,28 @@ body {
   padding: 10px;
 }
 /* Admin navigation — the Admin section borrows the sidebar.
-   Fourteen sub-tabs do not fit one horizontal strip: on a desktop .stabs has
-   neither wrap nor scroll, so the pills squeeze until their labels break. A
-   vertical, grouped list has no such ceiling, and .sb-nav already scrolls.
-   Mobile keeps the strip instead — there the sidebar is a drawer that
-   sbCloseMobile() shuts on every pick, which would turn each sub-tab switch
-   into hamburger → tap → drawer-closes. The strip is one swipe. */
+   Fourteen sub-tabs do not fit one horizontal strip: .stabs has neither wrap
+   nor scroll outside the mobile rules, so on a desktop the pills squeeze until
+   their labels break. A vertical, grouped list has no such ceiling, and
+   .sb-nav already scrolls.
+   The drawer swaps the same way: on a phone Admin is a drill-down, not a
+   departure, so the menu stays open and shows the sub-tabs instead of closing
+   on the way out. The strip stays there too, as the quick switcher — changing
+   sub-tab is one swipe rather than hamburger → tap → drawer-closes. */
 .sb-admin-nav {
   display: none;
+}
+body.admin-mode .sb-nav {
+  display: none;
+}
+body.admin-mode .sb-admin-nav {
+  display: block;
 }
 .sb-admin-back {
   color: var(--c-text-muted);
   margin-bottom: 6px;
 }
 @media (min-width: 769px) {
-  body.admin-mode .sb-nav {
-    display: none;
-  }
-  body.admin-mode .sb-admin-nav {
-    display: block;
-  }
   body.admin-mode #p-settings > .stabs {
     display: none;
   }
@@ -379,6 +381,14 @@ body.has-worktree-banner .mobile-topbar {
 .sb-overlay.sb-show {
   display: block;
   opacity: 1;
+}
+/* Both thumb-zone buttons sit at z-index 850, far above the sidebar's 120, so
+   with the drawer open they float over its footer and bury the Admin entry and
+   the language picker. The drawer is a modal surface; neither button acts on
+   it, and the overlay behind them is already swallowing taps. */
+body.sb-mobile-open .cam-fab,
+body.sb-mobile-open .action-fab-wrap {
+  display: none;
 }
 
 /* ═══ CONTENT WRAP ══════════════════════════════════════════════ */

@@ -1073,7 +1073,11 @@ function go(page, btnId) {
   if (page === 'orders') renderOrders();
   if (page === 'pickups') renderPickups();
   updateTodoBadge();
-  sbCloseMobile();
+  // Admin is a drill-down, not a departure: on a phone the drawer swaps its
+  // list for the sub-tabs and stays open, because closing it is exactly what
+  // made the section feel unreachable. Every other page is somewhere the user
+  // has now arrived, so the drawer gets out of the way.
+  if (page !== 'settings') sbCloseMobile();
 }
 function openStab(page, sub) {
   document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
@@ -20517,6 +20521,7 @@ function initEventListeners() {
     }
     const stab = document.getElementById('st-settings-' + btn.dataset.sub);
     if (stab) stab.click();
+    sbCloseMobile();
   });
   $('n-settings').addEventListener('click', () => {
     go('settings', 'n-settings');
