@@ -893,6 +893,9 @@ window.LANG['en'] = {
   'harvestFeed.generate': 'Generate',
   'harvestFeed.generated': 'Generated — copy it now and save. It cannot be read back afterwards.',
   'harvestFeed.interval': 'Every … minutes',
+  'harvestFeed.connTitle': 'Where it goes',
+  'harvestFeed.connDesc':
+    'The address the messages are sent to and the key they are signed with — typed once and then left alone.',
   'harvestFeed.offerTitle': 'What is on offer',
   'harvestFeed.offerDesc':
     'The goods rather than the connection: how long a harvest counts as fresh, how far ahead a planned one is announced, and the portions it is handed over in. A shop builds its window out of these, and they ride along in every message that goes out.',
@@ -911,7 +914,7 @@ window.LANG['en'] = {
   'harvestFeed.siteHint':
     'Only needed when several farms send to the same receiver: it rides along in every message and says who sent it. This is not a pickup address — where goods are handed over lives under Settings → Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so changing it changes a key at the other end.',
   'harvestFeed.sitePh': 'e.g. north-farm',
-  'harvestFeed.saveHint': 'Both cards are one setting and are saved together.',
+  'harvestFeed.saveHint': 'All three cards are one setting and are saved together.',
   'harvestFeed.testNow': 'Send one now',
   'harvestFeed.preview': 'Show what would be sent',
   'harvestFeed.building': 'Building …',

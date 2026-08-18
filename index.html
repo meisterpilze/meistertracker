@@ -4986,13 +4986,14 @@
               </div>
             </div>
           </div>
-          <!-- Harvest feed in two cards, and the seam is the point: above, where the
-               messages go and how they are signed — typed once and then left alone;
-               below, what the farm sells, which is read and changed by whoever
-               writes the shop window. As one list a pack size sat between a shared
-               secret and a polling interval, and the two kinds of setting were told
-               apart only by reading every label. It stays one config with one Save,
-               at the foot of both cards. -->
+          <!-- Harvest feed in three cards, and the order is the point: the feed
+               itself first — is it on, did the last message arrive — then what the
+               farm sells, which is read and rewritten by whoever keeps the shop
+               window, and last the address and the key, typed once and then left
+               alone. The goods used to sit under the plumbing: a pack size was a
+               scroll past a shared secret and a polling interval, so the setting
+               that moves with the season was the one you had to hunt for. It stays
+               one config with one Save, at the foot of all three. -->
           <div class="sp" id="sp-settings-harvestfeed">
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.title">Harvest feed</div>
@@ -5009,112 +5010,10 @@
                 id="harvestfeed-status-banner"
                 style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
               ></div>
-              <div style="display: flex; flex-direction: column; gap: 10px">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
-                  <input type="checkbox" id="harvestfeed-enabled" style="width: auto" />
-                  <span data-i18n="harvestFeed.enable">Enable harvest feed</span>
-                </label>
-                <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
-                    data-i18n="harvestFeed.url"
-                    >Receiver URL</label
-                  >
-                  <input
-                    type="url"
-                    id="harvestfeed-url"
-                    placeholder="https://example.org/harvest"
-                    style="max-width: 480px; width: 100%"
-                  />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
-                    data-i18n="harvestFeed.urlHint"
-                  >
-                    Must be https. http is allowed for localhost only, so you can try it against a local receiver first.
-                  </div>
-                </div>
-                <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
-                    data-i18n="harvestFeed.secret"
-                    >Shared secret</label
-                  >
-                  <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
-                    <input type="password" id="harvestfeed-secret" style="max-width: 380px; width: 100%; flex: 1" />
-                    <button id="harvestfeed-gen-btn" class="btn btn-sm" data-i18n="harvestFeed.generate">
-                      Generate
-                    </button>
-                  </div>
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
-                    data-i18n="harvestFeed.secretHint"
-                  >
-                    The receiving side needs the same value. It signs every request, so the receiver can tell your
-                    numbers from someone else's — without it, anyone could post "we have 40 kg" and it would look real.
-                  </div>
-                </div>
-                <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
-                    data-i18n="harvestFeed.interval"
-                    >Every … minutes</label
-                  >
-                  <input type="number" id="harvestfeed-interval" min="1" max="1440" style="width: 90px" />
-                </div>
-                <!-- Nicht der Abholort. Der Name hat schon jemanden dazu
-                     gebracht, hier den Marktstand einzutragen — deshalb der Weg
-                     zur richtigen Stelle im Hinweis darunter. Er steht bei der
-                     Verbindung, weil er einer ist: der Schlüssel, an dem der
-                     Empfänger den Absender erkennt, keine Angabe zur Ware. -->
-                <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
-                    data-i18n="harvestFeed.site"
-                    >Name of this farm in the feed (optional)</label
-                  >
-                  <input
-                    type="text"
-                    id="harvestfeed-site"
-                    maxlength="64"
-                    style="max-width: 240px; width: 100%"
-                    data-i18n-placeholder="harvestFeed.sitePh"
-                    placeholder="e.g. north-farm"
-                  />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
-                    data-i18n="harvestFeed.siteHint"
-                  >
-                    Only needed when several farms send to the same receiver: it rides along in every message and says
-                    who sent it. This is not a pickup address — where goods are handed over lives under Settings →
-                    Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so
-                    changing it changes a key at the other end.
-                  </div>
-                </div>
-              </div>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                <input type="checkbox" id="harvestfeed-enabled" style="width: auto" />
+                <span data-i18n="harvestFeed.enable">Enable harvest feed</span>
+              </label>
             </div>
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.offerTitle">What is on offer</div>
@@ -5233,11 +5132,123 @@
               </div>
             </div>
             <div class="card">
+              <div class="sec" data-i18n="harvestFeed.connTitle">Where it goes</div>
+              <p
+                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                data-i18n="harvestFeed.connDesc"
+              >
+                The address the messages are sent to and the key they are signed with — typed once and then left
+                alone.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.url"
+                    >Receiver URL</label
+                  >
+                  <input
+                    type="url"
+                    id="harvestfeed-url"
+                    placeholder="https://example.org/harvest"
+                    style="max-width: 480px; width: 100%"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.urlHint"
+                  >
+                    Must be https. http is allowed for localhost only, so you can try it against a local receiver first.
+                  </div>
+                </div>
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.secret"
+                    >Shared secret</label
+                  >
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
+                    <input type="password" id="harvestfeed-secret" style="max-width: 380px; width: 100%; flex: 1" />
+                    <button id="harvestfeed-gen-btn" class="btn btn-sm" data-i18n="harvestFeed.generate">
+                      Generate
+                    </button>
+                  </div>
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.secretHint"
+                  >
+                    The receiving side needs the same value. It signs every request, so the receiver can tell your
+                    numbers from someone else's — without it, anyone could post "we have 40 kg" and it would look real.
+                  </div>
+                </div>
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.interval"
+                    >Every … minutes</label
+                  >
+                  <input type="number" id="harvestfeed-interval" min="1" max="1440" style="width: 90px" />
+                </div>
+                <!-- Nicht der Abholort. Der Name hat schon jemanden dazu
+                     gebracht, hier den Marktstand einzutragen — deshalb der Weg
+                     zur richtigen Stelle im Hinweis darunter. Er steht bei der
+                     Verbindung, weil er einer ist: der Schlüssel, an dem der
+                     Empfänger den Absender erkennt, keine Angabe zur Ware. -->
+                <div>
+                  <label
+                    style="
+                      font-size: 12px;
+                      font-weight: 600;
+                      color: var(--c-text-sec);
+                      display: block;
+                      margin-bottom: 4px;
+                    "
+                    data-i18n="harvestFeed.site"
+                    >Name of this farm in the feed (optional)</label
+                  >
+                  <input
+                    type="text"
+                    id="harvestfeed-site"
+                    maxlength="64"
+                    style="max-width: 240px; width: 100%"
+                    data-i18n-placeholder="harvestFeed.sitePh"
+                    placeholder="e.g. north-farm"
+                  />
+                  <div
+                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="harvestFeed.siteHint"
+                  >
+                    Only needed when several farms send to the same receiver: it rides along in every message and says
+                    who sent it. This is not a pickup address — where goods are handed over lives under Settings →
+                    Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so
+                    changing it changes a key at the other end.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
               <p
                 style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="harvestFeed.saveHint"
               >
-                Both cards are one setting and are saved together.
+                All three cards are one setting and are saved together.
               </p>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <div style="display: flex; gap: 6px; flex-wrap: wrap">
