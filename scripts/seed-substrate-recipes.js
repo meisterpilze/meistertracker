@@ -16,7 +16,10 @@
 const path = require('path');
 const db = require(path.join(__dirname, '..', 'db.js'));
 
-// Per 100 kg dry mix. Block size and spawn rate are NOT sheet figures — they are
+// Per 100 kg dry mix. Colonisation times are this farm's measured figures, not
+// the sheet's: the sheet said 45-70 d for shiitake and maitake and the lab says
+// 90, which is what the due dates have been driven off all along.
+// Block size and spawn rate are NOT sheet figures either — they are
 // how this particular farm fills and inoculates, which is exactly the kind of
 // thing another lab will want to change.
 const BLOCK_KG = 5.0;
@@ -27,8 +30,8 @@ const RECIPES = {
   lions: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '14-21 d', steril: '3 h' },
   chest: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '18-25 d', steril: '3 h' },
   pioppino: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '21-30 d', steril: '3 h' },
-  shiitake: { bran: 20, corn: 0, gyp: 1, moist: 56.5, colon: '45-70 d + browning', steril: '3.5-4 h' },
-  maitake: { bran: 19, corn: 5, gyp: 1, moist: 59.0, colon: '45-70 d', steril: '3.5-4 h' }
+  shiitake: { bran: 20, corn: 0, gyp: 1, moist: 56.5, colon: '90 d + browning', steril: '3.5-4 h' },
+  maitake: { bran: 19, corn: 5, gyp: 1, moist: 59.0, colon: '90 d', steril: '3.5-4 h' }
 };
 
 // Seven recipes cover twelve Sorten because the oysters share one dry blend and
