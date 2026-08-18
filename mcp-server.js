@@ -1199,7 +1199,7 @@ function createMcpServer(database, onWrite, printer) {
     'Create a single mushroom culture (MC, PD, LC, or G2G). Prefer strainId (use list_mushroom_strains); when omitted, species is required. NOT for creating production batches (→ create_batch).',
     {
       id: z.string().describe('Culture ID (e.g. MC-KINGS-250301-01)'),
-      type: z.enum(['MC', 'PD', 'LC', 'G2G']).describe('Culture type'),
+      type: z.enum(['MC', 'PD', 'LC', 'G2G', 'SY']).describe('Culture type'),
       strainId: z
         .number()
         .optional()

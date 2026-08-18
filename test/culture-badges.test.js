@@ -87,14 +87,29 @@ describe('culture badges escape their label', () => {
 describe('the server pins culture type and status', () => {
   const src = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
-  // GS is a real type in db.js's VALID_CULTURE_PARENT_TYPES. The MCP tool's
-  // enum lists only four; validating HTTP writes against that shorter list
-  // would start rejecting cultures a lab already has on its shelves.
-  it("accepts all five types db.js knows, not the MCP tool's four", () => {
+  // db.js decides what a culture type is; server.js only guards the HTTP write.
+  // Guarding it against a shorter list rejects cultures a lab already has on its
+  // shelves — which is how this test came about, GS being real in db.js and
+  // absent from the MCP tool's enum.
+  //
+  // Derived rather than listed. A literal snapshot has to be edited every time a
+  // type is added, and editing it is indistinguishable from noticing that the
+  // server was never told — so it would pass while the endpoint rejects the new
+  // type. Adding one to db.js and forgetting server.js now fails here.
+  it('accepts every culture type db.js knows about', () => {
+    const dbSrc = fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8');
+    const known = dbSrc.match(/const VALID_CULTURE_PARENT_TYPES = \{([\s\S]*?)\n\};/);
+    assert.ok(known, 'VALID_CULTURE_PARENT_TYPES is gone from db.js');
+    const dbTypes = [...known[1].matchAll(/^\s*([A-Z0-9]+):/gm)].map((x) => x[1]).sort();
+    assert.ok(dbTypes.length >= 5, 'expected db.js to know at least the original five');
+
     const m = src.match(/const CULTURE_TYPES = \[([^\]]*)\]/);
     assert.ok(m, 'CULTURE_TYPES is gone from server.js');
-    const types = m[1].split(',').map((s) => s.trim().replace(/'/g, ''));
-    assert.deepEqual(types.sort(), ['G2G', 'GS', 'LC', 'MC', 'PD']);
+    const serverTypes = m[1]
+      .split(',')
+      .map((s) => s.trim().replace(/'/g, ''))
+      .sort();
+    assert.deepEqual(serverTypes, dbTypes, 'server.js and db.js disagree on what a culture can be');
   });
 
   it('validates both fields on the cultures write path', () => {

@@ -655,7 +655,7 @@ function validateTimeOfDay(value, fieldName) {
 // Culture types and statuses, as the client renders them into badges. The five
 // types mirror VALID_CULTURE_PARENT_TYPES in db.js — GS included, which the MCP
 // tool's shorter enum leaves out.
-const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS'];
+const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
 const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
@@ -6031,6 +6031,221 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // -- Substrate batches (v67) --
+  // The mix is priced and booked entirely here: the client sends a recipe and a
+  // target amount, never a composition or a set of inventory deltas. POST
+  // /api/batches still accepts client-computed deltas for the older per-bag path,
+  // which means a browser can post a Charge whose booked consumption disagrees
+  // with its own recipe. There is no reason to carry that forward into the mix.
+  // Anchored, not a prefix match: /api/substrate-batches/SUB-01 is a different
+  // route and a startsWith would have answered it with the whole list.
+  if (req.method === 'GET' && /^\/api\/substrate-batches(\?|$)/.test(req.url)) {
+    try {
+      const openOnly = /[?&]open=1(&|$)/.test(req.url);
+      jsonOk(res, db.listSubstrateBatches(database, { openOnly }));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const subGetMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)$/);
+  if (req.method === 'GET' && subGetMatch) {
+    try {
+      const one = db.getSubstrateBatch(database, decodeURIComponent(subGetMatch[1]));
+      if (!one) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, one);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const subOffMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/write-off$/);
+  if (req.method === 'POST' && subOffMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vlen = validateLengths(data || {}, { note: 500 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      try {
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const r = db.writeOffSubstrateBatch(
+          database,
+          decodeURIComponent(subOffMatch[1]),
+          (data && data.note) || null,
+          userId
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/substrate-batches/preview') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['recipeStrainId', 'targetKg']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { recipeStrainId: 'number', targetKg: 'number' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vrng = validateRanges(data, { targetKg: { min: 0.1, max: 100000 } });
+      if (vrng) {
+        jsonErr(res, 400, vrng);
+        return;
+      }
+      try {
+        const found = db.getMixRecipe(database, data.recipeStrainId);
+        if (!found) {
+          jsonOk(res, { hasRecipe: false });
+          return;
+        }
+        jsonOk(res, {
+          hasRecipe: true,
+          mix: db.computeMixBatch(found.recipe, data.targetKg, found.opts),
+          recipeLabel: found.strain.name + ' (' + found.strain.kuerzel + ')'
+        });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/substrate-batches') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['subId', 'recipeStrainId', 'targetKg']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { subId: 'string', recipeStrainId: 'number', targetKg: 'number' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vrng = validateRanges(data, { targetKg: { min: 0.1, max: 100000 } });
+      if (vrng) {
+        jsonErr(res, 400, vrng);
+        return;
+      }
+      const vlen = validateLengths(data, { subId: 100, notes: 10000 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.subId)) {
+        jsonErr(res, 400, 'subId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      try {
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const r = db.createSubstrateBatch(database, data, userId);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, subId: r.subId, mix: r.mix });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const subDelMatch = req.url.match(/^\/api\/substrate-batches\/([^/]+)$/);
+  if (req.method === 'DELETE' && subDelMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const userId = req.authUser ? req.authUser.user_id : null;
+      const ok = db.deleteSubstrateBatch(database, decodeURIComponent(subDelMatch[1]), userId);
+      if (!ok) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // A Charge portioned out of an existing mix. Separate from POST /api/batches
+  // because almost nothing about it is the same: no composition, no deltas, and
+  // the substrate comes out of a named mix rather than off the shelf.
+  if (req.method === 'POST' && req.url === '/api/batches/from-substrate') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['batchId', 'subId', 'strainId', 'qty']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { batchId: 'string', subId: 'string', strainId: 'number', qty: 'number' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vrng = validateRanges(data, { qty: { min: 1, max: 10000 } });
+      if (vrng) {
+        jsonErr(res, 400, vrng);
+        return;
+      }
+      const vlen = validateLengths(data, { batchId: 100, subId: 100, strain: 200, notes: 10000, strainText: 200 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
+        jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      try {
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const r = db.createBagBatchFromSubstrate(database, data, userId);
+        // due is computed server-side from the Sorte's incubation days; without
+        // passing it on the calendar push silently drops the batch.
+        autoPushBatchCaldav({ batchId: data.batchId, due: r.due });
+        broadcastSSE(res);
+        jsonOk(res, {
+          ok: true,
+          batchId: data.batchId,
+          drawKg: r.drawKg,
+          spawnKg: r.spawnKg,
+          remainingKg: r.remainingKg,
+          over: r.over,
+          bagBarcodes: r.bagBarcodes || {}
+        });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
 
