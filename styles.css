@@ -139,7 +139,8 @@ body {
   color: var(--c-text);
 }
 
-.sb-nav {
+.sb-nav,
+.sb-admin-nav {
   flex: 1;
   overflow-y: auto;
   padding: 12px 10px;
@@ -218,6 +219,50 @@ body {
   border-top: 1px solid var(--c-border-light);
   padding: 10px;
 }
+/* Admin navigation — the Admin section borrows the sidebar.
+   Fourteen sub-tabs do not fit one horizontal strip: .stabs has neither wrap
+   nor scroll outside the mobile rules, so on a desktop the pills squeeze until
+   their labels break. A vertical, grouped list has no such ceiling, and
+   .sb-nav already scrolls.
+   The drawer swaps the same way: on a phone Admin is a drill-down, not a
+   departure, so the menu stays open and shows the sub-tabs instead of closing
+   on the way out. The strip stays there too, as the quick switcher — changing
+   sub-tab is one swipe rather than hamburger → tap → drawer-closes. */
+.sb-admin-nav {
+  display: none;
+}
+body.admin-mode .sb-nav {
+  display: none;
+}
+body.admin-mode .sb-admin-nav {
+  display: block;
+}
+/* The footer button is the door, and one door needs one place: the same spot
+   leads in and back out again. Solid green while inside says which side of it
+   you are standing on, and the arrow replacing the gear says what pressing it
+   does — a gear that navigates away would be telling you the wrong thing. */
+#n-settings .sb-ico-back {
+  display: none;
+}
+body.admin-mode #n-settings {
+  background: var(--c-primary);
+  color: #fff;
+}
+body.admin-mode #n-settings svg {
+  stroke: #fff;
+}
+body.admin-mode #n-settings .sb-ico-admin {
+  display: none;
+}
+body.admin-mode #n-settings .sb-ico-back {
+  display: block;
+}
+@media (min-width: 769px) {
+  body.admin-mode #p-settings > .stabs {
+    display: none;
+  }
+}
+
 .sb-sync {
   display: flex;
   align-items: center;
@@ -352,6 +397,14 @@ body.has-worktree-banner .mobile-topbar {
 .sb-overlay.sb-show {
   display: block;
   opacity: 1;
+}
+/* Both thumb-zone buttons sit at z-index 850, far above the sidebar's 120, so
+   with the drawer open they float over its footer and bury the Admin entry and
+   the language picker. The drawer is a modal surface; neither button acts on
+   it, and the overlay behind them is already swallowing taps. */
+body.sb-mobile-open .cam-fab,
+body.sb-mobile-open .action-fab-wrap {
+  display: none;
 }
 
 /* ═══ CONTENT WRAP ══════════════════════════════════════════════ */
@@ -4621,6 +4674,20 @@ tr:hover td {
   }
   #t-harvest > tbody > tr > td.hv-grams::before {
     display: none;
+  }
+}
+
+/* Clearance for the two thumb-zone buttons. They are gated on the pointer, not
+   on width, so the 56 px reserved above for the bottom-nav misses them twice:
+   on a phone they reach higher than the bar, and on a coarse-pointer tablet
+   past 768 px there is no bar and no reserve at all. The speed-dial governs —
+   it sits 72 px up and stands 56 px tall, so its top edge is 128 px above the
+   bottom. Without this the last stretch of any long page hides underneath;
+   Admin → Kanäle put its "Jetzt synchronisieren" button there.
+   Must stay after the bottom-nav rule: same specificity, later wins. */
+@media (pointer: coarse) and (hover: none) {
+  .content-wrap {
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0));
   }
 }
 
