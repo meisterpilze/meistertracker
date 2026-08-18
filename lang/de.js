@@ -66,8 +66,11 @@ window.LANG['de'] = {
   'pickupLoc.address': 'Adresse (optional)',
   'pickupLoc.addressPh': 'z.B. Marktplatz 1, 91054 Erlangen',
   'pickupLoc.order': 'Reihenfolge',
-  'pickupLoc.hint':
-    'Der Name steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden. Die Adresse bleibt im Haus.',
+  'pickupLoc.nameHint':
+    'Steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden: Der Ernte-Feed schickt ihn zu jedem Abholfenster mit. Ein anderer Name hier heißt, draußen steht etwas anderes.',
+  'pickupLoc.addressHint': 'Bleibt im Haus. Sie geht nie mit hinaus und steht hier für die eigenen Leute.',
+  'pickupLoc.orderHint':
+    'Nur die Reihenfolge in den Listen: hier und in der Auswahl an einem Kalendertermin. Kleinste Zahl zuerst, bei gleicher Zahl alphabetisch.',
   'pickupLoc.none': 'Noch kein Abholort angelegt',
   'pickupLoc.saved': 'Abholort gespeichert',
   'pickupLoc.retire': 'Stilllegen',
@@ -896,6 +899,9 @@ window.LANG['de'] = {
   'harvestFeed.generate': 'Erzeugen',
   'harvestFeed.generated': 'Erzeugt — jetzt kopieren und speichern. Danach ist er nicht mehr ablesbar.',
   'harvestFeed.interval': 'Alle … Minuten',
+  'harvestFeed.offerTitle': 'Was angeboten wird',
+  'harvestFeed.offerDesc':
+    'Die Ware statt der Verbindung: wie lange eine Ernte als frisch gilt, wie weit im Voraus eine geplante angekündigt wird und in welchen Mengen sie übergeben wird. Ein Shop baut daraus sein Fenster, und sie fahren in jeder Nachricht mit, die hinausgeht.',
   'harvestFeed.freshDays': 'Gilt … Tage als frisch',
   'harvestFeed.plannedDays': 'Vorausschau … Tage',
   'harvestFeed.leadDays': 'Vorlauf … Tage',
@@ -911,6 +917,7 @@ window.LANG['de'] = {
   'harvestFeed.siteHint':
     'Nur nötig, wenn mehrere Betriebe an denselben Empfänger senden: Die Kennung reist in jeder Meldung mit und sagt, von wem sie kommt. Das ist kein Abholort — wo Ware übergeben wird, steht unter Einstellungen → Abholorte und wird am Kalendereintrag ausgewählt. Ein Empfänger vergleicht diesen Text wörtlich; wer ihn ändert, ändert drüben einen Schlüssel.',
   'harvestFeed.sitePh': 'z. B. hof-nord',
+  'harvestFeed.saveHint': 'Beide Karten sind eine Einstellung und werden zusammen gespeichert.',
   'harvestFeed.testNow': 'Jetzt einmal senden',
   'harvestFeed.preview': 'Zeigen, was hinausginge',
   'harvestFeed.building': 'Wird zusammengestellt …',
@@ -1532,7 +1539,6 @@ window.LANG['de'] = {
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Kamera',
   'settings.tabServer': 'Server',
-  'settings.tabGrowth': 'Growth',
   // Camera dashboard (admin-only WIP)
   'cam.wipTitle': 'In Arbeit',
   'cam.wipDesc':
@@ -1686,7 +1692,10 @@ window.LANG['de'] = {
   'strains.deleteMsg': 'Pilzsorte "{name}" wirklich l\u00f6schen?',
   'strains.delete': 'L\u00f6schen',
   // Sync
-  'sync.syncedAt': 'Synchronisiert \u00b7 {time}',
+  // Nur die Zeit: Das Wort davor stand in einer Zeile, die eine Zeile hoch
+  // bleiben muss — siehe .sb-sync-label. Ein Präfix hier wird abgeschnitten,
+  // nicht umgebrochen.
+  'sync.syncedAt': '{time}',
   // DuckDNS / Let\'s Encrypt / Server
   'duckdns.noUpdateYet': 'DuckDNS aktiviert, aber noch kein IP-Update durchgef\u00fchrt.',
   'duckdns.currentCert': 'Aktuelles Zertifikat: ',

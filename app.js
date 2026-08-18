@@ -805,9 +805,16 @@ async function markAllNotifRead() {
   renderNotifList(_notifItems);
 }
 
+// The label is one line and clips rather than wraps, because a second line
+// moved the Admin button above it. The title carries whatever did not fit.
+function setSyncLabel(text) {
+  const el = document.getElementById('sync-label');
+  el.textContent = text;
+  el.title = text;
+}
 function setSyncStatus(cls, msg) {
   document.getElementById('sync-dot').className = 'sync-dot ' + cls;
-  document.getElementById('sync-label').textContent = msg;
+  setSyncLabel(msg);
   const m = document.getElementById('sync-dot-m');
   if (m) m.className = 'sync-dot ' + cls;
   if (cls === 'ok') lastSyncTime = Date.now();
@@ -817,7 +824,7 @@ setInterval(() => {
   if (!lastSyncTime) return;
   const dot = document.getElementById('sync-dot');
   if (!dot || !dot.classList.contains('ok')) return;
-  document.getElementById('sync-label').textContent = t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) });
+  setSyncLabel(t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
 }, 5000);
 let _polling = false;
 let _lastEtag = null;
@@ -1072,7 +1079,15 @@ function go(page, btnId) {
     renderCalendar();
     loadCalDAVImports().then(() => renderCalendar());
   }
-  if (page === 'settings') renderLog();
+  // Admin opens on whichever sub-tab is selected — Server on the first visit of
+  // a session, and after that wherever the user last was. Clicking that button
+  // rather than calling a loader here keeps one wiring per sub-tab: the strip
+  // handler already knows what its panel needs, and it is the same path the
+  // sidebar list takes.
+  if (page === 'settings') {
+    const stab = document.querySelector('#p-settings .stab.active');
+    if (stab) stab.click();
+  }
   if (page === 'strains') renderStrains();
   if (page === 'orders') renderOrders();
   if (page === 'pickups') renderPickups();
@@ -11865,13 +11880,19 @@ function renderPickupLocations() {
   </table></div>`;
 }
 
+// Every field says what it does, under itself. One paragraph at the foot used
+// to cover the name and the address, and it sat directly beneath Reihenfolge —
+// the field it did not mention — so the sentence read as an explanation of the
+// number above it and left the number unexplained. Three fields, three hints,
+// each where the hand already is.
 function editPickupLocation(id) {
   const existing = id ? pickupLocations.find((l) => l.id === id) : null;
+  const hint = (key) =>
+    `<div style="font-size:11px;color:var(--c-text-muted);margin-top:2px;line-height:1.5">${esc(t(key))}</div>`;
   const html = `<div style="display:flex;flex-direction:column;gap:10px">
-    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" /></div>
-    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" /></div>
-    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" /></div>
-    <p style="font-size:12px;color:var(--c-text-muted);margin:0;line-height:1.5">${esc(t('pickupLoc.hint'))}</p>
+    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" />${hint('pickupLoc.nameHint')}</div>
+    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" />${hint('pickupLoc.addressHint')}</div>
+    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" />${hint('pickupLoc.orderHint')}</div>
   </div>`;
   document.getElementById('m-title').textContent = existing ? t('pickupLoc.edit') : t('pickupLoc.add');
   document.getElementById('m-body').innerHTML = html;
@@ -20514,8 +20535,8 @@ function initEventListeners() {
     go('print', 'n-print');
   });
   // The admin sidebar forwards to the sub-tab strip rather than duplicating its
-  // wiring: every loader already hangs off those buttons — including Growth's,
-  // registered inline in index.html — so one click still runs exactly one.
+  // wiring: every loader already hangs off those buttons, so one click still
+  // runs exactly one.
   $('sb-admin-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.sb-btn');
     if (!btn) return;

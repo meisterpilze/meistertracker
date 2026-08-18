@@ -66,7 +66,11 @@ window.LANG['en'] = {
   'pickupLoc.address': 'Address (optional)',
   'pickupLoc.addressPh': 'e.g. Marktplatz 1, 91054 Erlangen',
   'pickupLoc.order': 'Sort order',
-  'pickupLoc.hint': "The name ends up next to a time on a customer's screen. The address stays in the building.",
+  'pickupLoc.nameHint':
+    "Ends up next to a time on a customer's screen: the harvest feed sends it along with every pickup window. A different name here means something different is read outside.",
+  'pickupLoc.addressHint': 'Stays in the building. It never goes out — it is here for your own people.',
+  'pickupLoc.orderHint':
+    'Only the order of the lists: this one, and the picker on a calendar entry. Lowest number first, ties alphabetically.',
   'pickupLoc.none': 'No pickup location yet',
   'pickupLoc.saved': 'Pickup location saved',
   'pickupLoc.retire': 'Retire',
@@ -889,6 +893,9 @@ window.LANG['en'] = {
   'harvestFeed.generate': 'Generate',
   'harvestFeed.generated': 'Generated — copy it now and save. It cannot be read back afterwards.',
   'harvestFeed.interval': 'Every … minutes',
+  'harvestFeed.offerTitle': 'What is on offer',
+  'harvestFeed.offerDesc':
+    'The goods rather than the connection: how long a harvest counts as fresh, how far ahead a planned one is announced, and the portions it is handed over in. A shop builds its window out of these, and they ride along in every message that goes out.',
   'harvestFeed.freshDays': 'Counts as fresh for … days',
   'harvestFeed.plannedDays': 'Look ahead … days',
   'harvestFeed.leadDays': 'Lead time … days',
@@ -904,6 +911,7 @@ window.LANG['en'] = {
   'harvestFeed.siteHint':
     'Only needed when several farms send to the same receiver: it rides along in every message and says who sent it. This is not a pickup address — where goods are handed over lives under Settings → Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so changing it changes a key at the other end.',
   'harvestFeed.sitePh': 'e.g. north-farm',
+  'harvestFeed.saveHint': 'Both cards are one setting and are saved together.',
   'harvestFeed.testNow': 'Send one now',
   'harvestFeed.preview': 'Show what would be sent',
   'harvestFeed.building': 'Building …',
@@ -1513,7 +1521,6 @@ window.LANG['en'] = {
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Camera',
   'settings.tabServer': 'Server',
-  'settings.tabGrowth': 'Growth',
   // Camera dashboard (admin-only WIP)
   'cam.wipTitle': 'Work in progress',
   'cam.wipDesc':
@@ -1662,7 +1669,10 @@ window.LANG['en'] = {
   'strains.deleteMsg': 'Really delete strain "{name}"?',
   'strains.delete': 'Delete',
   // Sync
-  'sync.syncedAt': 'Synced \u00b7 {time}',
+  // The time alone: the word in front of it lived on a row that has to stay one
+  // line tall — see .sb-sync-label. A prefix added here gets clipped, not
+  // wrapped.
+  'sync.syncedAt': '{time}',
   // DuckDNS / Let\'s Encrypt / Server
   'duckdns.noUpdateYet': 'DuckDNS enabled but no IP update yet.',
   'duckdns.currentCert': 'Current certificate: ',
