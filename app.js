@@ -6958,7 +6958,7 @@ function createBatch() {
   // the server takes the kilograms out of the mix and charges only the spawn.
   const _sbSel = document.getElementById('nb-substrate-batch');
   if (_sbSel && _sbSel.value) {
-    createBatchFromSubstrate(genBatchId(sp), _sbSel.value, strainId, qty, bagKg || ms.recBagKg || 5, days, st, strainText);
+    createBatchFromSubstrate(genBatchId(ms.name), _sbSel.value, strainId, qty, bagKg || ms.recBagKg || 5, days, st, strainText);
     return;
   }
   if (!bagKg) {
