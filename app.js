@@ -533,10 +533,10 @@ async function loadData() {
     lastSyncTime = Date.now();
     setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
     refresh();
-    // The mixes live on their own endpoint, so a sync that only refreshes
-    // /api/data would leave the remaining-kilogram figures stale — and those are
-    // what the next Charge gets planned against.
-    if (typeof refreshSubstrateBatches === 'function') refreshSubstrateBatches();
+    // The remaining-kilogram figures are what the next Charge gets planned
+    // against, so they have to move with every sync — but they come down inside
+    // /api/data now rather than costing a second round-trip on every SSE event.
+    if (typeof refreshSubstrateBatches === 'function') refreshSubstrateBatches(d.substrateBatches);
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   }
@@ -7210,8 +7210,11 @@ function sbGenId() {
   return 'SUB-' + dt + '-' + String(n + 1).padStart(2, '0');
 }
 
-async function refreshSubstrateBatches() {
-  const r = await apiGet('/api/substrate-batches');
+// The mixes ride along in /api/data, which is already fetched on every sync, so
+// this only goes to the network when something asks for them out of band (after
+// a write, before loadData has caught up).
+async function refreshSubstrateBatches(fromPayload) {
+  const r = fromPayload || (await apiGet('/api/substrate-batches'));
   _sbList = Array.isArray(r) ? r : [];
   renderSubstrateList();
   fillSubstrateSelect();
@@ -7388,6 +7391,7 @@ function renderSubstrateTab() {
   const sum = document.getElementById('sb-tab-summary');
   if (!box) return;
   const showSpent = (document.getElementById('sb-show-spent') || {}).checked;
+  _sbBuildCounts();
   const all = _sbList;
   const rows = showSpent ? all : all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
   if (sum) {
@@ -7450,10 +7454,19 @@ function _sbRowHtml(s) {
   );
 }
 
-// The Chargen already loaded carry the link, so counting them costs no request.
+// The Chargen already loaded carry the link, so counting them costs no request —
+// but counting them per row walked the whole list once per mix. One pass, built
+// when the table renders, answers every row.
+let _sbCounts = new Map();
+function _sbBuildCounts() {
+  _sbCounts = new Map();
+  for (const b of batches || []) {
+    if (!b.substrateSubId) continue;
+    _sbCounts.set(b.substrateSubId, (_sbCounts.get(b.substrateSubId) || 0) + 1);
+  }
+}
 function _sbDrawnCount(subId) {
-  const n = (batches || []).filter((b) => b.substrateSubId === subId).length;
-  return n || '—';
+  return _sbCounts.get(subId) || '—';
 }
 
 async function openSubstrateInfo(subId) {

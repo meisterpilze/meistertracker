@@ -1970,58 +1970,21 @@ const MIGRATIONS = [
   },
   {
     version: 66,
-    description: 'Seed the hardwood-pellet recipe sheet onto the existing Sorten',
-    fn(db) {
-      // Figures from the master substrate recipe sheet (Aug 2026): per 100 kg dry
-      // mix, 1 kg gypsum on every recipe. Seven recipes cover fourteen Sorten
-      // because the oysters share one blend and vary only by water — the sheet
-      // says so itself ("shaded rows share one dry blend").
+    description: 'Reserved — recipe figures are seeded by a script, not by a migration',
+    fn() {
+      // Deliberately does nothing.
       //
-      // Block size and spawn rate deliberately do NOT come from the sheet: its
-      // 2.5-3.0 kg blocks and 4-7% spawn are general figures, while this farm
-      // fills 5 kg blocks and spawns at a flat 5%.
-      const BLOCK_KG = 5.0;
-      const SPAWN_PCT = 5.0;
-      const R = {
-        oyster: { bran: 20, corn: 0, gyp: 1, moist: 62.0, colon: '12-16 d', steril: '3 h' },
-        king: { bran: 20, corn: 0, gyp: 1, moist: 61.0, colon: '16-21 d', steril: '3 h' },
-        lions: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '14-21 d', steril: '3 h' },
-        chest: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '18-25 d', steril: '3 h' },
-        pioppino: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '21-30 d', steril: '3 h' },
-        shiitake: { bran: 20, corn: 0, gyp: 1, moist: 56.5, colon: '45-70 d + browning', steril: '3.5-4 h' },
-        maitake: { bran: 19, corn: 5, gyp: 1, moist: 59.0, colon: '45-70 d', steril: '3.5-4 h' }
-      };
-      // Reishi and Cordyceps are absent on purpose — the sheet has no figures for
-      // them. Seeding a guess would be worse than leaving the recipe empty, which
-      // the interface already handles.
-      const BY_KUERZEL = {
-        BO: 'oyster',
-        PO: 'oyster',
-        YO: 'oyster',
-        PEO: 'oyster',
-        PHOE: 'oyster',
-        KO: 'king',
-        BPKO: 'king',
-        LM: 'lions',
-        CHUT: 'chest',
-        PIOP: 'pioppino',
-        SHIT: 'shiitake',
-        MAIT: 'maitake'
-      };
-      const upd = db.prepare(
-        `UPDATE mushroom_strains SET rec_batch_type='block', rec_substrate='holzkleie',
-           rec_hardwood_pct=?, rec_wheatbran_pct=?, rec_corn_pct=?, rec_gypsum_pct=?, rec_gypsum=1,
-           rec_rh_pct=?, rec_spawn_pct=?, rec_bag_kg=?, rec_colon_text=?, rec_steril_text=?, updated=?
-         WHERE kuerzel=?`
-      );
-      const now = new Date().toISOString();
-      for (const [kuerzel, key] of Object.entries(BY_KUERZEL)) {
-        const r = R[key];
-        // Pellets are the remainder, never a stored constant — that way the three
-        // shares cannot drift apart into a blend that does not total 100%.
-        const pellets = 100 - r.bran - r.corn;
-        upd.run(pellets, r.bran, r.corn, r.gyp, r.moist, SPAWN_PCT, BLOCK_KG, r.colon, r.steril, now, kuerzel);
-      }
+      // This used to write one farm's blends, block size and spawn rate onto every
+      // strain whose Kuerzel matched. Two things wrong with that. Another lab runs
+      // this code — see FORKING.md, and the test that keeps the operator name out
+      // of the product — and their oyster recipe is not this one. And an operator
+      // who had already tuned rec_* had it silently overwritten on upgrade, with no
+      // record of what it had been.
+      //
+      // The version number stays, so installations that already ran it are not
+      // asked to run something different under the same number. The figures moved
+      // to scripts/seed-substrate-recipes.js, which shows what it would change and
+      // only writes when told to.
     }
   }
 ,
@@ -2084,6 +2047,17 @@ const MIGRATIONS = [
       addCol('batches', 'substrate_kg', 'REAL DEFAULT 0');
       // Maitake is 76/19/5 — without this the corn share has nowhere to live.
       addCol('batches', 'sub_corn', 'REAL DEFAULT 0');
+    }
+  },
+  {
+    version: 68,
+    description: 'Index the link from a Charge to the mix it came out of',
+    fn(db) {
+      // readAll joins batches to substrate_batches on every /api/data, which is
+      // every SSE event, and the remaining figure is recomputed from the Chargen
+      // referencing a mix on every draw and every delete. Both walked the whole
+      // batches table without this.
+      db.exec('CREATE INDEX IF NOT EXISTS idx_batch_subbatch ON batches(substrate_batch_id)');
     }
   }
 ];
@@ -2580,6 +2554,10 @@ function readAll(db, opts = {}) {
   const version = getDataVersion(db);
   return {
     mushroomStrains,
+    // Carried in the main payload rather than fetched separately: the client needs
+    // the remaining kilograms on every sync, and /api/data is already the request
+    // every sync makes.
+    substrateBatches: listSubstrateBatches(db),
     batches,
     scanLog,
     manualTasks,
