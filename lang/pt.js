@@ -32,6 +32,11 @@ window.LANG['pt'] = {
   'nav.ordersMapping': 'Produtos',
   'nav.ordersCustomers': 'Clientes',
   'nav.pickups': 'Levantamentos',
+  'nav.adminBack': 'Voltar',
+  'nav.adminOps': 'Opera\u00e7\u00f5es',
+  'nav.adminSales': 'Vendas',
+  'nav.adminDevices': 'Dispositivos',
+  'nav.adminSystem': 'Sistema',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Levantamentos',
   'pickups.desc':
@@ -1413,6 +1418,7 @@ window.LANG['pt'] = {
   'aria.doneScanning': 'Scan conclu\u00eddo',
   'aria.toggleSidebar': 'Alternar barra lateral',
   'aria.mainNav': 'Navega\u00e7\u00e3o principal',
+  'aria.adminNav': 'Navega\u00e7\u00e3o de administra\u00e7\u00e3o',
   'aria.openMenu': 'Abrir menu',
   'aria.searchDashboard': 'Pesquisar dashboard',
   'aria.searchBatches': 'Pesquisar lotes',
@@ -1521,6 +1527,7 @@ window.LANG['pt'] = {
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Câmara',
   'settings.tabServer': 'Servidor',
+  'settings.tabGrowth': 'Growth',
   // Camera dashboard (admin-only WIP)
   'cam.wipTitle': 'Em desenvolvimento',
   'cam.wipDesc':

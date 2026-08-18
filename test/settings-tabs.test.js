@@ -67,6 +67,20 @@ describe('settings tabs', () => {
     assert.deepEqual(missing, [], 'tabs that render but do nothing when clicked');
   });
 
+  // Admin is navigated from two lists: the .stabs strip, which is what a phone
+  // shows, and the sidebar list, which is what a desktop shows. They are one
+  // selection drawn twice. A sub-tab in only one of them is reachable from only
+  // one screen size — and the size that loses it is whichever one the author
+  // was not sitting in front of. The sidebar forwards clicks by data-sub, so an
+  // entry without that attribute renders, highlights, and goes nowhere.
+  it('gives every tab a sidebar entry that knows which sub-tab it opens', () => {
+    const entries = [...html.matchAll(/id="sn-settings-([a-z0-9-]+)"[^>]*data-sub="([a-z0-9-]+)"/g)];
+    const named = entries.map((m) => m[1]).sort();
+    assert.deepEqual(named, [...tabs].sort(), 'strip and sidebar disagree about which sub-tabs exist');
+    const wrong = entries.filter((m) => m[1] !== m[2]).map((m) => m[1] + ' → ' + m[2]);
+    assert.deepEqual(wrong, [], 'sidebar entries whose data-sub points at a different sub-tab');
+  });
+
   it('does not load the same sub-tab config twice per click', () => {
     // A handler body runs until the closing `});` of the addEventListener call.
     const doubled = [];
