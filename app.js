@@ -20514,8 +20514,8 @@ function initEventListeners() {
     go('print', 'n-print');
   });
   // The admin sidebar forwards to the sub-tab strip rather than duplicating its
-  // wiring: every loader already hangs off those buttons — including Growth's,
-  // registered inline in index.html — so one click still runs exactly one.
+  // wiring: every loader already hangs off those buttons, so one click still
+  // runs exactly one.
   $('sb-admin-nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.sb-btn');
     if (!btn) return;

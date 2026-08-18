@@ -58,9 +58,9 @@ describe('settings tabs', () => {
   });
 
   it('wires every tab to a click handler', () => {
-    // Two styles in the tree, both fine: `$('st-settings-x').addEventListener`
-    // in app.js, and `getElementById('st-settings-x')` + addEventListener in an
-    // inline script (the Growth tab). Matching only the first would report a
+    // Two styles count, both fine: `$('st-settings-x').addEventListener` in
+    // app.js, and `getElementById('st-settings-x')` + addEventListener from an
+    // inline script in index.html. Matching only the first would report a
     // working tab as broken, and a test that cries wolf gets ignored the next
     // time it is right.
     const missing = tabs.filter((t) => !isWired(t, app, html));

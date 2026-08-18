@@ -1513,7 +1513,6 @@ window.LANG['en'] = {
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Camera',
   'settings.tabServer': 'Server',
-  'settings.tabGrowth': 'Growth',
   // Camera dashboard (admin-only WIP)
   'cam.wipTitle': 'Work in progress',
   'cam.wipDesc':
