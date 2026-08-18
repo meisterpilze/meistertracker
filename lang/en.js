@@ -198,6 +198,8 @@ window.LANG['en'] = {
   'inv.deliveryFailed': 'Delivery NOT saved: {err}',
   'inv.adjustFailed': 'Adjustment NOT saved: {err}',
   'inv.coir': 'Coir / CVG',
+  'strains.minSpawn': 'Minimum grain spawn (kg)',
+  'strains.minLc': 'Minimum liquid culture (jars)',
   'sub.tab': 'Substrate mixes',
   'sub.allTitle': 'Substrate mixes',
   'sub.showSpent': 'Show spent',

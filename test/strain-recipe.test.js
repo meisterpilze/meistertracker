@@ -153,3 +153,51 @@ describe('Sorte recipe – fruiting days (rec_fruit_days)', () => {
     assert.equal(ms.recFruitDays, 60, 'recipe preserved on a description-only edit');
   });
 });
+
+// v69: how much grain spawn and liquid culture the lab should never be without
+// while this Sorte is in production. Per Sorte, because shiitake needs two
+// months of notice to make more and an oyster needs a fortnight — one number
+// for the whole farm cannot mean both, which is why the farm-wide one sat at
+// zero and never flagged anything.
+describe('Sorte minimum holdings', () => {
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('round-trips a minimum through create and list', () => {
+    const id = db.createMushroomStrain(d, { name: 'Shiitake', kuerzel: 'SHIT', minSpawnKg: 30, minLc: 2 });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.minSpawnKg, 30);
+    assert.equal(ms.minLc, 2);
+  });
+
+  it('updates a minimum without disturbing the recipe', () => {
+    const id = db.createMushroomStrain(d, {
+      name: 'Blue Oyster',
+      kuerzel: 'BO',
+      recRhPct: 62,
+      recWheatbranPct: 20,
+      recHardwoodPct: 80,
+      minSpawnKg: 30,
+      minLc: 2
+    });
+    db.updateMushroomStrain(d, id, { minSpawnKg: 45, minLc: 3 });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.minSpawnKg, 45);
+    assert.equal(ms.minLc, 3);
+    assert.equal(ms.recRhPct, 62, 'the recipe must survive a minimum-only edit');
+    assert.equal(ms.recWheatbranPct, 20);
+  });
+
+  it('defaults to no minimum, which means no alarm rather than a silent zero', () => {
+    const id = db.createMushroomStrain(d, { name: 'Reishi', kuerzel: 'RESH' });
+    const ms = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(ms.minSpawnKg, 0);
+    assert.equal(ms.minLc, 0);
+  });
+});

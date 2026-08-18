@@ -5898,6 +5898,30 @@ function getLabStockCounts() {
     });
   return counts;
 }
+// A Sorte counts as in production while one of its Chargen is still running.
+// Building the lab list only out of what is in stock hid the one case worth
+// seeing: a Sorte being grown right now with no spawn left to grow it from.
+function strainsInProduction() {
+  const out = new Map();
+  for (const b of batches || []) {
+    const { status } = getStatus(b.batchId);
+    if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) continue;
+    const name = b.strainName || b.species || 'Unknown';
+    const kz = b.strainKuerzel || b.strain || '';
+    out.set(name + '|' + kz, { name, kz, desc: b.strainDescriptor || '' });
+  }
+  return out;
+}
+
+// The minimum a Sorte should never fall below, in the unit that type is
+// counted in: kilograms for grain spawn, jars for liquid culture.
+function strainMinFor(type, entry) {
+  if (type !== 'GS' && type !== 'LC') return 0;
+  const ms = (mushroomStrains || []).find((m) => (entry.kz && m.kuerzel === entry.kz) || m.name === entry.name);
+  if (!ms) return 0;
+  return (type === 'GS' ? ms.minSpawnKg : ms.minLc) || 0;
+}
+
 function getLabStrainBreakdown() {
   const breakdown = { MC: {}, PD: {}, LC: {}, G2G: {}, GS: {} };
   cultures
@@ -5927,6 +5951,19 @@ function getLabStrainBreakdown() {
         breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
       }
     });
+  // Every Sorte being grown right now gets a row for the two things it cannot
+  // be grown without, even at zero — a missing row reads as "fine" and is the
+  // exact opposite.
+  for (const [key, sp] of strainsInProduction()) {
+    for (const type of ['GS', 'LC']) {
+      if (!breakdown[type][key]) {
+        breakdown[type][key] = { name: sp.name, kz: sp.kz, desc: sp.desc, count: 0, color: spColor(sp.name) };
+      }
+    }
+  }
+  for (const type of ['GS', 'LC']) {
+    for (const entry of Object.values(breakdown[type])) entry.min = strainMinFor(type, entry);
+  }
   return breakdown;
 }
 const LAB_TYPE_COLORS = {
@@ -5951,19 +5988,27 @@ function renderDashLabStock() {
       const tc = LAB_TYPE_COLORS[type];
       const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
       const strainTotal = strains.reduce((sum, s) => sum + s.count, 0);
-      // For GS, low = any strain below min kg; for others, low = total count below min
-      const low = type === 'GS' ? min > 0 && strains.some((s) => s.count < min) : min > 0 && count < min;
+      // Grain spawn and liquid culture are judged per Sorte against that Sorte's
+      // own minimum: a farm holding 60 kg of oyster spawn and none of shiitake is
+      // not "fine on average", it is out of shiitake.
+      const perStrain = type === 'GS' || type === 'LC';
+      const low = perStrain
+        ? strains.some((x) => x.min > 0 && x.count < x.min)
+        : min > 0 && count < min;
       const strainRows = strains
         .map((s) => {
           const pct =
             (type === 'GS' ? strainTotal : count) > 0
               ? Math.round((s.count / (type === 'GS' ? strainTotal : count)) * 100)
               : 0;
-          const strainLow = type === 'GS' && min > 0 && s.count < min;
+          const strainLow = perStrain && s.min > 0 && s.count < s.min;
+          const unit = type === 'GS' ? ' kg' : '';
+          const shown = Number.isInteger(s.count) ? s.count : s.count.toFixed(1);
+          const against = s.min > 0 ? '<span style="color:var(--c-text-muted);font-weight:400">/' + s.min + '</span>' : '';
           return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
         <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(s.desc) + '</span>' : ''}</span>
-        <span style="font-size:11px;font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${type === 'GS' ? (Number.isInteger(s.count) ? s.count : s.count.toFixed(1)) + ' kg' : s.count}</span>
+        <span style="font-size:11px;font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${strainLow ? 'var(--c-red)' : s.color};border-radius:3px"></div></div>
       </div>`;
         })
@@ -12678,6 +12723,8 @@ function editMStrain(id) {
   sv('ms-rec-corn', ms.recCornPct || 0);
   sv('ms-rec-gyppct', ms.recGypsumPct || 0);
   sv('ms-rec-spawn', ms.recSpawnPct || 0);
+  sv('ms-min-spawn', ms.minSpawnKg || 0);
+  sv('ms-min-lc', ms.minLc || 0);
   msRecShowRef(ms);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!ms.recGypsum;
@@ -12717,6 +12764,8 @@ function cancelMStrain() {
   sv('ms-rec-corn', 0);
   sv('ms-rec-gyppct', 1);
   sv('ms-rec-spawn', 5);
+  sv('ms-min-spawn', 0);
+  sv('ms-min-lc', 0);
   msRecShowRef(null);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = false;
@@ -12769,6 +12818,8 @@ function _msReadRecipe() {
     // per-bag way would skip gypsum that the mix puts in — same recipe, two
     // answers depending on which screen made it.
     recGypsum: chk('ms-rec-gyp') || v('ms-rec-gyppct') > 0,
+    minSpawnKg: v('ms-min-spawn'),
+    minLc: v('ms-min-lc'),
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
     recIncDays: v('ms-rec-days'),
@@ -12880,6 +12931,8 @@ function msRecCopyFrom() {
   sv('ms-rec-corn', src.recCornPct || 0);
   sv('ms-rec-gyppct', src.recGypsumPct || 0);
   sv('ms-rec-spawn', src.recSpawnPct || 0);
+  sv('ms-min-spawn', src.minSpawnKg || 0);
+  sv('ms-min-lc', src.minLc || 0);
   msRecShowRef(src);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!src.recGypsum;

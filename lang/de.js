@@ -200,6 +200,8 @@ window.LANG['de'] = {
   'inv.deliveryFailed': 'Lieferung NICHT gespeichert: {err}',
   'inv.adjustFailed': 'Korrektur NICHT gespeichert: {err}',
   'inv.coir': 'Kokos / CVG',
+  'strains.minSpawn': 'Mindestbestand Körnerbrut (kg)',
+  'strains.minLc': 'Mindestbestand Flüssigkultur (Gläser)',
   'sub.tab': 'Substrat-Ansätze',
   'sub.allTitle': 'Substrat-Ansätze',
   'sub.showSpent': 'Verbrauchte anzeigen',

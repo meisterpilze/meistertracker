@@ -2059,6 +2059,24 @@ const MIGRATIONS = [
       // batches table without this.
       db.exec('CREATE INDEX IF NOT EXISTS idx_batch_subbatch ON batches(substrate_batch_id)');
     }
+  },
+  {
+    version: 69,
+    description: 'Per-Sorte minimum holdings of grain spawn and liquid culture',
+    fn(db) {
+      // The lab already compared grain spawn per Sorte against a minimum, but
+      // the minimum was one number for the whole farm and it was never set, so
+      // nothing was ever flagged. Shiitake needs 45-70 days of notice and an
+      // oyster needs a fortnight; one number cannot mean both.
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // Kilograms, because that is how grain spawn is counted everywhere else.
+      addCol('mushroom_strains', 'min_spawn_kg', 'REAL DEFAULT 0');
+      // Jars, because that is how liquid culture is counted.
+      addCol('mushroom_strains', 'min_lc', 'INTEGER DEFAULT 0');
+    }
   }
 ];
 
@@ -6929,6 +6947,18 @@ function _strainRecipeFields(d) {
   };
 }
 
+// Minimum holdings are NOT recipe fields, and putting them there cost a recipe.
+// updateMushroomStrain writes the entire rec_* set as soon as any recipe key is
+// present, so editing only a minimum wrote zeros over the blend. They are
+// written only when the caller actually sends them.
+function _strainMinFields(d) {
+  const num = (v, def) => (Number.isFinite(+v) ? +v : def);
+  const out = {};
+  if ('minSpawnKg' in d) out.min_spawn_kg = num(d.minSpawnKg, 0);
+  if ('minLc' in d) out.min_lc = num(d.minLc, 0);
+  return out;
+}
+
 function listMushroomStrains(db) {
   return db
     .prepare('SELECT * FROM mushroom_strains ORDER BY name')
@@ -6959,7 +6989,10 @@ function listMushroomStrains(db) {
       recGypsumPct: r.rec_gypsum_pct || 0,
       recSpawnPct: r.rec_spawn_pct || 0,
       recColonText: r.rec_colon_text || '',
-      recSterilText: r.rec_steril_text || ''
+      recSterilText: r.rec_steril_text || '',
+      // v69 — minimum holdings, per Sorte.
+      minSpawnKg: r.min_spawn_kg || 0,
+      minLc: r.min_lc || 0
     }));
 }
 
@@ -6968,7 +7001,7 @@ function createMushroomStrain(db, data) {
   if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
-  const rec = _strainRecipeFields(data);
+  const rec = { ..._strainRecipeFields(data), ..._strainMinFields(data || {}) };
   const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
   const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
@@ -7014,6 +7047,7 @@ function updateMushroomStrain(db, id, data) {
     'recSterilText'
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
+  Object.assign(fields, _strainMinFields(data || {}));
   if (!Object.keys(fields).length) return;
   fields.updated = now;
   const cols = Object.keys(fields);

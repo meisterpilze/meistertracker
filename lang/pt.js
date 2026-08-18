@@ -881,6 +881,8 @@ window.LANG['pt'] = {
   'inv.deliveryFailed': 'Entrega NÃO guardada: {err}',
   'inv.adjustFailed': 'Correção NÃO guardada: {err}',
   'inv.coir': 'Fibra de coco / CVG',
+  'strains.minSpawn': 'Stock mínimo de inóculo (kg)',
+  'strains.minLc': 'Stock mínimo de cultura líquida (frascos)',
   'sub.tab': 'Preparações de substrato',
   'sub.allTitle': 'Preparações de substrato',
   'sub.showSpent': 'Mostrar gastas',
