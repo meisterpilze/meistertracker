@@ -899,6 +899,9 @@ window.LANG['de'] = {
   'harvestFeed.generate': 'Erzeugen',
   'harvestFeed.generated': 'Erzeugt — jetzt kopieren und speichern. Danach ist er nicht mehr ablesbar.',
   'harvestFeed.interval': 'Alle … Minuten',
+  'harvestFeed.connTitle': 'Wohin es geht',
+  'harvestFeed.connDesc':
+    'Die Adresse, an die die Nachrichten gehen, und der Schlüssel, mit dem sie unterschrieben sind — einmal eingetragen und dann in Ruhe gelassen.',
   'harvestFeed.offerTitle': 'Was angeboten wird',
   'harvestFeed.offerDesc':
     'Die Ware statt der Verbindung: wie lange eine Ernte als frisch gilt, wie weit im Voraus eine geplante angekündigt wird und in welchen Mengen sie übergeben wird. Ein Shop baut daraus sein Fenster, und sie fahren in jeder Nachricht mit, die hinausgeht.',
@@ -917,7 +920,7 @@ window.LANG['de'] = {
   'harvestFeed.siteHint':
     'Nur nötig, wenn mehrere Betriebe an denselben Empfänger senden: Die Kennung reist in jeder Meldung mit und sagt, von wem sie kommt. Das ist kein Abholort — wo Ware übergeben wird, steht unter Einstellungen → Abholorte und wird am Kalendereintrag ausgewählt. Ein Empfänger vergleicht diesen Text wörtlich; wer ihn ändert, ändert drüben einen Schlüssel.',
   'harvestFeed.sitePh': 'z. B. hof-nord',
-  'harvestFeed.saveHint': 'Beide Karten sind eine Einstellung und werden zusammen gespeichert.',
+  'harvestFeed.saveHint': 'Alle drei Karten sind eine Einstellung und werden zusammen gespeichert.',
   'harvestFeed.testNow': 'Jetzt einmal senden',
   'harvestFeed.preview': 'Zeigen, was hinausginge',
   'harvestFeed.building': 'Wird zusammengestellt …',
