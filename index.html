@@ -765,6 +765,23 @@
 
     <!-- Zone check (stocktake): tick off the bags you actually find in a zone,
          then fix whatever the app still expects there but you didn't. -->
+    <!-- How a mix was made, and what came out of it. -->
+    <div class="modal-bg" id="m-subinfo" role="dialog" aria-modal="true" aria-labelledby="si-title" hidden>
+      <div class="modal" style="max-width: 560px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+          <h3 id="si-title">Ansatz</h3>
+          <button id="si-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="si-body"></div>
+        <div id="si-actions" style="margin-top: 14px"></div>
+      </div>
+    </div>
+
     <div class="modal-bg" id="m-zonecheck" role="dialog" aria-modal="true" aria-labelledby="zc-title" hidden>
       <div class="modal" style="max-width: 560px">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px">
@@ -2069,6 +2086,7 @@
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
                  sp-batch-new panel stays in the DOM as that dialog's backing form. -->
             <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
+            <button class="stab" id="st-batch-substrate" data-i18n="sub.tab">Substrat-Ansätze</button>
             <button class="stab" id="st-batch-harvest" data-i18n="batch.harvests">Harvests</button>
           </div>
           <!-- All batches -->
@@ -2146,6 +2164,21 @@
                   <tbody id="batches-body"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+          <!-- Every mix ever made, open and spent. Not front and center: this is
+               where you go to count them and to find the one that went wrong. -->
+          <div class="sp" id="sp-batch-substrate">
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+                <div class="sec" data-i18n="sub.allTitle">Substrat-Ansätze</div>
+                <label style="font-size: 12px; color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
+                  <input type="checkbox" id="sb-show-spent" style="width: auto" onchange="renderSubstrateTab()" />
+                  <span data-i18n="sub.showSpent">Verbrauchte anzeigen</span>
+                </label>
+              </div>
+              <div id="sb-tab-summary" style="font-size: 12px; color: var(--c-text-sec); margin: 4px 0 10px"></div>
+              <div id="sb-tab-list"></div>
             </div>
           </div>
           <!-- New batch -->

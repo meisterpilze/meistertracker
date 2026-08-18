@@ -2265,7 +2265,17 @@ function readAll(db, opts = {}) {
   // of running bagStmt.all() once per batch (the audit-flagged N+1 — at 200
   // batches that was 200 statement executions every time readAll fired,
   // and readAll is called by /api/data which polls on each SSE event).
-  const batchRows = db.prepare('SELECT * FROM batches ORDER BY created').all();
+  // The mix is joined in by name rather than by id: the client needs something
+  // it can match against the substrate list, and the numeric key means nothing
+  // on that side.
+  const batchRows = db
+    .prepare(
+      `SELECT b.*, sb.sub_id AS substrate_sub_id
+         FROM batches b
+         LEFT JOIN substrate_batches sb ON sb.id = b.substrate_batch_id
+        ORDER BY b.created`
+    )
+    .all();
   const bagsByBatch = new Map();
   for (const b of db.prepare('SELECT batch_id, bag_id, bag_kg FROM bags ORDER BY batch_id, bag_id').all()) {
     let arr = bagsByBatch.get(b.batch_id);
@@ -2290,9 +2300,14 @@ function readAll(db, opts = {}) {
       strainDescriptor: ms ? ms.description || null : null,
       qty: r.qty,
       days: r.days,
+      // v67: which mix this Charge was portioned out of, so the substrate tab
+      // can count its Chargen without asking the server once per row.
+      substrateSubId: r.substrate_sub_id || null,
+      substrateKg: r.substrate_kg || 0,
       substrate: {
         hardwood: r.sub_hardwood,
         wheatbran: r.sub_wheatbran,
+        corn: r.sub_corn || 0,
         coir: r.sub_coir || 0,
         rh: r.sub_rh,
         gypsum: r.sub_gypsum === 1 ? true : false
@@ -3550,37 +3565,99 @@ function createSubstrateBatch(db, b, userId) {
   return { subId: b.subId, mix };
 }
 
+function _mapSubstrateRow(r) {
+  return {
+    subId: r.sub_id,
+    recipeStrainId: r.recipe_strain_id,
+    recipeLabel: r.recipe_label,
+    targetKg: r.target_kg,
+    remainingKg: r.remaining_kg,
+    usedKg: r.target_kg - r.remaining_kg,
+    composition: {
+      hardwoodPct: r.hardwood_pct,
+      wheatbranPct: r.wheatbran_pct,
+      cornPct: r.corn_pct,
+      gypsumPct: r.gypsum_pct,
+      rhPct: r.rh_pct
+    },
+    dryKg: r.dry_kg,
+    pelletsKg: r.pellets_kg,
+    branKg: r.bran_kg,
+    cornKg: r.corn_kg,
+    gypsumKg: r.gypsum_kg,
+    waterL: r.water_l,
+    moisturePct: r.moisture_pct,
+    notes: r.notes || '',
+    created: r.created,
+    status: r.status
+  };
+}
+
+// Everything a mix is: how it was made, what has come out of it, and what is
+// left. The Chargen matter as much as the recipe — a mix that went wrong is
+// diagnosed by what was made from it, not by re-reading its percentages.
+function getSubstrateBatch(db, subId) {
+  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const drawn = db
+    .prepare(
+      `SELECT batch_id, species, strain, strain_text, qty, bag_kg, substrate_kg, created, due
+         FROM batches WHERE substrate_batch_id=? ORDER BY created`
+    )
+    .all(row.id)
+    .map((b) => ({
+      batchId: b.batch_id,
+      species: b.species,
+      strain: b.strain_text || b.strain || '',
+      qty: b.qty,
+      bagKg: b.bag_kg,
+      substrateKg: b.substrate_kg,
+      created: b.created,
+      due: b.due
+    }));
+  // What the mix actually took off the shelf, as booked — not as computed.
+  const ledger = db
+    .prepare(
+      "SELECT mat, delta_kg AS deltaKg, time FROM inventory_log WHERE ref = ? AND type IN ('mix','mix-delete') ORDER BY id"
+    )
+    .all(subId);
+  return { ..._mapSubstrateRow(row), drawn, ledger };
+}
+
+// A mix that went bad, or a remainder that got thrown out. No credit goes
+// back to the shelf: the pellets were mixed and are gone either way. What
+// changes is that it stops being offered to new Chargen and stops counting
+// as substrate anybody can still use.
+function writeOffSubstrateBatch(db, subId, note, userId) {
+  db.exec('BEGIN');
+  try {
+    const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+    if (!row) {
+      db.exec('ROLLBACK');
+      return false;
+    }
+    const lost = row.remaining_kg;
+    const stamp =
+      '[' + new Date().toISOString().slice(0, 10) + '] ' + (note || 'verworfen') + ' (' + lost.toFixed(1) + ' kg)';
+    db.prepare(
+      "UPDATE substrate_batches SET status='written_off', remaining_kg=0, notes = CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes || ' · ' || ? END WHERE sub_id=?"
+    ).run(stamp, stamp, subId);
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return { lostKg: lost };
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
 function listSubstrateBatches(db, opts) {
   const o = opts || {};
   const where = o.openOnly ? " WHERE status='open' AND remaining_kg > 0.0001" : '';
   return db
     .prepare('SELECT * FROM substrate_batches' + where + ' ORDER BY created DESC')
     .all()
-    .map((r) => ({
-      subId: r.sub_id,
-      recipeStrainId: r.recipe_strain_id,
-      recipeLabel: r.recipe_label,
-      targetKg: r.target_kg,
-      remainingKg: r.remaining_kg,
-      usedKg: r.target_kg - r.remaining_kg,
-      composition: {
-        hardwoodPct: r.hardwood_pct,
-        wheatbranPct: r.wheatbran_pct,
-        cornPct: r.corn_pct,
-        gypsumPct: r.gypsum_pct,
-        rhPct: r.rh_pct
-      },
-      dryKg: r.dry_kg,
-      pelletsKg: r.pellets_kg,
-      branKg: r.bran_kg,
-      cornKg: r.corn_kg,
-      gypsumKg: r.gypsum_kg,
-      waterL: r.water_l,
-      moisturePct: r.moisture_pct,
-      notes: r.notes || '',
-      created: r.created,
-      status: r.status
-    }));
+    .map(_mapSubstrateRow);
 }
 
 // Move kilograms out of a mix. Caller holds the transaction.
@@ -8910,6 +8987,8 @@ module.exports = {
   getMixRecipe,
   createSubstrateBatch,
   listSubstrateBatches,
+  getSubstrateBatch,
+  writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,
   insertHarvest,

@@ -1074,6 +1074,7 @@ function openStab(page, sub) {
     // Refill every time: bags get consumed and created between visits.
     inocRender('nb');
   }
+  if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
@@ -2051,6 +2052,10 @@ document.getElementById('m-ok').onclick = () => {
   if (confirmCb) confirmCb();
   closeConfirm();
 };
+document.getElementById('si-close').onclick = closeSubstrateInfo;
+document.getElementById('m-subinfo').addEventListener('click', (e) => {
+  if (e.target.id === 'm-subinfo') closeSubstrateInfo();
+});
 document.getElementById('m-confirm').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm') closeConfirm();
 });
@@ -7210,6 +7215,7 @@ async function refreshSubstrateBatches() {
   _sbList = Array.isArray(r) ? r : [];
   renderSubstrateList();
   fillSubstrateSelect();
+  renderSubstrateTab();
 }
 
 function renderSubstrateList() {
@@ -7367,6 +7373,223 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
     return;
   }
   go();
+}
+
+
+// ─── SUBSTRATE MIX: LIST AND DETAIL (v67) ────────────────────
+// The mix card on "Neue Charge" shows what is still usable, because that is what
+// you plan against. This tab shows all of them, spent ones included, because
+// that is what you count and where you look when one has gone wrong.
+const SB_STATUS = { open: 'sub.stOpen', used: 'sub.stUsed', written_off: 'sub.stBad' };
+const SB_STATUS_COLOR = { open: 'var(--c-accent)', used: 'var(--c-text-muted)', written_off: 'var(--c-red)' };
+
+function renderSubstrateTab() {
+  const box = document.getElementById('sb-tab-list');
+  const sum = document.getElementById('sb-tab-summary');
+  if (!box) return;
+  const showSpent = (document.getElementById('sb-show-spent') || {}).checked;
+  const all = _sbList;
+  const rows = showSpent ? all : all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
+  if (sum) {
+    const open = all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
+    const bad = all.filter((s) => s.status === 'written_off');
+    sum.textContent = t('sub.summary', {
+      total: all.length,
+      open: open.length,
+      kg: open.reduce((a, s) => a + s.remainingKg, 0).toFixed(1),
+      bad: bad.length
+    });
+  }
+  if (!rows.length) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
+    return;
+  }
+  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
+    .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
+    .join('');
+  box.innerHTML =
+    '<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    '<thead><tr style="text-align:left;color:var(--c-text-sec)">' +
+    head +
+    '</tr></thead><tbody>' +
+    rows.map(_sbRowHtml).join('') +
+    '</tbody></table></div>';
+}
+
+function _sbRowHtml(s) {
+  const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
+  const col = SB_STATUS_COLOR[s.status] || 'var(--c-text-muted)';
+  const cell = (inner, extra) => '<td style="padding:6px 8px 6px 0;' + (extra || '') + '">' + inner + '</td>';
+  return (
+    '<tr style="border-top:1px solid var(--c-border);cursor:pointer" onclick="openSubstrateInfo(' +
+    JSON.stringify(s.subId).replace(/"/g, '&quot;') +
+    ')">' +
+    cell(esc(s.subId), 'font-family:monospace;font-weight:600') +
+    cell(esc(s.recipeLabel), 'color:var(--c-text-sec)') +
+    cell(fmtDtShort(s.created), 'white-space:nowrap') +
+    cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
+    cell(
+      s.remainingKg.toFixed(1) +
+        ' kg<div style="height:4px;border-radius:2px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:2px;width:60px">' +
+        '<div style="height:100%;border-radius:2px;background:' +
+        col +
+        ';width:' +
+        pct.toFixed(0) +
+        '%"></div></div>',
+      'white-space:nowrap'
+    ) +
+    cell(
+      '<span style="font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;color:#fff;background:' +
+        col +
+        '">' +
+        esc(t(SB_STATUS[s.status] || s.status)) +
+        '</span>'
+    ) +
+    cell(_sbDrawnCount(s.subId), 'color:var(--c-text-muted)') +
+    '</tr>'
+  );
+}
+
+// The Chargen already loaded carry the link, so counting them costs no request.
+function _sbDrawnCount(subId) {
+  const n = (batches || []).filter((b) => b.substrateSubId === subId).length;
+  return n || '—';
+}
+
+async function openSubstrateInfo(subId) {
+  const body = document.getElementById('si-body');
+  const acts = document.getElementById('si-actions');
+  document.getElementById('si-title').textContent = subId;
+  body.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">…</div>';
+  acts.innerHTML = '';
+  document.getElementById('m-subinfo').classList.add('open');
+  const s = await apiGet('/api/substrate-batches/' + encodeURIComponent(subId));
+  if (!s || s.error) {
+    body.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((s && s.error) || '?') + '</div>';
+    return;
+  }
+  const line = (label, val) =>
+    '<tr><td style="padding:2px 12px 2px 0;color:var(--c-text-sec)">' +
+    esc(label) +
+    '</td><td style="padding:2px 0;font-weight:600">' +
+    val +
+    '</td></tr>';
+  const kg = (v, d) => v.toFixed(d == null ? 1 : d) + ' kg';
+  const c = s.composition;
+  let html =
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">' +
+    esc(t('sub.madeOn', { date: fmtDt(s.created), recipe: s.recipeLabel })) +
+    '</div>' +
+    '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+    esc(t('sub.howMade')) +
+    '</div>' +
+    '<table style="font-size:13px;border-collapse:collapse;margin-bottom:10px">' +
+    line(t('sub.targetKg'), kg(s.targetKg, 0)) +
+    line(t('sub.blend'), c.hardwoodPct + ' / ' + c.wheatbranPct + (c.cornPct ? ' / ' + c.cornPct : '') + ' %') +
+    line(t('sub.dryMix'), kg(s.dryKg)) +
+    line(t('sub.pellets'), kg(s.pelletsKg)) +
+    line(t('sub.bran'), kg(s.branKg)) +
+    (s.cornKg > 0.005 ? line(t('sub.corn'), kg(s.cornKg)) : '') +
+    line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
+    line(t('sub.water'), s.waterL.toFixed(1) + ' L') +
+    line(t('sub.moisture'), s.moisturePct.toFixed(1) + ' %') +
+    '</table>';
+  // What the shelf actually gave up, read from the ledger rather than recomputed.
+  // A mix made while stock was short booked less than the recipe asked for, and
+  // that gap is exactly what somebody looking at a bad batch needs to see.
+  if (s.ledger && s.ledger.length) {
+    html +=
+      '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+      esc(t('sub.booked')) +
+      '</div><div style="font-size:12px;color:var(--c-text-sec);margin-bottom:10px">' +
+      s.ledger.map((l) => esc(_ohMatName(l.mat)) + ' ' + Math.abs(l.deltaKg).toFixed(2) + ' kg').join(' · ') +
+      '</div>';
+  }
+  html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' + esc(t('sub.drawnBy')) + '</div>';
+  if (!s.drawn.length) {
+    html += '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.drawnNone')) + '</div>';
+  } else {
+    html +=
+      '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+      s.drawn
+        .map(
+          (b) =>
+            '<tr style="border-top:1px solid var(--c-border)">' +
+            '<td style="padding:4px 8px 4px 0;font-family:monospace">' +
+            esc(b.batchId) +
+            '</td><td style="padding:4px 8px 4px 0">' +
+            esc(b.species) +
+            '</td><td style="padding:4px 8px 4px 0;white-space:nowrap">' +
+            b.qty +
+            ' × ' +
+            b.bagKg +
+            ' kg</td><td style="padding:4px 0;white-space:nowrap;font-weight:600">' +
+            b.substrateKg.toFixed(1) +
+            ' kg</td></tr>'
+        )
+        .join('') +
+      '</table>';
+  }
+  html +=
+    '<div style="margin-top:10px;font-size:13px;font-weight:600">' +
+    esc(t('sub.leftNow', { kg: s.remainingKg.toFixed(1), of: s.targetKg.toFixed(0) })) +
+    '</div>';
+  if (s.notes) html += '<div style="margin-top:6px;font-size:12px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
+  body.innerHTML = html;
+  // Two different mistakes need two different answers, and offering both at once
+  // invites the wrong one. Nothing made from it yet: it can be removed cleanly,
+  // materials back on the shelf — that is a mis-entry. Something already made
+  // from it: the pellets are gone whatever happens, so the honest action is to
+  // stop it being offered, not to pretend it never existed.
+  const act = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-sm ' + cls;
+    b.textContent = label;
+    b.onclick = fn;
+    acts.appendChild(b);
+  };
+  if (!s.drawn.length) {
+    act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
+  } else if (s.status === 'open' && s.remainingKg > 0.0001) {
+    act(t('sub.writeOff'), 'btn-r', () => writeOffSubstrate(s.subId, s.remainingKg.toFixed(1)));
+  }
+}
+
+// No Charge was ever made from this mix, so removing it is a clean reversal: the
+// pellets, bran and gypsum go back on the shelf exactly as the ledger booked
+// them out. The right answer for a mix entered by mistake or as a test.
+function deleteSubstrate(subId) {
+  closeSubstrateInfo();
+  confirm2(t('sub.deleteTitle'), t('sub.deleteMsg', { id: subId }), t('sub.delete'), async () => {
+    const r = await apiDelete('/api/substrate-batches/' + encodeURIComponent(subId));
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await loadData();
+    await refreshSubstrateBatches();
+  });
+}
+
+function closeSubstrateInfo() {
+  document.getElementById('m-subinfo').classList.remove('open');
+}
+
+// A mix that soured, or a remainder that got thrown out. Nothing goes back to
+// the shelf — the pellets were mixed and are gone either way. What changes is
+// that it stops being offered and stops counting as substrate anyone can use.
+function writeOffSubstrate(subId, leftKg) {
+  closeSubstrateInfo();
+  confirm2(t('sub.writeOffTitle'), t('sub.writeOffMsg', { id: subId, kg: leftKg }), t('sub.writeOff'), async () => {
+    const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(subId) + '/write-off', {
+      note: t('sub.writeOffNote')
+    });
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await refreshSubstrateBatches();
+  });
 }
 
 // Print all labels for the just-created batch straight from the success panel,
@@ -20346,6 +20569,7 @@ function initEventListeners() {
     openStab('batch', 'list');
   });
   $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
+  $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });

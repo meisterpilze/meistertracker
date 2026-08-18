@@ -205,3 +205,67 @@ describe('substrate batches and the Chargen drawn from them', () => {
     assert.throws(() => db.createSubstrateBatch(d, { subId: 'SUB-X', recipeStrainId: resh, targetKg: 50 }, null), /Rezept/);
   });
 });
+
+describe('looking into a mix after the fact', () => {
+  let d, p, bo;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    bo = seedStrain(d, 'Blue Oyster', 'BO', { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 62 });
+    for (const [mat, v] of [['hardwood', 600], ['wheatbran', 200], ['gypsum', 20], ['grain', 60]]) {
+      db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', null);
+    }
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('reports how it was made and what came out of it', () => {
+    db.createSubstrateBatch(d, { subId: 'SUB-A', recipeStrainId: bo, targetKg: 200, notes: 'Montag' }, null);
+    db.createBagBatchFromSubstrate(d, { batchId: 'BO-A', subId: 'SUB-A', strainId: bo, qty: 20, bagKg: 5 }, null);
+    const one = db.getSubstrateBatch(d, 'SUB-A');
+    assert.equal(one.targetKg, 200);
+    assert.equal(one.remainingKg, 100);
+    assert.equal(one.notes, 'Montag');
+    assert.equal(one.drawn.length, 1);
+    assert.equal(one.drawn[0].batchId, 'BO-A');
+    assert.equal(one.drawn[0].substrateKg, 100);
+    // The ledger, not a recomputation: a mix made while stock was short booked
+    // less than its recipe asked for, and that gap is the whole point of showing it.
+    const pellets = one.ledger.find((l) => l.mat === 'hardwood');
+    assert.equal(Math.abs(pellets.deltaKg).toFixed(2), one.pelletsKg.toFixed(2));
+  });
+
+  it('says nothing about a mix that does not exist', () => {
+    assert.equal(db.getSubstrateBatch(d, 'SUB-NOPE'), null);
+  });
+
+  it('writes off what is left without crediting the shelf', () => {
+    const pelletsBefore = stock(d, 'hardwood');
+    const r = db.writeOffSubstrateBatch(d, 'SUB-A', 'kontaminiert', null);
+    assert.equal(r.lostKg, 100);
+    const one = db.getSubstrateBatch(d, 'SUB-A');
+    assert.equal(one.status, 'written_off');
+    assert.equal(one.remainingKg, 0);
+    // The pellets were mixed. They are gone whatever the mix turned into.
+    assert.equal(stock(d, 'hardwood'), pelletsBefore);
+    assert.match(one.notes, /kontaminiert/);
+    assert.match(one.notes, /100\.0 kg/);
+  });
+
+  it('keeps a written-off mix out of what can still be used', () => {
+    const open = db.listSubstrateBatches(d, { openOnly: true }).map((s) => s.subId);
+    assert.equal(open.includes('SUB-A'), false);
+    // But it is still there to be counted and looked at.
+    assert.ok(db.listSubstrateBatches(d).some((s) => s.subId === 'SUB-A'));
+  });
+
+  it('deletes a mix nothing was made from, and puts the material back', () => {
+    const before = stock(d, 'hardwood');
+    const r = db.createSubstrateBatch(d, { subId: 'SUB-TEST', recipeStrainId: bo, targetKg: 40 }, null);
+    assert.equal(stock(d, 'hardwood').toFixed(3), (before - r.mix.pelletsKg).toFixed(3));
+    assert.equal(db.deleteSubstrateBatch(d, 'SUB-TEST', null), true);
+    assert.equal(stock(d, 'hardwood').toFixed(3), before.toFixed(3));
+    assert.equal(db.getSubstrateBatch(d, 'SUB-TEST'), null);
+  });
+});

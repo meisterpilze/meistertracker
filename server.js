@@ -6040,13 +6040,61 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // /api/batches still accepts client-computed deltas for the older per-bag path,
   // which means a browser can post a Charge whose booked consumption disagrees
   // with its own recipe. There is no reason to carry that forward into the mix.
-  if (req.method === 'GET' && req.url.startsWith('/api/substrate-batches')) {
+  // Anchored, not a prefix match: /api/substrate-batches/SUB-01 is a different
+  // route and a startsWith would have answered it with the whole list.
+  if (req.method === 'GET' && /^\/api\/substrate-batches(\?|$)/.test(req.url)) {
     try {
       const openOnly = /[?&]open=1(&|$)/.test(req.url);
       jsonOk(res, db.listSubstrateBatches(database, { openOnly }));
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+  const subGetMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)$/);
+  if (req.method === 'GET' && subGetMatch) {
+    try {
+      const one = db.getSubstrateBatch(database, decodeURIComponent(subGetMatch[1]));
+      if (!one) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      jsonOk(res, one);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const subOffMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/write-off$/);
+  if (req.method === 'POST' && subOffMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vlen = validateLengths(data || {}, { note: 500 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      try {
+        const userId = req.authUser ? req.authUser.user_id : null;
+        const r = db.writeOffSubstrateBatch(
+          database,
+          decodeURIComponent(subOffMatch[1]),
+          (data && data.note) || null,
+          userId
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
   if (req.method === 'POST' && req.url === '/api/substrate-batches/preview') {
