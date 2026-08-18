@@ -139,7 +139,8 @@ body {
   color: var(--c-text);
 }
 
-.sb-nav {
+.sb-nav,
+.sb-admin-nav {
   flex: 1;
   overflow-y: auto;
   padding: 12px 10px;
@@ -218,6 +219,32 @@ body {
   border-top: 1px solid var(--c-border-light);
   padding: 10px;
 }
+/* Admin navigation — the Admin section borrows the sidebar.
+   Fourteen sub-tabs do not fit one horizontal strip: on a desktop .stabs has
+   neither wrap nor scroll, so the pills squeeze until their labels break. A
+   vertical, grouped list has no such ceiling, and .sb-nav already scrolls.
+   Mobile keeps the strip instead — there the sidebar is a drawer that
+   sbCloseMobile() shuts on every pick, which would turn each sub-tab switch
+   into hamburger → tap → drawer-closes. The strip is one swipe. */
+.sb-admin-nav {
+  display: none;
+}
+.sb-admin-back {
+  color: var(--c-text-muted);
+  margin-bottom: 6px;
+}
+@media (min-width: 769px) {
+  body.admin-mode .sb-nav {
+    display: none;
+  }
+  body.admin-mode .sb-admin-nav {
+    display: block;
+  }
+  body.admin-mode #p-settings > .stabs {
+    display: none;
+  }
+}
+
 .sb-sync {
   display: flex;
   align-items: center;

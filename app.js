@@ -523,6 +523,17 @@ function showAdminNav() {
   if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
 }
 
+// MCP, camera and server are admin-only sub-tabs, and every sub-tab now carries
+// two buttons: one in the strip, one in the sidebar list. Reveal them together —
+// a half-shown pair is a sub-tab reachable from one layout but not the other.
+function showAdminSubTab(sub) {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  for (const id of ['st-settings-' + sub, 'sn-settings-' + sub]) {
+    const btn = document.getElementById(id);
+    if (btn) btn.style.display = '';
+  }
+}
+
 // ─── SYNC ────────────────────────────────────────────────────
 async function loadData() {
   setSyncStatus('busy', 'Syncing...');
@@ -1010,8 +1021,15 @@ window.addEventListener('beforeunload', (e) => {
   e.returnValue = '';
 });
 
+// Where "Zurück" out of the admin section leads. Recorded on the way in, so it
+// lands where the user actually was instead of always on the dashboard.
+let lastMainPage = { page: 'dash', btnId: 'n-dash' };
+
 function go(page, btnId) {
   if (!mayLeavePage()) return;
+  if (page !== 'settings') lastMainPage = { page, btnId };
+  // Admin borrows the sidebar on a desktop; styles.css reads this flag.
+  document.body.classList.toggle('admin-mode', page === 'settings');
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
@@ -1064,6 +1082,12 @@ function openStab(page, sub) {
   if (stEl) stEl.classList.add('active');
   const spEl = document.getElementById(`sp-${page}-${sub}`);
   if (spEl) spEl.classList.add('active');
+  // The sidebar list and the sub-tab strip show the same selection — the
+  // sidebar on a desktop, the strip on a phone. Marking both here keeps them
+  // in step whichever one was clicked. A no-op for pages without a sidebar list.
+  document.querySelectorAll('.sb-admin-nav .sb-btn').forEach((b) => b.classList.remove('active'));
+  const snEl = document.getElementById(`sn-${page}-${sub}`);
+  if (snEl) snEl.classList.add('active');
   if (page === 'batch' && sub === 'list') renderBatches();
   if (page === 'batch' && sub === 'new') {
     _fillNbProducts();
@@ -10089,8 +10113,7 @@ async function requestLeCert() {
 
 // ─── MCP TAB (admin-only) ───────────────────────────────────
 function showMcpTab() {
-  const btn = document.getElementById('st-settings-mcp');
-  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+  showAdminSubTab('mcp');
 }
 
 // ─── CAMERA TAB (admin-only WIP) ─────────────────────────────
@@ -10119,8 +10142,7 @@ const CAM_CALIB_FIELDS = [
 ];
 
 function showCameraTab() {
-  const btn = document.getElementById('st-settings-camera');
-  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+  showAdminSubTab('camera');
 }
 
 async function loadCameraTab() {
@@ -10532,8 +10554,7 @@ function initCameraPxCalib() {
 
 // ─── SERVER TAB ─────────────────────────────────────────────
 function showServerTab() {
-  const btn = document.getElementById('st-settings-server');
-  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+  showAdminSubTab('server');
 }
 async function loadServerTab() {
   const el = document.getElementById('server-info');
@@ -20483,6 +20504,19 @@ function initEventListeners() {
   });
   $('n-print').addEventListener('click', () => {
     go('print', 'n-print');
+  });
+  // The admin sidebar forwards to the sub-tab strip rather than duplicating its
+  // wiring: every loader already hangs off those buttons — including Growth's,
+  // registered inline in index.html — so one click still runs exactly one.
+  $('sb-admin-nav').addEventListener('click', (e) => {
+    const btn = e.target.closest('.sb-btn');
+    if (!btn) return;
+    if (btn.id === 'sn-back') {
+      go(lastMainPage.page, lastMainPage.btnId);
+      return;
+    }
+    const stab = document.getElementById('st-settings-' + btn.dataset.sub);
+    if (stab) stab.click();
   });
   $('n-settings').addEventListener('click', () => {
     go('settings', 'n-settings');

@@ -32,6 +32,11 @@ window.LANG['en'] = {
   'nav.ordersMapping': 'Products',
   'nav.ordersCustomers': 'Customers',
   'nav.pickups': 'Pickups',
+  'nav.adminBack': 'Back',
+  'nav.adminOps': 'Operations',
+  'nav.adminSales': 'Sales',
+  'nav.adminDevices': 'Devices',
+  'nav.adminSystem': 'System',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':
@@ -1481,6 +1486,7 @@ window.LANG['en'] = {
   'aria.doneScanning': 'Done scanning',
   'aria.toggleSidebar': 'Toggle sidebar',
   'aria.mainNav': 'Main navigation',
+  'aria.adminNav': 'Admin navigation',
   'aria.openMenu': 'Open menu',
   'aria.searchDashboard': 'Search dashboard',
   'aria.searchBatches': 'Search batches',
@@ -1507,6 +1513,7 @@ window.LANG['en'] = {
   'settings.tabMcp': 'MCP',
   'settings.tabCamera': 'Camera',
   'settings.tabServer': 'Server',
+  'settings.tabGrowth': 'Growth',
   // Camera dashboard (admin-only WIP)
   'cam.wipTitle': 'Work in progress',
   'cam.wipDesc':
