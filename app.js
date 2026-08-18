@@ -7138,8 +7138,11 @@ async function sbPreview() {
       '</td></tr>'
     );
   };
-  const mm = Math.floor(m.waterMinutes);
-  const ss = String(Math.round((m.waterMinutes - mm) * 60)).padStart(2, '0');
+  // Round to whole seconds first, then split. Rounding the seconds against a
+  // separately floored minute prints 10:60 for anything just under the minute.
+  const _secs = Math.round(m.waterMinutes * 60);
+  const mm = Math.floor(_secs / 60);
+  const ss = String(_secs % 60).padStart(2, '0');
   out.innerHTML =
     '<table style="font-size:13px;border-collapse:collapse">' +
     row(t('sub.dryMix'), m.dryKg, 'kg') +
