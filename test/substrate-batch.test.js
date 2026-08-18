@@ -200,9 +200,113 @@ describe('substrate batches and the Chargen drawn from them', () => {
     }
   });
 
-  it('refuses to mix a Sorte whose recipe is not complete enough', () => {
-    const resh = db.createMushroomStrain(d, { name: 'Reishi', kuerzel: 'RESH', recRhPct: 61 });
-    assert.throws(() => db.createSubstrateBatch(d, { subId: 'SUB-X', recipeStrainId: resh, targetKg: 50 }, null), /Rezept/);
+  it('refuses to mix a Sorte with no hydration target, since there is no sum to do', () => {
+    const empty = db.createMushroomStrain(d, { name: 'Ohne Rezept', kuerzel: 'OHNE' });
+    assert.throws(
+      () => db.createSubstrateBatch(d, { subId: 'SUB-X', recipeStrainId: empty, targetKg: 50 }, null),
+      /Rezept/
+    );
+  });
+
+  it('accepts a recipe that uses no gypsum', () => {
+    // Gypsum is not what makes a recipe complete. Requiring it reported a
+    // finished CVG recipe as missing and sent the operator off to re-enter one
+    // that was already there.
+    const nogyp = db.createMushroomStrain(d, {
+      name: 'Ohne Gips',
+      kuerzel: 'NOGY',
+      recBatchType: 'block',
+      recSubstrate: 'holzkleie',
+      recBagKg: 5,
+      recHardwoodPct: 80,
+      recWheatbranPct: 20,
+      recGypsumPct: 0,
+      recRhPct: 62,
+      recSpawnPct: 5
+    });
+    const found = db.getMixRecipe(d, nogyp);
+    assert.ok(found, 'a gypsum-free blend is still a recipe');
+    const m = db.computeMixBatch(found.recipe, 100, { residualPct: 9 });
+    assert.equal(m.gypsumKg, 0);
+    assert.equal(
+      m.deltas.some((x) => x.mat === 'gypsum'),
+      false
+    );
+  });
+
+  it('books coir for a CVG recipe instead of draining the pellets', () => {
+    // The base of a blend is whatever the blend is not, and on a CVG recipe that
+    // base is coir. Pricing every mix as hardwood emptied the wrong shelf.
+    const cvg = db.createMushroomStrain(d, {
+      name: 'CVG Sorte',
+      kuerzel: 'TCVG',
+      recBatchType: 'block',
+      recSubstrate: 'cvg',
+      recBagKg: 5,
+      recHardwoodPct: 0,
+      recWheatbranPct: 0,
+      recCoirPct: 100,
+      recGypsumPct: 0,
+      recRhPct: 60,
+      recSpawnPct: 5
+    });
+    db.setInventoryAbsolute(d, 'coir', 200, 'count', 'Inventur', null);
+    const hwBefore = stock(d, 'hardwood');
+    db.createSubstrateBatch(d, { subId: 'SUB-CVG', recipeStrainId: cvg, targetKg: 50 }, null);
+    assert.equal(stock(d, 'hardwood'), hwBefore, 'a coir mix must not touch the pellets');
+    assert.ok(stock(d, 'coir') < 200, 'the coir is what gets used');
+    assert.equal(db.getMixRecipe(d, cvg).recipe.substrate, 'cvg');
+  });
+});
+
+describe('what a mix still holds is derived, not accumulated', () => {
+  let d, p, bo;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    bo = seedStrain(d, 'Blue Oyster', 'BO', { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 62 });
+    const counts = [
+      ['hardwood', 900],
+      ['wheatbran', 300],
+      ['gypsum', 30],
+      ['grain', 90]
+    ];
+    for (const [mat, v] of counts) db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', null);
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('does not hand back more than the mix ever held when a Charge overdrew it', () => {
+    // 200 kg mixed, 75 kg taken, then 150 kg overdrawn. Deleting the overdrawn
+    // Charge used to credit its full 150 kg onto a remainder of 0 and leave
+    // 150 kg standing — 25 kg of substrate that was never made.
+    db.createSubstrateBatch(d, { subId: 'M1', recipeStrainId: bo, targetKg: 200 }, null);
+    db.createBagBatchFromSubstrate(d, { batchId: 'M1-A', subId: 'M1', strainId: bo, qty: 15, bagKg: 5 }, null);
+    assert.equal(sub(d, 'M1').remainingKg, 125);
+    db.createBagBatchFromSubstrate(d, { batchId: 'M1-B', subId: 'M1', strainId: bo, qty: 30, bagKg: 5 }, null);
+    assert.equal(sub(d, 'M1').remainingKg, 0);
+    db.deleteBatchById(d, 'M1-B', null);
+    assert.equal(sub(d, 'M1').remainingKg, 125, 'only the 75 kg still out stays out');
+  });
+
+  it('keeps a written-off mix written off when a Charge is handed back', () => {
+    db.createSubstrateBatch(d, { subId: 'M2', recipeStrainId: bo, targetKg: 200 }, null);
+    db.createBagBatchFromSubstrate(d, { batchId: 'M2-A', subId: 'M2', strainId: bo, qty: 20, bagKg: 5 }, null);
+    db.writeOffSubstrateBatch(d, 'M2', 'kontaminiert', null);
+    assert.equal(sub(d, 'M2').status, 'written_off');
+    db.deleteBatchById(d, 'M2-A', null);
+    const after = sub(d, 'M2');
+    assert.equal(after.status, 'written_off', 'contaminated substrate must not become available again');
+    assert.equal(after.remainingKg, 0);
+  });
+
+  it('counts the extra bags when a Charge out of a mix is grown', () => {
+    db.createSubstrateBatch(d, { subId: 'M3', recipeStrainId: bo, targetKg: 100 }, null);
+    db.createBagBatchFromSubstrate(d, { batchId: 'M3-A', subId: 'M3', strainId: bo, qty: 10, bagKg: 5 }, null);
+    assert.equal(sub(d, 'M3').remainingKg, 50);
+    db.addBagsToBatch(d, 'M3-A', ['M3-A-11', 'M3-A-12'], 12, 5, null);
+    assert.equal(sub(d, 'M3').remainingKg, 40, 'the two added bags come out of the mix too');
   });
 });
 

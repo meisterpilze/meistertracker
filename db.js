@@ -3432,6 +3432,10 @@ function computeMixBatch(rec, targetKg, opts) {
 
   // Pellets are the remainder so the three shares can never total anything but
   // 100%. A blend that leaves nothing over is a data error, not a 0 kg order.
+  // The base is whatever the blend is not: pellets on a hardwood recipe, coir
+  // on a CVG one. Taking the remainder rather than storing it keeps the shares
+  // from drifting into a blend that does not total 100%.
+  const baseMat = (rec.substrate || 'holzkleie') === 'cvg' ? 'coir' : 'hardwood';
   const pelletShare = 1 - bran - corn;
   if (pelletShare <= 0) {
     throw new Error(
@@ -3465,7 +3469,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const push = (mat, kg) => {
     if (kg > 0) deltas.push({ mat, deltaKg: -kg, type: 'mix' });
   };
-  push('hardwood', pelletsKg);
+  push(baseMat, pelletsKg);
   push('wheatbran', branKg);
   push('corn', cornKg);
   push('gypsum', gypsumKg);
@@ -3480,6 +3484,9 @@ function computeMixBatch(rec, targetKg, opts) {
     waterL,
     // What the mix will actually measure once the residual moisture is in it —
     // the figure to check the halogen analyser against, not the recipe target.
+    // Named so the card and the detail view can label the line honestly rather
+    // than always calling it pellets.
+    baseMat,
     moisturePct: ((waterL + dryKg * R) / target) * 100,
     waterMinutes: flow > 0 ? waterL / flow : 0,
     hardwoodPct: pelletShare * 100,
@@ -3496,13 +3503,18 @@ function computeMixBatch(rec, targetKg, opts) {
 function getMixRecipe(db, strainId) {
   const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(strainId);
   if (!ms) throw new Error('Pilzsorte nicht gefunden');
-  // A leftover pre-v65 recipe can carry a hydration target and nothing else.
-  // Mixing off that books no gypsum, which reads as a clean batch and is not one.
-  if (!(ms.rec_rh_pct > 0) || !(ms.rec_gypsum_pct > 0)) return null;
+  // A mix needs a hydration target; without one there is no arithmetic to do.
+  // Gypsum is NOT required — CVG blends legitimately use none, and demanding it
+  // reported a complete recipe as missing and sent the operator to re-enter one
+  // that was already there.
+  if (!(ms.rec_rh_pct > 0)) return null;
   const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
   return {
     strain: ms,
     recipe: {
+      // Which base the blend is built on. Without it every mix was priced as
+      // hardwood pellets, so a coir recipe drained the wrong shelf entirely.
+      substrate: ms.rec_substrate || 'holzkleie',
       branPct: ms.rec_wheatbran_pct || 0,
       cornPct: ms.rec_corn_pct || 0,
       gypsumPct: ms.rec_gypsum_pct || 0,
@@ -3660,6 +3672,37 @@ function listSubstrateBatches(db, opts) {
     .map(_mapSubstrateRow);
 }
 
+// What a mix still holds is not a running total to be nudged up and down — it
+// is derivable from the Chargen made out of it, and deriving it is what makes
+// the two directions agree. The old add-and-cap arithmetic got both edges
+// wrong: an overdrawn Charge handed back more than the mix had ever held, and
+// a returned Charge silently reopened a mix that had been written off.
+//
+// `excludeBatchId` exists for the delete path, which has to recompute while the
+// row it is removing is still there.
+//
+// Caller holds the transaction.
+function _recalcSubstrateRemaining(db, subId, excludeBatchId) {
+  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const taken = db
+    .prepare(
+      'SELECT COALESCE(SUM(substrate_kg), 0) AS kg FROM batches WHERE substrate_batch_id = ? AND batch_id IS NOT ?'
+    )
+    .get(row.id, excludeBatchId || null).kg;
+  const remaining = Math.max(0, row.target_kg - taken);
+  // A mix declared unusable stays unusable. Handing a Charge back to it must
+  // not quietly put contaminated substrate back on the shelf.
+  const off = row.status === 'written_off';
+  const status = off ? 'written_off' : remaining > 0.0001 ? 'open' : 'used';
+  db.prepare('UPDATE substrate_batches SET remaining_kg=?, status=? WHERE sub_id=?').run(
+    off ? 0 : remaining,
+    status,
+    subId
+  );
+  return { row, taken, remaining, over: taken > row.target_kg + 1e-9 };
+}
+
 // Move kilograms out of a mix. Caller holds the transaction.
 //
 // Overdrawing is allowed and recorded honestly: a mix can come out heavier than
@@ -3669,28 +3712,7 @@ function listSubstrateBatches(db, opts) {
 function drawSubstrateNoTxn(db, subId, kg) {
   const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
   if (!row) throw new Error('Substrat-Charge nicht gefunden: ' + subId);
-  const drawn = Math.max(0, kg);
-  const remaining = Math.max(0, row.remaining_kg - drawn);
-  db.prepare('UPDATE substrate_batches SET remaining_kg=?, status=? WHERE sub_id=?').run(
-    remaining,
-    remaining <= 0.0001 ? 'used' : 'open',
-    subId
-  );
-  return { row, drawn, remaining, over: drawn > row.remaining_kg + 1e-9 };
-}
-
-// Give kilograms back to a mix — a bag batch deleted, or shrunk.
-function returnSubstrateNoTxn(db, subId, kg) {
-  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
-  if (!row) return;
-  // Never above what was mixed: an overdrawn batch handed back its full draw
-  // would otherwise invent substrate that was never made.
-  const remaining = Math.min(row.target_kg, row.remaining_kg + Math.max(0, kg));
-  db.prepare('UPDATE substrate_batches SET remaining_kg=?, status=? WHERE sub_id=?').run(
-    remaining,
-    remaining > 0.0001 ? 'open' : 'used',
-    subId
-  );
+  return _recalcSubstrateRemaining(db, subId);
 }
 
 function deleteSubstrateBatch(db, subId, userId) {
@@ -4038,9 +4060,9 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
     if (batch.substrate_batch_id) {
       // The substrate for these bags was bought when the mix was made. What
       // they cost now is more of that mix, plus the spawn to inoculate them.
+      db.prepare('UPDATE batches SET substrate_kg = substrate_kg + ? WHERE batch_id=?').run(addedWetKg, batchId);
       const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(batch.substrate_batch_id);
       if (sub) drawSubstrateNoTxn(db, sub.sub_id, addedWetKg);
-      db.prepare('UPDATE batches SET substrate_kg = substrate_kg + ? WHERE batch_id=?').run(addedWetKg, batchId);
       const ms = batch.strain_id
         ? db.prepare('SELECT rec_spawn_pct FROM mushroom_strains WHERE id=?').get(batch.strain_id)
         : null;
@@ -4081,7 +4103,7 @@ function deleteBatchById(db, batchId, userId) {
       // capped-at-what-was-taken logic below already handles that from the ledger.
       if (row.substrate_batch_id && row.substrate_kg > 0) {
         const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(row.substrate_batch_id);
-        if (sub) returnSubstrateNoTxn(db, sub.sub_id, row.substrate_kg);
+        if (sub) _recalcSubstrateRemaining(db, sub.sub_id, batchId);
       }
       const deltas = row.substrate_batch_id
         ? db
