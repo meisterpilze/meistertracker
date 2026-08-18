@@ -533,6 +533,10 @@ async function loadData() {
     lastSyncTime = Date.now();
     setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
     refresh();
+    // The mixes live on their own endpoint, so a sync that only refreshes
+    // /api/data would leave the remaining-kilogram figures stale — and those are
+    // what the next Charge gets planned against.
+    if (typeof refreshSubstrateBatches === 'function') refreshSubstrateBatches();
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   }
@@ -1839,7 +1843,8 @@ const _OH_MAT_KEY = {
   hardwood: 'inv.hardwood',
   wheatbran: 'inv.wheatBran',
   gypsum: 'inv.gypsum',
-  coir: 'inv.coir'
+  coir: 'inv.coir',
+  corn: 'inv.corn'
 };
 function _ohMatName(mat) {
   return t(_OH_MAT_KEY[mat] || mat);
@@ -1998,7 +2003,7 @@ function renderInventoryCard() {
   if (!body) return;
   const stock = (inventory && inventory.stock) || {};
   const thr = (inventory && inventory.thresholds) || {};
-  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir'];
+  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir', 'corn'];
   body.innerHTML = mats
     .map((m) => {
       const have = stock[m] || 0;
@@ -6840,6 +6845,14 @@ function createBatch() {
     alert(t('batch.fillQty'));
     return;
   }
+  // v67: portioned out of an existing mix. None of the composition and delta
+  // machinery below applies — that substrate was booked when it was mixed, and
+  // the server takes the kilograms out of the mix and charges only the spawn.
+  const _sbSel = document.getElementById('nb-substrate-batch');
+  if (_sbSel && _sbSel.value) {
+    createBatchFromSubstrate(genBatchId(sp), _sbSel.value, strainId, qty, bagKg || ms.recBagKg || 5, days, st, strainText);
+    return;
+  }
   if (!bagKg) {
     alert(t('batch.enterWeight'));
     return;
@@ -7067,6 +7080,289 @@ function createBatch() {
     _res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 }
+// ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
+// Two cards, because there are two steps and they cost different things. The
+// mix card turns kilograms of finished substrate into a shopping list and books
+// it against the shelf. The Charge card spends kilograms of an existing mix and
+// books only the spawn. Neither computes anything the server does not: the
+// browser posts a recipe and an amount, and the figures come back.
+let _sbTimer = null;
+let _sbLast = null;
+let _sbList = [];
+
+function sbPreviewSoon() {
+  clearTimeout(_sbTimer);
+  _sbTimer = setTimeout(sbPreview, 250);
+}
+
+async function sbPreview() {
+  const out = document.getElementById('sb-out');
+  const btn = document.getElementById('sb-go');
+  if (!out) return;
+  const recipeStrainId = parseInt(document.getElementById('sb-recipe').value, 10);
+  const kg = parseDecimal(document.getElementById('sb-kg').value) || 0;
+  _sbLast = null;
+  if (btn) btn.disabled = true;
+  if (!recipeStrainId || kg <= 0) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
+    return;
+  }
+  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg });
+  if (!r || r.error) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
+    return;
+  }
+  if (!r.hasRecipe) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc(t('sub.noRecipe')) + '</div>';
+    return;
+  }
+  const m = r.mix;
+  _sbLast = { recipeStrainId, kg, mix: m, label: r.recipeLabel };
+  if (btn) btn.disabled = false;
+  const stock = (inventory && inventory.stock) || {};
+  // Red when the shelf cannot cover the line. The server clamps a deduction to
+  // what is actually there, so an unnoticed shortfall does not merely mean a
+  // short mix — the missing kilos are never booked at all.
+  const row = (label, val, unit, mat, dec) => {
+    const short = mat && val > (stock[mat] || 0);
+    return (
+      '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
+      esc(label) +
+      '</td><td style="padding:2px 0;text-align:right;font-weight:600' +
+      (short ? ';color:var(--c-red-dark)' : '') +
+      '">' +
+      val.toFixed(dec == null ? 1 : dec) +
+      ' ' +
+      unit +
+      (short ? ' ⚠' : '') +
+      '</td></tr>'
+    );
+  };
+  const mm = Math.floor(m.waterMinutes);
+  const ss = String(Math.round((m.waterMinutes - mm) * 60)).padStart(2, '0');
+  out.innerHTML =
+    '<table style="font-size:13px;border-collapse:collapse">' +
+    row(t('sub.dryMix'), m.dryKg, 'kg') +
+    row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
+    row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
+    (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
+    row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
+    row(t('sub.water'), m.waterL, 'L') +
+    '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
+    esc(t('sub.waterTime')) +
+    '</td><td style="padding:2px 0;text-align:right;font-weight:600">' +
+    mm +
+    ':' +
+    ss +
+    ' min</td></tr>' +
+    row(t('sub.moisture'), m.moisturePct, '%') +
+    '</table>' +
+    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:6px">' +
+    esc(t('sub.noSpawnHint')) +
+    '</div>';
+}
+
+async function createSubstrateBatchUI() {
+  const st = document.getElementById('sb-status');
+  if (!_sbLast) {
+    setStatus(st, t('sub.pickBoth'), false);
+    return;
+  }
+  const subId = sbGenId();
+  confirm2(
+    t('sub.confirmTitle'),
+    t('sub.confirmMsg', { kg: _sbLast.kg.toFixed(0), recipe: _sbLast.label, id: subId }),
+    t('sub.create'),
+    async () => {
+      setStatus(st, t('sub.running'), true);
+      const r = await apiPost('/api/substrate-batches', {
+        subId,
+        recipeStrainId: _sbLast.recipeStrainId,
+        targetKg: _sbLast.kg,
+        notes: (document.getElementById('sb-notes').value || '').trim()
+      });
+      if (!r || r.error) {
+        setStatus(st, t('sub.failed', { err: (r && r.error) || '?' }), false);
+        return;
+      }
+      setStatus(st, t('sub.done', { id: r.subId, kg: _sbLast.kg.toFixed(0) }), true);
+      document.getElementById('sb-notes').value = '';
+      await loadData();
+      await refreshSubstrateBatches();
+      sbPreview();
+    }
+  );
+}
+
+// SUB-<ddmmyy>-<nn>, counted against the mixes already made today so two mixes
+// on one day cannot collide.
+function sbGenId() {
+  const dt = todayStr();
+  const n = _sbList.filter((s) => s.subId.startsWith('SUB-' + dt)).length;
+  return 'SUB-' + dt + '-' + String(n + 1).padStart(2, '0');
+}
+
+async function refreshSubstrateBatches() {
+  const r = await apiGet('/api/substrate-batches');
+  _sbList = Array.isArray(r) ? r : [];
+  renderSubstrateList();
+  fillSubstrateSelect();
+}
+
+function renderSubstrateList() {
+  const el = document.getElementById('sb-list');
+  if (!el) return;
+  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  if (!open.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
+    return;
+  }
+  el.innerHTML =
+    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    open
+      .map((s) => {
+        const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
+        return (
+          '<tr style="border-top:1px solid var(--c-border)">' +
+          '<td style="padding:5px 8px 5px 0;font-family:monospace;font-weight:600">' +
+          esc(s.subId) +
+          '</td>' +
+          '<td style="padding:5px 8px 5px 0;color:var(--c-text-sec)">' +
+          esc(s.recipeLabel) +
+          '</td>' +
+          '<td style="padding:5px 8px 5px 0;white-space:nowrap">' +
+          s.remainingKg.toFixed(1) +
+          ' / ' +
+          s.targetKg.toFixed(0) +
+          ' kg</td>' +
+          '<td style="padding:5px 0;width:70px"><div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden">' +
+          '<div style="height:100%;border-radius:3px;background:var(--c-accent);width:' +
+          pct.toFixed(0) +
+          '%"></div></div></td>' +
+          '</tr>'
+        );
+      })
+      .join('') +
+    '</table>';
+}
+
+function fillSubstrateSelect() {
+  const sel = document.getElementById('nb-substrate-batch');
+  if (!sel) return;
+  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  const opts =
+    '<option value="">' +
+    t('sub.selectNone') +
+    '</option>' +
+    open
+      .map(
+        (s) =>
+          `<option value="${esc(s.subId)}">${esc(s.subId)} — ${esc(s.recipeLabel)} — ${s.remainingKg.toFixed(1)} kg</option>`
+      )
+      .join('');
+  if (sel.innerHTML === opts) return;
+  const cur = sel.value;
+  sel.innerHTML = opts;
+  if (cur) sel.value = cur;
+  nbSubstrateChanged();
+}
+
+// Picking a mix switches the Charge form into "portion out of this" mode: the
+// substrate section is no longer an input, because the bags are made of what was
+// actually mixed and not of whatever the Sorte's recipe says today.
+function nbSubstrateChanged() {
+  const sel = document.getElementById('nb-substrate-batch');
+  const box = document.getElementById('nb-substrate-info');
+  if (!sel || !box) return;
+  const s = _sbList.find((x) => x.subId === sel.value);
+  const subSection = document.getElementById('nb-sub-section');
+  if (subSection) subSection.style.display = s ? 'none' : '';
+  if (!s) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = '';
+  nbSubstrateNeed();
+}
+
+// Live "this many bags eats this much of the mix" line.
+function nbSubstrateNeed() {
+  const sel = document.getElementById('nb-substrate-batch');
+  const box = document.getElementById('nb-substrate-info');
+  if (!sel || !box) return;
+  const s = _sbList.find((x) => x.subId === sel.value);
+  if (!s) return;
+  const qty = parseInt(document.getElementById('nb-qty').value, 10) || 0;
+  const strainId = parseInt(document.getElementById('nb-strain-sel').value, 10);
+  const ms = mushroomStrains.find((x) => x.id === strainId);
+  const bagKg = (ms && ms.recBagKg) || 5;
+  const need = qty * bagKg;
+  const left = s.remainingKg - need;
+  const spawn = need * (((ms && ms.recSpawnPct) || 0) / 100);
+  box.innerHTML =
+    '<div style="font-size:12px;line-height:1.7">' +
+    '<div>' +
+    esc(t('sub.mixComposition', { hw: s.composition.hardwoodPct, wb: s.composition.wheatbranPct, rh: s.composition.rhPct })) +
+    '</div>' +
+    '<div>' +
+    esc(t('sub.drawLine', { qty: qty, bagKg: bagKg, need: need.toFixed(1) })) +
+    '</div>' +
+    '<div style="font-weight:600' +
+    (left < -0.0001 ? ';color:var(--c-red-dark)' : '') +
+    '">' +
+    esc(
+      left < -0.0001
+        ? t('sub.overdraw', { over: Math.abs(left).toFixed(1) })
+        : t('sub.leftAfter', { left: left.toFixed(1) })
+    ) +
+    '</div>' +
+    (spawn > 0 ? '<div>' + esc(t('sub.spawnLine', { kg: spawn.toFixed(2) })) + '</div>' : '') +
+    '</div>';
+}
+
+// Post a Charge that is portioned out of a mix. Separate from createBatch's main
+// body because none of it applies: no composition to validate, no deltas to
+// compute, and the substrate comes out of a named mix rather than off the shelf.
+function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, strain, strainText) {
+  const s = _sbList.find((x) => x.subId === subId);
+  const need = qty * bagKg;
+  const go = async () => {
+    const r = await apiPost('/api/batches/from-substrate', {
+      batchId,
+      subId,
+      strainId,
+      qty,
+      bagKg,
+      days,
+      strain,
+      strainText,
+      notes: (document.getElementById('nb-notes').value || '').trim()
+    });
+    if (!r || r.error) {
+      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      return;
+    }
+    await loadData();
+    await refreshSubstrateBatches();
+    nbSubstrateNeed();
+    alert(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
+  };
+  // A mix can come out heavier than the arithmetic said, so this warns rather
+  // than blocks — but it has to be said out loud, because the leftover figure is
+  // what the next Charge will be planned against.
+  if (s && need > s.remainingKg + 1e-9) {
+    confirm2(
+      t('sub.overdrawTitle'),
+      t('sub.overdrawMsg', { need: need.toFixed(1), left: s.remainingKg.toFixed(1) }),
+      t('batch.create'),
+      go
+    );
+    return;
+  }
+  go();
+}
+
 // Print all labels for the just-created batch straight from the success panel,
 // so the common "create → print everything" path skips the hop to the Print
 // page. Uses the current default label mode + QR from the Print controls; the
@@ -10686,10 +10982,10 @@ function clearLog() {
 }
 
 // ─── INVENTORY ───────────────────────────────────────────────
-const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain' };
-const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8' };
-const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff' };
-const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff' };
+const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal' };
+const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207' };
+const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8' };
+const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a' };
 
 function invLog(mat, deltaKg, type, ref, time) {
   if (!inventory.log) inventory.log = [];
@@ -11990,7 +12286,7 @@ function fillStrainSelects() {
     '</option>' +
     mushroomStrains.map((ms) => `<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
   const hint = mushroomStrains.length === 0;
-  ['nb-strain-sel', 'lw-st'].forEach((id) => {
+  ['nb-strain-sel', 'lw-st', 'sb-recipe'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     // Skip rewrite when options are unchanged: SSE-pushed re-syncs (any other
@@ -12773,6 +13069,8 @@ function msQuickConfirm() {
 }
 
 function nbStrainChanged() {
+  // The mix line below quotes block weight and spawn rate off the Sorte.
+  if (typeof nbSubstrateNeed === 'function') setTimeout(nbSubstrateNeed, 0);
   nbPreview();
 }
 function renderNbGrainBanner() {

@@ -3707,6 +3707,11 @@ function createBagBatchFromSubstrate(db, b, userId) {
     ...res,
     drawKg,
     spawnKg,
+    // The due date is worked out here from the Sorte's incubation days, so the
+    // caller has no other way to learn it — and the calendar push drops any
+    // batch that arrives without one.
+    created,
+    due,
     remainingKg: after ? after.remaining_kg : 0,
     over: drawKg > sub.remaining_kg + 1e-9
   };
