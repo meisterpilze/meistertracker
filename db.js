@@ -1932,6 +1932,98 @@ const MIGRATIONS = [
       if (!has.c) db.exec('ALTER TABLE calendar_events ADD COLUMN pickup_capacity INTEGER');
     }
   }
+,
+  {
+    version: 65,
+    description: 'Recipe constants for a substrate mix, and corn meal as a stocked material',
+    fn(db) {
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+
+      // Maitake is the only recipe with corn meal in it, which is exactly why it
+      // has to be a real material: 5% of a 200 kg run is 4.7 kg that currently
+      // leaves the building with nothing recording that it did.
+      addCol('inventory', 'stock_corn', 'REAL DEFAULT 0');
+      addCol('inventory', 'thresh_corn', 'REAL DEFAULT 0');
+      // Bagged pellets and bran arrive with moisture already in them, so the dry
+      // mix needed to hit a target hydration is larger than (1 - moisture)
+      // suggests. Ignoring it under-books every mix by roughly 8%. Site-wide
+      // because it is a property of the delivery, not of the species.
+      addCol('inventory', 'residual_pct', 'REAL DEFAULT 9');
+      // Only used to turn litres of water into a hose time on the batch card.
+      addCol('inventory', 'water_flow_lmin', 'REAL DEFAULT 10');
+
+      // Recipe constants the pre-existing rec_* set could not express.
+      // rec_gypsum (0/1) stays for the older per-bag path; rec_gypsum_pct is the
+      // share of the dry mix, which is what a mix run actually needs.
+      addCol('mushroom_strains', 'rec_corn_pct', 'REAL DEFAULT 0');
+      addCol('mushroom_strains', 'rec_gypsum_pct', 'REAL DEFAULT 0');
+      addCol('mushroom_strains', 'rec_spawn_pct', 'REAL DEFAULT 0');
+      // Ranges, kept as text on purpose. "45-70 d + browning" is the honest
+      // answer for shiitake and no single integer replaces it without lying.
+      // rec_inc_days keeps driving the due date; this is the reference beside it.
+      addCol('mushroom_strains', 'rec_colon_text', "TEXT DEFAULT ''");
+      addCol('mushroom_strains', 'rec_steril_text', "TEXT DEFAULT ''");
+    }
+  },
+  {
+    version: 66,
+    description: 'Seed the hardwood-pellet recipe sheet onto the existing Sorten',
+    fn(db) {
+      // Figures from the master substrate recipe sheet (Aug 2026): per 100 kg dry
+      // mix, 1 kg gypsum on every recipe. Seven recipes cover fourteen Sorten
+      // because the oysters share one blend and vary only by water — the sheet
+      // says so itself ("shaded rows share one dry blend").
+      //
+      // Block size and spawn rate deliberately do NOT come from the sheet: its
+      // 2.5-3.0 kg blocks and 4-7% spawn are general figures, while this farm
+      // fills 5 kg blocks and spawns at a flat 5%.
+      const BLOCK_KG = 5.0;
+      const SPAWN_PCT = 5.0;
+      const R = {
+        oyster: { bran: 20, corn: 0, gyp: 1, moist: 62.0, colon: '12-16 d', steril: '3 h' },
+        king: { bran: 20, corn: 0, gyp: 1, moist: 61.0, colon: '16-21 d', steril: '3 h' },
+        lions: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '14-21 d', steril: '3 h' },
+        chest: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '18-25 d', steril: '3 h' },
+        pioppino: { bran: 20, corn: 0, gyp: 1, moist: 63.0, colon: '21-30 d', steril: '3 h' },
+        shiitake: { bran: 20, corn: 0, gyp: 1, moist: 56.5, colon: '45-70 d + browning', steril: '3.5-4 h' },
+        maitake: { bran: 19, corn: 5, gyp: 1, moist: 59.0, colon: '45-70 d', steril: '3.5-4 h' }
+      };
+      // Reishi and Cordyceps are absent on purpose — the sheet has no figures for
+      // them. Seeding a guess would be worse than leaving the recipe empty, which
+      // the interface already handles.
+      const BY_KUERZEL = {
+        BO: 'oyster',
+        PO: 'oyster',
+        YO: 'oyster',
+        PEO: 'oyster',
+        PHOE: 'oyster',
+        KO: 'king',
+        BPKO: 'king',
+        LM: 'lions',
+        CHUT: 'chest',
+        PIOP: 'pioppino',
+        SHIT: 'shiitake',
+        MAIT: 'maitake'
+      };
+      const upd = db.prepare(
+        `UPDATE mushroom_strains SET rec_batch_type='block', rec_substrate='holzkleie',
+           rec_hardwood_pct=?, rec_wheatbran_pct=?, rec_corn_pct=?, rec_gypsum_pct=?, rec_gypsum=1,
+           rec_rh_pct=?, rec_spawn_pct=?, rec_bag_kg=?, rec_colon_text=?, rec_steril_text=?, updated=?
+         WHERE kuerzel=?`
+      );
+      const now = new Date().toISOString();
+      for (const [kuerzel, key] of Object.entries(BY_KUERZEL)) {
+        const r = R[key];
+        // Pellets are the remainder, never a stored constant — that way the three
+        // shares cannot drift apart into a blend that does not total 100%.
+        const pellets = 100 - r.bran - r.corn;
+        upd.run(pellets, r.bran, r.corn, r.gyp, r.moist, SPAWN_PCT, BLOCK_KG, r.colon, r.steril, now, kuerzel);
+      }
+    }
+  }
 ];
 
 function runMigrations(db) {
@@ -2279,14 +2371,16 @@ function readAll(db, opts = {}) {
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
-      coir: inv.stock_coir || 0
+      coir: inv.stock_coir || 0,
+      corn: inv.stock_corn || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
-      coir: { minKg: inv.thresh_coir || 0 }
+      coir: { minKg: inv.thresh_coir || 0 },
+      corn: { minKg: inv.thresh_corn || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -5170,7 +5264,7 @@ function getOrderForShipping(db, id) {
 }
 
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -6300,7 +6394,13 @@ function _strainRecipeFields(d) {
     rec_grain_rh_pct: num(d.recGrainRhPct, 52),
     rec_inc_days: num(d.recIncDays, 14),
     // 0 = not set; the harvest card then shows tent days without a target.
-    rec_fruit_days: num(d.recFruitDays, 0)
+    rec_fruit_days: num(d.recFruitDays, 0),
+    // v65 — the mix-run half of the recipe.
+    rec_corn_pct: num(d.recCornPct, 0),
+    rec_gypsum_pct: num(d.recGypsumPct, 0),
+    rec_spawn_pct: num(d.recSpawnPct, 0),
+    rec_colon_text: typeof d.recColonText === 'string' ? d.recColonText : '',
+    rec_steril_text: typeof d.recSterilText === 'string' ? d.recSterilText : ''
   };
 }
 
@@ -6328,7 +6428,13 @@ function listMushroomStrains(db) {
       recGrainRhPct: r.rec_grain_rh_pct != null ? r.rec_grain_rh_pct : 52,
       recIncDays: r.rec_inc_days != null ? r.rec_inc_days : 14,
       // v51 — expected days in the fruiting tent; 0 = not set.
-      recFruitDays: r.rec_fruit_days || 0
+      recFruitDays: r.rec_fruit_days || 0,
+      // v65 — mix-run recipe constants.
+      recCornPct: r.rec_corn_pct || 0,
+      recGypsumPct: r.rec_gypsum_pct || 0,
+      recSpawnPct: r.rec_spawn_pct || 0,
+      recColonText: r.rec_colon_text || '',
+      recSterilText: r.rec_steril_text || ''
     }));
 }
 
@@ -6375,7 +6481,12 @@ function updateMushroomStrain(db, id, data) {
     'recGrainKg',
     'recGrainRhPct',
     'recIncDays',
-    'recFruitDays'
+    'recFruitDays',
+    'recCornPct',
+    'recGypsumPct',
+    'recSpawnPct',
+    'recColonText',
+    'recSterilText'
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   if (!Object.keys(fields).length) return;
@@ -6633,14 +6744,16 @@ function getInventory(db, logLimit) {
       wheatbran: inv.stock_wheatbran,
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
-      coir: inv.stock_coir || 0
+      coir: inv.stock_coir || 0,
+      corn: inv.stock_corn || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
       wheatbran: { minKg: inv.thresh_wheatbran },
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
-      coir: { minKg: inv.thresh_coir || 0 }
+      coir: { minKg: inv.thresh_coir || 0 },
+      corn: { minKg: inv.thresh_corn || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -8219,7 +8332,8 @@ function computeProductionDemand(db) {
     hardwood: inv.stock_hardwood || 0,
     wheatbran: inv.stock_wheatbran || 0,
     gypsum: inv.stock_gypsum || 0,
-    coir: inv.stock_coir || 0
+    coir: inv.stock_coir || 0,
+    corn: inv.stock_corn || 0
   };
 
   return rows
