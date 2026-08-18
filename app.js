@@ -1072,7 +1072,15 @@ function go(page, btnId) {
     renderCalendar();
     loadCalDAVImports().then(() => renderCalendar());
   }
-  if (page === 'settings') renderLog();
+  // Admin opens on whichever sub-tab is selected — Server on the first visit of
+  // a session, and after that wherever the user last was. Clicking that button
+  // rather than calling a loader here keeps one wiring per sub-tab: the strip
+  // handler already knows what its panel needs, and it is the same path the
+  // sidebar list takes.
+  if (page === 'settings') {
+    const stab = document.querySelector('#p-settings .stab.active');
+    if (stab) stab.click();
+  }
   if (page === 'strains') renderStrains();
   if (page === 'orders') renderOrders();
   if (page === 'pickups') renderPickups();
