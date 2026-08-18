@@ -193,10 +193,7 @@ describe('substrate batches and the Chargen drawn from them', () => {
     const opening = { hardwood: 600, wheatbran: 200, gypsum: 20, grain: 60, corn: 25 };
     for (const mat of Object.keys(opening)) {
       const sum = d.prepare('SELECT COALESCE(SUM(delta_kg),0) s FROM inventory_log WHERE mat=?').get(mat).s;
-      assert.ok(
-        Math.abs(sum - stock(d, mat)) < 1e-6,
-        mat + ': ledger ' + sum + ' vs shelf ' + stock(d, mat)
-      );
+      assert.ok(Math.abs(sum - stock(d, mat)) < 1e-6, mat + ': ledger ' + sum + ' vs shelf ' + stock(d, mat));
     }
   });
 
@@ -315,7 +312,12 @@ describe('looking into a mix after the fact', () => {
   before(() => {
     ({ db: d, path: p } = tmpDb());
     bo = seedStrain(d, 'Blue Oyster', 'BO', { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 62 });
-    for (const [mat, v] of [['hardwood', 600], ['wheatbran', 200], ['gypsum', 20], ['grain', 60]]) {
+    for (const [mat, v] of [
+      ['hardwood', 600],
+      ['wheatbran', 200],
+      ['gypsum', 20],
+      ['grain', 60]
+    ]) {
       db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', null);
     }
   });
@@ -387,7 +389,12 @@ describe('a write-off records who did it', () => {
     );
     uid = d.prepare("SELECT id FROM users WHERE username='Jonas'").get().id;
     bo = seedStrain(d, 'Blue Oyster', 'BO', { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 62 });
-    for (const [mat, v] of [['hardwood', 600], ['wheatbran', 200], ['gypsum', 20], ['grain', 60]]) {
+    for (const [mat, v] of [
+      ['hardwood', 600],
+      ['wheatbran', 200],
+      ['gypsum', 20],
+      ['grain', 60]
+    ]) {
       db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', uid);
     }
   });

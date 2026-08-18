@@ -57,15 +57,14 @@ function run(fields, sbList, strains) {
     // The real t() interpolates {name} placeholders; keeping that here is what
     // lets the assertions read the numbers back out of the rendered line.
     t: (key, vars) =>
-      key + '(' + Object.entries(vars || {}).map(([k, v]) => k + '=' + v).join(',') + ')'
+      key +
+      '(' +
+      Object.entries(vars || {})
+        .map(([k, v]) => k + '=' + v)
+        .join(',') +
+      ')'
   };
-  const fn = new Function(
-    'document',
-    '_sbList',
-    'mushroomStrains',
-    't',
-    lift() + '\nreturn nbSubstrateNeed();'
-  );
+  const fn = new Function('document', '_sbList', 'mushroomStrains', 't', lift() + '\nreturn nbSubstrateNeed();');
   fn(ctx.document, ctx._sbList, ctx.mushroomStrains, ctx.t);
   return dom.els['nb-substrate-info'].innerHTML;
 }

@@ -22,17 +22,18 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 function liftPattern(marker, name) {
   const line = SRC.split('\n').find((l) => l.includes(marker));
   assert.ok(line, name + ' not found in server.js — the test needs updating with it');
-  const m = line.match(/\/\^[^/]*\/(?=\.test|\))/) || line.match(/(\/\^.*?\/)\.test/) || line.match(/match\((\/\^.*?\/)\)/);
+  const m =
+    line.match(/\/\^[^/]*\/(?=\.test|\))/) || line.match(/(\/\^.*?\/)\.test/) || line.match(/match\((\/\^.*?\/)\)/);
   assert.ok(m, name + ': could not lift a regex from: ' + line.trim());
   const body = (m[1] || m[0]).replace(/^\//, '').replace(/\/$/, '');
   return new RegExp(body);
 }
 
 describe('substrate route shapes', () => {
-  const list = liftPattern("/^\\/api\\/substrate-batches(\\?|$)/", 'list route');
-  const detail = liftPattern("subGetMatch = req.url.match", 'detail route');
-  const writeOff = liftPattern("subOffMatch = req.url.match", 'write-off route');
-  const del = liftPattern("subDelMatch = req.url.match", 'delete route');
+  const list = liftPattern('/^\\/api\\/substrate-batches(\\?|$)/', 'list route');
+  const detail = liftPattern('subGetMatch = req.url.match', 'detail route');
+  const writeOff = liftPattern('subOffMatch = req.url.match', 'write-off route');
+  const del = liftPattern('subDelMatch = req.url.match', 'delete route');
 
   it('answers the collection only at the collection URL', () => {
     assert.ok(list.test('/api/substrate-batches'));

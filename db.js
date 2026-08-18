@@ -1931,8 +1931,7 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE calendar_events ADD COLUMN pickup_capacity INTEGER');
     }
-  }
-,
+  },
   {
     version: 65,
     description: 'Recipe constants for a substrate mix, and corn meal as a stocked material',
@@ -1986,8 +1985,7 @@ const MIGRATIONS = [
       // to scripts/seed-substrate-recipes.js, which shows what it would change and
       // only writes when told to.
     }
-  }
-,
+  },
   {
     version: 67,
     description: 'Substrate batches: mixed once, drawn from many times',
@@ -3647,13 +3645,15 @@ function writeOffSubstrateBatch(db, subId, note, userId) {
     const lost = row.remaining_kg;
     // Who threw away 100 kg of substrate is worth knowing later, and it makes the
     // actor an argument this function actually uses rather than one it carries.
-    const who = userId
-      ? (db.prepare('SELECT username FROM users WHERE id=?').get(userId) || {}).username
-      : null;
+    const who = userId ? (db.prepare('SELECT username FROM users WHERE id=?').get(userId) || {}).username : null;
     const stamp =
-      '[' + new Date().toISOString().slice(0, 10) + '] ' +
+      '[' +
+      new Date().toISOString().slice(0, 10) +
+      '] ' +
       (note || 'verworfen') +
-      ' (' + lost.toFixed(1) + ' kg)' +
+      ' (' +
+      lost.toFixed(1) +
+      ' kg)' +
       (who ? ' — ' + who : '');
     db.prepare(
       "UPDATE substrate_batches SET status='written_off', remaining_kg=0, notes = CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes || ' · ' || ? END WHERE sub_id=?"
@@ -3717,7 +3717,9 @@ function deleteSubstrateBatch(db, subId, userId) {
     }
     const users = db.prepare('SELECT COUNT(*) c FROM batches WHERE substrate_batch_id=?').get(row.id).c;
     if (users > 0) {
-      throw new Error('Diese Substrat-Charge wird von ' + users + ' Charge(n) verwendet und kann nicht geloescht werden');
+      throw new Error(
+        'Diese Substrat-Charge wird von ' + users + ' Charge(n) verwendet und kann nicht geloescht werden'
+      );
     }
     // Credit back exactly what the ledger says this mix took — not a recomputed
     // figure. applyInventoryDeltaNoTxn clamps a deduction to available stock, so
@@ -3879,9 +3881,7 @@ function insertBatch(db, b, deltas, userId) {
     // and takes those kilograms out of it here — inside this transaction, so
     // bags and remaining substrate can never disagree.
     if (b.substrateBatch) {
-      db.prepare(
-        `UPDATE batches SET substrate_batch_id=?, substrate_kg=?, sub_corn=? WHERE batch_id=?`
-      ).run(
+      db.prepare(`UPDATE batches SET substrate_batch_id=?, substrate_kg=?, sub_corn=? WHERE batch_id=?`).run(
         b.substrateBatch.id,
         b.substrateBatch.drawKg,
         (b.substrate && b.substrate.corn) || 0,
