@@ -58,9 +58,9 @@ describe('settings tabs', () => {
   });
 
   it('wires every tab to a click handler', () => {
-    // Two styles in the tree, both fine: `$('st-settings-x').addEventListener`
-    // in app.js, and `getElementById('st-settings-x')` + addEventListener in an
-    // inline script (the Growth tab). Matching only the first would report a
+    // Two styles count, both fine: `$('st-settings-x').addEventListener` in
+    // app.js, and `getElementById('st-settings-x')` + addEventListener from an
+    // inline script in index.html. Matching only the first would report a
     // working tab as broken, and a test that cries wolf gets ignored the next
     // time it is right.
     const missing = tabs.filter((t) => !isWired(t, app, html));
@@ -79,6 +79,22 @@ describe('settings tabs', () => {
     assert.deepEqual(named, [...tabs].sort(), 'strip and sidebar disagree about which sub-tabs exist');
     const wrong = entries.filter((m) => m[1] !== m[2]).map((m) => m[1] + ' → ' + m[2]);
     assert.deepEqual(wrong, [], 'sidebar entries whose data-sub points at a different sub-tab');
+  });
+
+  // Which sub-tab Admin opens on is written down three times: the pressed pill
+  // in the strip, the highlighted row in the sidebar, and the panel that is
+  // actually visible. go() then clicks whichever strip button carries the mark,
+  // so a disagreement here is not cosmetic — a highlighted row with a different
+  // panel underneath it, or two panels' loaders racing on the way in.
+  it('agrees on the sub-tab Admin opens on', () => {
+    const marked = (re) => [...html.matchAll(re)].map((m) => m[1]);
+    const strip = marked(/class="stab active" id="st-settings-([a-z0-9-]+)"/g);
+    const side = marked(/class="sb-btn active" id="sn-settings-([a-z0-9-]+)"/g);
+    const panel = marked(/class="sp active" id="sp-settings-([a-z0-9-]+)"/g);
+    assert.equal(strip.length, 1, 'expected exactly one pre-selected pill in the strip, got ' + strip.length);
+    assert.equal(side.length, 1, 'expected exactly one pre-selected sidebar entry, got ' + side.length);
+    assert.equal(panel.length, 1, 'expected exactly one panel to start visible, got ' + panel.length);
+    assert.deepEqual([side[0], panel[0]], [strip[0], strip[0]], 'strip, sidebar and panel start on different sub-tabs');
   });
 
   it('does not load the same sub-tab config twice per click', () => {
