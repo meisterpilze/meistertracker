@@ -66,8 +66,11 @@ window.LANG['de'] = {
   'pickupLoc.address': 'Adresse (optional)',
   'pickupLoc.addressPh': 'z.B. Marktplatz 1, 91054 Erlangen',
   'pickupLoc.order': 'Reihenfolge',
-  'pickupLoc.hint':
-    'Der Name steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden. Die Adresse bleibt im Haus.',
+  'pickupLoc.nameHint':
+    'Steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden: Der Ernte-Feed schickt ihn zu jedem Abholfenster mit. Ein anderer Name hier heißt, draußen steht etwas anderes.',
+  'pickupLoc.addressHint': 'Bleibt im Haus. Sie geht nie mit hinaus und steht hier für die eigenen Leute.',
+  'pickupLoc.orderHint':
+    'Nur die Reihenfolge in den Listen: hier und in der Auswahl an einem Kalendertermin. Kleinste Zahl zuerst, bei gleicher Zahl alphabetisch.',
   'pickupLoc.none': 'Noch kein Abholort angelegt',
   'pickupLoc.saved': 'Abholort gespeichert',
   'pickupLoc.retire': 'Stilllegen',

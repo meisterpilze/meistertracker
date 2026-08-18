@@ -66,7 +66,11 @@ window.LANG['pt'] = {
   'pickupLoc.address': 'Morada (opcional)',
   'pickupLoc.addressPh': 'ex. Marktplatz 1, 91054 Erlangen',
   'pickupLoc.order': 'Ordem',
-  'pickupLoc.hint': 'O nome acaba ao lado de uma hora no ecrã de um cliente. A morada fica cá dentro.',
+  'pickupLoc.nameHint':
+    'Aparece ao lado de uma hora no ecrã de um cliente: o feed de colheita envia-o com cada janela de levantamento. Outro nome aqui significa que lá fora se lê outra coisa.',
+  'pickupLoc.addressHint': 'Fica cá dentro. Nunca sai — está aqui para os da casa.',
+  'pickupLoc.orderHint':
+    'Apenas a ordem das listas: esta, e a escolha num evento do calendário. Número mais baixo primeiro, empates por ordem alfabética.',
   'pickupLoc.none': 'Ainda sem local de levantamento',
   'pickupLoc.saved': 'Local de levantamento guardado',
   'pickupLoc.retire': 'Desativar',

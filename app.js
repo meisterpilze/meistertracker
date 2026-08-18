@@ -11880,13 +11880,19 @@ function renderPickupLocations() {
   </table></div>`;
 }
 
+// Every field says what it does, under itself. One paragraph at the foot used
+// to cover the name and the address, and it sat directly beneath Reihenfolge —
+// the field it did not mention — so the sentence read as an explanation of the
+// number above it and left the number unexplained. Three fields, three hints,
+// each where the hand already is.
 function editPickupLocation(id) {
   const existing = id ? pickupLocations.find((l) => l.id === id) : null;
+  const hint = (key) =>
+    `<div style="font-size:11px;color:var(--c-text-muted);margin-top:2px;line-height:1.5">${esc(t(key))}</div>`;
   const html = `<div style="display:flex;flex-direction:column;gap:10px">
-    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" /></div>
-    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" /></div>
-    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" /></div>
-    <p style="font-size:12px;color:var(--c-text-muted);margin:0;line-height:1.5">${esc(t('pickupLoc.hint'))}</p>
+    <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" />${hint('pickupLoc.nameHint')}</div>
+    <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" />${hint('pickupLoc.addressHint')}</div>
+    <div><label>${t('pickupLoc.order')}</label><input type="number" id="ploc-sort" step="1" value="${existing ? Number(existing.sortOrder) || 0 : 0}" />${hint('pickupLoc.orderHint')}</div>
   </div>`;
   document.getElementById('m-title').textContent = existing ? t('pickupLoc.edit') : t('pickupLoc.add');
   document.getElementById('m-body').innerHTML = html;

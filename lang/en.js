@@ -66,7 +66,11 @@ window.LANG['en'] = {
   'pickupLoc.address': 'Address (optional)',
   'pickupLoc.addressPh': 'e.g. Marktplatz 1, 91054 Erlangen',
   'pickupLoc.order': 'Sort order',
-  'pickupLoc.hint': "The name ends up next to a time on a customer's screen. The address stays in the building.",
+  'pickupLoc.nameHint':
+    "Ends up next to a time on a customer's screen: the harvest feed sends it along with every pickup window. A different name here means something different is read outside.",
+  'pickupLoc.addressHint': 'Stays in the building. It never goes out — it is here for your own people.',
+  'pickupLoc.orderHint':
+    'Only the order of the lists: this one, and the picker on a calendar entry. Lowest number first, ties alphabetically.',
   'pickupLoc.none': 'No pickup location yet',
   'pickupLoc.saved': 'Pickup location saved',
   'pickupLoc.retire': 'Retire',
