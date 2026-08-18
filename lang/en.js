@@ -979,10 +979,6 @@ window.LANG['en'] = {
   'server.updateDesc':
     'Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.',
   'server.updateBtn': 'Update & restart server',
-  'migrate.title': 'One-time data migration',
-  'migrate.desc':
-    'Renames all existing batch IDs to the new Kürzel format (e.g. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Shows a preview of all changes before applying them.',
-  'migrate.btn': 'Migrate batch IDs',
   // More / Settings
   'settings.scanLog': 'Scan log',
   'settings.user': 'User',
@@ -1699,11 +1695,6 @@ window.LANG['en'] = {
   'server.uptimeLabel': 'Uptime',
   'server.sseLabel': 'SSE Clients',
   'server.ramLabel': 'RAM',
-  // Migration
-  'migrate.alreadyCurrent': 'All batch IDs are already current. No changes needed.',
-  'migrate.confirm': 'Start migration? All old IDs will be renamed.',
-  'migrate.complete': 'Migration complete: ',
-  'migrate.success': 'Migration successful: ',
   // Inventory labels
   'inv.afterDeliveryLabel': 'After delivery: ',
   'inv.setToLabel': 'Set to ',

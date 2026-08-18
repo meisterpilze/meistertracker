@@ -988,10 +988,6 @@ window.LANG['de'] = {
   'server.updateDesc':
     'Aktualisiert den Code von GitHub und startet den Server neu. Alle Benutzer werden kurz getrennt.',
   'server.updateBtn': 'Server aktualisieren & neustarten',
-  'migrate.title': 'Einmalige Datenmigration',
-  'migrate.desc':
-    'Benennt alle vorhandenen Chargen-IDs auf das neue K\u00fcrzel-Format um (z.B. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Zeigt eine Vorschau aller \u00c4nderungen vor der Ausf\u00fchrung.',
-  'migrate.btn': 'Chargen-IDs migrieren',
   'caldav.howItWorks': 'So funktioniert es',
   // More / Settings
   'settings.scanLog': 'Scan-Log',
@@ -1722,11 +1718,6 @@ window.LANG['de'] = {
   'server.uptimeLabel': 'Uptime',
   'server.sseLabel': 'SSE Clients',
   'server.ramLabel': 'RAM',
-  // Migration
-  'migrate.alreadyCurrent': 'Alle Chargen-IDs sind bereits aktuell. Keine \u00c4nderungen n\u00f6tig.',
-  'migrate.confirm': 'Migration starten? Alle alten IDs werden umbenannt.',
-  'migrate.complete': 'Migration abgeschlossen: ',
-  'migrate.success': 'Migration erfolgreich: ',
   // Inventory labels
   'inv.afterDeliveryLabel': 'Nach Lieferung: ',
   'inv.setToLabel': 'Setze auf ',

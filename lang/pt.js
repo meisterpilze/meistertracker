@@ -827,10 +827,6 @@ window.LANG['pt'] = {
   'server.updateDesc':
     'Obt\u00e9m o c\u00f3digo mais recente do GitHub e reinicia o servidor. Todos os utilizadores ser\u00e3o desligados brevemente.',
   'server.updateBtn': 'Atualizar e reiniciar servidor',
-  'migrate.title': 'Migra\u00e7\u00e3o de dados \u00fanica',
-  'migrate.desc':
-    'Renomeia todos os IDs de lotes existentes para o novo formato K\u00fcrzel (ex. <code>BLACK-100426-01</code> \u2192 <code>BPKO-100426-01</code>). Mostra uma pr\u00e9-visualiza\u00e7\u00e3o antes de aplicar.',
-  'migrate.btn': 'Migrar IDs de lotes',
   'caldav.howItWorks': 'Como funciona',
   // More / Settings
   'settings.scanLog': 'Log de scan',
@@ -1717,12 +1713,6 @@ window.LANG['pt'] = {
   'server.uptimeLabel': 'Tempo de atividade',
   'server.sseLabel': 'Clientes SSE',
   'server.ramLabel': 'RAM',
-  // Migration
-  'migrate.alreadyCurrent':
-    'Todos os IDs de lote j\u00e1 est\u00e3o atuais. Nenhuma altera\u00e7\u00e3o necess\u00e1ria.',
-  'migrate.confirm': 'Iniciar migra\u00e7\u00e3o? Todos os IDs antigos ser\u00e3o renomeados.',
-  'migrate.complete': 'Migra\u00e7\u00e3o conclu\u00edda: ',
-  'migrate.success': 'Migra\u00e7\u00e3o bem-sucedida: ',
   // Inventory labels
   'inv.afterDeliveryLabel': 'Ap\u00f3s entrega: ',
   'inv.setToLabel': 'Definir para ',
