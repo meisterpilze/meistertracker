@@ -7463,7 +7463,7 @@ function nbSubstrateNeed() {
 // Post a Charge that is portioned out of a mix. Separate from createBatch's main
 // body because none of it applies: no composition to validate, no deltas to
 // compute, and the substrate comes out of a named mix rather than off the shelf.
-function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, strain, strainText) {
+function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, strain, strainText, opts) {
   const s = _sbList.find((x) => x.subId === subId);
   const need = qty * bagKg;
   const go = async () => {
@@ -7476,7 +7476,9 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       days,
       strain,
       strainText,
-      notes: (document.getElementById('nb-notes').value || '').trim()
+      // Der geführte Ablauf bringt seine eigene Notiz mit; das lange Formular
+      // liest weiter sein Feld.
+      notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim()
     });
     if (!r || r.error) {
       alert(t('sub.failed', { err: (r && r.error) || '?' }));
@@ -7485,6 +7487,8 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
     await loadData();
     await refreshSubstrateBatches();
     nbSubstrateNeed();
+    // Der Ablauf zeigt statt des Hinweisfensters seine Quittung.
+    if (opts && opts.onDone) return opts.onDone(r);
     alert(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
   };
   // A mix can come out heavier than the arithmetic said, so this warns rather
@@ -21476,6 +21480,292 @@ function wkOpenSubstrate() {
     bg.addEventListener('input', (e) => {
       const g = e.target.closest('.wkf-g');
       if (g) wkfGramsInput(g);
+    });
+  }
+})();
+// ═══ CHARGE ANLEGEN ALS ARBEITSGANG ══════════════════════════════════════════
+// Der geführte Weg aus dem Entwurf: drei Schritte, das Rezept sichtbar und
+// änderbar, Notizen als eigenes Feld. Er ersetzt das lange Formular nicht — der
+// bleibt unter Chargen → Neue Charge für alles, was hier nicht hineinpasst
+// (ohne Ansatz, Körnerbrut, Produkte). Gebucht wird über dieselbe Funktion, die
+// das Formular benutzt, samt ihrer Warnung bei Überzug.
+
+const WKB = {
+  step: 1,
+  strainId: null,
+  qty: 20,
+  bagKg: 5,
+  subId: '',
+  notes: '',
+  custom: false,
+  hw: null,
+  wb: null,
+  rh: null,
+  days: null
+};
+
+function wkbStrain() {
+  return mushroomStrains.find((x) => x.id === WKB.strainId) || null;
+}
+// Die Werte, mit denen gerechnet wird: das Rezept der Sorte, sofern nicht von
+// Hand überschrieben. Beides an einer Stelle, damit Anzeige und Buchung nicht
+// auseinanderlaufen.
+function wkbRecipe() {
+  const ms = wkbStrain();
+  return {
+    hw: WKB.hw != null ? WKB.hw : (ms && ms.recHardwoodPct) || 0,
+    wb: WKB.wb != null ? WKB.wb : (ms && ms.recWheatbranPct) || 0,
+    rh: WKB.rh != null ? WKB.rh : (ms && ms.recRhPct) || 0,
+    days: WKB.days != null ? WKB.days : (ms && ms.recIncDays) || 14
+  };
+}
+function wkbMix() {
+  return (_sbList || []).find((x) => x.subId === WKB.subId) || null;
+}
+function wkbDraw() {
+  return WKB.qty * WKB.bagKg;
+}
+
+function wkbOpen() {
+  WKB.step = 1;
+  WKB.notes = '';
+  WKB.custom = false;
+  WKB.hw = WKB.wb = WKB.rh = WKB.days = null;
+  const first = mushroomStrains.filter((x) => x.recBatchType)[0] || mushroomStrains[0];
+  WKB.strainId = first ? first.id : null;
+  const mixes = _sbList || [];
+  WKB.subId = mixes.length ? mixes[0].subId : '';
+  WKF.kind = 'batch';
+  WKF.step = 'detail';
+  WKF.receipt = null;
+  wkf('m-work-flow').classList.add('open');
+  wkbRender();
+}
+
+function wkbBack() {
+  if (WKB.step > 1) {
+    WKB.step--;
+    wkbRender();
+    return;
+  }
+  wkfClose();
+}
+
+function wkbRender() {
+  const ms = wkbStrain();
+  const r = wkbRecipe();
+  const mix = wkbMix();
+  wkf('wkf-title').textContent = t('work.batch');
+  wkf('wkf-back').hidden = WKB.step === 1 || WKF.step === 'done';
+  const labels = [t('work.bStep1'), t('work.bStep2'), t('work.bStep3')];
+  wkf('wkf-steps').innerHTML =
+    WKF.step === 'done'
+      ? ''
+      : '<div class="wkf-chips">' +
+        labels
+          .map((l, i) => {
+            const n = i + 1;
+            const cls = n < WKB.step ? 'wkf-chip done' : n === WKB.step ? 'wkf-chip now' : 'wkf-chip';
+            return `<span class="${cls}">${n < WKB.step ? '&#10003; ' : ''}${esc(l)}</span>`;
+          })
+          .join('') +
+        '</div>';
+
+  if (WKF.step === 'done') {
+    const d = WKF.receipt || {};
+    wkf('wkf-body').innerHTML =
+      `<div class="wkf-receipt">
+         <div class="wkf-r-head"><span class="wkf-r-tick">&#10003;</span><b>${esc(d.headline || '')}</b></div>
+         <div class="wkf-r-lines">` +
+      (d.lines || []).map((l) => `<div><span class="wkf-r-k">${esc(l[0])}</span><span>${esc(l[1])}</span></div>`).join('') +
+      '</div></div>';
+    wkf('wkf-foot').innerHTML =
+      `<button class="btn btn-p" data-wkb="again">${esc(t('work.bAnother'))}</button>` +
+      `<button class="btn" onclick="wkfClose()">${esc(t('work.done'))}</button>`;
+    return;
+  }
+
+  let body = '';
+  if (WKB.step === 1) {
+    const list = mushroomStrains
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .map((x) => `<option value="${x.id}"${x.id === WKB.strainId ? ' selected' : ''}>${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`)
+      .join('');
+    body =
+      `<div class="wkf-q">${esc(t('work.bQ1'))}</div>
+       <div class="wkf-field"><label>${esc(t('strains.pilzsorte'))}</label>
+         <select id="wkb-strain">${list}</select></div>
+       <div class="wkf-two">
+         <div class="wkf-field"><label>${esc(t('batch.qty'))}</label>
+           <input type="text" inputmode="numeric" id="wkb-qty" value="${WKB.qty}" /></div>
+         <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
+           <div class="wkf-chipsrow">` +
+      [0.7, 1, 2, 3, 5]
+        .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
+        .join('') +
+      `</div></div>
+       </div>`;
+  } else if (WKB.step === 2) {
+    const mixes = _sbList || [];
+    const rest = mix ? mix.remainingKg - wkbDraw() : null;
+    body =
+      `<div class="wkf-q">${esc(t('work.bQ2'))}</div>` +
+      (mixes.length
+        ? `<div class="wkf-field"><label>${esc(t('sub.fromMix'))}</label><select id="wkb-mix">` +
+          mixes
+            .map((m) => `<option value="${esc(m.subId)}"${m.subId === WKB.subId ? ' selected' : ''}>${esc(m.subId)} &middot; ${t('work.bLeft', { kg: m.remainingKg.toFixed(0) })}</option>`)
+            .join('') +
+          '</select></div>' +
+          `<div class="wkf-note${rest != null && rest < -1e-9 ? ' bad' : ''}">${esc(
+            t('work.bDraw', { qty: WKB.qty, kg: WKB.bagKg, need: wkbDraw().toFixed(0) })
+          )} &mdash; ${
+            rest != null && rest < -1e-9
+              ? esc(t('work.bShort', { kg: (-rest).toFixed(0) }))
+              : esc(t('work.bRest', { kg: (rest || 0).toFixed(0) }))
+          }</div>`
+        : `<div class="wkf-note bad">${esc(t('work.bNoMix'))}</div>
+           <button class="btn" data-wkb="tosub">${esc(t('work.substrate'))}</button>`) +
+      `<div class="wkf-note">
+         <b>${esc(t('work.bRecipe', { name: ms ? ms.name : '' }))}${WKB.custom ? esc(t('work.bChanged')) : ''}</b>
+         ${
+           r.hw || r.wb || r.rh
+             ? esc(t('work.bRecipeLine', { hw: r.hw, wb: r.wb, rh: r.rh, days: r.days }))
+             : esc(t('work.bNoRecipe'))
+         }
+         <button type="button" class="wkf-link" data-wkb="custom">${esc(WKB.custom ? t('work.bCollapse') : t('work.bEditRecipe'))}</button>
+       </div>` +
+      (WKB.custom
+        ? `<div class="wkf-two">
+             <div class="wkf-field"><label>${esc(t('batch.hardwood'))}</label><input type="text" inputmode="decimal" id="wkb-hw" value="${r.hw}" /></div>
+             <div class="wkf-field"><label>${esc(t('batch.wheatBran'))}</label><input type="text" inputmode="decimal" id="wkb-wb" value="${r.wb}" /></div>
+           </div>
+           <div class="wkf-two">
+             <div class="wkf-field"><label>${esc(t('batch.fieldCapacity'))}</label><input type="text" inputmode="decimal" id="wkb-rh" value="${r.rh}" /></div>
+             <div class="wkf-field"><label>${esc(t('batch.incDays'))}</label><input type="text" inputmode="numeric" id="wkb-days" value="${r.days}" /></div>
+           </div>
+           <div class="wkf-hint">${esc(t('work.bOnlyThis'))}</div>`
+        : '');
+  } else {
+    body =
+      `<div class="wkf-q">${esc(t('work.bQ3'))}</div>
+       <div class="wkf-sum-card">
+         <div><span class="wkf-r-k">${esc(t('strains.pilzsorte'))}</span><b>${esc(ms ? ms.name : '')}</b></div>
+         <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
+         <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${mix ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg' : '&mdash;'}</div>
+         <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${r.hw}/${r.wb} @ ${r.rh} %${WKB.custom ? esc(t('work.bChanged')) : ''}
+           <button type="button" class="wkf-link" data-wkb="step2">${esc(t('work.bEdit'))}</button></div>
+         <div><span class="wkf-r-k">${esc(t('batch.incDays'))}</span>${r.days}</div>
+       </div>
+       <div class="wkf-field"><label>${esc(t('work.bNote'))}</label>
+         <input type="text" id="wkb-notes" value="${esc(WKB.notes)}" placeholder="${esc(t('work.bNotePh'))}" /></div>`;
+  }
+  wkf('wkf-body').innerHTML = body;
+
+  const back = `<button class="btn" data-wkb="back">${esc(t('work.back'))}</button>`;
+  wkf('wkf-foot').innerHTML =
+    (WKB.step > 1 ? back : `<button class="btn" onclick="wkfClose()">${esc(t('work.cancel'))}</button>`) +
+    (WKB.step < 3
+      ? `<button class="btn btn-p" data-wkb="next"${WKB.step === 2 && !wkbMix() ? ' disabled' : ''}>${esc(t('work.bNext'))}</button>`
+      : `<button class="btn btn-p" data-wkb="create">${esc(t('work.bCreate', { n: WKB.qty }))}</button>`);
+}
+
+function wkbReadStep() {
+  const g = (id) => document.getElementById(id);
+  if (WKB.step === 1) {
+    if (g('wkb-strain')) WKB.strainId = parseInt(g('wkb-strain').value, 10) || WKB.strainId;
+    if (g('wkb-qty')) WKB.qty = Math.max(1, parseInt(g('wkb-qty').value, 10) || 1);
+  } else if (WKB.step === 2) {
+    if (g('wkb-mix')) WKB.subId = g('wkb-mix').value;
+    if (WKB.custom) {
+      if (g('wkb-hw')) WKB.hw = parseDecimal(g('wkb-hw').value) || 0;
+      if (g('wkb-wb')) WKB.wb = parseDecimal(g('wkb-wb').value) || 0;
+      if (g('wkb-rh')) WKB.rh = parseDecimal(g('wkb-rh').value) || 0;
+      if (g('wkb-days')) WKB.days = parseInt(g('wkb-days').value, 10) || 14;
+    }
+  } else if (WKB.step === 3) {
+    if (g('wkb-notes')) WKB.notes = g('wkb-notes').value;
+  }
+}
+
+function wkbCreate() {
+  wkbReadStep();
+  const ms = wkbStrain();
+  const mix = wkbMix();
+  if (!ms || !mix) return;
+  const r = wkbRecipe();
+  const batchId = genBatchId(ms.name);
+  createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, ms.kuerzel || '', '', {
+    notes: WKB.notes.trim(),
+    onDone: (res) => {
+      WKF.receipt = {
+        headline: t('work.bDone', { n: WKB.qty, name: ms.name }),
+        lines: [
+          [t('work.rBatch'), res.batchId || batchId],
+          [t('work.stepSubstrate'), t('work.bDrawn', { kg: (res.drawKg || wkbDraw()).toFixed(0), id: mix.subId, left: (res.remainingKg || 0).toFixed(0) })],
+          [t('work.bMixLabel'), r.hw + '/' + r.wb + ' @ ' + r.rh + ' %' + (WKB.custom ? t('work.bChanged') : t('work.bFromRecipe'))],
+          [t('batch.incDays'), String(r.days)]
+        ].concat(WKB.notes.trim() ? [[t('work.bNote'), WKB.notes.trim()]] : []),
+        next: null
+      };
+      WKF.step = 'done';
+      wkbRender();
+    }
+  });
+}
+
+(function wireBatchWizard() {
+  const flow = document.getElementById('m-work-flow');
+  if (!flow) return;
+  flow.addEventListener('click', (e) => {
+    if (WKF.kind !== 'batch') return;
+    const el = e.target.closest('[data-wkb]');
+    if (!el || el.disabled) return;
+    const a = el.dataset.wkb;
+    if (a === 'kg') {
+      wkbReadStep();
+      WKB.bagKg = parseDecimal(el.dataset.val) || 5;
+    } else if (a === 'next') {
+      wkbReadStep();
+      WKB.step++;
+    } else if (a === 'back') {
+      wkbReadStep();
+      WKB.step--;
+    } else if (a === 'step2') {
+      wkbReadStep();
+      WKB.step = 2;
+    } else if (a === 'custom') {
+      wkbReadStep();
+      WKB.custom = !WKB.custom;
+    } else if (a === 'again') {
+      wkbOpen();
+      return;
+    } else if (a === 'tosub') {
+      wkfClose();
+      wkOpenSubstrate();
+      return;
+    } else if (a === 'create') {
+      wkbCreate();
+      return;
+    }
+    wkbRender();
+  });
+  // Menge und Sorte wirken auf die Zeile im zweiten Schritt, also sofort merken.
+  flow.addEventListener('change', (e) => {
+    if (WKF.kind !== 'batch') return;
+    if (e.target.closest('#wkb-strain,#wkb-qty,#wkb-mix')) {
+      wkbReadStep();
+      wkbRender();
+    }
+  });
+  const tile = document.getElementById('wk-t-batch');
+  if (tile) {
+    // Die Kachel führt jetzt durch den Ablauf statt in den Schnelldialog.
+    const fresh = tile.cloneNode(true);
+    tile.parentNode.replaceChild(fresh, tile);
+    fresh.addEventListener('click', () => {
+      if ((_sbList || []).length) wkbOpen();
+      else msQuickChargeNew();
     });
   }
 })();
