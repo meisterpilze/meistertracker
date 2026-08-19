@@ -22,7 +22,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const { floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK } = require('../scripts/mobile-size-scan.js');
+const { floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK, maskedCss } = require('../scripts/mobile-size-scan.js');
 
 const ROOT = path.join(__dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
@@ -121,6 +121,38 @@ describe('mobile token layer', () => {
     for (const m of DESKTOP_BLOCK.matchAll(/(--[a-z-]+):/g)) {
       assert.ok(TOKENS.includes(m[1]), `${m[1]} is overridden for desktop but is not a declared token — typo?`);
     }
+  });
+});
+
+describe('the scan that the ratchet reports through', () => {
+  // scripts/mobile-audit.js --list prints styles.css:<line> for every hit, and
+  // it computes that line from the MASKED stylesheet. The masking blanks
+  // comments so the bridge block's own `[style*='font-size:8px']` selectors do
+  // not count themselves, and its contract is that a blanked byte is still a
+  // byte and a blanked newline is still a newline.
+  //
+  // The first version wrote `' '.repeat(s.length)`. Byte count preserved, line
+  // count destroyed: every multi-line comment collapsed to one line, and every
+  // DECLARED line number after the first block comment pointed at an unrelated
+  // rule. The tool was confidently sending people to the wrong place, which is
+  // worse than not reporting a line at all.
+  const RAW = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+  const newlines = (t) => (t.match(/\n/g) || []).length;
+
+  it('keeps every byte where it was', () => {
+    const { src, scan } = maskedCss(RAW);
+    assert.equal(src.length, RAW.length, 'masking changed the byte count — every reported offset is off by that much');
+    assert.equal(scan.length, RAW.length);
+  });
+
+  it('keeps every newline where it was', () => {
+    const { src, scan } = maskedCss(RAW);
+    assert.equal(
+      newlines(src),
+      newlines(RAW),
+      'masking ate newlines — byte offsets still resolve, but every line number computed from them is wrong'
+    );
+    assert.equal(newlines(scan), newlines(RAW));
   });
 });
 

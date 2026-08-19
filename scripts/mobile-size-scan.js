@@ -89,8 +89,15 @@ function outsideMedia(css) {
 // offsets survive and a reported line number points at the real line. Blanking
 // them is what stops the bridge block's own `[style*='font-size:8px']`
 // selectors from counting themselves.
+//
+// Newlines survive the blanking too, and that is not a detail. The first
+// version wrote `' '.repeat(s.length)`, which preserves the byte count and
+// destroys the line count — a multi-line comment collapsed into one very long
+// line, and every DECLARED line number after the first block comment pointed
+// somewhere else in the file. `--list` was confidently sending people to the
+// wrong rule.
 function maskedCss(css = readCss()) {
-  const blank = (s) => ' '.repeat(s.length);
+  const blank = (s) => s.replace(/[^\n]/g, ' ');
   const src = css.replace(/\/\*[\s\S]*?\*\//g, blank);
   return { src, scan: src.replace(/\[[^\]]*\]/g, blank) };
 }
