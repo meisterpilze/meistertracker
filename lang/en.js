@@ -1906,5 +1906,11 @@ window.LANG['en'] = {
   'work.bNoMixOption': '— no mix, straight from stock —',
   'work.bFromShelf': 'Without a mix, pellets, bran and gypsum come off the shelf directly. The app then asks for the zone and prints the labels.',
   'work.bFromShelfShort': 'from stock',
-  'work.bMixFirst': 'Mix a batch of substrate first'
+  'work.bMixFirst': 'Mix a batch of substrate first',
+  'work.mQ': 'How much substrate, and to which recipe?',
+  'work.mCalc': 'calculating …',
+  'work.mNotePh': 'e.g. new pellet delivery',
+  'work.mDone': '{kg} kg of {recipe} mixed',
+  'work.mId': 'Mix',
+  'work.mAnother': 'Another mix'
 };
