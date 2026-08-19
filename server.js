@@ -41,10 +41,26 @@ loadEnv();
 // Outputs JSON lines for structured log aggregation (PM2, journald, etc.)
 // Falls back to human-readable format when LOG_FORMAT=text
 const LOG_FORMAT = process.env.LOG_FORMAT || 'json';
+// S-13: the record's own three fields are written first and meta is copied in
+// afterwards *without* being allowed to replace them. `...meta` used to be
+// spread last, so any caller handing this function attacker-shaped data could
+// forge the whole line — and /api/csp-reports did exactly that, passing a
+// parsed request body straight through. A report of
+//   {"time":"1999-01-01T00:00:00.000Z","level":"INFO","msg":"nothing to see here"}
+// became precisely that entry in the JSON stream that DEPLOYMENT.md tells
+// operators to feed to pm2/journald, which is enough to fabricate an audit
+// trail or to bury a real event under lines a log search filters out.
+const LOG_RESERVED = new Set(['time', 'level', 'msg']);
 function log(level, msg, meta) {
   const ts = new Date().toISOString();
   if (LOG_FORMAT === 'json') {
-    const entry = JSON.stringify({ time: ts, level: level.toUpperCase(), msg, ...meta });
+    const record = { time: ts, level: level.toUpperCase(), msg };
+    if (meta && typeof meta === 'object') {
+      for (const k of Object.keys(meta)) {
+        if (!LOG_RESERVED.has(k)) record[k] = meta[k];
+      }
+    }
+    const entry = JSON.stringify(record);
     if (level === 'error') console.error(entry);
     else console.log(entry);
   } else {
@@ -52,6 +68,33 @@ function log(level, msg, meta) {
     if (level === 'error') console.error(entry, meta || '');
     else console.log(entry, meta ? JSON.stringify(meta) : '');
   }
+}
+
+// The fields a CSP report is worth keeping, in the shape the spec defines them.
+// Everything else the client sent is dropped: `original-policy` repeats a header
+// we already know, and an arbitrary key set from an unauthenticated endpoint is
+// not something a log stream should have to carry. Strings are truncated so one
+// report cannot dominate a line.
+const CSP_REPORT_FIELDS = [
+  'document-uri',
+  'violated-directive',
+  'effective-directive',
+  'blocked-uri',
+  'source-file',
+  'line-number',
+  'column-number',
+  'disposition'
+];
+function cspReportFields(report) {
+  const out = {};
+  if (!report || typeof report !== 'object') return out;
+  for (const k of CSP_REPORT_FIELDS) {
+    const v = report[k];
+    if (v == null) continue;
+    if (typeof v === 'number') out[k] = Number.isFinite(v) ? v : null;
+    else out[k] = String(v).slice(0, 300);
+  }
+  return out;
 }
 
 const PORT_RAW = parseInt(process.env.PORT, 10) || 3000;
@@ -5464,7 +5507,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       if (aborted) return;
       try {
         const report = JSON.parse(body);
-        log('warn', 'CSP violation', report['csp-report'] || report);
+        // S-13: log the three fields a CSP report is actually read for, as
+        // strings, rather than whatever object the client sent. log() refuses
+        // to have its own fields overwritten now, but an unbounded set of
+        // attacker-chosen keys in the log stream is still noise worth not
+        // having — and a report is a fixed shape, so nothing is lost.
+        log('warn', 'CSP violation', cspReportFields(report['csp-report'] || report));
       } catch (e) {}
       res.writeHead(204);
       res.end();
