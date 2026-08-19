@@ -5469,8 +5469,31 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // the POST only ever erases data for a buyer eBay says has closed their account.
   const isEbayDeletion =
     (req.method === 'GET' || req.method === 'POST') && /^\/api\/channels\/ebay\/deletion(?:\?|$)/.test(url);
+  // S-22: both of these were written as public endpoints and both sat behind
+  // this gate, which runs first — so both answered 401 to everyone and neither
+  // did what its own code says it does.
+  //
+  // /api/health calls checkAuth itself and reveals nothing but status, db,
+  // uptime, version and the worktree flag without a session; platform, Node
+  // version, memory and backup freshness stay admin-only. Behind the gate the
+  // Dockerfile's HEALTHCHECK could never pass, so the container reported
+  // unhealthy forever, and the admin branch inside the handler was unreachable.
+  //
+  // /api/csp-reports is sent by the browser without credentials by definition,
+  // so behind the gate it silently discarded every violation report — the one
+  // signal that would tell us an injected script had run.
+  const isHealth = req.method === 'GET' && url === '/api/health';
+  const isCspReport = req.method === 'POST' && url === '/api/csp-reports';
 
-  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb && !isEbayDeletion) {
+  if (
+    !isLoginPage &&
+    !isPublicAsset &&
+    !isWebhook &&
+    !isChannelOAuthCb &&
+    !isEbayDeletion &&
+    !isHealth &&
+    !isCspReport
+  ) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -5716,6 +5739,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/health
   if (req.method === 'GET' && req.url === '/api/health') {
+    // S-22: reachable without a session now, so it gets the same per-IP budget
+    // /api/csp-reports has. It touches the database on every call.
+    if (!checkRate(req, 60)) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      res.end('{"error":"too_many_requests"}');
+      return;
+    }
     let dbOk = false;
     try {
       database.prepare('SELECT 1').get();
