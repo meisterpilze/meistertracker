@@ -717,6 +717,14 @@ function validateEnum(value, allowed, fieldName) {
 // pin the character set + length up-front. Mirrors the batchId regex used
 // by /api/batches.
 const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
+// S-16: the charset and length every account is created with — /api/auth/setup
+// and POST /api/users both enforce it, and createUser is the only writer of the
+// users table, so a name that fails this cannot belong to a real account. It is
+// applied on the way *in* as well now: the login handler used to take the
+// username straight from a body that may be up to 5 MB and make it a Map key in
+// two brute-force tables, where the 60-second sweep leaves it for the full
+// 15-minute lockout window.
+const USERNAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 function validateMushroomStrain(data) {
   if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
   if (data.name !== undefined && data.name !== null) {
@@ -2289,7 +2297,13 @@ function extractBasicAuthUsername(req) {
   if (!authHeader.startsWith('Basic ')) return null;
   const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
   const idx = decoded.indexOf(':');
-  return idx >= 0 ? decoded.slice(0, idx) : null;
+  if (idx < 0) return null;
+  const username = decoded.slice(0, idx);
+  // S-16: this value is only ever used to build brute-force throttle keys, and
+  // a name that cannot belong to an account has no business becoming one. The
+  // header is bounded by maxHeaderSize so the exposure is far smaller than on
+  // the JSON login route, but it is the same shape.
+  return USERNAME_RE.test(username) ? username : null;
 }
 
 // Check CalDAV basic auth against user accounts.
@@ -2338,6 +2352,7 @@ function checkCaldavAuth(req) {
     if (idx < 0) continue;
     const user = decoded.slice(0, idx);
     const pass = decoded.slice(idx + 1);
+    if (!USERNAME_RE.test(user)) continue; // S-16: cannot be an account
 
     const cacheKey = caldavAuthCacheKey(user, pass);
     const cached = caldavAuthCache.get(cacheKey);
@@ -5211,7 +5226,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
-        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+        if (!USERNAME_RE.test(username)) {
           jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
@@ -5240,6 +5255,19 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const { username, password } = data;
         if (!username || !password) {
           jsonErr(res, 400, 'Username and password required');
+          return;
+        }
+        // S-16: before userKey is built, because that string becomes a key in
+        // loginAttempts and loginAttemptsPerUser and stays there for the whole
+        // lockout window. No account can have a name that fails this, so the
+        // answer is the same one a wrong password gets.
+        if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
+          // Nothing is recorded against the throttle maps here: the whole point
+          // is that this string never becomes a key in them, and a failure
+          // logged under a shape that checkLoginAllowed never queries would be
+          // the same leak wearing a hat.
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid credentials' }));
           return;
         }
         const userKey = username.toLowerCase();
@@ -5398,7 +5426,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
-        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+        if (!USERNAME_RE.test(username)) {
           jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
