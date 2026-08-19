@@ -1836,24 +1836,33 @@ textarea:focus {
 }
 
 /* ═══ GRID ══════════════════════════════════════════════════════ */
+/* minmax(0, 1fr) and not 1fr, on every one of these. A bare `1fr` is
+   `minmax(auto, 1fr)`, and `auto` there is the track's min-content — so one
+   child that cannot shrink drags the whole column past its share and the page
+   with it. On Pilzsorten that child is a <select> whose longest option reads
+   "— Rezept von anderer Sorte übernehmen —": a select is at least as wide as
+   its widest option, 363px of it, inside a 343px grid. The page scrolled to
+   443px at 375px wide, measured by scripts/measure-mobile.js. With the minimum
+   pinned to 0 the track keeps its share and the select shrinks like everything
+   else. The calendar grids and the scan log already spell it this way. */
 .g2 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 .g3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .g4 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 .g5 {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -3680,7 +3689,7 @@ tr:hover td {
 @media (max-width: 1024px) {
   .g4,
   .g5 {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .rack-grid-inc {
     grid-template-columns: repeat(3, 1fr) !important;
@@ -3770,10 +3779,10 @@ tr:hover td {
   .g3,
   .g4,
   .g5 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .g2 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   th,
   td {
@@ -3876,7 +3885,7 @@ tr:hover td {
   .g3,
   .g4,
   .g5 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .cal-grid {
     font-size: 10px;
