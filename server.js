@@ -1446,6 +1446,31 @@ function waterfall(fns, done) {
   })(null);
 }
 
+// ── Private-key file handling ──
+// S-12: fs.writeFileSync's `mode` only applies when it *creates* the file, and
+// a renewal overwrites a key that is already there — which would keep whatever
+// mode the old one had, including the 0644 this used to produce. So the mode is
+// re-asserted after every write. chmod can fail when the file belongs to
+// another account (a key dropped in by root, say); that is worth a warning, not
+// a crash, because the alternative is a server that will not start.
+function writePrivateFile(filePath, contents) {
+  fs.writeFileSync(filePath, contents, { mode: 0o600 });
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (e) {
+    log('warn', 'Could not restrict permissions on private file', { path: filePath, error: e.message });
+  }
+}
+
+function ensurePrivateDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch (e) {
+    log('warn', 'Could not restrict permissions on key directory', { path: dir, error: e.message });
+  }
+}
+
 // ── ECDSA P-256 account key (persists in certs/) ──
 function loadOrCreateAccountKey() {
   if (fs.existsSync(ACME_ACCOUNT_KEY_PATH)) {
@@ -1454,8 +1479,12 @@ function loadOrCreateAccountKey() {
   log('info', 'Generating ACME account key...');
   const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const dir = path.dirname(ACME_ACCOUNT_KEY_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+  ensurePrivateDir(dir);
+  // S-12: this key re-issues certificates for the domain. Without a mode it
+  // lands at 0666 & ~umask — 0644 on a normal host, readable by every local
+  // account. BACKUP_DIR (0700) and the restore temp file (0600) already had
+  // this right; the two certs/ writes were simply missed.
+  writePrivateFile(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
   return privateKey;
 }
 
@@ -1716,9 +1745,10 @@ function requestLetsEncryptCert(callback) {
       (next) => {
         try {
           const certsDir = path.dirname(CERT_KEY);
-          if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+          ensurePrivateDir(certsDir);
+          // The certificate is public; the key is not (S-12).
           fs.writeFileSync(CERT_CRT, certPem);
-          fs.writeFileSync(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
+          writePrivateFile(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
         } catch (e) {
           return next(e);
         }
