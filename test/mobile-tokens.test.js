@@ -44,7 +44,22 @@ const ROOT_BLOCK = block(/^:root \{[\s\S]*?\n\}/m);
 // so this lands on the media query's own brace.
 const DESKTOP_BLOCK = block(/@media \(min-width: 769px\) and \(hover: hover\) \{[\s\S]*?\n\}/);
 
-const TOKENS = [
+// Derived from the stylesheet, not restated here. Phase 2 adds a paired token
+// per component — the base layer holds 104 sub-floor sizes and every one needs
+// its own — and a hand-kept list is a list someone forgets to extend, which is
+// silent: the new token simply is not checked.
+//
+// The prefixes are the contract. `--fs-` `--tap` `--pad-` `--fab-` are the size
+// system; everything else on :root is theme (--c-*, --radius, --sidebar-w) and
+// has nothing to do with the phone.
+const TOKEN_PREFIX = /^--(fs-|tap|pad-|fab-)/;
+const TOKENS = [...new Set([...ROOT_BLOCK.matchAll(/\n\s*(--[a-z0-9-]+):/g)].map((m) => m[1]))].filter((t) =>
+  TOKEN_PREFIX.test(t)
+);
+
+// The twelve Phase 0 shipped. Named so a derivation that quietly matches
+// nothing fails here rather than turning every assertion below into a no-op.
+const PHASE_0_TOKENS = [
   '--fs-xs',
   '--fs-sm',
   '--fs-base',
@@ -60,10 +75,28 @@ const TOKENS = [
 ];
 
 describe('mobile token layer', () => {
+  it('finds the tokens (a derivation that matches nothing would pass everything)', () => {
+    const lost = PHASE_0_TOKENS.filter((t) => !TOKENS.includes(t));
+    assert.deepEqual(lost, [], `the :root scan no longer sees ${lost.length} of the tokens Phase 0 shipped`);
+  });
+
   it('declares every size token on :root, which is the phone', () => {
     for (const t of TOKENS) {
       assert.match(ROOT_BLOCK, new RegExp('\\n\\s*' + t + ':\\s*[^;]+;'), `${t} missing from :root`);
     }
+  });
+
+  // The failure this catches is the one the project cannot afford and CI cannot
+  // otherwise see: a token added for a phone value with no desktop value beside
+  // it silently moves the desktop, and the only thing that would notice is
+  // scripts/capture-desktop-baseline.js, which needs a browser and a human.
+  it('pairs every token with a desktop value', () => {
+    const unpaired = TOKENS.filter((t) => !new RegExp('\\n\\s*' + t + ':\\s*[^;]+;').test(DESKTOP_BLOCK));
+    assert.deepEqual(
+      unpaired,
+      [],
+      `${unpaired.length} token(s) have a phone value and no desktop one — the desktop moves: ${unpaired.join(', ')}`
+    );
   });
 
   // The whole architecture is this one direction. A `max-width` override block
