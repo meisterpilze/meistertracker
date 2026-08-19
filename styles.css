@@ -5540,3 +5540,20 @@ tr:hover td {
   border-color: var(--c-primary) !important;
   background: var(--c-primary-light) !important;
 }
+
+/* Substrat ansetzen und Charge anlegen stehen nebeneinander: der Ansatz wird
+   gemischt und die Charge zieht sofort daraus, also gehören sie in einen Blick.
+   Der Substrat-Block ist schmaler, weil er weniger zu fragen hat. Unter 1000 px
+   fällt beides untereinander — im Labor wird am Handy gearbeitet. */
+.nb-split {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+@media (max-width: 1000px) {
+  .nb-split {
+    grid-template-columns: 1fr;
+  }
+}
