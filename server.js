@@ -2108,7 +2108,95 @@ function checkPrinterAvailable(callback) {
 // Send raw ZPL to the Zebra GK420d. Routes through the print bridge if one
 // is configured (DB or env), otherwise prints locally via PowerShell
 // (Windows-only — fails on Linux servers without a bridge).
+// S-24: ZPL is a command language, not a document format, and /api/print took
+// whatever the client sent and handed it straight to the printer. The label
+// layout is generated in the browser, so "the client" is anybody with a login —
+// and the language reaches well past drawing: ^JU and ~JS persist configuration,
+// ~DY and ^DF write files onto the printer, the ^W* family reconfigures the
+// wireless interface, ^KP sets a password. A Link-OS printer on the lab network
+// is a small networked computer, and this endpoint was an unauthenticated shell
+// on it for anybody the app had let in the front door.
+//
+// So: an allowlist of the commands the label layouts actually emit, plus a
+// couple of unambiguously safe drawing ones. Anything else is refused. It has to
+// be an allowlist rather than a blocklist — the command set is large, printer
+// firmware adds to it, and ^CC/~CC can redefine the command character itself and
+// walk straight through any blocklist written against the default one.
+//
+// Every ^ or ~ in the payload is treated as introducing a command, which is
+// exactly how the printer reads it. Legitimate labels never carry a bare one:
+// the layout code strips ^ and ~ out of every data field before it gets here
+// (zplText in app.js and mcp-server.js), so a ^ inside ^FD data means the client
+// is not the one we ship.
+const ZPL_ALLOWED_COMMANDS = new Set([
+  // Format boundaries
+  'XA',
+  'XZ',
+  // Label geometry, orientation, encoding, copies
+  'PW',
+  'LL',
+  'LH',
+  'LT',
+  'LS',
+  'PO',
+  'FW',
+  'CI',
+  'PQ',
+  // Fields: origin, typeset origin, block, separator, data, comment, reverse
+  'FO',
+  'FT',
+  'FB',
+  'FS',
+  'FD',
+  'FX',
+  'FR',
+  // Drawing
+  'GB',
+  // Barcodes: defaults, Code 128, QR, Code 39
+  'BY',
+  'BC',
+  'BQ',
+  'B3'
+]);
+// ^A0..^A9 and ^AA..^AZ select a font that lives in firmware. ^A@ loads one from
+// the printer's file system, which is the kind of thing this list exists to keep
+// out, so the character class is deliberately narrow.
+const ZPL_FONT_RE = /^A[0-9A-Z]$/;
+// A label is on the order of a kilobyte. The body cap is 5 MB, which would be
+// tens of thousands of them.
+const ZPL_MAX_CHARS = 1024 * 1024;
+const ZPL_MAX_LABELS = 2000;
+
+/** null when the payload is safe to send, otherwise the reason it is not. */
+function checkZpl(zpl) {
+  if (typeof zpl !== 'string' || !zpl.trim()) return 'empty ZPL';
+  if (zpl.length > ZPL_MAX_CHARS) return 'ZPL too large (' + zpl.length + ' chars)';
+  if (!zpl.includes('^XA') || !zpl.includes('^XZ')) return 'ZPL must contain ^XA and ^XZ';
+  const labels = (zpl.match(/\^XA/g) || []).length;
+  if (labels > ZPL_MAX_LABELS) return 'too many labels in one job (' + labels + ')';
+
+  const rejected = new Set();
+  for (let i = 0; i < zpl.length; i++) {
+    const lead = zpl[i];
+    if (lead !== '^' && lead !== '~') continue;
+    const cmd = zpl.slice(i + 1, i + 3).toUpperCase();
+    // Tilde commands are all device control — none of them draw anything.
+    if (lead === '^' && (ZPL_ALLOWED_COMMANDS.has(cmd) || ZPL_FONT_RE.test(cmd))) continue;
+    rejected.add(lead + cmd);
+    if (rejected.size >= 5) break;
+  }
+  if (rejected.size) return 'ZPL contains commands that are not allowed: ' + [...rejected].join(' ');
+  return null;
+}
+
 function printZPL(zplData, callback) {
+  // Checked here rather than in the route, so the /api/print handler, the bridge
+  // self-test and the MCP print tools are all covered by the one gate.
+  const bad = checkZpl(zplData);
+  if (bad) {
+    log('warn', 'Refused a print job', { reason: bad });
+    return callback('Refused: ' + bad);
+  }
   if (getEffectiveBridgeConfig()) return _printViaBridge(zplData, callback);
   return _printViaPowerShell(zplData, callback);
 }
