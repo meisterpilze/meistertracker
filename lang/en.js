@@ -1901,5 +1901,10 @@ window.LANG['en'] = {
   'batch.matGrain': 'Grain',
   'batch.matDryTotal': 'Dry matter per bag',
   'stage.done': 'Done',
-  'stage.contam': 'Contaminated'
+  'stage.contam': 'Contaminated',
+  'batch.guided': 'Step by step',
+  'work.bNoMixOption': '— no mix, straight from stock —',
+  'work.bFromShelf': 'Without a mix, pellets, bran and gypsum come off the shelf directly. The app then asks for the zone and prints the labels.',
+  'work.bFromShelfShort': 'from stock',
+  'work.bMixFirst': 'Mix a batch of substrate first'
 };

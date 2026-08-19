@@ -1924,5 +1924,10 @@ window.LANG['de'] = {
   'batch.matGrain': 'Körner',
   'batch.matDryTotal': 'Trockenmasse je Beutel',
   'stage.done': 'Fertig',
-  'stage.contam': 'Kontaminiert'
+  'stage.contam': 'Kontaminiert',
+  'batch.guided': 'Schritt für Schritt',
+  'work.bNoMixOption': '— ohne Ansatz, vom Lager —',
+  'work.bFromShelf': 'Ohne Ansatz: Pellets, Kleie und Gips werden direkt vom Lager gebucht. Danach fragt die App nach der Zone und druckt die Etiketten.',
+  'work.bFromShelfShort': 'vom Lager',
+  'work.bMixFirst': 'Lieber erst einen Ansatz mischen'
 };
