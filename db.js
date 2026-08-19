@@ -2124,6 +2124,31 @@ const MIGRATIONS = [
       if (!cols.includes('cert_fp')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_fp TEXT DEFAULT ''");
       if (!cols.includes('cert_url')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_url TEXT DEFAULT ''");
     }
+  },
+  {
+    version: 73,
+    description: 'App-specific passwords for CalDAV clients',
+    fn(db) {
+      // S-25: CalDAV authenticates with the account password, so subscribing a
+      // phone means typing the password that also opens the web UI — as an
+      // admin, if that is the account — into iOS or Thunderbird, where it sits
+      // in a keychain, syncs to a cloud backup, and stays there long after the
+      // device stops being one you control. One credential, every capability,
+      // and no way to revoke it that does not change the password for
+      // everything.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS caldav_app_passwords (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          label        TEXT NOT NULL,
+          hash         TEXT NOT NULL,
+          created      TEXT NOT NULL,
+          last_used_at TEXT
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_user ON caldav_app_passwords(user_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_hash ON caldav_app_passwords(hash)');
+    }
   }
 ];
 
@@ -3414,6 +3439,12 @@ function deleteAuthArtifactsNoTxn(db, userId) {
   db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  // S-25: CalDAV app passwords go too. They are deliberately independent of the
+  // account password day to day — that is the whole point of them — but a
+  // password change is the response to "this account may be compromised", and
+  // somebody who had the account could have minted one. The cost is re-adding
+  // the calendar on each device, which is the same trade every provider makes.
+  db.prepare('DELETE FROM caldav_app_passwords WHERE user_id = ?').run(userId);
 }
 
 // S-11: a password change is the standard answer to "my account may be
@@ -5771,6 +5802,89 @@ function countPickups(db) {
     unconfirmed: (row.open || 0) + (gone.open || 0),
     withdrawn: gone.total || 0
   };
+}
+
+// ── CalDAV app-specific passwords (S-25) ────────────────────
+// A credential that opens calendars and nothing else. The value is 25 random
+// characters from an unambiguous alphabet — no 0/O, no 1/I/l — because somebody
+// is going to type it into a phone by hand; that is ~116 bits, so a plain
+// SHA-256 is the right thing at rest for the same reason it is for session
+// tokens: there is no guessable input for a KDF to slow down. It also has to be
+// cheap, because CalDAV re-authenticates on every single request.
+const CALDAV_PW_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const CALDAV_PW_GROUPS = 5;
+const CALDAV_PW_GROUP_LEN = 5;
+
+function hashCaldavAppPassword(value) {
+  return crypto.createHash('sha256').update(String(value).replace(/-/g, '').toUpperCase()).digest('hex');
+}
+
+function generateCaldavAppPassword() {
+  const chars = [];
+  for (let i = 0; i < CALDAV_PW_GROUPS * CALDAV_PW_GROUP_LEN; i++) {
+    // Rejection-free because the alphabet's length divides evenly into the
+    // sampling range used here (31 values drawn from randomInt's uniform range).
+    chars.push(CALDAV_PW_ALPHABET[crypto.randomInt(CALDAV_PW_ALPHABET.length)]);
+  }
+  const groups = [];
+  for (let i = 0; i < CALDAV_PW_GROUPS; i++) {
+    groups.push(chars.slice(i * CALDAV_PW_GROUP_LEN, (i + 1) * CALDAV_PW_GROUP_LEN).join(''));
+  }
+  return groups.join('-');
+}
+
+/**
+ * Mint an app password for a user. The plaintext is returned once and never
+ * stored; only its hash goes into the table.
+ */
+function createCaldavAppPassword(db, userId, label) {
+  const clean = String(label || '').trim();
+  if (!userId) throw new Error('createCaldavAppPassword: userId required');
+  if (!clean) throw new Error('caldav: a name for the device is required');
+  if (clean.length > 60) throw new Error('caldav: device name too long (max 60)');
+  const count = db.prepare('SELECT COUNT(*) AS c FROM caldav_app_passwords WHERE user_id = ?').get(userId).c;
+  if (count >= 20) throw new Error('caldav: too many app passwords (revoke one first)');
+  const password = generateCaldavAppPassword();
+  const info = db
+    .prepare('INSERT INTO caldav_app_passwords(user_id, label, hash, created) VALUES(?, ?, ?, ?)')
+    .run(userId, clean, hashCaldavAppPassword(password), new Date().toISOString());
+  incrementDataVersion(db);
+  return { id: info.lastInsertRowid, label: clean, password };
+}
+
+/** What the settings screen shows. Never includes the hash. */
+function listCaldavAppPasswords(db, userId) {
+  return db
+    .prepare(
+      `SELECT id, label, created, last_used_at AS lastUsedAt
+         FROM caldav_app_passwords WHERE user_id = ? ORDER BY created DESC`
+    )
+    .all(userId);
+}
+
+/**
+ * The user this app password belongs to, or null. Does not record the use —
+ * see S-17: stamping before the caller has accepted the credential turns the
+ * audit column into a record of attempts.
+ */
+function findCaldavAppPassword(db, candidate) {
+  const value = String(candidate || '').replace(/[^A-Za-z0-9]/g, '');
+  if (value.length !== CALDAV_PW_GROUPS * CALDAV_PW_GROUP_LEN) return null;
+  const row = db
+    .prepare('SELECT id, user_id AS userId FROM caldav_app_passwords WHERE hash = ?')
+    .get(hashCaldavAppPassword(value));
+  return row || null;
+}
+
+function touchCaldavAppPassword(db, id) {
+  db.prepare('UPDATE caldav_app_passwords SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+}
+
+/** Scoped to the owner on purpose: nobody revokes somebody else's device by id. */
+function deleteCaldavAppPassword(db, userId, id) {
+  const info = db.prepare('DELETE FROM caldav_app_passwords WHERE id = ? AND user_id = ?').run(id, userId);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
 }
 
 // -- Print Bridge Config --
@@ -8269,6 +8383,7 @@ const SAFE_ERROR_PREFIXES = [
   // Conflicts — db.js
   'Zone already exists:',
   'Username conflicts with existing user:',
+  'caldav:',
   'Rack already exists:',
   'A batch with ID ',
   'A culture with ID ',
@@ -9290,6 +9405,11 @@ module.exports = {
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
   setPrintBridgeCertPin,
+  createCaldavAppPassword,
+  listCaldavAppPasswords,
+  findCaldavAppPassword,
+  touchCaldavAppPassword,
+  deleteCaldavAppPassword,
   getShippingConfig,
   updateShippingConfig,
   updateOrderShipAddress,

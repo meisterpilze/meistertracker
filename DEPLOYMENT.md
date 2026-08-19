@@ -553,6 +553,24 @@ powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.
 
 The installer persists the token into the scheduled-task arguments, so it survives logoffs / reboots.
 
+#### App passwords for calendar clients
+
+CalDAV authenticates with HTTP Basic against the app's own accounts, so
+subscribing a phone used to mean typing the password that also opens the web UI
+into iOS or Thunderbird — where the client keeps it, in a keychain that syncs to
+a cloud backup and outlives the device.
+
+Under **Settings → CalDAV** each user can now create an app password per device.
+It opens calendars and nothing else, it is shown once at creation and stored
+only as a hash, and it can be revoked on its own without changing the account
+password. The account password still works, so existing subscriptions keep
+running — but there is no longer a reason to hand one to a calendar client.
+
+Changing or resetting an account password deletes that user's app passwords,
+along with their sessions and OAuth grants. A password change is the answer to
+"this account may be compromised", and somebody who had the account could have
+created one; the cost is re-adding the calendar on each device.
+
 #### Certificate pinning
 
 The bridge's certificate is self-signed, so there is no chain for the server to

@@ -9025,6 +9025,7 @@ function loadCaldavSettings() {
   const url = location.protocol + '//' + location.hostname + ':' + location.port + '/caldav/calendars/';
   document.getElementById('caldav-url-display').textContent = url;
   document.getElementById('caldav-enabled').checked = !!caldav.enabled;
+  loadCaldavAppPasswords();
 }
 function saveCaldavSettings() {
   caldav.enabled = document.getElementById('caldav-enabled').checked;
@@ -9036,6 +9037,75 @@ function saveCaldavSettings() {
     }
   });
 }
+// ─── CalDAV app passwords (S-25) ────────────────────────────
+// A calendar app keeps whatever password it is given, in a keychain that syncs
+// to a cloud backup and outlives the device. Handing it the account password
+// means handing it the web UI as well, and the only way to take it back is to
+// change the password for everything. These open calendars and nothing else,
+// and each one is revocable on its own.
+async function loadCaldavAppPasswords() {
+  const box = document.getElementById('caldav-apppw-list');
+  if (!box) return;
+  try {
+    const r = await authFetch('/api/caldav/app-passwords').then((x) => x.json());
+    const items = (r && r.items) || [];
+    if (!items.length) {
+      box.innerHTML = `<div style="font-size:12px;color:var(--c-text-muted)">${esc(t('caldav.appPwNone'))}</div>`;
+      return;
+    }
+    const head = `<tr style="text-align:left;color:var(--c-text-muted)"><th style="padding:4px">${esc(t('caldav.appPwDevice'))}</th><th style="padding:4px">${esc(t('caldav.appPwCreated'))}</th><th style="padding:4px">${esc(t('caldav.appPwLastUsed'))}</th><th style="padding:4px"></th></tr>`;
+    const rows = items
+      .map(
+        (i) =>
+          `<tr><td style="padding:4px">${esc(i.label)}</td><td style="padding:4px">${esc(fmtDt(i.created))}</td><td style="padding:4px">${i.lastUsedAt ? esc(fmtDt(i.lastUsedAt)) : '—'}</td><td style="padding:4px;text-align:right"><button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="caldav-apppw-revoke" data-id="${esc(i.id)}">${esc(t('caldav.appPwRevoke'))}</button></td></tr>`
+      )
+      .join('');
+    box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">${head}${rows}</table>`;
+  } catch (e) {
+    box.textContent = t('common.error');
+  }
+}
+
+async function createCaldavAppPassword() {
+  const input = document.getElementById('caldav-apppw-label');
+  const label = (input.value || '').trim();
+  if (!label) {
+    showCaldavStatus(t('caldav.appPwNeedLabel'), 'var(--c-amber-dark)');
+    return;
+  }
+  const r = await apiPost('/api/caldav/app-passwords', { label });
+  if (!r || r.error) {
+    showCaldavStatus((r && r.error) || t('common.error'), 'var(--c-red-dark)');
+    return;
+  }
+  input.value = '';
+  // The only place this value is ever displayed. The server keeps a hash, so
+  // there is no "show it again" to build later.
+  document.getElementById('caldav-apppw-value').textContent = r.password;
+  document.getElementById('caldav-apppw-new').style.display = 'block';
+  loadCaldavAppPasswords();
+}
+
+function revokeCaldavAppPassword(id) {
+  confirm2(t('caldav.appPwRevoke'), t('caldav.appPwRevokeConfirm'), t('caldav.appPwRevoke'), async () => {
+    const r = await apiDelete('/api/caldav/app-passwords/' + id);
+    if (r && r.error) {
+      showCaldavStatus(r.error, 'var(--c-red-dark)');
+      return;
+    }
+    loadCaldavAppPasswords();
+  });
+}
+
+// Delegated, not an onclick attribute: the rows are rebuilt on every load, and
+// inline handlers are the reason the CSP still needs 'unsafe-inline'.
+function onCaldavAppPwClick(e) {
+  const btn = e.target.closest('button[data-action="caldav-apppw-revoke"]');
+  if (!btn) return;
+  const id = parseInt(btn.dataset.id, 10);
+  if (Number.isFinite(id)) revokeCaldavAppPassword(id);
+}
+
 function showCaldavStatus(msg, color) {
   const el = document.getElementById('caldav-status');
   el.style.display = 'block';
@@ -20893,6 +20963,8 @@ function initEventListeners() {
   $('caldav-enabled').addEventListener('change', saveCaldavSettings);
   $('act-46').addEventListener('click', saveCaldavSettings);
   $('caldav-sync-btn').addEventListener('click', syncCaldavNow);
+  $('caldav-apppw-create').addEventListener('click', createCaldavAppPassword);
+  $('caldav-apppw-list').addEventListener('click', onCaldavAppPwClick);
 
   // Inventory
   $('st-inv-stock').addEventListener('click', () => {

@@ -2518,6 +2518,23 @@ function checkCaldavAuth(req) {
     const pass = decoded.slice(idx + 1);
     if (!USERNAME_RE.test(user)) continue; // S-16: cannot be an account
 
+    // S-25: an app-specific password first. It is a SHA-256 lookup rather than
+    // a scrypt verify, so it costs nothing — which is also why it needs no
+    // cache entry. The username still has to match its owner: an app password
+    // opens that person's calendars, not whoever presents it.
+    const appPw = db.findCaldavAppPassword(database, pass);
+    if (appPw) {
+      const owner = db.getUserByUsername(database, user) || db.getUserByUsernameCaseInsensitive(database, user);
+      if (owner && owner.id === appPw.userId) {
+        try {
+          db.touchCaldavAppPassword(database, appPw.id);
+        } catch (e) {
+          /* the audit stamp is best effort; it must not cost somebody their calendar */
+        }
+        return owner;
+      }
+    }
+
     const cacheKey = caldavAuthCacheKey(user, pass);
     const cached = caldavAuthCache.get(cacheKey);
     if (cached) {
@@ -8348,6 +8365,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- CalDAV Config --
+  // ── CalDAV app-specific passwords (S-25) ──────────────────
+  // Every user manages their own, including admins; there is deliberately no
+  // route that touches somebody else's. The plaintext is shown exactly once,
+  // at creation, and never stored.
+  if (req.url === '/api/caldav/app-passwords' && req.method === 'GET') {
+    try {
+      jsonOk(res, { items: db.listCaldavAppPasswords(database, req.authUser.user_id) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.url === '/api/caldav/app-passwords' && req.method === 'POST') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const created = db.createCaldavAppPassword(database, req.authUser.user_id, data && data.label);
+        log('info', 'CalDAV app password created', { actor: req.authUser.username, label: created.label });
+        // `password` is in this response and nowhere else, ever.
+        jsonOk(res, created);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const caldavPwMatch = req.url.match(/^\/api\/caldav\/app-passwords\/(\d+)$/);
+  if (caldavPwMatch && req.method === 'DELETE') {
+    try {
+      const gone = db.deleteCaldavAppPassword(database, req.authUser.user_id, parseInt(caldavPwMatch[1], 10));
+      if (!gone) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      clearCaldavAuthCache();
+      log('info', 'CalDAV app password revoked', { actor: req.authUser.username });
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/caldav/config') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {

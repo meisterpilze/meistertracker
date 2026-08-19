@@ -873,10 +873,22 @@ window.LANG['de'] = {
   'caldav.syncNow': 'Alle Aufgaben jetzt synchronisieren',
   'caldav.settingsSaved': 'Einstellungen gespeichert.',
   'caldav.syncing': 'Synchronisiere...',
+  'caldav.appPwTitle': 'App-Passw\u00f6rter f\u00fcr Kalender-Apps',
+  'caldav.appPwDesc': 'Eine Kalender-App speichert das Passwort, das du ihr gibst \u2014 im Schl\u00fcsselbund, im Cloud-Backup, oft l\u00e4nger als das Ger\u00e4t selbst. Lege hier pro Ger\u00e4t ein eigenes Passwort an, statt dein Account-Passwort einzutippen: es \u00f6ffnet nur Kalender, und du kannst ein einzelnes Ger\u00e4t sperren, ohne deinen Login zu \u00e4ndern.',
+  'caldav.appPwLabelPh': 'Ger\u00e4tename, z. B. iPhone',
+  'caldav.appPwCreate': 'Anlegen',
+  'caldav.appPwOnce': 'Jetzt kopieren \u2014 es wird nur dieses eine Mal angezeigt.',
+  'caldav.appPwNone': 'Noch keine App-Passw\u00f6rter angelegt.',
+  'caldav.appPwDevice': 'Ger\u00e4t',
+  'caldav.appPwCreated': 'Angelegt',
+  'caldav.appPwLastUsed': 'Zuletzt genutzt',
+  'caldav.appPwRevoke': 'Sperren',
+  'caldav.appPwRevokeConfirm': 'Dieses Ger\u00e4t verliert damit den Zugriff auf die Kalender. Andere Ger\u00e4te bleiben verbunden.',
+  'caldav.appPwNeedLabel': 'Bitte einen Ger\u00e4tenamen eingeben.',
   'caldav.howToConnect': 'So verbinden',
   'caldav.copyUrl': 'URL kopieren',
   'caldav.loginHint':
-    '<strong>Anmeldung:</strong> Verwende deinen Account-Login (Benutzername &amp; Passwort) um dich in der Kalender-App anzumelden.',
+    '<strong>Anmeldung:</strong> Benutzername wie beim Login. Als Passwort besser ein <strong>App-Passwort</strong> (siehe unten) als dein Account-Passwort \u2014 die Kalender-App speichert es dauerhaft.',
   'caldav.hiwShared':
     '<strong>Betriebskalender (<code>meisterpilze</code>):</strong> Alle Aufgaben, Termine und Batch-F\u00e4lligkeiten landen hier. Jeder im Betrieb sieht diesen Kalender.',
   'caldav.hiwPersonal':
