@@ -1879,5 +1879,9 @@ window.LANG['de'] = {
   'work.rMoved': 'Umgezogen',
   'work.rSkipped': 'Übersprungen',
   'work.nextHarvest': 'Noch {n} Beutel dieser Charge ernten',
-  'bagInfo.openHint': 'Beutel öffnen — umziehen, ernten, Kontamination, Historie'
+  'bagInfo.openHint': 'Beutel öffnen — umziehen, ernten, Kontamination, Historie',
+  'sub.shortTitle': 'Das Lager reicht nicht',
+  'sub.shortLine': '{mat}: {need} kg gebraucht, {have} kg vorhanden',
+  'sub.shortHint': 'Der Ansatz wird mit dem vollen Gewicht verbucht, abgebucht wird aber nur, was wirklich da ist. Trage besser erst die Lieferung ein.',
+  'sub.shortConfirm': 'Es fehlt Material im Lager. Trotzdem ansetzen?'
 };

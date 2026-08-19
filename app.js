@@ -6610,6 +6610,15 @@ function nbPreview() {
     document.getElementById('nb-mat-preview').style.display = 'none';
     return;
   }
+  // A Charge portioned out of a mix takes finished substrate, not pellets and
+  // bran: db.js reverses such a Charge against the mix, never against the shelf.
+  // Quoting a raw-material shortfall here warns about stock this Charge will not
+  // touch, and nb-substrate-info already states the real draw. The raw-material
+  // figures stay for the mixless path, which does still book off the shelf.
+  if ((document.getElementById('nb-substrate-batch') || {}).value) {
+    document.getElementById('nb-mat-preview').style.display = 'none';
+    return;
+  }
   const lines = [];
   {
     const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
@@ -7224,8 +7233,14 @@ async function sbPreview() {
   // Red when the shelf cannot cover the line. The server clamps a deduction to
   // what is actually there, so an unnoticed shortfall does not merely mean a
   // short mix — the missing kilos are never booked at all.
+  // Every line the shelf cannot cover, collected while the table is built. The
+  // server clamps a deduction to what is actually there, so a mix started while
+  // short is recorded at full weight and quietly takes less — the gap has to be
+  // said out loud before it is booked, not inferred from a red number.
+  const shortfalls = [];
   const row = (label, val, unit, mat, dec) => {
-    const short = mat && val > (stock[mat] || 0);
+    const short = mat && val > (stock[mat] || 0) + 1e-9;
+    if (short) shortfalls.push({ label, need: val, have: stock[mat] || 0 });
     return (
       '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
       esc(label) +
@@ -7264,6 +7279,18 @@ async function sbPreview() {
     '<div style="font-size:11px;color:var(--c-text-muted);margin-top:6px">' +
     esc(t('sub.noSpawnHint')) +
     '</div>';
+  _sbLast.shortfalls = shortfalls;
+  if (shortfalls.length) {
+    const list = shortfalls
+      .map((x) => esc(t('sub.shortLine', { mat: x.label, need: x.need.toFixed(1), have: x.have.toFixed(1) })))
+      .join('<br>');
+    out.innerHTML =
+      '<div style="background:var(--c-red-light);border:1px solid var(--c-red-border);color:var(--c-red-dark);' +
+      'border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px;line-height:1.55">' +
+      '<b>' + esc(t('sub.shortTitle')) + '</b><br>' + list + '<br>' + esc(t('sub.shortHint')) +
+      '</div>' +
+      out.innerHTML;
+  }
 }
 
 async function createSubstrateBatchUI() {
@@ -7275,7 +7302,8 @@ async function createSubstrateBatchUI() {
   const subId = sbGenId();
   confirm2(
     t('sub.confirmTitle'),
-    t('sub.confirmMsg', { kg: _sbLast.kg.toFixed(0), recipe: _sbLast.label, id: subId }),
+    t('sub.confirmMsg', { kg: _sbLast.kg.toFixed(0), recipe: _sbLast.label, id: subId }) +
+      (_sbLast.shortfalls && _sbLast.shortfalls.length ? '\n\n' + t('sub.shortConfirm') : ''),
     t('sub.create'),
     async () => {
       setStatus(st, t('sub.running'), true);

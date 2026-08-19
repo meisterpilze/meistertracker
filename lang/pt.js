@@ -1874,5 +1874,9 @@ window.LANG['pt'] = {
   'work.rMoved': 'Movidos',
   'work.rSkipped': 'Ignorados',
   'work.nextHarvest': 'Colher mais {n} sacos deste lote',
-  'bagInfo.openHint': 'Abrir saco — mudar de lugar, colher, contaminação, histórico'
+  'bagInfo.openHint': 'Abrir saco — mudar de lugar, colher, contaminação, histórico',
+  'sub.shortTitle': 'Estoque insuficiente',
+  'sub.shortLine': '{mat}: {need} kg necessários, {have} kg em estoque',
+  'sub.shortHint': 'A mistura é registrada com o peso total, mas só sai do estoque o que realmente existe. Melhor registrar a entrega primeiro.',
+  'sub.shortConfirm': 'Falta material no estoque. Preparar mesmo assim?'
 };
