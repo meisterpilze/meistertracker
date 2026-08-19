@@ -2089,6 +2089,22 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_sy INTEGER DEFAULT 0');
     }
+  },
+  {
+    version: 71,
+    description: 'Store session tokens as SHA-256 hashes, like the MCP token',
+    fn(db) {
+      // S-15: the column held the same bytes the browser holds, so one read of
+      // the database file was every live session for up to seven days. Rewrite
+      // the existing rows in place rather than emptying the table, so a deploy
+      // does not log everybody out — the cookies people are holding keep
+      // working, they just no longer match anything readable in the file.
+      const rows = db.prepare('SELECT token FROM sessions').all();
+      const upd = db.prepare('UPDATE sessions SET token = ? WHERE token = ?');
+      for (const r of rows) {
+        upd.run(crypto.createHash('sha256').update(String(r.token)).digest('hex'), r.token);
+      }
+    }
   }
 ];
 
@@ -3284,6 +3300,18 @@ function verifyPassword(storedHash, salt, password) {
   return crypto.timingSafeEqual(a, b);
 }
 
+// S-15: sessions.token used to hold the very bytes the browser holds, so a
+// single read of the database file — a stray backup, a filesystem snapshot, an
+// ops copy handed to somebody for debugging — was every live session for up to
+// seven days. The MCP token in the same schema was already stored as a SHA-256
+// hash and compared with timingSafeEqual; sessions never got the same
+// treatment. A plain digest is right here (unlike for passwords): the token is
+// 32 bytes of CSPRNG output, so there is nothing to brute-force and nothing a
+// KDF would add, and the lookup stays a single indexed equality.
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 function createSession(db, userId) {
   // Enforce session limit per user — evict oldest when at cap
   const count = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE user_id = ?').get(userId).count;
@@ -3297,8 +3325,9 @@ function createSession(db, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const created = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  // The row stores the hash; the caller gets the token, once, for the cookie.
   db.prepare('INSERT INTO sessions(token, user_id, created, expires) VALUES(?, ?, ?, ?)').run(
-    token,
+    hashSessionToken(token),
     userId,
     created,
     expires
@@ -3307,17 +3336,20 @@ function createSession(db, userId) {
 }
 
 function getSession(db, token) {
+  // s.token is deliberately not selected — it is a hash now, and no caller
+  // wanted it. Returning it would only invite somebody to treat it as the
+  // cookie value again.
   return db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship, u.can_release
+      `SELECT s.user_id, s.expires, u.username, u.role, u.can_ship, u.can_release
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
-    .get(token);
+    .get(hashSessionToken(token));
 }
 
 function deleteSession(db, token) {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(hashSessionToken(token));
 }
 
 // Every credential that speaks for one user: browser sessions, OAuth access
