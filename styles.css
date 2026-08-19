@@ -4758,19 +4758,36 @@ tr:hover td {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
   }
 
-  /* ── Batches table — mobile card mode ────────────────────────
-     The 12-column batches table is unusable on a 360 px viewport
-     (Actions column ends up ~700 px off-screen). Below we transform
-     the rows into stacked cards via display:block; row labels come
-     from data-mlabel="..." that renderBatches() sets per <td>. */
-  #t-batches {
+  /* ── Tables as cards ────────────────────────────────────────
+     A 12-column table on a 360px viewport puts its Actions column
+     roughly 700px off-screen. Below this breakpoint the rows become
+     stacked cards: thead off, tr a card, td a label/value row, and the
+     label read from the data-mlabel the renderer already writes.
+
+     One mechanism, applied by class. Four tables had this spelled out
+     separately — #t-batches, #t-cultures, #t-log, #t-harvest — in four
+     blocks that were the same rules under different ids, 306 lines of
+     it. The cost of that shape was never the duplication: #t-grain is
+     filled by batchRowHtml(), the *same function* that fills
+     #t-batches, so every one of its cells already carried a
+     data-mlabel — and it still got a sideways-scrolling table, because
+     the fifth copy of the block was never written.
+
+     Two structural facts now do the work four ids used to:
+       - the card header is the first cell, in all four tables and by
+         construction — batch id, culture id, log time, harvest date;
+       - the actions cell is the one with no data-mlabel, because a row
+         of buttons has nothing to label. That is what distinguishes it
+         from a last cell that *is* data, which is what #t-harvest has
+         and why :last-child would have been wrong. */
+  .t-cards {
     border: 0;
     width: 100%;
   }
-  #t-batches > thead {
+  .t-cards > thead {
     display: none;
   }
-  #t-batches > tbody > tr {
+  .t-cards > tbody > tr {
     display: block;
     border: 1px solid var(--c-border);
     border-radius: 10px;
@@ -4779,20 +4796,7 @@ tr:hover td {
     padding: 12px 14px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
-  /* Empty/no-matches row keeps a centred full-row look */
-  #t-batches > tbody > tr > td.empty {
-    display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  /* Sub-row injected by toggleBatchBags() — leave its full-width layout
-     for the bag chips, just retint to look like a connected detail panel. */
-  #t-batches > tbody > tr[id^='brow-'] {
-    border: 1px dashed var(--c-border);
-    padding: 10px 12px;
-    background: var(--c-bg);
-  }
-  #t-batches > tbody > tr > td {
+  .t-cards > tbody > tr > td {
     display: flex;
     align-items: baseline;
     gap: 8px;
@@ -4800,30 +4804,41 @@ tr:hover td {
     border: 0;
     font-size: 13px;
     line-height: 1.4;
+    /* The card carries the background now, not the cell. Two table rules
+       still target these cells — `tr:nth-child(even) td` and `tr:hover td`
+       — and both outlive the layout they were written for: zebra striping
+       tints every second *card* grey instead of every second row, and a
+       tap on a coarse pointer leaves the hover tint stuck on. Neither was
+       introduced by the card mode; neither had been looked at since it
+       arrived. */
+    background: none;
   }
-  #t-batches > tbody > tr > td[data-mlabel]::before {
+  /* The label was 10–11px here, which is the size this whole project
+     exists to stop shipping. Uppercase, 600 and muted already say
+     "this is a label" without help from a size below the floor. */
+  .t-cards > tbody > tr > td[data-mlabel]::before {
     content: attr(data-mlabel);
     flex: 0 0 84px;
     color: var(--c-text-muted);
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  /* Promote the batch ID to a card header */
-  #t-batches > tbody > tr > td.bt-id {
-    font-size: 15px !important;
-    font-weight: 600;
+  /* First cell: the card's header. What it looks like is per table — an
+     id wants to be big, a timestamp wants to be a quiet subtitle — so
+     this sets only what they share. */
+  .t-cards > tbody > tr > td:first-child {
     padding-bottom: 6px;
     margin-bottom: 6px;
     border-bottom: 1px solid var(--c-border-light);
   }
-  #t-batches > tbody > tr > td.bt-id::before {
+  .t-cards > tbody > tr > td:first-child::before {
     display: none;
   }
-  /* Actions row — full width, buttons share the row equally. The
-     (pointer:coarse) rule near .btn-sm already gives us 44px height. */
-  #t-batches > tbody > tr > td.bt-actions {
+  /* Actions row — full width, buttons share it equally. The
+     (pointer: coarse) rule near .btn-sm already gives them 44px. */
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):not(.empty) {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -4832,226 +4847,65 @@ tr:hover td {
     border-top: 1px solid var(--c-border-light);
     white-space: normal !important;
   }
-  #t-batches > tbody > tr > td.bt-actions::before {
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):empty {
     display: none;
   }
-  #t-batches > tbody > tr > td.bt-actions .btn-sm {
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-sm,
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-xs {
     flex: 1 1 auto;
     min-width: 0;
     margin: 0 !important;
     text-align: center;
   }
-
-  /* ── Cultures table — mobile card mode ──────────────────────
-     Same pattern as #t-batches: thead hidden, tr -> card, td -> flex
-     row with data-mlabel pseudo-prefix. The status <select> and the
-     Print / ✕ buttons in the action row keep their inline styling. */
-  #t-cultures {
-    border: 0;
-    width: 100%;
-  }
-  #t-cultures > thead {
-    display: none;
-  }
-  #t-cultures > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 10px;
-    padding: 12px 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  }
-  #t-cultures > tbody > tr > td.empty {
+  /* Empty/no-matches row keeps a centred full-row look. */
+  .t-cards > tbody > tr > td.empty {
     display: block;
     text-align: center;
     padding: 18px 0;
+    border-bottom: 0;
+    margin-bottom: 0;
   }
-  #t-cultures > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 4px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-cultures > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 84px;
-    color: var(--c-text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Promote the culture ID to a card header */
+
+  /* ── Per table, only what is genuinely its own ───────────────── */
+
+  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  #t-batches > tbody > tr > td.bt-id,
+  #t-grain > tbody > tr > td.bt-id,
   #t-cultures > tbody > tr > td.cu-id {
-    font-size: 14px !important;
+    font-size: 15px !important;
     font-weight: 600;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid var(--c-border-light);
   }
-  #t-cultures > tbody > tr > td.cu-id::before {
-    display: none;
-  }
-  /* Action row spans full width with the status <select> + Print + ✕ */
-  #t-cultures > tbody > tr > td.cu-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--c-border-light);
-    white-space: normal !important;
-    align-items: center;
-  }
-  #t-cultures > tbody > tr > td.cu-actions::before {
-    display: none;
-  }
-  #t-cultures > tbody > tr > td.cu-actions select {
-    flex: 1 1 auto;
-    min-height: 40px;
-    padding: 6px 10px !important;
-  }
-  #t-cultures > tbody > tr > td.cu-actions .btn-sm {
-    margin: 0 !important;
-    text-align: center;
-    padding: 8px 12px !important;
-  }
-
-  /* ── Scan log table — mobile card mode ──────────────────────
-     9-column scan log forces 700+px scroll on phone. Same pattern
-     as #t-batches: thead off, tr -> card, td -> flex row. The Time
-     cell is promoted to a header; the delete (✕) action right-aligns
-     and disappears for older entries that don't get the button. */
-  #t-log {
-    border: 0;
-    width: 100%;
-  }
-  #t-log > thead {
-    display: none;
-  }
-  #t-log > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  }
-  #t-log > tbody > tr > td.empty {
-    display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  #t-log > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 3px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-log > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 64px;
-    color: var(--c-text-muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Time row promoted to card header */
-  #t-log > tbody > tr > td.lg-time {
-    font-size: 12px !important;
+  /* The scan log and the harvest log lead with a time, which is not a
+     name — it dates the row rather than titling it. */
+  #t-log > tbody > tr > td.lg-time,
+  #t-harvest > tbody > tr > td.hv-date {
+    font-size: max(12px, var(--fs-min)) !important;
     color: var(--c-text-sec) !important;
     padding-bottom: 4px;
     margin-bottom: 4px;
-    border-bottom: 1px solid var(--c-border-light);
   }
-  #t-log > tbody > tr > td.lg-time::before {
-    display: none;
+  /* Sub-row injected by toggleBatchBags() — keep its full-width layout
+     for the bag chips, just retint it as a connected detail panel. */
+  #t-batches > tbody > tr[id^='brow-'],
+  #t-grain > tbody > tr[id^='brow-'] {
+    border: 1px dashed var(--c-border);
+    padding: 10px 12px;
+    background: var(--c-bg);
   }
-  /* Action delete (✕) — bottom-right, only present on entries <24h */
-  #t-log > tbody > tr > td.lg-actions {
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
-  #t-log > tbody > tr > td.lg-actions:empty {
-    display: none;
-  }
-  #t-log > tbody > tr > td.lg-actions::before {
-    display: none;
-  }
-  #t-log > tbody > tr > td.lg-actions .btn-xs {
-    padding: 6px 12px !important;
-    font-size: 12px !important;
-  }
-
-  /* ── Harvests table — mobile card mode ──────────────────────
-     7-column harvest log. The audit notes "Date / Bag / Grams trio
-     is the only thing a phone user wants" — so we promote Date to
-     header, push Grams to a prominent right-aligned big number, and
-     keep the rest as plain label/value rows. */
-  #t-harvest {
-    border: 0;
+  /* The status dropdown in the cultures action row is a control, not a
+     button; stretching it to share the row makes it unreadable. */
+  #t-cultures > tbody > tr > td.cu-actions select {
+    flex: 1 1 100%;
     width: 100%;
   }
-  #t-harvest > thead {
-    display: none;
-  }
+  /* Harvest cards: grams pinned top-right as a big amber number, the
+     most-scanned value when reading a harvest log on a phone. */
   #t-harvest > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
     position: relative;
   }
-  #t-harvest > tbody > tr > td.empty {
-    display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  #t-harvest > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 3px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-harvest > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 64px;
-    color: var(--c-text-muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Date promoted to small muted card header */
   #t-harvest > tbody > tr > td.hv-date {
-    font-size: 12px !important;
-    color: var(--c-text-sec) !important;
-    padding-bottom: 4px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--c-border-light);
-    /* Reserve room for the absolute-positioned grams badge */
     padding-right: 96px;
   }
-  #t-harvest > tbody > tr > td.hv-date::before {
-    display: none;
-  }
-  /* Grams pinned to the top-right of the card as a big amber number —
-     the most-scanned value when reviewing a harvest log on phone. */
   #t-harvest > tbody > tr > td.hv-grams {
     position: absolute;
     top: 8px;
