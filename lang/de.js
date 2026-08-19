@@ -658,7 +658,7 @@ window.LANG['de'] = {
   'batch.filterArchiveAria': 'Nach Archiv-Status filtern',
   'batch.newBatch': 'Neue Charge',
   'batch.harvests': 'Ernten',
-  'batch.createNew': 'Neue Charge erstellen',
+  'batch.createNew': 'Growbags Batch',
   'batch.bagWeight': 'Beutelgewicht',
   'batch.qty': 'Menge (Beutel)',
   'batch.incDays': 'Inkubationstage',
@@ -1912,5 +1912,17 @@ window.LANG['de'] = {
   'work.bAnother': 'Noch eine Charge',
   'work.stepSubstrate': 'Substrat',
   'work.bRecipeLine': '{hw} % Hartholz / {wb} % Kleie · {rh} % Wassergehalt · {days} Inkubationstage',
-  'work.bNoRecipe': 'Für diese Sorte ist kein Rezept hinterlegt. Trage die Mischung hier ein.'
+  'work.bNoRecipe': 'Für diese Sorte ist kein Rezept hinterlegt. Trage die Mischung hier ein.',
+  'batch.otherWeight': 'anderes',
+  'batch.matBag': '<strong>Beutel:</strong> {kg} kg gesamt → {dry} kg Trockenmasse je Beutel ({rh} % Wasser entzogen)',
+  'batch.matNeed': '{need} kg gebraucht — {have} kg im Lager',
+  'batch.matShort': '\u26A0 es fehlen {kg} kg',
+  'batch.matHardwood': 'Hartholz',
+  'batch.matBran': 'Weizenkleie',
+  'batch.matCoir': 'Kokos/CVG',
+  'batch.matGypsum': 'Gips (~1 %)',
+  'batch.matGrain': 'Körner',
+  'batch.matDryTotal': 'Trockenmasse je Beutel',
+  'stage.done': 'Fertig',
+  'stage.contam': 'Kontaminiert'
 };

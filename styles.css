@@ -5547,7 +5547,7 @@ tr:hover td {
    fällt beides untereinander — im Labor wird am Handy gearbeitet. */
 .nb-split {
   display: grid;
-  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   align-items: start;
   margin-bottom: 12px;
@@ -5663,4 +5663,32 @@ tr:hover td {
   font-size: 11px;
   color: var(--c-text-muted);
   margin-bottom: 10px;
+}
+
+/* Kartenkopf mit Motiv: derselbe Strich wie auf den Arbeitsgang-Kacheln, damit
+   Substrat ansetzen und Growbags Batch auf einen Blick auseinandergehen. Die
+   Zeichnung sitzt hinter der Überschrift und läuft aus der Ecke heraus. */
+.card-head {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(120deg, var(--wk-cl) 0%, transparent 70%);
+  padding: 10px 12px;
+  margin: -4px -4px 10px;
+}
+.card-head-art {
+  position: absolute;
+  right: -6px;
+  bottom: -14px;
+  width: 96px;
+  color: var(--wk-c);
+  pointer-events: none;
+}
+.card-head-art svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.card-head .sec {
+  position: relative;
 }
