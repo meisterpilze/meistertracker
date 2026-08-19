@@ -58,6 +58,24 @@ function* blocks(css, headerRe) {
 }
 
 const MAX_WIDTH_BLOCK = /@media[^{]*max-width[^{]*\{/g;
+const MEDIA_BLOCK = /@media[^{]*\{/g;
+
+// Everything a phone reads from an unconditional rule: the stylesheet with every
+// @media body blanked out. Blanked, not deleted, so byte offsets survive.
+//
+// Both media directions have to go. A `max-width` body is the mobile-only layer
+// the ratchet already counts separately; a `min-width` body is by definition a
+// desktop value, and 11px there is the correct answer, not debt. What is left is
+// the layer that serves both devices from one number — the layer neither the
+// bridge (inline only) nor the max-width count can see.
+function outsideMedia(css) {
+  const src = maskedCss(css).src;
+  let out = src;
+  for (const block of blocks(src, MEDIA_BLOCK)) {
+    out = out.slice(0, block.start) + ' '.repeat(block.end - block.start) + out.slice(block.end);
+  }
+  return out;
+}
 
 // Comments and attribute selectors are blanked rather than deleted, so byte
 // offsets survive and a reported line number points at the real line. Blanking
@@ -69,4 +87,15 @@ function maskedCss(css = readCss()) {
   return { src, scan: src.replace(/\[[^\]]*\]/g, blank) };
 }
 
-module.exports = { ROOT, CSS_PATH, readCss, floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK, maskedCss };
+module.exports = {
+  ROOT,
+  CSS_PATH,
+  readCss,
+  floor,
+  subFloorSizes,
+  blocks,
+  MAX_WIDTH_BLOCK,
+  MEDIA_BLOCK,
+  outsideMedia,
+  maskedCss
+};

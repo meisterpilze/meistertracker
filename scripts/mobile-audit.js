@@ -19,18 +19,35 @@
 //    styles.css. These are the leftovers of "mobile means the same thing,
 //    tighter": rules that make text smaller on the device held at arm's length.
 //
+// 3. BASE — font-size below the floor in a rule outside every @media block, so
+//    it applies to the phone and the desk from one number. This is the layer
+//    nothing could see: the bridge only reaches inline styles and DECLARED only
+//    counts max-width blocks, so MOBILE_REDESIGN.md's Phase 0 notes could name
+//    four of these by hand and read as though that was most of them. It is 104.
+//    Each needs its own paired token — a phone value plus a desktop value equal
+//    to today's number — which is why Phase 2 is per-component and not a sweep.
+//
 // Comments and attribute selectors are excluded, so the bridge block's own
 // `[style*='font-size:8px']` selectors do not count themselves.
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK, maskedCss } = require('./mobile-size-scan.js');
+const {
+  ROOT,
+  readCss,
+  floor,
+  subFloorSizes,
+  blocks,
+  MAX_WIDTH_BLOCK,
+  outsideMedia,
+  maskedCss
+} = require('./mobile-size-scan.js');
 
 const SELF = path.relative(ROOT, __filename);
 const FLOOR = floor(); // --fs-xs, read from styles.css
 
 // Lower these as phases land. Never raise them.
-const CEILING = { inline: 500, declared: 11 };
+const CEILING = { inline: 500, declared: 11, base: 104 };
 
 function inlineHits() {
   const hits = [];
@@ -43,17 +60,21 @@ function inlineHits() {
   return hits;
 }
 
-function declaredHits() {
-  const { src, scan } = maskedCss();
-  const hits = [];
-  // Hits arrive in ascending offset order, so carry the line count forward
-  // instead of re-counting newlines from byte 0 for each one.
+// Hits arrive in ascending offset order, so the line count is carried forward
+// rather than re-counting newlines from byte 0 for each one.
+function lineCounter(src) {
   let scanned = 0;
   let line = 1;
-  const lineAt = (offset) => {
+  return (offset) => {
     for (; scanned < offset; scanned++) if (src[scanned] === '\n') line++;
     return line;
   };
+}
+
+function declaredHits() {
+  const { src, scan } = maskedCss();
+  const hits = [];
+  const lineAt = lineCounter(src);
   for (const block of blocks(scan, MAX_WIDTH_BLOCK)) {
     for (const f of subFloorSizes(block.body, FLOOR)) {
       hits.push({ file: 'styles.css', line: lineAt(block.start + f.index), text: f.text });
@@ -62,14 +83,28 @@ function declaredHits() {
   return hits;
 }
 
+function baseHits() {
+  const css = readCss();
+  const lineAt = lineCounter(css);
+  // outsideMedia() blanks rather than deletes, so an offset here is still an
+  // offset into styles.css and the reported line is the real one.
+  return [...subFloorSizes(outsideMedia(css), FLOOR)].map((f) => ({
+    file: 'styles.css',
+    line: lineAt(f.index),
+    text: f.text
+  }));
+}
+
 const inline = inlineHits();
 const declared = declaredHits();
-const counts = { inline: inline.length, declared: declared.length };
+const base = baseHits();
+const counts = { inline: inline.length, declared: declared.length, base: base.length };
 
 if (process.argv.includes('--list')) {
   for (const [label, hits] of [
     ['INLINE', inline],
-    ['DECLARED', declared]
+    ['DECLARED', declared],
+    ['BASE', base]
   ]) {
     console.log(`\n${label} (${hits.length})`);
     hits.forEach((h) => console.log(`  ${h.file}:${h.line}  ${h.text}`));
@@ -78,7 +113,7 @@ if (process.argv.includes('--list')) {
 
 if (process.argv.includes('--update')) {
   const before = fs.readFileSync(__filename, 'utf8');
-  const CEILING_LINE = /const CEILING = \{ inline: \d+, declared: \d+ \};/;
+  const CEILING_LINE = /const CEILING = \{ inline: \d+, declared: \d+, base: \d+ \};/;
   // Test the pattern rather than comparing the result: the regex can quietly
   // stop matching — a reformat, a wrapped line, a trailing comment — and the
   // script would write the file back unchanged while printing that it had
@@ -91,7 +126,7 @@ if (process.argv.includes('--update')) {
   }
   const after = before.replace(
     CEILING_LINE,
-    `const CEILING = { inline: ${counts.inline}, declared: ${counts.declared} };`
+    `const CEILING = { inline: ${counts.inline}, declared: ${counts.declared}, base: ${counts.base} };`
   );
   fs.writeFileSync(__filename, after);
   // The direction is computed, not assumed. This line used to read "ceilings
@@ -99,7 +134,7 @@ if (process.argv.includes('--update')) {
   // mattered it was wrong: a rebase brought five inline sizes in from main and
   // it announced a fall while raising the ceiling from 495 to 500. A ratchet
   // that reports a rise as a fall is worse than no ratchet at all.
-  const moved = ['inline', 'declared']
+  const moved = ['inline', 'declared', 'base']
     .map((key) => {
       const from = CEILING[key];
       const to = counts[key];
@@ -111,7 +146,7 @@ if (process.argv.includes('--update')) {
 }
 
 let failed = false;
-for (const key of ['inline', 'declared']) {
+for (const key of ['inline', 'declared', 'base']) {
   const now = counts[key];
   const max = CEILING[key];
   if (now > max) {
