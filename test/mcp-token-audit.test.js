@@ -17,7 +17,6 @@
 // succeeded makes the second one.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
