@@ -5155,15 +5155,18 @@ tr:hover td {
   gap: 12px;
 }
 .wk-tile {
+  position: relative;
+  overflow: hidden;
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 9px;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  gap: 7px;
   text-align: left;
-  background: var(--c-surface);
+  background: linear-gradient(150deg, var(--wk-cl) 0%, var(--c-surface) 62%);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
-  padding: 14px 14px 15px;
-  min-height: 136px;
+  padding: 15px 15px 16px;
+  min-height: 156px;
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
@@ -5180,29 +5183,53 @@ tr:hover td {
 .wk-tile:active {
   transform: scale(0.985);
 }
-.wk-tile-ic {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--wk-cl);
-  color: var(--wk-c);
+/* The drawing sits behind the words and bleeds off the corner, so the tile reads
+   as a picture of the job rather than a labelled box. It is drawn, not
+   photographed, because this app runs offline in the lab: nothing to load, sharp
+   at any size, a few hundred bytes each. Every shape takes the tile's own colour
+   through currentColor, so the seven read as one family. */
+/* A veil between the drawing and the words. The artwork may bleed as far across
+   the tile as it likes; the text side stays calm regardless of what is drawn
+   underneath, so legibility never depends on the shape of the picture. */
+.wk-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(102deg, var(--c-surface) 24%, rgba(255, 255, 255, 0) 72%);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
 }
-.wk-tile-ic svg {
-  width: 18px;
-  height: 18px;
+.wk-tile-art {
+  z-index: 0;
+  position: absolute;
+  right: -10px;
+  bottom: -8px;
+  width: 134px;
+  color: var(--wk-c);
+  pointer-events: none;
+}
+.wk-tile-art svg {
+  width: 100%;
+  height: auto;
   display: block;
 }
 .wk-tile-t {
-  font-size: 14px;
+  position: relative;
+  z-index: 2;
+  font-size: 14.5px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   line-height: 1.25;
+  max-width: 90%;
 }
 .wk-tile-when {
+  position: relative;
+  z-index: 2;
   font-size: 11.5px;
   color: var(--c-text-muted);
   line-height: 1.4;
+  max-width: 64%;
 }
 
 /* ── flow modal ─────────────────────────────────────────────────────────── */
