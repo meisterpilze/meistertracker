@@ -5557,3 +5557,110 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Der geführte Weg zum Anlegen einer Charge: dieselbe Hülle wie Ernte und Umzug,
+   nur mit eigenen Bausteinen. Alle Bedienelemente sind fingerhoch, weil der
+   Ablauf im Labor am Tablet läuft. */
+.wkf-q {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-bottom: 2px;
+}
+.wkf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.wkf-field > label {
+  font-size: 11.5px;
+  color: var(--c-text-sec);
+  font-weight: 600;
+  margin: 0;
+}
+.wkf-field input,
+.wkf-field select {
+  min-height: 44px;
+}
+.wkf-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 460px) {
+  .wkf-two {
+    grid-template-columns: 1fr;
+  }
+}
+.wkf-chipsrow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wkf-w {
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  border-radius: 8px;
+  padding: 0 12px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--c-text-sec);
+  cursor: pointer;
+}
+.wkf-w.on {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+}
+.wkf-note {
+  background: var(--c-primary-light);
+  border: 1px solid var(--c-green-border);
+  color: var(--c-green-dark);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.wkf-note.bad {
+  background: var(--c-red-light);
+  border-color: var(--c-red-border);
+  color: var(--c-red-dark);
+}
+.wkf-note b {
+  display: block;
+}
+.wkf-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wkf-sum-card {
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.wkf-sum-card > div {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.wkf-hint {
+  font-size: 11px;
+  color: var(--c-text-muted);
+  margin-bottom: 10px;
+}
