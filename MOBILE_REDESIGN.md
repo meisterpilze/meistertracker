@@ -483,7 +483,18 @@ In this order, cheapest and highest-traffic first:
    Found while measuring, fixed separately: `#cam-fab` (z-index 850) floats over every
    dialog backdrop (200) and `elementFromPoint` returns **the button**, so a thumb aiming
    at the bottom of a form opened the scanner. One `:has()` rule covers all 25 dialogs.
-2. **Scan overlay** — the one screen that is *always* used gloved.
+2. ✅ **Scan overlay** — the one screen that is *always* used gloved, and six of its
+   controls were under the floor. `.scan-modal-close` and `.cam-hud-btn` at 44×44;
+   `.scan-success-undo` with no size at all, so the button that takes back a wrong scan was
+   as tall as its own text; `.scan-tab` with no minimum and a 12px shrink inside a
+   `max-width` block; `#chip-to` / `#cam-chip-to` carrying `cursor: pointer` and nothing
+   else — a mouse affordance on the control whose entire purpose is the case where the
+   barcode would not scan and a gloved hand has to pick the zone by hand.
+
+   ➖ **Not done here:** the zone picker's rows are built in `app.js` with inline
+   `style="padding:8px 10px;font-size:..."` (three emitters around `_openZonePicker`), so
+   the floor cannot reach them and the ratchet counts them under INLINE. They are a markup
+   change, not a stylesheet one, and belong with the rest of the de-inlining.
 3. **`p-batch`** — 4 sub-tabs, tables `t-batches` + `t-harvest`.
 4. **`p-lab`** — 5 sub-tabs, tables `t-grain` + `t-cultures`.
 5. **`p-cal`** — the month grid at `min-height: 60px` per cell is unusable on a phone;
