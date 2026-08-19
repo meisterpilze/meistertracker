@@ -1079,13 +1079,15 @@ body:has(.modal-bg.open) .cam-fab {
   border-color: #fca5a5;
 }
 /* Touch devices have no :hover — always show the undo button and bump it to a
-   real tap target so workers can undo a mis-scan from the phone. */
+   real tap target so workers can undo a mis-scan from the phone. It said that
+   and then gave it 36px and 12px, both below the floors, on the one control
+   that exists to correct a mistake made while scanning. */
 @media (pointer: coarse) {
   .scan-log-entry .sle-undo {
     display: inline-flex;
-    min-height: 36px;
+    min-height: var(--tap);
     padding: 8px 12px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
 }
 

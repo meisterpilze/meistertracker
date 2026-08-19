@@ -15,9 +15,11 @@
 //    block that lifts them at runtime. When this count hits 0, delete the
 //    bridge. See MOBILE_REDESIGN.md §6.
 //
-// 2. DECLARED — font-size below the 13px floor inside a `max-width` block in
-//    styles.css. These are the leftovers of "mobile means the same thing,
-//    tighter": rules that make text smaller on the device held at arm's length.
+// 2. DECLARED — font-size below the 13px floor inside any block a phone
+//    matches: `max-width`, and also `pointer: coarse` / `hover: none`, which
+//    aim at the device rather than the width. These are the leftovers of
+//    "mobile means the same thing, tighter": rules that make text smaller on
+//    the device held at arm's length.
 //
 // 3. BASE — font-size below the floor in a rule outside every @media block, so
 //    it applies to the phone and the desk from one number. This is the layer
@@ -38,7 +40,7 @@ const {
   floor,
   subFloorSizes,
   blocks,
-  MAX_WIDTH_BLOCK,
+  PHONE_BLOCK,
   outsideMedia,
   maskedCss
 } = require('./mobile-size-scan.js');
@@ -75,7 +77,7 @@ function declaredHits() {
   const { src, scan } = maskedCss();
   const hits = [];
   const lineAt = lineCounter(src);
-  for (const block of blocks(scan, MAX_WIDTH_BLOCK)) {
+  for (const block of blocks(scan, PHONE_BLOCK)) {
     for (const f of subFloorSizes(block.body, FLOOR)) {
       hits.push({ file: 'styles.css', line: lineAt(block.start + f.index), text: f.text });
     }

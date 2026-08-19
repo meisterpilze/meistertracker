@@ -60,6 +60,14 @@ function* blocks(css, headerRe) {
 const MAX_WIDTH_BLOCK = /@media[^{]*max-width[^{]*\{/g;
 const MEDIA_BLOCK = /@media[^{]*\{/g;
 
+// Every block a phone matches. Width is the obvious one and was the only one
+// for a while, which left a hole: `@media (pointer: coarse)` targets exactly
+// the devices the floor exists for, at any width, so a sub-floor size in one of
+// those is worse than the same size in a base rule — it is aimed at the phone.
+// The scan overlay had one, 12px on the undo button in the scan log, and no
+// count could see it.
+const PHONE_BLOCK = /@media[^{]*(max-width|pointer:\s*coarse|hover:\s*none)[^{]*\{/g;
+
 // Everything a phone reads from an unconditional rule: the stylesheet with every
 // @media body blanked out. Blanked, not deleted, so byte offsets survive.
 //
@@ -95,6 +103,7 @@ module.exports = {
   subFloorSizes,
   blocks,
   MAX_WIDTH_BLOCK,
+  PHONE_BLOCK,
   MEDIA_BLOCK,
   outsideMedia,
   maskedCss
