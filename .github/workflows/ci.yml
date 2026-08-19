@@ -60,5 +60,18 @@ jobs:
       - name: Translations complete
         run: node --test test/i18n.test.js
 
+      # Same blindness as the translation step above, different symptom: type
+      # that is too small does not throw, it just ships, and nobody reviewing
+      # the diff is holding a phone. Called out separately so "Mobile size
+      # system: failed" is readable in the checks list.
+      - name: Mobile size system
+        run: node --test test/mobile-tokens.test.js
+
+      # Ratchet, not a gate: the inline font sizes and sub-floor mobile rules
+      # are paid down over several phases, and this only fails when the count
+      # goes UP. See MOBILE_REDESIGN.md.
+      - name: Mobile debt ratchet
+        run: npm run mobile-audit
+
       - name: Tests
         run: npm test
