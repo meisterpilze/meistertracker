@@ -5362,8 +5362,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const salt = crypto.randomBytes(16).toString('hex');
       const hash = crypto.scryptSync(data.newPassword, salt, 64).toString('hex');
       db.updateUserPassword(database, user.id, hash, salt);
-      // Invalidate all existing sessions, issue a fresh one for current user
-      db.deleteSessionsByUserId(database, user.id);
+      // S-11: kill every credential that speaks for this user, not just the
+      // browser sessions — an OAuth refresh token outlives a password change by
+      // 30 days otherwise, and /mcp honours it with the user's live role. Then
+      // issue a fresh session so the person who just changed it stays logged in.
+      db.revokeUserCredentials(database, user.id);
       const newToken = db.createSession(database, user.id);
       setSessionCookie(res, newToken);
       jsonOk(res);
@@ -5389,8 +5392,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       db.resetUserPassword(database, userId, data.newPassword);
-      // Invalidate all sessions for the affected user
-      db.deleteSessionsByUserId(database, userId);
+      // S-11: sessions *and* OAuth grants — see the self-service path above.
+      // An admin resetting somebody else's password is the stronger case: they
+      // are locking an account they no longer trust.
+      db.revokeUserCredentials(database, userId);
       jsonOk(res);
     });
     return;

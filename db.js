@@ -3287,8 +3287,31 @@ function deleteSession(db, token) {
   db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
-function deleteSessionsByUserId(db, userId) {
+// Every credential that speaks for one user: browser sessions, OAuth access
+// and refresh tokens, and any authorization code not yet exchanged. Kept in one
+// place because there are three callers and forgetting one of the tables is
+// exactly the bug S-11 was.
+function deleteAuthArtifactsNoTxn(db, userId) {
+  db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+}
+
+// S-11: a password change is the standard answer to "my account may be
+// compromised", so it has to end every way in. Deleting the sessions alone left
+// an attacker's OAuth access token valid for another hour and their refresh
+// token for 30 days — and /mcp accepts a refresh-minted token with the victim's
+// live role, admin included. Transactional so a failure halfway cannot leave
+// the sessions gone and the tokens alive.
+function revokeUserCredentials(db, userId) {
+  db.exec('BEGIN');
+  try {
+    deleteAuthArtifactsNoTxn(db, userId);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 function deleteExpiredSessions(db) {
@@ -3369,9 +3392,7 @@ function deleteUser(db, userId) {
   // a transaction so a partial failure doesn't leave dangling tokens.
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+    deleteAuthArtifactsNoTxn(db, userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -9018,7 +9039,7 @@ module.exports = {
   createSession,
   getSession,
   deleteSession,
-  deleteSessionsByUserId,
+  revokeUserCredentials,
   deleteExpiredSessions,
   cleanupExpiredSessions,
   cleanupOldNotifications,
