@@ -1929,5 +1929,11 @@ window.LANG['de'] = {
   'work.bNoMixOption': '— ohne Ansatz, vom Lager —',
   'work.bFromShelf': 'Ohne Ansatz: Pellets, Kleie und Gips werden direkt vom Lager gebucht. Danach fragt die App nach der Zone und druckt die Etiketten.',
   'work.bFromShelfShort': 'vom Lager',
-  'work.bMixFirst': 'Lieber erst einen Ansatz mischen'
+  'work.bMixFirst': 'Lieber erst einen Ansatz mischen',
+  'work.mQ': 'Wie viel Substrat, und nach welchem Rezept?',
+  'work.mCalc': 'wird berechnet …',
+  'work.mNotePh': 'z.B. neue Pelletslieferung',
+  'work.mDone': '{kg} kg {recipe} angesetzt',
+  'work.mId': 'Ansatz',
+  'work.mAnother': 'Noch ein Ansatz'
 };

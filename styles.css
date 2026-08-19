@@ -5692,3 +5692,9 @@ tr:hover td {
 .card-head .sec {
   position: relative;
 }
+
+/* Die Fußknöpfe der Abläufe sind die Hauptaktion und werden im Labor mit dem
+   Finger getroffen — 34 px reichten dafür nicht. */
+.wkf-foot .btn {
+  min-height: 44px;
+}
