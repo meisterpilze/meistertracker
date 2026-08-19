@@ -124,7 +124,7 @@ describe('mobile token layer', () => {
   });
 });
 
-describe('the size floor', () => {
+describe('the phone floors', () => {
   // 104 rules set a sub-floor font-size and serve both devices from that one
   // number. They are not tokenised — each keeps its desktop literal and is
   // floored on the phone by `max(Npx, var(--fs-min))`, so the desktop value is
@@ -165,6 +165,30 @@ describe('the size floor', () => {
       [],
       `font-size: max() floored against ${[...new Set(wrong)].join(', ')} instead of --fs-min`
     );
+  });
+
+  // The same idea applied to height. Rules across the app already chose a
+  // minimum — 44px, 46px, 48px — each correct for a mouse; --tap-min raises
+  // them in a hand and leaves them alone on a desk.
+  it('floors touch the same way it floors type', () => {
+    assert.equal(
+      valueIn(ROOT_BLOCK, '--tap-min'),
+      valueIn(ROOT_BLOCK, '--tap'),
+      '--tap-min and --tap disagree — two numbers for one touch floor'
+    );
+    assert.equal(
+      valueIn(DESKTOP_BLOCK, '--tap-min'),
+      '0px',
+      'the desktop touch floor must be 0. It cannot be `auto` like --tap: max() with a keyword is invalid CSS, ' +
+        'the whole declaration is dropped, and the phone minimum goes with it'
+    );
+  });
+
+  it('never floors a height against a token that is not the touch floor', () => {
+    const wrong = [...CSS.matchAll(/min-(?:height|width):\s*max\([^)]*var\((--[a-z0-9-]+)\)/g)]
+      .map((m) => m[1])
+      .filter((t) => t !== '--tap-min');
+    assert.deepEqual(wrong, [], `min-height/width: max() floored against ${[...new Set(wrong)].join(', ')}`);
   });
 });
 

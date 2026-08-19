@@ -97,6 +97,21 @@
      time this codebase sat down and thought about a touch target. */
   --tap: 56px;
   --tap-sm: 48px;
+  /* The touch floor, as a sentinel — the --fs-min idea applied to height.
+     Rules all over the app already chose a minimum and chose it thoughtfully:
+     44px on the flow's footer buttons, 46px on its batch rows, 48px on its zone
+     buttons. Those are WCAG-correct numbers for a mouse and a considered
+     desktop layout, and replacing them would move three desktop values to buy
+     nothing.
+
+       min-height: max(46px, var(--tap-min));
+
+     reads as "46, and at least 56 in a hand". --tap itself cannot do this job:
+     its desktop value is `auto`, which is not a length, and max() with a
+     keyword is invalid. So this is the numeric twin — 0 on a desktop, which
+     computes identically to `auto` for min-height (the fixture records 0px for
+     every --tap consumer). */
+  --tap-min: 56px;
   --pad-page: 16px;
   --pad-card: 16px;
   --pad-btn: 13px 18px;
@@ -135,6 +150,7 @@
     --fs-min: 0px;
     --tap: auto;
     --tap-sm: auto;
+    --tap-min: 0px;
     --pad-page: 24px;
     --pad-card: 20px;
     --pad-btn: 9px 16px;
@@ -647,8 +663,8 @@ body.sb-mobile-open .cam-fab {
    inherits modal text colour, neutral hover. Used in place of the text-pill
    close that workers struggled to hit one-handed on a phone. */
 .modal-close-icon {
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1746,12 +1762,17 @@ textarea:focus {
    old (max-width:768px) breakpoint missed. Applies to every .btn-xs / .btn-sm
    site-wide so post-scan actions, scan-modal controls, and table action columns
    all clear the 44px minimum. */
+/* Two literals here quietly outranked the token layer: this block is later than
+   `.btn` at the same specificity, so 44px beat var(--tap) and 14px beat
+   var(--fs-sm) on every coarse pointer — which is every device the tokens were
+   written for. It never applies while the baseline is captured (the fixture
+   records minHeight 0px for .btn.btn-sm), so saying it in tokens moves nothing. */
 @media (pointer: coarse) {
   .btn-xs,
   .btn-sm {
-    min-height: 44px;
+    min-height: var(--tap-sm);
     padding: 10px 14px;
-    font-size: 14px;
+    font-size: var(--fs-sm);
   }
 }
 
@@ -5263,6 +5284,9 @@ tr:hover td {
 }
 .wk-todo-strip .btn {
   margin-left: auto;
+  /* (0,2,0) — beats the site-wide `.btn-sm` coarse rule below, so the one
+     button on the landing page gets the full --tap rather than 44. */
+  min-height: var(--tap);
   border-color: var(--c-amber-dark);
   color: var(--c-amber-dark);
 }
@@ -5445,7 +5469,7 @@ tr:hover td {
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
-  min-height: 46px;
+  min-height: max(46px, var(--tap-min));
 }
 .wkf-row:hover {
   border-color: var(--c-primary);
@@ -5494,6 +5518,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: var(--tap);
   font-size: max(12.5px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 10px;
@@ -5574,7 +5599,7 @@ tr:hover td {
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
-  min-height: 48px;
+  min-height: max(48px, var(--tap-min));
 }
 .wkf-zone.sel {
   border-color: var(--c-primary);
@@ -5697,9 +5722,13 @@ tr:hover td {
   font-weight: 600;
   margin: 0;
 }
+/* Outranks the app-wide `input, select, textarea { min-height: 64px }` on
+   specificity, so before the floor this rule made the flow's fields SMALLER
+   than every other field in the app — 44px against 64px — on the one screen
+   that is filled in wearing gloves. */
 .wkf-field input,
 .wkf-field select {
-  min-height: 44px;
+  min-height: max(44px, var(--tap-min));
 }
 .wkf-two {
   display: grid;
@@ -5721,7 +5750,7 @@ tr:hover td {
   background: var(--c-surface);
   border-radius: 8px;
   padding: 0 12px;
-  min-height: 44px;
+  min-height: max(44px, var(--tap-min));
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -5812,7 +5841,9 @@ tr:hover td {
 }
 
 /* Die Fußknöpfe der Abläufe sind die Hauptaktion und werden im Labor mit dem
-   Finger getroffen — 34 px reichten dafür nicht. */
+   Finger getroffen — 34 px reichten dafür nicht. 44 reichen für die Maus, für
+   den Handschuh nicht; max() hebt sie am Gerät an und lässt sie am Schreibtisch
+   stehen. */
 .wkf-foot .btn {
-  min-height: 44px;
+  min-height: max(44px, var(--tap-min));
 }
