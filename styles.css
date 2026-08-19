@@ -5151,8 +5151,25 @@ tr:hover td {
 
 .wk-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  /* Fixed four across, so the launcher reads as four things that make
+     something and three that are done to it — an auto-fill grid put six on a
+     wide screen and left the seventh stranded on its own line. The second row
+     keeps the same four-column track, so every tile is the same width. */
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
+}
+.wk-tiles-row2 {
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .wk-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .wk-tiles {
+    grid-template-columns: 1fr;
+  }
 }
 .wk-tile {
   position: relative;
