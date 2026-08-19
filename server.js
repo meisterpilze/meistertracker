@@ -41,10 +41,26 @@ loadEnv();
 // Outputs JSON lines for structured log aggregation (PM2, journald, etc.)
 // Falls back to human-readable format when LOG_FORMAT=text
 const LOG_FORMAT = process.env.LOG_FORMAT || 'json';
+// S-13: the record's own three fields are written first and meta is copied in
+// afterwards *without* being allowed to replace them. `...meta` used to be
+// spread last, so any caller handing this function attacker-shaped data could
+// forge the whole line — and /api/csp-reports did exactly that, passing a
+// parsed request body straight through. A report of
+//   {"time":"1999-01-01T00:00:00.000Z","level":"INFO","msg":"nothing to see here"}
+// became precisely that entry in the JSON stream that DEPLOYMENT.md tells
+// operators to feed to pm2/journald, which is enough to fabricate an audit
+// trail or to bury a real event under lines a log search filters out.
+const LOG_RESERVED = new Set(['time', 'level', 'msg']);
 function log(level, msg, meta) {
   const ts = new Date().toISOString();
   if (LOG_FORMAT === 'json') {
-    const entry = JSON.stringify({ time: ts, level: level.toUpperCase(), msg, ...meta });
+    const record = { time: ts, level: level.toUpperCase(), msg };
+    if (meta && typeof meta === 'object') {
+      for (const k of Object.keys(meta)) {
+        if (!LOG_RESERVED.has(k)) record[k] = meta[k];
+      }
+    }
+    const entry = JSON.stringify(record);
     if (level === 'error') console.error(entry);
     else console.log(entry);
   } else {
@@ -52,6 +68,33 @@ function log(level, msg, meta) {
     if (level === 'error') console.error(entry, meta || '');
     else console.log(entry, meta ? JSON.stringify(meta) : '');
   }
+}
+
+// The fields a CSP report is worth keeping, in the shape the spec defines them.
+// Everything else the client sent is dropped: `original-policy` repeats a header
+// we already know, and an arbitrary key set from an unauthenticated endpoint is
+// not something a log stream should have to carry. Strings are truncated so one
+// report cannot dominate a line.
+const CSP_REPORT_FIELDS = [
+  'document-uri',
+  'violated-directive',
+  'effective-directive',
+  'blocked-uri',
+  'source-file',
+  'line-number',
+  'column-number',
+  'disposition'
+];
+function cspReportFields(report) {
+  const out = {};
+  if (!report || typeof report !== 'object') return out;
+  for (const k of CSP_REPORT_FIELDS) {
+    const v = report[k];
+    if (v == null) continue;
+    if (typeof v === 'number') out[k] = Number.isFinite(v) ? v : null;
+    else out[k] = String(v).slice(0, 300);
+  }
+  return out;
 }
 
 const PORT_RAW = parseInt(process.env.PORT, 10) || 3000;
@@ -149,6 +192,13 @@ function setupFromLoopback(remoteAddress, trustProxy) {
 }
 
 let database = db.openDb(DB_FILE);
+// S-18: createUser rejects a name that would share a CalDAV calendar with an
+// existing account, but a database created before that guard can already hold
+// one. Those calendars fail closed in checkCalendarAccess, which is silent from
+// the operator's side — so say it once at startup, with the names to rename.
+for (const clash of db.findCaldavSlugCollisions(database)) {
+  log('warn', 'Users share a CalDAV calendar name — their personal calendars are unreachable until renamed', clash);
+}
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 // I-17: serialize backup restores. Two admins kicking off concurrent
 // /api/backup/restore requests would race on the close→rename→reopen path
@@ -183,8 +233,12 @@ try {
 // a wrong password. Without this, attackers could enumerate valid accounts
 // by measuring 10 ms (no scrypt) vs 50-200 ms (real scrypt) responses.
 // Salt+hash are randomized per process, never persisted.
-const DUMMY_PASSWORD_SALT = crypto.randomBytes(16).toString('hex');
-const DUMMY_PASSWORD_HASH = crypto.scryptSync('', DUMMY_PASSWORD_SALT, 64).toString('hex');
+// S-14: minted through db.hashPassword so it carries the current parameters —
+// a dummy that stayed on the old cost would answer faster than a real account
+// and re-open the enumeration channel this exists to close.
+const { salt: DUMMY_PASSWORD_SALT, hash: DUMMY_PASSWORD_HASH } = db.hashPassword(
+  crypto.randomBytes(32).toString('hex')
+);
 
 // ── MCP (Model Context Protocol) server ────────────────────
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
@@ -242,11 +296,17 @@ function checkMcpAuth(req) {
   const hash = crypto.createHash('sha256').update(token).digest('hex');
 
   // Try legacy static API token
-  const stored = db.getMcpToken(database, { touchLastUsed: true });
+  const stored = db.getMcpToken(database);
   if (stored) {
     const a = Buffer.from(hash, 'hex');
     const b = Buffer.from(stored, 'hex');
     if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      // S-17: after the comparison, never before it. Stamping on the way in
+      // meant every failed bearer probe refreshed "last used", so an admin
+      // deciding whether a token is still needed saw the attacker's traffic as
+      // evidence that it was. It also made an unauthenticated request write to
+      // the database.
+      db.touchMcpTokenUsed(database);
       return { userId: null, role: 'admin' };
     }
   }
@@ -657,6 +717,9 @@ function validateTimeOfDay(value, fieldName) {
 // tool's shorter enum leaves out.
 const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
 const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
+// The batch kinds the app knows, mirroring the buckets getProductionPipeline
+// seeds. 'block' is the column default, so an omitted batchType is fine.
+const BATCH_TYPES = ['block', 'grain', 'liquid'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
@@ -667,6 +730,14 @@ function validateEnum(value, allowed, fieldName) {
 // pin the character set + length up-front. Mirrors the batchId regex used
 // by /api/batches.
 const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
+// S-16: the charset and length every account is created with — /api/auth/setup
+// and POST /api/users both enforce it, and createUser is the only writer of the
+// users table, so a name that fails this cannot belong to a real account. It is
+// applied on the way *in* as well now: the login handler used to take the
+// username straight from a body that may be up to 5 MB and make it a Map key in
+// two brute-force tables, where the 60-second sweep leaves it for the full
+// 15-minute lockout window.
+const USERNAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 function validateMushroomStrain(data) {
   if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
   if (data.name !== undefined && data.name !== null) {
@@ -1443,6 +1514,31 @@ function waterfall(fns, done) {
   })(null);
 }
 
+// ── Private-key file handling ──
+// S-12: fs.writeFileSync's `mode` only applies when it *creates* the file, and
+// a renewal overwrites a key that is already there — which would keep whatever
+// mode the old one had, including the 0644 this used to produce. So the mode is
+// re-asserted after every write. chmod can fail when the file belongs to
+// another account (a key dropped in by root, say); that is worth a warning, not
+// a crash, because the alternative is a server that will not start.
+function writePrivateFile(filePath, contents) {
+  fs.writeFileSync(filePath, contents, { mode: 0o600 });
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (e) {
+    log('warn', 'Could not restrict permissions on private file', { path: filePath, error: e.message });
+  }
+}
+
+function ensurePrivateDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch (e) {
+    log('warn', 'Could not restrict permissions on key directory', { path: dir, error: e.message });
+  }
+}
+
 // ── ECDSA P-256 account key (persists in certs/) ──
 function loadOrCreateAccountKey() {
   if (fs.existsSync(ACME_ACCOUNT_KEY_PATH)) {
@@ -1451,8 +1547,12 @@ function loadOrCreateAccountKey() {
   log('info', 'Generating ACME account key...');
   const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const dir = path.dirname(ACME_ACCOUNT_KEY_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+  ensurePrivateDir(dir);
+  // S-12: this key re-issues certificates for the domain. Without a mode it
+  // lands at 0666 & ~umask — 0644 on a normal host, readable by every local
+  // account. BACKUP_DIR (0700) and the restore temp file (0600) already had
+  // this right; the two certs/ writes were simply missed.
+  writePrivateFile(ACME_ACCOUNT_KEY_PATH, privateKey.export({ type: 'pkcs8', format: 'pem' }));
   return privateKey;
 }
 
@@ -1713,9 +1813,10 @@ function requestLetsEncryptCert(callback) {
       (next) => {
         try {
           const certsDir = path.dirname(CERT_KEY);
-          if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+          ensurePrivateDir(certsDir);
+          // The certificate is public; the key is not (S-12).
           fs.writeFileSync(CERT_CRT, certPem);
-          fs.writeFileSync(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
+          writePrivateFile(CERT_KEY, domainKey.export({ type: 'pkcs8', format: 'pem' }));
         } catch (e) {
           return next(e);
         }
@@ -1793,15 +1894,42 @@ function getEffectiveBridgeConfig() {
   return null;
 }
 
+// S-23: the bridge's certificate is self-signed by `print-bridge.ps1 -Install`,
+// so there is no chain to validate — and the request used to go out with
+// rejectUnauthorized:false and nothing else. Encryption without authentication
+// stops a passive listener and does nothing about an active one: anybody on the
+// LAN able to answer for the bridge's address could present their own
+// certificate, collect the X-Bridge-Token from the header, and hand back
+// whatever printer status they liked.
+//
+// A CA is the wrong tool for a machine on a workshop LAN, so the certificate is
+// pinned instead. The first connection to an address records its SHA-256
+// fingerprint; every connection after that compares. The first one is still
+// trusted blind — that is the known limit of trust-on-first-use — but it
+// happens once, on the operator's own network, right after they ran the
+// installer, rather than on every print for the life of the bridge.
+//
+// The check runs on 'secureConnect' and destroys the socket there. Verified: at
+// that point Node has not yet written the request head, so a mismatch costs the
+// attacker the token as well as the payload.
+//
+// Re-pinning is a deliberate act — saving the printer settings clears the pin.
+// See db.updatePrintBridgeCfg.
+function _pinnedBridgeFingerprint(origin) {
+  try {
+    const cfg = db.getPrintBridgeCfg(database);
+    return cfg.certUrl === origin ? cfg.certFp || '' : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 // Make an HTTPS request to the print bridge with a 5s timeout.
 // callback(err, { statusCode, body, raw }) — body is parsed JSON or null.
 //
-// The bridge ships with a self-signed cert generated by `print-bridge.ps1
-// -Install`. We can't validate its chain (no CA), but the connection is
-// still encrypted, so the X-Bridge-Token header and the ZPL payload don't
-// travel in cleartext over the LAN. HTTP URLs are still tolerated for
-// backwards compatibility with .env-based setups predating the TLS switch
-// — they log a warning every request so the operator notices.
+// HTTP URLs are still tolerated for backwards compatibility with .env-based
+// setups predating the TLS switch — they log a warning every request so the
+// operator notices.
 function _bridgeRequest(method, urlPath, body, callback) {
   const cfg = getEffectiveBridgeConfig();
   if (!cfg) {
@@ -1829,9 +1957,8 @@ function _bridgeRequest(method, urlPath, body, callback) {
   }
   const reqOpts = { method, headers, timeout: 5000 };
   if (isHttps) {
-    // Bridge cert is self-signed. We trade chain validation for an
-    // encrypted channel + token auth, which is the right call on a
-    // trusted LAN. Future enhancement: pin to a stored fingerprint.
+    // Self-signed, so the chain cannot be validated. The fingerprint check
+    // below is what authenticates the peer (S-23).
     reqOpts.rejectUnauthorized = false;
   }
   const req = lib.request(target, reqOpts, (res) => {
@@ -1848,6 +1975,43 @@ function _bridgeRequest(method, urlPath, body, callback) {
       callback(null, { statusCode: res.statusCode, body: parsed, raw: data });
     });
   });
+  if (isHttps) {
+    req.on('socket', (socket) => {
+      socket.on('secureConnect', () => {
+        const cert = socket.getPeerCertificate();
+        const fingerprint = (cert && cert.fingerprint256) || '';
+        if (!fingerprint) {
+          socket.destroy(new Error('Bridge presented no certificate'));
+          return;
+        }
+        const pinned = _pinnedBridgeFingerprint(target.origin);
+        if (!pinned) {
+          try {
+            db.setPrintBridgeCertPin(database, target.origin, fingerprint);
+            log('info', 'Pinned print bridge certificate on first connection', {
+              bridge: target.origin,
+              fingerprint
+            });
+          } catch (e) {
+            log('warn', 'Could not store the print bridge certificate pin', { error: e.message });
+          }
+          return;
+        }
+        if (fingerprint !== pinned) {
+          log('error', 'Print bridge certificate does not match the pinned one — refusing to send', {
+            bridge: target.origin,
+            expected: pinned,
+            got: fingerprint
+          });
+          socket.destroy(
+            new Error(
+              'Bridge certificate changed. If you re-installed the print bridge, save the printer settings again to re-pin it.'
+            )
+          );
+        }
+      });
+    });
+  }
   req.on('timeout', () => {
     req.destroy(new Error('Bridge timeout'));
   });
@@ -1944,7 +2108,95 @@ function checkPrinterAvailable(callback) {
 // Send raw ZPL to the Zebra GK420d. Routes through the print bridge if one
 // is configured (DB or env), otherwise prints locally via PowerShell
 // (Windows-only — fails on Linux servers without a bridge).
+// S-24: ZPL is a command language, not a document format, and /api/print took
+// whatever the client sent and handed it straight to the printer. The label
+// layout is generated in the browser, so "the client" is anybody with a login —
+// and the language reaches well past drawing: ^JU and ~JS persist configuration,
+// ~DY and ^DF write files onto the printer, the ^W* family reconfigures the
+// wireless interface, ^KP sets a password. A Link-OS printer on the lab network
+// is a small networked computer, and this endpoint was an unauthenticated shell
+// on it for anybody the app had let in the front door.
+//
+// So: an allowlist of the commands the label layouts actually emit, plus a
+// couple of unambiguously safe drawing ones. Anything else is refused. It has to
+// be an allowlist rather than a blocklist — the command set is large, printer
+// firmware adds to it, and ^CC/~CC can redefine the command character itself and
+// walk straight through any blocklist written against the default one.
+//
+// Every ^ or ~ in the payload is treated as introducing a command, which is
+// exactly how the printer reads it. Legitimate labels never carry a bare one:
+// the layout code strips ^ and ~ out of every data field before it gets here
+// (zplText in app.js and mcp-server.js), so a ^ inside ^FD data means the client
+// is not the one we ship.
+const ZPL_ALLOWED_COMMANDS = new Set([
+  // Format boundaries
+  'XA',
+  'XZ',
+  // Label geometry, orientation, encoding, copies
+  'PW',
+  'LL',
+  'LH',
+  'LT',
+  'LS',
+  'PO',
+  'FW',
+  'CI',
+  'PQ',
+  // Fields: origin, typeset origin, block, separator, data, comment, reverse
+  'FO',
+  'FT',
+  'FB',
+  'FS',
+  'FD',
+  'FX',
+  'FR',
+  // Drawing
+  'GB',
+  // Barcodes: defaults, Code 128, QR, Code 39
+  'BY',
+  'BC',
+  'BQ',
+  'B3'
+]);
+// ^A0..^A9 and ^AA..^AZ select a font that lives in firmware. ^A@ loads one from
+// the printer's file system, which is the kind of thing this list exists to keep
+// out, so the character class is deliberately narrow.
+const ZPL_FONT_RE = /^A[0-9A-Z]$/;
+// A label is on the order of a kilobyte. The body cap is 5 MB, which would be
+// tens of thousands of them.
+const ZPL_MAX_CHARS = 1024 * 1024;
+const ZPL_MAX_LABELS = 2000;
+
+/** null when the payload is safe to send, otherwise the reason it is not. */
+function checkZpl(zpl) {
+  if (typeof zpl !== 'string' || !zpl.trim()) return 'empty ZPL';
+  if (zpl.length > ZPL_MAX_CHARS) return 'ZPL too large (' + zpl.length + ' chars)';
+  if (!zpl.includes('^XA') || !zpl.includes('^XZ')) return 'ZPL must contain ^XA and ^XZ';
+  const labels = (zpl.match(/\^XA/g) || []).length;
+  if (labels > ZPL_MAX_LABELS) return 'too many labels in one job (' + labels + ')';
+
+  const rejected = new Set();
+  for (let i = 0; i < zpl.length; i++) {
+    const lead = zpl[i];
+    if (lead !== '^' && lead !== '~') continue;
+    const cmd = zpl.slice(i + 1, i + 3).toUpperCase();
+    // Tilde commands are all device control — none of them draw anything.
+    if (lead === '^' && (ZPL_ALLOWED_COMMANDS.has(cmd) || ZPL_FONT_RE.test(cmd))) continue;
+    rejected.add(lead + cmd);
+    if (rejected.size >= 5) break;
+  }
+  if (rejected.size) return 'ZPL contains commands that are not allowed: ' + [...rejected].join(' ');
+  return null;
+}
+
 function printZPL(zplData, callback) {
+  // Checked here rather than in the route, so the /api/print handler, the bridge
+  // self-test and the MCP print tools are all covered by the one gate.
+  const bad = checkZpl(zplData);
+  if (bad) {
+    log('warn', 'Refused a print job', { reason: bad });
+    return callback('Refused: ' + bad);
+  }
   if (getEffectiveBridgeConfig()) return _printViaBridge(zplData, callback);
   return _printViaPowerShell(zplData, callback);
 }
@@ -2209,13 +2461,49 @@ function extractBasicAuthUsername(req) {
   if (!authHeader.startsWith('Basic ')) return null;
   const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
   const idx = decoded.indexOf(':');
-  return idx >= 0 ? decoded.slice(0, idx) : null;
+  if (idx < 0) return null;
+  const username = decoded.slice(0, idx);
+  // S-16: this value is only ever used to build brute-force throttle keys, and
+  // a name that cannot belong to an account has no business becoming one. The
+  // header is bounded by maxHeaderSize so the exposure is far smaller than on
+  // the JSON login route, but it is the same shape.
+  return USERNAME_RE.test(username) ? username : null;
 }
 
 // Check CalDAV basic auth against user accounts.
 // Handles charset mismatches: iOS/Safari may send Basic Auth as ISO-8859-1
 // (latin1) when the WWW-Authenticate header lacks charset="UTF-8".
 // Also tries case-insensitive username lookup as fallback.
+// S-14: CalDAV re-verifies Basic auth on every single request, so raising the
+// account KDF to N=131072 would put a few hundred milliseconds of CPU behind
+// each PROPFIND — a phone syncing eight calendars would keep a core busy on its
+// own. Only the *outcome of the password check* is cached: the account row is
+// re-read from the database on every hit, so a role change, a revoked
+// capability or a deleted account still takes effect immediately. Failures are
+// never cached — brute force is already bounded by the per-user and per-IP
+// lockout above, and caching a miss would only raise an attacker's throughput.
+//
+// The key is peppered with a per-process random value, so the cache is
+// meaningless to anyone who reads it out of a core dump on another machine.
+const CALDAV_AUTH_CACHE_TTL = 5 * 60 * 1000;
+const CALDAV_AUTH_CACHE_MAX = 200;
+const CALDAV_AUTH_PEPPER = crypto.randomBytes(32);
+const caldavAuthCache = new Map(); // key → { username, expires }
+
+function caldavAuthCacheKey(user, pass) {
+  return crypto
+    .createHash('sha256')
+    .update(CALDAV_AUTH_PEPPER)
+    .update(user + '\u0000' + pass)
+    .digest('hex');
+}
+
+// Called whenever a password changes or an account goes away. The TTL alone
+// would get there within five minutes; this makes it immediate.
+function clearCaldavAuthCache() {
+  caldavAuthCache.clear();
+}
+
 function checkCaldavAuth(req) {
   const authHeader = req.headers['authorization'] || '';
   if (!authHeader.startsWith('Basic ')) return false;
@@ -2228,11 +2516,47 @@ function checkCaldavAuth(req) {
     if (idx < 0) continue;
     const user = decoded.slice(0, idx);
     const pass = decoded.slice(idx + 1);
+    if (!USERNAME_RE.test(user)) continue; // S-16: cannot be an account
+
+    // S-25: an app-specific password first. It is a SHA-256 lookup rather than
+    // a scrypt verify, so it costs nothing — which is also why it needs no
+    // cache entry. The username still has to match its owner: an app password
+    // opens that person's calendars, not whoever presents it.
+    const appPw = db.findCaldavAppPassword(database, pass);
+    if (appPw) {
+      const owner = db.getUserByUsername(database, user) || db.getUserByUsernameCaseInsensitive(database, user);
+      if (owner && owner.id === appPw.userId) {
+        try {
+          db.touchCaldavAppPassword(database, appPw.id);
+        } catch (e) {
+          /* the audit stamp is best effort; it must not cost somebody their calendar */
+        }
+        return owner;
+      }
+    }
+
+    const cacheKey = caldavAuthCacheKey(user, pass);
+    const cached = caldavAuthCache.get(cacheKey);
+    if (cached) {
+      if (cached.expires > Date.now()) {
+        const fresh = db.getUserByUsername(database, cached.username);
+        if (fresh) return fresh;
+      }
+      caldavAuthCache.delete(cacheKey);
+    }
 
     // Try exact username match, then case-insensitive fallback
     const account = db.getUserByUsername(database, user) || db.getUserByUsernameCaseInsensitive(database, user);
     if (!account) continue;
-    if (db.verifyPassword(account.hash, account.salt, pass)) return account;
+    if (db.verifyPassword(account.hash, account.salt, pass)) {
+      // Insertion order is eviction order — drop the oldest entry at the cap so
+      // a client cycling credentials cannot grow this without bound.
+      if (caldavAuthCache.size >= CALDAV_AUTH_CACHE_MAX) {
+        caldavAuthCache.delete(caldavAuthCache.keys().next().value);
+      }
+      caldavAuthCache.set(cacheKey, { username: account.username, expires: Date.now() + CALDAV_AUTH_CACHE_TTL });
+      return account;
+    }
   }
   return false;
 }
@@ -2278,7 +2602,20 @@ function getBatchLocServer(batch, scanLog) {
 function checkCalendarAccess(req, calName) {
   if (CALDAV_CATEGORY_CALS[calName]) return true;
   if (req.caldavUser.role === 'admin') return true;
-  return req.caldavUserSlug === calName;
+  if (req.caldavUserSlug !== calName) return false;
+  // S-18: createUser rejects a colliding name now, but a database created
+  // before that guard can already hold one — and a personal calendar shared
+  // between two people is worse than a personal calendar that stops answering.
+  // Deny, and say who has to be renamed.
+  const owners = db.listUsers(database).filter((u) => db.caldavSlug(u.username) === calName);
+  if (owners.length > 1) {
+    log('warn', 'CalDAV calendar name is ambiguous — access denied until one account is renamed', {
+      calendar: calName,
+      users: owners.map((u) => u.username)
+    });
+    return false;
+  }
+  return true;
 }
 
 // Get display name and color for a calendar
@@ -2287,7 +2624,7 @@ function getCalDisplayInfo(calName) {
     return { displayName: CALDAV_CATEGORY_CALS[calName].displayName, color: CALDAV_CATEGORY_CALS[calName].color };
   }
   const users = db.listUsers(database);
-  const userIdx = users.findIndex((u) => u.username.toLowerCase().replace(/[^a-z0-9]+/g, '-') === calName);
+  const userIdx = users.findIndex((u) => db.caldavSlug(u.username) === calName);
   if (userIdx >= 0) {
     return { displayName: users[userIdx].username, color: USER_CALENDAR_COLORS[userIdx % USER_CALENDAR_COLORS.length] };
   }
@@ -2783,7 +3120,7 @@ function autoPushTaskCaldav(task) {
     }
     // Per-person calendar: if assigned
     if (task.assignee) {
-      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const slug = db.caldavSlug(task.assignee);
       writeTaskToCalendar(task, slug);
     }
     // Due-date VEVENT → aufgaben calendar: respect privacy
@@ -2808,7 +3145,7 @@ function autoDeleteTaskCaldav(task) {
     deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
     // Remove from personal calendar if assigned
     if (task.assignee) {
-      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const slug = db.caldavSlug(task.assignee);
       deleteTaskFromCalendar(task.caldavUid, slug);
     }
     // Also remove VEVENT for due date (check aufgaben + legacy meisterpilze)
@@ -3009,7 +3346,7 @@ function _doAutoSyncAllCaldav(data) {
           writeTaskToCalendar(t, 'meisterpilze');
         }
         if (t.assignee) {
-          const slug = t.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const slug = db.caldavSlug(t.assignee);
           writeTaskToCalendar(t, slug);
           if (t.caldavUid) {
             if (!personalWrittenUids.has(slug)) personalWrittenUids.set(slug, new Set());
@@ -3122,7 +3459,7 @@ function syncAllTasksLocal(data) {
   for (const calSlug of Object.keys(CALDAV_CATEGORY_CALS)) ensureCalDir(calSlug);
   const users = db.listUsers(database);
   for (const u of users) {
-    const slug = u.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = db.caldavSlug(u.username);
     ensureCalDir(slug);
   }
 
@@ -3136,7 +3473,7 @@ function syncAllTasksLocal(data) {
       const isPrivate = task.private === 1 || task.private === true;
       if (!isPrivate) writeTaskToCalendar(task, 'meisterpilze');
       if (task.assignee) {
-        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const slug = db.caldavSlug(task.assignee);
         writeTaskToCalendar(task, slug);
       }
       results.pushed++;
@@ -3263,7 +3600,7 @@ function handleCaldav(req, res) {
   if (caldavUsername) {
     const caldavUserKey = caldavUsername.toLowerCase();
     const caldavThrottleKey = caldavUserKey + '@' + caldavIP;
-    if (!checkLoginAllowed(caldavThrottleKey) || !checkLoginAllowedPerUser(caldavUserKey)) {
+    if (!checkLoginAllowed(caldavThrottleKey)) {
       res.writeHead(429, { 'Content-Type': 'text/plain' });
       res.end('Too many login attempts. Try again later.');
       return;
@@ -3287,7 +3624,7 @@ function handleCaldav(req, res) {
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
   req.caldavUser = caldavUser;
-  req.caldavUserSlug = caldavUser.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  req.caldavUserSlug = db.caldavSlug(caldavUser.username);
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
@@ -4211,7 +4548,7 @@ function handleDelete(parts, req, res) {
               deleteIcsFile('meisterpilze', uid + '.ics');
             }
             if (task.assignee) {
-              const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              const slug = db.caldavSlug(task.assignee);
               if (calName !== slug) {
                 deleteIcsFile(slug, uid + '.ics');
               }
@@ -4284,10 +4621,61 @@ setInterval(() => {
 
 // ── LOGIN BRUTE-FORCE PROTECTION ────────────────────────────
 const LOGIN_MAX_ATTEMPTS = 5; // per username+IP
-const LOGIN_MAX_PER_USER = 20; // per username across all IPs
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 const loginAttempts = new Map(); // username@IP → { count, firstAttempt, lockedUntil }
-const loginAttemptsPerUser = new Map(); // username → { count, firstAttempt, lockedUntil }
+const loginAttemptsPerUser = new Map(); // username → { count, firstAttempt }
+
+// S-19: the per-user tier used to be a hard lock — twenty failures from
+// anywhere and the account was unreachable for fifteen minutes. That is real
+// protection against distributed password spraying, and simultaneously a
+// weapon: twenty wrong guesses against a known username ("admin" is a good
+// guess) keeps that account out indefinitely at four requests a minute, spread
+// over as many source addresses as the attacker likes, and the locked-out admin
+// has no self-service way back in.
+//
+// It is an escalating delay instead. The per-*source* tier keeps its hard lock,
+// because an attacker can only ever aim that at their own address. Spraying one
+// account still collapses — each failure past the threshold doubles the wait, to
+// a five-second ceiling — while the person who actually knows the password
+// always gets in, just slowly, and one correct login clears the counter.
+//
+// Pending delays are counted and capped so the delay cannot itself be turned
+// into a way to pin open sockets. Past the cap the answer is an immediate 429,
+// which clears the moment the flood stops instead of fifteen minutes later.
+const LOGIN_DELAY_AFTER = 5; // failures for one account before the wait starts
+const LOGIN_DELAY_STEP_MS = 250;
+const LOGIN_DELAY_MAX_MS = 5000;
+const LOGIN_DELAY_MAX_PENDING = 64;
+let loginDelaysPending = 0;
+
+function loginDelayForUser(username) {
+  const entry = loginAttemptsPerUser.get(username);
+  if (!entry) return 0;
+  if (Date.now() - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
+    loginAttemptsPerUser.delete(username);
+    return 0;
+  }
+  const over = entry.count - LOGIN_DELAY_AFTER;
+  if (over <= 0) return 0;
+  return Math.min(LOGIN_DELAY_STEP_MS * 2 ** (over - 1), LOGIN_DELAY_MAX_MS);
+}
+
+// Runs `next` once this account's current penalty has elapsed. Returns false
+// when the pending-delay budget is spent — the caller answers 429 then.
+function afterLoginDelay(username, next) {
+  const delay = loginDelayForUser(username);
+  if (delay <= 0) {
+    next();
+    return true;
+  }
+  if (loginDelaysPending >= LOGIN_DELAY_MAX_PENDING) return false;
+  loginDelaysPending++;
+  setTimeout(() => {
+    loginDelaysPending--;
+    next();
+  }, delay);
+  return true;
+}
 
 function checkLoginAllowed(key) {
   const entry = loginAttempts.get(key);
@@ -4295,17 +4683,6 @@ function checkLoginAllowed(key) {
   if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
   if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
     loginAttempts.delete(key);
-    return true;
-  }
-  return true;
-}
-
-function checkLoginAllowedPerUser(username) {
-  const entry = loginAttemptsPerUser.get(username);
-  if (!entry) return true;
-  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
-  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
-    loginAttemptsPerUser.delete(username);
     return true;
   }
   return true;
@@ -4329,13 +4706,14 @@ function recordLoginFailurePerUser(username) {
   const now = Date.now();
   let entry = loginAttemptsPerUser.get(username);
   if (!entry) {
-    entry = { count: 0, firstAttempt: now, lockedUntil: null };
+    entry = { count: 0, firstAttempt: now };
     loginAttemptsPerUser.set(username, entry);
   }
   entry.count++;
-  if (entry.count >= LOGIN_MAX_PER_USER) {
-    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
-    log('warn', 'Login locked (per-user) due to too many failed attempts', { username, attempts: entry.count });
+  // Logged once, when the wait first bites, so a spray against one account is
+  // visible without a line per attempt.
+  if (entry.count === LOGIN_DELAY_AFTER + 1) {
+    log('warn', 'Repeated failed logins for one account — throttling it', { username, attempts: entry.count });
   }
 }
 
@@ -4346,6 +4724,58 @@ function clearLoginAttemptsPerUser(username) {
   loginAttemptsPerUser.delete(username);
 }
 
+// The half of /api/auth/login that runs once the per-account wait has elapsed.
+// Split out of the route handler for S-19: the delay is asynchronous, and this
+// is what it defers.
+function finishLogin(req, res, { username, password, userKey, throttleKey }) {
+  const user = db.getUserByUsernameCaseInsensitive(database, username);
+  // Constant-time login: always run scrypt, even when the username is
+  // unknown — falling back to a process-local dummy hash keeps the
+  // response time independent of whether the account exists. The
+  // !user check below still rejects unknown accounts, but does so at
+  // the same latency as a real user with a wrong password.
+  const candidateHash = user ? user.hash : DUMMY_PASSWORD_HASH;
+  const candidateSalt = user ? user.salt : DUMMY_PASSWORD_SALT;
+  const passwordOk = db.verifyPassword(candidateHash, candidateSalt, password);
+  if (!user || !passwordOk) {
+    recordLoginFailure(throttleKey);
+    recordLoginFailurePerUser(userKey);
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid credentials' }));
+    return;
+  }
+  // One correct password clears the account's penalty outright, which is what
+  // keeps S-19's delay from being a lockout with extra steps.
+  clearLoginAttempts(throttleKey);
+  clearLoginAttemptsPerUser(userKey);
+  // S-14: login is the only moment the plaintext password is in hand, so
+  // it is the only chance to re-hash a row that still uses the old scrypt
+  // cost. Best effort — a failure here must not cost the user their login.
+  if (db.passwordNeedsUpgrade(user.salt)) {
+    try {
+      const upgraded = db.hashPassword(password);
+      db.updateUserPassword(database, user.id, upgraded.hash, upgraded.salt);
+      log('info', 'Upgraded password hash to current KDF parameters', { username: user.username });
+    } catch (upgradeErr) {
+      log('warn', 'Password hash upgrade failed', { username: user.username, error: upgradeErr.message });
+    }
+  }
+  // Rotate: invalidate any pre-existing session token presented in
+  // the request before minting a new one. Defends against stolen
+  // pre-auth cookies surviving the legitimate user's login.
+  const oldToken = getSessionToken(req);
+  if (oldToken) {
+    try {
+      db.deleteSession(database, oldToken);
+    } catch (_) {
+      /* best effort — token may not exist anymore */
+    }
+  }
+  const token = db.createSession(database, user.id);
+  setSessionCookie(res, token);
+  jsonOk(res, { username: user.username, role: user.role });
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of loginAttempts) {
@@ -4353,8 +4783,7 @@ setInterval(() => {
     else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
   }
   for (const [key, entry] of loginAttemptsPerUser) {
-    if (entry.lockedUntil && now >= entry.lockedUntil) loginAttemptsPerUser.delete(key);
-    else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
+    if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
   }
 }, 60000);
 
@@ -4435,7 +4864,18 @@ function handleRequest(req, res) {
 
   // ── CalDAV requests ──
   if (req.url.startsWith('/caldav')) {
-    return handleCaldav(req, res);
+    // S-19: the per-account wait, applied before the handler runs. CalDAV
+    // re-authenticates on every request, so this is the same throttle the login
+    // route uses, on the same counters — a stale password in a calendar client
+    // slows itself down instead of locking the person out of the web UI.
+    const caldavUser = extractBasicAuthUsername(req);
+    if (!caldavUser) return handleCaldav(req, res);
+    const accepted = afterLoginDelay(caldavUser.toLowerCase(), () => handleCaldav(req, res));
+    if (!accepted) {
+      res.writeHead(429, { 'Content-Type': 'text/plain', 'Retry-After': '2' });
+      res.end('Too many login attempts. Try again shortly.');
+    }
+    return;
   }
 
   // ── OAuth 2.0 well-known endpoints (public, no auth) ──
@@ -5083,7 +5523,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
-        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+        if (!USERNAME_RE.test(username)) {
           jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
@@ -5114,45 +5554,41 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password required');
           return;
         }
-        const userKey = username.toLowerCase();
-        const throttleKey = userKey + '@' + clientIP;
-        if (!checkLoginAllowed(throttleKey) || !checkLoginAllowedPerUser(userKey)) {
-          res.writeHead(429, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
-          return;
-        }
-        const user = db.getUserByUsernameCaseInsensitive(database, username);
-        // Constant-time login: always run scrypt, even when the username is
-        // unknown — falling back to a process-local dummy hash keeps the
-        // response time independent of whether the account exists. The
-        // !user check below still rejects unknown accounts, but does so at
-        // the same latency as a real user with a wrong password.
-        const candidateHash = user ? user.hash : DUMMY_PASSWORD_HASH;
-        const candidateSalt = user ? user.salt : DUMMY_PASSWORD_SALT;
-        const passwordOk = db.verifyPassword(candidateHash, candidateSalt, password);
-        if (!user || !passwordOk) {
-          recordLoginFailure(throttleKey);
-          recordLoginFailurePerUser(userKey);
+        // S-16: before userKey is built, because that string becomes a key in
+        // loginAttempts and loginAttemptsPerUser and stays there for the whole
+        // lockout window. No account can have a name that fails this, so the
+        // answer is the same one a wrong password gets.
+        if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
+          // Nothing is recorded against the throttle maps here: the whole point
+          // is that this string never becomes a key in them, and a failure
+          // logged under a shape that checkLoginAllowed never queries would be
+          // the same leak wearing a hat.
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid credentials' }));
           return;
         }
-        clearLoginAttempts(throttleKey);
-        clearLoginAttemptsPerUser(userKey);
-        // Rotate: invalidate any pre-existing session token presented in
-        // the request before minting a new one. Defends against stolen
-        // pre-auth cookies surviving the legitimate user's login.
-        const oldToken = getSessionToken(req);
-        if (oldToken) {
-          try {
-            db.deleteSession(database, oldToken);
-          } catch (_) {
-            /* best effort — token may not exist anymore */
-          }
+        const userKey = username.toLowerCase();
+        const throttleKey = userKey + '@' + clientIP;
+        // Per-source: still a hard lock. An attacker can only point that at
+        // their own address, so it is not usable against anyone else.
+        if (!checkLoginAllowed(throttleKey)) {
+          res.writeHead(429, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
+          return;
         }
-        const token = db.createSession(database, user.id);
-        setSessionCookie(res, token);
-        jsonOk(res, { username: user.username, role: user.role });
+        // Per-account: a wait rather than a lock (S-19). The password check
+        // happens on the other side of it.
+        const accepted = afterLoginDelay(userKey, () => {
+          try {
+            finishLogin(req, res, { username, password, userKey, throttleKey });
+          } catch (err) {
+            safeErr(res, err);
+          }
+        });
+        if (!accepted) {
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
+        }
       } catch (err) {
         safeErr(res, err);
       }
@@ -5201,8 +5637,31 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // the POST only ever erases data for a buyer eBay says has closed their account.
   const isEbayDeletion =
     (req.method === 'GET' || req.method === 'POST') && /^\/api\/channels\/ebay\/deletion(?:\?|$)/.test(url);
+  // S-22: both of these were written as public endpoints and both sat behind
+  // this gate, which runs first — so both answered 401 to everyone and neither
+  // did what its own code says it does.
+  //
+  // /api/health calls checkAuth itself and reveals nothing but status, db,
+  // uptime, version and the worktree flag without a session; platform, Node
+  // version, memory and backup freshness stay admin-only. Behind the gate the
+  // Dockerfile's HEALTHCHECK could never pass, so the container reported
+  // unhealthy forever, and the admin branch inside the handler was unreachable.
+  //
+  // /api/csp-reports is sent by the browser without credentials by definition,
+  // so behind the gate it silently discarded every violation report — the one
+  // signal that would tell us an injected script had run.
+  const isHealth = req.method === 'GET' && url === '/api/health';
+  const isCspReport = req.method === 'POST' && url === '/api/csp-reports';
 
-  if (!isLoginPage && !isPublicAsset && !isWebhook && !isChannelOAuthCb && !isEbayDeletion) {
+  if (
+    !isLoginPage &&
+    !isPublicAsset &&
+    !isWebhook &&
+    !isChannelOAuthCb &&
+    !isEbayDeletion &&
+    !isHealth &&
+    !isCspReport
+  ) {
     if (db.countUsers(database) === 0) {
       if (url.startsWith('/api/')) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -5258,7 +5717,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
-        if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+        if (!USERNAME_RE.test(username)) {
           jsonErr(res, 400, 'username must be alphanumeric with . _ - (max 64 chars)');
           return;
         }
@@ -5285,6 +5744,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     db.deleteUser(database, userId);
+    clearCaldavAuthCache();
     log('info', 'User deleted', { actor: req.authUser.username, deletedUserId: userId });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
@@ -5356,11 +5816,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 401, 'Current password is incorrect');
         return;
       }
-      const salt = crypto.randomBytes(16).toString('hex');
-      const hash = crypto.scryptSync(data.newPassword, salt, 64).toString('hex');
+      const { salt, hash } = db.hashPassword(data.newPassword);
       db.updateUserPassword(database, user.id, hash, salt);
-      // Invalidate all existing sessions, issue a fresh one for current user
-      db.deleteSessionsByUserId(database, user.id);
+      // S-11: kill every credential that speaks for this user, not just the
+      // browser sessions — an OAuth refresh token outlives a password change by
+      // 30 days otherwise, and /mcp honours it with the user's live role. Then
+      // issue a fresh session so the person who just changed it stays logged in.
+      db.revokeUserCredentials(database, user.id);
+      clearCaldavAuthCache();
       const newToken = db.createSession(database, user.id);
       setSessionCookie(res, newToken);
       jsonOk(res);
@@ -5386,8 +5849,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       db.resetUserPassword(database, userId, data.newPassword);
-      // Invalidate all sessions for the affected user
-      db.deleteSessionsByUserId(database, userId);
+      // S-11: sessions *and* OAuth grants — see the self-service path above.
+      // An admin resetting somebody else's password is the stronger case: they
+      // are locking an account they no longer trust.
+      db.revokeUserCredentials(database, userId);
+      clearCaldavAuthCache();
       jsonOk(res);
     });
     return;
@@ -5426,7 +5892,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       if (aborted) return;
       try {
         const report = JSON.parse(body);
-        log('warn', 'CSP violation', report['csp-report'] || report);
+        // S-13: log the three fields a CSP report is actually read for, as
+        // strings, rather than whatever object the client sent. log() refuses
+        // to have its own fields overwritten now, but an unbounded set of
+        // attacker-chosen keys in the log stream is still noise worth not
+        // having — and a report is a fixed shape, so nothing is lost.
+        log('warn', 'CSP violation', cspReportFields(report['csp-report'] || report));
       } catch (e) {}
       res.writeHead(204);
       res.end();
@@ -5436,6 +5907,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // GET /api/health
   if (req.method === 'GET' && req.url === '/api/health') {
+    // S-22: reachable without a session now, so it gets the same per-IP budget
+    // /api/csp-reports has. It touches the database on every call.
+    if (!checkRate(req, 60)) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      res.end('{"error":"too_many_requests"}');
+      return;
+    }
     let dbOk = false;
     try {
       database.prepare('SELECT 1').get();
@@ -6287,6 +6765,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
         jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      // S-10: batch_type was the one field on this route with no validation at
+      // all — it went straight into the INSERT, and it is read back as an
+      // object key by the production-pipeline rollup. The accumulators there
+      // are null-prototype now; this pins the column to the three kinds the
+      // app actually knows as well. Omitting it is still fine — the column
+      // defaults to 'block'.
+      const vbt = validateEnum(data.batchType, BATCH_TYPES, 'batchType');
+      if (vbt) {
+        jsonErr(res, 400, vbt);
         return;
       }
       let vd = validateDate(data.created, 'created');
@@ -7153,6 +7642,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // Orders — manual / CSV import (single object, or {orders:[...]}, or [...])
   if (req.method === 'POST' && url === '/api/orders/import') {
+    // S-09: import is an upsert, not just a create — upsertOrder matches on
+    // channel + channelOrderId and COALESCE-replaces ship_* / customer_* on the
+    // existing row. Without this gate any authed user could read channel +
+    // channelOrderId from GET /api/orders and rewrite the delivery address of
+    // somebody else's order, so the next label buy sends the parcel to them.
+    // Rewriting a ship-to address is not an "operational write" — same gate as
+    // the other customer-PII routes.
+    if (requireShipping(req, res)) return;
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
@@ -7868,6 +8365,52 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- CalDAV Config --
+  // ── CalDAV app-specific passwords (S-25) ──────────────────
+  // Every user manages their own, including admins; there is deliberately no
+  // route that touches somebody else's. The plaintext is shown exactly once,
+  // at creation, and never stored.
+  if (req.url === '/api/caldav/app-passwords' && req.method === 'GET') {
+    try {
+      jsonOk(res, { items: db.listCaldavAppPasswords(database, req.authUser.user_id) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.url === '/api/caldav/app-passwords' && req.method === 'POST') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const created = db.createCaldavAppPassword(database, req.authUser.user_id, data && data.label);
+        log('info', 'CalDAV app password created', { actor: req.authUser.username, label: created.label });
+        // `password` is in this response and nowhere else, ever.
+        jsonOk(res, created);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const caldavPwMatch = req.url.match(/^\/api\/caldav\/app-passwords\/(\d+)$/);
+  if (caldavPwMatch && req.method === 'DELETE') {
+    try {
+      const gone = db.deleteCaldavAppPassword(database, req.authUser.user_id, parseInt(caldavPwMatch[1], 10));
+      if (!gone) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      clearCaldavAuthCache();
+      log('info', 'CalDAV app password revoked', { actor: req.authUser.username });
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/caldav/config') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -8501,7 +9044,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         try {
           for (const u of db.listUsers(database)) {
             if (u.role !== 'admin') continue;
-            db.createNotification(database, {
+            // S-20: once per admin per customer while it is still unread. This
+            // endpoint takes no credential and matches customers by email, so
+            // without the guard anyone who knows an address could bury the
+            // notification list — and burying it is how the real one is missed.
+            db.createNotificationOnce(database, {
               userId: u.id,
               type: 'ebay-deletion',
               title: 'eBay account closure',
@@ -10164,7 +10711,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         // Personal calendar: if assigned
         if (task.assignee) {
-          const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const slug = db.caldavSlug(task.assignee);
           uid = writeTaskToCalendar(task, slug);
         }
         // Private + unassigned: no calendar to write to, just generate a UID
@@ -10255,11 +10802,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // Shared category calendars are visible to everyone, the user's own
       // slug is always visible, and admins see everything.
       const isAdmin = req.authUser && req.authUser.role === 'admin';
-      const callerSlug = req.authUser
-        ? String(req.authUser.username)
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-        : null;
+      const callerSlug = req.authUser ? db.caldavSlug(req.authUser.username) : null;
       const canSeeDir = (dir) => {
         if (CALDAV_CATEGORY_CALS[dir]) return true;
         if (isAdmin) return true;

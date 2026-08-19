@@ -318,7 +318,11 @@ function createMcpServer(database, onWrite, printer) {
 
       // Open tasks grouped by assignee
       const openTasks = manualTasks.filter((t) => !t.done);
-      const tasksByAssignee = {};
+      // S-10: null-prototype accumulator. `assignee` is free text from the
+      // task row, and on a plain {} the key "__proto__" is truthy, so the
+      // initialiser is skipped and .push() runs on Object.prototype — which
+      // has no push, so the tool throws instead of answering.
+      const tasksByAssignee = Object.create(null);
       for (const t of openTasks) {
         const key = t.assignee || 'Unassigned';
         if (!tasksByAssignee[key]) tasksByAssignee[key] = [];
@@ -437,7 +441,7 @@ function createMcpServer(database, onWrite, printer) {
       const harvests = db.getAllHarvests(database).filter((h) => h.batch === batchId);
 
       const totalGrams = harvests.reduce((sum, h) => sum + h.grams, 0);
-      const byFlush = {};
+      const byFlush = Object.create(null);
       for (const h of harvests) {
         const key = 'flush_' + h.flush;
         byFlush[key] = (byFlush[key] || 0) + h.grams;
@@ -632,14 +636,16 @@ function createMcpServer(database, onWrite, printer) {
       if (params.endDate) harvests = harvests.filter((h) => h.time && h.time.slice(0, 10) <= params.endDate);
 
       const groupBy = params.groupBy || 'batch';
-      const groups = {};
+      // S-10: keyed by batch id / species / month, all row data.
+      const groups = Object.create(null);
       for (const h of harvests) {
         let key;
         if (groupBy === 'batch') key = h.batch || 'unknown';
         else if (groupBy === 'species') key = h.species || 'unknown';
         else key = h.time ? h.time.slice(0, 7) : 'unknown'; // month: YYYY-MM
 
-        if (!groups[key]) groups[key] = { totalGrams: 0, count: 0, byFlush: {}, byQuality: {} };
+        if (!groups[key])
+          groups[key] = { totalGrams: 0, count: 0, byFlush: Object.create(null), byQuality: Object.create(null) };
         groups[key].totalGrams += h.grams;
         groups[key].count += 1;
         const fKey = 'flush_' + h.flush;
@@ -649,7 +655,7 @@ function createMcpServer(database, onWrite, printer) {
       }
 
       // Overall quality distribution
-      const qualityDist = {};
+      const qualityDist = Object.create(null);
       for (const h of harvests) {
         const q = h.quality || 'ungraded';
         qualityDist[q] = (qualityDist[q] || 0) + 1;

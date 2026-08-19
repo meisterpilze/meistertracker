@@ -2089,6 +2089,66 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE inventory ADD COLUMN lab_thresh_sy INTEGER DEFAULT 0');
     }
+  },
+  {
+    version: 71,
+    description: 'Store session tokens as SHA-256 hashes, like the MCP token',
+    fn(db) {
+      // S-15: the column held the same bytes the browser holds, so one read of
+      // the database file was every live session for up to seven days. Rewrite
+      // the existing rows in place rather than emptying the table, so a deploy
+      // does not log everybody out — the cookies people are holding keep
+      // working, they just no longer match anything readable in the file.
+      const rows = db.prepare('SELECT token FROM sessions').all();
+      const upd = db.prepare('UPDATE sessions SET token = ? WHERE token = ?');
+      for (const r of rows) {
+        upd.run(crypto.createHash('sha256').update(String(r.token)).digest('hex'), r.token);
+      }
+    }
+  },
+  {
+    version: 72,
+    description: 'Pin the print bridge certificate (trust on first use)',
+    fn(db) {
+      // S-23: the bridge's certificate is self-signed by print-bridge.ps1, so
+      // there is no chain to validate and the request went out with
+      // rejectUnauthorized:false — an on-path attacker on the LAN could present
+      // any certificate, take the X-Bridge-Token and hand back whatever it
+      // liked. The fingerprint is remembered on first connection and checked on
+      // every one after, so a swap is caught even without a CA. cert_url keeps
+      // the pin honest when the bridge is moved to a different address.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('print_bridge_config')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('cert_fp')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_fp TEXT DEFAULT ''");
+      if (!cols.includes('cert_url')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_url TEXT DEFAULT ''");
+    }
+  },
+  {
+    version: 73,
+    description: 'App-specific passwords for CalDAV clients',
+    fn(db) {
+      // S-25: CalDAV authenticates with the account password, so subscribing a
+      // phone means typing the password that also opens the web UI — as an
+      // admin, if that is the account — into iOS or Thunderbird, where it sits
+      // in a keychain, syncs to a cloud backup, and stays there long after the
+      // device stops being one you control. One credential, every capability,
+      // and no way to revoke it that does not change the password for
+      // everything.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS caldav_app_passwords (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          label        TEXT NOT NULL,
+          hash         TEXT NOT NULL,
+          created      TEXT NOT NULL,
+          last_used_at TEXT
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_user ON caldav_app_passwords(user_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_hash ON caldav_app_passwords(hash)');
+    }
   }
 ];
 
@@ -3215,6 +3275,66 @@ function readCaldavConfig(db) {
 }
 
 // ── Auth helpers ────────────────────────────────────────────
+// S-14: account passwords used crypto.scryptSync's defaults — N=16384, about
+// 16 MB and 30-50 ms — while the backup KDF a few hundred lines away in
+// server.js already used N=131072. OWASP's current floor for scrypt is N=2^17,
+// so the accounts were the weakest KDF in the codebase and the backup file the
+// strongest, which is backwards.
+//
+// The parameters live in the salt column rather than in a new column or a
+// migration: a salt written by this version carries the "s2$" prefix, one
+// written before it is bare hex. Both formats verify, so nothing is locked out,
+// and a row upgrades itself the next time its owner logs in. Because the marker
+// travels with the row there is no way to apply the wrong cost to a hash.
+//
+// maxmem has to be raised explicitly — 128 * N * r is 128 MB here, well over
+// Node's 32 MB default, and scryptSync throws rather than degrading.
+const SCRYPT_PARAMS = { N: 131072, r: 8, p: 1, maxmem: 192 * 1024 * 1024 };
+const SCRYPT_SALT_PREFIX = 's2$';
+
+function scryptFor(password, salt) {
+  return String(salt).startsWith(SCRYPT_SALT_PREFIX)
+    ? crypto.scryptSync(password, salt, 64, SCRYPT_PARAMS)
+    : crypto.scryptSync(password, salt, 64); // pre-S-14 row: Node's defaults
+}
+
+/** Hash a password with the current parameters. Returns { salt, hash } as stored. */
+function hashPassword(password) {
+  const salt = SCRYPT_SALT_PREFIX + crypto.randomBytes(16).toString('hex');
+  return { salt, hash: scryptFor(password, salt).toString('hex') };
+}
+
+/** True when the stored row predates the current parameters and should be re-hashed. */
+function passwordNeedsUpgrade(salt) {
+  return !String(salt || '').startsWith(SCRYPT_SALT_PREFIX);
+}
+
+// S-18: the URL segment a user's personal CalDAV calendar lives at. This lives
+// in db.js rather than server.js because createUser is what has to enforce it:
+// /[^a-z0-9]+/ collapses '.', '_' and '-' to the same character, so bob.smith,
+// bob_smith, bob-smith and Bob.Smith all produce the slug "bob-smith" — and
+// checkCalendarAccess grants access on nothing more than a slug match. Two such
+// accounts could read and write each other's personal calendar. createUser
+// already rejected case-insensitive exact duplicates; it did not know about
+// this weaker equality. The naming drift that produces it (anna.mueller one
+// month, anna_mueller the next) is exactly what happens in practice.
+function caldavSlug(username) {
+  return String(username)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+/** Usernames that share a CalDAV slug. Empty on a healthy database. */
+function findCaldavSlugCollisions(db) {
+  const bySlug = new Map();
+  for (const r of db.prepare('SELECT username FROM users').all()) {
+    const slug = caldavSlug(r.username);
+    if (!bySlug.has(slug)) bySlug.set(slug, []);
+    bySlug.get(slug).push(r.username);
+  }
+  return [...bySlug.entries()].filter(([, names]) => names.length > 1).map(([slug, names]) => ({ slug, names }));
+}
+
 function createUser(db, username, password, role) {
   // Login matches usernames case-insensitively (getUserByUsernameCaseInsensitive),
   // but the column's UNIQUE is case-sensitive. Without this guard 'Admin' could
@@ -3223,8 +3343,16 @@ function createUser(db, username, password, role) {
   if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
     throw new Error('Username already exists');
   }
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  // S-18: and reject one that collides under the weaker CalDAV equality too.
+  const slug = caldavSlug(username);
+  const clash = db
+    .prepare('SELECT username FROM users')
+    .all()
+    .find((u) => caldavSlug(u.username) === slug);
+  if (clash) {
+    throw new Error('Username conflicts with existing user: ' + clash.username + ' (same CalDAV calendar name)');
+  }
+  const { salt, hash } = hashPassword(password);
   const created = new Date().toISOString();
   db.prepare('INSERT INTO users(username, hash, salt, role, created) VALUES(?, ?, ?, ?, ?)').run(
     username,
@@ -3246,9 +3374,21 @@ function getUserByUsernameCaseInsensitive(db, username) {
 
 function verifyPassword(storedHash, salt, password) {
   const a = Buffer.from(storedHash, 'hex');
-  const b = crypto.scryptSync(password, salt, 64);
+  const b = scryptFor(password, salt);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+// S-15: sessions.token used to hold the very bytes the browser holds, so a
+// single read of the database file — a stray backup, a filesystem snapshot, an
+// ops copy handed to somebody for debugging — was every live session for up to
+// seven days. The MCP token in the same schema was already stored as a SHA-256
+// hash and compared with timingSafeEqual; sessions never got the same
+// treatment. A plain digest is right here (unlike for passwords): the token is
+// 32 bytes of CSPRNG output, so there is nothing to brute-force and nothing a
+// KDF would add, and the lookup stays a single indexed equality.
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
 function createSession(db, userId) {
@@ -3264,8 +3404,9 @@ function createSession(db, userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const created = new Date().toISOString();
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  // The row stores the hash; the caller gets the token, once, for the cookie.
   db.prepare('INSERT INTO sessions(token, user_id, created, expires) VALUES(?, ?, ?, ?)').run(
-    token,
+    hashSessionToken(token),
     userId,
     created,
     expires
@@ -3274,21 +3415,53 @@ function createSession(db, userId) {
 }
 
 function getSession(db, token) {
+  // s.token is deliberately not selected — it is a hash now, and no caller
+  // wanted it. Returning it would only invite somebody to treat it as the
+  // cookie value again.
   return db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires, u.username, u.role, u.can_ship, u.can_release
+      `SELECT s.user_id, s.expires, u.username, u.role, u.can_ship, u.can_release
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.token = ? AND s.expires > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     )
-    .get(token);
+    .get(hashSessionToken(token));
 }
 
 function deleteSession(db, token) {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(hashSessionToken(token));
 }
 
-function deleteSessionsByUserId(db, userId) {
+// Every credential that speaks for one user: browser sessions, OAuth access
+// and refresh tokens, and any authorization code not yet exchanged. Kept in one
+// place because there are three callers and forgetting one of the tables is
+// exactly the bug S-11 was.
+function deleteAuthArtifactsNoTxn(db, userId) {
+  db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+  db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  // S-25: CalDAV app passwords go too. They are deliberately independent of the
+  // account password day to day — that is the whole point of them — but a
+  // password change is the response to "this account may be compromised", and
+  // somebody who had the account could have minted one. The cost is re-adding
+  // the calendar on each device, which is the same trade every provider makes.
+  db.prepare('DELETE FROM caldav_app_passwords WHERE user_id = ?').run(userId);
+}
+
+// S-11: a password change is the standard answer to "my account may be
+// compromised", so it has to end every way in. Deleting the sessions alone left
+// an attacker's OAuth access token valid for another hour and their refresh
+// token for 30 days — and /mcp accepts a refresh-minted token with the victim's
+// live role, admin included. Transactional so a failure halfway cannot leave
+// the sessions gone and the tokens alive.
+function revokeUserCredentials(db, userId) {
+  db.exec('BEGIN');
+  try {
+    deleteAuthArtifactsNoTxn(db, userId);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 function deleteExpiredSessions(db) {
@@ -3319,6 +3492,36 @@ function createNotification(db, { userId, type, title, body, linkType, linkId })
     )
     .run(userId, type, title, body || null, linkType || null, linkId || null, new Date().toISOString());
   return info.lastInsertRowid;
+}
+
+// S-20: like createNotification, but a no-op when that user already has an
+// unread notification pointing at the same thing.
+//
+// /api/channels/ebay/deletion is unauthenticated by necessity — eBay calls it
+// from its own infrastructure, and the POST carries no signature this server
+// verifies yet. findCustomerByIdentity falls back to matching on email, so
+// anyone who knows a customer's email address could send that notification
+// repeatedly and get one row per admin per request. The handler deliberately
+// does not erase anything, so the rows were the whole effect: a notification
+// list buried under duplicates, which is how a real one gets missed.
+//
+// Unread is the right key rather than "ever seen": a second request about a
+// customer whose first is still sitting unread adds nothing, while a request
+// arriving after the admin has dealt with the last one is a new event and
+// should say so.
+function createNotificationOnce(db, payload) {
+  const { userId, type, linkType, linkId } = payload || {};
+  if (userId && type) {
+    // `IS` rather than `=` so a NULL link matches a NULL link.
+    const existing = db
+      .prepare(
+        `SELECT id FROM notifications
+          WHERE user_id = ? AND type = ? AND read = 0 AND link_type IS ? AND link_id IS ?`
+      )
+      .get(userId, type, linkType || null, linkId || null);
+    if (existing) return existing.id;
+  }
+  return createNotification(db, payload);
 }
 
 function listNotifications(db, userId, limit = 20) {
@@ -3369,9 +3572,7 @@ function deleteUser(db, userId) {
   // a transaction so a partial failure doesn't leave dangling tokens.
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM oauth_codes WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+    deleteAuthArtifactsNoTxn(db, userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -3398,8 +3599,7 @@ function setUserCanRelease(db, userId, canRelease) {
 }
 
 function resetUserPassword(db, userId, newPassword) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(newPassword, salt, 64).toString('hex');
+  const { salt, hash } = hashPassword(newPassword);
   db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
 }
 
@@ -5604,23 +5804,119 @@ function countPickups(db) {
   };
 }
 
+// ── CalDAV app-specific passwords (S-25) ────────────────────
+// A credential that opens calendars and nothing else. The value is 25 random
+// characters from an unambiguous alphabet — no 0/O, no 1/I/l — because somebody
+// is going to type it into a phone by hand; that is ~116 bits, so a plain
+// SHA-256 is the right thing at rest for the same reason it is for session
+// tokens: there is no guessable input for a KDF to slow down. It also has to be
+// cheap, because CalDAV re-authenticates on every single request.
+const CALDAV_PW_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const CALDAV_PW_GROUPS = 5;
+const CALDAV_PW_GROUP_LEN = 5;
+
+function hashCaldavAppPassword(value) {
+  return crypto.createHash('sha256').update(String(value).replace(/-/g, '').toUpperCase()).digest('hex');
+}
+
+function generateCaldavAppPassword() {
+  const chars = [];
+  for (let i = 0; i < CALDAV_PW_GROUPS * CALDAV_PW_GROUP_LEN; i++) {
+    // Rejection-free because the alphabet's length divides evenly into the
+    // sampling range used here (31 values drawn from randomInt's uniform range).
+    chars.push(CALDAV_PW_ALPHABET[crypto.randomInt(CALDAV_PW_ALPHABET.length)]);
+  }
+  const groups = [];
+  for (let i = 0; i < CALDAV_PW_GROUPS; i++) {
+    groups.push(chars.slice(i * CALDAV_PW_GROUP_LEN, (i + 1) * CALDAV_PW_GROUP_LEN).join(''));
+  }
+  return groups.join('-');
+}
+
+/**
+ * Mint an app password for a user. The plaintext is returned once and never
+ * stored; only its hash goes into the table.
+ */
+function createCaldavAppPassword(db, userId, label) {
+  const clean = String(label || '').trim();
+  if (!userId) throw new Error('createCaldavAppPassword: userId required');
+  if (!clean) throw new Error('caldav: a name for the device is required');
+  if (clean.length > 60) throw new Error('caldav: device name too long (max 60)');
+  const count = db.prepare('SELECT COUNT(*) AS c FROM caldav_app_passwords WHERE user_id = ?').get(userId).c;
+  if (count >= 20) throw new Error('caldav: too many app passwords (revoke one first)');
+  const password = generateCaldavAppPassword();
+  const info = db
+    .prepare('INSERT INTO caldav_app_passwords(user_id, label, hash, created) VALUES(?, ?, ?, ?)')
+    .run(userId, clean, hashCaldavAppPassword(password), new Date().toISOString());
+  incrementDataVersion(db);
+  return { id: info.lastInsertRowid, label: clean, password };
+}
+
+/** What the settings screen shows. Never includes the hash. */
+function listCaldavAppPasswords(db, userId) {
+  return db
+    .prepare(
+      `SELECT id, label, created, last_used_at AS lastUsedAt
+         FROM caldav_app_passwords WHERE user_id = ? ORDER BY created DESC`
+    )
+    .all(userId);
+}
+
+/**
+ * The user this app password belongs to, or null. Does not record the use —
+ * see S-17: stamping before the caller has accepted the credential turns the
+ * audit column into a record of attempts.
+ */
+function findCaldavAppPassword(db, candidate) {
+  const value = String(candidate || '').replace(/[^A-Za-z0-9]/g, '');
+  if (value.length !== CALDAV_PW_GROUPS * CALDAV_PW_GROUP_LEN) return null;
+  const row = db
+    .prepare('SELECT id, user_id AS userId FROM caldav_app_passwords WHERE hash = ?')
+    .get(hashCaldavAppPassword(value));
+  return row || null;
+}
+
+function touchCaldavAppPassword(db, id) {
+  db.prepare('UPDATE caldav_app_passwords SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+}
+
+/** Scoped to the owner on purpose: nobody revokes somebody else's device by id. */
+function deleteCaldavAppPassword(db, userId, id) {
+  const info = db.prepare('DELETE FROM caldav_app_passwords WHERE id = ? AND user_id = ?').run(id, userId);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
 // -- Print Bridge Config --
 function getPrintBridgeCfg(db) {
   const row = db.prepare('SELECT * FROM print_bridge_config WHERE id = 1').get();
   return {
     enabled: row && row.enabled === 1,
     url: (row && row.url) || '',
-    token: (row && row.token) || ''
+    token: (row && row.token) || '',
+    // S-23: the pinned certificate, and the origin it was pinned for.
+    certFp: (row && row.cert_fp) || '',
+    certUrl: (row && row.cert_url) || ''
   };
 }
 
 function updatePrintBridgeCfg(db, cfg) {
-  db.prepare(`UPDATE print_bridge_config SET enabled=?, url=?, token=? WHERE id=1`).run(
+  // Saving the bridge settings always drops the pin. That covers moving the
+  // bridge to another address, and it is also the operator's way back in after
+  // re-running print-bridge.ps1 -Install, which issues a fresh certificate: the
+  // next request pins the new one. Making a deliberate save the only way to
+  // re-pin is the point — a mismatch that cleared itself would prove nothing.
+  db.prepare(`UPDATE print_bridge_config SET enabled=?, url=?, token=?, cert_fp='', cert_url='' WHERE id=1`).run(
     cfg.enabled ? 1 : 0,
     cfg.url || '',
     cfg.token || ''
   );
   incrementDataVersion(db);
+}
+
+/** Remember the certificate seen at `origin` (trust on first use). */
+function setPrintBridgeCertPin(db, origin, fingerprint) {
+  db.prepare('UPDATE print_bridge_config SET cert_fp=?, cert_url=? WHERE id=1').run(fingerprint || '', origin || '');
 }
 
 // -- Shipping (Phase 4 Versand) --
@@ -6752,18 +7048,25 @@ function getMcpCfg(db) {
   };
 }
 // S-08: getMcpToken is called from two places — token verification
-// (server.js checkMcpAuth) and admin diagnostics. The verification path
-// passes touchLastUsed=true so we can record audit timestamps; the admin
-// path defaults to false so just opening the settings page doesn't bump
-// "last used" and mask actual abuse.
-function getMcpToken(db, opts) {
+// (server.js checkMcpAuth) and admin diagnostics. Neither may write: opening
+// the settings page must not bump "last used" and mask actual abuse.
+//
+// S-17: the verification path used to pass touchLastUsed and the helper stamped
+// the column before returning, i.e. before the caller had compared anything. So
+// every failed bearer probe refreshed the timestamp, which inverts what the
+// column is for — an admin checking whether a token is still in use before
+// revoking it would read an attacker's traffic as their own team's. Stamping is
+// its own call now, made only after timingSafeEqual has agreed.
+function getMcpToken(db) {
   const row = db.prepare('SELECT api_token, revoked_at FROM mcp_config WHERE id=1').get();
   if (!row || !row.api_token) return '';
   if (row.revoked_at) return '';
-  if (opts && opts.touchLastUsed) {
-    db.prepare('UPDATE mcp_config SET last_used_at=? WHERE id=1').run(new Date().toISOString());
-  }
   return row.api_token;
+}
+
+/** Record a *successful* use of the static MCP token. */
+function touchMcpTokenUsed(db) {
+  db.prepare('UPDATE mcp_config SET last_used_at=? WHERE id=1').run(new Date().toISOString());
 }
 function updateMcpCfg(db, cfg) {
   db.prepare('UPDATE mcp_config SET enabled=? WHERE id=1').run(cfg.enabled ? 1 : 0);
@@ -7541,13 +7844,19 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
   if (endDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) <= endDate);
 
-  const groups = {};
+  // S-10: null-prototype accumulator. Every key here is row data — species,
+  // zone name, contamination reason — and on a plain {} the key "__proto__"
+  // resolves to Object.prototype, which is truthy. The initialiser is skipped,
+  // the ++ lands on the prototype, and from then on every object in the
+  // process inherits a NaN `count`. Object.create(null) has no such key to
+  // hit, and JSON.stringify / Object.keys behave identically on it.
+  const groups = Object.create(null);
   for (const r of rows) {
     let key;
     if (groupBy === 'species') key = r.species || 'unknown';
     else if (groupBy === 'zone') key = r.from || 'unknown';
     else key = r.time ? r.time.slice(0, 7) : 'unknown'; // month
-    if (!groups[key]) groups[key] = { count: 0, reasons: {} };
+    if (!groups[key]) groups[key] = { count: 0, reasons: Object.create(null) };
     groups[key].count++;
     const reason = r.reason || 'unspecified';
     groups[key].reasons[reason] = (groups[key].reasons[reason] || 0) + 1;
@@ -7739,9 +8048,10 @@ function traceLineageForward(db, cultureId) {
 function getProductionPipeline(db) {
   // Active cultures by type and status
   const cultures = db.prepare('SELECT type, status, COUNT(*) AS cnt FROM cultures GROUP BY type, status').all();
-  const cultureSummary = {};
+  // S-10: keyed by row data (see getContaminationReport).
+  const cultureSummary = Object.create(null);
   for (const c of cultures) {
-    if (!cultureSummary[c.type]) cultureSummary[c.type] = {};
+    if (!cultureSummary[c.type]) cultureSummary[c.type] = Object.create(null);
     cultureSummary[c.type][c.status] = c.cnt;
   }
 
@@ -7750,11 +8060,16 @@ function getProductionPipeline(db) {
   // I-09: compare against lab-local day, not UTC day. A 22:00 Berlin "due"
   // would otherwise tip into tomorrow under UTC and disappear from the ready bucket.
   const todayStr = localDayString();
-  const batchSummary = {
+  // S-10: the three known types are seeded onto a null prototype, so a row
+  // whose batch_type is "__proto__" takes the `if (!batchSummary[type])`
+  // branch and gets its own bucket instead of incrementing Object.prototype.
+  // This one polluted silently — both branches only increment, so nothing
+  // threw and the corruption showed up somewhere else entirely.
+  const batchSummary = Object.assign(Object.create(null), {
     grain: { incubating: 0, ready: 0 },
     block: { incubating: 0, ready: 0 },
     liquid: { incubating: 0, ready: 0 }
-  };
+  });
   for (const b of allBatches) {
     const type = b.batch_type || 'block';
     if (!batchSummary[type]) batchSummary[type] = { incubating: 0, ready: 0 };
@@ -7766,7 +8081,7 @@ function getProductionPipeline(db) {
   // P-06: bag-zone map is maintained in memory; used to be a full scan_log SCAN.
   const zones = db.prepare('SELECT id, name, role, max_capacity FROM zones ORDER BY sort_order').all();
   const bagZoneMap = getBagZoneMap(db);
-  const zoneCounts = {};
+  const zoneCounts = Object.create(null);
   for (const zId of bagZoneMap.values()) {
     zoneCounts[zId] = (zoneCounts[zId] || 0) + 1;
   }
@@ -8067,6 +8382,8 @@ const SAFE_ERROR_PREFIXES = [
   'batch not found:',
   // Conflicts — db.js
   'Zone already exists:',
+  'Username conflicts with existing user:',
+  'caldav:',
   'Rack already exists:',
   'A batch with ID ',
   'A culture with ID ',
@@ -9000,17 +9317,22 @@ module.exports = {
   updateBatchDue,
   updateTaskDueDate,
   createUser,
+  caldavSlug,
+  findCaldavSlugCollisions,
   getUserByUsername,
   getUserByUsernameCaseInsensitive,
   verifyPassword,
+  hashPassword,
+  passwordNeedsUpgrade,
   createSession,
   getSession,
   deleteSession,
-  deleteSessionsByUserId,
+  revokeUserCredentials,
   deleteExpiredSessions,
   cleanupExpiredSessions,
   cleanupOldNotifications,
   createNotification,
+  createNotificationOnce,
   listNotifications,
   countUnreadNotifications,
   markNotificationsRead,
@@ -9082,6 +9404,12 @@ module.exports = {
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
+  setPrintBridgeCertPin,
+  createCaldavAppPassword,
+  listCaldavAppPasswords,
+  findCaldavAppPassword,
+  touchCaldavAppPassword,
+  deleteCaldavAppPassword,
   getShippingConfig,
   updateShippingConfig,
   updateOrderShipAddress,
@@ -9129,6 +9457,7 @@ module.exports = {
   rackBagCount,
   getMcpCfg,
   getMcpToken,
+  touchMcpTokenUsed,
   updateMcpCfg,
   generateMcpToken,
   revokeMcpToken,

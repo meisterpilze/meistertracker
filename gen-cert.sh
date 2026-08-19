@@ -13,6 +13,10 @@ set -e
 
 CERT_DIR="certs"
 mkdir -p "$CERT_DIR"
+# S-12: openssl writes the key with the caller's umask, which on a normal host
+# means 0644 — the server's TLS private key readable by every local account.
+# Restrict the directory up front and the key itself after generation.
+chmod 700 "$CERT_DIR"
 
 # Domain from first argument or CERT_DOMAIN env var.
 # Validate against a strict whitelist before interpolating
@@ -74,6 +78,9 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -config "$TMPCONF"
 
 rm -f "$TMPCONF"
+
+chmod 600 "$CERT_DIR/server.key"
+chmod 644 "$CERT_DIR/server.crt"
 
 echo ""
 echo "Certificate generated in $CERT_DIR/"
