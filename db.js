@@ -3444,6 +3444,36 @@ function createNotification(db, { userId, type, title, body, linkType, linkId })
   return info.lastInsertRowid;
 }
 
+// S-20: like createNotification, but a no-op when that user already has an
+// unread notification pointing at the same thing.
+//
+// /api/channels/ebay/deletion is unauthenticated by necessity — eBay calls it
+// from its own infrastructure, and the POST carries no signature this server
+// verifies yet. findCustomerByIdentity falls back to matching on email, so
+// anyone who knows a customer's email address could send that notification
+// repeatedly and get one row per admin per request. The handler deliberately
+// does not erase anything, so the rows were the whole effect: a notification
+// list buried under duplicates, which is how a real one gets missed.
+//
+// Unread is the right key rather than "ever seen": a second request about a
+// customer whose first is still sitting unread adds nothing, while a request
+// arriving after the admin has dealt with the last one is a new event and
+// should say so.
+function createNotificationOnce(db, payload) {
+  const { userId, type, linkType, linkId } = payload || {};
+  if (userId && type) {
+    // `IS` rather than `=` so a NULL link matches a NULL link.
+    const existing = db
+      .prepare(
+        `SELECT id FROM notifications
+          WHERE user_id = ? AND type = ? AND read = 0 AND link_type IS ? AND link_id IS ?`
+      )
+      .get(userId, type, linkType || null, linkId || null);
+    if (existing) return existing.id;
+  }
+  return createNotification(db, payload);
+}
+
 function listNotifications(db, userId, limit = 20) {
   const lim = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
   return db
@@ -9155,6 +9185,7 @@ module.exports = {
   cleanupExpiredSessions,
   cleanupOldNotifications,
   createNotification,
+  createNotificationOnce,
   listNotifications,
   countUnreadNotifications,
   markNotificationsRead,

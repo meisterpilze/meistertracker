@@ -8800,7 +8800,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         try {
           for (const u of db.listUsers(database)) {
             if (u.role !== 'admin') continue;
-            db.createNotification(database, {
+            // S-20: once per admin per customer while it is still unread. This
+            // endpoint takes no credential and matches customers by email, so
+            // without the guard anyone who knows an address could bury the
+            // notification list — and burying it is how the real one is missed.
+            db.createNotificationOnce(database, {
               userId: u.id,
               type: 'ebay-deletion',
               title: 'eBay account closure',
