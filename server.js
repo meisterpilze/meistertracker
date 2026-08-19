@@ -7153,6 +7153,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // Orders — manual / CSV import (single object, or {orders:[...]}, or [...])
   if (req.method === 'POST' && url === '/api/orders/import') {
+    // S-09: import is an upsert, not just a create — upsertOrder matches on
+    // channel + channelOrderId and COALESCE-replaces ship_* / customer_* on the
+    // existing row. Without this gate any authed user could read channel +
+    // channelOrderId from GET /api/orders and rewrite the delivery address of
+    // somebody else's order, so the next label buy sends the parcel to them.
+    // Rewriting a ship-to address is not an "operational write" — same gate as
+    // the other customer-PII routes.
+    if (requireShipping(req, res)) return;
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
