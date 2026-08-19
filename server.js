@@ -162,9 +162,35 @@ const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
 
+/**
+ * The address to key a limit on.
+ *
+ * ⚠️ **X-Forwarded-For's first entry is the caller's, not the proxy's.** nginx's
+ * `$proxy_add_x_forwarded_for` APPENDS the real peer to whatever the client
+ * sent, so entry [0] is attacker-supplied — the comment on setupFromLoopback
+ * below has said so for as long as that guard has existed, and used it as the
+ * reason not to trust this function there. Every throttle in this file is keyed
+ * on the value returned here, so reading [0] handed an attacker a fresh
+ * identity per request and let them aim any per-address penalty at somebody
+ * else.
+ *
+ * X-Real-IP instead: it is single-valued, and the nginx configuration in
+ * DEPLOYMENT.md sets it from `$remote_addr` at every location, so a client
+ * cannot prepend to it. Falling back to the socket keeps the direct-TLS
+ * deployment (Path A, the recommended one) working unchanged, where
+ * TRUST_PROXY is unset and no header is read at all.
+ */
 function getClientIP(req) {
-  const fwd = TRUST_PROXY ? req.headers['x-forwarded-for'] : null;
-  return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+  if (TRUST_PROXY) {
+    const real = req.headers['x-real-ip'];
+    if (typeof real === 'string' && real.trim()) return real.trim();
+    // No X-Real-IP behind a proxy that was told to send one: the socket is
+    // the proxy itself, so everyone shares a key. Said plainly rather than
+    // silently, because a shared key turns every per-address limit into a
+    // shared one — see the throttles' own comments.
+    return (req.socket.remoteAddress || 'unknown') + '|proxy-ohne-real-ip';
+  }
+  return req.socket.remoteAddress || 'unknown';
 }
 
 /**
@@ -3696,6 +3722,19 @@ function handleCaldav(req, res) {
     }
   }
 
+  // S-22: the same budget the login route spends from, because this reaches the
+  // same KDF — checkCaldavAuth runs db.verifyPassword, and it runs the decode
+  // loop twice, so a request here costs *two* hashes. Guarding only
+  // /api/auth/login left the more expensive door open, and CalDAV is on by
+  // default (migration v10). The username is spendable the same way there:
+  // checkCaldavAuth skips hashing for an unknown account, so "admin" is as good
+  // a guess as any and a fresh username buys nothing extra.
+  if (!takeLoginKdfToken(caldavIP)) {
+    res.writeHead(429, { 'Retry-After': '5' });
+    res.end('Too many login attempts. Try again shortly.');
+    return;
+  }
+
   // Auth check — returns user account object or false
   const caldavUser = checkCaldavAuth(req);
   if (!caldavUser) {
@@ -3709,6 +3748,7 @@ function handleCaldav(req, res) {
     return;
   }
   // Clear attempts on successful auth
+  refundLoginKdfToken(caldavIP);
   const successKey = caldavUser.username.toLowerCase();
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
@@ -4900,92 +4940,97 @@ function recordLoginFailurePerUser(username) {
   }
 }
 
-// ── S-22: the tier that counts the source, whatever name it types ────────────
+// ── S-22: what an unauthenticated caller may make this process compute ──────
 //
-// Both tiers above begin their key with a string the caller chooses —
-// loginAttempts on username@IP, loginAttemptsPerUser on the username alone. A
-// fresh username on every request therefore lands in a fresh bucket, both
-// counters stay at one, and neither the wait nor the lock ever engages, while
-// finishLogin runs a full scrypt regardless because the constant-time answer
-// requires it. Measured at 276 ms per call with the S-14 parameters, and the
-// hash is synchronous, so it blocks the only thread there is: at 300 a minute
-// that is 82 s of CPU asked of every 60 s of wall clock, so the queue never
-// drains. Scanning, CalDAV and the harvest feed's own setInterval stop with it,
-// and the shop stops being told what is in stock.
+// finishLogin runs a full scrypt whether or not the account exists, because the
+// constant-time answer requires it, and S-14 raised that to N=2^17: ~276 ms of
+// synchronous work on the only thread there is. Both older tiers key on a string
+// the caller chooses — loginAttempts on username@IP, loginAttemptsPerUser on the
+// username — so a fresh username per request lands in a fresh bucket, neither
+// counter ever engages, and every request bought a full hash. At the
+// 300-a-minute ceiling that is 82 s of CPU demanded of every 60 s of wall clock,
+// from one address, with no account.
 //
-// A per-source *wait* does not close this. A delay that still ends in a hash
-// only queues the work — 64 pending delays releasing 17 s of hashing every 5 s
-// is the same overload with extra steps. So this tier refuses instead of
-// deferring: past the threshold the answer is immediate and there is no hash at
-// all. Hard is safe here for the reason S-19 already gives for the per-source
-// lock, that an attacker can only ever point it at their own address; and
-// because the threshold counts the address rather than the account, twenty
-// wrong passwords is a great many typos while a new username no longer resets
-// the count.
-const LOGIN_SOURCE_MAX_FAILURES = 20;
-const loginAttemptsPerSource = new Map(); // IP → { count, firstAttempt }
+// Three things this must NOT be, each learned the hard way:
+//
+// 1. **Not a delay.** A wait that still ends in a hash only queues the work;
+//    64 pending delays releasing 17 s of hashing every 5 s is the same overload
+//    with extra steps.
+//
+// 2. **Not a hard lock.** The first version of this was one, and it repeated
+//    S-19's mistake one level down. S-19 removed the per-account lock because
+//    twenty wrong guesses could keep a named account out; a lock keyed on the
+//    address does the same to everyone who shares one — an office NAT, a mobile
+//    carrier, or the documented Path B nginx, where without TRUST_PROXY every
+//    request arrives from 127.0.0.1. Worse, it could not be cleared: the refusal
+//    ran before finishLogin, so the "one correct login clears it" escape was
+//    unreachable once tripped. This budget refills on its own instead, so the
+//    worst case is a wait measured in seconds.
+//
+// 3. **Not one global pot.** That was the second version, and it turned a CPU
+//    exhaustion into a login outage: a flood that keeps the shared bucket empty
+//    costs the attacker nothing and locks out everyone arriving without a
+//    session, invisibly. A per-source budget cannot be spent on somebody else's
+//    behalf, which is the whole property that was missing.
+//
+// What is left is a rate, not a verdict: an address may buy LOGIN_KDF_BURST
+// hashes at once and one more every LOGIN_KDF_REFILL_MS. One address therefore
+// holds about 5% of the thread, and a correct password hands its token straight
+// back, so honest use costs nothing at all.
+//
+// A distributed flood across many addresses is not answered here and is not
+// pretended to be: that is what the 300-a-minute limiter and a firewall are for.
+// What this closes is one caller freezing the lab.
+const LOGIN_KDF_BURST = 5;
+const LOGIN_KDF_REFILL_MS = 5000;
+const LOGIN_KDF_MAX_QUELLEN = 5000;
+const loginKdfTokens = new Map(); // Adresse → { tokens, stand }
 
-function checkLoginSourceAllowed(ip) {
-  const entry = loginAttemptsPerSource.get(ip);
-  if (!entry) return true;
-  if (Date.now() - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
-    loginAttemptsPerSource.delete(ip);
-    return true;
+function _loginKdfEintrag(quelle, jetzt) {
+  let e = loginKdfTokens.get(quelle);
+  if (!e) {
+    // Bounded, or the map is a memory leak with a rate limit in front of it.
+    // Oldest-first: the entries that matter are the ones spending right now.
+    if (loginKdfTokens.size >= LOGIN_KDF_MAX_QUELLEN) {
+      const aeltester = loginKdfTokens.keys().next().value;
+      if (aeltester !== undefined) loginKdfTokens.delete(aeltester);
+    }
+    e = { tokens: LOGIN_KDF_BURST, stand: jetzt };
+    loginKdfTokens.set(quelle, e);
   }
-  return entry.count < LOGIN_SOURCE_MAX_FAILURES;
+  const dazu = Math.floor((jetzt - e.stand) / LOGIN_KDF_REFILL_MS);
+  if (dazu > 0) {
+    e.tokens = Math.min(LOGIN_KDF_BURST, e.tokens + dazu);
+    e.stand += dazu * LOGIN_KDF_REFILL_MS;
+  }
+  return e;
 }
 
-function recordLoginFailurePerSource(ip) {
-  const now = Date.now();
-  let entry = loginAttemptsPerSource.get(ip);
-  if (!entry || now - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
-    entry = { count: 0, firstAttempt: now };
-    loginAttemptsPerSource.set(ip, entry);
-  }
-  entry.count++;
-  if (entry.count === LOGIN_SOURCE_MAX_FAILURES) {
-    log('warn', 'Too many failed logins from one address — refusing without hashing', {
-      ip,
-      attempts: entry.count
-    });
-  }
-}
-
-function clearLoginAttemptsPerSource(ip) {
-  loginAttemptsPerSource.delete(ip);
-}
-
-// ── S-22: and the budget that survives a thousand addresses ──────────────────
-//
-// The tier above bounds one source and does nothing about a flood spread over
-// many. The hash is expensive enough that a modest spread-out one still hurts,
-// so this is a token bucket in front of the KDF: take a token before hashing,
-// answer without hashing when there is none.
-//
-// The refund is what keeps the bucket from becoming a denial of service of its
-// own. A correct password hands its token straight back, so honest logins cost
-// nothing and it only ever drains on failure. What an attacker can hold is one
-// hash a second — about a quarter of the thread — and the rest of the server
-// goes on answering.
-const LOGIN_KDF_BURST = 10;
-const LOGIN_KDF_REFILL_MS = 1000;
-let loginKdfTokens = LOGIN_KDF_BURST;
-let loginKdfRefilledAt = Date.now();
-
-function takeLoginKdfToken(now = Date.now()) {
-  const gained = Math.floor((now - loginKdfRefilledAt) / LOGIN_KDF_REFILL_MS);
-  if (gained > 0) {
-    loginKdfTokens = Math.min(LOGIN_KDF_BURST, loginKdfTokens + gained);
-    loginKdfRefilledAt += gained * LOGIN_KDF_REFILL_MS;
-  }
-  if (loginKdfTokens <= 0) return false;
-  loginKdfTokens--;
+/** One hash for this address, or false. Nothing is hashed on a false. */
+function takeLoginKdfToken(quelle, jetzt = Date.now()) {
+  const e = _loginKdfEintrag(quelle, jetzt);
+  if (e.tokens <= 0) return false;
+  e.tokens--;
   return true;
 }
 
-function refundLoginKdfToken() {
-  loginKdfTokens = Math.min(LOGIN_KDF_BURST, loginKdfTokens + 1);
+/** A correct password costs nothing — that is what keeps this off honest users. */
+function refundLoginKdfToken(quelle, jetzt = Date.now()) {
+  const e = _loginKdfEintrag(quelle, jetzt);
+  e.tokens = Math.min(LOGIN_KDF_BURST, e.tokens + 1);
 }
+
+// An address that has not asked for a while is not worth remembering.
+setInterval(
+  () => {
+    const jetzt = Date.now();
+    const alt = LOGIN_KDF_BURST * LOGIN_KDF_REFILL_MS;
+    for (const [quelle, e] of loginKdfTokens) {
+      if (jetzt - e.stand > alt && e.tokens >= LOGIN_KDF_BURST) loginKdfTokens.delete(quelle);
+    }
+  },
+  10 * 60 * 1000
+).unref();
 
 function clearLoginAttempts(key) {
   loginAttempts.delete(key);
@@ -5010,9 +5055,6 @@ function finishLogin(req, res, { username, password, userKey, throttleKey, sourc
   if (!user || !passwordOk) {
     recordLoginFailure(throttleKey);
     recordLoginFailurePerUser(userKey);
-    // S-22: the tier a new username cannot walk around. The KDF token stays
-    // spent — the bucket is meant to drain on failure and only on failure.
-    recordLoginFailurePerSource(sourceKey);
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Invalid credentials' }));
     return;
@@ -5021,10 +5063,9 @@ function finishLogin(req, res, { username, password, userKey, throttleKey, sourc
   // keeps S-19's delay from being a lockout with extra steps.
   clearLoginAttempts(throttleKey);
   clearLoginAttemptsPerUser(userKey);
-  // S-22: a correct password costs the budget nothing, which is what keeps the
-  // bucket from locking out the people it is there to protect.
-  clearLoginAttemptsPerSource(sourceKey);
-  refundLoginKdfToken();
+  // S-22: a correct password costs this address nothing, which is what keeps
+  // the budget off the people it exists to protect.
+  refundLoginKdfToken(sourceKey);
   // S-14: login is the only moment the plaintext password is in hand, so
   // it is the only chance to re-hash a row that still uses the old scrypt
   // cost. Best effort — a failure here must not cost the user their login.
@@ -5884,31 +5925,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
           return;
         }
-        // S-22: the same question asked of the address on its own. Both keys
-        // above start with a string the caller picks, so a new username each
-        // time walks straight past them; this one it cannot rename its way
-        // around. Answered before anything is hashed, which is the whole point
-        // of it — see the tier's own comment for what the hashing costs.
-        if (!checkLoginSourceAllowed(clientIP)) {
-          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '900' });
-          res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
-          return;
-        }
         // S-22: a password big enough to be its own denial of service never
         // reaches the KDF. No account can hold one, so the answer is the one a
-        // wrong password gets — and it counts against the address, because
-        // sending it is not something a client of ours does by accident.
+        // wrong password gets.
         if (typeof password !== 'string' || password.length > PASSWORD_MAX_LENGTH) {
-          recordLoginFailurePerSource(clientIP);
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid credentials' }));
           return;
         }
-        // S-22: the global budget in front of the KDF, for a flood spread over
-        // more addresses than the per-source tier can hold. Taken here rather
-        // than after the wait, so a queued request reserves its hash instead of
-        // reaching the end of the wait to find there is no room for it.
-        if (!takeLoginKdfToken()) {
+        // S-22: this address's budget for hashing. Taken here rather than after
+        // the wait, so a queued request reserves its hash instead of reaching
+        // the end of the wait to find there is no room for it.
+        if (!takeLoginKdfToken(clientIP)) {
           res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
           return;
@@ -5919,13 +5947,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           try {
             finishLogin(req, res, { username, password, userKey, throttleKey, sourceKey: clientIP });
           } catch (err) {
-            refundLoginKdfToken();
+            refundLoginKdfToken(clientIP);
             safeErr(res, err);
           }
         });
         if (!accepted) {
           // Nothing was hashed, so the reservation goes back.
-          refundLoginKdfToken();
+          refundLoginKdfToken(clientIP);
           res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
         }
