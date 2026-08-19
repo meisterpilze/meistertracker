@@ -22,7 +22,15 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const { floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK, maskedCss } = require('../scripts/mobile-size-scan.js');
+const {
+  floor,
+  tapFloor,
+  rootPx,
+  subFloorSizes,
+  blocks,
+  MAX_WIDTH_BLOCK,
+  maskedCss
+} = require('../scripts/mobile-size-scan.js');
 
 const ROOT = path.join(__dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
@@ -221,6 +229,36 @@ describe('the phone floors', () => {
       .map((m) => m[1])
       .filter((t) => t !== '--tap-min');
     assert.deepEqual(wrong, [], `min-height/width: max() floored against ${[...new Set(wrong)].join(', ')}`);
+  });
+});
+
+describe('the floors the tools measure against', () => {
+  // scripts/measure-mobile.js gates a real phone measurement on these two
+  // numbers, and scripts/mobile-audit.js counts against the first. Both get
+  // them from rootPx(), so a reader that quietly returns the wrong value does
+  // not throw — it reports a clean bill of health against the wrong floor,
+  // which is the one failure mode worse than no measurement at all.
+  it('reads the type floor and the touch floor off :root', () => {
+    assert.equal(floor(CSS), 13, 'the type floor moved — if that was deliberate, this number moves with it');
+    assert.equal(tapFloor(CSS), 56, 'the touch floor moved — see MOBILE_REDESIGN.md §9 decision 2');
+  });
+
+  // The specific way this breaks. `--tap-min` is declared twice: 56px on :root
+  // and 0px in the desktop override, the 0 being what makes every max() return
+  // its literal on a desk. A reader not anchored to the phone block finds the
+  // desktop one just as easily, and then the touch floor is zero and every
+  // control on earth clears it.
+  it('reads the phone value, not the desktop override beside it', () => {
+    assert.notEqual(
+      rootPx('--tap-min', CSS),
+      0,
+      'the touch floor resolved to the desktop 0px — nothing can fail against it'
+    );
+    assert.notEqual(rootPx('--fs-min', CSS), 0, 'the type floor resolved to the desktop 0px');
+  });
+
+  it('throws on a token it cannot find, rather than reporting against undefined', () => {
+    assert.throws(() => rootPx('--fs-nope', CSS), /--fs-nope/);
   });
 });
 

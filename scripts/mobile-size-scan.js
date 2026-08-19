@@ -20,15 +20,21 @@ const CSS_PATH = path.join(ROOT, 'styles.css');
 
 const readCss = () => fs.readFileSync(CSS_PATH, 'utf8');
 
-// The floor is --fs-xs, read from the stylesheet rather than restated. A copy
-// in each consumer would let the token move while both kept checking the old
-// number, and nothing would fail.
-function floor(css = readCss()) {
+// Any px-valued token on the phone :root, read from the stylesheet rather than
+// restated. A copy in each consumer would let the token move while both kept
+// checking the old number, and nothing would fail.
+function rootPx(name, css = readCss()) {
   const m = css.match(/^:root \{[\s\S]*?\n\}/m);
-  const decl = m && m[0].match(/\n\s*--fs-xs:\s*([\d.]+)px;/);
-  if (!decl) throw new Error('--fs-xs not found in the :root block of styles.css — the floor has no source of truth');
+  const decl = m && m[0].match(new RegExp('\\n\\s*' + name + ':\\s*([\\d.]+)px;'));
+  if (!decl) throw new Error(name + ' not found as a px value in the :root block of styles.css');
   return parseFloat(decl[1]);
 }
+
+// The two floors the whole redesign is measured against. Named rather than
+// spelled out at each call site, because "13" and "56" appearing bare in three
+// scripts is how the tokens and the tools drift apart.
+const floor = (css) => rootPx('--fs-xs', css === undefined ? readCss() : css);
+const tapFloor = (css) => rootPx('--tap-min', css === undefined ? readCss() : css);
 
 // Every `font-size:` below the floor. `spacing` is kept because it is the
 // difference between the two spellings in this codebase — index.html writes
@@ -106,7 +112,9 @@ module.exports = {
   ROOT,
   CSS_PATH,
   readCss,
+  rootPx,
   floor,
+  tapFloor,
   subFloorSizes,
   blocks,
   MAX_WIDTH_BLOCK,
