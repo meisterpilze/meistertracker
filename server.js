@@ -879,6 +879,34 @@ function _oauthResultHtml(channel, ok, msg) {
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label}</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f14;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:24px"><div style="font-size:48px;color:${color}">${icon}</div><p style="font-size:16px;line-height:1.5">${safe}</p><p style="margin-top:18px"><a href="/" style="color:#60a5fa">Zurück zur App</a></p>${redirect}</div></body></html>`;
 }
 // Admin-only guard — returns true if blocked (response already sent)
+/**
+ * Does this calendar write create, move or withdraw a pickup window?
+ *
+ * A calendar event with category 'pickup' is not an entry in a diary — it is
+ * what harvest-feed.js publishes to the shop as a bookable collection slot,
+ * with its day, its clock, its address and its number of places. POST and PATCH
+ * on /api/calendar-events carried no permission check at all, so any logged-in
+ * worker could invent a 05:00 collection at an address the farm does not use,
+ * or set the capacity of a window customers had already booked to zero. The
+ * neighbours had long since decided this was not everyone's to do: DELETE on
+ * the same row and POST /api/pickup-locations are both requireAdmin.
+ *
+ * Both directions have to be asked about, which is why the stored row is read
+ * and not only the body. A PATCH that moves a window usually carries no
+ * category at all, and a PATCH that carries `category: 'meeting'` takes a
+ * published window off the shop without ever mentioning pickup.
+ *
+ * Ordinary calendar entries — meetings, deliveries, maintenance — stay
+ * everyone's, as before. The guard is scoped to the one category that talks to
+ * customers.
+ */
+function touchesPickupWindow(id, data) {
+  if (data && data.category === 'pickup') return true;
+  if (!id) return false;
+  const stored = db.getCalendarEventById(database, id);
+  return !!(stored && stored.category === 'pickup');
+}
+
 function requireAdmin(req, res) {
   if (!req.authUser || req.authUser.role !== 'admin') {
     jsonErr(res, 403, 'admin required');
@@ -4197,6 +4225,14 @@ function caldavRecordAllowed(req, ics) {
   // A custom calendar event. Matched before the -event suffix is stripped, or
   // an event id that ends in "-event" would be mangled into a different one.
   if (/^cev-(.+)@meisterpilze$/.test(uid)) return isAdmin;
+  // ⚠️ And the ones that do not wear that shape. The UID is only built as
+  // `cev-<id>@meisterpilze` when the row has no caldav_uid of its own; an event
+  // that arrived from a calendar client keeps the client's UID, and the pattern
+  // above walks straight past it. That left the withdraw direction open for
+  // exactly the windows an admin had created from their own calendar app.
+  // Asking the database costs one indexed lookup and cannot be fooled by a
+  // naming convention.
+  if (db.readCalendarEventByCaldavUid(database, uid)) return isAdmin;
   // A task, either by its own uid or by its companion due-date event's.
   const taskUid = uid.replace(/-event$/, '');
   if (!db.isValidCaldavUid(taskUid)) return true;
@@ -4464,6 +4500,27 @@ function handlePut(parts, body, req, res) {
               if (catMatch) {
                 const c = catMatch[1].trim().toLowerCase();
                 if (KNOWN_CATEGORIES[c]) category = c;
+              }
+              // The second door to the same thing. Any user may mint a CalDAV
+              // app password, and checkCalendarAccess lets everyone write into
+              // the shared calendar — so without this, the permission asked for
+              // on POST /api/calendar-events is answered by putting the same
+              // event in an .ics instead. Editing an existing one this way was
+              // already admin-only: caldavRecordAllowed returns isAdmin for any
+              // cev-…@meisterpilze UID. Only creating a fresh one was open.
+              //
+              // The already-parsed `category` is used rather than reading
+              // CATEGORIES a third time: two spellings of the same rule is how
+              // one of them stops matching, and the loose one would read the
+              // whole file instead of this VEVENT block.
+              if (category === 'pickup' && req.caldavUser.role !== 'admin') {
+                log('warn', 'CalDAV PUT: refused a pickup window from a non-admin', {
+                  calendar: calName,
+                  actor: req.caldavUser.username
+                });
+                res.writeHead(403);
+                res.end('Forbidden');
+                return;
               }
 
               let startDate = null,
@@ -10248,6 +10305,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      // A pickup window is a promise to customers, not a diary entry — see
+      // touchesPickupWindow. Everything else on this route stays open.
+      if (touchesPickupWindow(null, data) && requireAdmin(req, res)) return;
       if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.id)) {
         jsonErr(res, 400, 'id must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
@@ -10311,6 +10371,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        // The stored row as well as the body: a PATCH that moves a window
+        // usually names no category, and one that sets `category: 'meeting'`
+        // takes a published window off the shop without mentioning pickup.
+        if (touchesPickupWindow(id, data) && requireAdmin(req, res)) return;
         // Atomically update the event row + refresh the assignees junction
         // table so the two can't drift apart on a mid-operation crash.
         const effectiveAssignees = deriveEffectiveAssignees(data);

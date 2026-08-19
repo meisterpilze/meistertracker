@@ -955,6 +955,17 @@ function createMcpServer(database, onWrite, printer) {
       recurrenceUntil: z.string().optional().describe('ISO date — last allowed recurrence (inclusive)')
     },
     async (params) => {
+      // A pickup window is what harvest-feed.js publishes to the shop as a
+      // bookable collection slot — day, clock, address, places. The HTTP route
+      // and the CalDAV create branch both ask for admin before writing one, and
+      // an MCP token is something any worker can mint through the OAuth flow,
+      // so this is the third door to the same room. Only that one category:
+      // meetings and inoculation days stay everyone's, as they are here and on
+      // the other two doors. delete_calendar_event is already requireAdminRole.
+      if (params.category === 'pickup') {
+        const adminErr = requireAdminRole();
+        if (adminErr) return adminErr;
+      }
       try {
         const id = 'ev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
         const unknownAssigneeNames = [];
