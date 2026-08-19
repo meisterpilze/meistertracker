@@ -21396,9 +21396,19 @@ function wkOpenGrain() {
   }
 }
 
+// The mixing form lives in the "Neue Charge" panel, right above the batch form
+// that draws kilos out of it — the "Substrat-Ansätze" tab only lists the open
+// mixes. Pointing the tile at the list was a dead end: it showed what exists
+// and offered no way to add one.
 function wkOpenSubstrate() {
   go('batch', 'n-batch');
-  openStab('batch', 'substrate');
+  openStab('batch', 'new');
+  setTimeout(() => {
+    const el = document.getElementById('sb-recipe');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.focus();
+  }, 80);
 }
 
 (function wireWorkSteps() {
