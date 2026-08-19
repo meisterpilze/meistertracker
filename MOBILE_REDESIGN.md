@@ -497,8 +497,29 @@ In this order, cheapest and highest-traffic first:
    change, not a stylesheet one, and belong with the rest of the de-inlining.
 3. **`p-batch`** — 4 sub-tabs, tables `t-batches` + `t-harvest`.
 4. **`p-lab`** — 5 sub-tabs, tables `t-grain` + `t-cultures`.
-5. **`p-cal`** — the month grid at `min-height: 60px` per cell is unusable on a phone;
-   below 769px it should be an agenda list, not a grid.
+5. ✅ **`p-cal`** — an agenda list below 769px, and the reason it took one day rather
+   than three is that the list was already written. `printCalendarTaskList()` collects
+   the same events the grids collect, groups them by date, sorts each day all-day-first
+   then by start time, and emits a row per entry. That is an agenda view, shipping for
+   as long as the print button has, and unreachable: it writes to `#print-sheet`
+   (`display: none` off-print), every rule of its own lives inside `@media print`, and
+   it ends by calling `window.print()`. The grouping and the sort are the parts that
+   would have been fiddly against recurrence expansion, and they were already correct.
+
+   The **view toggle and the legend are hidden, not shrunk.** The toggle would offer
+   three views that all render the same list; the legend is eight colour keys for dots
+   whose meaning every agenda row already says in words — and those eight spans were
+   the last sub-floor type in the app. The honest fix for a key nobody needs is not a
+   bigger key.
+
+   Three ways this could have half-worked, each now pinned by an assertion:
+   `calAgendaOnly()` is checked *before* `calView`, because `calView` survives from a
+   desktop session in the same tab; `calNav()` moves by a month on a phone whatever
+   `calView` still says; and crossing the breakpoint re-renders rather than only
+   re-styling, or rotating into landscape leaves the toggle over a container still
+   holding agenda markup.
+
+   *Measured at 375px: sub-floor type 8 → 0, DECLARED ratchet 10 → 7.*
 6. **`p-inv`**, **`p-zones`**.
 
 Each PR: de-inline that page's font sizes, apply §5.1–5.2, convert its tables per §5.4.
@@ -613,8 +634,14 @@ should not be claimed as automated.
    page may need to be cut in two rather than assigned.
 2. **56px or 48px** as the Feld target? 56 is better with gloves and costs roughly one list
    row per screen. Recommend 56 for Feld, 48 for Büro; it is one token either way.
-3. **Calendar on phone** — agenda list (recommended) or keep the month grid with a bigger
-   cell minimum? The grid is the more expensive option and the less useful one on foot.
+3. ~~**Calendar on phone** — agenda list (recommended) or keep the month grid with a bigger
+   cell minimum?~~ **Settled by arithmetic rather than by taste, and shipped.** A bigger
+   cell minimum cannot work: seven columns at the 44px floor need 316px of grid, which
+   does fit in 343px of content — and leaves each cell 36px wide, so the day-number
+   circle fills it edge to edge with nothing left for an event label. Today a month cell
+   is 47.9px wide and gives an event 29.9px of text at 10px type: four glyphs and an
+   ellipsis. Week view is worse at 40.7px per column. **The constraint is horizontal and
+   no minimum height reaches it.** Agenda, per item 5 above.
 4. **Bridge lifetime.** Is "gone by the end of Phase 5" a commitment or an aspiration? It
    changes whether Phase 3 is one batch or three.
 5. **Phase 0 alone is worth shipping.** It is roughly a day and fixes text size, target
