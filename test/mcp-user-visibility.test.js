@@ -100,39 +100,47 @@ describe('list_users tells a worker only what an assignee picker needs', () => {
 });
 
 describe('move_bags writes down who moved them', () => {
+  // ⚠️ The first version of this block called the tool with { bagIds,
+  // toLocation }. move_bags takes { entries, confirm }, and calling handler()
+  // directly bypasses zod — so `entries` was undefined, the tool threw, the
+  // early return swallowed it, and both cases passed while asserting nothing.
+  // The move_bags half of the fix shipped with no coverage at all. The guard
+  // against a repeat is the row count: a case that wrote nothing now fails.
   let d, p;
   before(() => {
     p = path.join(os.tmpdir(), 'mt_mcpmove_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
     d = db.openDb(p);
     db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    // No batch fixture: move_bags reads one only to copy species and strain
+    // onto the row, and readBatchById returning null is a normal case. What is
+    // under test is which user id the row carries.
   });
   after(() => {
     d.close();
     fs.unlinkSync(p);
   });
 
-  const letzterAkteur = () => d.prepare('SELECT user_id FROM scan_log ORDER BY id DESC LIMIT 1').get();
+  const bewege = (auth, bag) =>
+    rufe(werkzeuge(d, auth), 'move_bags', {
+      entries: [{ batch: 'FB-2026-001', bag, action: 'MOVE', from: 'INC', to: 'FRUIT' }]
+    });
+  const letzte = () => d.prepare('SELECT user_id FROM scan_log ORDER BY id DESC LIMIT 1').get();
+  const anzahl = () => d.prepare('SELECT COUNT(*) AS n FROM scan_log').get().n;
 
   it('records the calling user, not a null', async () => {
-    const vorher = d.prepare('SELECT COUNT(*) AS n FROM scan_log').get().n;
-    await rufe(werkzeuge(d, { userId: 1, role: 'user' }), 'move_bags', {
-      bagIds: ['FB-2025-001-01'],
-      toLocation: 'INC'
-    });
-    const nachher = d.prepare('SELECT COUNT(*) AS n FROM scan_log').get().n;
-    if (nachher === vorher) return; // nothing to move in an empty database
-    assert.equal(letzterAkteur().user_id, 1, 'the row must carry the user who asked for it');
+    const vorher = anzahl();
+    const r = await bewege({ userId: 1, role: 'user', username: 'anton' }, 'FB-2026-001-01');
+    assert.equal(/error/i.test(JSON.stringify(r)), false, 'the tool must actually run: ' + JSON.stringify(r));
+    assert.equal(anzahl(), vorher + 1, 'a row must have been written — otherwise this asserts nothing');
+    assert.equal(letzte().user_id, 1, 'the row carries the user who asked for it');
   });
 
   it('leaves the legacy static token as nobody rather than inventing an identity', async () => {
-    const vorher = d.prepare('SELECT COUNT(*) AS n FROM scan_log').get().n;
-    await rufe(werkzeuge(d, { userId: null, role: 'admin' }), 'move_bags', {
-      bagIds: ['FB-2025-001-02'],
-      toLocation: 'INC'
-    });
-    const nachher = d.prepare('SELECT COUNT(*) AS n FROM scan_log').get().n;
-    if (nachher === vorher) return;
-    assert.equal(letzterAkteur().user_id, null);
+    const vorher = anzahl();
+    const r = await bewege({ userId: null, role: 'admin', username: null }, 'FB-2026-001-02');
+    assert.equal(/error/i.test(JSON.stringify(r)), false, JSON.stringify(r));
+    assert.equal(anzahl(), vorher + 1);
+    assert.equal(letzte().user_id, null);
   });
 });
 

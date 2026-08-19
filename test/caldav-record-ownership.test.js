@@ -105,6 +105,18 @@ describe('a CalDAV write is judged on the record it names', () => {
     assert.equal(erlaubt(req('anton', 'user'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR'), true);
   });
 
+  it('is not fooled by a property whose name merely ends in UID', () => {
+    // ⚠️ The guard matched /UID:(.*)/, which finds `X-DECOY-UID:` too. One
+    // header line therefore fed it a name that resolves to nothing — so it
+    // waved the request through while the sync-back below read the real UID out
+    // of the VEVENT and wrote it. The whole check walked around by a decoy.
+    const koeder =
+      'BEGIN:VCALENDAR\r\nX-DECOY-UID:nichts-hier\r\nBEGIN:VTODO\r\nUID:' +
+      uidFremd +
+      '\r\nSUMMARY:x\r\nEND:VTODO\r\nEND:VCALENDAR';
+    assert.equal(erlaubt(req('anton', 'user'), koeder), false, 'the decoy must not decide it');
+  });
+
   it('lets through a UID that could never name a row', () => {
     assert.equal(erlaubt(req('anton', 'user'), ics('../../etc/passwd')), true);
   });

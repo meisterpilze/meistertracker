@@ -4258,7 +4258,13 @@ function handleMkcalendar(parts, body, req, res) {
 // new task from a calendar client is a normal thing to do, and it takes nothing
 // from anyone.
 function caldavRecordAllowed(req, ics) {
-  const uidMatch = String(ics || '').match(/UID:(.*)/);
+  // ⚠️ **Anchored, and that is not tidiness.** `/UID:(.*)/` matches inside any
+  // property whose name ends in UID — `X-DECOY-UID:harmless` in the first line
+  // fed this guard a name that resolves to nothing, so it waved the request
+  // through while the sync-back below read the real UID out of the VEVENT and
+  // wrote it. One header line walked around the whole check. The text arrives
+  // unfolded, so a line anchor is the same thing the writers see.
+  const uidMatch = String(ics || '').match(/^UID:(.*)$/m);
   if (!uidMatch) return true;
   const uid = uidMatch[1].trim();
   const isAdmin = !!(req.caldavUser && req.caldavUser.role === 'admin');
@@ -4272,7 +4278,14 @@ function caldavRecordAllowed(req, ics) {
   // exactly the windows an admin had created from their own calendar app.
   // Asking the database costs one indexed lookup and cannot be fooled by a
   // naming convention.
-  if (db.readCalendarEventByCaldavUid(database, uid)) return isAdmin;
+  //
+  // ⚠️ **Only the pickup category.** The first version of this line returned
+  // isAdmin for every calendar row that carried a caldav_uid, which took
+  // meetings, deliveries and maintenance away from everyone over CalDAV — the
+  // exact opposite of what its own commit said it did. What is being protected
+  // is the shop's collection times, not the calendar.
+  const ereignis = db.readCalendarEventByCaldavUid(database, uid);
+  if (ereignis) return ereignis.category === 'pickup' ? isAdmin : true;
   // A task, either by its own uid or by its companion due-date event's.
   const taskUid = uid.replace(/-event$/, '');
   if (!db.isValidCaldavUid(taskUid)) return true;
@@ -6675,7 +6688,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (Array.isArray(payload.manualTasks)) {
       const isAdmin = req.authUser && req.authUser.role === 'admin';
       const wer = req.authUser && req.authUser.username;
-      payload.manualTasks = payload.manualTasks.filter((t) => db.canUserSeeTask(t, wer, isAdmin));
+      payload.manualTasks = payload.manualTasks.filter((t) => db.canUserSeeTask(database, t, wer, isAdmin));
     }
     // Per-user unread notification count so the bell badge can update
     // on every sync without a separate request.

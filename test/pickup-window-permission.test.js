@@ -118,6 +118,16 @@ describe('the CalDAV doors', () => {
     assert.equal((zweig.match(/CATEGORIES:/g) || []).length, 1, 'the category is parsed once in this branch');
   });
 
+  it('leaves ordinary calendar entries to everyone over CalDAV', () => {
+    // ⚠️ The first version of the database lookup returned isAdmin for EVERY
+    // calendar row that carried a caldav_uid — meetings, deliveries,
+    // maintenance — which is the opposite of what its own commit claimed. What
+    // is protected is the shop's collection times, not the calendar.
+    const fn = SRC.match(/function caldavRecordAllowed\(req, ics\) \{[\s\S]*?\n\}/);
+    assert.ok(fn, 'caldavRecordAllowed has moved');
+    assert.match(fn[0], /ereignis\.category === 'pickup' \? isAdmin : true/, 'the category has to decide');
+  });
+
   it('recognises an event by its stored uid, not only by the cev- shape', () => {
     // The UID is only built as cev-<id>@meisterpilze when the row has no
     // caldav_uid of its own. One that arrived from a calendar client keeps the

@@ -5083,13 +5083,25 @@ function canUserModifyTask(db, username, taskId, isAdmin) {
  * person. Making that case impossible is a question for the dialog, not for a
  * read filter that would eat data to answer it.
  */
-function canUserSeeTask(task, username, isAdmin) {
+function canUserSeeTask(db, task, username, isAdmin) {
   if (isAdmin) return true;
   if (!task || task.private === undefined) return false;
   if (!task.private) return true;
   const assignees = taskAssignees(task.assignee);
   if (!assignees.length) return true;
-  return assignees.includes(username);
+  if (assignees.includes(username)) return true;
+  // ⚠️ **The assignee picker offers two namespaces, and only one of them can
+  // log in.** app.js merges `users[].username` with `team_members[].name`, and
+  // a team member is a free-text row with no account and no key to one. A
+  // private task assigned only to such a name would otherwise be visible to
+  // nobody but an admin — including whoever typed it, who cannot get it back
+  // because there is no created_by column. That is the same data loss the
+  // no-assignee case above is written to avoid, so it takes the same answer:
+  // when there is no account to keep it for, it is not kept from anyone.
+  const konten = db
+    .prepare('SELECT COUNT(*) AS n FROM users WHERE username IN (' + assignees.map(() => '?').join(',') + ')')
+    .get(...assignees);
+  return !(konten && konten.n > 0);
 }
 
 function readTaskByCaldavUid(db, caldavUid) {

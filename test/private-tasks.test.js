@@ -26,31 +26,48 @@ const ROOT = path.join(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
 describe('canUserSeeTask', () => {
+  // A real database, because the rule now has to know which assignee names can
+  // actually log in — the picker offers two namespaces and only one of them can.
+  let d, p;
+  before(() => {
+    p = path.join(os.tmpdir(), 'mt_sicht_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
+    d = db.openDb(p);
+    db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    db.createUser(d, 'britta', 'passwort-lang-genug', 'user');
+    db.createUser(d, 'carla', 'passwort-lang-genug', 'user');
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
   const offen = { private: false, assignee: 'britta' };
   const privatFremd = { private: true, assignee: 'britta' };
   const privatEigen = { private: true, assignee: 'anton' };
   const privatGeteilt = { private: true, assignee: 'britta, anton' };
   const privatNiemand = { private: true, assignee: null };
+  const privatNurTeammitglied = { private: true, assignee: 'Aushilfe Jonas' };
+  const privatGemischt = { private: true, assignee: 'Aushilfe Jonas, britta' };
 
   it('shows an ordinary task to everyone', () => {
-    assert.equal(db.canUserSeeTask(offen, 'anton', false), true);
+    assert.equal(db.canUserSeeTask(d, offen, 'anton', false), true);
   });
 
   it("hides a colleague's private task", () => {
-    assert.equal(db.canUserSeeTask(privatFremd, 'anton', false), false);
+    assert.equal(db.canUserSeeTask(d, privatFremd, 'anton', false), false);
   });
 
   it('shows a private task to the person it is for', () => {
-    assert.equal(db.canUserSeeTask(privatEigen, 'anton', false), true);
+    assert.equal(db.canUserSeeTask(d, privatEigen, 'anton', false), true);
   });
 
   it('splits a multi-assignee list the same way canUserModifyTask does', () => {
-    assert.equal(db.canUserSeeTask(privatGeteilt, 'anton', false), true);
-    assert.equal(db.canUserSeeTask(privatGeteilt, 'carla', false), false);
+    assert.equal(db.canUserSeeTask(d, privatGeteilt, 'anton', false), true);
+    assert.equal(db.canUserSeeTask(d, privatGeteilt, 'carla', false), false);
   });
 
   it('shows everything to an admin', () => {
-    assert.equal(db.canUserSeeTask(privatFremd, 'anton', true), true);
+    assert.equal(db.canUserSeeTask(d, privatFremd, 'anton', true), true);
   });
 
   it('leaves a private task with nobody assigned visible, deliberately', () => {
@@ -58,16 +75,29 @@ describe('canUserSeeTask', () => {
     // would lose the note for whoever typed it with no way to get it back, and
     // the checkbox's own words say nothing about the case where there is no
     // assigned person. Pinned so the decision is a decision and not a slip.
-    assert.equal(db.canUserSeeTask(privatNiemand, 'anton', false), true);
+    assert.equal(db.canUserSeeTask(d, privatNiemand, 'anton', false), true);
+  });
+
+  it('treats an assignee who has no account the same way', () => {
+    // The picker merges users[].username with team_members[].name, and a team
+    // member is free text with no account. Scoping a private task to a name
+    // that cannot log in would hide it from everyone including its author —
+    // the same data loss the no-assignee case is written to avoid.
+    assert.equal(db.canUserSeeTask(d, privatNurTeammitglied, 'anton', false), true);
+  });
+
+  it('but a single real account among them is enough to scope it', () => {
+    assert.equal(db.canUserSeeTask(d, privatGemischt, 'anton', false), false, 'anton is not on it');
+    assert.equal(db.canUserSeeTask(d, privatGemischt, 'britta', false), true, 'britta is');
   });
 
   it('fails closed on a row that does not carry the flag at all', () => {
     // A mapper that forgets the column must not quietly come to mean "public" —
     // that is exactly how the MCP briefing kept handing out what the web
     // payload had started filtering.
-    assert.equal(db.canUserSeeTask({ assignee: 'britta' }, 'anton', false), false);
-    assert.equal(db.canUserSeeTask(null, 'anton', false), false);
-    assert.equal(db.canUserSeeTask(undefined, 'anton', false), false);
+    assert.equal(db.canUserSeeTask(d, { assignee: 'britta' }, 'anton', false), false);
+    assert.equal(db.canUserSeeTask(d, null, 'anton', false), false);
+    assert.equal(db.canUserSeeTask(d, undefined, 'anton', false), false);
   });
 });
 
@@ -76,6 +106,10 @@ describe('every task mapper carries the flag the filter asks about', () => {
   before(() => {
     p = path.join(os.tmpdir(), 'mt_priv_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
     d = db.openDb(p);
+    // The accounts have to exist: the rule asks whether an assignee can log in,
+    // and a name that cannot is treated as unassigned on purpose.
+    db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    db.createUser(d, 'britta', 'passwort-lang-genug', 'user');
     db.insertTask(d, {
       text: 'Krankmeldung Britta',
       assignee: 'britta',
@@ -98,7 +132,7 @@ describe('every task mapper carries the flag the filter asks about', () => {
   });
 
   it('so a worker sees only their own through either of them', () => {
-    const sichtbar = (rows, wer) => rows.filter((t) => db.canUserSeeTask(t, wer, false)).map((t) => t.text);
+    const sichtbar = (rows, wer) => rows.filter((t) => db.canUserSeeTask(d, t, wer, false)).map((t) => t.text);
     assert.deepEqual(sichtbar(db.readAll(d).manualTasks, 'anton'), ['Regale wischen']);
     assert.deepEqual(sichtbar(db.getAllTasks(d), 'anton'), ['Regale wischen']);
     assert.equal(sichtbar(db.readAll(d).manualTasks, 'britta').length, 2);
@@ -110,6 +144,10 @@ describe('the MCP briefing applies the same filter', () => {
   before(() => {
     p = path.join(os.tmpdir(), 'mt_privmcp_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
     d = db.openDb(p);
+    // The accounts have to exist: the rule asks whether an assignee can log in,
+    // and a name that cannot is treated as unassigned on purpose.
+    db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    db.createUser(d, 'britta', 'passwort-lang-genug', 'user');
     db.insertTask(d, {
       text: 'Abmahnung vorbereiten',
       assignee: 'britta',
@@ -144,6 +182,54 @@ describe('the MCP briefing applies the same filter', () => {
   it('still hands it to an admin', async () => {
     const text = JSON.stringify(await briefing({ userId: 1, role: 'admin', username: 'chefin' }));
     assert.ok(text.includes('Abmahnung'));
+  });
+});
+
+describe('the third door: the MCP get_tasks tool', () => {
+  // daily_briefing and GET /api/data both filter; get_tasks is a dedicated task
+  // lister on the same server, reachable with the same self-minted worker
+  // token, and it takes an `assignee` parameter — so it answered "show me
+  // everything marked private for this colleague" in a single call.
+  let d, p;
+  before(() => {
+    p = path.join(os.tmpdir(), 'mt_gettasks_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
+    d = db.openDb(p);
+    db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    db.createUser(d, 'britta', 'passwort-lang-genug', 'user');
+    db.insertTask(d, {
+      text: 'Abmahnung vorbereiten',
+      assignee: 'britta',
+      private: true,
+      created: '2026-08-20T00:00:00Z'
+    });
+    db.insertTask(d, { text: 'Regale wischen', assignee: 'anton', created: '2026-08-20T00:00:00Z' });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  const holen = async (auth, args = {}) => {
+    const server = createMcpServer(d, () => {}, { auth });
+    const t = server._registeredTools['get_tasks'];
+    assert.ok(t && typeof t.handler === 'function', 'get_tasks is gone or the SDK renamed the callback');
+    return JSON.stringify(await t.handler(args, {}));
+  };
+
+  it("does not list a colleague's private task", async () => {
+    const text = await holen({ userId: 2, role: 'user', username: 'anton' });
+    assert.equal(text.includes('Abmahnung'), false);
+    assert.ok(text.includes('Regale wischen'));
+  });
+
+  it('does not answer it when asked for that colleague by name either', async () => {
+    const text = await holen({ userId: 2, role: 'user', username: 'anton' }, { assignee: 'britta' });
+    assert.equal(text.includes('Abmahnung'), false, 'the assignee filter must not be a way around it');
+  });
+
+  it('still lists it for the person it is for, and for an admin', async () => {
+    assert.ok((await holen({ userId: 3, role: 'user', username: 'britta' })).includes('Abmahnung'));
+    assert.ok((await holen({ userId: 1, role: 'admin', username: 'chefin' })).includes('Abmahnung'));
   });
 });
 

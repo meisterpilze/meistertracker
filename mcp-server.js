@@ -299,7 +299,7 @@ function createMcpServer(database, onWrite, printer) {
       // flow. A read hole with two doors is not closed until both are.
       const manualTasks = db
         .getAllTasks(database)
-        .filter((t) => db.canUserSeeTask(t, auth.username, auth.role === 'admin'));
+        .filter((t) => db.canUserSeeTask(database, t, auth.username, auth.role === 'admin'));
       const inventory = db.getInventory(database, 20);
       const calendarEvents = db.getCalendarEvents(database);
       const target = date || today();
@@ -540,7 +540,14 @@ function createMcpServer(database, onWrite, printer) {
       dueAfter: z.string().optional().describe('ISO date — tasks due after this date')
     },
     async (params) => {
-      let tasks = db.getAllTasks(database);
+      // The third door. daily_briefing and GET /api/data both filter; this one
+      // is a dedicated task lister on the same server, reachable with the same
+      // self-minted worker token, and it takes an `assignee` parameter — so it
+      // answered "show me everything marked private for this colleague" in one
+      // call. A read hole is not closed until every door asks.
+      let tasks = db
+        .getAllTasks(database)
+        .filter((t) => db.canUserSeeTask(database, t, auth.username, auth.role === 'admin'));
 
       if (params.assignee) {
         const a = params.assignee.toLowerCase();
