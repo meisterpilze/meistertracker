@@ -553,6 +553,27 @@ powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.
 
 The installer persists the token into the scheduled-task arguments, so it survives logoffs / reboots.
 
+#### Certificate pinning
+
+The bridge's certificate is self-signed, so there is no chain for the server to
+validate. Instead it pins the certificate: the **first** connection to a bridge
+address records that certificate's SHA-256 fingerprint (you will see
+`Pinned print bridge certificate on first connection` in the log, with the
+fingerprint), and every connection after that is refused unless the certificate
+matches. That is what stops somebody on the same LAN from answering for the
+bridge's address, collecting your `PRINT_BRIDGE_TOKEN` and printing whatever
+they like.
+
+Consequence: **re-running `print-bridge.ps1 -Install` issues a new certificate**,
+and printing will then fail with *"Bridge certificate changed"* until you tell
+the server to trust it. To re-pin, open **Settings → Drucker** and save — any
+save clears the pin, and the next print records the new certificate. Pointing
+the server at a different bridge address re-pins by itself; only a changed
+certificate at the *same* address is treated as a problem.
+
+If you see that error and you did not just re-install the bridge, do not save
+the settings — find out who else is answering on that address first.
+
 ## 13. Updating
 
 To update a running installation:

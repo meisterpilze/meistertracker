@@ -2105,6 +2105,25 @@ const MIGRATIONS = [
         upd.run(crypto.createHash('sha256').update(String(r.token)).digest('hex'), r.token);
       }
     }
+  },
+  {
+    version: 72,
+    description: 'Pin the print bridge certificate (trust on first use)',
+    fn(db) {
+      // S-23: the bridge's certificate is self-signed by print-bridge.ps1, so
+      // there is no chain to validate and the request went out with
+      // rejectUnauthorized:false — an on-path attacker on the LAN could present
+      // any certificate, take the X-Bridge-Token and hand back whatever it
+      // liked. The fingerprint is remembered on first connection and checked on
+      // every one after, so a swap is caught even without a CA. cert_url keeps
+      // the pin honest when the bridge is moved to a different address.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('print_bridge_config')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('cert_fp')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_fp TEXT DEFAULT ''");
+      if (!cols.includes('cert_url')) db.exec("ALTER TABLE print_bridge_config ADD COLUMN cert_url TEXT DEFAULT ''");
+    }
   }
 ];
 
@@ -5760,17 +5779,30 @@ function getPrintBridgeCfg(db) {
   return {
     enabled: row && row.enabled === 1,
     url: (row && row.url) || '',
-    token: (row && row.token) || ''
+    token: (row && row.token) || '',
+    // S-23: the pinned certificate, and the origin it was pinned for.
+    certFp: (row && row.cert_fp) || '',
+    certUrl: (row && row.cert_url) || ''
   };
 }
 
 function updatePrintBridgeCfg(db, cfg) {
-  db.prepare(`UPDATE print_bridge_config SET enabled=?, url=?, token=? WHERE id=1`).run(
+  // Saving the bridge settings always drops the pin. That covers moving the
+  // bridge to another address, and it is also the operator's way back in after
+  // re-running print-bridge.ps1 -Install, which issues a fresh certificate: the
+  // next request pins the new one. Making a deliberate save the only way to
+  // re-pin is the point — a mismatch that cleared itself would prove nothing.
+  db.prepare(`UPDATE print_bridge_config SET enabled=?, url=?, token=?, cert_fp='', cert_url='' WHERE id=1`).run(
     cfg.enabled ? 1 : 0,
     cfg.url || '',
     cfg.token || ''
   );
   incrementDataVersion(db);
+}
+
+/** Remember the certificate seen at `origin` (trust on first use). */
+function setPrintBridgeCertPin(db, origin, fingerprint) {
+  db.prepare('UPDATE print_bridge_config SET cert_fp=?, cert_url=? WHERE id=1').run(fingerprint || '', origin || '');
 }
 
 // -- Shipping (Phase 4 Versand) --
@@ -9257,6 +9289,7 @@ module.exports = {
   updateDuckdnsStatus,
   getPrintBridgeCfg,
   updatePrintBridgeCfg,
+  setPrintBridgeCertPin,
   getShippingConfig,
   updateShippingConfig,
   updateOrderShipAddress,
