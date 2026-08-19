@@ -22,12 +22,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
+const { floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK } = require('../scripts/mobile-size-scan.js');
+
 const ROOT = path.join(__dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 
-const FLOOR = 13; // --fs-xs, in px
+// Read off --fs-xs rather than restated here: a second copy of the number lets
+// the token move while this file keeps asserting against the old one.
+const FLOOR = floor(CSS);
 
 // The :root block and the desktop override, as source text.
 function block(re) {
@@ -51,7 +55,8 @@ const TOKENS = [
   '--pad-btn',
   '--pad-stab',
   '--pad-sb',
-  '--pad-modal'
+  '--pad-modal',
+  '--fab-bottom'
 ];
 
 describe('mobile token layer', () => {
@@ -64,8 +69,13 @@ describe('mobile token layer', () => {
   // The whole architecture is this one direction. A `max-width` override block
   // would mean someone went back to subtracting from the desktop.
   it('overrides on min-width, not max-width, so the phone stays the base', () => {
-    const rootRedefinitions = CSS.match(/@media[^{]*max-width[^{]*\{\s*:root \{/g);
-    assert.equal(rootRedefinitions, null, 'a max-width block redefines :root — the base flipped back to desktop');
+    for (const block of blocks(CSS, MAX_WIDTH_BLOCK)) {
+      assert.doesNotMatch(
+        block.body,
+        /^\s*:root \{/m,
+        'a max-width block redefines :root — the base flipped back to desktop'
+      );
+    }
   });
 
   // Not decoration: a tablet held in a gloved hand is 1024px wide and still
@@ -92,8 +102,12 @@ describe('touch targets', () => {
 
   // The specific regression this phase existed to undo.
   it('never shrinks .btn at a narrow breakpoint again', () => {
-    for (const m of CSS.matchAll(/@media[^{]*max-width[^{]*\{[\s\S]*?\n\}/g)) {
-      assert.doesNotMatch(m[0], /\.btn \{[^}]*font-size:\s*\d/, 'a max-width block sets a literal font-size on .btn');
+    for (const block of blocks(CSS, MAX_WIDTH_BLOCK)) {
+      assert.doesNotMatch(
+        block.body,
+        /\.btn \{[^}]*font-size:\s*\d/,
+        'a max-width block sets a literal font-size on .btn'
+      );
     }
   });
 });
@@ -102,9 +116,7 @@ describe('the inline-size bridge', () => {
   // Every distinct sub-floor size the source actually emits, both spellings.
   const declared = new Set();
   for (const src of [HTML, APP]) {
-    for (const m of src.matchAll(/font-size:(\s*)([\d.]+)px/g)) {
-      if (parseFloat(m[2]) < FLOOR) declared.add(m[1] + m[2] + 'px');
-    }
+    for (const m of subFloorSizes(src, FLOOR)) declared.add(m.size);
   }
 
   it('finds sub-floor inline sizes to cover (otherwise this suite is vacuous)', () => {

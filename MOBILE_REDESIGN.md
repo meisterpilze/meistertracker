@@ -161,6 +161,7 @@ override.** Everything else follows.
   --fs-xs: 13px;      /* the floor. nothing user-facing goes below this. */
   --fs-sm: 15px;
   --fs-base: 17px;
+  /* Sketched, deliberately NOT shipped in Phase 0 — see the note below. */
   --fs-lg: 20px;
   --fs-xl: 26px;
 
@@ -168,7 +169,7 @@ override.** Everything else follows.
   --tap: 56px;
   --tap-sm: 48px;
 
-  /* Space */
+  /* Space — also sketched, also not shipped yet. */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
   --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   --pad-page: 16px;
@@ -204,10 +205,22 @@ Then every rule that hard-codes a size consumes a token instead:
 
 ```css
 body { font-size: var(--fs-base); }
-.btn { padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); min-height: var(--tap); }
+.btn { padding: var(--pad-btn); font-size: var(--fs-sm); min-height: var(--tap); }
 .main { padding: var(--pad-page); }
 .card { padding: var(--pad-card); }
 ```
+
+> **[corrected]** Phase 0 shipped **11 tokens**, and the `--sp-*` scale, `--fs-lg` and
+> `--fs-xl` are **not among them** — nothing consumed them, and a token nobody reads is
+> just a number in a different place. The `.btn` line above originally read
+> `padding: var(--sp-3) var(--sp-4)`, which would have been `12px 16px` on a desktop
+> where `.btn` is `9px 16px` — a desktop redesign smuggled in as a refactor. Paired
+> `--pad-*` tokens exist precisely because today's values are not on any scale.
+>
+> This is a real open question, not a settled one: with no scale, every new component
+> gets a bespoke token **by default rather than by decision**. Whoever lands Phase 2
+> should either introduce `--sp-*` at the point something actually consumes it, or say
+> plainly that per-component padding tokens are the house style.
 
 …and **every `max-width` rule that only shrinks something gets deleted**, because the
 desktop override now does that job in one place.
@@ -258,12 +271,12 @@ The mechanism, chosen because it needs no change to how rows are built:
 @media (max-width: 768px) {
   .t-cards thead { position: absolute; left: -9999px; }   /* not display:none — keeps AT */
   .t-cards tr {
-    display: block; padding: var(--sp-3); margin-bottom: var(--sp-3);
+    display: block; padding: 12px; margin-bottom: 12px;
     border: 1px solid var(--c-border); border-radius: var(--radius);
   }
   .t-cards td {
-    display: flex; justify-content: space-between; gap: var(--sp-3);
-    border: none; padding: var(--sp-2) 0; font-size: var(--fs-sm);
+    display: flex; justify-content: space-between; gap: 12px;
+    border: none; padding: 8px 0; font-size: var(--fs-sm);
   }
   .t-cards td::before { content: attr(data-l); font-weight: 600; color: var(--c-text-muted); }
 }
@@ -335,7 +348,8 @@ Each phase is a PR. Each is shippable on its own and does something visible.
 
 ### Phase 0 — Tokens, inversion, bridge · **shipped**
 
-- ✅ `:root` token block + the `min-width: 769px and (hover: hover)` override (§4).
+- ✅ `:root` token block — **11 tokens**, not the full §4 sketch — plus the
+  `min-width: 769px and (hover: hover)` override.
 - ✅ Converted to tokens: `body`, `.btn`, `.stab`, `.card`, `.main`, `.sb-btn`, `.modal`.
 - ✅ **Deleted** the shrink-only rules — `.btn` and `.main`/`.card` at 480, `.main`/`.card`
   and `table { font-size: 12px }` at 768, `.modal` at both — plus the size half of the

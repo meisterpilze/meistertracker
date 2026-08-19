@@ -18,7 +18,6 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const os = require('os');
 
 const ROOT = path.resolve(__dirname, '..');
 const FIXTURE = path.join(ROOT, 'test', 'desktop-baseline.json');
@@ -40,19 +39,22 @@ const SNIPPET = `(function(){
   fetch('/', { method: 'POST', body: JSON.stringify({ viewport: innerWidth, styles: styles }, null, 2) });
 })();`;
 
-// The served copy: index.html minus every external script, plus styles.css.
-function stage() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mt-baseline-'));
-  const html = fs
-    .readFileSync(path.join(ROOT, 'index.html'), 'utf8')
-    .replace(/<script[^>]*\ssrc="[^"]*"[^>]*>\s*<\/script>/gi, '');
-  fs.writeFileSync(path.join(dir, 'index.html'), html);
-  fs.copyFileSync(path.join(ROOT, 'styles.css'), path.join(dir, 'styles.css'));
-  return dir;
+// What gets served: index.html minus every external script, plus styles.css.
+// Held in memory rather than staged to a temp directory — both strings are
+// already here, and the earlier mkdtemp version left a mt-baseline-* directory
+// behind on every run because nothing ever removed it.
+function build() {
+  return {
+    'index.html': fs
+      .readFileSync(path.join(ROOT, 'index.html'), 'utf8')
+      .replace(/<script[^>]*\ssrc="[^"]*"[^>]*>\s*<\/script>/gi, ''),
+    'styles.css': fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8')
+  };
 }
 
-// Only the two files we stage are reachable — no path traversal, no repo.
-function serve(dir, onCapture) {
+// Only the two files in `files` are reachable — the exact-name lookup below is
+// what rules out path traversal, so nothing else in the repo is exposed.
+function serve(files, onCapture) {
   const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
       const chunks = [];
@@ -66,7 +68,8 @@ function serve(dir, onCapture) {
     }
     const clean = req.url.split('?')[0];
     const name = clean === '/' || clean.startsWith('/index.html') ? 'index.html' : path.basename(clean);
-    if (name !== 'index.html' && name !== 'styles.css') return res.writeHead(404).end();
+    const body = Object.prototype.hasOwnProperty.call(files, name) ? files[name] : null;
+    if (body === null) return res.writeHead(404).end();
     // no-store is load-bearing, not hygiene. Without it the browser reuses
     // styles.css across runs — the stylesheet URL never changes — and you
     // measure an edit you made two commits ago. That produced a "the desktop
@@ -76,7 +79,7 @@ function serve(dir, onCapture) {
       'Content-Type': name.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8',
       'Cache-Control': 'no-store, must-revalidate'
     });
-    res.end(fs.readFileSync(path.join(dir, name)));
+    res.end(body);
   });
   server.listen(PORT, '127.0.0.1');
   return server;
@@ -99,9 +102,8 @@ function diff(before, after) {
 }
 
 const compare = process.argv.includes('--compare');
-const dir = stage();
 
-serve(dir, (captured) => {
+serve(build(), (captured) => {
   if (captured.viewport !== WIDTH) {
     console.error(`\n✗ captured at ${captured.viewport}px, expected ${WIDTH}px — resize the window and retry.`);
     process.exit(1);
@@ -126,6 +128,10 @@ serve(dir, (captured) => {
 });
 
 console.log(`\nServing on http://127.0.0.1:${PORT}/index.html`);
-console.log(`Open it, size the viewport to exactly ${WIDTH}px wide, and run this in the console:\n`);
+// Size first, then load. Resizing a page that is already open can leave
+// elements holding computed styles from the old width — during Phase 0 that
+// reported .sb-btn as "moved" three separate times when it had not.
+console.log(`Size the viewport to exactly ${WIDTH}px wide FIRST, then open it (a resize after`);
+console.log(`loading can leave stale computed styles), and run this in the console:\n`);
 console.log(SNIPPET);
 console.log(`\nWaiting for the capture${compare ? ' (compare mode)' : ''}…`);

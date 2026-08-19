@@ -1,8 +1,10 @@
 // Ratchet for the two debts the mobile redesign has to pay down.
 //
-// Both counts are allowed to fall and never to rise. That is the same trick
-// `npm run lint --max-warnings 73` already plays in this repo: you cannot fix
-// 495 things in one commit, but you can guarantee nobody adds the 496th.
+// Both counts are allowed to fall and never to rise, in the spirit of the
+// `--max-warnings 73` on `npm run lint`: you cannot fix 495 things in one
+// commit, but you can guarantee nobody adds the 496th. Unlike that flag, which
+// is a hand-edited integer in package.json, --update rewrites the CEILING line
+// below in place — so it verifies the rewrite instead of trusting it.
 //
 //   node scripts/mobile-audit.js            # check against the ceilings
 //   node scripts/mobile-audit.js --list     # ...and show where the hits are
@@ -22,52 +24,39 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ROOT, floor, subFloorSizes, blocks, MAX_WIDTH_BLOCK, maskedCss } = require('./mobile-size-scan.js');
 
-const ROOT = path.resolve(__dirname, '..');
 const SELF = path.relative(ROOT, __filename);
-const FLOOR = 13; // --fs-xs
+const FLOOR = floor(); // --fs-xs, read from styles.css
 
 // Lower these as phases land. Never raise them.
 const CEILING = { inline: 495, declared: 11 };
-
-const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '');
 
 function inlineHits() {
   const hits = [];
   for (const file of ['index.html', 'app.js']) {
     const lines = fs.readFileSync(path.join(ROOT, file), 'utf8').split('\n');
     lines.forEach((line, i) => {
-      // index.html writes `font-size: 12px`, app.js writes `font-size:12px`.
-      for (const m of line.matchAll(/font-size:\s*([\d.]+)px/g)) {
-        if (parseFloat(m[1]) < FLOOR) hits.push({ file, line: i + 1, text: m[0] });
-      }
+      for (const m of subFloorSizes(line, FLOOR)) hits.push({ file, line: i + 1, text: m.text });
     });
   }
   return hits;
 }
 
 function declaredHits() {
-  const raw = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
-  // Blank out comments and attribute selectors but keep the byte offsets, so a
-  // reported line number still points at the real line in the real file.
-  const blank = (s) => ' '.repeat(s.length);
-  const src = stripComments(raw).length === raw.length ? raw : raw.replace(/\/\*[\s\S]*?\*\//g, blank);
-  const scan = src.replace(/\[[^\]]*\]/g, blank);
-
+  const { src, scan } = maskedCss();
   const hits = [];
-  for (const m of scan.matchAll(/@media[^{]*max-width[^{]*\{/g)) {
-    let i = m.index + m[0].length;
-    let depth = 1;
-    const start = i;
-    while (i < scan.length && depth) {
-      if (scan[i] === '{') depth++;
-      else if (scan[i] === '}') depth--;
-      i++;
-    }
-    for (const f of scan.slice(start, i).matchAll(/font-size:\s*([\d.]+)px/g)) {
-      if (parseFloat(f[1]) >= FLOOR) continue;
-      const at = start + f.index;
-      hits.push({ file: 'styles.css', line: src.slice(0, at).split('\n').length, text: f[0] });
+  // Hits arrive in ascending offset order, so carry the line count forward
+  // instead of re-counting newlines from byte 0 for each one.
+  let scanned = 0;
+  let line = 1;
+  const lineAt = (offset) => {
+    for (; scanned < offset; scanned++) if (src[scanned] === '\n') line++;
+    return line;
+  };
+  for (const block of blocks(scan, MAX_WIDTH_BLOCK)) {
+    for (const f of subFloorSizes(block.body, FLOOR)) {
+      hits.push({ file: 'styles.css', line: lineAt(block.start + f.index), text: f.text });
     }
   }
   return hits;
@@ -88,11 +77,23 @@ if (process.argv.includes('--list')) {
 }
 
 if (process.argv.includes('--update')) {
-  const src = fs.readFileSync(__filename, 'utf8').replace(
-    /const CEILING = \{ inline: \d+, declared: \d+ \};/,
+  const before = fs.readFileSync(__filename, 'utf8');
+  const CEILING_LINE = /const CEILING = \{ inline: \d+, declared: \d+ \};/;
+  // Test the pattern rather than comparing the result: the regex can quietly
+  // stop matching — a reformat, a wrapped line, a trailing comment — and the
+  // script would write the file back unchanged while printing that it had
+  // lowered the ceilings. `scripts/` is in neither the lint nor the format npm
+  // script, so nothing else guards its shape. Comparing before/after instead
+  // would call a re-run at the same numbers a failure, which it is not.
+  if (!CEILING_LINE.test(before)) {
+    console.error(`✗ could not find the CEILING line in ${SELF} — edit it by hand, or restore its one-line shape.`);
+    process.exit(1);
+  }
+  const after = before.replace(
+    CEILING_LINE,
     `const CEILING = { inline: ${counts.inline}, declared: ${counts.declared} };`
   );
-  fs.writeFileSync(__filename, src);
+  fs.writeFileSync(__filename, after);
   console.log(`\n✓ ceilings lowered to inline: ${counts.inline}, declared: ${counts.declared} — commit ${SELF}`);
   process.exit(0);
 }
