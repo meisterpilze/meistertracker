@@ -713,10 +713,22 @@ window.LANG['pt'] = {
   'caldav.syncNow': 'Sincronizar todas as tarefas agora',
   'caldav.settingsSaved': 'Configura\u00e7\u00f5es salvas.',
   'caldav.syncing': 'Sincronizando...',
+  'caldav.appPwTitle': 'Palavras-passe de aplica\u00e7\u00e3o para apps de calend\u00e1rio',
+  'caldav.appPwDesc': 'Uma app de calend\u00e1rio guarda a palavra-passe que lhe deres \u2014 no porta-chaves, na c\u00f3pia de seguran\u00e7a na nuvem, muitas vezes mais tempo do que o pr\u00f3prio aparelho. Cria aqui uma por aparelho em vez de escreveres a palavra-passe da tua conta: abre apenas calend\u00e1rios e podes revogar um aparelho sem mudar o teu acesso.',
+  'caldav.appPwLabelPh': 'Nome do aparelho, p. ex. iPhone',
+  'caldav.appPwCreate': 'Criar',
+  'caldav.appPwOnce': 'Copia agora \u2014 s\u00f3 \u00e9 mostrada esta vez.',
+  'caldav.appPwNone': 'Ainda sem palavras-passe de aplica\u00e7\u00e3o.',
+  'caldav.appPwDevice': 'Aparelho',
+  'caldav.appPwCreated': 'Criada',
+  'caldav.appPwLastUsed': '\u00daltimo uso',
+  'caldav.appPwRevoke': 'Revogar',
+  'caldav.appPwRevokeConfirm': 'Este aparelho perde o acesso aos calend\u00e1rios. Os outros continuam ligados.',
+  'caldav.appPwNeedLabel': 'Indica um nome para o aparelho.',
   'caldav.howToConnect': 'Como conectar',
   'caldav.copyUrl': 'Copiar URL',
   'caldav.loginHint':
-    '<strong>Login:</strong> Use o login da sua conta (utilizador &amp; senha) para autenticar no app de calend\u00e1rio.',
+    '<strong>Login:</strong> O teu utilizador habitual. Como palavra-passe, usa antes uma <strong>palavra-passe de aplica\u00e7\u00e3o</strong> (abaixo) em vez da da conta \u2014 a app de calend\u00e1rio guarda-a permanentemente.',
   'caldav.hiwShared':
     '<strong>Calend\u00e1rio partilhado (<code>meisterpilze</code>):</strong> Todas as tarefas, eventos e prazos de lotes v\u00e3o para aqui. Toda a equipa v\u00ea este calend\u00e1rio.',
   'caldav.hiwPersonal':

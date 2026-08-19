@@ -6,12 +6,26 @@ on:
   push:
     branches: [main]
 
+# S-21: the default GITHUB_TOKEN is read-write on a repository that has not said
+# otherwise. Nothing in this workflow writes anything, so it gets a read-only
+# token — which is what limits the damage if any step ever executes code from a
+# pull request (npm ci runs install scripts, and the audit and license steps
+# read the dependency tree). The trigger is `pull_request`, not
+# `pull_request_target`, so a fork's token is already read-only and untrusted
+# code never sees a privileged one; this is the belt to that pair of braces.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Otherwise the checkout leaves the token in .git/config for every
+          # later step — and for anything those steps run — to pick up.
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
