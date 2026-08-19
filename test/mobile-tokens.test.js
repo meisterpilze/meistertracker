@@ -124,6 +124,50 @@ describe('mobile token layer', () => {
   });
 });
 
+describe('the size floor', () => {
+  // 104 rules set a sub-floor font-size and serve both devices from that one
+  // number. They are not tokenised — each keeps its desktop literal and is
+  // floored on the phone by `max(Npx, var(--fs-min))`, so the desktop value is
+  // never replaced and cannot move. What has to hold is that the floor is the
+  // floor everywhere: the ratchet in scripts/mobile-audit.js reads --fs-xs to
+  // decide what counts as sub-floor, and the stylesheet enforces --fs-min. Two
+  // numbers for one idea is a silent drift, so they are pinned to each other.
+  const valueIn = (blockText, token) => {
+    const m = blockText.match(new RegExp('\\n\\s*' + token + ':\\s*([^;]+);'));
+    return m && m[1].trim();
+  };
+
+  it('floors the phone at exactly --fs-xs', () => {
+    assert.equal(
+      valueIn(ROOT_BLOCK, '--fs-min'),
+      valueIn(ROOT_BLOCK, '--fs-xs'),
+      '--fs-min and --fs-xs disagree — the stylesheet enforces one floor and the ratchet counts against another'
+    );
+  });
+
+  it('lifts the floor off the desktop entirely', () => {
+    assert.equal(
+      valueIn(DESKTOP_BLOCK, '--fs-min'),
+      '0px',
+      'the desktop floor must be 0 so every max() returns the literal beside it unchanged'
+    );
+  });
+
+  it('never floors against a token that is not the floor', () => {
+    // `max(12px, var(--fs-sm))` would read as deliberate, pass the ratchet —
+    // which only looks for a bare px after `font-size:` — and quietly hand the
+    // desktop a 13px value where 12px was written.
+    const wrong = [...CSS.matchAll(/font-size:\s*max\([^)]*var\((--[a-z0-9-]+)\)/g)]
+      .map((m) => m[1])
+      .filter((t) => t !== '--fs-min');
+    assert.deepEqual(
+      wrong,
+      [],
+      `font-size: max() floored against ${[...new Set(wrong)].join(', ')} instead of --fs-min`
+    );
+  });
+});
+
 describe('touch targets', () => {
   for (const sel of ['.btn', '.stab', '.sb-btn']) {
     it(`${sel} carries a tap-token minimum`, () => {

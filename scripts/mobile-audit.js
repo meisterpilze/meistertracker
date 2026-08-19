@@ -47,7 +47,7 @@ const SELF = path.relative(ROOT, __filename);
 const FLOOR = floor(); // --fs-xs, read from styles.css
 
 // Lower these as phases land. Never raise them.
-const CEILING = { inline: 500, declared: 11, base: 104 };
+const CEILING = { inline: 500, declared: 11, base: 0 };
 
 function inlineHits() {
   const hits = [];

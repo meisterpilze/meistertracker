@@ -498,10 +498,26 @@ review the same way. The test reads `styles.css` as text and asserts:
 2. Every rule matching a known interactive class carries a `min-height`.
 3. No `px` literal for size/space/type outside the two `:root` blocks — tokens only.
 
-**Ratchet — `scripts/mobile-audit.js`. ✅ built, wired into CI.** Two ceilings, both allowed
-only to fall: **495** inline sub-floor sizes, and **11** sub-floor `font-size` declarations
-inside `max-width` blocks. `--list` locates them, `--update` lowers the ceilings after a
-phase. Sibling to the existing `scripts/i18n-hardcoded.js`.
+> **[corrected]** Assertion 3 was never implemented, and Phase 2 decided against it. The
+> base layer holds 104 sub-floor sizes across six distinct desktop values, and every one of
+> those numbers is a considered desktop value that may not move. Tokenising them meant five
+> hand-written pairs — five chances to type the wrong desktop number, watched by a fixture
+> that covers 31 of the 104 rules. Instead each keeps its literal and gains a floor:
+> `font-size: max(12px, var(--fs-min))`, where `--fs-min` is 13px on a phone and `0px` on a
+> desktop. The desktop value is never replaced, so it *cannot* move — a stronger guarantee
+> than the tripwire that would have checked the alternative.
+>
+> What the test asserts instead, since the literal now carries meaning: `--fs-min` equals
+> `--fs-xs` on the phone, is `0px` on the desktop, and no `font-size: max()` anywhere floors
+> against a different token. That last one matters because `max(12px, var(--fs-sm))` reads
+> as deliberate and passes the ratchet, which only looks for a bare `px`.
+
+**Ratchet — `scripts/mobile-audit.js`. ✅ built, wired into CI.** Three ceilings, all allowed
+only to fall: **500** inline sub-floor sizes, **11** sub-floor `font-size` declarations
+inside `max-width` blocks, and **0** in base rules outside every `@media` — that last one
+started at 104 and Phase 2 emptied it in one commit. `--list` locates them, `--update` moves
+the ceilings after a phase and marks a rise `↑ RAISED` rather than describing it as a fall.
+Sibling to the existing `scripts/i18n-hardcoded.js`.
 
 **Desktop-unchanged proof — `scripts/capture-desktop-baseline.js` + `test/desktop-baseline.json`.
 ✅ built.** 31 selectors at 1440px, captured before Phase 0 touched anything; `--compare`

@@ -72,6 +72,26 @@
   --fs-xs: 13px;
   --fs-sm: 15px;
   --fs-base: 17px;
+  /* The floor, as a sentinel rather than a size. 104 rules in this stylesheet
+     set a font-size below --fs-xs and serve both devices from that one number:
+     `.sec` at 12px, `.sb-group-label` at 10px, `.chip-l` at 9px. Every one of
+     those numbers is a considered DESKTOP value, so none of them may move.
+
+     `font-size: max(12px, var(--fs-min))` says both things at once. On a phone
+     the floor wins and the text is 13px; on a desk --fs-min is 0 and max() gives
+     back exactly the 12px that was written, byte for byte. The desktop cannot
+     move here — not "was checked and did not", cannot — because the value is
+     never replaced, only floored on the device that needs a floor.
+
+     The alternative was five paired tokens, one per distinct desktop value
+     (9, 10, 11.5, 12, 12.5). Rejected: five hand-written pairs is five chances
+     to type the wrong desktop number, and test/desktop-baseline.json watches 31
+     selectors out of the 104 rules — it is a tripwire, not a proof, and this is
+     exactly the shape of change it cannot see.
+
+     Same trick as --tap: auto below, and for the same reason — the desktop's
+     honest answer is "no constraint", not "a different constraint". */
+  --fs-min: 13px;
   /* 44px is WCAG 2.5.5 AAA. 56 is the deliberate step past it for gloves — and
      it is not a new number here: .bottom-nav-btn already chose 56px the one
      time this codebase sat down and thought about a touch target. */
@@ -111,6 +131,8 @@
     --fs-xs: 11px;
     --fs-sm: 13px;
     --fs-base: 15px;
+    /* 0, so every max() in the sheet returns the literal beside it unchanged. */
+    --fs-min: 0px;
     --tap: auto;
     --tap-sm: auto;
     --pad-page: 24px;
@@ -237,7 +259,7 @@ body {
 .sb-logo-text small {
   font-weight: 400;
   color: var(--c-text-sec);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .sb-toggle {
   background: none;
@@ -264,7 +286,7 @@ body {
   padding: 12px 10px;
 }
 .sb-group-label {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -398,7 +420,7 @@ body.admin-mode #n-settings .sb-ico-back {
    on a timer. min-width: 0 is what lets a flex child shrink far enough to
    ellipsize instead of forcing the row wider. */
 .sb-sync-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   flex: 1;
   min-width: 0;
@@ -408,7 +430,7 @@ body.admin-mode #n-settings .sb-ico-back {
 }
 .sb-lang-sel {
   width: auto;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 3px 6px;
   border: 1px solid var(--c-border);
   border-radius: 6px;
@@ -726,7 +748,7 @@ body.sb-mobile-open .cam-fab {
   border-radius: 9px;
   background: var(--c-border);
   color: var(--c-text-muted);
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 700;
 }
 .scan-tab.active .scan-tab-count {
@@ -780,12 +802,12 @@ body.sb-mobile-open .cam-fab {
   background: var(--c-bg);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .scan-success-time {
   color: var(--c-text-muted);
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-success-body {
@@ -800,7 +822,7 @@ body.sb-mobile-open .cam-fab {
 }
 .scan-success-loc {
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
 }
 .scan-success-undo {
   background: var(--c-surface);
@@ -808,7 +830,7 @@ body.sb-mobile-open .cam-fab {
   border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   flex-shrink: 0;
   transition: all 0.15s;
@@ -835,7 +857,7 @@ body.sb-mobile-open .cam-fab {
     box-shadow 0.2s;
 }
 .chip-l {
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1;
   text-transform: uppercase;
@@ -853,7 +875,7 @@ body.sb-mobile-open .cam-fab {
 }
 .chip-last-scan .chip-v {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
 }
 /* Chip pulse animation for missing input hints */
 .chip-pulse {
@@ -878,7 +900,7 @@ body.sb-mobile-open .cam-fab {
 }
 .btn-xs {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -957,7 +979,7 @@ body.sb-mobile-open .cam-fab {
   flex: 1;
   min-height: 120px;
   overflow-y: auto;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   display: flex;
   flex-direction: column-reverse;
@@ -990,7 +1012,7 @@ body.sb-mobile-open .cam-fab {
 }
 .scan-log-entry .sle-time {
   color: var(--c-text-muted);
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-log-entry .sle-msg {
@@ -1002,7 +1024,7 @@ body.sb-mobile-open .cam-fab {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   cursor: pointer;
   color: var(--c-text-muted);
   flex-shrink: 0;
@@ -1058,12 +1080,12 @@ body.sb-mobile-open .cam-fab {
   color: var(--c-text);
 }
 .scan-summary-stat .ss-lbl {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-transform: uppercase;
 }
 .scan-summary-batches {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 12px;
 }
@@ -1181,7 +1203,7 @@ body.sb-mobile-open .cam-fab {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 99px;
@@ -1193,7 +1215,7 @@ body.sb-mobile-open .cam-fab {
     transform 0.15s;
 }
 .cam-chip-l {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 400;
   opacity: 0.6;
   text-transform: uppercase;
@@ -1366,7 +1388,7 @@ body.sb-mobile-open .cam-fab {
   box-shadow: var(--shadow);
 }
 .sec {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1541,7 +1563,7 @@ body.sb-mobile-open .cam-fab {
 }
 .oh-ch {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   border-radius: 6px;
   padding: 1px 7px;
@@ -1565,7 +1587,7 @@ body.sb-mobile-open .cam-fab {
 }
 .oh-st {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   border-radius: 999px;
   padding: 2px 9px;
@@ -1599,7 +1621,7 @@ body.sb-mobile-open .cam-fab {
   color: var(--c-red-dark);
 }
 .oh-fchip {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -1643,12 +1665,12 @@ body.sb-mobile-open .cam-fab {
 }
 .oh-comp-row input,
 .oh-comp-row select {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   color: var(--c-text-sec);
   display: block;
@@ -1718,7 +1740,7 @@ textarea:focus {
 }
 .btn-sm {
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 /* Touch-device tap targets — covers phones AND tablets in landscape, which the
    old (max-width:768px) breakpoint missed. Applies to every .btn-xs / .btn-sm
@@ -1771,7 +1793,7 @@ textarea:focus {
   border-left: 4px solid var(--c-primary);
 }
 .met-l {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 4px;
   font-weight: 500;
@@ -1792,7 +1814,7 @@ textarea:focus {
 /* ═══ BADGES ════════════════════════════════════════════════════ */
 .badge {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 3px 9px;
   border-radius: 99px;
@@ -1897,7 +1919,7 @@ table {
   font-size: 13px;
 }
 th {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1920,7 +1942,7 @@ th.sortable {
   }
 }
 th.sortable .arrow {
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   opacity: 0.35;
   margin-left: 3px;
 }
@@ -1977,7 +1999,7 @@ tr:hover td {
   margin-right: 4px;
 }
 .sub-tag {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   background: var(--c-bg);
   color: var(--c-text-sec);
   padding: 3px 8px;
@@ -2034,7 +2056,7 @@ tr:hover td {
   grid-row: 2;
   grid-column: var(--col);
   min-width: 0;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   /* A rule between the days, not just a gap. Seven columns of similar-looking
      rows run together without one, and the eye loses which day it is reading.
      Left edge on every column but the first, so the outer edges stay clean. */
@@ -2129,7 +2151,7 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, monospace;
   line-height: 1;
@@ -2175,7 +2197,7 @@ tr:hover td {
 }
 .tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 2px 8px;
   border-radius: 99px;
   margin-left: 4px;
@@ -2387,7 +2409,7 @@ tr:hover td {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 14px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   padding: 8px 12px;
   background: var(--c-surface);
@@ -2446,7 +2468,7 @@ tr:hover td {
 .cal-hdr {
   background: var(--c-bg);
   text-align: center;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   padding: 10px 4px;
@@ -2503,7 +2525,7 @@ tr:hover td {
   color: #fff;
 }
 .cal-event {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: #fff;
   padding: 2px 7px;
   border-radius: 4px;
@@ -2544,7 +2566,7 @@ tr:hover td {
   }
 }
 .cal-ev-assignees {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   opacity: 0.85;
   display: inline;
   white-space: nowrap;
@@ -2553,7 +2575,7 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 1px 8px;
   background: #eee;
   border-radius: 12px;
@@ -2570,13 +2592,13 @@ tr:hover td {
   display: block;
   padding: 4px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 #cal-ev-assignee-dropdown label:hover {
   background: #f0f0f0;
 }
 .cal-more {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-primary);
   cursor: pointer;
   padding: 2px 7px;
@@ -2610,7 +2632,7 @@ tr:hover td {
 .cal-week-hdr-cell {
   text-align: center;
   padding: 10px 4px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -2638,7 +2660,7 @@ tr:hover td {
   min-height: 36px;
 }
 .cal-week-allday-label {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   padding: 6px;
   display: flex;
@@ -2663,7 +2685,7 @@ tr:hover td {
   overflow-y: auto;
 }
 .cal-week-time {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px 0 0;
@@ -2696,7 +2718,7 @@ tr:hover td {
   right: 2px;
   border-radius: 5px;
   padding: 2px 6px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -2756,14 +2778,14 @@ tr:hover td {
 }
 .cal-day-allday .sec {
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--c-text-muted);
   font-weight: 700;
 }
 .cal-day-allday-empty {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
 }
@@ -2775,7 +2797,7 @@ tr:hover td {
   position: relative;
 }
 .cal-day-time {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px;
@@ -2804,7 +2826,7 @@ tr:hover td {
   right: 4px;
   border-radius: 5px;
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -2877,7 +2899,7 @@ tr:hover td {
   pointer-events: none;
 }
 .cal-empty-hint span {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
   opacity: 0.7;
@@ -2936,7 +2958,7 @@ tr:hover td {
   flex-shrink: 0;
 }
 .location-section-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -2973,7 +2995,7 @@ tr:hover td {
   color: var(--c-text);
 }
 .rack-card-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -3018,7 +3040,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .batch-card-species {
   font-weight: 600;
@@ -3028,12 +3050,12 @@ tr:hover td {
   gap: 4px;
 }
 .batch-card-count {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
 .batch-card-meta {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 3px;
   display: flex;
@@ -3056,7 +3078,7 @@ tr:hover td {
   display: flex;
 }
 .bag-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   padding: 4px 8px;
   border-radius: 6px;
@@ -3090,7 +3112,7 @@ tr:hover td {
   gap: 6px;
 }
 .tent-column-empty {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
   text-align: center;
@@ -3121,7 +3143,7 @@ tr:hover td {
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 .action-bar-sticky .action-bar-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
 }
@@ -3176,7 +3198,7 @@ tr:hover td {
   border-radius: 8px;
   background: transparent;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -3198,7 +3220,7 @@ tr:hover td {
 }
 .dash-search-inline {
   width: 200px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   padding: 6px 10px;
   border: 2px solid var(--c-border-strong, #94a3b8);
   border-radius: var(--radius-sm);
@@ -3225,7 +3247,7 @@ tr:hover td {
   border-radius: var(--radius);
   background: var(--c-surface, var(--c-card));
   border: 1px solid var(--c-border);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -3272,7 +3294,7 @@ tr:hover td {
   margin-bottom: 8px;
 }
 .metrics-total-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -3316,7 +3338,7 @@ tr:hover td {
 
 /* ═══ OVERVIEW KPI CARDS ════════════════════════════════════════ */
 .ov-kpi-group-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3357,7 +3379,7 @@ tr:hover td {
   margin-bottom: 2px;
 }
 .ov-kpi-label {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -3365,7 +3387,7 @@ tr:hover td {
   text-overflow: ellipsis;
 }
 .ov-kpi-sub {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 1px;
   white-space: nowrap;
@@ -3381,7 +3403,7 @@ tr:hover td {
   border: 1px solid var(--c-border-light);
 }
 .rack-detail-inline .rack-detail-close {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   cursor: pointer;
   color: var(--c-text-muted);
 }
@@ -4076,7 +4098,7 @@ tr:hover td {
   margin-top: 6px;
 }
 .zone-rack-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: monospace;
   padding: 2px 8px;
   border-radius: 4px;
@@ -4087,12 +4109,12 @@ tr:hover td {
 }
 .zone-rack-del {
   padding: 1px 4px !important;
-  font-size: 9px !important;
+  font-size: max(9px, var(--fs-min)) !important;
   margin-left: 4px;
   line-height: 1;
 }
 .zone-group-header {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4138,7 +4160,7 @@ tr:hover td {
 .zone-direct-badge {
   background: var(--c-red) !important;
   color: #fff !important;
-  font-size: 12px !important;
+  font-size: max(12px, var(--fs-min)) !important;
   font-weight: 700 !important;
   padding: 4px 10px !important;
   border-radius: 6px !important;
@@ -4167,7 +4189,7 @@ tr:hover td {
   gap: 4px;
 }
 .zone-qr-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   font-family: monospace;
   color: var(--c-text-sec);
@@ -4258,7 +4280,7 @@ tr:hover td {
   border-radius: 9px;
   background: #ef4444;
   color: #fff;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   line-height: 18px;
   text-align: center;
@@ -4325,7 +4347,7 @@ tr:hover td {
   color: var(--c-text);
 }
 .notif-mark-read {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-primary);
   background: transparent;
   border: none;
@@ -4382,19 +4404,19 @@ tr:hover td {
   flex-shrink: 0;
 }
 .notif-item-body {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 3px;
 }
 .notif-item-time {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .notif-empty {
   padding: 24px 14px;
   text-align: center;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 @media (max-width: 768px) {
@@ -4446,7 +4468,7 @@ tr:hover td {
   background: none;
   border: none;
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -4803,7 +4825,7 @@ tr:hover td {
    resize at 1280px / quality 0.8). */
 .cr-label {
   display: block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -4894,7 +4916,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   cursor: pointer;
   overflow: hidden;
@@ -4943,7 +4965,7 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 /* ═══ PHOTO ANNOTATION MODAL ══════════════════════════════════
@@ -4996,7 +5018,7 @@ tr:hover td {
 }
 .pa-hint {
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: center;
   border-top: 1px solid var(--c-border-light);
@@ -5061,11 +5083,11 @@ tr:hover td {
 }
 .contam-list-batch {
   font-family: monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .contam-list-when {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -5075,7 +5097,7 @@ tr:hover td {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   background: rgba(0, 0, 0, 0.04);
 }
@@ -5085,7 +5107,7 @@ tr:hover td {
   border-radius: 50%;
 }
 .contam-sev-badge {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -5105,7 +5127,7 @@ tr:hover td {
   color: #991b1b;
 }
 .contam-resolved-badge {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -5113,7 +5135,7 @@ tr:hover td {
   color: #14532d;
 }
 .contam-open-badge {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -5141,7 +5163,7 @@ tr:hover td {
   border-top: 1px solid var(--c-border-light);
 }
 .contam-list-notes {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   white-space: nowrap;
   overflow: hidden;
@@ -5158,7 +5180,7 @@ tr:hover td {
 }
 .cd-meta-grid .label {
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5339,7 +5361,7 @@ tr:hover td {
 .wk-tile-when {
   position: relative;
   z-index: 2;
-  font-size: 11.5px;
+  font-size: max(11.5px, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1.4;
   max-width: 64%;
@@ -5364,7 +5386,7 @@ tr:hover td {
   margin-bottom: 14px;
 }
 .wkf-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -5431,15 +5453,15 @@ tr:hover td {
 }
 .wkf-row-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   font-weight: 700;
 }
 .wkf-row-meta {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-row-zone {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   color: var(--c-green-dark);
   background: var(--c-green-light);
@@ -5456,7 +5478,7 @@ tr:hover td {
   margin-bottom: 10px;
 }
 .wkf-bar label {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   margin: 0;
 }
@@ -5464,7 +5486,7 @@ tr:hover td {
   width: 76px;
 }
 .wkf-bar-sp {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -5472,7 +5494,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 10px;
 }
@@ -5501,11 +5523,11 @@ tr:hover td {
 }
 .wkf-bag-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   font-weight: 650;
 }
 .wkf-prev {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   white-space: nowrap;
 }
@@ -5514,7 +5536,7 @@ tr:hover td {
   font-weight: 700;
 }
 .wkf-unit {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-sum {
@@ -5530,7 +5552,7 @@ tr:hover td {
   font-weight: 800;
 }
 .wkf-sum span {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
 }
 
@@ -5670,7 +5692,7 @@ tr:hover td {
   margin-bottom: 10px;
 }
 .wkf-field > label {
-  font-size: 11.5px;
+  font-size: max(11.5px, var(--fs-min));
   color: var(--c-text-sec);
   font-weight: 600;
   margin: 0;
@@ -5717,7 +5739,7 @@ tr:hover td {
   color: var(--c-green-dark);
   border-radius: 9px;
   padding: 10px 12px;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   line-height: 1.6;
   margin-bottom: 10px;
 }
@@ -5756,7 +5778,7 @@ tr:hover td {
   flex-wrap: wrap;
 }
 .wkf-hint {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 10px;
 }
