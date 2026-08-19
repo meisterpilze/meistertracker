@@ -17684,12 +17684,56 @@ function closeCalPrintModal() {
   if (m) m.classList.remove('open');
 }
 
+// The type of an event, in words. Shared by the printed task list and the
+// on-screen agenda, because a dot in one and a word in the other would be two
+// vocabularies for one set of five things.
+function calTypeLabels() {
+  return {
+    'batch-due': t('cal.legend.batches'),
+    'task-due': t('calDetail.taskDue'),
+    harvest: t('cal.legend.harvests'),
+    custom: t('calEntry.cat.custom'),
+    'caldav-import': t('calDetail.external')
+  };
+}
+
+// Every day between two dates, each carrying its events in reading order:
+// all-day first, then by start time. Empty days are kept — on a task list the
+// blank Sunday is information.
+//
+// This was the middle of printCalendarTaskList() and nothing else could reach
+// it, which is the only reason the calendar had no agenda view: the grouping
+// and the sort, the two parts that are actually fiddly against recurrence
+// expansion, were already written and already correct, three lines below a
+// window.print().
+function calAgendaDays(startDate, endDate) {
+  const DAYS = calDays();
+  const startStr = fmtDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const byDate = {};
+  collectCalendarEvents()
+    .filter((e) => e.date >= startStr && e.date <= endStr)
+    .forEach((e) => {
+      (byDate[e.date] = byDate[e.date] || []).push(e);
+    });
+  const days = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayEvents = (byDate[ds] || []).slice().sort((a, b) => {
+      if (a.allDay && !b.allDay) return -1;
+      if (!a.allDay && b.allDay) return 1;
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
+    days.push({ ds, dayName: DAYS[(d.getDay() + 6) % 7], date: new Date(d), events: dayEvents });
+  }
+  return days;
+}
+
 function printCalendarTaskList(range) {
   const sheet = document.getElementById('print-sheet');
   if (!sheet) return;
 
-  const MONTHS = calMonths(),
-    DAYS = calDays();
+  const MONTHS = calMonths();
 
   // Determine date range — rolling window anchored on today
   const today = new Date();
@@ -17720,39 +17764,9 @@ function printCalendarTaskList(range) {
     ' ' +
     endDate.getFullYear();
 
-  // Collect and filter events in range
-  const allEvents = collectCalendarEvents();
-  const startStr = fmtDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-  const eventsInRange = allEvents.filter((e) => e.date >= startStr && e.date <= endStr);
-
-  // Group by date
-  const byDate = {};
-  eventsInRange.forEach((e) => {
-    (byDate[e.date] = byDate[e.date] || []).push(e);
-  });
-
-  // Type label map
-  const typeLabels = {
-    'batch-due': t('cal.legend.batches'),
-    'task-due': t('calDetail.taskDue'),
-    harvest: t('cal.legend.harvests'),
-    custom: t('calEntry.cat.custom'),
-    'caldav-import': t('calDetail.external')
-  };
-
-  // Build day list
-  const days = [];
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayName = DAYS[(d.getDay() + 6) % 7];
-    const dayEvents = (byDate[ds] || []).slice().sort((a, b) => {
-      if (a.allDay && !b.allDay) return -1;
-      if (!a.allDay && b.allDay) return 1;
-      return (a.startTime || '').localeCompare(b.startTime || '');
-    });
-    days.push({ ds, dayName, date: new Date(d), events: dayEvents });
-  }
+  const days = calAgendaDays(startDate, endDate);
+  const typeLabels = calTypeLabels();
+  const totalEvents = days.reduce((n, d) => n + d.events.length, 0);
 
   // Render HTML
   const todayStr = localDateStr(new Date());
@@ -17806,7 +17820,6 @@ function printCalendarTaskList(range) {
     bodyHtml += '</div>';
   });
 
-  const totalEvents = eventsInRange.length;
   sheet.innerHTML =
     '<div class="cal-print-page cal-print-tasklist">' +
     '<div class="cal-print-header">' +
