@@ -1731,6 +1731,26 @@ body:has(.modal-bg.open) .cam-fab {
   padding: 5px 12px;
   cursor: pointer;
   color: var(--c-text-sec);
+  /* 27.5px, and there are four of them in a row: the smallest targets left in
+     the app after the chrome pass. A pill's whole job is to be tapped. */
+  min-height: var(--tap-sm-min);
+}
+/* The worklist dialog's "group by" pair. Spelled out inline on both buttons,
+   nine declarations each and identical apart from the label, which is why
+   neither could pick up a touch floor: there was nothing to put it on. */
+.wl-group-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  background: transparent;
+  /* --fs-sm and not --fs-xs: the inline value was a flat 13px, and --fs-xs is
+     11px on a desktop, so the obvious-looking token would have shrunk it
+     there. --fs-sm is 13px on a desktop — unchanged — and 15px in a hand. */
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: var(--tap-sm-min);
 }
 .oh-fchip.active {
   background: var(--c-primary);
@@ -3302,6 +3322,7 @@ tr:hover td {
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  min-height: var(--tap-sm-min);
 }
 .dash-view-btn.active {
   background: var(--c-surface);
