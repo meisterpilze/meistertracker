@@ -1935,5 +1935,8 @@ window.LANG['de'] = {
   'work.mNotePh': 'z.B. neue Pelletslieferung',
   'work.mDone': '{kg} kg {recipe} angesetzt',
   'work.mId': 'Ansatz',
-  'work.mAnother': 'Noch ein Ansatz'
+  'work.mAnother': 'Noch ein Ansatz',
+  'work.flushN': 'Flush {n}',
+  'work.rBagsVal2': '{n} von {total}',
+  'work.bookFailed': '{bag} konnte nicht gebucht werden: {err}'
 };

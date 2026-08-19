@@ -1930,5 +1930,8 @@ window.LANG['pt'] = {
   'work.mNotePh': 'ex.: nova entrega de pellets',
   'work.mDone': '{kg} kg de {recipe} preparados',
   'work.mId': 'Mistura',
-  'work.mAnother': 'Outra mistura'
+  'work.mAnother': 'Outra mistura',
+  'work.flushN': 'flush {n}',
+  'work.rBagsVal2': '{n} de {total}',
+  'work.bookFailed': '{bag} não pôde ser registrado: {err}'
 };
