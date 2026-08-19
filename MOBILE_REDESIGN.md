@@ -377,6 +377,13 @@ the same is true of `th` at 11px, `.sec` at 12px and `.bottom-nav-btn` at 11px. 
 legitimate *desktop* sizes living in rules that serve both; tokenising them is per-component
 work, and it is the first thing Phase 2 does.
 
+> **[corrected]** Four here, one more in Phase 1's notes, and the tone of both reads as
+> though five was roughly the size of it. Counted rather than sampled, it is **104**.
+> `scripts/mobile-audit.js` grew a third dimension, BASE, to hold the number, because the
+> reason nobody had it is that nothing could see this layer: the bridge reaches inline
+> styles only and the old count read `max-width` blocks only. The calendar holds fourteen
+> of them, Arbeitsgänge fifteen, the scan overlay eight.
+
 ### Phase 1 — Navigation chrome
 
 - ✅ **Deleted the `+` speed-dial FAB.** All three of its items resolved to the same
@@ -437,6 +444,11 @@ work, and it is the first thing Phase 2 does.
   chrome and this is the one thing in it Phase 1 did not fix.
 
 ### Phase 2 — Feld pages, one PR each
+
+**104 base-rule sub-floor sizes**, each needing its own paired token so the desktop value
+survives. That is the phase's real shape and its real cost — not a sweep, and not the half
+day the first item below was budgeted at before the layer was counted. `npm run mobile-audit`
+holds the number; it may only fall.
 
 In this order, cheapest and highest-traffic first:
 
