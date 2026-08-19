@@ -64,7 +64,20 @@ describe('the cards a table becomes on a phone', () => {
   // reason is.
   it('is applied only to tables whose rows carry labels', () => {
     const marked = [...HTML.matchAll(/<table id="([^"]+)" class="t-cards">/g)].map((m) => m[1]).sort();
-    assert.deepEqual(marked, ['t-batches', 't-cultures', 't-grain', 't-harvest', 't-log']);
+    assert.deepEqual(marked, [
+      't-batches',
+      't-catalog',
+      't-cultures',
+      't-customers',
+      't-demand',
+      't-grain',
+      't-harvest',
+      't-harvestrelease',
+      't-log',
+      't-orders',
+      't-pickups',
+      't-rawstock'
+    ]);
   });
 
   // #t-grain is the reason this became one mechanism instead of a fifth copy.

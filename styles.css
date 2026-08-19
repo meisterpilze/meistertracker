@@ -3039,6 +3039,16 @@ tr:hover td {
   pointer-events: none;
 }
 
+/* Eight columns of numbers that mean nothing squashed. The width was inline on
+   the table, which is why it survived into the card layout and forced a 640px
+   scroll on a phone that no longer has a table to scroll. Stated where it is
+   true instead: above the breakpoint, where this is still a table. */
+@media (min-width: 769px) {
+  #t-harvestrelease {
+    min-width: 640px;
+  }
+}
+
 /* ═══ CALENDAR — AGENDA VIEW ═══════════════════════════════════
    The calendar below 769px. Not a fourth tab: a month cell at 375px is 47.9px
    wide and gives an event label 29.9px of text, four glyphs and an ellipsis,

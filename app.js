@@ -1274,7 +1274,7 @@ let _ordersCache = [];
 let _ordersFilter = '';
 
 function _ohEmpty(cols, msg) {
-  return `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
+  return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
 }
 function _ohChannel(ch) {
   const label =
@@ -1327,12 +1327,12 @@ function _renderOrdersInbox() {
   body.innerHTML = rows
     .map(
       (o) =>
-        `<tr><td>${_ohChannel(o.channel)}</td>` +
-        `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
-        `<td>${esc(o.customerName || '—')}</td>` +
-        `<td>${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
-        `<td style="font-size:11px">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
-        `<td>${_ohStatus(o.status)}</td></tr>`
+        `<tr><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.order'))}" style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.customer'))}">${esc(o.customerName || '—')}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.shipBy'))}" style="font-size:11px">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.status'))}">${_ohStatus(o.status)}</td></tr>`
     )
     .join('');
 }
@@ -1374,10 +1374,12 @@ function renderOrdersDemand() {
                 ? `<span class="oh-st oh-st-cancelled">${r.backorder} ${esc(t('orders.backorder'))}</span>`
                 : '<span class="muted">0</span>';
           return (
-            `<tr><td><strong>${esc(r.product)}</strong> <span class="muted" style="font-size:11px">${esc(r.category || '')}</span></td>` +
-            `<td>${r.demand}</td><td>${r.fromStock}</td><td>${produce}</td>` +
-            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td>` +
-            `<td style="font-size:11px">${comps}</td></tr>`
+            `<tr><td data-mlabel="${esc(t('orders.th.product'))}"><strong>${esc(r.product)}</strong> <span class="muted" style="font-size:11px">${esc(r.category || '')}</span></td>` +
+            `<td data-mlabel="${esc(t('orders.th.demand'))}">${r.demand}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.fromStock'))}">${r.fromStock}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.toProduce'))}">${produce}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.startBy'))}" style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.components'))}" style="font-size:11px">${comps}</td></tr>`
           );
         })
         .join('');
@@ -1415,9 +1417,10 @@ function renderOrdersMapping() {
           ? products
               .map(
                 (pr) =>
-                  `<tr><td><strong>${esc(pr.name)}</strong></td><td>${esc(pr.category || '—')}</td>` +
-                  `<td class="muted" style="font-size:11px">${esc(pr.sku || '')}</td>` +
-                  `<td><button class="btn btn-sm" data-action="oh-prod-edit" data-id="${pr.id}">${esc(t('orders.edit'))}</button></td></tr>`
+                  `<tr><td data-mlabel="${esc(t('orders.th.product'))}"><strong>${esc(pr.name)}</strong></td>` +
+                  `<td data-mlabel="${esc(t('orders.th.category'))}">${esc(pr.category || '—')}</td>` +
+                  `<td data-mlabel="${esc(t('orders.th.sku'))}" class="muted" style="font-size:11px">${esc(pr.sku || '')}</td>` +
+                  `<td class="oh-actions"><button class="btn btn-sm" data-action="oh-prod-edit" data-id="${pr.id}">${esc(t('orders.edit'))}</button></td></tr>`
               )
               .join('')
           : _ohEmpty(4, t('orders.noProducts'));
@@ -1478,12 +1481,13 @@ function renderOrdersCustomers() {
           const hit = _ohHighlightCustomer && c.id === _ohHighlightCustomer;
           return (
             `<tr${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
-            `<td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
-            `<td>${chans}</td><td>${c.orderCount || 0}</td>` +
-            `<td><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
-            `<td style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
-            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td>` +
-            (isAdmin ? `<td>${privacy}</td>` : '') +
+            `<td data-mlabel="${esc(t('orders.th.customer'))}"><strong>${esc(c.name || c.email || '—')}</strong></td>` +
+            `<td data-mlabel="${esc(t('orders.th.channels'))}">${chans}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.orders'))}">${c.orderCount || 0}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.ltv'))}"><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
+            `<td data-mlabel="${esc(t('orders.th.last'))}" style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.type'))}">${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td>` +
+            (isAdmin ? `<td data-mlabel="${esc(t('orders.th.privacy'))}">${privacy}</td>` : '') +
             '</tr>'
           );
         })
@@ -1572,11 +1576,11 @@ function renderPickups() {
               : `<span style="font-size:11px;color:var(--c-text-muted)">${esc(t('pickups.pending'))}</span>`;
           return (
             '<tr>' +
-            `<td><strong>${_pickupWhen(p)}</strong>${zone}</td>` +
-            `<td>${esc(p.place || '—')}</td>` +
-            `<td>${esc(p.order || '—')}</td>` +
-            `<td style="font-size:12px">${items || '—'}</td>` +
-            `<td>${state}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.when'))}"><strong>${_pickupWhen(p)}</strong>${zone}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.place'))}">${esc(p.place || '—')}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.order'))}">${esc(p.order || '—')}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.items'))}" style="font-size:12px">${items || '—'}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.state'))}">${state}</td>` +
             '</tr>'
           );
         })
@@ -2123,9 +2127,9 @@ function renderInventoryCard() {
       const min = (thr[m] && thr[m].minKg) || 0;
       const low = min > 0 && have <= min;
       return (
-        `<tr><td><strong>${esc(_ohMatName(m))}</strong></td>` +
-        `<td>${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
-        `<td style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
+        `<tr><td data-mlabel="${esc(t('orders.mat.name'))}"><strong>${esc(_ohMatName(m))}</strong></td>` +
+        `<td data-mlabel="${esc(t('orders.rawStockKg'))}">${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
+        `<td class="oh-actions" style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
         `<button class="btn btn-sm" data-action="oh-inv-set" data-mat="${m}">${esc(t('orders.set'))}</button></td></tr>`
       );
     })
@@ -9789,7 +9793,8 @@ function harvestReleaseRemoveBtn(row) {
 function renderHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!harvestReleaseRows.length) {
-    body.innerHTML = '<tr><td colspan="7" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
+    body.innerHTML =
+      '<tr><td class="empty" colspan="7" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
     updateHarvestReleasePending();
     // Also here: bookings that match no release row are exactly what an empty
     // table needs to mention, not what it may leave out.
@@ -9812,28 +9817,36 @@ function renderHarvestReleases() {
         i +
         '"' +
         (touched ? ' style="background:var(--c-amber-light)"' : '') +
-        '><td' +
+        '><td data-mlabel="' +
+        esc(t('harvestFeed.colSpecies')) +
+        '"' +
         durch +
         '>' +
         esc(row.species) +
-        '</td><td style="color:var(--c-text-muted)">' +
+        '</td><td data-mlabel="' +
+        esc(t('harvestFeed.colHarvested')) +
+        '" style="color:var(--c-text-muted)">' +
         harvested +
         (row.removing
           ? ' <span style="color:var(--c-amber-dark)">(' + esc(t('harvestFeed.markedRemoved')) + ')</span>'
           : row.expired
             ? ' <span style="color:var(--c-red-dark)">(' + esc(t('harvestFeed.expired')) + ')</span>'
             : '') +
-        '</td><td><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
+        '</td><td data-mlabel="' +
+        esc(t('harvestFeed.colRelease')) +
+        '"><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
         esc(row.kg) +
         '"' +
         (row.removing ? ' disabled' : '') +
         '></td>' +
         promisedCells(row) +
-        '<td><input type="date" class="hr-until" style="width:150px" value="' +
+        '<td data-mlabel="' +
+        esc(t('harvestFeed.colUntil')) +
+        '"><input type="date" class="hr-until" style="width:150px" value="' +
         esc(row.until) +
         '"' +
         (row.removing ? ' disabled' : '') +
-        '></td><td>' +
+        '></td><td class="hr-actions">' +
         harvestReleaseRemoveBtn(row) +
         '</td></tr>'
       );
@@ -9884,15 +9897,20 @@ function promisedCells(row) {
   const still = Number(harvestReleasePromised[row.species]) || 0;
   const released = Number(row.wasKg) * 1000;
   const muted = 'color:var(--c-text-muted)';
-  if (!(released > 0) && !still) return '<td style="' + muted + '">—</td><td style="' + muted + '">—</td>';
+  const lbl = (k) => ' data-mlabel="' + esc(t(k)) + '"';
+  if (!(released > 0) && !still)
+    return (
+      '<td' + lbl('harvestFeed.colPromised') + ' style="' + muted + '">—</td>' +
+      '<td' + lbl('harvestFeed.colFree') + ' style="' + muted + '">—</td>'
+    );
   const frei = released - still;
   // Negative is real and not an arithmetic slip: more is promised than was set
   // aside. It reads as a warning rather than a quantity, because there is
   // nothing left to hand out and somebody has to decide what happens.
   const freiFarbe = frei > 0 ? '' : 'color:var(--c-red-dark);font-weight:600';
   return (
-    '<td style="' + muted + '">' + (still ? (still / 1000).toFixed(2) + ' kg' : '—') + '</td>' +
-    '<td style="' + freiFarbe + '">' + (frei / 1000).toFixed(2) + ' kg</td>'
+    '<td' + lbl('harvestFeed.colPromised') + ' style="' + muted + '">' + (still ? (still / 1000).toFixed(2) + ' kg' : '—') + '</td>' +
+    '<td' + lbl('harvestFeed.colFree') + ' style="' + freiFarbe + '">' + (frei / 1000).toFixed(2) + ' kg</td>'
   );
 }
 
