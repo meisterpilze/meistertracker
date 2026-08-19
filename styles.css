@@ -336,23 +336,28 @@ body {
   border-top: 1px solid var(--c-border-light);
   padding: 10px;
 }
-/* Admin navigation — the Admin section borrows the sidebar.
+/* Admin navigation — on a desktop the Admin section borrows the sidebar.
    Fourteen sub-tabs do not fit one horizontal strip: .stabs has neither wrap
-   nor scroll outside the mobile rules, so on a desktop the pills squeeze until
-   their labels break. A vertical, grouped list has no such ceiling, and
-   .sb-nav already scrolls.
-   The drawer swaps the same way: on a phone Admin is a drill-down, not a
-   departure, so the menu stays open and shows the sub-tabs instead of closing
-   on the way out. The strip stays there too, as the quick switcher — changing
-   sub-tab is one swipe rather than hamburger → tap → drawer-closes. */
+   nor scroll outside the mobile rules, so the pills squeeze until their labels
+   break. A vertical, grouped list has no such ceiling, and .sb-nav already
+   scrolls.
+
+   Desktop only, and the min-width is the whole point. The drawer used to swap
+   the same way and stay open on a phone, because closing it left the section
+   with nothing to navigate by. The strip is now a drill-down list on the page
+   itself, so a swapped drawer would lay the same thirteen entries over the
+   thirteen behind it — and take the screen with them. Below 769px the drawer
+   keeps the main navigation, which is what a phone opens it for. */
 .sb-admin-nav {
   display: none;
 }
-body.admin-mode .sb-nav {
-  display: none;
-}
-body.admin-mode .sb-admin-nav {
-  display: block;
+@media (min-width: 769px) {
+  body.admin-mode .sb-nav {
+    display: none;
+  }
+  body.admin-mode .sb-admin-nav {
+    display: block;
+  }
 }
 /* The footer button is the door, and one door needs one place: the same spot
    leads in and back out again. Solid green while inside says which side of it

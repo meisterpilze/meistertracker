@@ -1463,9 +1463,11 @@
           ><span data-i18n="nav.ordersVersand">Versand</span>
         </button>
       </nav>
-      <!-- Admin navigation — takes the sidebar over while the Admin section is open.
-           Fourteen sub-tabs never fitted the horizontal strip on a desktop; grouped and
-           vertical they do. See .sb-admin-nav in styles.css for the mobile arrangement. -->
+      <!-- Admin navigation — takes the sidebar over while the Admin section is open, on a
+           desktop. Fourteen sub-tabs never fitted the horizontal strip there; grouped and
+           vertical they do. A phone reaches them through the page's own drill-down list
+           instead, and keeps the main navigation in the drawer — see .sb-admin-nav in
+           styles.css. -->
       <nav class="sb-admin-nav" id="sb-admin-nav" data-i18n-aria-label="aria.adminNav" aria-label="Admin navigation">
         <div class="sb-group-label" data-i18n="nav.adminSystem">System</div>
         <button class="sb-btn active" id="sn-settings-server" type="button" data-sub="server" style="display: none">

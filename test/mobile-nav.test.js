@@ -135,6 +135,43 @@ describe('the sub-tab drill-down', () => {
   });
 });
 
+describe('the drawer on a phone', () => {
+  // Every `@media (... min-width ...)` block body, so "is this rule desktop-only"
+  // is answerable without depending on where it sits in the file.
+  const MIN_WIDTH_BLOCK = /@media[^{]*min-width[^{]*\{/g;
+  const desktopOnly = [...blocks(CSS, MIN_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+  const everywhere = (() => {
+    let out = CSS;
+    for (const b of blocks(CSS, MIN_WIDTH_BLOCK)) out = out.replace(b.body, '');
+    return out;
+  })();
+
+  it('keeps the main navigation there while Admin is open', () => {
+    // Admin's sidebar list is a desktop arrangement. On a phone the section's
+    // list is on the page, so a drawer swapped to the same thirteen entries
+    // would lay them over the thirteen behind it and take the screen with them.
+    assert.match(
+      desktopOnly,
+      /body\.admin-mode \.sb-admin-nav \{\s*display: block;/,
+      'the admin swap is not desktop-only'
+    );
+    assert.doesNotMatch(
+      everywhere,
+      /body\.admin-mode \.sb-nav \{\s*display: none;/,
+      'the main nav is hidden in admin-mode outside a min-width block — a phone drawer then has neither list'
+    );
+  });
+
+  it('gets out of the way on Admin like it does everywhere else', () => {
+    assert.doesNotMatch(
+      APP,
+      /if \(page !== 'settings'\) sbCloseMobile\(\)/,
+      "Admin keeps the drawer open again — it now covers the page's own list"
+    );
+    assert.match(APP, /\n {2}sbCloseMobile\(\);\n\}/, 'openPage() must close the drawer unconditionally');
+  });
+});
+
 describe('the back rows', () => {
   let LANG;
   before(() => {

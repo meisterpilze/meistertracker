@@ -411,9 +411,30 @@ work, and it is the first thing Phase 2 does.
   behind any of these tabs today, so a badge would need a data source per tab before it
   could show a number. Label and chevron shipped; the badge is not a deferred detail but
   unbuilt work, and it should be decided per tab rather than as a row of zeros.
-- Bottom nav becomes the primary phone navigation; the hamburger drawer becomes the
-  "everything else" door rather than the main route.
-- Admin drawer: the 13-entry `sb-admin-nav` gets the same drill-down treatment.
+- ✅ **Admin stops commandeering the drawer on a phone.** This was the concrete half of
+  "the drawer becomes the everything-else door rather than the main route", and the
+  drill-down is what made it possible. Entering Admin used to leave the drawer open with
+  its list swapped to the 13 sub-tabs, because closing it left the section with nothing to
+  navigate by. The section now carries that list on the page, so the swap would only lay
+  thirteen entries over thirteen — and take the screen with them. Below 769px the drawer
+  keeps the main navigation and closes on arrival like every other page; the swap is
+  behind a `min-width: 769px`, where the sidebar is still Admin's only navigation.
+
+  ➖ **The drawer still repeats the bottom nav.** Measured at 375px: 19 rows, 868px of
+  content in a 655px viewport, so 5 of 14 destinations sit below the fold — and the five
+  the bottom bar already shows permanently (Arbeitsgänge, Dashboard, Chargen, Labor,
+  Kalender) are among them. Hiding those five below 769px would fit the rest on one screen
+  without scrolling. Not done, and deliberately: the only way to identify them in CSS is
+  by id, one group ("Arbeiten") would lose all three of its entries and leave an orphaned
+  heading, and the coupling rots silently the day the bottom nav changes. It is worth
+  doing with a real mechanism — the bottom nav emitting the list it owns — not with five
+  hardcoded selectors.
+
+  ➖ **`.sb-group-label` is 10px**, the smallest text in the app and three below the floor,
+  on all five drawer headings. Left alone on purpose: it is a base-rule size serving both
+  devices, and 10px is a deliberate desktop value, so lifting it needs its own token — the
+  per-component work §7 files under Phase 2. Noted here because the drawer is navigation
+  chrome and this is the one thing in it Phase 1 did not fix.
 
 ### Phase 2 — Feld pages, one PR each
 

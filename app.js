@@ -1095,11 +1095,13 @@ function go(page, btnId) {
   if (page === 'orders') renderOrders();
   if (page === 'pickups') renderPickups();
   updateTodoBadge();
-  // Admin is a drill-down, not a departure: on a phone the drawer swaps its
-  // list for the sub-tabs and stays open, because closing it is exactly what
-  // made the section feel unreachable. Every other page is somewhere the user
-  // has now arrived, so the drawer gets out of the way.
-  if (page !== 'settings') sbCloseMobile();
+  // Every page, Admin included, is somewhere the user has now arrived, so the
+  // drawer gets out of the way. Admin used to be the exception — the drawer
+  // swapped its list for the sub-tabs and stayed open, because on a phone
+  // closing it left nothing to navigate the section with. The section now has
+  // its own list on the page, so keeping the drawer open would only put the
+  // same thirteen entries on top of the thirteen behind it.
+  sbCloseMobile();
 }
 function openStab(page, sub) {
   document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
