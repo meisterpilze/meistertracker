@@ -222,10 +222,10 @@
           <label data-i18n="msq.labType">Art</label>
           <select id="ms-q-labtype" onchange="msQuickLabTypeChanged()">
             <option value="MC">MC — Slant</option>
-            <option value="PD">PD — Petri</option>
-            <option value="LC">LC — Liquid Culture</option>
-            <option value="SY">SY — Liquid Syringe</option>
-            <option value="KB">G — Grainspawn</option>
+            <option value="PD">PD — Petrischale</option>
+            <option value="LC">LC — Flüssigkultur</option>
+            <option value="SY">SY — Spritze</option>
+            <option value="KB">G — Körnerbrut</option>
           </select>
         </div>
         <!-- Grain spawn is weight-based, unlike the count-based culture types,
@@ -895,6 +895,38 @@
       </div>
     </div>
 
+    <!-- Work-step flow modal — one shell for every click-driven Arbeitsgang.
+         Header, step chips, body and footer are rendered by wkRender() so the
+         batch picker, the harvest list, the move target and the receipt all
+         look and behave the same. Nothing in here depends on a scanner; the
+         scanner only jumps ahead a step where one is present. -->
+    <div class="modal-bg" id="m-work-flow" role="dialog" aria-modal="true" aria-labelledby="wkf-title" hidden>
+      <div class="modal" style="max-width: 620px">
+        <div class="wkf-head">
+          <button id="wkf-back" class="btn btn-sm" hidden data-i18n="work.back">Zurück</button>
+          <h3 id="wkf-title">—</h3>
+          <button id="wkf-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="wkf-steps" class="wkf-steps"></div>
+        <div id="wkf-body"></div>
+        <div id="wkf-foot" class="wkf-foot"></div>
+      </div>
+    </div>
+
     <!-- Contamination report modal — capture photo + tag type for a bag/batch -->
     <div class="modal-bg" id="m-contam-report" role="dialog" aria-modal="true" aria-labelledby="cr-title" hidden>
       <div class="modal" style="max-width: 540px">
@@ -1173,8 +1205,25 @@
         </button>
       </div>
       <nav class="sb-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation" role="navigation">
-        <div class="sb-group-label" data-i18n="nav.main">Main</div>
-        <button class="sb-btn active" id="n-dash">
+        <div class="sb-group-label" data-i18n="nav.work">Arbeiten</div>
+        <button class="sb-btn active" id="n-work">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 6h11M9 12h11M9 18h11" />
+            <path d="m3.5 6 1 1 2-2" />
+            <path d="m3.5 12 1 1 2-2" />
+            <path d="m3.5 18 1 1 2-2" /></svg
+          ><span data-i18n="nav.workSteps">Arbeitsgänge</span>
+        </button>
+        <button class="sb-btn" id="n-dash">
           <svg
             width="18"
             height="18"
@@ -1208,6 +1257,7 @@
             <line x1="3" y1="10" x2="21" y2="10" /></svg
           ><span data-i18n="nav.calendar">Kalender</span>
         </button>
+        <div class="sb-group-label" data-i18n="nav.lookup">Nachschauen</div>
         <button class="sb-btn" id="n-batch">
           <svg
             width="18"
@@ -1729,6 +1779,24 @@
          Visible only on touch + narrow viewport; the sidebar remains the
          single source of truth for active state and routing. -->
     <nav class="bottom-nav no-print" id="bottom-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation">
+      <button class="bottom-nav-btn" id="bn-work" type="button" data-page="work">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9 6h11M9 12h11M9 18h11" />
+          <path d="m3.5 6 1 1 2-2" />
+          <path d="m3.5 12 1 1 2-2" />
+          <path d="m3.5 18 1 1 2-2" />
+        </svg>
+        <span data-i18n="nav.workSteps">Arbeitsgänge</span>
+      </button>
       <button class="bottom-nav-btn" id="bn-dash" type="button" data-page="dash">
         <svg
           width="22"
@@ -2019,8 +2087,107 @@
       </div>
 
       <div class="main">
+        <!-- ══ ARBEITSGÄNGE ══
+             The launcher: the seven things that actually get done, in the order
+             they happen. Every tile opens a flow that works by clicking — the
+             scanner stays the fast path on the tablet, but nothing here needs it. -->
+        <div class="page active" id="p-work">
+          <div class="wk-head">
+            <div>
+              <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
+              <div class="wk-sub" data-i18n="work.sub">
+                Wähle den Arbeitsgang — die App fragt den Rest ab.
+              </div>
+            </div>
+          </div>
+          <div class="wk-todo-strip" id="wk-todo-strip">
+            <span data-i18n="work.dontKnow">Weißt du nicht, was ansteht?</span>
+            <button class="btn btn-sm" id="wk-goto-today" data-i18n="work.todayOpen">Heute zu tun</button>
+          </div>
+          <div class="wk-tiles">
+            <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 3h6v7l4 9H5l4-9V3z" />
+                  <path d="M9 3h6" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.lab">Reinraumarbeit erfassen</span>
+              <span class="wk-tile-when" data-i18n="work.labWhen">Slant, Petri, Flüssigkultur, Spritzen, Korn-zu-Korn</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-grain" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="6" y="7" width="12" height="14" rx="2" />
+                  <path d="M9 4h6v3H9z" />
+                  <circle cx="10" cy="13.5" r="0.9" />
+                  <circle cx="14" cy="13.5" r="0.9" />
+                  <circle cx="12" cy="17.5" r="0.9" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.grain">Körnerbrut ansetzen</span>
+              <span class="wk-tile-when" data-i18n="work.grainWhen">wenn eine Flüssigkultur fertig ist</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-batch" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <path d="m3.3 7 8.7 5 8.7-5" />
+                  <path d="M12 22V12" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.batch">Charge anlegen</span>
+              <span class="wk-tile-when" data-i18n="work.batchWhen">wenn Körnerbrut durchgewachsen ist</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-sub" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 7h16l-1.4 12.3a2 2 0 0 1-2 1.7H7.4a2 2 0 0 1-2-1.7L4 7z" />
+                  <path d="M3 7h18" />
+                  <path d="M6.5 13.5h11" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.substrate">Substrat ansetzen</span>
+              <span class="wk-tile-when" data-i18n="work.substrateWhen">bucht Pellets, Kleie und Gips vom Lager ab</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-move" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="7" width="10" height="10" rx="1.5" />
+                  <path d="M16 12h5" />
+                  <path d="m18.5 9.5 2.5 2.5-2.5 2.5" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.move">Umziehen</span>
+              <span class="wk-tile-when" data-i18n="work.moveWhen">Inkubation → Zelt → Lager</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-harvest" style="--wk-c: var(--c-amber-dark); --wk-cl: var(--c-amber-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 13h16a8 8 0 0 1-16 0z" />
+                  <path d="M12 3v6" />
+                  <path d="m9.5 6.5 2.5 2.5 2.5-2.5" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.harvest">Ernte erfassen</span>
+              <span class="wk-tile-when" data-i18n="work.harvestWhen">Gramm pro Beutel, nach dem Ernten</span>
+            </button>
+            <button type="button" class="wk-tile" id="wk-t-contam" style="--wk-c: var(--c-red-dark); --wk-cl: var(--c-red-light)">
+              <span class="wk-tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.contam">Kontamination melden</span>
+              <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
+            </button>
+          </div>
+        </div>
+
         <!-- ══ DASHBOARD ══ -->
-        <div class="page active" id="p-dash">
+        <div class="page" id="p-dash">
           <!-- Farm / Overview view toggle -->
           <div class="dash-view-toggle">
             <button class="dash-view-btn active" id="dash-view-farm" onclick="setDashMode('farm')">
