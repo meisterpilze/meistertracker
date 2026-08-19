@@ -72,6 +72,11 @@
   --fs-xs: 13px;
   --fs-sm: 15px;
   --fs-base: 17px;
+  /* 12px is the single most common inline size in this app — filter selects,
+     status lines, card blurbs, preview boxes. --fs-xs cannot absorb them: it is
+     11px on a desktop and would drop every one of them by a pixel. So it gets
+     its own pair, phone at the floor and desktop where it already was. */
+  --fs-meta: 13px;
   /* The floor, as a sentinel rather than a size. 104 rules in this stylesheet
      set a font-size below --fs-xs and serve both devices from that one number:
      `.sec` at 12px, `.sb-group-label` at 10px, `.chip-l` at 9px. Every one of
@@ -164,6 +169,7 @@
     --fs-xs: 11px;
     --fs-sm: 13px;
     --fs-base: 15px;
+    --fs-meta: 12px;
     /* 0, so every max() in the sheet returns the literal beside it unchanged. */
     --fs-min: 0px;
     --tap: auto;
@@ -1447,6 +1453,42 @@ body:has(.modal-bg.open) .cam-fab {
   margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
+/* A .sec heading on the left, controls on the right — twenty-three of these in
+   index.html, all spelled out inline, and eighteen without a wrap. On a desktop
+   the wrap never fires because everything fits; at 375px the culture library's
+   two filters and its Check button came to 366px beside a 101px heading and
+   pushed the whole page to 467. Measured, not guessed: scripts/measure-mobile.js.
+
+   The tools group wraps too. Wrapping only the outer row moved the page from
+   467 to 399 and left it still overflowing, because the group by itself is
+   wider than the card's 311px content box.
+
+   Named for the heading it carries and not the card it sits in, because
+   `.card-head` is already the illustrated header the work tiles use — same
+   words, unrelated job, and two rules with one name would have fought over
+   display, padding and margin at a distance of 4500 lines. */
+.sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sec-head .sec {
+  margin: 0;
+}
+.sec-head-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* A filter that sizes to its own content rather than the form grid. */
+.head-select {
+  width: auto;
+  font-size: var(--fs-meta);
+  padding: 4px 8px;
+}
 .sec {
   font-size: max(12px, var(--fs-min));
   font-weight: 700;
@@ -1842,9 +1884,8 @@ textarea:focus {
    with it. On Pilzsorten that child is a <select> whose longest option reads
    "— Rezept von anderer Sorte übernehmen —": a select is at least as wide as
    its widest option, 363px of it, inside a 343px grid. The page scrolled to
-   443px at 375px wide, measured by scripts/measure-mobile.js. With the minimum
-   pinned to 0 the track keeps its share and the select shrinks like everything
-   else. The calendar grids and the scan log already spell it this way. */
+   443px at 375px wide. With the minimum pinned to 0 the track keeps its share
+   and the select shrinks like everything else. */
 .g2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

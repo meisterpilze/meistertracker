@@ -3746,17 +3746,17 @@
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="lab.cultureLibrary">Culture library</div>
-                <div style="display: flex; gap: 6px">
-                  <select id="cult-type" style="width: auto; font-size: 12px; padding: 4px 8px">
+              <div class="sec-head">
+                <div class="sec" data-i18n="lab.cultureLibrary">Culture library</div>
+                <div class="sec-head-tools">
+                  <select id="cult-type" class="head-select">
                     <option value="all" data-i18n="lab.allTypes">All types</option>
                     <option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
                     <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option>
                     <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
                     <option value="SY" data-i18n="lab.syringes">Liquid syringes</option>
                   </select>
-                  <select id="cult-stat" style="width: auto; font-size: 12px; padding: 4px 8px">
+                  <select id="cult-stat" class="head-select">
                     <option value="all" data-i18n="lab.allStatuses">All statuses</option>
                     <option value="active" data-i18n="lab.active">Active</option>
                     <option value="stored" data-i18n="lab.stored">Stored</option>
@@ -3768,7 +3768,7 @@
                     type="button"
                     id="lab-check-btn"
                     class="btn btn-sm"
-                    style="font-size: 12px; padding: 5px 10px; white-space: nowrap"
+                    style="white-space: nowrap"
                     data-i18n="zoneCheck.btn"
                   >
                     Check
