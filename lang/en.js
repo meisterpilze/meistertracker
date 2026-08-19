@@ -1856,5 +1856,9 @@ window.LANG['en'] = {
   'work.rMoved': 'Moved',
   'work.rSkipped': 'Skipped',
   'work.nextHarvest': 'Harvest {n} more bags of this batch',
-  'bagInfo.openHint': 'Open bag — move, harvest, contamination, history'
+  'bagInfo.openHint': 'Open bag — move, harvest, contamination, history',
+  'sub.shortTitle': 'Not enough in stock',
+  'sub.shortLine': '{mat}: {need} kg needed, {have} kg on the shelf',
+  'sub.shortHint': 'The mix is recorded at its full weight, but only what is actually there gets booked out. Better to enter the delivery first.',
+  'sub.shortConfirm': 'Material is missing from stock. Mix anyway?'
 };
