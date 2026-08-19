@@ -172,6 +172,22 @@ describe('the drawer on a phone', () => {
   });
 });
 
+describe('the floating scan button', () => {
+  it('gets out of the way of anything modal', () => {
+    // It sits at z-index 850. The drawer is 120 and every dialog backdrop is
+    // 200, so without these two rules it floats over both — and tappably:
+    // elementFromPoint at its centre returns the button, not the dialog under
+    // it, so a thumb aiming at the bottom of a form opens the scanner.
+    assert.match(CSS, /body\.sb-mobile-open \.cam-fab \{\s*display: none;/, 'the scan button covers the open drawer');
+    assert.match(
+      CSS,
+      /body:has\(\.modal-bg\.open\) \.cam-fab \{\s*display: none;/,
+      'the scan button covers open dialogs. :has() is what makes this one rule instead of 25 — every dialog ' +
+        'in the app opens by putting .open on its .modal-bg'
+    );
+  });
+});
+
 describe('the back rows', () => {
   let LANG;
   before(() => {

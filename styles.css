@@ -586,6 +586,19 @@ body.has-worktree-banner .mobile-topbar {
 body.sb-mobile-open .cam-fab {
   display: none;
 }
+/* Same argument, one layer up: a dialog's backdrop is z-index 200 against the
+   button's 850, so it floats over all 25 of them — and not merely visibly.
+   elementFromPoint at its centre returns the button while a dialog is open, so
+   a thumb aiming at the bottom of a form opens the scanner instead. Found while
+   measuring the guided flow at 375px, where it overlapped the modal's corner.
+
+   :has() rather than a body class from JS, because every dialog in this app
+   opens the same way — .modal-bg gains .open — so one selector covers all of
+   them and the next one too. The pattern is already in the sheet
+   (.notif-fab:has(.bell-badge:not([hidden]))). */
+body:has(.modal-bg.open) .cam-fab {
+  display: none;
+}
 
 /* ═══ CONTENT WRAP ══════════════════════════════════════════════ */
 .content-wrap {
