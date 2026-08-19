@@ -1168,8 +1168,22 @@ function openStab(page, sub) {
   // Every route into a sub-page runs through here — the strip, the admin
   // drawer, and the dozen `openStab(...)` calls that land somewhere after a
   // save — so this is the one place that has to say "we are inside one now".
-  const drilled = document.getElementById(`p-${page}`);
-  if (drilled) drilled.classList.add('stab-drilled');
+  //
+  // Both guards are load-bearing. `stab-drill` is only on the pages
+  // stabDrillInit() gave a back row to, so a page with no way out never gets
+  // shut into a sub-page. And a tab that is not in the list is not a place to
+  // land — see stabLandable().
+  const pgEl = document.getElementById(`p-${page}`);
+  if (pgEl && pgEl.classList.contains('stab-drill') && stabLandable(stEl)) pgEl.classList.add('stab-drilled');
+}
+
+// A sub-tab hidden from the strip is not somewhere to send a phone: the list it
+// would have to go back through does not offer it. Admin's "Server" is the one
+// that exists — it opens on first visit of a session and is display:none in
+// both the strip and the sidebar list — so on a phone Admin opens on its index
+// instead of on a panel the index cannot reach.
+function stabLandable(stab) {
+  return !!stab && stab.style.display !== 'none';
 }
 
 // Gives each sub-tab strip its back row and decides which of the two states the
@@ -1201,11 +1215,14 @@ function stabDrillInit() {
     back.append(ico, label);
     back.addEventListener('click', () => page.classList.remove('stab-drilled'));
     page.insertBefore(back, strip);
-    // Land on the sub-page the page defaults to. The exception is a rule, not
-    // a list of page names: a default tab that is hidden (Admin's "Server") is
-    // not a place to land, so that page opens on its index instead.
-    const active = strip.querySelector('.stab.active');
-    if (active && active.style.display !== 'none') page.classList.add('stab-drilled');
+    // The marker is what scopes the CSS. Only a page that got a back row here
+    // may have its sub-pages hidden, because only that page can get them back:
+    // Bestellungen keeps its strip display:none on every device, and hiding its
+    // panels on the way to an index it does not have renders the page blank.
+    page.classList.add('stab-drill');
+    // Land on the sub-page the page defaults to, unless that tab is not one you
+    // can land on — same rule as openStab(), so both entrances agree.
+    if (stabLandable(strip.querySelector('.stab.active'))) page.classList.add('stab-drilled');
   });
 }
 function refresh() {

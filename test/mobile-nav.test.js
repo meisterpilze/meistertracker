@@ -58,8 +58,8 @@ describe('the sub-tab drill-down', () => {
     );
     assert.match(
       PHONE_BLOCK,
-      /\.page:not\(\.stab-drilled\) \.sp \{\s*display: none;/,
-      'on the index no sub-page may show. This selector is 0,3,0 and beats `.sp.active` at 0,2,0 — ' +
+      /\.page\.stab-drill:not\(\.stab-drilled\) \.sp \{\s*display: none;/,
+      'on the index no sub-page may show. This selector is 0,4,0 and beats `.sp.active` at 0,2,0 — ' +
         'weaken it and the default panel renders under the list'
     );
     assert.match(
@@ -91,6 +91,38 @@ describe('the sub-tab drill-down', () => {
       assert.doesNotMatch(b.body, /\.stabs \{[^}]*flex-wrap: wrap/s, 'a `max-width` block wraps .stabs again');
       assert.doesNotMatch(b.body, /#p-settings > \.stabs \{[^}]*overflow-x: auto/s, 'Admin scrolls sideways again');
     }
+  });
+
+  it('reaches only the pages that were given a way back', () => {
+    // This is the shape of a bug that shipped: the index rule started as
+    // `.page:not(.stab-drilled) .sp`, which also hid the sub-pages of
+    // Bestellungen — a page whose strip is display:none on every device, so it
+    // is never drilled and never can be. It rendered blank on a phone.
+    //
+    // Both halves are asserted because either alone is silent: CSS scoped to a
+    // class nobody adds hides nothing, and a class nobody reads changes nothing.
+    assert.match(
+      PHONE_BLOCK,
+      /\.page\.stab-drill\b/,
+      'the index rule must be scoped to the pages stabDrillInit() set up, not to every .page'
+    );
+    assert.match(APP, /classList\.add\('stab-drill'\)/, 'nothing adds stab-drill — the scoped CSS then hides nothing');
+    assert.match(
+      APP,
+      /classList\.contains\('stab-drill'\)/,
+      'openStab() must not drill a page it was never set up for — that page has no back row'
+    );
+  });
+
+  it('does not send a phone to a tab the list cannot get back to', () => {
+    // Admin's default tab is display:none in both the strip and the sidebar
+    // list. Landing on it means a sub-page the index does not offer.
+    assert.match(
+      APP,
+      /function stabLandable\(/,
+      'the landable rule is gone — Admin opens on a panel its list cannot reach'
+    );
+    assert.match(APP, /stabLandable\(stEl\)/, 'openStab() no longer checks whether the tab is one you can land on');
   });
 
   it('marks the page drilled from the one place every route runs through', () => {

@@ -1507,8 +1507,15 @@ body.sb-mobile-open .cam-fab {
   }
   /* On the index there is no sub-page. The .active panel keeps its class, so
      going back into it needs no state of its own — this rule outranks
-     `.sp.active` on specificity alone (0,3,0 against 0,2,0). */
-  .page:not(.stab-drilled) .sp {
+     `.sp.active` on specificity alone (0,4,0 against 0,2,0).
+
+     `.stab-drill` is not decoration: it is added by stabDrillInit(), so this
+     reaches only the pages that were given a back row. Without it the rule also
+     hides the sub-pages of Bestellungen — whose strip is display:none on every
+     device, so it is never drilled and never can be — and that page renders
+     blank on a phone. It also means the whole mechanism is inert if the script
+     does not run, which is the right way round. */
+  .page.stab-drill:not(.stab-drilled) .sp {
     display: none;
   }
 }
