@@ -4154,6 +4154,43 @@ function handleMkcalendar(parts, body, req, res) {
   res.end('Forbidden');
 }
 
+// S-24: whose record it is — asked of the record, not of the URL.
+//
+// The CalDAV sync-back paths look a row up by the UID carried in the request
+// body (PUT) or in the file being removed (DELETE) and then write or delete
+// that row. Every guard above them is about the *calendar*: checkCalendarAccess,
+// and "only from your own calendar, or from the shared one if you are admin".
+// None of them says anything about the row the UID names, and a worker may
+// write into their own personal calendar — so PUT an .ics carrying a
+// colleague's task UID there, DELETE it again, and the colleague's task goes
+// with it. The UIDs are not a secret: GET /api/data hands out caldavUid for
+// every task.
+//
+// The HTTP twins of these operations already answer this question —
+// PATCH /api/tasks/:id calls db.canUserModifyTask and returns "You are not
+// allowed to modify this task", and DELETE /api/calendar-events/:id is
+// requireAdmin. This asks those same two, so the two doors into the same room
+// stop disagreeing.
+//
+// Anything the UID does not resolve to a row for is allowed through: creating a
+// new task from a calendar client is a normal thing to do, and it takes nothing
+// from anyone.
+function caldavRecordAllowed(req, ics) {
+  const uidMatch = String(ics || '').match(/UID:(.*)/);
+  if (!uidMatch) return true;
+  const uid = uidMatch[1].trim();
+  const isAdmin = !!(req.caldavUser && req.caldavUser.role === 'admin');
+  // A custom calendar event. Matched before the -event suffix is stripped, or
+  // an event id that ends in "-event" would be mangled into a different one.
+  if (/^cev-(.+)@meisterpilze$/.test(uid)) return isAdmin;
+  // A task, either by its own uid or by its companion due-date event's.
+  const taskUid = uid.replace(/-event$/, '');
+  if (!db.isValidCaldavUid(taskUid)) return true;
+  const task = db.readTaskByCaldavUid(database, taskUid);
+  if (!task) return true;
+  return db.canUserModifyTask(database, req.caldavUser && req.caldavUser.username, task.id, isAdmin);
+}
+
 function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
@@ -4188,12 +4225,26 @@ function handlePut(parts, body, req, res) {
       }
     }
 
+    // Bidirectional sync: parse incoming content and update DB
+    const unfolded = unfoldIcs(body);
+
+    // S-24: asked before the write, not after it. The sync-back below is what
+    // touches the row, but a refusal that still left the caller's .ics sitting
+    // in a shared calendar would be a refusal in name only.
+    if (!caldavRecordAllowed(req, unfolded)) {
+      log('warn', 'CalDAV PUT: refused a record the caller may not modify', {
+        calendar: calName,
+        file: fileName,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+
     fs.writeFileSync(filePath, body, 'utf8');
     invalidateCtag(calName);
     recordChange(calName, fileName, 'changed');
-
-    // Bidirectional sync: parse incoming content and update DB
-    const unfolded = unfoldIcs(body);
 
     // ── VTODO sync-back: task text, priority, completion, due date ──
     if (unfolded.includes('VTODO')) {
@@ -4544,6 +4595,20 @@ function handleDelete(parts, req, res) {
     try {
       content = unfoldIcs(fs.readFileSync(filePath, 'utf8'));
     } catch {}
+
+    // S-24: the calendar guards above allow deleting from your own calendar.
+    // What is deleted from the *database* is decided by the UID inside the
+    // file, which the caller put there — so the row gets its own question.
+    if (!caldavRecordAllowed(req, content)) {
+      log('warn', 'CalDAV DELETE: refused a record the caller may not modify', {
+        calendar: calName,
+        file: fileName,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
 
     const typeMatch = content.match(/X-MEISTERPILZE-TYPE:(.*)/);
     const evType = typeMatch ? typeMatch[1].trim() : null;
