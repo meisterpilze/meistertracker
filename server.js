@@ -770,6 +770,17 @@ function validateScanEntries(entries) {
     if (!e.time || typeof e.time !== 'string' || isNaN(new Date(e.time).getTime())) {
       return 'entry[' + i + '].time must be an ISO timestamp';
     }
+    // Canonicalise, do not merely accept. `new Date()` takes far more than ISO,
+    // and V8's legacy parser ignores a trailing parenthesised group — so
+    // "Aug 19 2099 12:00:00 GMT+0000 (' + fetch(...) + ')" is a *valid* date and
+    // was stored verbatim. The client renders time into markup, which is the
+    // same reason the charset pin below exists for batch/bag/from/to; time was
+    // the field that list forgot. Writing the ISO form makes the charset a
+    // property of the stored row instead of a promise about the caller.
+    // Real clients already send `new Date().toISOString()`, so this changes
+    // nothing for them — and it repairs the log's string-compare date filters
+    // for anything that did not.
+    e.time = new Date(e.time).toISOString();
     // Optional ID-like fields — pin charset + length to prevent stored XSS via
     // raw rendering in the client.
     for (const f of ['batch', 'bag', 'from', 'to', 'expected_current_zone']) {
