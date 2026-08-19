@@ -3432,7 +3432,7 @@ function handleCaldav(req, res) {
   if (caldavUsername) {
     const caldavUserKey = caldavUsername.toLowerCase();
     const caldavThrottleKey = caldavUserKey + '@' + caldavIP;
-    if (!checkLoginAllowed(caldavThrottleKey) || !checkLoginAllowedPerUser(caldavUserKey)) {
+    if (!checkLoginAllowed(caldavThrottleKey)) {
       res.writeHead(429, { 'Content-Type': 'text/plain' });
       res.end('Too many login attempts. Try again later.');
       return;
@@ -4453,10 +4453,61 @@ setInterval(() => {
 
 // ── LOGIN BRUTE-FORCE PROTECTION ────────────────────────────
 const LOGIN_MAX_ATTEMPTS = 5; // per username+IP
-const LOGIN_MAX_PER_USER = 20; // per username across all IPs
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 const loginAttempts = new Map(); // username@IP → { count, firstAttempt, lockedUntil }
-const loginAttemptsPerUser = new Map(); // username → { count, firstAttempt, lockedUntil }
+const loginAttemptsPerUser = new Map(); // username → { count, firstAttempt }
+
+// S-19: the per-user tier used to be a hard lock — twenty failures from
+// anywhere and the account was unreachable for fifteen minutes. That is real
+// protection against distributed password spraying, and simultaneously a
+// weapon: twenty wrong guesses against a known username ("admin" is a good
+// guess) keeps that account out indefinitely at four requests a minute, spread
+// over as many source addresses as the attacker likes, and the locked-out admin
+// has no self-service way back in.
+//
+// It is an escalating delay instead. The per-*source* tier keeps its hard lock,
+// because an attacker can only ever aim that at their own address. Spraying one
+// account still collapses — each failure past the threshold doubles the wait, to
+// a five-second ceiling — while the person who actually knows the password
+// always gets in, just slowly, and one correct login clears the counter.
+//
+// Pending delays are counted and capped so the delay cannot itself be turned
+// into a way to pin open sockets. Past the cap the answer is an immediate 429,
+// which clears the moment the flood stops instead of fifteen minutes later.
+const LOGIN_DELAY_AFTER = 5; // failures for one account before the wait starts
+const LOGIN_DELAY_STEP_MS = 250;
+const LOGIN_DELAY_MAX_MS = 5000;
+const LOGIN_DELAY_MAX_PENDING = 64;
+let loginDelaysPending = 0;
+
+function loginDelayForUser(username) {
+  const entry = loginAttemptsPerUser.get(username);
+  if (!entry) return 0;
+  if (Date.now() - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
+    loginAttemptsPerUser.delete(username);
+    return 0;
+  }
+  const over = entry.count - LOGIN_DELAY_AFTER;
+  if (over <= 0) return 0;
+  return Math.min(LOGIN_DELAY_STEP_MS * 2 ** (over - 1), LOGIN_DELAY_MAX_MS);
+}
+
+// Runs `next` once this account's current penalty has elapsed. Returns false
+// when the pending-delay budget is spent — the caller answers 429 then.
+function afterLoginDelay(username, next) {
+  const delay = loginDelayForUser(username);
+  if (delay <= 0) {
+    next();
+    return true;
+  }
+  if (loginDelaysPending >= LOGIN_DELAY_MAX_PENDING) return false;
+  loginDelaysPending++;
+  setTimeout(() => {
+    loginDelaysPending--;
+    next();
+  }, delay);
+  return true;
+}
 
 function checkLoginAllowed(key) {
   const entry = loginAttempts.get(key);
@@ -4464,17 +4515,6 @@ function checkLoginAllowed(key) {
   if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
   if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
     loginAttempts.delete(key);
-    return true;
-  }
-  return true;
-}
-
-function checkLoginAllowedPerUser(username) {
-  const entry = loginAttemptsPerUser.get(username);
-  if (!entry) return true;
-  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
-  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
-    loginAttemptsPerUser.delete(username);
     return true;
   }
   return true;
@@ -4498,13 +4538,14 @@ function recordLoginFailurePerUser(username) {
   const now = Date.now();
   let entry = loginAttemptsPerUser.get(username);
   if (!entry) {
-    entry = { count: 0, firstAttempt: now, lockedUntil: null };
+    entry = { count: 0, firstAttempt: now };
     loginAttemptsPerUser.set(username, entry);
   }
   entry.count++;
-  if (entry.count >= LOGIN_MAX_PER_USER) {
-    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
-    log('warn', 'Login locked (per-user) due to too many failed attempts', { username, attempts: entry.count });
+  // Logged once, when the wait first bites, so a spray against one account is
+  // visible without a line per attempt.
+  if (entry.count === LOGIN_DELAY_AFTER + 1) {
+    log('warn', 'Repeated failed logins for one account — throttling it', { username, attempts: entry.count });
   }
 }
 
@@ -4515,6 +4556,58 @@ function clearLoginAttemptsPerUser(username) {
   loginAttemptsPerUser.delete(username);
 }
 
+// The half of /api/auth/login that runs once the per-account wait has elapsed.
+// Split out of the route handler for S-19: the delay is asynchronous, and this
+// is what it defers.
+function finishLogin(req, res, { username, password, userKey, throttleKey }) {
+  const user = db.getUserByUsernameCaseInsensitive(database, username);
+  // Constant-time login: always run scrypt, even when the username is
+  // unknown — falling back to a process-local dummy hash keeps the
+  // response time independent of whether the account exists. The
+  // !user check below still rejects unknown accounts, but does so at
+  // the same latency as a real user with a wrong password.
+  const candidateHash = user ? user.hash : DUMMY_PASSWORD_HASH;
+  const candidateSalt = user ? user.salt : DUMMY_PASSWORD_SALT;
+  const passwordOk = db.verifyPassword(candidateHash, candidateSalt, password);
+  if (!user || !passwordOk) {
+    recordLoginFailure(throttleKey);
+    recordLoginFailurePerUser(userKey);
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid credentials' }));
+    return;
+  }
+  // One correct password clears the account's penalty outright, which is what
+  // keeps S-19's delay from being a lockout with extra steps.
+  clearLoginAttempts(throttleKey);
+  clearLoginAttemptsPerUser(userKey);
+  // S-14: login is the only moment the plaintext password is in hand, so
+  // it is the only chance to re-hash a row that still uses the old scrypt
+  // cost. Best effort — a failure here must not cost the user their login.
+  if (db.passwordNeedsUpgrade(user.salt)) {
+    try {
+      const upgraded = db.hashPassword(password);
+      db.updateUserPassword(database, user.id, upgraded.hash, upgraded.salt);
+      log('info', 'Upgraded password hash to current KDF parameters', { username: user.username });
+    } catch (upgradeErr) {
+      log('warn', 'Password hash upgrade failed', { username: user.username, error: upgradeErr.message });
+    }
+  }
+  // Rotate: invalidate any pre-existing session token presented in
+  // the request before minting a new one. Defends against stolen
+  // pre-auth cookies surviving the legitimate user's login.
+  const oldToken = getSessionToken(req);
+  if (oldToken) {
+    try {
+      db.deleteSession(database, oldToken);
+    } catch (_) {
+      /* best effort — token may not exist anymore */
+    }
+  }
+  const token = db.createSession(database, user.id);
+  setSessionCookie(res, token);
+  jsonOk(res, { username: user.username, role: user.role });
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of loginAttempts) {
@@ -4522,8 +4615,7 @@ setInterval(() => {
     else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
   }
   for (const [key, entry] of loginAttemptsPerUser) {
-    if (entry.lockedUntil && now >= entry.lockedUntil) loginAttemptsPerUser.delete(key);
-    else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
+    if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
   }
 }, 60000);
 
@@ -4604,7 +4696,18 @@ function handleRequest(req, res) {
 
   // ── CalDAV requests ──
   if (req.url.startsWith('/caldav')) {
-    return handleCaldav(req, res);
+    // S-19: the per-account wait, applied before the handler runs. CalDAV
+    // re-authenticates on every request, so this is the same throttle the login
+    // route uses, on the same counters — a stale password in a calendar client
+    // slows itself down instead of locking the person out of the web UI.
+    const caldavUser = extractBasicAuthUsername(req);
+    if (!caldavUser) return handleCaldav(req, res);
+    const accepted = afterLoginDelay(caldavUser.toLowerCase(), () => handleCaldav(req, res));
+    if (!accepted) {
+      res.writeHead(429, { 'Content-Type': 'text/plain', 'Retry-After': '2' });
+      res.end('Too many login attempts. Try again shortly.');
+    }
+    return;
   }
 
   // ── OAuth 2.0 well-known endpoints (public, no auth) ──
@@ -5298,55 +5401,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         const userKey = username.toLowerCase();
         const throttleKey = userKey + '@' + clientIP;
-        if (!checkLoginAllowed(throttleKey) || !checkLoginAllowedPerUser(userKey)) {
+        // Per-source: still a hard lock. An attacker can only point that at
+        // their own address, so it is not usable against anyone else.
+        if (!checkLoginAllowed(throttleKey)) {
           res.writeHead(429, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
           return;
         }
-        const user = db.getUserByUsernameCaseInsensitive(database, username);
-        // Constant-time login: always run scrypt, even when the username is
-        // unknown — falling back to a process-local dummy hash keeps the
-        // response time independent of whether the account exists. The
-        // !user check below still rejects unknown accounts, but does so at
-        // the same latency as a real user with a wrong password.
-        const candidateHash = user ? user.hash : DUMMY_PASSWORD_HASH;
-        const candidateSalt = user ? user.salt : DUMMY_PASSWORD_SALT;
-        const passwordOk = db.verifyPassword(candidateHash, candidateSalt, password);
-        if (!user || !passwordOk) {
-          recordLoginFailure(throttleKey);
-          recordLoginFailurePerUser(userKey);
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid credentials' }));
-          return;
-        }
-        clearLoginAttempts(throttleKey);
-        clearLoginAttemptsPerUser(userKey);
-        // S-14: login is the only moment the plaintext password is in hand, so
-        // it is the only chance to re-hash a row that still uses the old scrypt
-        // cost. Best effort — a failure here must not cost the user their login.
-        if (db.passwordNeedsUpgrade(user.salt)) {
+        // Per-account: a wait rather than a lock (S-19). The password check
+        // happens on the other side of it.
+        const accepted = afterLoginDelay(userKey, () => {
           try {
-            const upgraded = db.hashPassword(password);
-            db.updateUserPassword(database, user.id, upgraded.hash, upgraded.salt);
-            log('info', 'Upgraded password hash to current KDF parameters', { username: user.username });
-          } catch (upgradeErr) {
-            log('warn', 'Password hash upgrade failed', { username: user.username, error: upgradeErr.message });
+            finishLogin(req, res, { username, password, userKey, throttleKey });
+          } catch (err) {
+            safeErr(res, err);
           }
+        });
+        if (!accepted) {
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
         }
-        // Rotate: invalidate any pre-existing session token presented in
-        // the request before minting a new one. Defends against stolen
-        // pre-auth cookies surviving the legitimate user's login.
-        const oldToken = getSessionToken(req);
-        if (oldToken) {
-          try {
-            db.deleteSession(database, oldToken);
-          } catch (_) {
-            /* best effort — token may not exist anymore */
-          }
-        }
-        const token = db.createSession(database, user.id);
-        setSessionCookie(res, token);
-        jsonOk(res, { username: user.username, role: user.role });
       } catch (err) {
         safeErr(res, err);
       }
