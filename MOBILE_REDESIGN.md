@@ -1,8 +1,9 @@
 # 📱 Mobile Redesign — Design Doc
 
-> **Status:** Draft for review · **Author:** design pass with Claude · **Date:** 2026-08-19
-> **Scope decision:** design only — no code in this document. Measurements taken against
-> `main` @ `e656fbd`.
+> **Status:** Phase 0 shipped · **Author:** design pass with Claude · **Date:** 2026-08-19
+> **Measurements** taken against `main` @ `e656fbd`. Where building Phase 0 proved a
+> number or a claim wrong, the correction is in place and flagged **[corrected]** — the
+> original reasoning is kept where it explains why the wrong thing looked right.
 
 The lab walks. Workers carry a phone in one hand and a bag in the other, wear gloves, and
 work in a room that is warm and humid. The phone layout they get today is the desktop
@@ -52,9 +53,18 @@ Everything below was counted against the working tree, not recalled.
 | Sub-tab pills | 34 | 6 `.stabs` strips; Settings alone has 13 |
 | `<table>` elements | 29 | 16 static + 13 built by string concat in `app.js` |
 | Media queries | 38 | `max-width`, `pointer: coarse`, `hover: none`, `min-width: 769` — mixed |
-| **Inline `font-size` ≤13px** | **549** | 275 in `index.html`, 274 in `app.js` |
+| **Inline `font-size` below the 13px floor** | **495** | 242 in `index.html`, 253 in `app.js` |
+| …of those, fractional | 11 | `10.5px`, `11.5px`, `9.5px`, `12.5px` — all in `app.js` |
+| Inline `font-size` at exactly 13px | 65 | at the floor, so not the bridge's problem |
 | Inline `style="` attributes | 1335 | 766 in `index.html`, 569 in `app.js` |
-| Size / space / type tokens | **0** | `:root` has colours, 2 radii, 2 shadows, sidebar widths |
+| Size / space / type tokens | **0** → 11 | was: `:root` had only colours, 2 radii, 2 shadows |
+
+> **[corrected]** This table first said 549 inline sizes ≤13px. The survey behind it used a
+> shell pattern with no decimal point in it, so eleven fractional sizes never appeared —
+> and the first version of the bridge, built from the same list, silently missed exactly
+> those eleven. `scripts/mobile-audit.js` and `test/mobile-tokens.test.js` both exist
+> partly so the next omission is caught by a number instead of by someone squinting at a
+> phone.
 
 ### 2.1 The direction is inverted
 
@@ -95,13 +105,24 @@ Even here the type is desktop-sized: `.wk-tile-t` is `14.5px` and `.wk-tile-when
 
 ### 2.3 Two defects found while measuring
 
-- **`.scan-float` is dead CSS.** Styled twice — [styles.css:3476](styles.css:3476) with
-  `env(safe-area-inset-*)` handling, [styles.css:3722](styles.css:3722) to hide it in
-  print — and carried by **no element in the source**. `openScanModal()`
-  ([app.js:16107](app.js:16107)) is only reached from inside individual flows and the PWA
-  shortcut `/?action=scan`. On a phone, mid-task, there is no way to the scanner.
-- **The bottom nav's comment disagrees with the bottom nav.** [index.html:1785](index.html:1785)
-  says "4 most-used pages"; five buttons follow.
+- **`.scan-float` was dead CSS.** Styled twice — once with `env(safe-area-inset-*)`
+  handling, once to hide it in print — carried by **no element in the source**, with
+  `scan.fabLabel` still translated in all three language files.
+
+  > **[corrected]** The conclusion drawn from this — "on a phone there is no way to the
+  > scanner" — was **wrong**, and Phase 0 shipped a duplicate button before a screenshot
+  > showed `#cam-fab` already sitting there doing the job. The dead CSS was the corpse of
+  > a button that had been *replaced*, not removed. It is now deleted and the duplicate
+  > reverted. Worth keeping as a lesson: three independent traces (CSS, print rule, i18n
+  > keys) all agreed with each other, and all three were evidence about the past.
+
+- **Three floating controls sat on top of the bottom nav.** The genuine defect, found by
+  looking at the screen rather than at the source: `.cam-fab` sits at `bottom: 24px` and
+  `.undo-bar` at `20px`, both under the 56px bottom nav, so the "Scannen" pill covers
+  *Labor* and *Kalender* on a 375px screen. `.action-fab-wrap` already used `72px` — the
+  right value was in the file, applied to one of the three. Fixed in Phase 0.
+- **The bottom nav's comment disagreed with the bottom nav** — "4 most-used pages" above
+  five buttons. Fixed.
 
 ---
 
@@ -154,14 +175,30 @@ override.** Everything else follows.
   --pad-card: 16px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 769px) and (hover: hover) {
   :root {
-    --fs-xs: 11px; --fs-sm: 13px; --fs-base: 15px; --fs-lg: 17px; --fs-xl: 22px;
-    --tap: 36px;   --tap-sm: 32px;
+    --fs-xs: 11px; --fs-sm: 13px; --fs-base: 15px;
+    --tap: auto;   --tap-sm: auto;
     --pad-page: 24px; --pad-card: 20px;
+    --pad-btn: 9px 16px; --pad-stab: 7px 16px; --pad-sb: 9px 12px; --pad-modal: 28px;
   }
 }
 ```
+
+> **[corrected]** Two changes from the sketch, both made while building it.
+>
+> **`and (hover: hover)`.** Width alone hands a coarse-pointer tablet the desk's numbers
+> at 1024px. The reason for a big target is the input device, so the query asks about the
+> device. This also absorbs the old `@media (pointer: coarse)` `.sb-btn` block, which was
+> reaching for the same thing one component at a time.
+>
+> **`--tap: auto`, not `36px`.** A desktop number would have *added* a minimum where
+> there was none and moved the desktop by a pixel or two. `auto` means "intrinsic height,
+> exactly as before" — which is what "the desktop must not move" actually requires.
+>
+> Padding tokens carry paired values rather than sitting on a 4/8/12/16 scale, for the
+> same reason: `.btn` is `9px 16px` today, 9 is not on any sane scale, and rounding it to
+> 12 would have been a redesign of the desktop disguised as a refactor.
 
 Then every rule that hard-codes a size consumes a token instead:
 
@@ -239,6 +276,12 @@ untouched, and a `<td>` that is missed simply renders without its label rather t
 29 tables. This is where most of the hours in this plan actually go — budget accordingly,
 and see §7 for how they are sliced.
 
+**There is prior art in the file already.** Four tables — including `#t-log` and
+`#t-harvest` — have a hand-rolled card mode on mobile, using a `flex: 0 0 84px` label
+column and a promoted date header. The pattern was invented, applied four times, and never
+generalised. Read those rules before writing new ones; the generalisation should absorb
+them rather than sit beside them.
+
 The existing `overflow-x: auto` wrappers ([app.js:7567](app.js:7567), [app.js:10444](app.js:10444),
 [app.js:11170](app.js:11170), [app.js:11505](app.js:11505), [app.js:11597](app.js:11597))
 come out as each table converts. Sideways scroll inside a page is the thing being removed,
@@ -290,20 +333,32 @@ already uses with `--max-warnings 73`.
 
 Each phase is a PR. Each is shippable on its own and does something visible.
 
-### Phase 0 — Tokens, inversion, bridge
+### Phase 0 — Tokens, inversion, bridge · **shipped**
 
-- Add the `:root` token block and the `min-width: 769px` override (§4).
-- Convert the class-based rules to tokens: `.btn`, `.stab`, `.card`, `.main`, `.sb-btn`,
-  `table`/`th`/`td`, `.modal`.
-- **Delete** the shrink-only rules: `.btn` at 480, `table { font-size: 12px }` at 768,
-  `.main { padding: 8px }`, `.card { padding: 12px }`.
-- Add the §6 bridge block, with the comment naming its exit condition.
-- Re-attach `.scan-float` — a persistent scan button on Feld pages. The CSS is already
-  written and correct; it needs an element and a click handler calling `openScanModal()`.
-- Fix the bottom-nav comment to say five.
+- ✅ `:root` token block + the `min-width: 769px and (hover: hover)` override (§4).
+- ✅ Converted to tokens: `body`, `.btn`, `.stab`, `.card`, `.main`, `.sb-btn`, `.modal`.
+- ✅ **Deleted** the shrink-only rules — `.btn` and `.main`/`.card` at 480, `.main`/`.card`
+  and `table { font-size: 12px }` at 768, `.modal` at both — plus the size half of the
+  `pointer: coarse` `.sb-btn` block, which the tokens now say once instead of three times.
+- ✅ The §6 bridge, covering both spellings **and** the eleven fractional sizes.
+- ✅ Deleted dead `.scan-float`; lifted `.cam-fab` and `.undo-bar` clear of the bottom nav
+  (see §2.3 — this replaced the "re-attach the scan button" item, which rested on a
+  wrong premise).
+- ✅ Bottom-nav comment says five.
+- ➖ **`th`/`td` deliberately untouched.** Raising table type widens tables, and the payoff
+  only arrives in Phase 3 when they stop being tables. The 12px shrink is gone, so phone
+  tables read at the 13px base.
 
-*Visible result: nothing on the phone is smaller than 13px, everything tappable is at least
-48px, and the scanner is one thumb away from anywhere.*
+*Measured result at 375px: `body` 15→17px, `.main` padding 8→16px, `.btn` from 12px/8px/12px
+with no minimum to 15px/13px/18px with a 56px floor, every inline sub-floor size lifted to
+13px, no horizontal overflow. At 1440px all 31 baseline selectors are byte-identical.*
+
+**What Phase 0 did not reach.** The smallest text on the landing page is now 11.5px, on
+`.wk-tile-when` — the *when do I use this* line under each tile. It is a base-rule size, so
+neither the bridge (inline only) nor the ratchet (`max-width` blocks only) touches it, and
+the same is true of `th` at 11px, `.sec` at 12px and `.bottom-nav-btn` at 11px. These are
+legitimate *desktop* sizes living in rules that serve both; tokenising them is per-component
+work, and it is the first thing Phase 2 does.
 
 ### Phase 1 — Navigation chrome
 
@@ -353,7 +408,7 @@ lift functions out of `app.js` with regexes and run them against mocks
 see CSS at all. So the verification has to be static and manual, and it has to be honest
 about which is which.
 
-**Static — `test/mobile-tokens.test.js`, wired into CI as its own step.** The repo already
+**Static — `test/mobile-tokens.test.js`, wired into CI as its own step. ✅ built.** The repo already
 does exactly this for translations, and for the stated reason: a missing translation is
 invisible in review, so the check is made loud in the checks list
 ([.github/workflows/ci.yml:46](.github/workflows/ci.yml:46)). Small type is invisible in
@@ -363,15 +418,24 @@ review the same way. The test reads `styles.css` as text and asserts:
 2. Every rule matching a known interactive class carries a `min-height`.
 3. No `px` literal for size/space/type outside the two `:root` blocks — tokens only.
 
-**Ratchet — `scripts/mobile-audit.js`.** Counts inline `font-size` ≤13px in `index.html` and
-`app.js` and fails when the number rises above the committed baseline. Starts at **549**,
-and the number in the assertion goes down with each phase. Sibling to the existing
-`scripts/i18n-hardcoded.js`.
+**Ratchet — `scripts/mobile-audit.js`. ✅ built, wired into CI.** Two ceilings, both allowed
+only to fall: **495** inline sub-floor sizes, and **11** sub-floor `font-size` declarations
+inside `max-width` blocks. `--list` locates them, `--update` lowers the ceilings after a
+phase. Sibling to the existing `scripts/i18n-hardcoded.js`.
 
-**Desktop-unchanged proof.** Before Phase 0, capture the computed values of a fixed list of
-~30 selectors at 1440px (font-size, padding, min-height) into a committed JSON fixture. A
-test re-reads it after the token conversion. This is what makes "no desktop redesign" a
-check rather than a promise.
+**Desktop-unchanged proof — `scripts/capture-desktop-baseline.js` + `test/desktop-baseline.json`.
+✅ built.** 31 selectors at 1440px, captured before Phase 0 touched anything; `--compare`
+re-measures and diffs. It serves `index.html` with every `<script src>` stripped, so only
+the cascade decides the numbers.
+
+> **[corrected]** This **cannot run in CI** — computing CSS needs a browser engine and this
+> repo has none. Calling it "a test" in the first draft implied a gate that does not exist.
+> It is a dev-time tool; the CI gates are the static assertions and the ratchet above.
+>
+> It also needs `Cache-Control: no-store`, which is load-bearing rather than hygiene: the
+> stylesheet URL never changes between runs, so a browser will happily re-measure an older
+> `styles.css`. During Phase 0 that produced one "the desktop moved" report for a rule that
+> had not moved, and one "the phone is unchanged" report for a rule that had.
 
 **Manual, per phase.** A real phone, in the lab, with gloves on: the phase's screens, the
 scan flow end to end, and one pass in landscape. Checklist lives in the PR body. This part
