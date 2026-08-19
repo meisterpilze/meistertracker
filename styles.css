@@ -112,6 +112,15 @@
      computes identically to `auto` for min-height (the fixture records 0px for
      every --tap consumer). */
   --tap-min: 56px;
+  /* And the same sentinel for the other floor, because §9 chose two. --tap-min
+     is 56px for a gloved hand on a Feld screen; this is the 48px one, and the
+     rule for picking is which kind of screen the control lives on. Chrome that
+     rides along on every screen — the topbar bell, the drawer toggle, the undo
+     toast — takes this one: it clears the 44px minimum every guideline agrees
+     on without spending 56px of a phone's height on furniture. Having only the
+     Feld floor as a sentinel is what left that chrome at 26–36px through four
+     phases; there was nothing to floor it with that did not also make it huge. */
+  --tap-sm-min: 48px;
   --pad-page: 16px;
   --pad-card: 16px;
   --pad-btn: 13px 18px;
@@ -160,6 +169,7 @@
     --tap: auto;
     --tap-sm: auto;
     --tap-min: 0px;
+    --tap-sm-min: 0px;
     --pad-page: 24px;
     --pad-card: 20px;
     --pad-btn: 9px 16px;
@@ -300,6 +310,10 @@ body {
   justify-content: center;
   transition: background 0.15s;
   flex-shrink: 0;
+  /* 18px of icon in 4px of padding is a 26px target. The floor is a phone-only
+     0-on-desktop sentinel, so the header keeps its desktop geometry exactly. */
+  min-width: var(--tap-sm-min);
+  min-height: var(--tap-sm-min);
 }
 .sb-toggle:hover {
   background: var(--c-border-light);
@@ -1721,6 +1735,21 @@ label {
   color: var(--c-text-sec);
   display: block;
   margin-bottom: 4px;
+}
+/* A <summary> is a button that does not look like one, and every one in this
+   app was the height of its own line — 19.5px. Floored generically rather than
+   per instance, because the next <details> someone writes has the same problem
+   and no reason to know about it.
+
+   min-height and not display:flex, deliberately: flex on a summary drops the
+   disclosure triangle in every engine, and the triangle is the only thing that
+   says the row opens. align-content centres the text inside the taller box on
+   anything from 2024 on; where it is not supported the text sits at the top of
+   the box, which is untidy and still hits the floor — the target is correct
+   either way, which is the half that matters. */
+summary {
+  min-height: var(--tap-sm-min);
+  align-content: center;
 }
 input,
 select,
@@ -3614,6 +3643,11 @@ tr:hover td {
   padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
+  /* 31.5px, on the control that takes back a scan that went to the wrong zone.
+     Chrome floor rather than the Feld one: the bar is a transient overlay and
+     56px of it would cover a row of whatever is underneath. */
+  min-height: var(--tap-sm-min);
+  padding-inline: 18px;
 }
 .undo-bar #undo-btn:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -4362,6 +4396,13 @@ tr:hover td {
   cursor: pointer;
   margin-left: auto;
   padding: 0;
+  /* 36px is a phone value in a rule the phone is the only reader of — the bell
+     is display:none until 768px. The floor lifts it to 48 there and leaves the
+     literal alone above, where nothing renders it anyway. The topbar's own
+     padding drops by the same 12px (see the 768px block), so the bar stays the
+     height it is and only the target grows. */
+  min-width: max(36px, var(--tap-sm-min));
+  min-height: max(36px, var(--tap-sm-min));
 }
 .mobile-bell:hover {
   background: var(--c-border-light);
@@ -4484,6 +4525,12 @@ tr:hover td {
   }
   .mobile-bell {
     display: inline-flex;
+  }
+  /* Paid for out of the bar's own padding rather than the screen: 10px around a
+     36px bell and 4px around a 48px one are both 56px tall. */
+  .mobile-topbar {
+    padding-block: 4px;
+    padding-top: calc(4px + env(safe-area-inset-top, 0px));
   }
   .notif-dropdown {
     left: 8px;

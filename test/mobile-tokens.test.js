@@ -207,28 +207,39 @@ describe('the phone floors', () => {
     );
   });
 
-  // The same idea applied to height. Rules across the app already chose a
-  // minimum — 44px, 46px, 48px — each correct for a mouse; --tap-min raises
-  // them in a hand and leaves them alone on a desk.
-  it('floors touch the same way it floors type', () => {
-    assert.equal(
-      valueIn(ROOT_BLOCK, '--tap-min'),
-      valueIn(ROOT_BLOCK, '--tap'),
-      '--tap-min and --tap disagree — two numbers for one touch floor'
-    );
-    assert.equal(
-      valueIn(DESKTOP_BLOCK, '--tap-min'),
-      '0px',
-      'the desktop touch floor must be 0. It cannot be `auto` like --tap: max() with a keyword is invalid CSS, ' +
-        'the whole declaration is dropped, and the phone minimum goes with it'
-    );
-  });
+  // The same idea applied to height, twice — because §9 chose two floors and
+  // one sentinel could only serve one of them. Rules across the app already
+  // picked a minimum — 44px, 46px, 48px — each correct for a mouse; the
+  // sentinels raise them in a hand and leave them alone on a desk.
+  for (const [floorToken, pairToken] of [
+    ['--tap-min', '--tap'],
+    ['--tap-sm-min', '--tap-sm']
+  ]) {
+    it(`floors touch the same way it floors type (${floorToken})`, () => {
+      assert.equal(
+        valueIn(ROOT_BLOCK, floorToken),
+        valueIn(ROOT_BLOCK, pairToken),
+        `${floorToken} and ${pairToken} disagree — two numbers for one touch floor`
+      );
+      assert.equal(
+        valueIn(DESKTOP_BLOCK, floorToken),
+        '0px',
+        `the desktop value of ${floorToken} must be 0. It cannot be \`auto\` like ${pairToken}: max() with a ` +
+          'keyword is invalid CSS, the whole declaration is dropped, and the phone minimum goes with it'
+      );
+    });
+  }
 
-  it('never floors a height against a token that is not the touch floor', () => {
-    const wrong = [...CSS.matchAll(/min-(?:height|width):\s*max\([^)]*var\((--[a-z0-9-]+)\)/g)]
+  // Both spellings, and both properties. The earlier version read `min-height`
+  // and `min-width` only, which left `width: max(44px, var(--tap-min))` — the
+  // form three square icon buttons actually use — unchecked. A max() against
+  // the wrong token there reads as deliberate and silently resizes the desktop.
+  it('never floors a size against a token that is not a touch floor', () => {
+    const TOUCH_FLOORS = ['--tap-min', '--tap-sm-min'];
+    const wrong = [...CSS.matchAll(/(?:min-)?(?:height|width):\s*max\([^)]*var\((--[a-z0-9-]+)\)/g)]
       .map((m) => m[1])
-      .filter((t) => t !== '--tap-min');
-    assert.deepEqual(wrong, [], `min-height/width: max() floored against ${[...new Set(wrong)].join(', ')}`);
+      .filter((t) => !TOUCH_FLOORS.includes(t));
+    assert.deepEqual(wrong, [], `a height/width max() floored against ${[...new Set(wrong)].join(', ')}`);
   });
 });
 
