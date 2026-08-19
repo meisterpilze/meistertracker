@@ -192,6 +192,13 @@ function setupFromLoopback(remoteAddress, trustProxy) {
 }
 
 let database = db.openDb(DB_FILE);
+// S-18: createUser rejects a name that would share a CalDAV calendar with an
+// existing account, but a database created before that guard can already hold
+// one. Those calendars fail closed in checkCalendarAccess, which is silent from
+// the operator's side — so say it once at startup, with the names to rename.
+for (const clash of db.findCaldavSlugCollisions(database)) {
+  log('warn', 'Users share a CalDAV calendar name — their personal calendars are unreachable until renamed', clash);
+}
 let protocol = 'http'; // set to 'https' at startup if TLS certs are found
 // I-17: serialize backup restores. Two admins kicking off concurrent
 // /api/backup/restore requests would race on the close→rename→reopen path
@@ -2427,7 +2434,20 @@ function getBatchLocServer(batch, scanLog) {
 function checkCalendarAccess(req, calName) {
   if (CALDAV_CATEGORY_CALS[calName]) return true;
   if (req.caldavUser.role === 'admin') return true;
-  return req.caldavUserSlug === calName;
+  if (req.caldavUserSlug !== calName) return false;
+  // S-18: createUser rejects a colliding name now, but a database created
+  // before that guard can already hold one — and a personal calendar shared
+  // between two people is worse than a personal calendar that stops answering.
+  // Deny, and say who has to be renamed.
+  const owners = db.listUsers(database).filter((u) => db.caldavSlug(u.username) === calName);
+  if (owners.length > 1) {
+    log('warn', 'CalDAV calendar name is ambiguous — access denied until one account is renamed', {
+      calendar: calName,
+      users: owners.map((u) => u.username)
+    });
+    return false;
+  }
+  return true;
 }
 
 // Get display name and color for a calendar
@@ -2436,7 +2456,7 @@ function getCalDisplayInfo(calName) {
     return { displayName: CALDAV_CATEGORY_CALS[calName].displayName, color: CALDAV_CATEGORY_CALS[calName].color };
   }
   const users = db.listUsers(database);
-  const userIdx = users.findIndex((u) => u.username.toLowerCase().replace(/[^a-z0-9]+/g, '-') === calName);
+  const userIdx = users.findIndex((u) => db.caldavSlug(u.username) === calName);
   if (userIdx >= 0) {
     return { displayName: users[userIdx].username, color: USER_CALENDAR_COLORS[userIdx % USER_CALENDAR_COLORS.length] };
   }
@@ -2932,7 +2952,7 @@ function autoPushTaskCaldav(task) {
     }
     // Per-person calendar: if assigned
     if (task.assignee) {
-      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const slug = db.caldavSlug(task.assignee);
       writeTaskToCalendar(task, slug);
     }
     // Due-date VEVENT → aufgaben calendar: respect privacy
@@ -2957,7 +2977,7 @@ function autoDeleteTaskCaldav(task) {
     deleteTaskFromCalendar(task.caldavUid, 'meisterpilze');
     // Remove from personal calendar if assigned
     if (task.assignee) {
-      const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const slug = db.caldavSlug(task.assignee);
       deleteTaskFromCalendar(task.caldavUid, slug);
     }
     // Also remove VEVENT for due date (check aufgaben + legacy meisterpilze)
@@ -3158,7 +3178,7 @@ function _doAutoSyncAllCaldav(data) {
           writeTaskToCalendar(t, 'meisterpilze');
         }
         if (t.assignee) {
-          const slug = t.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const slug = db.caldavSlug(t.assignee);
           writeTaskToCalendar(t, slug);
           if (t.caldavUid) {
             if (!personalWrittenUids.has(slug)) personalWrittenUids.set(slug, new Set());
@@ -3271,7 +3291,7 @@ function syncAllTasksLocal(data) {
   for (const calSlug of Object.keys(CALDAV_CATEGORY_CALS)) ensureCalDir(calSlug);
   const users = db.listUsers(database);
   for (const u of users) {
-    const slug = u.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = db.caldavSlug(u.username);
     ensureCalDir(slug);
   }
 
@@ -3285,7 +3305,7 @@ function syncAllTasksLocal(data) {
       const isPrivate = task.private === 1 || task.private === true;
       if (!isPrivate) writeTaskToCalendar(task, 'meisterpilze');
       if (task.assignee) {
-        const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const slug = db.caldavSlug(task.assignee);
         writeTaskToCalendar(task, slug);
       }
       results.pushed++;
@@ -3436,7 +3456,7 @@ function handleCaldav(req, res) {
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
   req.caldavUser = caldavUser;
-  req.caldavUserSlug = caldavUser.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  req.caldavUserSlug = db.caldavSlug(caldavUser.username);
 
   const method = req.method;
   // Normalize path: /caldav/calendars/calname/file.ics
@@ -4360,7 +4380,7 @@ function handleDelete(parts, req, res) {
               deleteIcsFile('meisterpilze', uid + '.ics');
             }
             if (task.assignee) {
-              const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              const slug = db.caldavSlug(task.assignee);
               if (calName !== slug) {
                 deleteIcsFile(slug, uid + '.ics');
               }
@@ -10369,7 +10389,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         // Personal calendar: if assigned
         if (task.assignee) {
-          const slug = task.assignee.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const slug = db.caldavSlug(task.assignee);
           uid = writeTaskToCalendar(task, slug);
         }
         // Private + unassigned: no calendar to write to, just generate a UID
@@ -10460,11 +10480,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // Shared category calendars are visible to everyone, the user's own
       // slug is always visible, and admins see everything.
       const isAdmin = req.authUser && req.authUser.role === 'admin';
-      const callerSlug = req.authUser
-        ? String(req.authUser.username)
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-        : null;
+      const callerSlug = req.authUser ? db.caldavSlug(req.authUser.username) : null;
       const canSeeDir = (dir) => {
         if (CALDAV_CATEGORY_CALS[dir]) return true;
         if (isAdmin) return true;

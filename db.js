@@ -3265,6 +3265,32 @@ function passwordNeedsUpgrade(salt) {
   return !String(salt || '').startsWith(SCRYPT_SALT_PREFIX);
 }
 
+// S-18: the URL segment a user's personal CalDAV calendar lives at. This lives
+// in db.js rather than server.js because createUser is what has to enforce it:
+// /[^a-z0-9]+/ collapses '.', '_' and '-' to the same character, so bob.smith,
+// bob_smith, bob-smith and Bob.Smith all produce the slug "bob-smith" — and
+// checkCalendarAccess grants access on nothing more than a slug match. Two such
+// accounts could read and write each other's personal calendar. createUser
+// already rejected case-insensitive exact duplicates; it did not know about
+// this weaker equality. The naming drift that produces it (anna.mueller one
+// month, anna_mueller the next) is exactly what happens in practice.
+function caldavSlug(username) {
+  return String(username)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+/** Usernames that share a CalDAV slug. Empty on a healthy database. */
+function findCaldavSlugCollisions(db) {
+  const bySlug = new Map();
+  for (const r of db.prepare('SELECT username FROM users').all()) {
+    const slug = caldavSlug(r.username);
+    if (!bySlug.has(slug)) bySlug.set(slug, []);
+    bySlug.get(slug).push(r.username);
+  }
+  return [...bySlug.entries()].filter(([, names]) => names.length > 1).map(([slug, names]) => ({ slug, names }));
+}
+
 function createUser(db, username, password, role) {
   // Login matches usernames case-insensitively (getUserByUsernameCaseInsensitive),
   // but the column's UNIQUE is case-sensitive. Without this guard 'Admin' could
@@ -3272,6 +3298,15 @@ function createUser(db, username, password, role) {
   // out. Reject case-insensitive duplicates up front.
   if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
     throw new Error('Username already exists');
+  }
+  // S-18: and reject one that collides under the weaker CalDAV equality too.
+  const slug = caldavSlug(username);
+  const clash = db
+    .prepare('SELECT username FROM users')
+    .all()
+    .find((u) => caldavSlug(u.username) === slug);
+  if (clash) {
+    throw new Error('Username conflicts with existing user: ' + clash.username + ' (same CalDAV calendar name)');
   }
   const { salt, hash } = hashPassword(password);
   const created = new Date().toISOString();
@@ -8171,6 +8206,7 @@ const SAFE_ERROR_PREFIXES = [
   'batch not found:',
   // Conflicts — db.js
   'Zone already exists:',
+  'Username conflicts with existing user:',
   'Rack already exists:',
   'A batch with ID ',
   'A culture with ID ',
@@ -9104,6 +9140,8 @@ module.exports = {
   updateBatchDue,
   updateTaskDueDate,
   createUser,
+  caldavSlug,
+  findCaldavSlugCollisions,
   getUserByUsername,
   getUserByUsernameCaseInsensitive,
   verifyPassword,
