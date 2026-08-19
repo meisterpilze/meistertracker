@@ -1495,6 +1495,7 @@ window.LANG['en'] = {
   'cal.taskListTitle': 'Task list',
   'cal.entries': 'entries',
   'cal.noTasks': 'no tasks',
+  'cal.agendaEmpty': 'Nothing this month',
   'cal.printChooseRange': 'Choose the range for the task list:',
   'cal.printWeek': 'Week — task list for the current week',
   'cal.printMonth': 'Month — task list for the current month',

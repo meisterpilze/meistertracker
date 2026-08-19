@@ -1509,6 +1509,7 @@ window.LANG['de'] = {
   'cal.taskListTitle': 'Aufgabenliste',
   'cal.entries': 'Einträge',
   'cal.noTasks': 'keine Aufgaben',
+  'cal.agendaEmpty': 'Nichts in diesem Monat',
   'cal.printChooseRange': 'Wähle den Zeitraum für die Aufgabenliste:',
   'cal.printWeek': 'Woche — Aufgabenliste der aktuellen Woche',
   'cal.printMonth': 'Monat — Aufgabenliste des aktuellen Monats',

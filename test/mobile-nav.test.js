@@ -188,6 +188,93 @@ describe('the floating scan button', () => {
   });
 });
 
+describe('the calendar agenda', () => {
+  // Same split-brain as the drill-down, one file further: app.js decides that a
+  // phone gets the agenda, styles.css decides that a phone gets no view toggle
+  // and no legend, and the two decisions are the same breakpoint written twice.
+  // Move one and the phone shows a Monat/Woche/Tag toggle whose three buttons
+  // all render the same list — or a grid with no way back to it. Neither throws.
+  const JS_BREAKPOINT = APP.match(/function calAgendaOnly\(\)[\s\S]*?matchMedia\('([^']+)'\)/);
+
+  it('decides in one place whether this is a phone', () => {
+    assert.ok(JS_BREAKPOINT, 'calAgendaOnly() no longer reads a media query — the router lost its condition');
+    assert.equal(JS_BREAKPOINT[1], '(max-width: 768px)');
+  });
+
+  it('hides the grid-only chrome at exactly that breakpoint', () => {
+    const hides = [...blocks(CSS, MAX_WIDTH_BLOCK)].filter((b) =>
+      /\.cal-view-toggle,\s*\n\s*\.cal-legend/.test(b.body)
+    );
+    assert.equal(
+      hides.length,
+      1,
+      'the view toggle and legend are not hidden in a max-width block — on a phone the toggle offers ' +
+        'three views that all render the agenda'
+    );
+    // The block's own header has to be the same 768, not merely some max-width.
+    // blocks() reports `start` just past the opening brace, so the slice ends on it.
+    const header = CSS.slice(0, hides[0].start).match(/@media[^{]*\{$/);
+    assert.match(
+      header[0],
+      /max-width:\s*768px/,
+      'the CSS hides the toggle at a different width than app.js routes at — between the two, a phone ' +
+        'gets either a grid it cannot read or a toggle that does nothing'
+    );
+  });
+
+  it('routes the phone to the agenda before it reads calView', () => {
+    // Order matters: `calView` survives from a desktop session in the same tab,
+    // so a `calView === 'month'` branch tested first would win on a phone too.
+    const router = APP.match(/function renderCalendar\(\) \{[\s\S]*?\n\}/);
+    assert.ok(router, 'renderCalendar() not found');
+    // The FIRST branch, found by position rather than by pattern. Matching
+    // `if (calAgendaOnly())` anywhere passes just as happily when the branch
+    // has been demoted to an `else if`, because the demoted line still
+    // contains it — which is exactly what a mutation run showed.
+    // Anchored on `renderCal…` so it finds the view dispatch and not the
+    // `if (!title) return` guard three lines above it.
+    const firstBranch = router[0].match(/^ {2}if \((.+?)\) renderCal/m);
+    assert.ok(firstBranch, 'renderCalendar() no longer opens its view dispatch with a plain if');
+    assert.equal(
+      firstBranch[1],
+      'calAgendaOnly()',
+      'the agenda is not the first branch — a calView left at "month" by a desktop session in the same ' +
+        'tab would route a phone to a grid'
+    );
+  });
+
+  it('navigates by month on a phone whatever calView still says', () => {
+    const nav = APP.match(/function calNav\(delta\) \{[\s\S]*?\n\}/);
+    assert.ok(nav, 'calNav() not found');
+    assert.match(
+      nav[0],
+      /calView === 'month' \|\| calAgendaOnly\(\)/,
+      'prev/next on a phone would step by seven days while the list below it changes by thirty'
+    );
+  });
+
+  // The failure this catches is the quietest one in the set: renderCalAgenda()
+  // builds its markup as a string, so a class it emits that styles.css does
+  // not define throws nothing, logs nothing, and renders as unstyled text in a
+  // list nobody on a desktop will ever open.
+  it('styles every class it emits', () => {
+    const fn = APP.match(/function renderCalAgenda\(\) \{[\s\S]*?\n\}/);
+    assert.ok(fn, 'renderCalAgenda() not found in app.js');
+    const emitted = [...new Set([...fn[0].matchAll(/class="(cal-agenda[a-z- ]*)"/g)].flatMap((m) => m[1].split(/\s+/)))]
+      .filter(Boolean)
+      .filter((c) => c !== 'today');
+    assert.ok(emitted.length >= 8, `expected the agenda to emit several classes, found ${emitted.length}`);
+    const unstyled = emitted.filter((c) => !new RegExp('\\.' + c + '\\b').test(CSS));
+    assert.deepEqual(unstyled, [], `the agenda emits ${unstyled.length} class(es) styles.css never defines`);
+  });
+
+  it('gives the empty month something to say in every language', () => {
+    // Emitted through `t('cal.agendaEmpty')` inside a template, so
+    // test/i18n.test.js's literal scan does not reach it either.
+    assert.match(APP, /t\('cal\.agendaEmpty'\)/, 'the agenda no longer has an empty state');
+  });
+});
+
 describe('the back rows', () => {
   let LANG;
   before(() => {

@@ -17629,13 +17629,22 @@ function collectCalendarEvents() {
   return events;
 }
 
+// One place decides whether this is a phone, and both the router and the
+// navigation read it. The breakpoint is duplicated in styles.css — where it
+// hides the view toggle — and that pair is exactly the split-brain
+// test/mobile-nav.test.js exists to catch, so it is asserted there too.
+function calAgendaOnly() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+}
+
 function renderCalendar() {
   const title = document.getElementById('cal-title');
   if (!title) return;
   document.querySelectorAll('.cal-vbtn').forEach((b) => b.classList.remove('active'));
   const btn = document.getElementById('cv-' + calView);
   if (btn) btn.classList.add('active');
-  if (calView === 'month') renderCalMonth();
+  if (calAgendaOnly()) renderCalAgenda();
+  else if (calView === 'month') renderCalMonth();
   else if (calView === 'week') renderCalWeek();
   else if (calView === 'day') renderCalDay();
 }
@@ -17652,7 +17661,11 @@ function calToday() {
 }
 
 function calNav(delta) {
-  if (calView === 'month') {
+  // The agenda spans the displayed month, so on a phone prev/next moves a
+  // month regardless of which grid calView still names — otherwise a stale
+  // 'week' from a desktop session steps the title by seven days while the list
+  // below it changes by thirty.
+  if (calView === 'month' || calAgendaOnly()) {
     calMonth += delta;
     if (calMonth < 0) {
       calMonth = 11;
@@ -17846,6 +17859,116 @@ function printCalendarTaskList(range) {
 
   closeCalPrintModal();
   setTimeout(() => window.print(), 150);
+}
+
+// ── Agenda View — what the calendar is on a phone ──
+//
+// Not a preference and not a fourth tab: below 769px the three grids cannot
+// work, and the numbers say so rather than taste. Seven columns at the 44px
+// WCAG floor need 316px of grid, which fits in 343px of content — and leaves
+// each cell 36px wide, so the day-number circle fills it edge to edge with
+// nothing left for an event. Today a month cell is 47.9px wide and an event
+// label gets 29.9px at 10px type: four glyphs and an ellipsis. Week view is
+// worse at 40.7px per column. The constraint is horizontal, and a taller cell
+// cannot reach it, which is what settles §9 decision 3.
+//
+// Empty days are dropped here and kept in print. That is deliberate on both
+// sides: on paper the blank Sunday is a line you tick, on a phone it is thirty
+// rows of "no tasks" between you and the four that matter.
+function renderCalAgenda() {
+  const container = document.getElementById('cal-container');
+  const title = document.getElementById('cal-title');
+  if (!container || !title) return;
+  const MONTHS = calMonths();
+  title.textContent = MONTHS[calMonth] + ' ' + calYear;
+
+  const days = calAgendaDays(new Date(calYear, calMonth, 1), new Date(calYear, calMonth + 1, 0)).filter(
+    (d) => d.events.length
+  );
+  const typeLabels = calTypeLabels();
+  const todayStr = localDateStr(new Date());
+
+  if (!days.length) {
+    container.innerHTML = '<div class="cal-agenda-empty">' + esc(t('cal.agendaEmpty')) + '</div>';
+    container.onclick = null;
+    return;
+  }
+
+  container.innerHTML =
+    '<div class="cal-agenda">' +
+    days
+      .map((day) => {
+        const rows = day.events
+          .map((e) => {
+            const when = e.allDay
+              ? t('cal.allDay')
+              : (e.startTime || '') + (e.endTime ? '–' + e.endTime : '');
+            const desc = e.description
+              ? '<span class="cal-agenda-desc">' + esc(e.description) + '</span>'
+              : '';
+            const who =
+              e.assignees && e.assignees.length
+                ? '<span class="cal-agenda-who">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>'
+                : '';
+            return (
+              '<button type="button" class="cal-agenda-row" data-type="' +
+              esc(e.type) +
+              '" data-id="' +
+              esc(e.id || '') +
+              '">' +
+              '<span class="cal-agenda-dot" style="background:' +
+              safeColor(e.color || '#64748b') +
+              '"></span>' +
+              '<span class="cal-agenda-when">' +
+              esc(when) +
+              '</span>' +
+              '<span class="cal-agenda-what">' +
+              '<span class="cal-agenda-label">' +
+              esc(e.label) +
+              '</span>' +
+              '<span class="cal-agenda-meta">' +
+              esc(typeLabels[e.type] || '') +
+              who +
+              '</span>' +
+              desc +
+              '</span>' +
+              '</button>'
+            );
+          })
+          .join('');
+        return (
+          '<div class="cal-agenda-day' +
+          (day.ds === todayStr ? ' today' : '') +
+          '" data-date="' +
+          day.ds +
+          '">' +
+          '<div class="cal-agenda-date">' +
+          '<span class="cal-agenda-num">' +
+          day.date.getDate() +
+          '</span>' +
+          '<span class="cal-agenda-dow">' +
+          esc(day.dayName) +
+          '</span>' +
+          '</div>' +
+          '<div class="cal-agenda-rows">' +
+          rows +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('') +
+    '</div>';
+
+  // The same opener the month grid uses. No drag-and-drop: rescheduling by
+  // dragging is a mouse gesture, and this view exists for the hand.
+  container.onclick = function (ev) {
+    const row = ev.target.closest('.cal-agenda-row');
+    if (!row) return;
+    onCalMonthEventClick(row.dataset.type, row.dataset.id);
+  };
+
+  const today = container.querySelector('.cal-agenda-day.today');
+  if (today) today.scrollIntoView({ block: 'nearest' });
 }
 
 // ── Month View ──
@@ -20817,6 +20940,16 @@ function initEventListeners() {
   $('cv-day').addEventListener('click', () => {
     setCalView('day');
   });
+  // Crossing the breakpoint has to re-render, not just re-style. Rotate a phone
+  // into landscape and the view toggle reappears while the container still
+  // holds agenda markup — the grid the toggle claims is showing would not exist
+  // until the next navigation. Cheap to fix, invisible until someone turns the
+  // device sideways, which in a lab is most of the time.
+  if (typeof window.matchMedia === 'function') {
+    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
+      if (document.getElementById('cal-title')) renderCalendar();
+    });
+  }
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);
   $('m-cal-print-week').addEventListener('click', () => printCalendarTaskList('week'));

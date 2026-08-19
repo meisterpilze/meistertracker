@@ -3055,6 +3055,106 @@ tr:hover td {
   opacity: 0.7;
 }
 
+/* ═══ CALENDAR — AGENDA VIEW ═══════════════════════════════════
+   The calendar below 769px. Not a fourth tab: a month cell at 375px is 47.9px
+   wide and gives an event label 29.9px of text, four glyphs and an ellipsis,
+   and week view is worse at 40.7px per column. Seven columns cannot be made to
+   work by making rows taller — the constraint is horizontal.
+
+   A list has the opposite shape: one column, full width, as many rows as the
+   month has entries. Everything the grid had to abbreviate fits here in words. */
+.cal-agenda-day {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--c-border);
+}
+.cal-agenda-day:first-child {
+  border-top: 0;
+}
+/* The date column is fixed so every row's text starts on the same line, which
+   is what makes a list scannable rather than merely short. */
+.cal-agenda-date {
+  flex: 0 0 40px;
+  text-align: center;
+  padding-top: 2px;
+}
+.cal-agenda-num {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.cal-agenda-dow {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.cal-agenda-day.today .cal-agenda-num {
+  color: var(--c-primary);
+}
+.cal-agenda-rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* A button, not a div: this opens the same editor the month grid opens, and
+   the row is the target — 56px of it, the Feld floor, because the calendar is
+   read walking between tents. */
+.cal-agenda-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.cal-agenda-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+.cal-agenda-when {
+  flex: 0 0 auto;
+  color: var(--c-text-sec);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cal-agenda-what {
+  flex: 1;
+  min-width: 0;
+}
+.cal-agenda-label {
+  display: block;
+  font-weight: 600;
+}
+.cal-agenda-meta,
+.cal-agenda-desc {
+  display: block;
+  color: var(--c-text-muted);
+}
+.cal-agenda-who::before {
+  content: ' · ';
+}
+.cal-agenda-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--c-text-muted);
+  font-style: italic;
+}
+
 /* ═══ DASHBOARD LOCATION OVERVIEW ══════════════════════════════ */
 .location-section {
   background: var(--c-surface);
@@ -3878,16 +3978,20 @@ tr:hover td {
     font-size: 13px;
   }
   .cal-event {
-    font-size: 10px;
     padding: 1px 5px;
   }
   .cal-week-hdr-cell .wk-day-num {
     font-size: 16px;
   }
+  /* Both of these describe the grids, and below this breakpoint there are no
+     grids. The toggle would offer three views that all render the agenda; the
+     legend is eight colour keys for dots whose meaning every agenda row spells
+     out in words next to the label. Hidden rather than shrunk — the eight
+     legend spans were the last sub-floor type in the app at 11px, and the
+     honest fix for a key nobody needs is not a bigger key. */
+  .cal-view-toggle,
   .cal-legend {
-    padding: 6px 10px;
-    gap: 10px;
-    font-size: 11px;
+    display: none;
   }
   .dash-top-row {
     flex-direction: column;
@@ -3948,9 +4052,6 @@ tr:hover td {
   .g4,
   .g5 {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .cal-grid {
-    font-size: 10px;
   }
   .cal-cell {
     min-height: 60px;

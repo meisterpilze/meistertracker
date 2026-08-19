@@ -1426,6 +1426,7 @@ window.LANG['pt'] = {
   'cal.taskListTitle': 'Lista de tarefas',
   'cal.entries': 'entradas',
   'cal.noTasks': 'sem tarefas',
+  'cal.agendaEmpty': 'Nada neste mês',
   'cal.printChooseRange': 'Escolha o período para a lista de tarefas:',
   'cal.printWeek': 'Semana — lista de tarefas da semana atual',
   'cal.printMonth': 'M\u00eas — lista de tarefas do m\u00eas atual',
