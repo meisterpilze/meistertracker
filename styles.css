@@ -3528,18 +3528,15 @@ tr:hover td {
   .g2 {
     grid-template-columns: 1fr;
   }
+  /* Umbrechen statt schieben: auf den Arbeitsseiten sind es vier Reiter, die
+     nebeneinander nicht passen — in zwei Zeilen aber vollständig sichtbar sind.
+     Ein seitlich scrollender Streifen versteckt die hinteren, und wer sie nicht
+     sieht, sucht sie nicht. Die Einstellungen behalten den Streifen (unten),
+     weil fünfzehn Reiter umgebrochen eine halbe Seite hoch wären. */
   .stabs {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    gap: 2px;
+    flex-wrap: wrap;
+    gap: 4px;
     padding-bottom: 8px;
-    /* Fade-edge cue so workers see there's more to scroll. The mask hides
-       content fading from opaque (left edge) to transparent (right 24 px),
-       hinting "there's more this way" without taking layout space. The
-       existing horizontal scroll keeps working underneath. */
-    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
-    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
   }
   .stab {
     flex-shrink: 0;
@@ -5697,4 +5694,17 @@ tr:hover td {
    Finger getroffen — 34 px reichten dafür nicht. */
 .wkf-foot .btn {
   min-height: 44px;
+}
+
+/* Fünfzehn Reiter brechen nicht sinnvoll um: die Einstellungen behalten den
+   seitlich schiebbaren Streifen samt Auslauf-Kante als Hinweis. Die Arbeitsseiten
+   mit ihren vier Reitern brechen dagegen um (Regel weiter oben). */
+@media (max-width: 768px) {
+  #p-settings > .stabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+  }
 }
