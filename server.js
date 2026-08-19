@@ -270,7 +270,9 @@ setInterval(
   },
   5 * 60 * 1000
 ); // check every 5 minutes
-// Clean up expired OAuth codes and revoked tokens every hour
+// Clean up expired OAuth codes and revoked tokens every hour — and, since
+// S-25, auto-registered clients that never completed a flow (see
+// db.deleteExpiredOAuthData for why each condition is there).
 setInterval(
   () => {
     try {
@@ -743,6 +745,12 @@ const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
 // username straight from a body that may be up to 5 MB and make it a Map key in
 // two brute-force tables, where the 60-second sweep leaves it for the full
 // 15-minute lockout window.
+// S-25: what an unauthenticated registration may carry. Generous against any
+// real client, small against a five-megabyte body sent twenty times a minute.
+const OAUTH_MAX_CLIENT_NAME = 128;
+const OAUTH_MAX_REDIRECT_URIS = 5;
+const OAUTH_MAX_URI_LENGTH = 512;
+
 const USERNAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 // S-22: there was a minimum (8) and no maximum anywhere, so MAX_BODY_SIZE was
 // the only bound on what reached scrypt — five megabytes of it. Set where the
@@ -5169,6 +5177,37 @@ function handleRequest(req, res) {
           if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris required"}');
+            return;
+          }
+          // S-25: bounds, because this route is unauthenticated and every call
+          // writes a row that nothing used to collect. Until here the only
+          // limits were checkOAuthRate (20/min per address) and MAX_BODY_SIZE —
+          // five megabytes of client_name, stored verbatim and logged verbatim,
+          // twenty times a minute, for ever.
+          //
+          // The numbers are deliberately far above any real client: a name is a
+          // label in an admin list, and RFC 7591 registrations carry one or two
+          // redirect URIs, not fifty.
+          if (redirectUris.length > OAUTH_MAX_REDIRECT_URIS) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client_metadata","error_description":"too many redirect_uris"}');
+            return;
+          }
+          // Typed as well as bounded. `new URL(uri)` below throws on a
+          // non-string, and that lands in safeErr as a 500 — our fault by the
+          // response code, the caller's by the facts.
+          for (const uri of redirectUris) {
+            if (typeof uri !== 'string' || uri.length > OAUTH_MAX_URI_LENGTH) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                '{"error":"invalid_client_metadata","error_description":"redirect_uri must be a string within length limits"}'
+              );
+              return;
+            }
+          }
+          if (typeof data.client_name === 'string' && data.client_name.length > OAUTH_MAX_CLIENT_NAME) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client_metadata","error_description":"client_name too long"}');
             return;
           }
           // Validate redirect URIs. RFC 8252 (OAuth 2.0 for Native Apps):

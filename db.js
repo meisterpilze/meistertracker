@@ -7281,6 +7281,35 @@ function revokeOAuthTokensByRefresh(db, refreshHash) {
 }
 
 function deleteExpiredOAuthData(db) {
+  // S-25: the clients first, and that order is the point.
+  //
+  // POST /oauth/register is unauthenticated by design — MCP clients register
+  // themselves — and every call wrote a row that nothing ever collected. Bounds
+  // on the input make each row small; only this makes the pile stop growing.
+  //
+  // Judged **before** the two deletions below, so a token that expired since the
+  // last run still speaks for its client this round. Written the other way, a
+  // client whose token expired an hour ago was swept in the same call that
+  // removed the token — measured, and it made a real registration look exactly
+  // like one that never completed a flow.
+  //
+  // Each condition earns its place. `client_secret_hash IS NULL` is what
+  // listOAuthClients already calls autoRegistered, so a client an admin created
+  // by hand is never touched. The two NOT IN clauses spare anything that ever
+  // got a code or a token, live or expired. And a day is far longer than
+  // register→authorize→token takes.
+  //
+  // What this does mean: a client that has not been used for long enough that
+  // all its tokens have expired *and* been reaped will eventually be swept, and
+  // has to register again. That is what dynamic registration is for, and the
+  // alternative is keeping every registration ever made for ever.
+  db.prepare(
+    `DELETE FROM oauth_clients
+      WHERE client_secret_hash IS NULL
+        AND created < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')
+        AND client_id NOT IN (SELECT client_id FROM oauth_tokens)
+        AND client_id NOT IN (SELECT client_id FROM oauth_codes)`
+  ).run();
   db.prepare("DELETE FROM oauth_codes WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR used = 1").run();
   db.prepare("DELETE FROM oauth_tokens WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR revoked = 1").run();
 }
