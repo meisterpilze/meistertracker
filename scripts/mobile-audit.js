@@ -94,7 +94,19 @@ if (process.argv.includes('--update')) {
     `const CEILING = { inline: ${counts.inline}, declared: ${counts.declared} };`
   );
   fs.writeFileSync(__filename, after);
-  console.log(`\n✓ ceilings lowered to inline: ${counts.inline}, declared: ${counts.declared} — commit ${SELF}`);
+  // The direction is computed, not assumed. This line used to read "ceilings
+  // lowered to ..." whatever it had just written, and the first time that
+  // mattered it was wrong: a rebase brought five inline sizes in from main and
+  // it announced a fall while raising the ceiling from 495 to 500. A ratchet
+  // that reports a rise as a fall is worse than no ratchet at all.
+  const moved = ['inline', 'declared']
+    .map((key) => {
+      const from = CEILING[key];
+      const to = counts[key];
+      return `${key}: ${from} ${to < from ? '↓' : to > from ? '↑ RAISED' : '='} ${to}`;
+    })
+    .join(', ');
+  console.log(`\n✓ ${moved} — commit ${SELF}`);
   process.exit(0);
 }
 
