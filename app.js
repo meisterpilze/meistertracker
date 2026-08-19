@@ -4313,16 +4313,6 @@ function printWorkList() {
   win.document.write(html);
   win.document.close();
 }
-// "+ Ernte erfassen" from the speed-dial. Harvests used to have their own card;
-// they are rows in the day plan now, so this opens the day they sit on and
-// flashes the card holding it rather than pointing at a card that is gone.
-// "Ernte erfassen" used to scroll to the task card and flash it for 1.5 s —
-// which told the worker where to look but left them with nothing to type into,
-// because the only way to actually record a harvest was to scan a bag. It now
-// opens the harvest flow, where the bag is picked from a list.
-function dashGoHarvest() {
-  wkfOpen('harvest');
-}
 // Warnungen is for problems you can't see anywhere else on the dashboard: low
 // stock, lab issues, zones at capacity. It deliberately does NOT restate
 // due-today / overdue batches — those are already the "zu verschieben" chip and
@@ -20491,8 +20481,8 @@ function initEventListeners() {
         break;
     }
   });
-  // The two creation flows keep one-tap buttons on the dashboard; the speed-dial
-  // FAB carries the same actions for every other page.
+  // The two creation flows keep one-tap buttons here, on the screen where you
+  // decide what to do next. Every other page reaches them through Arbeitsgänge.
   $('dash-act-newbatch').addEventListener('click', msQuickChargeNew);
   $('dash-act-labwork').addEventListener('click', msQuickLaborNew);
   applyDashMode();
@@ -21036,48 +21026,6 @@ document.addEventListener('DOMContentLoaded', function () {
   } catch (e) {
     /* ignore — bad URL or no URLSearchParams */
   }
-
-  // Action speed-dial FAB — toggles a 3-button menu (New batch / Lab work /
-  // Log harvest). This is the single home for the creation flows on every page.
-  const afab = document.getElementById('action-fab');
-  const afabMenu = document.getElementById('action-fab-menu');
-  const afabWrap = document.getElementById('action-fab-wrap');
-  function setAfabOpen(open) {
-    if (!afab || !afabMenu) return;
-    afab.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) afabMenu.removeAttribute('hidden');
-    else afabMenu.setAttribute('hidden', '');
-  }
-  if (afab) {
-    afab.addEventListener('click', function (e) {
-      e.stopPropagation();
-      const open = afab.getAttribute('aria-expanded') === 'true';
-      setAfabOpen(!open);
-    });
-  }
-  // The speed-dial is now the single home for the creation flows (the duplicate
-  // dashboard button row is gone), so these call the flows directly.
-  [
-    // Guided, recipe-driven create dialog (pick Sorte → substrate auto-filled
-    // from its recipe → zone pick → print). The old full form is still reachable
-    // via Chargen → Neue Charge for advanced/recipe-less cases.
-    ['action-fab-newbatch', msQuickChargeNew],
-    ['action-fab-labwork', msQuickLaborNew],
-    ['action-fab-harvest', dashGoHarvest]
-  ].forEach(function (pair) {
-    const src = document.getElementById(pair[0]);
-    if (!src) return;
-    src.addEventListener('click', function () {
-      pair[1]();
-      setAfabOpen(false);
-    });
-  });
-  // Close on outside tap (backdrop dismiss). Don't close when the user
-  // taps inside the wrap — they may be aiming at a menu item.
-  document.addEventListener('click', function (e) {
-    if (!afabWrap || afab.getAttribute('aria-expanded') !== 'true') return;
-    if (!afabWrap.contains(e.target)) setAfabOpen(false);
-  });
 });
 
 // ═══ ARBEITSGÄNGE ════════════════════════════════════════════════════════════

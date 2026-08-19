@@ -1513,7 +1513,6 @@ window.LANG['en'] = {
   'aria.searchLog': 'Search log',
   'aria.openCameraScanner': 'Open camera scanner',
   'scan.fabLabel': 'Scan',
-  'aria.actionSpeedDial': 'Quick actions',
   'aria.clickToSync': 'Click to sync',
   'harvest.gramsPlaceholder': 'e.g. 245',
   'batch.notesPlaceholder': 'Any notes...',
@@ -1754,7 +1753,6 @@ window.LANG['en'] = {
   'dash.splitBatches.stale': '> 24 h unmoved',
   'dash.actionNewBatch': '+ New batch',
   'dash.actionLabWork': '+ Lab work',
-  'dash.actionHarvest': '+ Log harvest',
   'dash.harvestNoFruiting': 'No batches are ready to harvest right now.',
   // Scan log
   'log.entries': '{n} entries',

@@ -119,8 +119,11 @@ Even here the type is desktop-sized: `.wk-tile-t` is `14.5px` and `.wk-tile-when
 - **Three floating controls sat on top of the bottom nav.** The genuine defect, found by
   looking at the screen rather than at the source: `.cam-fab` sits at `bottom: 24px` and
   `.undo-bar` at `20px`, both under the 56px bottom nav, so the "Scannen" pill covers
-  *Labor* and *Kalender* on a 375px screen. `.action-fab-wrap` already used `72px` — the
-  right value was in the file, applied to one of the three. Fixed in Phase 0.
+  *Chargen*, *Labor* and *Kalender* on a 375px screen. `.action-fab-wrap` already used
+  `72px` — the right value was in the file, applied to one of the three. Fixed in Phase 0.
+
+  > **[corrected]** Measured after the fact, the pill covered **three** nav entries, not
+  > two. `.action-fab-wrap` no longer exists — see Phase 1, which deleted it.
 - **The bottom nav's comment disagreed with the bottom nav** — "4 most-used pages" above
   five buttons. Fixed.
 
@@ -376,6 +379,16 @@ work, and it is the first thing Phase 2 does.
 
 ### Phase 1 — Navigation chrome
 
+- ✅ **Deleted the `+` speed-dial FAB.** All three of its items resolved to the same
+  function references the Arbeitsgänge tiles already use — `msQuickChargeNew` =
+  `wk-t-batch`, `msQuickLaborNew` = `wk-t-lab`, `wkfOpen('harvest')` = `wk-t-harvest` —
+  making it a strict subset of the first bottom-nav entry, one tap from anywhere. On the
+  dashboard it also repeated two buttons visible on the same screen. Two comments in the
+  source already claimed this redundancy had been removed; it had not. Gone with it: the
+  markup, ~90 lines of CSS including a keyframe animation, the open/close state, the
+  now-unreachable `dashGoHarvest`, and the `aria.actionSpeedDial` / `dash.actionHarvest`
+  keys in all three language files. The left thumb zone is free and one floating control
+  remains.
 - `.stabs` → drill-down list below 769px (§5.3); delete the wrap rule and the
   scroll-with-fade rule.
 - Bottom nav becomes the primary phone navigation; the hamburger drawer becomes the

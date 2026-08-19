@@ -1445,7 +1445,6 @@ window.LANG['pt'] = {
   'aria.searchLog': 'Pesquisar registo',
   'aria.openCameraScanner': 'Abrir scanner de c\u00e2mera',
   'scan.fabLabel': 'Escanear',
-  'aria.actionSpeedDial': 'A\u00e7\u00f5es r\u00e1pidas',
   'aria.clickToSync': 'Clique para sincronizar',
   // Placeholders
   'harvest.gramsPlaceholder': 'ex. 245',
@@ -1772,7 +1771,6 @@ window.LANG['pt'] = {
   'dash.splitBatches.stale': '> 24 h sem movimento',
   'dash.actionNewBatch': '+ Novo lote',
   'dash.actionLabWork': '+ Trabalho de laborat\u00f3rio',
-  'dash.actionHarvest': '+ Registrar colheita',
   'dash.harvestNoFruiting': 'Nenhum lote pronto para colheita no momento.',
   // Scan log
   'log.entries': '{n} entradas',

@@ -85,9 +85,10 @@
   --pad-modal: 16px 14px;
   /* Where the floating chrome sits above the bottom edge. On a phone the 56px
      bottom nav is in the way; on a desk there is no bar — same inversion as
-     everything above. .action-fab-wrap already used 72px, .cam-fab still had
-     the 24px it was born with, and .undo-bar carried a third number derived by
-     hand from the second. One token, and the derivation stays visible. */
+     everything above. Three pieces of floating chrome used to carry three
+     unrelated numbers here — a 72px shelf, the 24px .cam-fab was born with, and
+     an .undo-bar offset derived by hand from the second. One token now, and the
+     derivation stays visible. */
   --fab-bottom: 72px;
 }
 
@@ -524,12 +525,11 @@ body.has-worktree-banner .mobile-topbar {
   display: block;
   opacity: 1;
 }
-/* Both thumb-zone buttons sit at z-index 850, far above the sidebar's 120, so
-   with the drawer open they float over its footer and bury the Admin entry and
-   the language picker. The drawer is a modal surface; neither button acts on
-   it, and the overlay behind them is already swallowing taps. */
-body.sb-mobile-open .cam-fab,
-body.sb-mobile-open .action-fab-wrap {
+/* The scan button sits at z-index 850, far above the sidebar's 120, so with the
+   drawer open it floats over the drawer's footer and buries the Admin entry and
+   the language picker. The drawer is a modal surface; the button does not act on
+   it, and the overlay behind it is already swallowing taps. */
+body.sb-mobile-open .cam-fab {
   display: none;
 }
 
@@ -1321,103 +1321,6 @@ body.sb-mobile-open .action-fab-wrap {
 @media (pointer: coarse) and (hover: none) {
   .cam-fab {
     display: flex;
-  }
-}
-
-/* ═══ ACTION SPEED-DIAL FAB (mobile/tablet only) ═════════════
-   Bottom-left counterpart to the cam-fab. Tapping the round + button
-   reveals a vertical stack of pill buttons above it — primary
-   creation flows reachable from any page in the thumb zone. Sits
-   just above the bottom-nav (z-index 850 vs nav's 100). */
-.action-fab-wrap {
-  display: none;
-  position: fixed;
-  bottom: calc(var(--fab-bottom) + env(safe-area-inset-bottom, 0px));
-  left: calc(16px + env(safe-area-inset-left, 0px));
-  z-index: 850;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-@media (pointer: coarse) and (hover: none) {
-  .action-fab-wrap {
-    display: flex;
-  }
-}
-.action-fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: var(--c-primary, #16a34a);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.15s;
-  -webkit-tap-highlight-color: transparent;
-  align-self: flex-start;
-}
-.action-fab:active {
-  transform: scale(0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-.action-fab[aria-expanded='true'] {
-  transform: rotate(45deg);
-  background: var(--c-text, #1a1a1a);
-}
-.action-fab-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
-  /* Hidden via [hidden] until JS toggles it open */
-}
-.action-fab-menu[hidden] {
-  display: none;
-}
-.action-fab-item {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  border-radius: 999px;
-  padding: 10px 16px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  -webkit-tap-highlight-color: transparent;
-  /* Slide-up entrance animation when the menu opens */
-  animation: action-fab-pop 0.18s ease-out backwards;
-  min-height: 44px;
-}
-.action-fab-item:nth-child(1) {
-  animation-delay: 0.04s;
-}
-.action-fab-item:nth-child(2) {
-  animation-delay: 0.08s;
-}
-.action-fab-item:nth-child(3) {
-  animation-delay: 0.12s;
-}
-.action-fab-item:active {
-  background: var(--c-bg);
-  transform: translateY(1px);
-}
-@keyframes action-fab-pop {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -4236,7 +4139,6 @@ tr:hover td {
   .chip-pulse,
   .count-bump .chip-v,
   .cam-chip.ch-pulse,
-  .action-fab-item,
   .batch-row-flash > td {
     animation: none !important;
   }
@@ -4776,12 +4678,12 @@ tr:hover td {
   }
 }
 
-/* Clearance for the two thumb-zone buttons. They are gated on the pointer, not
-   on width, so the 56 px reserved above for the bottom-nav misses them twice:
-   on a phone they reach higher than the bar, and on a coarse-pointer tablet
-   past 768 px there is no bar and no reserve at all. The speed-dial governs —
-   it sits 72 px up and stands 56 px tall, so its top edge is 128 px above the
-   bottom. Without this the last stretch of any long page hides underneath;
+/* Clearance for the floating scan button. It is gated on the pointer, not on
+   width, so the 56 px reserved above for the bottom-nav misses it twice: on a
+   phone it reaches higher than the bar, and on a coarse-pointer tablet past
+   768 px there is no bar and no reserve at all. It sits --fab-bottom (72 px) up
+   and stands 56 px tall, so its top edge is 128 px above the bottom. Without
+   this the last stretch of any long page hides underneath;
    Admin → Kanäle put its "Jetzt synchronisieren" button there.
    Must stay after the bottom-nav rule: same specificity, later wins. */
 @media (pointer: coarse) and (hover: none) {
