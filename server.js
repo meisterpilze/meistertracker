@@ -5920,7 +5920,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // ── Username list (any authenticated user) ────────────────
   if (url === '/api/usernames' && req.method === 'GET') {
-    const users = db.listUsers(database).map((u) => ({ id: u.id, username: u.username }));
+    const users = db.listUsersPublic(database);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(users));
     return;

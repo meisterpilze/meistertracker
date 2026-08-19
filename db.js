@@ -3566,6 +3566,20 @@ function listUsers(db) {
   return db.prepare('SELECT id, username, role, can_ship, can_release, created FROM users ORDER BY id').all();
 }
 
+/**
+ * The same list with everything a non-admin has no business reading removed.
+ *
+ * What is left is what an assignee picker needs and nothing else. Kept here
+ * rather than spelled out at each caller: GET /api/usernames and the MCP
+ * list_users tool both want it, and two copies of a projection like this is how
+ * one of them quietly stops matching after a column is added. It is an
+ * allowlist for the same reason — a new users column is invisible to it until
+ * somebody decides otherwise.
+ */
+function listUsersPublic(db) {
+  return listUsers(db).map((u) => ({ id: u.id, username: u.username }));
+}
+
 function deleteUser(db, userId) {
   // I-16: clean up all auth artifacts so a freshly-recycled user_id can't
   // inherit OAuth grants/tokens/sessions from the deleted account. Wrap in
@@ -9555,5 +9569,6 @@ module.exports = {
   setContaminationReportScanLogId,
   // R-23
   isSafeError,
-  isValidCaldavUid
+  isValidCaldavUid,
+  listUsersPublic
 };
