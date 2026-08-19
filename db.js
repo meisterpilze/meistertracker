@@ -7541,13 +7541,19 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
   if (endDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) <= endDate);
 
-  const groups = {};
+  // S-10: null-prototype accumulator. Every key here is row data — species,
+  // zone name, contamination reason — and on a plain {} the key "__proto__"
+  // resolves to Object.prototype, which is truthy. The initialiser is skipped,
+  // the ++ lands on the prototype, and from then on every object in the
+  // process inherits a NaN `count`. Object.create(null) has no such key to
+  // hit, and JSON.stringify / Object.keys behave identically on it.
+  const groups = Object.create(null);
   for (const r of rows) {
     let key;
     if (groupBy === 'species') key = r.species || 'unknown';
     else if (groupBy === 'zone') key = r.from || 'unknown';
     else key = r.time ? r.time.slice(0, 7) : 'unknown'; // month
-    if (!groups[key]) groups[key] = { count: 0, reasons: {} };
+    if (!groups[key]) groups[key] = { count: 0, reasons: Object.create(null) };
     groups[key].count++;
     const reason = r.reason || 'unspecified';
     groups[key].reasons[reason] = (groups[key].reasons[reason] || 0) + 1;
@@ -7739,9 +7745,10 @@ function traceLineageForward(db, cultureId) {
 function getProductionPipeline(db) {
   // Active cultures by type and status
   const cultures = db.prepare('SELECT type, status, COUNT(*) AS cnt FROM cultures GROUP BY type, status').all();
-  const cultureSummary = {};
+  // S-10: keyed by row data (see getContaminationReport).
+  const cultureSummary = Object.create(null);
   for (const c of cultures) {
-    if (!cultureSummary[c.type]) cultureSummary[c.type] = {};
+    if (!cultureSummary[c.type]) cultureSummary[c.type] = Object.create(null);
     cultureSummary[c.type][c.status] = c.cnt;
   }
 
@@ -7750,11 +7757,16 @@ function getProductionPipeline(db) {
   // I-09: compare against lab-local day, not UTC day. A 22:00 Berlin "due"
   // would otherwise tip into tomorrow under UTC and disappear from the ready bucket.
   const todayStr = localDayString();
-  const batchSummary = {
+  // S-10: the three known types are seeded onto a null prototype, so a row
+  // whose batch_type is "__proto__" takes the `if (!batchSummary[type])`
+  // branch and gets its own bucket instead of incrementing Object.prototype.
+  // This one polluted silently — both branches only increment, so nothing
+  // threw and the corruption showed up somewhere else entirely.
+  const batchSummary = Object.assign(Object.create(null), {
     grain: { incubating: 0, ready: 0 },
     block: { incubating: 0, ready: 0 },
     liquid: { incubating: 0, ready: 0 }
-  };
+  });
   for (const b of allBatches) {
     const type = b.batch_type || 'block';
     if (!batchSummary[type]) batchSummary[type] = { incubating: 0, ready: 0 };
@@ -7766,7 +7778,7 @@ function getProductionPipeline(db) {
   // P-06: bag-zone map is maintained in memory; used to be a full scan_log SCAN.
   const zones = db.prepare('SELECT id, name, role, max_capacity FROM zones ORDER BY sort_order').all();
   const bagZoneMap = getBagZoneMap(db);
-  const zoneCounts = {};
+  const zoneCounts = Object.create(null);
   for (const zId of bagZoneMap.values()) {
     zoneCounts[zId] = (zoneCounts[zId] || 0) + 1;
   }

@@ -657,6 +657,9 @@ function validateTimeOfDay(value, fieldName) {
 // tool's shorter enum leaves out.
 const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
 const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
+// The batch kinds the app knows, mirroring the buckets getProductionPipeline
+// seeds. 'block' is the column default, so an omitted batchType is fine.
+const BATCH_TYPES = ['block', 'grain', 'liquid'];
 function validateEnum(value, allowed, fieldName) {
   if (value === undefined || value === null) return null;
   if (!allowed.includes(value)) return fieldName + ' must be one of: ' + allowed.join(', ');
@@ -6287,6 +6290,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
         jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      // S-10: batch_type was the one field on this route with no validation at
+      // all — it went straight into the INSERT, and it is read back as an
+      // object key by the production-pipeline rollup. The accumulators there
+      // are null-prototype now; this pins the column to the three kinds the
+      // app actually knows as well. Omitting it is still fine — the column
+      // defaults to 'block'.
+      const vbt = validateEnum(data.batchType, BATCH_TYPES, 'batchType');
+      if (vbt) {
+        jsonErr(res, 400, vbt);
         return;
       }
       let vd = validateDate(data.created, 'created');
