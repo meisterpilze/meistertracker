@@ -389,8 +389,28 @@ work, and it is the first thing Phase 2 does.
   now-unreachable `dashGoHarvest`, and the `aria.actionSpeedDial` / `dash.actionHarvest`
   keys in all three language files. The left thumb zone is free and one floating control
   remains.
-- `.stabs` → drill-down list below 769px (§5.3); delete the wrap rule and the
-  scroll-with-fade rule.
+- ✅ **`.stabs` → drill-down list below 769px** (§5.3). Both mitigations deleted: the wrap
+  rule on the work pages and the sideways-scroll-with-fade on Admin. A page below 769px is
+  now in one of two states, carried by `stab-drilled` on the `.page` element — its index
+  (full-width rows, 56px, chevron) or one sub-page with a back row above it. Above 769px
+  nothing reads the class and the pills are untouched, proven against the baseline.
+
+  Two things fell out of the design rather than being decided per page. **Landing goes
+  straight to the sub-page a page defaults to**, so Chargen still opens on the batch list
+  at no extra tap — and the one page that opens on its index instead, Admin, does so
+  because its default tab is `display: none`, not because it is named anywhere. And
+  **`openStab()` is the only place that sets the class**, because every route into a
+  sub-page already ran through it: the strip, the admin drawer, and the dozen
+  `openStab(…)` calls that land somewhere after a save.
+
+  *Measured at 375px: Admin went from 13 pills behind a sideways scroll to 10 visible rows
+  on one screen with no horizontal overflow. `test/mobile-nav.test.js` (9 assertions, CI
+  step "Mobile navigation") holds the four files that cannot see each other in step.*
+
+  ➖ **No count badges.** §5.3 asks for "label, count badge, chevron". There is no count
+  behind any of these tabs today, so a badge would need a data source per tab before it
+  could show a number. Label and chevron shipped; the badge is not a deferred detail but
+  unbuilt work, and it should be decided per tab rather than as a row of zeros.
 - Bottom nav becomes the primary phone navigation; the hamburger drawer becomes the
   "everything else" door rather than the main route.
 - Admin drawer: the 13-entry `sb-admin-nav` gets the same drill-down treatment.

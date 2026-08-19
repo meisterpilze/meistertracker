@@ -67,6 +67,13 @@ jobs:
       - name: Mobile size system
         run: node --test test/mobile-tokens.test.js
 
+      # The drill-down's behaviour lives in four files that cannot see each
+      # other — the strip's home page, its translation, the two states in CSS,
+      # and the class in JS. Edit one alone and the back row reads a raw i18n
+      # key or the strip scrolls sideways again; neither throws.
+      - name: Mobile navigation
+        run: node --test test/mobile-nav.test.js
+
       # Ratchet, not a gate: the inline font sizes and sub-floor mobile rules
       # are paid down over several phases, and this only fails when the count
       # goes UP. See MOBILE_REDESIGN.md.

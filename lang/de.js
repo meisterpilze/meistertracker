@@ -33,6 +33,7 @@ window.LANG['de'] = {
   'nav.ordersCustomers': 'Kunden',
   'nav.pickups': 'Abholungen',
   'nav.adminBack': 'Zur\u00fcck',
+  'nav.backToList': 'Zur\u00fcck zur \u00dcbersicht',
   'nav.adminOps': 'Betrieb',
   'nav.adminSales': 'Verkauf',
   'nav.adminDevices': 'Ger\u00e4te',

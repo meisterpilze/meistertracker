@@ -33,6 +33,7 @@ window.LANG['pt'] = {
   'nav.ordersCustomers': 'Clientes',
   'nav.pickups': 'Levantamentos',
   'nav.adminBack': 'Voltar',
+  'nav.backToList': 'Voltar \u00e0 lista',
   'nav.adminOps': 'Opera\u00e7\u00f5es',
   'nav.adminSales': 'Vendas',
   'nav.adminDevices': 'Dispositivos',

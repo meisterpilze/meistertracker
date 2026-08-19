@@ -1406,6 +1406,112 @@ body.sb-mobile-open .cam-fab {
 .sp.active {
   display: block;
 }
+/* The back row belongs to the drill-down below; on a desktop there is nothing
+   to go back from, so it never appears. */
+.stab-back {
+  display: none;
+}
+
+/* ── Sub-tabs on a phone: a drill-down, not a strip ────────────────────────
+   A row of pills has no good answer to "there are thirteen of them". The two
+   it had were both treatments of the symptom: wrap to a second line on the
+   work pages, sideways scroll with a fade edge on Admin — the first eats a
+   third of a short screen, the second hides the far end from anyone who does
+   not think to swipe a thing that does not look swipeable.
+
+   So below 769px the strip is the page's index: full width, one per line,
+   chevron on the right. Picking one shows that sub-page alone, with a back
+   row above it. `stab-drilled` on the .page element is which of the two
+   states the page is in; above 769px nothing reads the class and the pills
+   are untouched.
+
+   Landing goes straight to the sub-page the page defaults to, so the common
+   case — Chargen opens on the batch list — still costs no tap. The one page
+   that opens on its index instead falls out of the same rule rather than a
+   name: Admin's default tab is display:none, so there is no sub-page to land
+   on, and the list is what you get. */
+@media (max-width: 768px) {
+  .stabs {
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 0;
+    margin-bottom: 12px;
+    border-bottom: none;
+  }
+  .stab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    /* --tap, not --tap-sm: on a phone this is the page's navigation, which is
+       the argument the base rule makes for keeping it small in reverse. */
+    min-height: var(--tap);
+    border-radius: 0;
+    border-bottom: 1px solid var(--c-border-light);
+    text-align: left;
+    font-size: var(--fs-base);
+    color: var(--c-text);
+  }
+  /* A full-width green bar for "you were last here" would read as the page's
+     primary action. In a list, the mark is the label. */
+  .stab.active {
+    background: transparent;
+    color: var(--c-primary);
+    font-weight: 600;
+  }
+  .stab:hover:not(.active) {
+    background: transparent;
+  }
+  /* Drawn, not typed: a › from the font renders at a different size and
+     baseline in every fallback, and this one has to line up with the others. */
+  .stab::after {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-right: 2px solid var(--c-text-muted);
+    border-bottom: 2px solid var(--c-text-muted);
+    transform: rotate(-45deg);
+  }
+  .stab.active::after {
+    border-color: var(--c-primary);
+  }
+  .page.stab-drilled > .stabs {
+    display: none;
+  }
+  .page.stab-drilled > .stab-back {
+    display: flex;
+  }
+  .stab-back {
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 4px;
+    margin-bottom: 12px;
+    border: none;
+    border-bottom: 1px solid var(--c-border-light);
+    background: transparent;
+    color: var(--c-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .stab-back-ico {
+    font-size: 20px;
+    line-height: 1;
+  }
+  /* On the index there is no sub-page. The .active panel keeps its class, so
+     going back into it needs no state of its own — this rule outranks
+     `.sp.active` on specificity alone (0,3,0 against 0,2,0). */
+  .page:not(.stab-drilled) .sp {
+    display: none;
+  }
+}
 
 /* ═══ ORDER HUB ═════════════════════════════════════════════════ */
 .oh-banner {
@@ -3543,19 +3649,6 @@ tr:hover td {
   .g2 {
     grid-template-columns: 1fr;
   }
-  /* Umbrechen statt schieben: auf den Arbeitsseiten sind es vier Reiter, die
-     nebeneinander nicht passen — in zwei Zeilen aber vollständig sichtbar sind.
-     Ein seitlich scrollender Streifen versteckt die hinteren, und wer sie nicht
-     sieht, sucht sie nicht. Die Einstellungen behalten den Streifen (unten),
-     weil fünfzehn Reiter umgebrochen eine halbe Seite hoch wären. */
-  .stabs {
-    flex-wrap: wrap;
-    gap: 4px;
-    padding-bottom: 8px;
-  }
-  .stab {
-    flex-shrink: 0;
-  }
   th,
   td {
     padding: 7px 6px;
@@ -5688,17 +5781,4 @@ tr:hover td {
    Finger getroffen — 34 px reichten dafür nicht. */
 .wkf-foot .btn {
   min-height: 44px;
-}
-
-/* Fünfzehn Reiter brechen nicht sinnvoll um: die Einstellungen behalten den
-   seitlich schiebbaren Streifen samt Auslauf-Kante als Hinweis. Die Arbeitsseiten
-   mit ihren vier Reitern brechen dagegen um (Regel weiter oben). */
-@media (max-width: 768px) {
-  #p-settings > .stabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
-    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
-  }
 }

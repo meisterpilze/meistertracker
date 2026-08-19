@@ -1164,6 +1164,49 @@ function openStab(page, sub) {
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
+  // A phone shows one sub-page at a time, with a back row where the strip was.
+  // Every route into a sub-page runs through here — the strip, the admin
+  // drawer, and the dozen `openStab(...)` calls that land somewhere after a
+  // save — so this is the one place that has to say "we are inside one now".
+  const drilled = document.getElementById(`p-${page}`);
+  if (drilled) drilled.classList.add('stab-drilled');
+}
+
+// Gives each sub-tab strip its back row and decides which of the two states the
+// page starts in. See the drill-down block in styles.css for what the states
+// look like; this only sets the class, so above 769px it is inert.
+function stabDrillInit() {
+  document.querySelectorAll('.page > .stabs').forEach((strip) => {
+    // Bestellungen navigates from the sidebar and hides its strip on every
+    // device, so it has no index to go back to.
+    if (strip.style.display === 'none') return;
+    const page = strip.parentElement;
+    const home = strip.dataset.stabHome;
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'stab-back';
+    // The label is the page's own name — where the row leads, not where you
+    // are; the sub-page below it already says that. data-i18n on the span (and
+    // data-i18n-aria-label on the button) hands both to translatePage(), so a
+    // language switch reaches them like any other string in the markup.
+    back.setAttribute('data-i18n-aria-label', 'nav.backToList');
+    back.setAttribute('aria-label', t('nav.backToList'));
+    const ico = document.createElement('span');
+    ico.className = 'stab-back-ico';
+    ico.setAttribute('aria-hidden', 'true');
+    ico.textContent = '\u2190';
+    const label = document.createElement('span');
+    label.setAttribute('data-i18n', home);
+    label.textContent = t(home);
+    back.append(ico, label);
+    back.addEventListener('click', () => page.classList.remove('stab-drilled'));
+    page.insertBefore(back, strip);
+    // Land on the sub-page the page defaults to. The exception is a rule, not
+    // a list of page names: a default tab that is hidden (Admin's "Server") is
+    // not a place to land, so that page opens on its index instead.
+    const active = strip.querySelector('.stab.active');
+    if (active && active.style.display !== 'none') page.classList.add('stab-drilled');
+  });
 }
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -20999,6 +21042,11 @@ document.addEventListener('DOMContentLoaded', function () {
       updateSD();
       openCamScan();
     });
+
+  // Back rows for the sub-tab strips. Here rather than in initEventListeners()
+  // for the same reason as the FAB above: this inserts elements, and doing that
+  // once the document is settled keeps it off the critical path.
+  stabDrillInit();
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
   // Wait until the rest of the app has had a chance to fetch data + render
