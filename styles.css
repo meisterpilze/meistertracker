@@ -670,8 +670,8 @@ body:has(.modal-bg.open) .cam-fab {
   cursor: pointer;
   color: var(--c-text-muted);
   line-height: 1;
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -757,7 +757,11 @@ body:has(.modal-bg.open) .cam-fab {
   border: none;
   border-bottom: 2px solid transparent;
   padding: 10px 16px;
-  font-size: 13px;
+  /* --fs-sm's desktop value is 13px, exactly what this had, and --tap resolves
+     to auto there — so both of these are phone-only in effect. The fixture
+     records fontSize 13px / minHeight 0px for .scan-tab and still does. */
+  min-height: var(--tap);
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text-muted);
   cursor: pointer;
@@ -869,6 +873,11 @@ body:has(.modal-bg.open) .cam-fab {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  /* 4px of vertical padding and nothing else: the target was as tall as its
+     own text. This is the button that takes back a wrong scan, and it appears
+     on a flash that is already going away. */
+  min-height: var(--tap);
+  min-width: var(--tap);
   padding: 4px 10px;
   font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
@@ -1306,8 +1315,8 @@ body:has(.modal-bg.open) .cam-fab {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.15);
@@ -1328,11 +1337,6 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .cam-hud-btn.torch-on:active {
   background: rgba(250, 204, 21, 0.6);
-}
-.cam-hud-close {
-  font-size: 24px;
-  font-weight: 300;
-  line-height: 1;
 }
 .cam-hud-done {
   background: #16a34a;
@@ -3519,10 +3523,14 @@ tr:hover td {
 }
 
 /* Destination chips open the shared zone picker (for when a location barcode
-   can't be scanned), so they need to read as tappable. */
+   can't be scanned), so they need to read as tappable — and be tappable. They
+   carried a cursor and nothing else, which is a mouse affordance on a control
+   whose whole purpose is the case where scanning failed and a gloved hand has
+   to pick the zone by hand. */
 #chip-to,
 #cam-chip-to {
   cursor: pointer;
+  min-height: var(--tap);
 }
 
 /* ═══ STOCKTAKE SCAN FLASH ═════════════════════════════════════
@@ -3718,9 +3726,12 @@ tr:hover td {
     max-height: 40vh;
     max-height: 40dvh;
   }
+  /* Narrower side padding so four tabs fit; the size stays where the token put
+     it. Shrinking type at a narrow breakpoint is the exact move the token layer
+     replaced — and this one was on the tab strip of the screen that is only
+     ever read at arm's length. */
   .scan-tab {
     padding: 10px 10px;
-    font-size: 12px;
   }
   .g3,
   .g4,
