@@ -738,6 +738,12 @@ const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
 // two brute-force tables, where the 60-second sweep leaves it for the full
 // 15-minute lockout window.
 const USERNAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
+// S-22: there was a minimum (8) and no maximum anywhere, so MAX_BODY_SIZE was
+// the only bound on what reached scrypt — five megabytes of it. Set where the
+// password is *chosen* as well as where it is checked, because a cap that only
+// one of the two knows about is a lockout waiting to happen. Far above any real
+// passphrase; the point is the megabyte, not the sentence.
+const PASSWORD_MAX_LENGTH = 1024;
 function validateMushroomStrain(data) {
   if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
   if (data.name !== undefined && data.name !== null) {
@@ -4728,6 +4734,93 @@ function recordLoginFailurePerUser(username) {
   }
 }
 
+// ── S-22: the tier that counts the source, whatever name it types ────────────
+//
+// Both tiers above begin their key with a string the caller chooses —
+// loginAttempts on username@IP, loginAttemptsPerUser on the username alone. A
+// fresh username on every request therefore lands in a fresh bucket, both
+// counters stay at one, and neither the wait nor the lock ever engages, while
+// finishLogin runs a full scrypt regardless because the constant-time answer
+// requires it. Measured at 276 ms per call with the S-14 parameters, and the
+// hash is synchronous, so it blocks the only thread there is: at 300 a minute
+// that is 82 s of CPU asked of every 60 s of wall clock, so the queue never
+// drains. Scanning, CalDAV and the harvest feed's own setInterval stop with it,
+// and the shop stops being told what is in stock.
+//
+// A per-source *wait* does not close this. A delay that still ends in a hash
+// only queues the work — 64 pending delays releasing 17 s of hashing every 5 s
+// is the same overload with extra steps. So this tier refuses instead of
+// deferring: past the threshold the answer is immediate and there is no hash at
+// all. Hard is safe here for the reason S-19 already gives for the per-source
+// lock, that an attacker can only ever point it at their own address; and
+// because the threshold counts the address rather than the account, twenty
+// wrong passwords is a great many typos while a new username no longer resets
+// the count.
+const LOGIN_SOURCE_MAX_FAILURES = 20;
+const loginAttemptsPerSource = new Map(); // IP → { count, firstAttempt }
+
+function checkLoginSourceAllowed(ip) {
+  const entry = loginAttemptsPerSource.get(ip);
+  if (!entry) return true;
+  if (Date.now() - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
+    loginAttemptsPerSource.delete(ip);
+    return true;
+  }
+  return entry.count < LOGIN_SOURCE_MAX_FAILURES;
+}
+
+function recordLoginFailurePerSource(ip) {
+  const now = Date.now();
+  let entry = loginAttemptsPerSource.get(ip);
+  if (!entry || now - entry.firstAttempt > LOGIN_LOCKOUT_MS) {
+    entry = { count: 0, firstAttempt: now };
+    loginAttemptsPerSource.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count === LOGIN_SOURCE_MAX_FAILURES) {
+    log('warn', 'Too many failed logins from one address — refusing without hashing', {
+      ip,
+      attempts: entry.count
+    });
+  }
+}
+
+function clearLoginAttemptsPerSource(ip) {
+  loginAttemptsPerSource.delete(ip);
+}
+
+// ── S-22: and the budget that survives a thousand addresses ──────────────────
+//
+// The tier above bounds one source and does nothing about a flood spread over
+// many. The hash is expensive enough that a modest spread-out one still hurts,
+// so this is a token bucket in front of the KDF: take a token before hashing,
+// answer without hashing when there is none.
+//
+// The refund is what keeps the bucket from becoming a denial of service of its
+// own. A correct password hands its token straight back, so honest logins cost
+// nothing and it only ever drains on failure. What an attacker can hold is one
+// hash a second — about a quarter of the thread — and the rest of the server
+// goes on answering.
+const LOGIN_KDF_BURST = 10;
+const LOGIN_KDF_REFILL_MS = 1000;
+let loginKdfTokens = LOGIN_KDF_BURST;
+let loginKdfRefilledAt = Date.now();
+
+function takeLoginKdfToken(now = Date.now()) {
+  const gained = Math.floor((now - loginKdfRefilledAt) / LOGIN_KDF_REFILL_MS);
+  if (gained > 0) {
+    loginKdfTokens = Math.min(LOGIN_KDF_BURST, loginKdfTokens + gained);
+    loginKdfRefilledAt += gained * LOGIN_KDF_REFILL_MS;
+  }
+  if (loginKdfTokens <= 0) return false;
+  loginKdfTokens--;
+  return true;
+}
+
+function refundLoginKdfToken() {
+  loginKdfTokens = Math.min(LOGIN_KDF_BURST, loginKdfTokens + 1);
+}
+
 function clearLoginAttempts(key) {
   loginAttempts.delete(key);
 }
@@ -4738,7 +4831,7 @@ function clearLoginAttemptsPerUser(username) {
 // The half of /api/auth/login that runs once the per-account wait has elapsed.
 // Split out of the route handler for S-19: the delay is asynchronous, and this
 // is what it defers.
-function finishLogin(req, res, { username, password, userKey, throttleKey }) {
+function finishLogin(req, res, { username, password, userKey, throttleKey, sourceKey }) {
   const user = db.getUserByUsernameCaseInsensitive(database, username);
   // Constant-time login: always run scrypt, even when the username is
   // unknown — falling back to a process-local dummy hash keeps the
@@ -4751,6 +4844,9 @@ function finishLogin(req, res, { username, password, userKey, throttleKey }) {
   if (!user || !passwordOk) {
     recordLoginFailure(throttleKey);
     recordLoginFailurePerUser(userKey);
+    // S-22: the tier a new username cannot walk around. The KDF token stays
+    // spent — the bucket is meant to drain on failure and only on failure.
+    recordLoginFailurePerSource(sourceKey);
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Invalid credentials' }));
     return;
@@ -4759,6 +4855,10 @@ function finishLogin(req, res, { username, password, userKey, throttleKey }) {
   // keeps S-19's delay from being a lockout with extra steps.
   clearLoginAttempts(throttleKey);
   clearLoginAttemptsPerUser(userKey);
+  // S-22: a correct password costs the budget nothing, which is what keeps the
+  // bucket from locking out the people it is there to protect.
+  clearLoginAttemptsPerSource(sourceKey);
+  refundLoginKdfToken();
   // S-14: login is the only moment the plaintext password is in hand, so
   // it is the only chance to re-hash a row that still uses the old scrypt
   // cost. Best effort — a failure here must not cost the user their login.
@@ -5530,7 +5630,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const { username, password } = data;
-        if (!username || !password || password.length < 8) {
+        if (!username || !password || password.length < 8 || password.length > PASSWORD_MAX_LENGTH) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
@@ -5587,16 +5687,48 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
           return;
         }
+        // S-22: the same question asked of the address on its own. Both keys
+        // above start with a string the caller picks, so a new username each
+        // time walks straight past them; this one it cannot rename its way
+        // around. Answered before anything is hashed, which is the whole point
+        // of it — see the tier's own comment for what the hashing costs.
+        if (!checkLoginSourceAllowed(clientIP)) {
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '900' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
+          return;
+        }
+        // S-22: a password big enough to be its own denial of service never
+        // reaches the KDF. No account can hold one, so the answer is the one a
+        // wrong password gets — and it counts against the address, because
+        // sending it is not something a client of ours does by accident.
+        if (typeof password !== 'string' || password.length > PASSWORD_MAX_LENGTH) {
+          recordLoginFailurePerSource(clientIP);
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid credentials' }));
+          return;
+        }
+        // S-22: the global budget in front of the KDF, for a flood spread over
+        // more addresses than the per-source tier can hold. Taken here rather
+        // than after the wait, so a queued request reserves its hash instead of
+        // reaching the end of the wait to find there is no room for it.
+        if (!takeLoginKdfToken()) {
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
+          return;
+        }
         // Per-account: a wait rather than a lock (S-19). The password check
         // happens on the other side of it.
         const accepted = afterLoginDelay(userKey, () => {
           try {
-            finishLogin(req, res, { username, password, userKey, throttleKey });
+            finishLogin(req, res, { username, password, userKey, throttleKey, sourceKey: clientIP });
           } catch (err) {
+            refundLoginKdfToken();
             safeErr(res, err);
           }
         });
         if (!accepted) {
+          // Nothing was hashed, so the reservation goes back.
+          refundLoginKdfToken();
           res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
         }
@@ -5724,7 +5856,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const { username, password, role } = data;
-        if (!username || !password || password.length < 8) {
+        if (!username || !password || password.length < 8 || password.length > PASSWORD_MAX_LENGTH) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
@@ -5814,7 +5946,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'currentPassword and newPassword required');
         return;
       }
-      if (data.newPassword.length < 8) {
+      // S-22: currentPassword is verified with scrypt too. Behind a login, so
+      // not the flood from /api/auth/login — but the same cap, because two
+      // bounds that disagree are how one of them stops being true.
+      if (typeof data.currentPassword !== 'string' || data.currentPassword.length > PASSWORD_MAX_LENGTH) {
+        jsonErr(res, 400, 'currentPassword and newPassword required');
+        return;
+      }
+      if (data.newPassword.length < 8 || data.newPassword.length > PASSWORD_MAX_LENGTH) {
         jsonErr(res, 400, 'New password must be at least 8 characters');
         return;
       }
@@ -5855,7 +5994,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'newPassword required');
         return;
       }
-      if (data.newPassword.length < 8) {
+      if (data.newPassword.length < 8 || data.newPassword.length > PASSWORD_MAX_LENGTH) {
         jsonErr(res, 400, 'New password must be at least 8 characters');
         return;
       }
