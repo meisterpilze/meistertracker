@@ -103,14 +103,27 @@ describe('the budget in front of the KDF', () => {
   });
 
   it('refills at its stated rate and no faster', () => {
-    // Offsets from the real clock: the bucket stamps itself with Date.now() at
-    // load, and an invented small number is *behind* that, which reads as a
-    // negative refill rather than as the fast-forward it was meant to be.
-    const jetzt = Date.now() + 60_000;
-    for (let i = 0; i < t.LOGIN_KDF_BURST; i++) t.takeLoginKdfToken(jetzt);
-    assert.equal(t.takeLoginKdfToken(jetzt + t.LOGIN_KDF_REFILL_MS - 1), false, 'not a millisecond early');
-    assert.ok(t.takeLoginKdfToken(jetzt + t.LOGIN_KDF_REFILL_MS), 'one token per interval');
-    assert.equal(t.takeLoginKdfToken(jetzt + t.LOGIN_KDF_REFILL_MS), false, 'and only one');
+    // The bucket stamps its epoch with Date.now() when the module loads, so
+    // from here the exact millisecond a token lands on is not knowable — and a
+    // test that guesses it passes alone and fails in a full run, which is what
+    // this one did. The claim is not *when* the boundary falls but how far
+    // apart two of them are, so that is what is measured.
+    const basis = Date.now() + 60_000;
+    for (let i = 0; i < t.LOGIN_KDF_BURST; i++) t.takeLoginKdfToken(basis);
+    assert.equal(t.takeLoginKdfToken(basis), false, 'drained');
+
+    const naechsteRueckkehr = (ab) => {
+      for (let d = ab + 1; d <= ab + 3 * t.LOGIN_KDF_REFILL_MS; d++) {
+        if (t.takeLoginKdfToken(basis + d)) return d;
+      }
+      return null;
+    };
+
+    const erste = naechsteRueckkehr(0);
+    assert.ok(erste !== null && erste <= t.LOGIN_KDF_REFILL_MS, 'a token is back inside one interval');
+    assert.equal(t.takeLoginKdfToken(basis + erste), false, 'and only the one');
+    const zweite = naechsteRueckkehr(erste);
+    assert.equal(zweite - erste, t.LOGIN_KDF_REFILL_MS, 'the next is a full interval later, not sooner');
   });
 
   it('never refills past the burst, so an idle hour is not a stored-up flood', () => {

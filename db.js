@@ -2982,7 +2982,7 @@ function writeAll(db, incoming, opts) {
           t.dueTime || null,
           t.dueEndTime || null,
           t.description || null,
-          t.caldavUid || null,
+          cleanCaldavUid(t.caldavUid),
           t.caldavSynced || null,
           t.private ? 1 : 0,
           t.recurrence || null,
@@ -4921,6 +4921,31 @@ function deleteCulture(db, id) {
 }
 
 // -- Tasks --
+// S-23: what a CalDAV uid is allowed to look like — the one definition.
+//
+// It ends up as a file name (`<uid>.ics`) inside the calendar directory, so the
+// separators and NUL have to be out; with those gone a uid cannot address a
+// second path component and traversal is impossible on POSIX and Windows alike.
+// This is the charset the sync-back paths in server.js have always demanded of
+// a uid on the way *out* of a file; it had no counterpart on the way in, which
+// is how a request body's caldavUid could name a path.
+//
+// Kept here rather than in server.js because both the file writer and the two
+// rows that store the value need it, and two copies of a rule like this is how
+// one of them quietly stops matching.
+const CALDAV_UID_RE = /^[A-Za-z0-9\-_.@]{1,120}$/;
+
+function isValidCaldavUid(uid) {
+  return typeof uid === 'string' && CALDAV_UID_RE.test(uid);
+}
+
+/** A uid we would refuse to write is not worth storing — it becomes null and
+ *  the next sync mints a fresh one, instead of leaving a row that can never
+ *  reach a calendar and never says why. */
+function cleanCaldavUid(uid) {
+  return isValidCaldavUid(uid) ? uid : null;
+}
+
 function insertTask(db, t) {
   const r = db
     .prepare(
@@ -4936,7 +4961,7 @@ function insertTask(db, t) {
       t.dueTime || null,
       t.dueEndTime || null,
       t.description || null,
-      t.caldavUid || null,
+      cleanCaldavUid(t.caldavUid),
       t.caldavSynced || null,
       t.private ? 1 : 0,
       t.recurrence || null,
@@ -9529,5 +9554,6 @@ module.exports = {
   unresolveContaminationReport,
   setContaminationReportScanLogId,
   // R-23
-  isSafeError
+  isSafeError,
+  isValidCaldavUid
 };

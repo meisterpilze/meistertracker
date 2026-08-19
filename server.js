@@ -2729,7 +2729,36 @@ function getSyncToken(calName) {
 }
 
 // Write an .ics file and invalidate caches / record change
+// S-23: the calendar file name, checked where it becomes a path.
+//
+// Every writeIcsFile caller builds the name as `uid + '.ics'`, and on the
+// push-one / push-event routes that uid is `task.caldavUid` straight out of a
+// request body — any logged-in user, no role required. path.join() will follow
+// a "../" chain out of the calendar directory without complaint, so a worker
+// could drop an .ics carrying their own SUMMARY and DESCRIPTION anywhere the
+// server process can write, including the Windows profile it runs under.
+//
+// The charset is the one the *read* side has always demanded of a uid
+// (/^[A-Za-z0-9\-_.@]+$/ at the sync-back paths); it simply never held on the
+// way in. It is sufficient on its own: with the separators and NUL excluded, a
+// name cannot address a second path component at all, on POSIX or on Windows —
+// so there is no need to also hunt for "..", and no legitimate uid gets refused
+// for containing one.
+//
+// The check lives here rather than at each caller because there are fourteen of
+// them, and calName is already safe (db.caldavSlug reduces it to [a-z0-9-]).
+function icsFileName(fileName) {
+  const stem = typeof fileName === 'string' && fileName.endsWith('.ics') ? fileName.slice(0, -4) : null;
+  if (!db.isValidCaldavUid(stem)) {
+    // The 'caldav:' prefix is on db.isSafeError's list, so the caller answers
+    // 400 with this text rather than a 500 that reads like our own fault.
+    throw new Error('caldav: rejected calendar file name');
+  }
+  return fileName;
+}
+
 function writeIcsFile(calName, fileName, content) {
+  icsFileName(fileName);
   const dir = ensureCalDir(calName);
   fs.writeFileSync(path.join(dir, fileName), content, 'utf8');
   invalidateCtag(calName);
@@ -2738,6 +2767,7 @@ function writeIcsFile(calName, fileName, content) {
 
 // Delete an .ics file and invalidate caches / record change
 function deleteIcsFile(calName, fileName) {
+  icsFileName(fileName);
   const filePath = path.join(CAL_DIR, calName, fileName);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
