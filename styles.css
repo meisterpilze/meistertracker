@@ -3039,22 +3039,6 @@ tr:hover td {
   pointer-events: none;
 }
 
-/* Calendar empty state */
-.cal-empty-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.cal-empty-hint span {
-  font-size: max(12px, var(--fs-min));
-  color: var(--c-text-muted);
-  font-style: italic;
-  opacity: 0.7;
-}
-
 /* ═══ CALENDAR — AGENDA VIEW ═══════════════════════════════════
    The calendar below 769px. Not a fourth tab: a month cell at 375px is 47.9px
    wide and gives an event label 29.9px of text, four glyphs and an ellipsis,
