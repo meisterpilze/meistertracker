@@ -21638,16 +21638,19 @@ function wkbRender() {
           mixes
             .map((m) => `<option value="${esc(m.subId)}"${m.subId === WKB.subId ? ' selected' : ''}>${esc(m.subId)} &middot; ${t('work.bLeft', { kg: m.remainingKg.toFixed(0) })}</option>`)
             .join('') +
+          `<option value=""${WKB.subId ? '' : ' selected'}>${esc(t('work.bNoMixOption'))}</option>` +
           '</select></div>' +
-          `<div class="wkf-note${rest != null && rest < -1e-9 ? ' bad' : ''}">${esc(
-            t('work.bDraw', { qty: WKB.qty, kg: WKB.bagKg, need: wkbDraw().toFixed(0) })
-          )} &mdash; ${
-            rest != null && rest < -1e-9
-              ? esc(t('work.bShort', { kg: (-rest).toFixed(0) }))
-              : esc(t('work.bRest', { kg: (rest || 0).toFixed(0) }))
-          }</div>`
-        : `<div class="wkf-note bad">${esc(t('work.bNoMix'))}</div>
-           <button class="btn" data-wkb="tosub">${esc(t('work.substrate'))}</button>`) +
+          (mix
+            ? `<div class="wkf-note${rest != null && rest < -1e-9 ? ' bad' : ''}">${esc(
+                t('work.bDraw', { qty: WKB.qty, kg: WKB.bagKg, need: wkbDraw().toFixed(0) })
+              )} &mdash; ${
+                rest != null && rest < -1e-9
+                  ? esc(t('work.bShort', { kg: (-rest).toFixed(0) }))
+                  : esc(t('work.bRest', { kg: (rest || 0).toFixed(0) }))
+              }</div>`
+            : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>`)
+        : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>
+           <button class="btn" data-wkb="tosub">${esc(t('work.bMixFirst'))}</button>`) +
       `<div class="wkf-note">
          <b>${esc(t('work.bRecipe', { name: ms ? ms.name : '' }))}${WKB.custom ? esc(t('work.bChanged')) : ''}</b>
          ${
@@ -21674,7 +21677,7 @@ function wkbRender() {
        <div class="wkf-sum-card">
          <div><span class="wkf-r-k">${esc(t('strains.pilzsorte'))}</span><b>${esc(ms ? ms.name : '')}</b></div>
          <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
-         <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${mix ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg' : '&mdash;'}</div>
+         <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${mix ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg' : esc(t('work.bFromShelfShort'))}</div>
          <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${r.hw}/${r.wb} @ ${r.rh} %${WKB.custom ? esc(t('work.bChanged')) : ''}
            <button type="button" class="wkf-link" data-wkb="step2">${esc(t('work.bEdit'))}</button></div>
          <div><span class="wkf-r-k">${esc(t('batch.incDays'))}</span>${r.days}</div>
@@ -21688,7 +21691,7 @@ function wkbRender() {
   wkf('wkf-foot').innerHTML =
     (WKB.step > 1 ? back : `<button class="btn" onclick="wkfClose()">${esc(t('work.cancel'))}</button>`) +
     (WKB.step < 3
-      ? `<button class="btn btn-p" data-wkb="next"${WKB.step === 2 && !wkbMix() ? ' disabled' : ''}>${esc(t('work.bNext'))}</button>`
+      ? `<button class="btn btn-p" data-wkb="next">${esc(t('work.bNext'))}</button>`
       : `<button class="btn btn-p" data-wkb="create">${esc(t('work.bCreate', { n: WKB.qty }))}</button>`);
 }
 
@@ -21710,11 +21713,41 @@ function wkbReadStep() {
   }
 }
 
+// Ohne Ansatz läuft die Buchung über createBatch() des langen Formulars: es
+// zieht Rohmaterial vom Lager, fragt danach die Zone ab und druckt Etiketten.
+// Der Ablauf füllt dessen Felder und übergibt, statt denselben Weg noch einmal
+// zu schreiben — eine zweite Fassung wäre die, die irgendwann abweicht.
+function wkbCreateFromShelf() {
+  const ms = wkbStrain();
+  if (!ms) return;
+  const r = wkbRecipe();
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+  set('nb-substrate-batch', '');
+  if (typeof nbSubstrateChanged === 'function') nbSubstrateChanged();
+  set('nb-strain-sel', String(ms.id));
+  if (typeof nbStrainChanged === 'function') nbStrainChanged();
+  set('nb-qty', String(WKB.qty));
+  set('nb-weight', String(WKB.bagKg));
+  set('nb-hw', String(r.hw));
+  set('nb-wb', String(r.wb));
+  set('nb-rh', String(r.rh));
+  set('nb-days', String(r.days));
+  set('nb-notes', WKB.notes.trim());
+  wkfClose();
+  go('batch', 'n-batch');
+  openStab('batch', 'new');
+  createBatch();
+}
+
 function wkbCreate() {
   wkbReadStep();
   const ms = wkbStrain();
   const mix = wkbMix();
-  if (!ms || !mix) return;
+  if (!ms) return;
+  if (!mix) return wkbCreateFromShelf();
   const r = wkbRecipe();
   const batchId = genBatchId(ms.name);
   createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, ms.kuerzel || '', '', {
@@ -21785,9 +21818,12 @@ function wkbCreate() {
     // Die Kachel führt jetzt durch den Ablauf statt in den Schnelldialog.
     const fresh = tile.cloneNode(true);
     tile.parentNode.replaceChild(fresh, tile);
-    fresh.addEventListener('click', () => {
-      if ((_sbList || []).length) wkbOpen();
-      else msQuickChargeNew();
-    });
+    fresh.addEventListener('click', wkbOpen);
+  }
+  // Derselbe Weg aus der Karte heraus, wo das lange Formular steht: wer dort
+  // landet, soll nicht erst auf die Startseite zurückmüssen, um geführt zu werden.
+  const guided = document.getElementById('nb-guided');
+  if (guided) {
+    guided.addEventListener('click', wkbOpen);
   }
 })();

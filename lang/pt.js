@@ -1919,5 +1919,10 @@ window.LANG['pt'] = {
   'batch.matGrain': 'Grão',
   'batch.matDryTotal': 'Matéria seca por saco',
   'stage.done': 'Concluído',
-  'stage.contam': 'Contaminado'
+  'stage.contam': 'Contaminado',
+  'batch.guided': 'Passo a passo',
+  'work.bNoMixOption': '— sem mistura, direto do estoque —',
+  'work.bFromShelf': 'Sem mistura, pellets, farelo e gesso saem direto do estoque. Depois o app pergunta a zona e imprime as etiquetas.',
+  'work.bFromShelfShort': 'do estoque',
+  'work.bMixFirst': 'Preparar uma mistura primeiro'
 };
