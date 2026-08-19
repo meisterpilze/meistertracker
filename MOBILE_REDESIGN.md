@@ -573,12 +573,36 @@ the cascade decides the numbers.
 > `styles.css`. During Phase 0 that produced one "the desktop moved" report for a rule that
 > had not moved, and one "the phone is unchanged" report for a rule that had.
 
-**Manual, per phase.** A real phone, in the lab, with gloves on: the phase's screens, the
-scan flow end to end, and one pass in landscape. Checklist lives in the PR body. This part
-cannot be automated and should not be claimed as automated.
+**Phone measurement — `scripts/measure-mobile.js`. ✅ built.** The mirror of the baseline
+tool, and it exists because everything above proves the desktop did not move while nothing
+proved the phone did. Every phone claim on this branch up to it was *the rule is written*,
+never *it renders*. Served at 375px with the scripts stripped, it walks every element and
+reports computed `font-size` under `--fs-xs` and rendered height under the touch floor.
 
-> **Preview note:** the Browser pane cannot reach this app from a worktree — self-signed
-> cert plus login wall. Visual checks are device-only until that changes.
+Two touch bands, not one, and that is load-bearing rather than tidy: `--tap-min` is 56px for
+a gloved hand and `--tap-sm` is 48px for a desk, and §9 chose both. Measuring everything
+against 56 reports 76 sidebar buttons sitting exactly where they were put as failures, which
+teaches a reader to ignore the tool. The gate is **44px** — the floor WCAG 2.5.5 AAA,
+Apple's HIG and Material all agree on — and the 44→56 gap is listed but never counted.
+
+*First run, against everything this branch had already shipped: 8 sub-floor type and 14
+controls under 44px, in markup four phases had passed over.* The type is the calendar legend
+at 11px; the touch list is Phase 1 chrome (`#sb-toggle` 26px, `#undo-btn` 31.5px,
+`#n-notif-m` 36px, two `<summary>` rows at 19.5px) plus Büro pages Phase 4 has not reached.
+
+**Manual, per phase.** A real phone, in the lab, with gloves on: the phase's screens, the
+scan flow end to end, and one pass in landscape. Checklist lives in the PR body. Narrowed by
+the tool above but not replaced by it: what a stripped page cannot show is everything
+`app.js` renders — every table row, every list, every dialog body — and it cannot show
+whether a target is *reachable*, only whether it is *big*. That part cannot be automated and
+should not be claimed as automated.
+
+> **[corrected]** The preview note here said the Browser pane cannot reach this app from a
+> worktree — self-signed cert plus login wall — and concluded "visual checks are device-only
+> until that changes". The premise is true of the *app* server and false of the measurement
+> ones: both tools serve plain HTTP with every `<script src>` stripped, so there is no cert
+> to reject and no login to pass. The conclusion had been standing since Phase 0 and cost
+> this branch four phases of unmeasured work.
 
 ---
 
