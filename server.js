@@ -289,11 +289,17 @@ function checkMcpAuth(req) {
   const hash = crypto.createHash('sha256').update(token).digest('hex');
 
   // Try legacy static API token
-  const stored = db.getMcpToken(database, { touchLastUsed: true });
+  const stored = db.getMcpToken(database);
   if (stored) {
     const a = Buffer.from(hash, 'hex');
     const b = Buffer.from(stored, 'hex');
     if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      // S-17: after the comparison, never before it. Stamping on the way in
+      // meant every failed bearer probe refreshed "last used", so an admin
+      // deciding whether a token is still needed saw the attacker's traffic as
+      // evidence that it was. It also made an unauthenticated request write to
+      // the database.
+      db.touchMcpTokenUsed(database);
       return { userId: null, role: 'admin' };
     }
   }

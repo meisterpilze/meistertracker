@@ -6837,18 +6837,25 @@ function getMcpCfg(db) {
   };
 }
 // S-08: getMcpToken is called from two places — token verification
-// (server.js checkMcpAuth) and admin diagnostics. The verification path
-// passes touchLastUsed=true so we can record audit timestamps; the admin
-// path defaults to false so just opening the settings page doesn't bump
-// "last used" and mask actual abuse.
-function getMcpToken(db, opts) {
+// (server.js checkMcpAuth) and admin diagnostics. Neither may write: opening
+// the settings page must not bump "last used" and mask actual abuse.
+//
+// S-17: the verification path used to pass touchLastUsed and the helper stamped
+// the column before returning, i.e. before the caller had compared anything. So
+// every failed bearer probe refreshed the timestamp, which inverts what the
+// column is for — an admin checking whether a token is still in use before
+// revoking it would read an attacker's traffic as their own team's. Stamping is
+// its own call now, made only after timingSafeEqual has agreed.
+function getMcpToken(db) {
   const row = db.prepare('SELECT api_token, revoked_at FROM mcp_config WHERE id=1').get();
   if (!row || !row.api_token) return '';
   if (row.revoked_at) return '';
-  if (opts && opts.touchLastUsed) {
-    db.prepare('UPDATE mcp_config SET last_used_at=? WHERE id=1').run(new Date().toISOString());
-  }
   return row.api_token;
+}
+
+/** Record a *successful* use of the static MCP token. */
+function touchMcpTokenUsed(db) {
+  db.prepare('UPDATE mcp_config SET last_used_at=? WHERE id=1').run(new Date().toISOString());
 }
 function updateMcpCfg(db, cfg) {
   db.prepare('UPDATE mcp_config SET enabled=? WHERE id=1').run(cfg.enabled ? 1 : 0);
@@ -9228,6 +9235,7 @@ module.exports = {
   rackBagCount,
   getMcpCfg,
   getMcpToken,
+  touchMcpTokenUsed,
   updateMcpCfg,
   generateMcpToken,
   revokeMcpToken,
