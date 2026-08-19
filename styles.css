@@ -55,6 +55,64 @@
   --radius-sm: 8px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+  /* ── SIZE / SPACE / TYPE ─────────────────────────────────────────────────
+     These values are the PHONE. The desktop is the override below.
+
+     It used to run the other way: the base was the desktop and each phone rule
+     subtracted from it, which is how a 480 px viewport ended up with a smaller
+     primary button than a 27" monitor. Nobody decided that; it is just what you
+     get when "mobile" means "the same thing, tighter". The lab works standing,
+     gloved, one-handed, so the phone gets the generous end of every pair and
+     the desk has to ask for the tight one.
+
+     Rule for adding to this block: a token's :root value is what a phone should
+     get. If that is also what the desktop should get, it does not need a line
+     in the override. */
+  --fs-xs: 13px;
+  --fs-sm: 15px;
+  --fs-base: 17px;
+  /* 44px is WCAG 2.5.5 AAA. 56 is the deliberate step past it for gloves — and
+     it is not a new number here: .bottom-nav-btn already chose 56px the one
+     time this codebase sat down and thought about a touch target. */
+  --tap: 56px;
+  --tap-sm: 48px;
+  --pad-page: 16px;
+  --pad-card: 16px;
+  --pad-btn: 13px 18px;
+  --pad-stab: 11px 18px;
+  --pad-sb: 12px 14px;
+  --pad-modal: 16px 14px;
+}
+
+/* The desktop override restores today's values exactly — every number below was
+   read off the computed styles before the conversion, and test/desktop-baseline.json
+   plus scripts/capture-desktop-baseline.js exist to prove it stayed that way.
+
+   `hover: hover` is doing real work in this query, not decoration. The reason
+   for a big touch target is the input device, not the viewport width: a tablet
+   held in a gloved hand is 1024 px wide and still needs the phone's numbers.
+   Coarse-pointer devices therefore keep the :root values at any width, which is
+   also what the old `@media (pointer: coarse)` .sb-btn block was reaching for
+   before the tokens absorbed it. A touchscreen laptop reports hover: hover for
+   its mouse and lands on the desktop side, correctly.
+
+   `auto` for the tap tokens is not a placeholder — it means "intrinsic height,
+   exactly as before", so min-height contributes nothing on a desktop. */
+@media (min-width: 769px) and (hover: hover) {
+  :root {
+    --fs-xs: 11px;
+    --fs-sm: 13px;
+    --fs-base: 15px;
+    --tap: auto;
+    --tap-sm: auto;
+    --pad-page: 24px;
+    --pad-card: 20px;
+    --pad-btn: 9px 16px;
+    --pad-stab: 7px 16px;
+    --pad-sb: 9px 12px;
+    --pad-modal: 28px;
+  }
 }
 
 * {
@@ -70,7 +128,7 @@ body {
     sans-serif;
   background: var(--c-bg);
   color: var(--c-text);
-  font-size: 15px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   overflow-x: hidden;
 }
@@ -161,12 +219,13 @@ body {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: var(--pad-sb);
+  min-height: var(--tap-sm);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--c-text-sec);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -182,12 +241,10 @@ body {
 /* Touch-device sidebar items: bump to 48 px min-height + 15 px font so the
    drawer (opened via the hamburger on mobile) has finger-friendly targets.
    Defaults below stay at 38 px for desktop where a mouse cursor is precise. */
+/* The size half of this block is gone — --tap-sm, --fs-sm and --pad-sb now say
+   the same thing for every coarse pointer, at any width. The icon is not a
+   token, so it stays. */
 @media (pointer: coarse) {
-  .sb-btn {
-    min-height: 48px;
-    font-size: 15px;
-    padding: 11px 14px;
-  }
   .sb-btn svg {
     width: 20px;
     height: 20px;
@@ -1323,7 +1380,7 @@ body.sb-mobile-open .action-fab-wrap {
 
 /* ═══ LAYOUT ════════════════════════════════════════════════════ */
 .main {
-  padding: 24px;
+  padding: var(--pad-page);
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -1337,7 +1394,7 @@ body.sb-mobile-open .action-fab-wrap {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: var(--pad-card);
   margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
@@ -1359,9 +1416,13 @@ body.sb-mobile-open .action-fab-wrap {
   padding-bottom: 10px;
 }
 .stab {
-  padding: 7px 16px;
+  padding: var(--pad-stab);
+  /* --tap-sm, not --tap: these are secondary navigation, and Phase 1 replaces
+     the strip with a drill-down list on a phone anyway. 56px pills would be
+     enormous for something on its way out. */
+  min-height: var(--tap-sm);
   border-radius: 99px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -1539,9 +1600,10 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 .btn {
-  padding: 9px 16px;
+  padding: var(--pad-btn);
+  min-height: var(--tap);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--c-border);
@@ -3277,7 +3339,7 @@ tr:hover td {
 .modal {
   background: var(--c-surface);
   border-radius: 16px;
-  padding: 28px;
+  padding: var(--pad-modal);
   width: 92%;
   max-width: 480px;
   max-height: 92vh;
@@ -3514,12 +3576,6 @@ tr:hover td {
     padding: 10px 10px;
     font-size: 12px;
   }
-  .main {
-    padding: 12px;
-  }
-  .card {
-    padding: 14px;
-  }
   .g3,
   .g4,
   .g5 {
@@ -3540,9 +3596,6 @@ tr:hover td {
   }
   .stab {
     flex-shrink: 0;
-  }
-  table {
-    font-size: 12px;
   }
   th,
   td {
@@ -3605,7 +3658,6 @@ tr:hover td {
   }
   .modal {
     width: 96%;
-    padding: 20px;
   }
   .scan-modal {
     width: 95vw;
@@ -3639,19 +3691,8 @@ tr:hover td {
   .dmp-stage-count {
     font-size: 15px;
   }
-  .main {
-    padding: 8px;
-  }
   .card {
-    padding: 12px;
     border-radius: var(--radius-sm);
-  }
-  /* Tighten modal padding further on phones — 28 px (default) eats 56 px
-     of horizontal space on a 360 px viewport, and the 768 px override still
-     leaves 20 px which is also too much when bag-info action buttons need
-     to wrap. 14 / 12 px gives the content room to breathe without scroll. */
-  .modal {
-    padding: 14px 12px;
   }
   .g2,
   .g3,
@@ -3669,10 +3710,6 @@ tr:hover td {
   .todo-row {
     padding: 10px;
     gap: 8px;
-  }
-  .btn {
-    padding: 8px 12px;
-    font-size: 12px;
   }
   .scan-modal {
     padding: 12px;
