@@ -452,8 +452,37 @@ holds the number; it may only fall.
 
 In this order, cheapest and highest-traffic first:
 
-1. **`p-work`** — mostly a type bump; `.wk-tile-t` → `--fs-base`, `.wk-tile-when` → `--fs-xs`,
-   `min-height` up. Half a day.
+0. ✅ **The two floors, first, because everything else stands on them.** `--fs-min` (13px
+   phone / 0px desktop) and `--tap-min` (56px / 0px), each applied as
+   `max(<today's number>, var(--floor))` so the desktop literal is never replaced and
+   therefore cannot move. 104 type rules and six tap-target rules. The smallest rendered
+   text on the landing page goes 10px → 13px. See §4 and §8's `[corrected]` note for why
+   this beat five paired tokens.
+
+1. ✅ **`p-work`** — three commits: the touch floor across the guided flow, the tiles'
+   type, and the flow's layout.
+
+   The doc's own prescription here was wrong, and worth recording rather than quietly
+   fixing: `.wk-tile-t → --fs-base` and `.wk-tile-when → --fs-xs` would both have failed
+   `--compare`. `--fs-base` is 15px on a desktop against the frozen 14.5, `--fs-xs` is 11px
+   against 11.5. The title got its own pair (`--fs-tile`, 17/14.5) with `--pad-tile` beside
+   it; the when-line stayed where the floor put it, because 13px under a 17px title is a
+   clearer hierarchy than 15 and one fewer token.
+
+   The flow behind the tiles turned out to be the larger half. Its fields were **smaller**
+   than every other field in the app — `.wkf-field input` sets 44px and outranks the global
+   `input { min-height: 64px }` on specificity — on the one screen that is filled in
+   wearing gloves. Its three breakpoints (460 / 520 / 560) became one at 768. Its footer
+   became a column so the primary action is full width in thumb reach (§5.2). Its bag rows
+   keep the "bereits 340 g · Flush 2" line the old 560px rule hid, which is the number that
+   decides whether a bag is worth weighing at all. And its two scrolling lists moved from
+   `vh` to `dvh`, so the keyboard no longer pushes the footer off the bottom.
+
+   *Not half a day.*
+
+   Found while measuring, fixed separately: `#cam-fab` (z-index 850) floats over every
+   dialog backdrop (200) and `elementFromPoint` returns **the button**, so a thumb aiming
+   at the bottom of a form opened the scanner. One `:has()` rule covers all 25 dialogs.
 2. **Scan overlay** — the one screen that is *always* used gloved.
 3. **`p-batch`** — 4 sub-tabs, tables `t-batches` + `t-harvest`.
 4. **`p-lab`** — 5 sub-tabs, tables `t-grain` + `t-cultures`.
