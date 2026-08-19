@@ -1924,5 +1924,11 @@ window.LANG['pt'] = {
   'work.bNoMixOption': '— sem mistura, direto do estoque —',
   'work.bFromShelf': 'Sem mistura, pellets, farelo e gesso saem direto do estoque. Depois o app pergunta a zona e imprime as etiquetas.',
   'work.bFromShelfShort': 'do estoque',
-  'work.bMixFirst': 'Preparar uma mistura primeiro'
+  'work.bMixFirst': 'Preparar uma mistura primeiro',
+  'work.mQ': 'Quanto substrato, e com qual receita?',
+  'work.mCalc': 'calculando …',
+  'work.mNotePh': 'ex.: nova entrega de pellets',
+  'work.mDone': '{kg} kg de {recipe} preparados',
+  'work.mId': 'Mistura',
+  'work.mAnother': 'Outra mistura'
 };

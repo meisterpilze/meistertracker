@@ -21827,3 +21827,221 @@ function wkbCreate() {
     guided.addEventListener('click', wkbOpen);
   }
 })();
+
+// ═══ SUBSTRAT ANSETZEN ALS ARBEITSGANG ═══════════════════════════════════════
+// Die Kachel schickte auf die Chargen-Seite und scrollte dort zu einem Formular.
+// Sechs Kacheln öffnen einen Dialog, eine wechselte die Seite — das war der
+// Ausreißer. Ein Bildschirm reicht: Rezept, Menge, was dabei herauskommt, und
+// ob das Lager es trägt. Gebucht wird über denselben Aufruf wie im Formular.
+
+const WKM = { strainId: null, kg: 200, notes: '', preview: null, laedt: false, fehler: '' };
+
+function wkmStock() {
+  return (inventory && inventory.stock) || {};
+}
+
+// Was der Ansatz vom Lager nimmt, gegen das, was da ist. Der Server kappt eine
+// Abbuchung auf den Bestand, also muss die Lücke vor dem Buchen dastehen.
+function wkmShortfalls() {
+  const m = WKM.preview && WKM.preview.mix;
+  if (!m) return [];
+  const s = wkmStock();
+  const zeilen = [
+    [t('sub.pellets'), m.pelletsKg, s.hardwood || 0],
+    [t('sub.bran'), m.branKg, s.wheatbran || 0],
+    [t('sub.gypsum'), m.gypsumKg, s.gypsum || 0]
+  ];
+  if (m.cornKg > 0.005) zeilen.push([t('sub.corn'), m.cornKg, s.corn || 0]);
+  return zeilen.filter((z) => z[1] > z[2] + 1e-9).map((z) => ({ label: z[0], need: z[1], have: z[2] }));
+}
+
+async function wkmLoadPreview() {
+  if (!WKM.strainId || !(WKM.kg > 0)) {
+    WKM.preview = null;
+    WKM.fehler = '';
+    return;
+  }
+  WKM.laedt = true;
+  wkmRenderOut();
+  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId: WKM.strainId, targetKg: WKM.kg });
+  WKM.laedt = false;
+  if (!r || r.error) {
+    WKM.preview = null;
+    WKM.fehler = (r && r.error) || '?';
+  } else if (!r.hasRecipe) {
+    WKM.preview = null;
+    WKM.fehler = t('sub.noRecipe');
+  } else {
+    WKM.preview = r;
+    WKM.fehler = '';
+  }
+  wkmRenderOut();
+  wkmUpdateButton();
+}
+
+function wkmOpen() {
+  const list = mushroomStrains.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  WKM.strainId = list.length ? list[0].id : null;
+  WKM.kg = 200;
+  WKM.notes = '';
+  WKM.preview = null;
+  WKM.fehler = '';
+  WKF.kind = 'mix';
+  WKF.step = 'detail';
+  WKF.receipt = null;
+  wkf('m-work-flow').classList.add('open');
+  wkmRender();
+  wkmLoadPreview();
+}
+
+function wkmRead() {
+  const g = (id) => document.getElementById(id);
+  if (g('wkm-recipe')) WKM.strainId = parseInt(g('wkm-recipe').value, 10) || null;
+  if (g('wkm-kg')) WKM.kg = parseDecimal(g('wkm-kg').value) || 0;
+  if (g('wkm-notes')) WKM.notes = g('wkm-notes').value;
+}
+
+// Nur der Ergebnisbereich: Lagerwarnung, Fehlermeldung, Mischungstabelle.
+function wkmRenderOut() {
+  const out = document.getElementById('wkm-out');
+  if (!out) return;
+  const m = WKM.preview && WKM.preview.mix;
+  const kurz = WKM.preview ? wkmShortfalls() : [];
+  const zeile = (label, wert, einheit) =>
+    `<div><span class="wkf-r-k">${esc(label)}</span><span>${fmtKg(wert, 1)} ${einheit}</span></div>`;
+  out.innerHTML =
+    (kurz.length
+      ? '<div class="wkf-note bad"><b>' +
+        esc(t('sub.shortTitle')) +
+        '</b>' +
+        kurz
+          .map((x) => esc(t('sub.shortLine', { mat: x.label, need: fmtKg(x.need, 1), have: fmtKg(x.have, 1) })))
+          .join('<br>') +
+        '<br>' +
+        esc(t('sub.shortHint')) +
+        '</div>'
+      : '') +
+    (WKM.fehler ? `<div class="wkf-note bad">${esc(WKM.fehler)}</div>` : '') +
+    (m
+      ? '<div class="wkf-sum-card">' +
+        zeile(t('sub.dryMix'), m.dryKg, 'kg') +
+        zeile(t('sub.pellets'), m.pelletsKg, 'kg') +
+        zeile(t('sub.bran'), m.branKg, 'kg') +
+        (m.cornKg > 0.005 ? zeile(t('sub.corn'), m.cornKg, 'kg') : '') +
+        zeile(t('sub.gypsum'), m.gypsumKg, 'kg') +
+        zeile(t('sub.water'), m.waterL, 'L') +
+        zeile(t('sub.moisture'), m.moisturePct, '%') +
+        '</div>'
+      : WKM.laedt
+        ? `<div class="wkf-hint">${esc(t('work.mCalc'))}</div>`
+        : '');
+}
+// Anlegen erst, wenn eine Mischung berechnet ist.
+function wkmUpdateButton() {
+  const b = document.querySelector('[data-wkm="create"]');
+  if (b) b.disabled = !(WKM.preview && WKM.preview.mix);
+}
+
+function wkmRender() {
+  wkf('wkf-title').textContent = t('work.substrate');
+  wkf('wkf-back').hidden = true;
+  wkf('wkf-steps').innerHTML = '';
+
+  if (WKF.step === 'done') {
+    const d = WKF.receipt || {};
+    wkf('wkf-body').innerHTML =
+      `<div class="wkf-receipt">
+         <div class="wkf-r-head"><span class="wkf-r-tick">&#10003;</span><b>${esc(d.headline || '')}</b></div>
+         <div class="wkf-r-lines">` +
+      (d.lines || []).map((l) => `<div><span class="wkf-r-k">${esc(l[0])}</span><span>${esc(l[1])}</span></div>`).join('') +
+      '</div></div>';
+    wkf('wkf-foot').innerHTML =
+      `<button class="btn btn-p" data-wkm="again">${esc(t('work.mAnother'))}</button>` +
+      `<button class="btn" onclick="wkfClose()">${esc(t('work.done'))}</button>`;
+    return;
+  }
+
+  const list = mushroomStrains
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map((x) => `<option value="${x.id}"${x.id === WKM.strainId ? ' selected' : ''}>${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`)
+    .join('');
+
+  wkf('wkf-body').innerHTML =
+    `<div class="wkf-q">${esc(t('work.mQ'))}</div>
+     <div class="wkf-field"><label>${esc(t('sub.recipe'))}</label><select id="wkm-recipe">${list}</select></div>
+     <div class="wkf-field"><label>${esc(t('sub.targetKg'))}</label>
+       <input type="text" inputmode="decimal" id="wkm-kg" value="${esc(String(WKM.kg))}" /></div>` +
+    '<div id="wkm-out"></div>' +
+    `<div class="wkf-field"><label>${esc(t('work.bNote'))}</label>
+       <input type="text" id="wkm-notes" value="${esc(WKM.notes)}" placeholder="${esc(t('work.mNotePh'))}" /></div>`;
+
+  wkf('wkf-foot').innerHTML =
+    `<button class="btn" onclick="wkfClose()">${esc(t('work.cancel'))}</button>` +
+    `<button class="btn btn-p" data-wkm="create">${esc(t('sub.create'))}</button>`;
+  wkmRenderOut();
+  wkmUpdateButton();
+}
+
+function wkmCreate() {
+  wkmRead();
+  if (!WKM.preview) return;
+  const subId = sbGenId();
+  const kg = WKM.kg;
+  const label = WKM.preview.recipeLabel || '';
+  apiPost('/api/substrate-batches', {
+    subId,
+    recipeStrainId: WKM.strainId,
+    targetKg: kg,
+    notes: WKM.notes.trim()
+  }).then(async (r) => {
+    if (!r || r.error) {
+      WKM.fehler = (r && r.error) || '?';
+      wkmRender();
+      return;
+    }
+    await loadData();
+    await refreshSubstrateBatches();
+    const m = WKM.preview.mix;
+    WKF.receipt = {
+      headline: t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }),
+      lines: [
+        [t('work.mId'), r.subId || subId],
+        [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
+        [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
+        [t('sub.water'), fmtKg(m.waterL, 1) + ' L']
+      ].concat(WKM.notes.trim() ? [[t('work.bNote'), WKM.notes.trim()]] : []),
+      next: null
+    };
+    WKF.step = 'done';
+    wkmRender();
+  });
+}
+
+(function wireMixFlow() {
+  const flow = document.getElementById('m-work-flow');
+  if (!flow) return;
+  flow.addEventListener('click', (e) => {
+    if (WKF.kind !== 'mix') return;
+    const el = e.target.closest('[data-wkm]');
+    if (!el || el.disabled) return;
+    if (el.dataset.wkm === 'create') wkmCreate();
+    else if (el.dataset.wkm === 'again') wkmOpen();
+  });
+  // Rezept und Menge neu rechnen lassen; die Notiz nicht, sonst springt der Cursor.
+  flow.addEventListener('change', (e) => {
+    if (WKF.kind !== 'mix') return;
+    if (e.target.closest('#wkm-recipe,#wkm-kg')) {
+      wkmRead();
+      wkmLoadPreview();
+    } else if (e.target.closest('#wkm-notes')) {
+      wkmRead();
+    }
+  });
+  const tile = document.getElementById('wk-t-sub');
+  if (tile) {
+    const fresh = tile.cloneNode(true);
+    tile.parentNode.replaceChild(fresh, tile);
+    fresh.addEventListener('click', wkmOpen);
+  }
+})();
