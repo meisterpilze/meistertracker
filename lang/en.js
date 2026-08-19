@@ -1912,5 +1912,8 @@ window.LANG['en'] = {
   'work.mNotePh': 'e.g. new pellet delivery',
   'work.mDone': '{kg} kg of {recipe} mixed',
   'work.mId': 'Mix',
-  'work.mAnother': 'Another mix'
+  'work.mAnother': 'Another mix',
+  'work.flushN': 'flush {n}',
+  'work.rBagsVal2': '{n} of {total}',
+  'work.bookFailed': '{bag} could not be booked: {err}'
 };
