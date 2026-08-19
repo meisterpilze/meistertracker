@@ -5039,15 +5039,56 @@ function readTaskById(db, id) {
 // Admins can always modify. Otherwise, the user must be named in the
 // task's assignee field (comma-separated) OR the task must be
 // unassigned (null/empty assignee means "for everyone").
+/** The assignee column is a comma-separated list. One place that says so. */
+function taskAssignees(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function canUserModifyTask(db, username, taskId, isAdmin) {
   if (isAdmin) return true;
   const r = db.prepare('SELECT assignee FROM manual_tasks WHERE id=?').get(taskId);
   if (!r) return false;
-  if (!r.assignee || !String(r.assignee).trim()) return true;
-  const assignees = String(r.assignee)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const assignees = taskAssignees(r.assignee);
+  if (!assignees.length) return true;
+  return assignees.includes(username);
+}
+
+/**
+ * May this user see this task at all?
+ *
+ * The task dialog has a checkbox reading "only visible to the assigned person".
+ * It was honoured in exactly one place — autoPushTaskCaldav skips the shared
+ * calendar for it — and nowhere else. readAll selected every row with no
+ * filter, GET /api/data handed the payload to any authenticated session, and
+ * the client read the flag only in the edit dialog, never in a render path. One
+ * request therefore returned every note somebody had marked private, which for
+ * a task list means sickness, warnings and personnel matters.
+ *
+ * Takes the row rather than an id: the callers already hold whole rows, and a
+ * SELECT per task turns one payload into hundreds of queries.
+ *
+ * ⚠️ **Fails closed when the row does not carry `private`.** A mapper that
+ * forgets the column must not silently come to mean "public" — that is exactly
+ * how the MCP briefing kept handing out what the web payload had started
+ * filtering. Every task mapper in this file carries it; the guard is for the
+ * next one.
+ *
+ * ⚠️ **A private task with no assignee stays visible, and that is deliberate.**
+ * There is no created_by column, so such a row belongs to nobody; hiding it
+ * would lose the note for whoever typed it, with no way to get it back. The
+ * checkbox's own words say nothing about the case where there is no assigned
+ * person. Making that case impossible is a question for the dialog, not for a
+ * read filter that would eat data to answer it.
+ */
+function canUserSeeTask(task, username, isAdmin) {
+  if (isAdmin) return true;
+  if (!task || task.private === undefined) return false;
+  if (!task.private) return true;
+  const assignees = taskAssignees(task.assignee);
+  if (!assignees.length) return true;
   return assignees.includes(username);
 }
 
@@ -7552,6 +7593,10 @@ function getAllTasks(db) {
       dueTime: r.due_time,
       dueEndTime: r.due_end_time,
       description: r.description,
+      // Carried so a caller can ask canUserSeeTask about the row. It was
+      // missing here while readAll had it, which is precisely how the MCP
+      // briefing came to hand out task text the web payload was filtering.
+      private: r.private === 1,
       recurrence: r.recurrence || null,
       recurrenceUntil: r.recurrence_until || null,
       caldavUid: r.caldav_uid || null,
@@ -9570,5 +9615,6 @@ module.exports = {
   // R-23
   isSafeError,
   isValidCaldavUid,
-  listUsersPublic
+  listUsersPublic,
+  canUserSeeTask
 };

@@ -261,7 +261,7 @@ function createMcpServer(database, onWrite, printer) {
   // Fail closed: with no auth context, default to no role (not admin) so a caller
   // that forgets to pass auth cannot reach admin-only tools. The real server path
   // always supplies printer.auth from checkMcpAuth (legacy static token -> admin).
-  const auth = (printer && printer.auth) || { userId: null, role: null };
+  const auth = (printer && printer.auth) || { userId: null, role: null, username: null };
 
   function notify() {
     if (typeof onWrite === 'function') onWrite();
@@ -293,7 +293,13 @@ function createMcpServer(database, onWrite, printer) {
     async ({ date }) => {
       const batches = db.getAllBatches(database);
       const scanLog = db.getScanLog(database);
-      const manualTasks = db.getAllTasks(database);
+      // The same filter GET /api/data applies. Without it this briefing was the
+      // way around it: it hands back task text grouped by assignee, and an MCP
+      // token is something any worker can mint for themselves through the OAuth
+      // flow. A read hole with two doors is not closed until both are.
+      const manualTasks = db
+        .getAllTasks(database)
+        .filter((t) => db.canUserSeeTask(t, auth.username, auth.role === 'admin'));
       const inventory = db.getInventory(database, 20);
       const calendarEvents = db.getCalendarEvents(database);
       const target = date || today();

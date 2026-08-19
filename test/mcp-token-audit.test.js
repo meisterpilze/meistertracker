@@ -88,10 +88,14 @@ describe('checkMcpAuth stamps only after the comparison', () => {
     assert.ok(touch > cmp, 'the stamp must follow the comparison, not precede it');
     // And it must be inside the branch, not merely after it: the success return
     // has to come after the stamp with nothing between them but whitespace.
-    assert.match(
-      fn.slice(touch),
-      /db\.touchMcpTokenUsed\(database\);\s*\n\s*return \{ userId: null, role: 'admin' \};/
-    );
+    //
+    // The role is pinned, the field list is not. Spelling the whole object out
+    // made this go red when `username` was added for the private-task filter —
+    // a change that has nothing to do with when the stamp happens, which is the
+    // only thing this test is about. What matters is that the very next
+    // statement is the admin return.
+    assert.match(fn.slice(touch), /db\.touchMcpTokenUsed\(database\);\s*\n\s*return \{[^}]*\};/);
+    assert.match(fn.slice(touch), /return \{[^}]*role: 'admin'[^}]*\};/, 'and it is the admin return');
   });
 
   it('an unauthenticated request no longer causes a database write', () => {

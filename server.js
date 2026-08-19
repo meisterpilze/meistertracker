@@ -307,7 +307,7 @@ function checkMcpAuth(req) {
       // evidence that it was. It also made an unauthenticated request write to
       // the database.
       db.touchMcpTokenUsed(database);
-      return { userId: null, role: 'admin' };
+      return { userId: null, role: 'admin', username: null };
     }
   }
 
@@ -315,13 +315,19 @@ function checkMcpAuth(req) {
   const oauthToken = db.getOAuthAccessToken(database, hash);
   if (oauthToken) {
     let role = 'user';
+    let username = null;
     try {
-      const user = database.prepare('SELECT role FROM users WHERE id = ?').get(oauthToken.userId);
+      const user = database.prepare('SELECT role, username FROM users WHERE id = ?').get(oauthToken.userId);
       if (user && user.role) role = user.role;
+      // The name as well as the role: the task filter asks whether a row is
+      // assigned to *this person*, and an assignee is stored as a name. Without
+      // it a worker's own private tasks would disappear from the briefing —
+      // fail-closed, but wrong in a way they would report as data loss.
+      if (user && user.username) username = user.username;
     } catch (_) {
       // best effort — fall through with role: 'user' (least privilege)
     }
-    return { userId: oauthToken.userId, role };
+    return { userId: oauthToken.userId, role, username };
   }
 
   return null;
@@ -6531,6 +6537,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     const payload = readData();
+    // The tasks somebody marked "only visible to the assigned person" — until
+    // now that checkbox was honoured in exactly one place, autoPushTaskCaldav's
+    // decision to skip the shared calendar, and nowhere else. readData() selects
+    // every row without a filter, so one GET returned every private note to any
+    // logged-in account; on a task list that means sickness, warnings and
+    // personnel matters. The client never consulted the flag outside the edit
+    // dialog either, so nothing downstream was covering for it.
+    //
+    // Filtered here and not inside readAll(): the admin write-back path reads
+    // the very same function and needs the rows whole. The ETag above already
+    // carries the user id, so a per-user payload does not need a cache change.
+    if (Array.isArray(payload.manualTasks)) {
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const wer = req.authUser && req.authUser.username;
+      payload.manualTasks = payload.manualTasks.filter((t) => db.canUserSeeTask(t, wer, isAdmin));
+    }
     // Per-user unread notification count so the bell badge can update
     // on every sync without a separate request.
     payload.notifications = { unread };
