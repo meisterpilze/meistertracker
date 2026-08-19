@@ -3584,12 +3584,6 @@ tr:hover td {
   select[style*='width:'] {
     max-width: 100%;
   }
-  .scan-float {
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    right: calc(10px + env(safe-area-inset-right, 0px));
-    left: calc(10px + env(safe-area-inset-left, 0px));
-    max-width: none;
-  }
   /* WCAG-size touch targets for calendar toolbar on mobile */
   .cal-nav-btn,
   .cal-print-btn {
@@ -3805,7 +3799,6 @@ tr:hover td {
 @media print {
   .sidebar,
   .mobile-topbar,
-  .scan-float,
   .scan-toast,
   #harvest-panel,
   .no-print,
@@ -4460,6 +4453,20 @@ tr:hover td {
      56px nav + safe-area inset for devices with home indicators. */
   .content-wrap {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+  }
+  /* Everything else that floats has to clear the bar too. .action-fab-wrap
+     already sits at 72px; the scan pill (24px) and the undo toast (20px) were
+     left at their pre-bottom-nav heights and have been sitting *on* the bar
+     ever since — the pill covers "Labor" and "Kalender" on a 375px screen.
+     Same 72px, so the three of them line up on one shelf.
+
+     This lives in the width query rather than on the rules themselves because
+     the collision is with the bottom nav, and the bottom nav is what this query
+     switches on. .cam-fab shows on `pointer: coarse` instead, so a wide tablet
+     keeps it low, where there is no bar to clear. */
+  .cam-fab,
+  .undo-bar {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
 
   /* ── Batches table — mobile card mode ────────────────────────

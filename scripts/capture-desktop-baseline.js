@@ -64,9 +64,18 @@ function serve(dir, onCapture) {
       });
       return;
     }
-    const name = req.url === '/' || req.url.startsWith('/index.html') ? 'index.html' : path.basename(req.url);
+    const clean = req.url.split('?')[0];
+    const name = clean === '/' || clean.startsWith('/index.html') ? 'index.html' : path.basename(clean);
     if (name !== 'index.html' && name !== 'styles.css') return res.writeHead(404).end();
-    res.writeHead(200, { 'Content-Type': name.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8' });
+    // no-store is load-bearing, not hygiene. Without it the browser reuses
+    // styles.css across runs — the stylesheet URL never changes — and you
+    // measure an edit you made two commits ago. That produced a "the desktop
+    // moved" report for a rule that had not moved, and a "the phone did not
+    // change" report for one that had.
+    res.writeHead(200, {
+      'Content-Type': name.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, must-revalidate'
+    });
     res.end(fs.readFileSync(path.join(dir, name)));
   });
   server.listen(PORT, '127.0.0.1');
