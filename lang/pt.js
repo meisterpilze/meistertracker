@@ -467,7 +467,7 @@ window.LANG['pt'] = {
   'batch.filterArchiveAria': 'Filtrar por status de arquivo',
   'batch.newBatch': 'Novo lote',
   'batch.harvests': 'Colheitas',
-  'batch.createNew': 'Criar novo lote',
+  'batch.createNew': 'Lote de growbags',
   'batch.bagWeight': 'Peso do saco',
   'batch.qty': 'Qtd (sacos)',
   'batch.incDays': 'Dias de incuba\u00e7\u00e3o',
@@ -1907,5 +1907,17 @@ window.LANG['pt'] = {
   'work.bAnother': 'Outro lote',
   'work.stepSubstrate': 'Substrato',
   'work.bRecipeLine': '{hw} % madeira / {wb} % farelo · {rh} % umidade · {days} dias de incubação',
-  'work.bNoRecipe': 'Esta espécie ainda não tem receita. Informe a mistura aqui.'
+  'work.bNoRecipe': 'Esta espécie ainda não tem receita. Informe a mistura aqui.',
+  'batch.otherWeight': 'outro',
+  'batch.matBag': '<strong>Saco:</strong> {kg} kg no total → {dry} kg de matéria seca por saco ({rh} % de água removida)',
+  'batch.matNeed': '{need} kg necessários — {have} kg em estoque',
+  'batch.matShort': '\u26A0 faltam {kg} kg',
+  'batch.matHardwood': 'Madeira',
+  'batch.matBran': 'Farelo de trigo',
+  'batch.matCoir': 'Fibra de coco/CVG',
+  'batch.matGypsum': 'Gesso (~1 %)',
+  'batch.matGrain': 'Grão',
+  'batch.matDryTotal': 'Matéria seca por saco',
+  'stage.done': 'Concluído',
+  'stage.contam': 'Contaminado'
 };

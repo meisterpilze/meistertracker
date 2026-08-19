@@ -58,6 +58,9 @@ if (document.readyState === 'loading') {
 // ─── I18N ────────────────────────────────────────────────────
 let currentLang = localStorage.getItem('mp-lang') || 'de';
 const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };
+// Kilogramm in der Sprache des Benutzers. `toFixed` liefert immer einen Punkt,
+// und "13.650 kg" liest sich auf Deutsch als dreizehntausend statt als 13,65.
+const fmtKg = (v, d) => Number(v).toLocaleString(LOCALE_MAP[currentLang] || 'de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
 function loc() {
   return LOCALE_MAP[currentLang];
 }
@@ -2430,31 +2433,31 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
   const zContam = zones.find((z) => z.role === 'contaminated');
   const stages = [
     {
-      label: 'SPAWN',
+      label: t('stage.spawn'),
       value: spawn,
       color: zSpawn?.color || '#a855f7',
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`
     },
     {
-      label: 'INC',
+      label: t('stage.incubation'),
       value: inc,
       color: zInc?.color || '#0ea5e9',
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
     },
     {
-      label: 'TENT',
+      label: t('stage.fruiting'),
       value: tent,
       color: zTent?.color || '#10b981',
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`
     },
     {
-      label: 'DONE',
+      label: t('stage.done'),
       value: done,
       color: '#64748b',
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`
     },
     {
-      label: 'CONTAM',
+      label: t('stage.contam'),
       value: contam,
       color: zContam?.color || '#ef4444',
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
@@ -6540,16 +6543,38 @@ function locUndo() {
 function nbTypeChange() {
   nbPreview();
 }
-function setBagWeight(kg) {
+// The number field and the buttons used to sit on top of each other, both
+// setting the same value, and nothing said which one counted. The buttons now
+// carry the two sizes actually used; the field only appears for a weight that
+// is neither of them, and says so by being labelled "anderes".
+function setBagWeight(kg, keepField) {
   document.getElementById('nb-weight').value = kg;
-  // Highlight the active button
   ['wbtn-3', 'wbtn-5'].forEach((id) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     const btnKg = parseFloat(btn.textContent);
     btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
   });
+  const other = document.getElementById('wbtn-other');
+  const field = document.getElementById('nb-weight');
+  const preset = kg === 3 || kg === 5;
+  if (other) other.className = 'btn btn-sm' + (preset ? '' : ' btn-p');
+  if (field && !keepField) field.style.display = preset ? 'none' : '';
   nbPreview();
+}
+// "anderes": show the field and let the worker type, whatever it says now.
+function nbOtherWeight() {
+  const field = document.getElementById('nb-weight');
+  if (!field) return;
+  field.style.display = '';
+  ['wbtn-3', 'wbtn-5'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.className = 'btn btn-sm';
+  });
+  const other = document.getElementById('wbtn-other');
+  if (other) other.className = 'btn btn-sm btn-p';
+  field.focus();
+  field.select();
 }
 // Charge form ← product: fill the substrate/grain fields from a saved product
 // spec so a charge can be made straight from "what was ordered". The product
@@ -6620,6 +6645,15 @@ function nbPreview() {
     return;
   }
   const lines = [];
+  // Eine Zeile je Zutat: was gebraucht wird, was da ist, und ob es reicht.
+  const matLine = (label, pct, need, have) =>
+    '<strong>' +
+    esc(label) +
+    (pct != null ? ' (' + pct + ' %)' : '') +
+    ':</strong> ' +
+    t('batch.matNeed', { need: fmtKg(need, 2), have: fmtKg(have, 1) }) +
+    ' ' +
+    (have >= need ? '\u2713' : t('batch.matShort', { kg: fmtKg(need - have, 1) }));
   {
     const hw = parseDecimal(document.getElementById('nb-hw').value) || 0;
     const wb = parseDecimal(document.getElementById('nb-wb').value) || 0;
@@ -6642,32 +6676,18 @@ function nbPreview() {
       const gypStock = inventory.stock?.gypsum || 0;
       if (rh > 0)
         lines.push(
-          `<strong>Bag:</strong> ${bagKg}kg total → ${dryKg.toFixed(3)}kg dry matter per bag (${rh}% water removed)`
+          t('batch.matBag', { kg: fmtKg(bagKg, 1), dry: fmtKg(dryKg, 2), rh: rh })
         );
-      if (hw)
-        lines.push(
-          `<strong>Hardwood (${hw}%):</strong> ${hwKg.toFixed(3)} kg needed — ${hwStock.toFixed(2)} kg in stock ${hwStock >= hwKg ? '✓' : '⚠ short by ' + (hwKg - hwStock).toFixed(2) + 'kg'}`
-        );
-      if (wb)
-        lines.push(
-          `<strong>Wheat bran (${wb}%):</strong> ${wbKg.toFixed(3)} kg needed — ${wbStock.toFixed(2)} kg in stock ${wbStock >= wbKg ? '✓' : '⚠ short by ' + (wbKg - wbStock).toFixed(2) + 'kg'}`
-        );
-      if (coir)
-        lines.push(
-          `<strong>Kokos/CVG (${coir}%):</strong> ${coirKg.toFixed(3)} kg needed — ${coirStock.toFixed(2)} kg in stock ${coirStock >= coirKg ? '✓' : '⚠ short by ' + (coirKg - coirStock).toFixed(2) + 'kg'}`
-        );
-      if (gyp)
-        lines.push(
-          `<strong>Gypsum (~1%):</strong> ${gypKg.toFixed(3)} kg needed — ${gypStock.toFixed(2)} kg in stock ${gypStock >= gypKg ? '✓' : '⚠'}`
-        );
-      lines.push(`<strong>Total dry matter per bag:</strong> ${dryKg.toFixed(3)} kg`);
+      if (hw) lines.push(matLine(t('batch.matHardwood'), hw, hwKg, hwStock));
+      if (wb) lines.push(matLine(t('batch.matBran'), wb, wbKg, wbStock));
+      if (coir) lines.push(matLine(t('batch.matCoir'), coir, coirKg, coirStock));
+      if (gyp) lines.push(matLine(t('batch.matGypsum'), null, gypKg, gypStock));
+      lines.push('<strong>' + esc(t('batch.matDryTotal')) + ':</strong> ' + fmtKg(dryKg, 2) + ' kg');
     }
     if (grainKg > 0) {
       const grainUsed = qty * mtDryKg(grainKg, grainRh);
       const grainStock = inventory.stock?.grain || 0;
-      lines.push(
-        `<strong>Grain:</strong> ${grainUsed.toFixed(3)} kg needed — ${grainStock.toFixed(2)} kg in stock ${grainStock >= grainUsed ? '✓' : '⚠ short by ' + (grainUsed - grainStock).toFixed(2) + 'kg'}`
-      );
+      lines.push(matLine(t('batch.matGrain'), null, grainUsed, grainStock));
     }
   }
   const el = document.getElementById('nb-mat-preview');
@@ -20460,6 +20480,8 @@ function initEventListeners() {
   $('wbtn-5').addEventListener('click', () => {
     setBagWeight(5);
   });
+  const _wother = $('wbtn-other');
+  if (_wother) _wother.addEventListener('click', nbOtherWeight);
   $('nb-weight').addEventListener('input', nbPreview);
   $('nb-strain-sel').addEventListener('change', nbPreview);
   $('nb-qty').addEventListener('input', nbPreview);
