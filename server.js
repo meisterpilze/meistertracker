@@ -226,8 +226,12 @@ try {
 // a wrong password. Without this, attackers could enumerate valid accounts
 // by measuring 10 ms (no scrypt) vs 50-200 ms (real scrypt) responses.
 // Salt+hash are randomized per process, never persisted.
-const DUMMY_PASSWORD_SALT = crypto.randomBytes(16).toString('hex');
-const DUMMY_PASSWORD_HASH = crypto.scryptSync('', DUMMY_PASSWORD_SALT, 64).toString('hex');
+// S-14: minted through db.hashPassword so it carries the current parameters —
+// a dummy that stayed on the old cost would answer faster than a real account
+// and re-open the enumeration channel this exists to close.
+const { salt: DUMMY_PASSWORD_SALT, hash: DUMMY_PASSWORD_HASH } = db.hashPassword(
+  crypto.randomBytes(32).toString('hex')
+);
 
 // ── MCP (Model Context Protocol) server ────────────────────
 // Each session gets its own McpServer + transport (SDK requires one server per transport).
@@ -2292,6 +2296,36 @@ function extractBasicAuthUsername(req) {
 // Handles charset mismatches: iOS/Safari may send Basic Auth as ISO-8859-1
 // (latin1) when the WWW-Authenticate header lacks charset="UTF-8".
 // Also tries case-insensitive username lookup as fallback.
+// S-14: CalDAV re-verifies Basic auth on every single request, so raising the
+// account KDF to N=131072 would put a few hundred milliseconds of CPU behind
+// each PROPFIND — a phone syncing eight calendars would keep a core busy on its
+// own. Only the *outcome of the password check* is cached: the account row is
+// re-read from the database on every hit, so a role change, a revoked
+// capability or a deleted account still takes effect immediately. Failures are
+// never cached — brute force is already bounded by the per-user and per-IP
+// lockout above, and caching a miss would only raise an attacker's throughput.
+//
+// The key is peppered with a per-process random value, so the cache is
+// meaningless to anyone who reads it out of a core dump on another machine.
+const CALDAV_AUTH_CACHE_TTL = 5 * 60 * 1000;
+const CALDAV_AUTH_CACHE_MAX = 200;
+const CALDAV_AUTH_PEPPER = crypto.randomBytes(32);
+const caldavAuthCache = new Map(); // key → { username, expires }
+
+function caldavAuthCacheKey(user, pass) {
+  return crypto
+    .createHash('sha256')
+    .update(CALDAV_AUTH_PEPPER)
+    .update(user + '\u0000' + pass)
+    .digest('hex');
+}
+
+// Called whenever a password changes or an account goes away. The TTL alone
+// would get there within five minutes; this makes it immediate.
+function clearCaldavAuthCache() {
+  caldavAuthCache.clear();
+}
+
 function checkCaldavAuth(req) {
   const authHeader = req.headers['authorization'] || '';
   if (!authHeader.startsWith('Basic ')) return false;
@@ -2305,10 +2339,28 @@ function checkCaldavAuth(req) {
     const user = decoded.slice(0, idx);
     const pass = decoded.slice(idx + 1);
 
+    const cacheKey = caldavAuthCacheKey(user, pass);
+    const cached = caldavAuthCache.get(cacheKey);
+    if (cached) {
+      if (cached.expires > Date.now()) {
+        const fresh = db.getUserByUsername(database, cached.username);
+        if (fresh) return fresh;
+      }
+      caldavAuthCache.delete(cacheKey);
+    }
+
     // Try exact username match, then case-insensitive fallback
     const account = db.getUserByUsername(database, user) || db.getUserByUsernameCaseInsensitive(database, user);
     if (!account) continue;
-    if (db.verifyPassword(account.hash, account.salt, pass)) return account;
+    if (db.verifyPassword(account.hash, account.salt, pass)) {
+      // Insertion order is eviction order — drop the oldest entry at the cap so
+      // a client cycling credentials cannot grow this without bound.
+      if (caldavAuthCache.size >= CALDAV_AUTH_CACHE_MAX) {
+        caldavAuthCache.delete(caldavAuthCache.keys().next().value);
+      }
+      caldavAuthCache.set(cacheKey, { username: account.username, expires: Date.now() + CALDAV_AUTH_CACHE_TTL });
+      return account;
+    }
   }
   return false;
 }
@@ -5215,6 +5267,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         clearLoginAttempts(throttleKey);
         clearLoginAttemptsPerUser(userKey);
+        // S-14: login is the only moment the plaintext password is in hand, so
+        // it is the only chance to re-hash a row that still uses the old scrypt
+        // cost. Best effort — a failure here must not cost the user their login.
+        if (db.passwordNeedsUpgrade(user.salt)) {
+          try {
+            const upgraded = db.hashPassword(password);
+            db.updateUserPassword(database, user.id, upgraded.hash, upgraded.salt);
+            log('info', 'Upgraded password hash to current KDF parameters', { username: user.username });
+          } catch (upgradeErr) {
+            log('warn', 'Password hash upgrade failed', { username: user.username, error: upgradeErr.message });
+          }
+        }
         // Rotate: invalidate any pre-existing session token presented in
         // the request before minting a new one. Defends against stolen
         // pre-auth cookies surviving the legitimate user's login.
@@ -5361,6 +5425,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     db.deleteUser(database, userId);
+    clearCaldavAuthCache();
     log('info', 'User deleted', { actor: req.authUser.username, deletedUserId: userId });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
@@ -5432,14 +5497,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 401, 'Current password is incorrect');
         return;
       }
-      const salt = crypto.randomBytes(16).toString('hex');
-      const hash = crypto.scryptSync(data.newPassword, salt, 64).toString('hex');
+      const { salt, hash } = db.hashPassword(data.newPassword);
       db.updateUserPassword(database, user.id, hash, salt);
       // S-11: kill every credential that speaks for this user, not just the
       // browser sessions — an OAuth refresh token outlives a password change by
       // 30 days otherwise, and /mcp honours it with the user's live role. Then
       // issue a fresh session so the person who just changed it stays logged in.
       db.revokeUserCredentials(database, user.id);
+      clearCaldavAuthCache();
       const newToken = db.createSession(database, user.id);
       setSessionCookie(res, newToken);
       jsonOk(res);
@@ -5469,6 +5534,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // An admin resetting somebody else's password is the stronger case: they
       // are locking an account they no longer trust.
       db.revokeUserCredentials(database, userId);
+      clearCaldavAuthCache();
       jsonOk(res);
     });
     return;

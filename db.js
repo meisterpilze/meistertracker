@@ -3215,6 +3215,40 @@ function readCaldavConfig(db) {
 }
 
 // ── Auth helpers ────────────────────────────────────────────
+// S-14: account passwords used crypto.scryptSync's defaults — N=16384, about
+// 16 MB and 30-50 ms — while the backup KDF a few hundred lines away in
+// server.js already used N=131072. OWASP's current floor for scrypt is N=2^17,
+// so the accounts were the weakest KDF in the codebase and the backup file the
+// strongest, which is backwards.
+//
+// The parameters live in the salt column rather than in a new column or a
+// migration: a salt written by this version carries the "s2$" prefix, one
+// written before it is bare hex. Both formats verify, so nothing is locked out,
+// and a row upgrades itself the next time its owner logs in. Because the marker
+// travels with the row there is no way to apply the wrong cost to a hash.
+//
+// maxmem has to be raised explicitly — 128 * N * r is 128 MB here, well over
+// Node's 32 MB default, and scryptSync throws rather than degrading.
+const SCRYPT_PARAMS = { N: 131072, r: 8, p: 1, maxmem: 192 * 1024 * 1024 };
+const SCRYPT_SALT_PREFIX = 's2$';
+
+function scryptFor(password, salt) {
+  return String(salt).startsWith(SCRYPT_SALT_PREFIX)
+    ? crypto.scryptSync(password, salt, 64, SCRYPT_PARAMS)
+    : crypto.scryptSync(password, salt, 64); // pre-S-14 row: Node's defaults
+}
+
+/** Hash a password with the current parameters. Returns { salt, hash } as stored. */
+function hashPassword(password) {
+  const salt = SCRYPT_SALT_PREFIX + crypto.randomBytes(16).toString('hex');
+  return { salt, hash: scryptFor(password, salt).toString('hex') };
+}
+
+/** True when the stored row predates the current parameters and should be re-hashed. */
+function passwordNeedsUpgrade(salt) {
+  return !String(salt || '').startsWith(SCRYPT_SALT_PREFIX);
+}
+
 function createUser(db, username, password, role) {
   // Login matches usernames case-insensitively (getUserByUsernameCaseInsensitive),
   // but the column's UNIQUE is case-sensitive. Without this guard 'Admin' could
@@ -3223,8 +3257,7 @@ function createUser(db, username, password, role) {
   if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) {
     throw new Error('Username already exists');
   }
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  const { salt, hash } = hashPassword(password);
   const created = new Date().toISOString();
   db.prepare('INSERT INTO users(username, hash, salt, role, created) VALUES(?, ?, ?, ?, ?)').run(
     username,
@@ -3246,7 +3279,7 @@ function getUserByUsernameCaseInsensitive(db, username) {
 
 function verifyPassword(storedHash, salt, password) {
   const a = Buffer.from(storedHash, 'hex');
-  const b = crypto.scryptSync(password, salt, 64);
+  const b = scryptFor(password, salt);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
@@ -3419,8 +3452,7 @@ function setUserCanRelease(db, userId, canRelease) {
 }
 
 function resetUserPassword(db, userId, newPassword) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(newPassword, salt, 64).toString('hex');
+  const { salt, hash } = hashPassword(newPassword);
   db.prepare('UPDATE users SET hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
 }
 
@@ -9036,6 +9068,8 @@ module.exports = {
   getUserByUsername,
   getUserByUsernameCaseInsensitive,
   verifyPassword,
+  hashPassword,
+  passwordNeedsUpgrade,
   createSession,
   getSession,
   deleteSession,
