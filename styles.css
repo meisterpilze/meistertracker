@@ -125,6 +125,15 @@
      an .undo-bar offset derived by hand from the second. One token now, and the
      derivation stays visible. */
   --fab-bottom: 72px;
+  /* The launcher's tiles. A pair rather than a max() floor, because this is not
+     a floor: 14.5px already clears --fs-min, and 17px on a phone is a decision
+     about what the first screen a worker meets should look like, not a rescue.
+     max() is for "never smaller than"; a pair is for "this size here, that size
+     there", and keeping the two apart is what stops either from becoming the
+     answer to everything. The padding grows with the type — the title gains
+     2.5px inside a box that would otherwise stay the same size. */
+  --fs-tile: 17px;
+  --pad-tile: 18px 18px 20px;
 }
 
 /* The desktop override restores today's values exactly — every number below was
@@ -160,6 +169,8 @@
     /* No bottom nav here, so the chrome sits where it always did. Both FABs are
        display:none on a desktop anyway; only .undo-bar reads this off-phone,
        and its own rule keeps it out of the way. */
+    --fs-tile: 14.5px;
+    --pad-tile: 15px 15px 16px;
     --fab-bottom: 24px;
   }
 }
@@ -5264,7 +5275,7 @@ tr:hover td {
   margin-bottom: 4px;
 }
 .wk-sub {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   color: var(--c-text-muted);
   margin-top: 3px;
 }
@@ -5278,7 +5289,7 @@ tr:hover td {
   color: var(--c-amber-dark);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   margin: 12px 0 14px;
 }
@@ -5303,12 +5314,18 @@ tr:hover td {
 .wk-tiles-row2 {
   margin-top: 12px;
 }
+/* 769–900px: a narrow desk window or a tablet in portrait. Below 769 the rule
+   under this one takes over with a single column. */
 @media (max-width: 900px) {
   .wk-tiles {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 520px) {
+/* One column on every phone, not only the narrow ones. 520px was a guess at
+   where two tiles stop fitting; the answer is that two tiles never fit next to
+   a title at 17px and a when-line at 13px, and 768 is where the rest of the
+   app already draws the line. */
+@media (max-width: 768px) {
   .wk-tiles {
     grid-template-columns: 1fr;
   }
@@ -5324,7 +5341,7 @@ tr:hover td {
   background: linear-gradient(150deg, var(--wk-cl) 0%, var(--c-surface) 62%);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
-  padding: 15px 15px 16px;
+  padding: var(--pad-tile);
   min-height: 156px;
   cursor: pointer;
   font: inherit;
@@ -5376,7 +5393,7 @@ tr:hover td {
 .wk-tile-t {
   position: relative;
   z-index: 2;
-  font-size: 14.5px;
+  font-size: var(--fs-tile);
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.25;
