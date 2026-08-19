@@ -13117,7 +13117,9 @@ function msQuickConfirm() {
     }
     setv('lw-type', labType);
     setv('lw-st', ms.id);
-    setv('lw-strain-text', strainText);
+    // Korn-zu-Korn führt keine Stammbezeichnung: das lange Formular blendet das
+    // Feld für diesen Typ aus, also bleibt es hier leer statt mitzureisen.
+    setv('lw-strain-text', labType === 'G2G' ? '' : strainText);
     setv('lw-qty', qty);
     setv('lw-source', '');
     setv('lw-notes', '');
@@ -14031,7 +14033,7 @@ function renderBiActions() {
     `<button type="button" data-bi="move" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
     `<button type="button" data-bi="remove" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
     '</div>';
-  html += `<button type="button" data-bi="contam" style="${big};font-size:15px;padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">⚠ ${esc(t('bagInfo.reportContam'))}</button>`;
+  html += `<button type="button" data-bi="contam" style="${big};font-size:15px;padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('bagInfo.reportContam'))}</button>`;
   el.innerHTML = html;
 }
 // Move the scanned bag (or whole batch, per the toggle) to dest, then drop the
