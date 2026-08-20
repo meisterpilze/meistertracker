@@ -86,10 +86,28 @@ describe('what the search puts first', () => {
     assert.ok(hits.includes(CHARGE) && hits.includes(KULTUR), 'the records carrying it in their subtitle dropped out');
   });
 
+  // Both of these need the two sides to arrive on the same rank. `chargen` used
+  // to stand here and did not: the page is called exactly that (rank 0) and the
+  // sub-page merely starts with it (rank 1), so the first clause of the
+  // comparator settled it and the two clauses under it were never reached.
+  // Deleting them left the file green.
   it('breaks a tie by type, so records come before the pages that hold them', () => {
-    const hits = gsMatch(INDEX, 'chargen');
+    const SEITE_Z = { type: 'page', id: 'Zonen', sub: 'Seiten', page: 'zones', btn: 'n-zones' };
+    const ZONE_Z = { type: 'zone', id: 'ZONEN_R1', sub: 'Inkubation \u00b7 4 Beutel' };
+    // Page first in the array, so insertion order alone would keep it first.
+    const hits = gsMatch([SEITE_Z, ZONE_Z], 'zone');
     assert.ok(GS_ORDER.indexOf('page') === GS_ORDER.length - 1, 'pages are meant to sort last');
-    assert.equal(hits[0], SEITE);
+    assert.equal(gsRank(SEITE_Z, 'zone'), gsRank(ZONE_Z, 'zone'), 'the tie this test is about did not happen');
+    assert.equal(hits[0], ZONE_Z, 'a page outranked the zone it merely lists');
+  });
+
+  it('breaks a tie inside one type by id, so the same query always answers the same way', () => {
+    // Two Chargen of the same Sorte, same rank, same type. Without the last
+    // clause a stable sort would simply keep whichever order the index was
+    // built in — which is creation order, and changes as batches are added.
+    const hits = gsMatch(INDEX, 'aus-1');
+    assert.equal(gsRank(CHARGE, 'aus-1'), gsRank(CHARGE2, 'aus-1'), 'the tie this test is about did not happen');
+    assert.deepEqual(hits.slice(0, 2), [CHARGE2, CHARGE], 'the older id did not sort first');
   });
 
   it('answers an empty field with the pages, and not with forty sub-pages', () => {

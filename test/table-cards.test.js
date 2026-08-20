@@ -33,9 +33,17 @@ const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 // highlighted row, or a template broken over two lines simply stopped being a
 // row template as far as this file was concerned. Three of the eleven were
 // visible under the strict pattern, and the guard below is what said so.
-const ROW_TEMPLATES = [...APP.matchAll(/<tr(?:\s[^>]*)?>([\s\S]*?)<\/tr>/g)]
-  .map((m) => m[1])
-  .filter((row) => row.includes('data-mlabel'));
+//
+// The body may not cross another `<tr`. Allowing it to was how widening the
+// opening tag paid for itself in the wrong currency: prose in this file talks
+// about rows, and the sentence "writing textContent onto the <tr>" in app.js
+// is an opening tag as far as a regex is concerned. It anchored a match that
+// ran 630 lines to the next `</tr>` and consumed every template in between —
+// a stretch of app.js that happens to hold no labelled row today, and would
+// have swallowed one silently on the day somebody wrote one there.
+const ROW_RE = /<tr(?:\s[^>]*)?>((?:(?!<tr[\s>])[\s\S])*?)<\/tr>/g;
+const ROW_MATCHES = [...APP.matchAll(ROW_RE)];
+const ROW_TEMPLATES = ROW_MATCHES.map((m) => m[1]).filter((row) => row.includes('data-mlabel'));
 
 // A cell may go unlabelled for exactly two reasons, both of which the layout
 // handles on purpose.
@@ -44,6 +52,19 @@ const MAY_BE_UNLABELLED = /class="[^"]*(?:-actions|\bempty)\b/;
 describe('the cards a table becomes on a phone', () => {
   it('finds the row templates — a silent zero would make this file vacuous', () => {
     assert.ok(ROW_TEMPLATES.length >= 10, `expected at least 10 labelled row templates, found ${ROW_TEMPLATES.length}`);
+  });
+
+  // The floor above only says the pattern found enough rows. It cannot say that
+  // each one is a row: a match that runs from a `<tr` in a comment to a `</tr>`
+  // hundreds of lines later still counts as one, and everything it swallows
+  // stops being checked. The longest real template here is under 2000
+  // characters, so a match several times that is not a row template, whatever
+  // the count says.
+  it('matches rows, not stretches of file between two of them', () => {
+    const tooLong = ROW_MATCHES.filter((m) => m[0].length > 4000).map(
+      (m) => `${m[0].length} chars at index ${m.index}`
+    );
+    assert.deepEqual(tooLong, [], 'a <tr…</tr> match spans far more than a row — it is hiding the templates inside it');
   });
 
   it('labels every data cell, or says why not', () => {
