@@ -2192,6 +2192,13 @@ tr:hover td {
   border: 1.5px solid rgba(255, 255, 255, 0.8);
   margin-right: 4px;
 }
+/* No `display` here on purpose — see the .t-cards .sub-tag rule in the phone
+   block. As a bare inline box this pill splits across line boxes when it
+   wraps, which is a real blemish on the desktop table too, but the desktop
+   Substrat column is ~63px wide: making the pill a box there wraps it into
+   three lines of padded box and takes #t-batches from 760px to 1093px tall.
+   That is a desktop layout change, not a phone fix, and it needs the column
+   widths looked at rather than a display keyword. */
 .sub-tag {
   font-size: max(11px, var(--fs-min));
   background: var(--c-bg);
@@ -4863,9 +4870,7 @@ tr:hover td {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
   .t-cards > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+    display: block;
     padding: 4px 0;
     border: 0;
     font-size: 13px;
@@ -4879,28 +4884,64 @@ tr:hover td {
        arrived. */
     background: none;
   }
+  /* Label in a gutter, value in normal flow.
+
+     This cell was `display: flex` with the label as its first item, which
+     reads correctly and is wrong: making the cell a flex container makes
+     *every* element child a flex item, so the layout silently depended on
+     each cell holding exactly one. #t-batches' Substrat cell holds three —
+     batchRowHtml() writes one .sub-tag per material — and they became three
+     competing items on a nowrap line, each shrunk until "HW 60% WB 20%"
+     wrapped to four lines inside a 99px-radius pill. Eight cards, every
+     batch, and no count could see it: the chips do not exist until the
+     renderer runs, so both the source census and measure-mobile.js (which
+     serves the page with the scripts stripped) looked straight past them.
+
+     Normal flow is also what these chips get from the desktop table cell
+     they were written for, so the two layouts now differ in where the label
+     sits and not in how the value is laid out. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child) {
+    position: relative;
+    padding-left: 92px;
+  }
   /* The label was 10–11px here, which is the size this whole project
      exists to stop shipping. Uppercase, 600 and muted already say
-     "this is a label" without help from a size below the floor. */
-  .t-cards > tbody > tr > td[data-mlabel]::before {
+     "this is a label" without help from a size below the floor.
+     84px fits every label the renderers emit except "Chargen-ID" at 87px,
+     which is a first cell and hidden; the rest top out at 72px. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child)::before {
     content: attr(data-mlabel);
-    flex: 0 0 84px;
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 84px;
     color: var(--c-text-muted);
     font-size: var(--fs-xs);
     font-weight: 600;
+    line-height: 1.4;
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
+  /* The other half of the same cell. Normal flow fixed the three chips
+     competing as flex items; it does not fix each chip being an inline box,
+     which splits its background and its 99px radius across two line boxes the
+     moment it wraps — "RH 63%" came out as a 155×39 smear. A pill has to be a
+     box. Scoped to the card because the desktop table's Substrat column is
+     ~63px wide, where the same keyword wraps every chip into a padded stack
+     and takes #t-batches from 760px to 1093px tall. Same defect, different
+     fix: the desktop needs its column widths looked at. */
+  .t-cards .sub-tag {
+    display: inline-block;
+  }
   /* First cell: the card's header. What it looks like is per table — an
      id wants to be big, a timestamp wants to be a quiet subtitle — so
-     this sets only what they share. */
+     this sets only what they share. Its label is not hidden here but never
+     written: the :not(:first-child) above is what keeps 184 of the 189
+     first cells from indenting 92px around a label nobody wants to see. */
   .t-cards > tbody > tr > td:first-child {
     padding-bottom: 6px;
     margin-bottom: 6px;
     border-bottom: 1px solid var(--c-border-light);
-  }
-  .t-cards > tbody > tr > td:first-child::before {
-    display: none;
   }
   /* Actions row — full width, buttons share it equally. The
      (pointer: coarse) rule near .btn-sm already gives them 44px. */
