@@ -1642,11 +1642,17 @@
           <path d="M3 12h18M3 6h18M3 18h18" />
         </svg>
       </button>
+      <!-- The page's name, not the app's. A phone has no sidebar to read the
+           highlight off, and the bottom bar covers five of the twelve pages — open
+           the drawer, tap Abholungen, watch it close, and nothing on the screen said
+           where you landed. go() writes the label here from the nav entry it was
+           handed, so the two cannot drift; data-i18n goes with it, so a language
+           switch reaches it through translatePage() like any other string. -->
       <div class="sb-logo">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="5" />
           <path d="M12 13v5M8 21h8" /></svg
-        ><span class="sb-logo-text">Meistertracker</span>
+        ><span class="sb-logo-text" id="topbar-title" data-i18n="nav.workSteps">Arbeitsgänge</span>
       </div>
       <button
         class="mobile-bell"

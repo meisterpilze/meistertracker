@@ -1047,7 +1047,17 @@ function go(page, btnId) {
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
   document.getElementById('p-' + page).classList.add('active');
-  document.getElementById(btnId).classList.add('active');
+  const navBtn = document.getElementById(btnId);
+  navBtn.classList.add('active');
+  // The mobile topbar says which page this is. Read off the entry that opened it
+  // rather than a second table of names: a page added to the sidebar is named
+  // here without anyone remembering to, and a renamed one is renamed once.
+  const title = document.getElementById('topbar-title');
+  const label = navBtn.querySelector('[data-i18n]');
+  if (title && label) {
+    title.dataset.i18n = label.dataset.i18n;
+    title.textContent = label.textContent;
+  }
   // Mirror active state onto the mobile bottom nav for the four pages it covers.
   const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
   if (bnBtn) bnBtn.classList.add('active');
