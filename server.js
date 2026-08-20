@@ -162,9 +162,35 @@ const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB max request body
 const SESSION_TTL_SECONDS = db.SESSION_TTL_MS / 1000; // keep in sync with db.js
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
 
+/**
+ * The address to key a limit on.
+ *
+ * ⚠️ **X-Forwarded-For's first entry is the caller's, not the proxy's.** nginx's
+ * `$proxy_add_x_forwarded_for` APPENDS the real peer to whatever the client
+ * sent, so entry [0] is attacker-supplied — the comment on setupFromLoopback
+ * below has said so for as long as that guard has existed, and used it as the
+ * reason not to trust this function there. Every throttle in this file is keyed
+ * on the value returned here, so reading [0] handed an attacker a fresh
+ * identity per request and let them aim any per-address penalty at somebody
+ * else.
+ *
+ * X-Real-IP instead: it is single-valued, and the nginx configuration in
+ * DEPLOYMENT.md sets it from `$remote_addr` at every location, so a client
+ * cannot prepend to it. Falling back to the socket keeps the direct-TLS
+ * deployment (Path A, the recommended one) working unchanged, where
+ * TRUST_PROXY is unset and no header is read at all.
+ */
 function getClientIP(req) {
-  const fwd = TRUST_PROXY ? req.headers['x-forwarded-for'] : null;
-  return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+  if (TRUST_PROXY) {
+    const real = req.headers['x-real-ip'];
+    if (typeof real === 'string' && real.trim()) return real.trim();
+    // No X-Real-IP behind a proxy that was told to send one: the socket is
+    // the proxy itself, so everyone shares a key. Said plainly rather than
+    // silently, because a shared key turns every per-address limit into a
+    // shared one — see the throttles' own comments.
+    return (req.socket.remoteAddress || 'unknown') + '|proxy-ohne-real-ip';
+  }
+  return req.socket.remoteAddress || 'unknown';
 }
 
 /**
@@ -270,7 +296,9 @@ setInterval(
   },
   5 * 60 * 1000
 ); // check every 5 minutes
-// Clean up expired OAuth codes and revoked tokens every hour
+// Clean up expired OAuth codes and revoked tokens every hour — and, since
+// S-25, auto-registered clients that never completed a flow (see
+// db.deleteExpiredOAuthData for why each condition is there).
 setInterval(
   () => {
     try {
@@ -307,7 +335,7 @@ function checkMcpAuth(req) {
       // evidence that it was. It also made an unauthenticated request write to
       // the database.
       db.touchMcpTokenUsed(database);
-      return { userId: null, role: 'admin' };
+      return { userId: null, role: 'admin', username: null };
     }
   }
 
@@ -315,13 +343,19 @@ function checkMcpAuth(req) {
   const oauthToken = db.getOAuthAccessToken(database, hash);
   if (oauthToken) {
     let role = 'user';
+    let username = null;
     try {
-      const user = database.prepare('SELECT role FROM users WHERE id = ?').get(oauthToken.userId);
+      const user = database.prepare('SELECT role, username FROM users WHERE id = ?').get(oauthToken.userId);
       if (user && user.role) role = user.role;
+      // The name as well as the role: the task filter asks whether a row is
+      // assigned to *this person*, and an assignee is stored as a name. Without
+      // it a worker's own private tasks would disappear from the briefing —
+      // fail-closed, but wrong in a way they would report as data loss.
+      if (user && user.username) username = user.username;
     } catch (_) {
       // best effort — fall through with role: 'user' (least privilege)
     }
-    return { userId: oauthToken.userId, role };
+    return { userId: oauthToken.userId, role, username };
   }
 
   return null;
@@ -737,7 +771,19 @@ const ID_CHARSET_RE = /^[A-Za-z0-9_\-@.:]+$/;
 // username straight from a body that may be up to 5 MB and make it a Map key in
 // two brute-force tables, where the 60-second sweep leaves it for the full
 // 15-minute lockout window.
+// S-25: what an unauthenticated registration may carry. Generous against any
+// real client, small against a five-megabyte body sent twenty times a minute.
+const OAUTH_MAX_CLIENT_NAME = 128;
+const OAUTH_MAX_REDIRECT_URIS = 5;
+const OAUTH_MAX_URI_LENGTH = 512;
+
 const USERNAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
+// S-22: there was a minimum (8) and no maximum anywhere, so MAX_BODY_SIZE was
+// the only bound on what reached scrypt — five megabytes of it. Set where the
+// password is *chosen* as well as where it is checked, because a cap that only
+// one of the two knows about is a lockout waiting to happen. Far above any real
+// passphrase; the point is the megabyte, not the sentence.
+const PASSWORD_MAX_LENGTH = 1024;
 function validateMushroomStrain(data) {
   if (!data || typeof data !== 'object') return 'Request body must be a JSON object';
   if (data.name !== undefined && data.name !== null) {
@@ -770,6 +816,17 @@ function validateScanEntries(entries) {
     if (!e.time || typeof e.time !== 'string' || isNaN(new Date(e.time).getTime())) {
       return 'entry[' + i + '].time must be an ISO timestamp';
     }
+    // Canonicalise, do not merely accept. `new Date()` takes far more than ISO,
+    // and V8's legacy parser ignores a trailing parenthesised group — so
+    // "Aug 19 2099 12:00:00 GMT+0000 (' + fetch(...) + ')" is a *valid* date and
+    // was stored verbatim. The client renders time into markup, which is the
+    // same reason the charset pin below exists for batch/bag/from/to; time was
+    // the field that list forgot. Writing the ISO form makes the charset a
+    // property of the stored row instead of a promise about the caller.
+    // Real clients already send `new Date().toISOString()`, so this changes
+    // nothing for them — and it repairs the log's string-compare date filters
+    // for anything that did not.
+    e.time = new Date(e.time).toISOString();
     // Optional ID-like fields — pin charset + length to prevent stored XSS via
     // raw rendering in the client.
     for (const f of ['batch', 'bag', 'from', 'to', 'expected_current_zone']) {
@@ -848,6 +905,34 @@ function _oauthResultHtml(channel, ok, msg) {
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label}</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f14;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:24px"><div style="font-size:48px;color:${color}">${icon}</div><p style="font-size:16px;line-height:1.5">${safe}</p><p style="margin-top:18px"><a href="/" style="color:#60a5fa">Zurück zur App</a></p>${redirect}</div></body></html>`;
 }
 // Admin-only guard — returns true if blocked (response already sent)
+/**
+ * Does this calendar write create, move or withdraw a pickup window?
+ *
+ * A calendar event with category 'pickup' is not an entry in a diary — it is
+ * what harvest-feed.js publishes to the shop as a bookable collection slot,
+ * with its day, its clock, its address and its number of places. POST and PATCH
+ * on /api/calendar-events carried no permission check at all, so any logged-in
+ * worker could invent a 05:00 collection at an address the farm does not use,
+ * or set the capacity of a window customers had already booked to zero. The
+ * neighbours had long since decided this was not everyone's to do: DELETE on
+ * the same row and POST /api/pickup-locations are both requireAdmin.
+ *
+ * Both directions have to be asked about, which is why the stored row is read
+ * and not only the body. A PATCH that moves a window usually carries no
+ * category at all, and a PATCH that carries `category: 'meeting'` takes a
+ * published window off the shop without ever mentioning pickup.
+ *
+ * Ordinary calendar entries — meetings, deliveries, maintenance — stay
+ * everyone's, as before. The guard is scoped to the one category that talks to
+ * customers.
+ */
+function touchesPickupWindow(id, data) {
+  if (data && data.category === 'pickup') return true;
+  if (!id) return false;
+  const stored = db.getCalendarEventById(database, id);
+  return !!(stored && stored.category === 'pickup');
+}
+
 function requireAdmin(req, res) {
   if (!req.authUser || req.authUser.role !== 'admin') {
     jsonErr(res, 403, 'admin required');
@@ -2712,7 +2797,36 @@ function getSyncToken(calName) {
 }
 
 // Write an .ics file and invalidate caches / record change
+// S-23: the calendar file name, checked where it becomes a path.
+//
+// Every writeIcsFile caller builds the name as `uid + '.ics'`, and on the
+// push-one / push-event routes that uid is `task.caldavUid` straight out of a
+// request body — any logged-in user, no role required. path.join() will follow
+// a "../" chain out of the calendar directory without complaint, so a worker
+// could drop an .ics carrying their own SUMMARY and DESCRIPTION anywhere the
+// server process can write, including the Windows profile it runs under.
+//
+// The charset is the one the *read* side has always demanded of a uid
+// (/^[A-Za-z0-9\-_.@]+$/ at the sync-back paths); it simply never held on the
+// way in. It is sufficient on its own: with the separators and NUL excluded, a
+// name cannot address a second path component at all, on POSIX or on Windows —
+// so there is no need to also hunt for "..", and no legitimate uid gets refused
+// for containing one.
+//
+// The check lives here rather than at each caller because there are fourteen of
+// them, and calName is already safe (db.caldavSlug reduces it to [a-z0-9-]).
+function icsFileName(fileName) {
+  const stem = typeof fileName === 'string' && fileName.endsWith('.ics') ? fileName.slice(0, -4) : null;
+  if (!db.isValidCaldavUid(stem)) {
+    // The 'caldav:' prefix is on db.isSafeError's list, so the caller answers
+    // 400 with this text rather than a 500 that reads like our own fault.
+    throw new Error('caldav: rejected calendar file name');
+  }
+  return fileName;
+}
+
 function writeIcsFile(calName, fileName, content) {
+  icsFileName(fileName);
   const dir = ensureCalDir(calName);
   fs.writeFileSync(path.join(dir, fileName), content, 'utf8');
   invalidateCtag(calName);
@@ -2721,6 +2835,7 @@ function writeIcsFile(calName, fileName, content) {
 
 // Delete an .ics file and invalidate caches / record change
 function deleteIcsFile(calName, fileName) {
+  icsFileName(fileName);
   const filePath = path.join(CAL_DIR, calName, fileName);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
@@ -3607,6 +3722,19 @@ function handleCaldav(req, res) {
     }
   }
 
+  // S-22: the same budget the login route spends from, because this reaches the
+  // same KDF — checkCaldavAuth runs db.verifyPassword, and it runs the decode
+  // loop twice, so a request here costs *two* hashes. Guarding only
+  // /api/auth/login left the more expensive door open, and CalDAV is on by
+  // default (migration v10). The username is spendable the same way there:
+  // checkCaldavAuth skips hashing for an unknown account, so "admin" is as good
+  // a guess as any and a fresh username buys nothing extra.
+  if (!takeLoginKdfToken(caldavIP)) {
+    res.writeHead(429, { 'Retry-After': '5' });
+    res.end('Too many login attempts. Try again shortly.');
+    return;
+  }
+
   // Auth check — returns user account object or false
   const caldavUser = checkCaldavAuth(req);
   if (!caldavUser) {
@@ -3620,6 +3748,7 @@ function handleCaldav(req, res) {
     return;
   }
   // Clear attempts on successful auth
+  refundLoginKdfToken(caldavIP);
   const successKey = caldavUser.username.toLowerCase();
   clearLoginAttempts(successKey + '@' + caldavIP);
   clearLoginAttemptsPerUser(successKey);
@@ -4107,6 +4236,69 @@ function handleMkcalendar(parts, body, req, res) {
   res.end('Forbidden');
 }
 
+// S-24: whose record it is — asked of the record, not of the URL.
+//
+// The CalDAV sync-back paths look a row up by the UID carried in the request
+// body (PUT) or in the file being removed (DELETE) and then write or delete
+// that row. Every guard above them is about the *calendar*: checkCalendarAccess,
+// and "only from your own calendar, or from the shared one if you are admin".
+// None of them says anything about the row the UID names, and a worker may
+// write into their own personal calendar — so PUT an .ics carrying a
+// colleague's task UID there, DELETE it again, and the colleague's task goes
+// with it. The UIDs are not a secret: GET /api/data hands out caldavUid for
+// every task.
+//
+// The HTTP twins of these operations already answer this question —
+// PATCH /api/tasks/:id calls db.canUserModifyTask and returns "You are not
+// allowed to modify this task", and DELETE /api/calendar-events/:id is
+// requireAdmin. This asks those same two, so the two doors into the same room
+// stop disagreeing.
+//
+// Anything the UID does not resolve to a row for is allowed through: creating a
+// new task from a calendar client is a normal thing to do, and it takes nothing
+// from anyone.
+function caldavRecordAllowed(req, ics) {
+  // ⚠️ **Anchored, and that is not tidiness.** `/UID:(.*)/` matches inside any
+  // property whose name ends in UID — `X-DECOY-UID:harmless` in the first line
+  // fed this guard a name that resolves to nothing, so it waved the request
+  // through while the sync-back below read the real UID out of the VEVENT and
+  // wrote it. One header line walked around the whole check. The text arrives
+  // unfolded, so a line anchor is the same thing the writers see.
+  const uidMatch = String(ics || '').match(/^UID:(.*)$/m);
+  if (!uidMatch) return true;
+  const uid = uidMatch[1].trim();
+  const isAdmin = !!(req.caldavUser && req.caldavUser.role === 'admin');
+  // A custom calendar event. Matched before the -event suffix is stripped, or
+  // an event id that ends in "-event" would be mangled into a different one.
+  if (/^cev-(.+)@meisterpilze$/.test(uid)) return isAdmin;
+  // ⚠️ And the ones that do not wear that shape. The UID is only built as
+  // `cev-<id>@meisterpilze` when the row has no caldav_uid of its own; an event
+  // that arrived from a calendar client keeps the client's UID, and the pattern
+  // above walks straight past it. That left the withdraw direction open for
+  // exactly the windows an admin had created from their own calendar app.
+  // Asking the database costs one indexed lookup and cannot be fooled by a
+  // naming convention.
+  //
+  // ⚠️ **Only the pickup category.** The first version of this line returned
+  // isAdmin for every calendar row that carried a caldav_uid, which took
+  // meetings, deliveries and maintenance away from everyone over CalDAV — the
+  // exact opposite of what its own commit said it did. What is being protected
+  // is the shop's collection times, not the calendar.
+  const ereignis = db.readCalendarEventByCaldavUid(database, uid);
+  if (ereignis) return ereignis.category === 'pickup' ? isAdmin : true;
+  // A task, either by its own uid or by its companion due-date event's.
+  const taskUid = uid.replace(/-event$/, '');
+  // ⚠️ **No charset pre-check here.** There was one, and it failed open on
+  // exactly the values it rejected: isValidCaldavUid caps a uid at 120
+  // characters, the sync-back's own regex does not, so a 150-character uid was
+  // waved through by this guard and then happily resolved to a row and written.
+  // The lookup answers the only question that matters — does this name a row? —
+  // and cannot disagree with anything.
+  const task = db.readTaskByCaldavUid(database, taskUid);
+  if (!task) return true;
+  return db.canUserModifyTask(database, req.caldavUser && req.caldavUser.username, task.id, isAdmin);
+}
+
 function handlePut(parts, body, req, res) {
   // PUT /caldav/calendars/<cal>/<uid>.ics
   if (parts.length === 3 && parts[0] === 'calendars' && parts[2].endsWith('.ics')) {
@@ -4141,12 +4333,26 @@ function handlePut(parts, body, req, res) {
       }
     }
 
+    // Bidirectional sync: parse incoming content and update DB
+    const unfolded = unfoldIcs(body);
+
+    // S-24: asked before the write, not after it. The sync-back below is what
+    // touches the row, but a refusal that still left the caller's .ics sitting
+    // in a shared calendar would be a refusal in name only.
+    if (!caldavRecordAllowed(req, unfolded)) {
+      log('warn', 'CalDAV PUT: refused a record the caller may not modify', {
+        calendar: calName,
+        file: fileName,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+
     fs.writeFileSync(filePath, body, 'utf8');
     invalidateCtag(calName);
     recordChange(calName, fileName, 'changed');
-
-    // Bidirectional sync: parse incoming content and update DB
-    const unfolded = unfoldIcs(body);
 
     // ── VTODO sync-back: task text, priority, completion, due date ──
     if (unfolded.includes('VTODO')) {
@@ -4353,6 +4559,27 @@ function handlePut(parts, body, req, res) {
                 const c = catMatch[1].trim().toLowerCase();
                 if (KNOWN_CATEGORIES[c]) category = c;
               }
+              // The second door to the same thing. Any user may mint a CalDAV
+              // app password, and checkCalendarAccess lets everyone write into
+              // the shared calendar — so without this, the permission asked for
+              // on POST /api/calendar-events is answered by putting the same
+              // event in an .ics instead. Editing an existing one this way was
+              // already admin-only: caldavRecordAllowed returns isAdmin for any
+              // cev-…@meisterpilze UID. Only creating a fresh one was open.
+              //
+              // The already-parsed `category` is used rather than reading
+              // CATEGORIES a third time: two spellings of the same rule is how
+              // one of them stops matching, and the loose one would read the
+              // whole file instead of this VEVENT block.
+              if (category === 'pickup' && req.caldavUser.role !== 'admin') {
+                log('warn', 'CalDAV PUT: refused a pickup window from a non-admin', {
+                  calendar: calName,
+                  actor: req.caldavUser.username
+                });
+                res.writeHead(403);
+                res.end('Forbidden');
+                return;
+              }
 
               let startDate = null,
                 endDate = null,
@@ -4497,6 +4724,20 @@ function handleDelete(parts, req, res) {
     try {
       content = unfoldIcs(fs.readFileSync(filePath, 'utf8'));
     } catch {}
+
+    // S-24: the calendar guards above allow deleting from your own calendar.
+    // What is deleted from the *database* is decided by the UID inside the
+    // file, which the caller put there — so the row gets its own question.
+    if (!caldavRecordAllowed(req, content)) {
+      log('warn', 'CalDAV DELETE: refused a record the caller may not modify', {
+        calendar: calName,
+        file: fileName,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
 
     const typeMatch = content.match(/X-MEISTERPILZE-TYPE:(.*)/);
     const evType = typeMatch ? typeMatch[1].trim() : null;
@@ -4717,6 +4958,98 @@ function recordLoginFailurePerUser(username) {
   }
 }
 
+// ── S-22: what an unauthenticated caller may make this process compute ──────
+//
+// finishLogin runs a full scrypt whether or not the account exists, because the
+// constant-time answer requires it, and S-14 raised that to N=2^17: ~276 ms of
+// synchronous work on the only thread there is. Both older tiers key on a string
+// the caller chooses — loginAttempts on username@IP, loginAttemptsPerUser on the
+// username — so a fresh username per request lands in a fresh bucket, neither
+// counter ever engages, and every request bought a full hash. At the
+// 300-a-minute ceiling that is 82 s of CPU demanded of every 60 s of wall clock,
+// from one address, with no account.
+//
+// Three things this must NOT be, each learned the hard way:
+//
+// 1. **Not a delay.** A wait that still ends in a hash only queues the work;
+//    64 pending delays releasing 17 s of hashing every 5 s is the same overload
+//    with extra steps.
+//
+// 2. **Not a hard lock.** The first version of this was one, and it repeated
+//    S-19's mistake one level down. S-19 removed the per-account lock because
+//    twenty wrong guesses could keep a named account out; a lock keyed on the
+//    address does the same to everyone who shares one — an office NAT, a mobile
+//    carrier, or the documented Path B nginx, where without TRUST_PROXY every
+//    request arrives from 127.0.0.1. Worse, it could not be cleared: the refusal
+//    ran before finishLogin, so the "one correct login clears it" escape was
+//    unreachable once tripped. This budget refills on its own instead, so the
+//    worst case is a wait measured in seconds.
+//
+// 3. **Not one global pot.** That was the second version, and it turned a CPU
+//    exhaustion into a login outage: a flood that keeps the shared bucket empty
+//    costs the attacker nothing and locks out everyone arriving without a
+//    session, invisibly. A per-source budget cannot be spent on somebody else's
+//    behalf, which is the whole property that was missing.
+//
+// What is left is a rate, not a verdict: an address may buy LOGIN_KDF_BURST
+// hashes at once and one more every LOGIN_KDF_REFILL_MS. One address therefore
+// holds about 5% of the thread, and a correct password hands its token straight
+// back, so honest use costs nothing at all.
+//
+// A distributed flood across many addresses is not answered here and is not
+// pretended to be: that is what the 300-a-minute limiter and a firewall are for.
+// What this closes is one caller freezing the lab.
+const LOGIN_KDF_BURST = 5;
+const LOGIN_KDF_REFILL_MS = 5000;
+const LOGIN_KDF_MAX_QUELLEN = 5000;
+const loginKdfTokens = new Map(); // Adresse → { tokens, stand }
+
+function _loginKdfEintrag(quelle, jetzt) {
+  let e = loginKdfTokens.get(quelle);
+  if (!e) {
+    // Bounded, or the map is a memory leak with a rate limit in front of it.
+    // Oldest-first: the entries that matter are the ones spending right now.
+    if (loginKdfTokens.size >= LOGIN_KDF_MAX_QUELLEN) {
+      const aeltester = loginKdfTokens.keys().next().value;
+      if (aeltester !== undefined) loginKdfTokens.delete(aeltester);
+    }
+    e = { tokens: LOGIN_KDF_BURST, stand: jetzt };
+    loginKdfTokens.set(quelle, e);
+  }
+  const dazu = Math.floor((jetzt - e.stand) / LOGIN_KDF_REFILL_MS);
+  if (dazu > 0) {
+    e.tokens = Math.min(LOGIN_KDF_BURST, e.tokens + dazu);
+    e.stand += dazu * LOGIN_KDF_REFILL_MS;
+  }
+  return e;
+}
+
+/** One hash for this address, or false. Nothing is hashed on a false. */
+function takeLoginKdfToken(quelle, jetzt = Date.now()) {
+  const e = _loginKdfEintrag(quelle, jetzt);
+  if (e.tokens <= 0) return false;
+  e.tokens--;
+  return true;
+}
+
+/** A correct password costs nothing — that is what keeps this off honest users. */
+function refundLoginKdfToken(quelle, jetzt = Date.now()) {
+  const e = _loginKdfEintrag(quelle, jetzt);
+  e.tokens = Math.min(LOGIN_KDF_BURST, e.tokens + 1);
+}
+
+// An address that has not asked for a while is not worth remembering.
+setInterval(
+  () => {
+    const jetzt = Date.now();
+    const alt = LOGIN_KDF_BURST * LOGIN_KDF_REFILL_MS;
+    for (const [quelle, e] of loginKdfTokens) {
+      if (jetzt - e.stand > alt && e.tokens >= LOGIN_KDF_BURST) loginKdfTokens.delete(quelle);
+    }
+  },
+  10 * 60 * 1000
+).unref();
+
 function clearLoginAttempts(key) {
   loginAttempts.delete(key);
 }
@@ -4727,7 +5060,7 @@ function clearLoginAttemptsPerUser(username) {
 // The half of /api/auth/login that runs once the per-account wait has elapsed.
 // Split out of the route handler for S-19: the delay is asynchronous, and this
 // is what it defers.
-function finishLogin(req, res, { username, password, userKey, throttleKey }) {
+function finishLogin(req, res, { username, password, userKey, throttleKey, sourceKey }) {
   const user = db.getUserByUsernameCaseInsensitive(database, username);
   // Constant-time login: always run scrypt, even when the username is
   // unknown — falling back to a process-local dummy hash keeps the
@@ -4748,6 +5081,9 @@ function finishLogin(req, res, { username, password, userKey, throttleKey }) {
   // keeps S-19's delay from being a lockout with extra steps.
   clearLoginAttempts(throttleKey);
   clearLoginAttemptsPerUser(userKey);
+  // S-22: a correct password costs this address nothing, which is what keeps
+  // the budget off the people it exists to protect.
+  refundLoginKdfToken(sourceKey);
   // S-14: login is the only moment the plaintext password is in hand, so
   // it is the only chance to re-hash a row that still uses the old scrypt
   // cost. Best effort — a failure here must not cost the user their login.
@@ -4957,6 +5293,37 @@ function handleRequest(req, res) {
           if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end('{"error":"invalid_client_metadata","error_description":"redirect_uris required"}');
+            return;
+          }
+          // S-25: bounds, because this route is unauthenticated and every call
+          // writes a row that nothing used to collect. Until here the only
+          // limits were checkOAuthRate (20/min per address) and MAX_BODY_SIZE —
+          // five megabytes of client_name, stored verbatim and logged verbatim,
+          // twenty times a minute, for ever.
+          //
+          // The numbers are deliberately far above any real client: a name is a
+          // label in an admin list, and RFC 7591 registrations carry one or two
+          // redirect URIs, not fifty.
+          if (redirectUris.length > OAUTH_MAX_REDIRECT_URIS) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client_metadata","error_description":"too many redirect_uris"}');
+            return;
+          }
+          // Typed as well as bounded. `new URL(uri)` below throws on a
+          // non-string, and that lands in safeErr as a 500 — our fault by the
+          // response code, the caller's by the facts.
+          for (const uri of redirectUris) {
+            if (typeof uri !== 'string' || uri.length > OAUTH_MAX_URI_LENGTH) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                '{"error":"invalid_client_metadata","error_description":"redirect_uri must be a string within length limits"}'
+              );
+              return;
+            }
+          }
+          if (typeof data.client_name === 'string' && data.client_name.length > OAUTH_MAX_CLIENT_NAME) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid_client_metadata","error_description":"client_name too long"}');
             return;
           }
           // Validate redirect URIs. RFC 8252 (OAuth 2.0 for Native Apps):
@@ -5519,7 +5886,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const { username, password } = data;
-        if (!username || !password || password.length < 8) {
+        if (!username || !password || password.length < 8 || password.length > PASSWORD_MAX_LENGTH) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
@@ -5576,16 +5943,35 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
           return;
         }
+        // S-22: a password big enough to be its own denial of service never
+        // reaches the KDF. No account can hold one, so the answer is the one a
+        // wrong password gets.
+        if (typeof password !== 'string' || password.length > PASSWORD_MAX_LENGTH) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid credentials' }));
+          return;
+        }
+        // S-22: this address's budget for hashing. Taken here rather than after
+        // the wait, so a queued request reserves its hash instead of reaching
+        // the end of the wait to find there is no room for it.
+        if (!takeLoginKdfToken(clientIP)) {
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+          res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
+          return;
+        }
         // Per-account: a wait rather than a lock (S-19). The password check
         // happens on the other side of it.
         const accepted = afterLoginDelay(userKey, () => {
           try {
-            finishLogin(req, res, { username, password, userKey, throttleKey });
+            finishLogin(req, res, { username, password, userKey, throttleKey, sourceKey: clientIP });
           } catch (err) {
+            refundLoginKdfToken(clientIP);
             safeErr(res, err);
           }
         });
         if (!accepted) {
+          // Nothing was hashed, so the reservation goes back.
+          refundLoginKdfToken(clientIP);
           res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
           res.end(JSON.stringify({ error: 'Too many login attempts. Try again shortly.' }));
         }
@@ -5682,7 +6068,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
 
   // ── Username list (any authenticated user) ────────────────
   if (url === '/api/usernames' && req.method === 'GET') {
-    const users = db.listUsers(database).map((u) => ({ id: u.id, username: u.username }));
+    const users = db.listUsersPublic(database);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(users));
     return;
@@ -5713,7 +6099,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const { username, password, role } = data;
-        if (!username || !password || password.length < 8) {
+        if (!username || !password || password.length < 8 || password.length > PASSWORD_MAX_LENGTH) {
           jsonErr(res, 400, 'Username and password (min 8 chars) required');
           return;
         }
@@ -5803,7 +6189,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'currentPassword and newPassword required');
         return;
       }
-      if (data.newPassword.length < 8) {
+      // S-22: currentPassword is verified with scrypt too. Behind a login, so
+      // not the flood from /api/auth/login — but the same cap, because two
+      // bounds that disagree are how one of them stops being true.
+      if (typeof data.currentPassword !== 'string' || data.currentPassword.length > PASSWORD_MAX_LENGTH) {
+        jsonErr(res, 400, 'currentPassword and newPassword required');
+        return;
+      }
+      if (data.newPassword.length < 8 || data.newPassword.length > PASSWORD_MAX_LENGTH) {
         jsonErr(res, 400, 'New password must be at least 8 characters');
         return;
       }
@@ -5844,7 +6237,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'newPassword required');
         return;
       }
-      if (data.newPassword.length < 8) {
+      if (data.newPassword.length < 8 || data.newPassword.length > PASSWORD_MAX_LENGTH) {
         jsonErr(res, 400, 'New password must be at least 8 characters');
         return;
       }
@@ -6286,6 +6679,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     const payload = readData();
+    // The tasks somebody marked "only visible to the assigned person" — until
+    // now that checkbox was honoured in exactly one place, autoPushTaskCaldav's
+    // decision to skip the shared calendar, and nowhere else. readData() selects
+    // every row without a filter, so one GET returned every private note to any
+    // logged-in account; on a task list that means sickness, warnings and
+    // personnel matters. The client never consulted the flag outside the edit
+    // dialog either, so nothing downstream was covering for it.
+    //
+    // Filtered here and not inside readAll(): the admin write-back path reads
+    // the very same function and needs the rows whole. The ETag above already
+    // carries the user id, so a per-user payload does not need a cache change.
+    if (Array.isArray(payload.manualTasks)) {
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const wer = req.authUser && req.authUser.username;
+      payload.manualTasks = payload.manualTasks.filter((t) => db.canUserSeeTask(database, t, wer, isAdmin));
+    }
     // Per-user unread notification count so the bell badge can update
     // on every sync without a separate request.
     payload.notifications = { unread };
@@ -9942,6 +10351,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vlen);
         return;
       }
+      // A pickup window is a promise to customers, not a diary entry — see
+      // touchesPickupWindow. Everything else on this route stays open.
+      if (touchesPickupWindow(null, data) && requireAdmin(req, res)) return;
       if (!/^[A-Za-z0-9_\-@.:]{1,200}$/.test(data.id)) {
         jsonErr(res, 400, 'id must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
@@ -10005,6 +10417,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
+        // The stored row as well as the body: a PATCH that moves a window
+        // usually names no category, and one that sets `category: 'meeting'`
+        // takes a published window off the shop without mentioning pickup.
+        if (touchesPickupWindow(id, data) && requireAdmin(req, res)) return;
         // Atomically update the event row + refresh the assignees junction
         // table so the two can't drift apart on a mid-operation crash.
         const effectiveAssignees = deriveEffectiveAssignees(data);

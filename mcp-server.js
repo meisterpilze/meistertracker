@@ -261,14 +261,25 @@ function createMcpServer(database, onWrite, printer) {
   // Fail closed: with no auth context, default to no role (not admin) so a caller
   // that forgets to pass auth cannot reach admin-only tools. The real server path
   // always supplies printer.auth from checkMcpAuth (legacy static token -> admin).
-  const auth = (printer && printer.auth) || { userId: null, role: null };
+  const auth = (printer && printer.auth) || { userId: null, role: null, username: null };
 
   function notify() {
     if (typeof onWrite === 'function') onWrite();
   }
 
+  function isAdminCaller() {
+    return !!(auth && auth.role === 'admin');
+  }
+
+  // Returns a refusal, or null when the caller may proceed. Every call site
+  // reads `const adminErr = requireAdminRole(); if (adminErr) return adminErr;`
+  // — truthy means refuse, at all ten of them. A tool that wants to *narrow* an
+  // answer rather than refuse it asks isAdminCaller() instead: reusing this one
+  // for that would make truthy mean two opposite things, and the next
+  // maintainer sweeping for missing `if (adminErr) return adminErr;` would turn
+  // the narrowing into a refusal.
   function requireAdminRole() {
-    return auth && auth.role === 'admin' ? null : errResult('admin role required');
+    return isAdminCaller() ? null : errResult('admin role required');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -282,7 +293,13 @@ function createMcpServer(database, onWrite, printer) {
     async ({ date }) => {
       const batches = db.getAllBatches(database);
       const scanLog = db.getScanLog(database);
-      const manualTasks = db.getAllTasks(database);
+      // The same filter GET /api/data applies. Without it this briefing was the
+      // way around it: it hands back task text grouped by assignee, and an MCP
+      // token is something any worker can mint for themselves through the OAuth
+      // flow. A read hole with two doors is not closed until both are.
+      const manualTasks = db
+        .getAllTasks(database)
+        .filter((t) => db.canUserSeeTask(database, t, auth.username, auth.role === 'admin'));
       const inventory = db.getInventory(database, 20);
       const calendarEvents = db.getCalendarEvents(database);
       const target = date || today();
@@ -523,7 +540,14 @@ function createMcpServer(database, onWrite, printer) {
       dueAfter: z.string().optional().describe('ISO date — tasks due after this date')
     },
     async (params) => {
-      let tasks = db.getAllTasks(database);
+      // The third door. daily_briefing and GET /api/data both filter; this one
+      // is a dedicated task lister on the same server, reachable with the same
+      // self-minted worker token, and it takes an `assignee` parameter — so it
+      // answered "show me everything marked private for this colleague" in one
+      // call. A read hole is not closed until every door asks.
+      let tasks = db
+        .getAllTasks(database)
+        .filter((t) => db.canUserSeeTask(database, t, auth.username, auth.role === 'admin'));
 
       if (params.assignee) {
         const a = params.assignee.toLowerCase();
@@ -938,6 +962,17 @@ function createMcpServer(database, onWrite, printer) {
       recurrenceUntil: z.string().optional().describe('ISO date — last allowed recurrence (inclusive)')
     },
     async (params) => {
+      // A pickup window is what harvest-feed.js publishes to the shop as a
+      // bookable collection slot — day, clock, address, places. The HTTP route
+      // and the CalDAV create branch both ask for admin before writing one, and
+      // an MCP token is something any worker can mint through the OAuth flow,
+      // so this is the third door to the same room. Only that one category:
+      // meetings and inoculation days stay everyone's, as they are here and on
+      // the other two doors. delete_calendar_event is already requireAdminRole.
+      if (params.category === 'pickup') {
+        const adminErr = requireAdminRole();
+        if (adminErr) return adminErr;
+      }
       try {
         const id = 'ev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
         const unknownAssigneeNames = [];
@@ -1128,7 +1163,14 @@ function createMcpServer(database, onWrite, printer) {
             reason: e.reason || null
           };
         });
-        const ids = db.appendScanEntries(database, enriched, null);
+        // The acting user, the way create_batch and the other writes already
+        // pass it — move_bags was the one that did not. A hardcoded null puts a
+        // MOVE or a contamination REMOVE into scan_log with no user, so it reads
+        // back nameless out of the forensic query, while the same action through
+        // POST /api/scan-log carries its session's user. The legacy static token
+        // genuinely belongs to nobody; `|| null` keeps that a null instead of
+        // inventing an identity for it.
+        const ids = db.appendScanEntries(database, enriched, auth.userId || null);
         notify();
         return json({ success: true, count: entries.length, ids: ids.map(Number) });
       } catch (e) {
@@ -1701,9 +1743,21 @@ function createMcpServer(database, onWrite, printer) {
   // Example: list_users()
   server.tool(
     'list_users',
-    'List all users with their IDs, usernames, roles, and creation dates. READ-ONLY. Useful for assigneeIds in calendar events.',
+    'List users. Everyone gets id and username, which is what assigneeIds need. Admins additionally get role, the can_ship / can_release flags and creation dates. READ-ONLY.',
     {},
     async () => {
+      // The web UI splits this on purpose: GET /api/usernames hands every
+      // logged-in user {id, username}, GET /api/users returns the whole row
+      // behind an admin check. This tool returned the whole row to everyone,
+      // and any worker can mint themselves an MCP token through /oauth —
+      // so role and the two capability flags were readable by exactly the
+      // people they exist to hold back. can_ship is the one that matters
+      // there: it reaches postage and the customer's name. Knowing who holds
+      // it is a target list.
+      //
+      // The split is mirrored rather than the tool refused: looking up an
+      // assignee is what it is for, and that works on the projection.
+      if (!isAdminCaller()) return json(db.listUsersPublic(database));
       return json(db.listUsers(database));
     }
   );
