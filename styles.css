@@ -203,55 +203,6 @@
   }
 }
 
-/* ── THE INLINE-SIZE BRIDGE — temporary, and meant to be deleted ───────────
-   A token layer has no power over style="font-size:10px", and there are 484 of
-   those below the 13px floor across index.html and app.js. Until they are gone
-   the tokens above simply do not reach most of the text on a phone.
-
-   This is a hack. It is written down as a hack so nobody later mistakes it for
-   the design. It is also not a new hack — the rule further down that forces
-   inputs to 16px carries a comment saying !important was needed to beat inline
-   style="font-size:12px", which is this same wound treated one spot at a time.
-   Generalising it buys legible text app-wide in one commit instead of twenty.
-
-   Both spellings are here on purpose: index.html writes `font-size: 12px` with
-   a space, app.js writes `font-size:12px` without one, and a selector that
-   matched only one form would silently cover half the app.
-
-   EXIT: delete this block when `node scripts/mobile-audit.js` reports 0. The
-   real fix is per-page, folded into Phases 2-4 — see MOBILE_REDESIGN.md §6.
-   The audit ratchets the count so it can only ever fall. */
-@media (max-width: 768px) {
-  [style*='font-size:8px'],
-  [style*='font-size: 8px'],
-  [style*='font-size:9px'],
-  [style*='font-size: 9px'],
-  [style*='font-size:10px'],
-  [style*='font-size: 10px'],
-  [style*='font-size:11px'],
-  [style*='font-size: 11px'],
-  [style*='font-size:12px'],
-  [style*='font-size: 12px'],
-  /* Eleven of these are fractional. A pattern list is only as good as its
-     survey, and the first survey here missed them — scripts/mobile-audit.js
-     exists partly so the next omission is caught by a number rather than by
-     someone squinting at a phone. */
-  [style*='font-size:9.5px'],
-  [style*='font-size:10.5px'],
-  [style*='font-size:11.5px'],
-  [style*='font-size:12.5px'] {
-    font-size: var(--fs-xs) !important;
-  }
-  /* An attribute selector outranks a bare `input`, so the bridge would have
-     quietly undone the anti-zoom rule below and handed iOS Safari a 13px field
-     to zoom into. Same weapon, one notch more specific, wins it back. */
-  input[style*='font-size'],
-  select[style*='font-size'],
-  textarea[style*='font-size'] {
-    font-size: 16px !important;
-  }
-}
-
 * {
   box-sizing: border-box;
   margin: 0;
@@ -3949,8 +3900,11 @@ tr:hover td {
     margin-left: 0;
   }
   /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px).
-     !important is required to override inline style="font-size:12px" that several
-     compact filter/search inputs still carry from desktop layout work. */
+     !important is still required, for a different reason than when this was
+     written: the inline style="font-size:12px" it used to fight is gone from
+     every compact filter and search field, but the .fs-meta class that replaced
+     it is (0,2,0) and this selector is (0,0,3). Drop the !important and Safari
+     gets a 13px field to zoom into on the pages that were just cleaned up. */
   input,
   select,
   textarea {

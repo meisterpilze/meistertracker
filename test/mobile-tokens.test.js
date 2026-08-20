@@ -399,29 +399,48 @@ describe('the size utilities that replace the inline styles', () => {
   });
 });
 
-describe('the inline-size bridge', () => {
-  // Every distinct sub-floor size the source actually emits, both spellings.
-  const declared = new Set();
-  for (const src of [HTML, APP]) {
-    for (const m of subFloorSizes(src, FLOOR)) declared.add(m.size);
-  }
-
-  it('finds sub-floor inline sizes to cover (otherwise this suite is vacuous)', () => {
-    assert.ok(declared.size > 0, 'no sub-floor inline sizes found — check the scan, not the app');
-  });
-
-  it('has a selector for every sub-floor size present in the source', () => {
-    const missing = [...declared].filter((size) => !CSS.includes(`[style*='font-size:${size}']`));
+describe('the bridge, now that it is gone', () => {
+  // §6's block matched `[style*='font-size:11px']` and lifted it with
+  // !important. It was written as a hack, labelled as one, and given an exit:
+  // delete it when the ratchet reports 0. The ratchet reports 0.
+  //
+  // These assertions are the inversion of the ones that used to live here.
+  // They no longer check that the bridge covers every size the source emits;
+  // they check that neither the sizes nor the bridge come back — because the
+  // failure mode after a deletion is a slow return, one edit at a time, and
+  // the first inline `font-size:11px` to reappear would now be small on a
+  // phone with nothing to catch it.
+  it('leaves no sub-floor inline size anywhere in the source', () => {
+    const left = [];
+    for (const [name, src] of [
+      ['index.html', HTML],
+      ['app.js', maskedSource(APP)]
+    ]) {
+      for (const m of subFloorSizes(src, FLOOR)) left.push(`${name}: ${m.text}`);
+    }
     assert.deepEqual(
-      missing,
+      left,
       [],
-      `the bridge misses ${missing.length} size(s) the source emits — that text stays small on a phone`
+      `${left.length} inline sub-floor size(s) are back, and the bridge that used to cover them is gone: ` +
+        left.slice(0, 6).join(', ')
     );
   });
 
-  // An attribute selector outranks a bare `input`, so the bridge would silently
-  // hand iOS Safari a 13px field to zoom into.
-  it('keeps form controls at 16px despite the bridge outranking the old rule', () => {
-    assert.match(CSS, /input\[style\*='font-size'\][\s\S]{0,200}font-size: 16px !important/);
+  it('leaves no attribute-substring rule behind to bring it back', () => {
+    const bridge = [...CSS.matchAll(/\[style\*='font-size[^\]]*\]/g)].map((m) => m[0]);
+    assert.deepEqual(bridge, [], `${bridge.length} bridge selector(s) survive: ${bridge.join(', ')}`);
+  });
+
+  // The one rule the bridge used to have to fight, still standing and still
+  // needing !important — for a different reason now. The inline sizes it beat
+  // are gone; what it beats today is .fs-meta at (0,2,0), against its own
+  // (0,0,3). Without the !important, Safari gets a 13px field to zoom into on
+  // exactly the pages that were just cleaned up.
+  it('keeps form controls at 16px, which is what stops iOS zooming the page', () => {
+    assert.match(
+      CSS,
+      /input,\s*\n\s*select,\s*\n\s*textarea \{\s*\n\s*font-size: 16px !important;/,
+      'the anti-zoom rule lost its !important or its shape — a phone now zooms when a field is focused'
+    );
   });
 });
