@@ -741,12 +741,29 @@ controls under 44px, in markup four phases had passed over.* The type is the cal
 at 11px; the touch list is Phase 1 chrome (`#sb-toggle` 26px, `#undo-btn` 31.5px,
 `#n-notif-m` 36px, two `<summary>` rows at 19.5px) plus Büro pages Phase 4 has not reached.
 
+**Rendered measurement — the demo server. ✅ built.** The gap the tool above states plainly
+in its own header: a stripped page cannot show anything `app.js` renders. Closing it needs a
+backend, not a browser trick, and the backend is cheap — `db.openDb()` on a throwaway SQLite
+file, a few hundred rows of invented farm, and `db.readAll()`, which is the function
+`GET /api/data` already calls. Serve the app's real files against that and every renderer
+runs. Lives in the session scratchpad, not the repo: the schema, the migrations and the
+serializer are the app's own, so the only invented part is the values, and those are worth
+nothing tomorrow.
+
+*What it found on the first run, after this branch had reported 0/0/0:* eight batch cards
+whose Substrat cell laid its three chips out as competing flex items, twelve controls under
+44px in five shapes, and the Inventory page 111px wider than the screen. None of it was
+reachable by the source census (the markup is a template string) or by `measure-mobile.js`
+(the cell is empty when the scripts are stripped). Three commits, and the same measurement
+against the rendered app now reads 0 under the type floor, 0 under 44px and 0 past the edge,
+at 375px and at 320px, over ~6,080 rendered elements.
+
 **Manual, per phase.** A real phone, in the lab, with gloves on: the phase's screens, the
-scan flow end to end, and one pass in landscape. Checklist lives in the PR body. Narrowed by
-the tool above but not replaced by it: what a stripped page cannot show is everything
-`app.js` renders — every table row, every list, every dialog body — and it cannot show
-whether a target is *reachable*, only whether it is *big*. That part cannot be automated and
-should not be claimed as automated.
+scan flow end to end, and one pass in landscape. Checklist lives in the PR body. Narrowed
+twice now — by the tool above and by the demo server — but still not replaced: what no
+measurement can show is whether a target is *reachable* rather than merely *big*, how any of
+it behaves through a glove, or what the scan flow feels like with one hand full. That part
+cannot be automated and should not be claimed as automated.
 
 > **[corrected]** The preview note here said the Browser pane cannot reach this app from a
 > worktree — self-signed cert plus login wall — and concluded "visual checks are device-only
