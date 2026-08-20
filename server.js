@@ -1526,14 +1526,59 @@ async function pushBillbeeStock(why) {
  * pushHarvestFeedNow() and for the same reason: lowering a release is the
  * dangerous direction, and the shops must not go on offering the old figure.
  *
+ * ⚠️ **Only one push is ever in the air**, and that is not just about saving
+ * requests. Billbee is called through one queue that spaces calls 550 ms apart,
+ * and a 429 retry re-enters that queue at the back — so with two runs overlapping,
+ * the older one's chunk can land *after* the newer one's and republish the very
+ * figure somebody has just corrected downwards. A push that arrives while one is
+ * running is remembered as a single follow-up instead, and that follow-up reads
+ * the levels fresh when it starts. Same lesson as harvest-feed's pushNow().
+ *
  * Skipped in worktree mode exactly like the feed. A second copy of the server
  * usually carries a copy of the database with the live credentials still in it,
  * and stock written from a stale copy is worse than stock written late.
  */
+let _billbeeStockInFlight = false;
+let _billbeeStockPending = null;
 function pushBillbeeStockNow(why) {
   if (WORKTREE_MODE) return;
-  pushBillbeeStock(why).catch((e) => log('warn', 'Billbee stock push failed', { why, error: e.message }));
+  if (_billbeeStockInFlight) {
+    _billbeeStockPending = why;
+    return;
+  }
+  _billbeeStockInFlight = true;
+  pushBillbeeStock(why)
+    .catch((e) => log('warn', 'Billbee stock push failed', { why, error: e.message }))
+    .finally(() => {
+      _billbeeStockInFlight = false;
+      const again = _billbeeStockPending;
+      _billbeeStockPending = null;
+      if (again) pushBillbeeStockNow(again);
+    });
 }
+
+/**
+ * The heartbeat that heals a push nobody watched fail.
+ *
+ * Without it the release hooks are the only sender, and they fire once: if
+ * Billbee is unreachable for the half-minute somebody lowers a release, the
+ * warning goes to the log and every shop Billbee feeds keeps offering the old
+ * figure until the next time a human happens to edit a release — days, or never.
+ * The harvest feed has had this from the start ("The timer carries the same
+ * numbers a few minutes later regardless"); this is the same promise on the
+ * other road. The numbers are absolute and idempotent, so a tick that changes
+ * nothing costs one request and tells no shop anything.
+ */
+const BILLBEE_STOCK_INTERVAL_MS = 15 * 60 * 1000;
+let _billbeeStockTimer = null;
+function startBillbeeStockTimer() {
+  if (WORKTREE_MODE) return false;
+  if (_billbeeStockTimer) clearInterval(_billbeeStockTimer);
+  _billbeeStockTimer = setInterval(() => pushBillbeeStockNow('timer'), BILLBEE_STOCK_INTERVAL_MS);
+  if (_billbeeStockTimer.unref) _billbeeStockTimer.unref();
+  return true;
+}
+startBillbeeStockTimer();
 
 /** One release change, every road out of this building. */
 function pushReleaseOutward(why) {
