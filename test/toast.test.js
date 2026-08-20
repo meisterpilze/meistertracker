@@ -312,3 +312,49 @@ describe('asking before something irreversible', () => {
     assert.ok(APP.split('askConfirm(').length - 1 >= 9, 'the eight call sites plus the helper are not all there');
   });
 });
+
+// ── the field a message is about ────────────────────────────────────────────
+describe('a validation message points at its own field', () => {
+  const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+  it('marks, focuses and clears again', () => {
+    const fn = APP.match(/function fieldError\(el, msg\) \{[\s\S]*?\n\}/m);
+    assert.ok(fn, 'fieldError() not found');
+    assert.match(fn[0], /classList\.add\('is-invalid'\)/, 'the field is not marked');
+    assert.match(fn[0], /setAttribute\('aria-invalid', 'true'\)/, 'the mark is visual only');
+    assert.match(fn[0], /\{ once: true \}/, 'the ring is never taken off — the field looks broken while it is fixed');
+    assert.match(fn[0], /toast\(msg, 'err'\)/, 'the words are gone as well as the pointer');
+    // A renamed id must degrade to what the call site did before, not to silence.
+    assert.match(fn[0], /if \(!input\) return toast\(msg, 'err'\);/, 'a missing element makes the message disappear');
+  });
+
+  it('has a ring to show', () => {
+    const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+    assert.match(CSS, /input\.is-invalid[\s\S]{0,80}\{[^}]*box-shadow/, 'nothing styles .is-invalid');
+    assert.doesNotMatch(
+      CSS.match(/input\.is-invalid[\s\S]*?\}/)[0],
+      /border-color: var\(--c-red\);\s*\}/,
+      'the mark is a border colour alone — invisible to a red/green deficiency'
+    );
+  });
+
+  it('names a field that exists', () => {
+    // The failure mode is silent by construction: fieldError() falls back to a
+    // plain toast when the element is missing, so a typo'd id looks exactly like
+    // the old behaviour and nobody notices the ring never appears.
+    const ids = new Set();
+    // The definition is `fieldError(el, msg)` and matches this too — its body
+    // would contribute 'string' and 'err' as if they were element ids.
+    for (const call of (APP.match(/fieldError\([\s\S]*?\);/g) || []).filter(
+      (c) => !c.startsWith('fieldError(el, msg)')
+    )) {
+      for (const m of call.matchAll(/'([a-z][a-z0-9-]{2,})'/g)) if (!m[1].includes('.')) ids.add(m[1]);
+    }
+    assert.ok(ids.size >= 15, `expected at least 15 field ids, found ${ids.size}`);
+    const inMarkup = new Set([...HTML.matchAll(/id="([A-Za-z0-9_:.-]+)"/g)].map((m) => m[1]));
+    // Some forms are built by app.js, so an id it writes itself counts too.
+    const built = new Set([...APP.matchAll(/id="([A-Za-z0-9_:.-]+)"/g)].map((m) => m[1]));
+    const missing = [...ids].filter((id) => !inMarkup.has(id) && !built.has(id));
+    assert.deepEqual(missing, [], `fieldError() points at element(s) that do not exist: ${missing.join(', ')}`);
+  });
+});

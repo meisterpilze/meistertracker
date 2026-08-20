@@ -2202,6 +2202,52 @@ document.getElementById('m-ok').onclick = () => {
 };
 
 /**
+ * Say which field is wrong by marking it, not only by describing it.
+ *
+ * The bar fixed three of the four things wrong with alert() and left the fourth:
+ * a message that names a problem without pointing at it. "Menge eingeben" over a
+ * form with nine inputs is a puzzle, and the answer is obvious only to whoever
+ * wrote the check.
+ *
+ * So the field gets the red ring, the focus and the scroll, and the bar still
+ * carries the words. The words are deliberately *not* moved under the input: the
+ * twenty-eight fields this is called for sit in grid cells, plain blocks and
+ * non-wrapping flex rows, and a block inserted after the input lands differently
+ * in each. Marking and focusing is what answers "which one", and it does so the
+ * same way everywhere.
+ *
+ * The ring clears on the next keystroke in that field, because a ring that
+ * outlives the mistake is a field that looks broken while it is being fixed.
+ *
+ * @param {string|Element} el the input, or its id
+ * @param {string} msg what is wrong with it
+ */
+function fieldError(el, msg) {
+  const input = typeof el === 'string' ? document.getElementById(el) : el;
+  // No element is not a reason to say nothing: a renamed id falls back to what
+  // every one of these call sites did before, rather than failing silently.
+  if (!input) return toast(msg, 'err');
+  toast(msg, 'err');
+  input.classList.add('is-invalid');
+  input.setAttribute('aria-invalid', 'true');
+  const clear = () => {
+    input.classList.remove('is-invalid');
+    input.removeAttribute('aria-invalid');
+  };
+  input.addEventListener('input', clear, { once: true });
+  input.addEventListener('change', clear, { once: true });
+  // A field two screens down is not pointed at by being focused alone; and
+  // focus() on a hidden or disabled input is a no-op, which is why the ring is
+  // set first and does not depend on it.
+  try {
+    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    input.focus({ preventScroll: true });
+  } catch (e) {
+    /* an input the browser will not focus is still marked */
+  }
+}
+
+/**
  * The dialog confirm2() opens, as a promise, so a caller can keep the shape it
  * had with window.confirm(): `if (!(await askConfirm(…))) return;`.
  *
@@ -2366,11 +2412,11 @@ function confirmBatchAdd() {
     loc = document.getElementById('ba-loc').value,
     batch = batches.find((x) => x.batchId === id);
   if (!id || !batch) {
-    toast(t('batchadd.selectBatch'), 'err');
+    fieldError('ba-batch', t('batchadd.selectBatch'));
     return;
   }
   if (!loc) {
-    toast(t('batchadd.selectLoc'), 'err');
+    fieldError('ba-loc', t('batchadd.selectLoc'));
     return;
   }
   const now = new Date().toISOString();
@@ -7002,7 +7048,7 @@ async function createBatch() {
     days = parseInt(document.getElementById('nb-days').value) || 14;
   const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
-    toast(t('batch.fillQty'), 'err');
+    fieldError('nb-qty', t('batch.fillQty'));
     return;
   }
   // v67: portioned out of an existing mix. None of the composition and delta
@@ -7014,7 +7060,7 @@ async function createBatch() {
     return;
   }
   if (!bagKg) {
-    toast(t('batch.enterWeight'), 'err');
+    fieldError('nb-weight', t('batch.enterWeight'));
     return;
   }
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
@@ -7038,7 +7084,9 @@ async function createBatch() {
   // under-deducted by half.
   const subTotal = hw + wb + coir;
   if ((hw || wb || coir) && Math.abs(subTotal - 100) > 0.01) {
-    toast(t('batch.substrateExceeds', { sum: subTotal }), 'err');
+    // The sum is of three fields; the first that carries a number is the one
+    // the cursor lands in, because a ring on an empty field explains nothing.
+    fieldError(hw ? 'nb-hw' : wb ? 'nb-wb' : 'nb-coir', t('batch.substrateExceeds', { sum: subTotal }));
     return;
   }
   // Nothing to deduct at all: the substrate block below is skipped and the batch
@@ -8541,7 +8589,7 @@ function confirmAddBags() {
   if (!b) return;
   const qty = parseInt(document.getElementById('ab-qty').value) || 0;
   if (qty < 1) {
-    toast(t('addBags.enterQty'), 'err');
+    fieldError('ab-qty', t('addBags.enterQty'));
     return;
   }
   const confirmBtn = document.getElementById('addbags-confirm-btn');
@@ -8681,7 +8729,7 @@ function confirmHarvest(keepScanning) {
   const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
-    toast(t('harvest.enterWeight'), 'err');
+    fieldError('hp-grams', t('harvest.enterWeight'));
     return;
   }
   // Only when the field is on screen. Reading it regardless would send whatever
@@ -8692,7 +8740,7 @@ function confirmHarvest(keepScanning) {
   // scan modal has moved on is a message about a bag that is already back on the
   // shelf.
   if (rel > g) {
-    toast(t('harvest.releaseTooHigh'), 'err');
+    fieldError('hp-release', t('harvest.releaseTooHigh'));
     return;
   }
   const p = scan.harvestBag;
@@ -11402,7 +11450,7 @@ function logDelivery() {
   const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const note = document.getElementById('del-note').value.trim();
   if (kg <= 0) {
-    toast(t('inv.enterQty'), 'err');
+    fieldError('del-kg', t('inv.enterQty'));
     return;
   }
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
@@ -11446,7 +11494,9 @@ function logAdjustment() {
     delta = parseDecimal(deltaVal) || 0;
     newStock = Math.max(0, cur + delta);
   } else {
-    toast(t('inv.enterAmount'), 'err');
+    // Neither box filled in, so point at the absolute one — it is the first of
+    // the pair and the one that needs no arithmetic to use.
+    fieldError('adj-absolute', t('inv.enterAmount'));
     return;
   }
   const prevStock = inventory.stock[mat] || 0;
@@ -11636,7 +11686,7 @@ function editSupplier(id) {
       notes: document.getElementById('sup-notes').value.trim()
     };
     if (!s.name) {
-      toast(t('zones.nameRequired'), 'err');
+      fieldError('sup-name', t('zones.nameRequired'));
       return;
     }
     if (existing) s.id = existing.id;
@@ -12116,7 +12166,7 @@ async function addZone() {
     .replace(/[^A-Z0-9]/g, '_')
     .replace(/^_+|_+$/g, '');
   if (!id || id.length < 2) {
-    toast(t('zones.errShort'), 'err');
+    fieldError('zone-name', t('zones.errShort'));
     return;
   }
   if (nameRaw.length > 50) {
@@ -12164,7 +12214,7 @@ async function addZone() {
   const capVal = document.getElementById('zone-capacity').value.trim();
   const maxCapacity = capVal ? parseInt(capVal, 10) : null;
   if (maxCapacity !== null && (!Number.isFinite(maxCapacity) || maxCapacity < 1)) {
-    toast(t('zones.errCapacity'), 'err');
+    fieldError('zone-capacity', t('zones.errCapacity'));
     return;
   }
   try {
@@ -12535,11 +12585,11 @@ function saveMStrain() {
   const desc = document.getElementById('ms-desc').value.trim();
   const editId = document.getElementById('ms-edit-id').value;
   if (!name || !kuerzel) {
-    toast(t('strains.required'), 'err');
+    fieldError(name ? 'ms-kuerzel' : 'ms-name', t('strains.required'));
     return;
   }
   if (kuerzel.length < 2 || kuerzel.length > 4) {
-    toast(t('strains.kuerzelLength'), 'err');
+    fieldError('ms-kuerzel', t('strains.kuerzelLength'));
     return;
   }
   const rec = _msReadRecipe();
@@ -13160,7 +13210,7 @@ function msQuickConfirm() {
   const mode = _msQuickCtx.mode;
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
   if (qty < 1) {
-    toast(t('batch.fillQty'), 'err');
+    fieldError('ms-q-qty', t('batch.fillQty'));
     return;
   }
   _msqSaveQty(mode, qty);
@@ -13549,7 +13599,7 @@ function logLabWork() {
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   if (!ms) {
-    toast(t('lab.selectPilzsorte'), 'err');
+    fieldError('lw-st', t('lab.selectPilzsorte'));
     return;
   }
   const sp = ms.name,
@@ -17278,11 +17328,11 @@ async function addUser() {
   const p = document.getElementById('new-password').value;
   const role = document.getElementById('new-role').value;
   if (!u || !p) {
-    toast(t('users.required'), 'err');
+    fieldError(u ? 'new-password' : 'new-username', t('users.required'));
     return;
   }
   if (p.length < 8) {
-    toast(t('users.minPw'), 'err');
+    fieldError('new-password', t('users.minPw'));
     return;
   }
   try {

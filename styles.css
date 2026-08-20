@@ -1923,6 +1923,18 @@ textarea:focus {
    element (`--w-cap: 480px`) rather than as an inline `max-width` declaration,
    because an inline declaration wins against every rule in this file — including
    the phone rule that exists to undo exactly this cap. */
+/* The field a validation message is about. Not a colour alone — a 3px ring, so
+   it survives a red/green colour deficiency and a bright greenhouse — and it is
+   removed on the next keystroke by fieldError() rather than on submit, because a
+   ring that outlives the mistake makes a field look broken while it is being
+   fixed. */
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+  border-color: var(--c-red);
+  box-shadow: 0 0 0 3px var(--c-red-light);
+}
+
 .w-cap {
   max-width: var(--w-cap);
 }
