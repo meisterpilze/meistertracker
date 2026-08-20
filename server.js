@@ -1497,95 +1497,6 @@ function pushHarvestFeedNow(why) {
     .catch((e) => log('warn', 'Immediate harvest feed push errored', { why, error: e.message }));
 }
 
-/**
- * Tell Billbee what may be sold, so every shop connected there hears it.
- *
- * Billbee is the only channel this server writes stock *to*, and that is because
- * it is the only one that is not a shop: it forwards what it is told to all of
- * them. The numbers are the same decision the harvest feed publishes — both read
- * harvest_release — so this is a second road for one decision, never a second
- * decision.
- *
- * Throws, so the manual route can show what went wrong. The automatic caller
- * below swallows it: a release that was saved is a fact, and a hub that is down
- * must not turn it into an error on the screen.
- */
-async function pushBillbeeStock(why) {
-  const cfg = db.getChannelConfig(database, 'billbee');
-  if (!cfg.enabled) return { disabled: true, articles: 0, pushed: 0, failed: 0 };
-  const { levels, skipped, unknownSpecies } = db.billbeeStockLevels(database);
-  const base = { articles: levels.length, notComputable: skipped, unknownSpecies };
-  if (!levels.length) return { ...base, pushed: 0, failed: 0, results: [] };
-  const r = await channels.getChannelProvider('billbee').pushStock(cfg, levels);
-  log('info', 'Billbee stock pushed', { why, articles: levels.length, pushed: r.pushed, failed: r.failed });
-  return { ...base, ...r };
-}
-
-/**
- * The same push, for the moment a release changes — fire-and-forget, next to
- * pushHarvestFeedNow() and for the same reason: lowering a release is the
- * dangerous direction, and the shops must not go on offering the old figure.
- *
- * ⚠️ **Only one push is ever in the air**, and that is not just about saving
- * requests. Billbee is called through one queue that spaces calls 550 ms apart,
- * and a 429 retry re-enters that queue at the back — so with two runs overlapping,
- * the older one's chunk can land *after* the newer one's and republish the very
- * figure somebody has just corrected downwards. A push that arrives while one is
- * running is remembered as a single follow-up instead, and that follow-up reads
- * the levels fresh when it starts. Same lesson as harvest-feed's pushNow().
- *
- * Skipped in worktree mode exactly like the feed. A second copy of the server
- * usually carries a copy of the database with the live credentials still in it,
- * and stock written from a stale copy is worse than stock written late.
- */
-let _billbeeStockInFlight = false;
-let _billbeeStockPending = null;
-function pushBillbeeStockNow(why) {
-  if (WORKTREE_MODE) return;
-  if (_billbeeStockInFlight) {
-    _billbeeStockPending = why;
-    return;
-  }
-  _billbeeStockInFlight = true;
-  pushBillbeeStock(why)
-    .catch((e) => log('warn', 'Billbee stock push failed', { why, error: e.message }))
-    .finally(() => {
-      _billbeeStockInFlight = false;
-      const again = _billbeeStockPending;
-      _billbeeStockPending = null;
-      if (again) pushBillbeeStockNow(again);
-    });
-}
-
-/**
- * The heartbeat that heals a push nobody watched fail.
- *
- * Without it the release hooks are the only sender, and they fire once: if
- * Billbee is unreachable for the half-minute somebody lowers a release, the
- * warning goes to the log and every shop Billbee feeds keeps offering the old
- * figure until the next time a human happens to edit a release — days, or never.
- * The harvest feed has had this from the start ("The timer carries the same
- * numbers a few minutes later regardless"); this is the same promise on the
- * other road. The numbers are absolute and idempotent, so a tick that changes
- * nothing costs one request and tells no shop anything.
- */
-const BILLBEE_STOCK_INTERVAL_MS = 15 * 60 * 1000;
-let _billbeeStockTimer = null;
-function startBillbeeStockTimer() {
-  if (WORKTREE_MODE) return false;
-  if (_billbeeStockTimer) clearInterval(_billbeeStockTimer);
-  _billbeeStockTimer = setInterval(() => pushBillbeeStockNow('timer'), BILLBEE_STOCK_INTERVAL_MS);
-  if (_billbeeStockTimer.unref) _billbeeStockTimer.unref();
-  return true;
-}
-startBillbeeStockTimer();
-
-/** One release change, every road out of this building. */
-function pushReleaseOutward(why) {
-  pushHarvestFeedNow(why);
-  pushBillbeeStockNow(why);
-}
-
 // ── LET'S ENCRYPT CERT MANAGEMENT (native ACME v2) ─────────
 // Pure Node.js — no bash, curl, or acme.sh required.
 // Uses built-in crypto + https for ACME v2 (RFC 8555) with DNS-01 challenge.
@@ -7994,7 +7905,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Only when something was actually set aside. A plain harvest changes
         // nothing the feed publishes, and a push per weighed bag would be a
         // request every few seconds on a picking afternoon.
-        if (released) pushReleaseOutward('release from harvest');
+        if (released) pushHarvestFeedNow('release from harvest');
         broadcastSSE(res);
         jsonOk(res, { id, released, releaseError });
       } catch (err) {
@@ -9383,26 +9294,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
-  // Send the current release levels to Billbee by hand. Billbee then forwards them
-  // to every shop connected there — see pushBillbeeStock().
-  if (req.method === 'POST' && req.url === '/api/channels/billbee/stock') {
-    if (requireAdmin(req, res)) return;
-    // Refused rather than skipped quietly: somebody pressed a button, and a
-    // worktree copy silently doing nothing looks exactly like a successful push.
-    if (WORKTREE_MODE) {
-      jsonErr(res, 409, 'Worktree-Modus: Bestand wird nicht an Billbee gesendet');
-      return;
-    }
-    (async () => {
-      try {
-        jsonOk(res, await pushBillbeeStock('manual'));
-      } catch (err) {
-        jsonErr(res, 502, err.message || 'stock push failed');
-      }
-    })();
-    return;
-  }
-
   // -- Sales-channel OAuth (connect eBay / Etsy) --
   // Admin starts the login; we return the provider's authorize URL for the browser
   // to open. (Token-based admin auth means we can't just 302 the top-level nav.)
@@ -9982,7 +9873,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         if (data.remove) {
           db.deleteHarvestRelease(database, species);
           log('info', 'Harvest release removed', { actor: req.authUser.username, species });
-          pushReleaseOutward('release removed');
+          pushHarvestFeedNow('release removed');
           jsonOk(res, { removed: true, releases: db.listHarvestReleases(database) });
           return;
         }
@@ -10005,7 +9896,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           note: data.note || ''
         });
         log('info', 'Harvest release set', { actor: req.authUser.username, species, grams });
-        pushReleaseOutward('release set');
+        pushHarvestFeedNow('release set');
         jsonOk(res, { releases: db.listHarvestReleases(database) });
       } catch (err) {
         // setHarvestRelease throws on a malformed date; that is a bad request,

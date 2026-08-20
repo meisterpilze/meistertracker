@@ -9582,47 +9582,6 @@ async function syncChannel(channel) {
   }
 }
 
-// Send the released amounts to Billbee, which forwards them to every shop
-// connected there. The unknown-species warning is the whole reason this reports
-// more than a count: a name that does not match a release reads as "sold out"
-// in every shop and looks like nothing at all from here.
-async function pushBillbeeStock() {
-  const st = document.getElementById('billbee-status');
-  if (st) {
-    st.style.display = 'block';
-    st.textContent = t('channels.billbeeStockSending');
-  }
-  try {
-    const r = await apiPost('/api/channels/billbee/stock', {});
-    if (r && r.error) {
-      if (st) st.textContent = '⚠ ' + r.error;
-      return;
-    }
-    if (r && r.disabled) {
-      if (st) st.textContent = '⚠ ' + t('channels.billbeeDisabled');
-      return;
-    }
-    const msg = t('channels.billbeeStockDone', { n: (r && r.pushed) || 0, total: (r && r.articles) || 0 });
-    const bits = ['✓ ' + msg];
-    // Which articles did not arrive, by name. A count alone leaves the operator
-    // nothing to act on, and the commonest cause — an article number Billbee does
-    // not know — is fixed in ten seconds once you can see which one it is.
-    const missed = ((r && r.results) || []).filter((x) => x && x.message).map((x) => x.sku || '?');
-    if (r && r.failed)
-      bits.push('⚠ ' + t('channels.billbeeStockFailed', { n: r.failed, list: missed.slice(0, 6).join(', ') }));
-    // A run that stopped part-way: the articles before the break are live at
-    // Billbee, the ones after it are not. Deliberately not called `error` — that
-    // field is checked above and would hide the counts this line belongs to.
-    if (r && r.stoppedWith) bits.push('⚠ ' + r.stoppedWith);
-    const unknown = (r && r.unknownSpecies) || [];
-    if (unknown.length) bits.push('⚠ ' + t('channels.billbeeUnknownSpecies', { list: unknown.join(', ') }));
-    if (st) st.textContent = bits.join(' · ');
-    setFb(r && (r.failed || r.stoppedWith) ? 'err' : 'ok', msg);
-  } catch (e) {
-    if (st) st.textContent = '⚠ ' + t('common.error');
-  }
-}
-
 async function loadDuckdnsSettings() {
   try {
     const r = await authFetch('/api/duckdns/config');
@@ -21309,7 +21268,6 @@ function initEventListeners() {
   $('billbee-save-btn').addEventListener('click', () => saveChannel('billbee'));
   $('billbee-test-btn').addEventListener('click', () => testChannel('billbee'));
   $('billbee-sync-btn').addEventListener('click', () => syncChannel('billbee'));
-  $('billbee-stock-btn').addEventListener('click', pushBillbeeStock);
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
   $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));

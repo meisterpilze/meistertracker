@@ -109,7 +109,7 @@ window.LANG['pt'] = {
   'orders.mapped': 'Associado',
   'orders.fixmapTitle': 'Associações fixas',
   'orders.fixmapDesc':
-    'Que número de artigo de um canal pertence a que produto. A lista acima só se enche a partir de encomendas — mas para o stock que vai para o Billbee, um número tem de estar associado antes de alguém o encomendar pela primeira vez.',
+    'Que número de artigo de um canal pertence a que produto. A lista acima só se enche a partir de encomendas; aqui um número pode ser associado de antemão, para que a primeira encomenda desse artigo resolva logo para um produto.',
   'orders.fixmapNone': 'Ainda nada associado para este canal.',
   'orders.fixmapNeeds': 'Escolhe um número de artigo e um produto',
   'orders.retired': 'descontinuado',
@@ -1540,15 +1540,9 @@ window.LANG['pt'] = {
   'channels.lastSync': 'Última: {time}',
   'channels.billbeeTitle': 'Billbee',
   'channels.billbeeDesc':
-    'O Billbee não é uma loja, é a central: de lá chegam as encomendas de todos os canais de uma só vez, e para lá vai o stock libertado — o Billbee distribui-o por todas as lojas ligadas. Peça uma chave de API ao Billbee, ative a API na conta Billbee e crie aí uma palavra-passe de API. Importante: assim que o Billbee estiver ativo, as ligações diretas às lojas que o Billbee já recolhe devem ficar desligadas aqui — caso contrário cada encomenda chega duas vezes.',
+    'O Billbee não é uma loja, é a central: de lá chegam as encomendas de todos os canais de uma só vez, para que o planeamento da produção saiba o que é preciso. O Meistertracker só lê — stock, faturas e envios ficam no Billbee. Peça uma chave de API ao Billbee, ative a API na conta Billbee e crie aí uma palavra-passe de API. Importante: assim que o Billbee estiver ativo, as ligações diretas às lojas que o Billbee já recolhe devem ficar desligadas aqui — caso contrário cada encomenda chega duas vezes.',
   'channels.billbeeUser': 'Utilizador Billbee (e-mail)',
   'channels.billbeeApiPassword': 'Palavra-passe da API',
-  'channels.billbeeStock': 'Enviar stock agora',
-  'channels.billbeeStockSending': 'A enviar stock …',
-  'channels.billbeeStockDone': '{n} de {total} artigos enviados para o Billbee',
-  'channels.billbeeStockFailed': '{n} não chegaram: {list}',
-  'channels.billbeeDisabled': 'O Billbee não está ativado',
-  'channels.billbeeUnknownSpecies': 'Espécies sem libertação: {list}',
   'channels.billbeeDoubleImport': 'Encomendas duplicadas: {list} também está ligado diretamente',
   // Print
   'print.barcodeOnly': 'S\u00f3 c\u00f3digo de barras (C\u00f3digo + ID)',

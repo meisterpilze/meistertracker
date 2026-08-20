@@ -427,32 +427,13 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   process from `GET /api/v1/enums/shippingcarriers` rather than hard-coded from a guess — a miss
   costs the carrier id, never the Sendungsnummer, and the carrier name still travels in the
   comment.
-- **Stock out — the reason to connect it at all:** `POST /api/v1/products/updatestockmultiple`,
-  one call for every shop Billbee feeds. What a level *is* stays a question about this lab:
-  Meistertracker keeps no stock figure, it keeps a release, so the quantity is
-  `floor(released grams ÷ grams the article needs)` over the article's `product_components` rows of
-  type `harvest`. An expired release is zero; an article without a harvest component is left out of
-  the push **entirely** rather than pushed as zero, which would delist it in every connected shop;
-  a species the lab has never released comes back in `unknownSpecies`, because a misspelt name and
-  a sold-out one both read as zero. A **retired** article is the one place a zero is right: it is
-  pushed as 0 rather than dropped, or the last number it was ever given would stand in every shop
-  for good — but only for an article number no live article answers for, including a live one whose
-  stock cannot be worked out, or the zero would fill that silence and delist something still on
-  sale. Which releases are live is decided by `activeHarvestReleases()`, on the **lab** day —
-  asking that question in its own words against the UTC day kept expired releases selling until
-  02:00. `AutosubtractReservedAmount` is always on — Billbee knows about orders that are not
-  shipped yet and a release does not. See `db.billbeeStockLevels()`.
-- **Which articles:** the rows of `product_channel_map` for channel `billbee`, and nothing else.
-  They are made in Bestellungen → Zuordnung, which lists what stands and can add one by hand —
-  the unmapped-lines list next to it only ever fills from orders that already exist, so on its own
-  it could never map an article before somebody had bought it.
-- **When it goes out:** the three moments a release changes (the same ones the harvest feed fires
-  on), a 15-minute heartbeat, and a button in Settings → Kanäle. The heartbeat is not optional
-  decoration: the hooks fire once, so without it a push that failed while nobody watched leaves
-  every connected shop on the old figure until a human next edits a release. Only one push is ever
-  in the air — with two overlapping, a 429 retry re-enters the call queue at the back and the older
-  run can land last, republishing the figure somebody has just corrected downwards. Skipped in
-  worktree mode, like the feed.
+- **Stock is read, never written.** Billbee is the commercial side of this business
+  and owns what may be sold; the lab's job with a Billbee order is to make what it says. An
+  earlier draft of this section pushed the harvest releases into Billbee with
+  `updatestockmultiple` — the owner's answer settled it: fresh produce is sold locally and for
+  cash, never through a Billbee channel, so there was nothing for that road to carry. The four
+  commits are on the branch's history if the question ever changes shape (see the note under
+  §11.1).
 - **Throttle:** 2 calls/second per endpoint for one key + user, answered with 429 + `Retry-After`.
   All calls are serialised through one 550 ms queue and a 429 is retried once.
 - **Credentials that cannot work are refused at the keyboard:** a colon breaks basic auth outright
@@ -480,7 +461,6 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
 | `POST /api/products/map`              | admin  | Bind a channel listing → product         |
 | `GET/POST /api/channels/:c/config`    | admin  | Channel credentials + enable/disable     |
 | `POST /api/channels/:c/sync`          | admin  | Force a sync now                         |
-| `POST /api/channels/billbee/stock`    | admin  | Push the released amounts to Billbee (§6.4) |
 | `GET  /api/products/mappings?channel=` | admin | The standing article ↔ listing mappings of one channel |
 | `POST /api/orders/webhook/wix`         | public | Signed Wix webhook                       |
 | `GET/POST /api/orders/webhook/ebay-deletion` | public | eBay account-deletion compliance   |
@@ -548,10 +528,18 @@ better-than-retail rates). Candidates for Germany: **Shipcloud** (API-first, Ger
 side too). *Provider choice is a separate comparison — the design below stays provider-agnostic
 behind a thin `shipping/provider.js` adapter, so swapping later is cheap.*
 
-> **Billbee is connected since §6.4 — as the order hub, not as the label arm.** Labels are bought
-> through `shipping.js` and only the resulting Sendungsnummer is written back to Billbee. Whether
-> the label itself should be bought through Billbee is still open question 4 below; connecting the
-> hub did not answer it, because nothing in §6.4 buys anything.
+> **Billbee is connected since §6.4 — reading only.** The owner buys domestic labels inside
+> Billbee and international ones separately, so Meistertracker is not on the label path at all for
+> this lab, and `pushTracking` only ever fires for a label bought here. That answers open question
+> 4 for Meisterpilze without answering it for the product: a lab that does want Meistertracker to
+> buy labels still needs an aggregator, and the comparison is still owed.
+>
+> The reverse direction — the lab telling Billbee what is in stock — was built and then taken out
+> again: it derived quantities from harvest releases, and this lab sells no fresh produce through
+> Billbee. The durable goods it *does* sell there (growkits, spawn, cultures) would need a
+> finished-goods stock that Meistertracker does not have: `inventory` is substrate materials, and
+> a batch is a production run, not a shelf. That is the feature to build first if the question
+> comes back.
 
 > **Division of labour:** Meistertracker stays the **brain** (orders → production → pack-ready);
 > the aggregator is only the **arm** (label + tracking). One API call between them.

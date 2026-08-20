@@ -108,7 +108,7 @@ window.LANG['en'] = {
   'orders.mapped': 'Mapped',
   'orders.fixmapTitle': 'Standing mappings',
   'orders.fixmapDesc':
-    'Which article number of a channel belongs to which product. The list above only fills from orders — but for the stock that goes out to Billbee, a number has to be mapped before anybody orders it for the first time.',
+    'Which article number of a channel belongs to which product. The list above only fills from orders; here a number can be mapped in advance, so the first order for that article resolves to a product straight away.',
   'orders.fixmapNone': 'Nothing mapped for this channel yet.',
   'orders.fixmapNeeds': 'Pick an article number and a product',
   'orders.retired': 'retired',
@@ -428,15 +428,9 @@ window.LANG['en'] = {
   'channels.lastSync': 'Last: {time}',
   'channels.billbeeTitle': 'Billbee',
   'channels.billbeeDesc':
-    'Billbee is not a shop but the hub: every channel’s orders arrive from there at once, and the released stock goes back the same way — Billbee passes it on to every shop connected to it. Request an API key from Billbee, switch the API on in the Billbee account and create an API password there. Important: once Billbee is on, the direct connections to the shops Billbee already collects from belong switched off here — otherwise every order arrives twice.',
+    'Billbee is not a shop but the hub: every channel\'s orders arrive from there at once, so the production planning knows what is needed. Meistertracker only reads — stock, invoices and shipping stay in Billbee. Request an API key from Billbee, switch the API on in the Billbee account and create an API password there. Important: once Billbee is on, the direct connections to the shops Billbee already collects from belong switched off here — otherwise every order arrives twice.',
   'channels.billbeeUser': 'Billbee user (email)',
   'channels.billbeeApiPassword': 'API password',
-  'channels.billbeeStock': 'Send stock now',
-  'channels.billbeeStockSending': 'Sending stock …',
-  'channels.billbeeStockDone': '{n} of {total} articles sent to Billbee',
-  'channels.billbeeStockFailed': '{n} did not arrive: {list}',
-  'channels.billbeeDisabled': 'Billbee is not enabled',
-  'channels.billbeeUnknownSpecies': 'Species with no release: {list}',
   'channels.billbeeDoubleImport': 'Duplicate orders: {list} is also connected directly',
   // Scan strip
   'scan.action': 'Action',

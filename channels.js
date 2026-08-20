@@ -563,9 +563,10 @@ const ebay = {
 // side — instead of merging the two. So when Billbee is on, the direct connection
 // for every shop it covers belongs off. The shop name still travels in raw_json.
 //
-// **Stock travels the other way**, and that is the reason to connect Billbee at
-// all: one updatestockmultiple call and every connected shop hears the new
-// release. See pushStock.
+// It reads and never writes stock. Billbee is the commercial side of this
+// business and owns what may be sold; the lab's job with a Billbee order is to
+// make what it says. The only thing this provider writes back at all is a
+// Sendungsnummer, and only for a label bought in Meistertracker.
 //
 // Credentials reuse the existing columns, so there is no migration: api_key holds
 // the app's X-Billbee-Api-Key, client_id the Billbee login, client_secret the API
@@ -582,9 +583,6 @@ const BILLBEE_PAGE_SIZE = 250; // the documented maximum
 // order history of every connected channel — and the sync route stops after 20
 // pages regardless, so the walk would never reach today's orders.
 const BILLBEE_WINDOW_DAYS = 30;
-// Stock is pushed in chunks: one body per few hundred articles keeps a partial
-// failure readable (Billbee answers per article) and the request small.
-const BILLBEE_STOCK_CHUNK = 50;
 
 // One queue for every Billbee call in this process, spaced by BILLBEE_MIN_GAP_MS.
 // Per endpoint would be closer to what Billbee actually limits, but the sync and
@@ -846,78 +844,6 @@ const billbee = {
       'Billbee Sendungsnummer'
     );
     return { ok: true };
-  },
-  /**
-   * Push absolute stock levels to Billbee, which forwards them to every connected
-   * shop. `items` is `[{ sku, qty, reason }]` — what a level *is* is a question
-   * about this lab's releases, so db.billbeeStockLevels() answers it and this only
-   * carries the answer.
-   *
-   * Returns `{ pushed, failed, results, stoppedWith }`; a per-article error from
-   * Billbee is reported, never thrown, so one unknown SKU cannot stop the rest of
-   * a push. A transport error stops the run, but only throws while nothing has
-   * gone out yet — see the catch below.
-   *
-   * `stoppedWith`, not `error`: the caller hands this straight to the browser,
-   * where an `error` field is the word for "the whole call failed" and is shown
-   * *instead of* the result. A run that stopped half way has a result, and hiding
-   * how much of it went out is the thing this field exists to prevent.
-   */
-  async pushStock(cfg, items) {
-    const list = (items || []).filter((i) => i && i.sku);
-    const results = [];
-    let pushed = 0;
-    let failed = 0;
-    let stoppedWith = null;
-    for (let i = 0; i < list.length; i += BILLBEE_STOCK_CHUNK) {
-      const slice = list.slice(i, i + BILLBEE_STOCK_CHUNK);
-      const body = slice.map((it) => ({
-        Sku: it.sku,
-        NewQuantity: it.qty,
-        Reason: it.reason || 'Meistertracker',
-        // Billbee knows about orders that are not shipped yet; a release does not.
-        // Without this, a release of 2 kg would be republished in full to every
-        // shop even after 1.5 kg of it had already been sold through one of them.
-        AutosubtractReservedAmount: true
-      }));
-      let j;
-      try {
-        j = await _billbeeFetch(
-          cfg,
-          '/products/updatestockmultiple',
-          { method: 'POST', body: JSON.stringify(body) },
-          'Billbee Bestand'
-        );
-      } catch (e) {
-        // Chunks already sent are live at Billbee. Throwing here would report the
-        // whole push as failed and leave nobody able to say which half of the
-        // catalogue carries new numbers. The first chunk is the exception:
-        // nothing is out yet, and a wrong key or a dead network has to reach the
-        // caller as an error rather than as a tidy "0 of 120 sent".
-        if (!results.length) throw e;
-        stoppedWith = e.message || String(e);
-        break;
-      }
-      const rows = Array.isArray(j) ? j : [j];
-      rows.forEach((r, n) => {
-        const data = (r && r.Data) || {};
-        // Billbee answers 200 with a per-article failure for the ordinary case —
-        // an SKU it does not know — and puts it in either field depending on the
-        // kind. Reading one and counting the other reported "50 of 50 sent" over
-        // articles that never moved.
-        const err = (r && r.ErrorMessage) || data.Message || null;
-        const sku = data.SKU || (slice[n] && slice[n].sku) || null;
-        if (err) failed++;
-        else pushed++;
-        results.push({ sku, qty: slice[n] ? slice[n].qty : null, stock: data.CurrentStock, message: err });
-      });
-      // A short answer means articles nobody reported on. They are not pushes.
-      for (let n = rows.length; n < slice.length; n++) {
-        failed++;
-        results.push({ sku: slice[n].sku, qty: slice[n].qty, stock: undefined, message: 'keine Antwort' });
-      }
-    }
-    return { pushed, failed, results, stoppedWith };
   }
 };
 

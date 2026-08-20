@@ -109,7 +109,7 @@ window.LANG['de'] = {
   'orders.mapped': 'Zugeordnet',
   'orders.fixmapTitle': 'Feste Zuordnungen',
   'orders.fixmapDesc':
-    'Welche Artikelnummer eines Kanals zu welchem Produkt gehört. Die Liste darüber füllt sich nur aus Bestellungen — für den Bestand, der an Billbee hinausgeht, muss eine Nummer aber schon zugeordnet sein, bevor sie jemand zum ersten Mal bestellt.',
+    'Welche Artikelnummer eines Kanals zu welchem Produkt gehört. Die Liste darüber füllt sich nur aus Bestellungen; hier lässt sich eine Nummer schon vorher zuordnen, dann löst die erste Bestellung dieses Artikels sofort auf ein Produkt auf.',
   'orders.fixmapNone': 'Für diesen Kanal ist noch nichts zugeordnet.',
   'orders.fixmapNeeds': 'Artikelnummer und Produkt wählen',
   'orders.retired': 'ausgelistet',
@@ -430,15 +430,9 @@ window.LANG['de'] = {
   'channels.lastSync': 'Zuletzt: {time}',
   'channels.billbeeTitle': 'Billbee',
   'channels.billbeeDesc':
-    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, und dorthin geht der freigegebene Bestand — Billbee verteilt ihn an jeden angeschlossenen Shop. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Wichtig: Sobald Billbee an ist, gehören die Direktverbindungen zu den Shops, die Billbee schon abholt, hier aus — sonst kommt jede Bestellung doppelt.',
+    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, damit die Produktionsplanung weiß, was gebraucht wird. Meistertracker liest nur — Bestand, Rechnungen und Versand bleiben in Billbee. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Wichtig: Sobald Billbee an ist, gehören die Direktverbindungen zu den Shops, die Billbee schon abholt, hier aus — sonst kommt jede Bestellung doppelt.',
   'channels.billbeeUser': 'Billbee-Benutzer (E-Mail)',
   'channels.billbeeApiPassword': 'API-Passwort',
-  'channels.billbeeStock': 'Bestand jetzt senden',
-  'channels.billbeeStockSending': 'Sende Bestand …',
-  'channels.billbeeStockDone': '{n} von {total} Artikeln an Billbee gesendet',
-  'channels.billbeeStockFailed': '{n} nicht angekommen: {list}',
-  'channels.billbeeDisabled': 'Billbee ist nicht aktiviert',
-  'channels.billbeeUnknownSpecies': 'Sorten ohne Freigabe: {list}',
   'channels.billbeeDoubleImport': 'Doppelte Bestellungen: {list} ist zusätzlich direkt verbunden',
   // Scan strip
   'scan.action': 'Aktion',
