@@ -1956,6 +1956,8 @@ window.LANG['de'] = {
   'search.opens': 'öffnet {id}',
   'search.none': 'Nichts gefunden für „{q}“',
   'search.more': '+ {n} weitere — tippe weiter',
+  'search.hits.one': '{n} Treffer',
+  'search.hits.other': '{n} Treffer',
   'search.gBatches': 'Chargen',
   'search.gCultures': 'Kulturen',
   'search.gStrains': 'Pilzsorten',

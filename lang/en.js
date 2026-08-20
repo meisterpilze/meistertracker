@@ -1933,6 +1933,8 @@ window.LANG['en'] = {
   'search.opens': 'opens {id}',
   'search.none': 'Nothing found for “{q}”',
   'search.more': '+ {n} more — keep typing',
+  'search.hits.one': '{n} result',
+  'search.hits.other': '{n} results',
   'search.gBatches': 'Batches',
   'search.gCultures': 'Cultures',
   'search.gStrains': 'Strains',

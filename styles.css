@@ -3863,6 +3863,21 @@ tr:hover td {
 .gs-esc-x {
   display: none;
 }
+/* Out of sight, still announced. Not display:none and not visibility:hidden —
+   both take an element out of the accessibility tree, which is the one thing
+   this element exists to be in. */
+.gs-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .gs-group {
   padding: 8px 14px 3px;
   font-size: max(11px, var(--fs-min));

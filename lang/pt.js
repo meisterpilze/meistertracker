@@ -1951,6 +1951,8 @@ window.LANG['pt'] = {
   'search.opens': 'abre {id}',
   'search.none': 'Nada encontrado para “{q}”',
   'search.more': '+ {n} outros — continue a escrever',
+  'search.hits.one': '{n} resultado',
+  'search.hits.other': '{n} resultados',
   'search.gBatches': 'Lotes',
   'search.gCultures': 'Culturas',
   'search.gStrains': 'Espécies',

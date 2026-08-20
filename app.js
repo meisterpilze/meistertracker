@@ -20365,14 +20365,23 @@ function gsRender(keep) {
   gsHits.forEach((rec, i) => {
     if (rec.type !== group) {
       group = rec.type;
-      html += '<div class="gs-group">' + esc(t(GS_GROUP[group])) + '</div>';
+      // role=presentation: a listbox may hold options, and a heading is not
+      // one. Left as a plain div it was an unlabelled child of the list and
+      // some screen readers count it as an item.
+      html += '<div class="gs-group" role="presentation">' + esc(t(GS_GROUP[group])) + '</div>';
     }
     html += gsRowHtml(rec, i, q);
   });
-  if (!gsHits.length) html = '<div class="gs-empty">' + esc(t('search.none', { q: q })) + '</div>';
+  if (!gsHits.length) html = '<div class="gs-empty" role="presentation">' + esc(t('search.none', { q: q })) + '</div>';
   else if (all.length > gsHits.length)
-    html += '<div class="gs-more">' + esc(t('search.more', { n: all.length - gsHits.length })) + '</div>';
+    html +=
+      '<div class="gs-more" role="presentation">' + esc(t('search.more', { n: all.length - gsHits.length })) + '</div>';
   box.innerHTML = html;
+  // The count, out of sight. The listbox cannot be the live region — it would
+  // read every row on every keystroke — and #gs-hint lives in .gs-foot, which a
+  // phone does not show at all.
+  const live = document.getElementById('gs-live');
+  if (live) live.textContent = tp('search.hits', all.length);
   gsSelect();
 }
 
@@ -20460,9 +20469,18 @@ function gsOpen() {
   const input = document.getElementById('gs-q');
   input.value = '';
   gsRender();
-  // The delay is the same 80 ms openNote() uses: focusing an element that is
-  // still display:none is a no-op, and on iOS it costs the keyboard.
-  setTimeout(() => input.focus(), 80);
+  // Now, inside the gesture that opened this. The 80 ms delay copied from
+  // openNote() was there because focusing a display:none element is a no-op —
+  // but the class above has already made this one visible, and iOS opens the
+  // on-screen keyboard only for a focus() that is still part of the tap. After
+  // a timeout the field had the caret and the phone had no keyboard, which for
+  // a search box is the whole of it. The timeout stays as a fallback for the
+  // case the comment was really about, and does nothing when the first one
+  // worked.
+  input.focus();
+  setTimeout(() => {
+    if (document.activeElement !== input) input.focus();
+  }, 80);
 }
 
 function gsClose() {

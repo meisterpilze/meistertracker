@@ -203,6 +203,11 @@
           data-i18n-aria-label="search.results"
           aria-label="Treffer"
         ></div>
+        <!-- How many. The listbox itself must not be the live region — it would
+             read every row on every keystroke — and the hint below it is inside
+             .gs-foot, which a phone does not show. So: a count, out of sight,
+             announced when it changes. -->
+        <div id="gs-live" class="gs-live" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="gs-foot">
           <span data-i18n="search.keys">↑↓ wählen · ↵ öffnen</span>
           <span id="gs-hint" class="gs-hint"></span>

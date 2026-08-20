@@ -467,6 +467,48 @@ describe('what a row says, and under which heading', () => {
   });
 });
 
+describe('what a screen reader is told', () => {
+  it('keeps the listbox to options', () => {
+    // A listbox may hold options. Group headings, the empty line and the
+    // "+n more" line are none of those, and left as plain divs some readers
+    // count them as items of the list.
+    const render = APP.match(/function gsRender\(keep\) \{[\s\S]*?\n\}/)[0];
+    for (const cls of ['gs-group', 'gs-empty', 'gs-more'])
+      assert.match(
+        render,
+        new RegExp(`class="${cls}" role="presentation"`),
+        `.${cls} is an unlabelled child of the list`
+      );
+  });
+
+  it('says how many, somewhere a phone will hear it', () => {
+    // Not on the listbox — that would read every row on every keystroke — and
+    // not #gs-hint, which lives in .gs-foot and is display:none below 769px.
+    assert.match(HTML, /id="gs-live"[^>]*role="status"/);
+    assert.match(HTML, /id="gs-live"[^>]*aria-live="polite"/);
+    assert.match(APP, /live\.textContent = tp\('search\.hits', all\.length\);/);
+    // Hidden from the eye, not from the tree.
+    const rule = CSS.match(/\.gs-live \{[\s\S]*?\n\}/);
+    assert.ok(rule, '.gs-live has no styles, so it is simply visible');
+    assert.doesNotMatch(rule[0], /display: none/);
+    assert.doesNotMatch(rule[0], /visibility: hidden/);
+    assert.match(rule[0], /clip-path: inset\(50%\)/);
+  });
+
+  it('takes the caret inside the tap that asked for it', () => {
+    // iOS opens the on-screen keyboard only for a focus() that is still part
+    // of the gesture. Behind a timeout the field had the caret and the phone
+    // had no keyboard, which for a search box is the whole of it.
+    const open = APP.match(/function gsOpen\(\) \{[\s\S]*?\n\}/)[0];
+    const sofort = open.indexOf('input.focus();');
+    const spaeter = open.indexOf('setTimeout(');
+    assert.ok(sofort >= 0, 'nothing focuses the field');
+    assert.ok(sofort < spaeter, 'the only focus() is still behind a timeout');
+    // And the fallback must not steal focus back from wherever it went.
+    assert.match(open, /if \(document\.activeElement !== input\) input\.focus\(\);/);
+  });
+});
+
 describe('the palette on a phone', () => {
   it('bounds the box against the viewport the keyboard leaves behind', () => {
     // .gs-bg is position:fixed inset:0, so `max-height: 100%` on the box was
