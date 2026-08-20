@@ -1954,5 +1954,9 @@ window.LANG['de'] = {
   'work.bMixGone': 'Aus {id} lässt sich nichts mehr ziehen. Bitte einen anderen Ansatz wählen.',
   'batch.printTitle': 'Etiketten drucken',
   'batch.printLater': 'Später',
-  'batch.printFor': '{id} — {n} Beutel eingelagert'
+  'batch.printFor': '{id} — {n} Beutel eingelagert',
+  'work.installWhy': 'Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.',
+  'work.installApple': 'Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".',
+  'work.installDo': 'Aufs Handy legen',
+  'work.installDone': 'Liegt jetzt auf dem Startbildschirm.'
 };

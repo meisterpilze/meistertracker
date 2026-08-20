@@ -2226,6 +2226,20 @@
               <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
             </button>
           </div>
+          <!-- Aufs Handy legen. Steht nur da, wenn der Browser die Installation
+               anbietet oder Safari sie von Hand verlangt — und nie, wenn die App
+               ohnehin schon als Symbol läuft. Zwei Texte statt einem, damit die
+               Sprachumschaltung beide übersetzen kann, ohne dass JavaScript
+               dazwischenschreibt. -->
+          <div class="wk-install" id="wk-install" hidden>
+            <span id="wk-install-why" data-i18n="work.installWhy" hidden>
+              Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.
+            </span>
+            <span id="wk-install-apple" data-i18n="work.installApple" hidden>
+              Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".
+            </span>
+            <button class="btn btn-sm" id="wk-install-btn" data-i18n="work.installDo" hidden>Aufs Handy legen</button>
+          </div>
         </div>
 
         <!-- ══ DASHBOARD ══ -->

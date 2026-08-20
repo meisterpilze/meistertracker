@@ -1931,5 +1931,9 @@ window.LANG['en'] = {
   'work.bMixGone': 'There is nothing left to draw from {id}. Please pick another mix.',
   'batch.printTitle': 'Print labels',
   'batch.printLater': 'Later',
-  'batch.printFor': '{id} — {n} bags placed'
+  'batch.printFor': '{id} — {n} bags placed',
+  'work.installWhy': 'Put the app on your phone — it then opens from an icon, without the browser bar.',
+  'work.installApple': 'To add it: tap Share below, then “Add to Home Screen”.',
+  'work.installDo': 'Add to home screen',
+  'work.installDone': 'It is on your home screen now.'
 };

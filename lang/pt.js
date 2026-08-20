@@ -1949,5 +1949,9 @@ window.LANG['pt'] = {
   'work.bMixGone': 'Não há mais nada para retirar de {id}. Escolha outra mistura.',
   'batch.printTitle': 'Imprimir etiquetas',
   'batch.printLater': 'Depois',
-  'batch.printFor': '{id} — {n} sacos armazenados'
+  'batch.printFor': '{id} — {n} sacos armazenados',
+  'work.installWhy': 'Coloque o app no celular — abre por um ícone, sem a barra do navegador.',
+  'work.installApple': 'Para adicionar: toque em Compartilhar abaixo e depois em “Adicionar à Tela de Início”.',
+  'work.installDo': 'Adicionar à tela inicial',
+  'work.installDone': 'Já está na tela inicial.'
 };
