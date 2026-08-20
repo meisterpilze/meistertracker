@@ -1882,6 +1882,12 @@ textarea:focus {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
+/* `hidden` muss auch auf Knöpfen wirken. Die display-Angabe unten ist eine
+   Autoren-Regel und schlägt damit die [hidden]-Regel des Browsers; ohne diese
+   Ausnahme bleibt ein Knopf mit hidden sichtbar (siehe .worktree-banner). */
+.btn[hidden] {
+  display: none;
+}
 .btn {
   padding: var(--pad-btn);
   min-height: var(--tap);

@@ -1860,7 +1860,6 @@ window.LANG['en'] = {
   'work.receiptMove': '{n} bags moved to {zone}',
   'work.rBatch': 'Batch',
   'work.rBags': 'Bags',
-  'work.rBagsVal': '{n} of {total} · flush {flush}',
   'work.rReleased': 'Released',
   'work.rReleasedYes': 'yes — goes to the shop',
   'work.rReleasedNo': 'no — stays in stock',
@@ -1883,7 +1882,6 @@ window.LANG['en'] = {
   'work.bDraw': '{qty} × {kg} kg = {need} kg out of the mix',
   'work.bRest': '{kg} kg left afterwards',
   'work.bShort': 'the mix cannot cover it, {kg} kg short',
-  'work.bNoMix': 'There is no open substrate mix. Make one first.',
   'work.bRecipe': 'Recipe {name}',
   'work.bChanged': ' — changed by hand',
   'work.bFromRecipe': ' — from the recipe',
@@ -1927,5 +1925,8 @@ window.LANG['en'] = {
   'work.mAnother': 'Another mix',
   'work.flushN': 'flush {n}',
   'work.rBagsVal2': '{n} of {total}',
-  'work.bookFailed': '{bag} could not be booked: {err}'
+  'work.bookFailed': '{bag} could not be booked: {err}',
+  'work.flushAuto': 'per bag',
+  'work.rReleasedPartial': 'yes — {n} failed',
+  'work.bMixGone': 'There is nothing left to draw from {id}. Please pick another mix.'
 };
