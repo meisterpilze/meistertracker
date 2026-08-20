@@ -637,6 +637,39 @@
       </div>
     </div>
 
+    <!-- Etiketten drucken: erscheint direkt nach dem Anlegen einer Charge.
+         Vorher stand das als Karte am Ende der Charge-Seite — der Zonenwähler
+         schloss sich, und das Nächste, was anstand, lag außerhalb des Bildes. -->
+    <div class="modal-bg" id="m-batch-print" role="dialog" aria-modal="true" aria-labelledby="m-batch-print-title" hidden>
+      <div class="modal" style="max-width: 480px">
+        <div class="wkf-head">
+          <h3 id="m-batch-print-title" data-i18n="batch.printTitle">Etiketten drucken</h3>
+          <button id="nbp-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="nb-result">
+          <div id="nbp-head" style="font-size: 13px; color: var(--c-text-sec); margin-bottom: 8px"></div>
+          <div class="sec" data-i18n="batch.generatedIds">Generated bag IDs</div>
+          <div
+            id="nb-bags"
+            style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto"
+          ></div>
+        </div>
+        <!-- Der Druckknopf steht ganz oben und über die volle Breite: er ist der
+             Grund, warum der Dialog aufgeht. Die beiden Auswege darunter. -->
+        <div class="nbp-btns">
+          <button id="prt-25" class="btn btn-p" data-i18n="batch.printLabels">Print labels for this batch</button>
+          <div class="nbp-sub">
+            <button id="prt-25-opts" class="btn" data-i18n="batch.printOptions">Print options…</button>
+            <button id="nbp-later" class="btn" data-i18n="batch.printLater">Später</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Move bag modal -->
     <div class="modal-bg" id="m-locmove" role="dialog" aria-modal="true" aria-labelledby="lm-title" hidden>
       <div class="modal" style="max-width: 420px">
@@ -2225,6 +2258,20 @@
               <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
             </button>
           </div>
+          <!-- Aufs Handy legen. Steht nur da, wenn der Browser die Installation
+               anbietet oder Safari sie von Hand verlangt — und nie, wenn die App
+               ohnehin schon als Symbol läuft. Zwei Texte statt einem, damit die
+               Sprachumschaltung beide übersetzen kann, ohne dass JavaScript
+               dazwischenschreibt. -->
+          <div class="wk-install" id="wk-install" hidden>
+            <span id="wk-install-why" data-i18n="work.installWhy" hidden>
+              Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.
+            </span>
+            <span id="wk-install-apple" data-i18n="work.installApple" hidden>
+              Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".
+            </span>
+            <button class="btn btn-sm" id="wk-install-btn" data-i18n="work.installDo" hidden>Aufs Handy legen</button>
+          </div>
         </div>
 
         <!-- ══ DASHBOARD ══ -->
@@ -2725,29 +2772,6 @@
                 </div>
               </div>
             </div>
-              <div class="card" id="nb-result" style="display: none">
-                <div class="sec" data-i18n="batch.generatedIds">Generated bag IDs</div>
-                <div
-                  id="nb-bags"
-                  style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 250px; overflow-y: auto"
-                ></div>
-                <div
-                  style="
-                    border-top: 1px solid var(--c-border);
-                    margin-top: 12px;
-                    padding-top: 12px;
-                    display: flex;
-                    gap: 8px;
-                  "
-                >
-                  <button id="prt-25" class="btn btn-p" style="flex: 1" data-i18n="batch.printLabels">
-                    Print labels for this batch
-                  </button>
-                  <button id="prt-25-opts" class="btn" style="flex: 0 0 auto" data-i18n="batch.printOptions">
-                    Print options…
-                  </button>
-                </div>
-              </div>
           </div>
           <!-- Harvests -->
           <div class="sp" id="sp-batch-harvest">

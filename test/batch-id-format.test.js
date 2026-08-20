@@ -14,11 +14,9 @@
 // actually passes it, and checks every call site lands on the Kürzel.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
+const { quelle, hebe } = require('./helpers/quelle');
 
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const SRC = quelle();
 
 // Named so a failure says which function moved, rather than "unexpected token".
 const TEILE = [
@@ -27,15 +25,7 @@ const TEILE = [
   [/^const genBatchId = \([\s\S]*?\n\};/m, 'genBatchId()']
 ];
 
-function lift() {
-  const out = [];
-  for (const [re, name] of TEILE) {
-    const m = SRC.match(re);
-    assert.ok(m, name + ' not found in app.js — the test needs updating with it');
-    out.push(m[0]);
-  }
-  return out.join('\n');
-}
+const TEILE_SRC = hebe(TEILE, SRC);
 
 const STRAINS = [
   { id: 1, name: 'Black Pearl King Oyster', kuerzel: 'BPKO' },
@@ -60,11 +50,12 @@ function idsFromCallSites(ms) {
   assert.ok(args.length >= 2, 'expected createBatch() to generate an ID on both the plain and the substrate path');
   return args.map((arg) => ({
     arg,
-    id: new Function('ms', 'mushroomStrains', 'batches', lift() + '\n' + locals + '\nreturn genBatchId(' + arg + ');')(
-      ms,
-      STRAINS,
-      []
-    )
+    id: new Function(
+      'ms',
+      'mushroomStrains',
+      'batches',
+      TEILE_SRC + '\n' + locals + '\nreturn genBatchId(' + arg + ');'
+    )(ms, STRAINS, [])
   }));
 }
 
@@ -85,7 +76,7 @@ describe('batch ID prefix', () => {
   });
 
   it('still falls back to four letters for a species with no strain entry', () => {
-    const genBatchId = new Function('mushroomStrains', 'batches', lift() + '\nreturn genBatchId;')(STRAINS, []);
+    const genBatchId = new Function('mushroomStrains', 'batches', TEILE_SRC + '\nreturn genBatchId;')(STRAINS, []);
     assert.match(genBatchId('Enoki'), /^ENOK-\d{6}-01$/);
     assert.match(genBatchId('Reishi'), /^REIS-\d{6}-01$/);
   });

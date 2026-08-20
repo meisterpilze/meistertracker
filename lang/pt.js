@@ -1867,7 +1867,6 @@ window.LANG['pt'] = {
   'work.receiptMove': '{n} sacos movidos para {zone}',
   'work.rBatch': 'Lote',
   'work.rBags': 'Sacos',
-  'work.rBagsVal': '{n} de {total} · flush {flush}',
   'work.rReleased': 'Liberado',
   'work.rReleasedYes': 'sim — vai para a loja',
   'work.rReleasedNo': 'não — fica no estoque',
@@ -1890,7 +1889,6 @@ window.LANG['pt'] = {
   'work.bDraw': '{qty} × {kg} kg = {need} kg da mistura',
   'work.bRest': 'depois restam {kg} kg',
   'work.bShort': 'a mistura não cobre, faltam {kg} kg',
-  'work.bNoMix': 'Não há mistura de substrato aberta. Prepare uma primeiro.',
   'work.bRecipe': 'Receita {name}',
   'work.bChanged': ' — ajustado à mão',
   'work.bFromRecipe': ' — da receita',
@@ -1934,5 +1932,15 @@ window.LANG['pt'] = {
   'work.mAnother': 'Outra mistura',
   'work.flushN': 'flush {n}',
   'work.rBagsVal2': '{n} de {total}',
-  'work.bookFailed': '{bag} não pôde ser registrado: {err}'
+  'work.bookFailed': '{bag} não pôde ser registrado: {err}',
+  'work.flushAuto': 'por saco',
+  'work.rReleasedPartial': 'sim — {n} falharam',
+  'work.bMixGone': 'Não há mais nada para retirar de {id}. Escolha outra mistura.',
+  'batch.printTitle': 'Imprimir etiquetas',
+  'batch.printLater': 'Depois',
+  'batch.printFor': '{id} — {n} sacos armazenados',
+  'work.installWhy': 'Coloque o app no celular — abre por um ícone, sem a barra do navegador.',
+  'work.installApple': 'Para adicionar: toque em Compartilhar abaixo e depois em “Adicionar à Tela de Início”.',
+  'work.installDo': 'Adicionar à tela inicial',
+  'work.installDone': 'Já está na tela inicial.'
 };

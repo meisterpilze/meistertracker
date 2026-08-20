@@ -30,33 +30,42 @@
 // What is left is a rate per address, refilling on its own, refunded on success.
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
+const { quelle } = require('./helpers/quelle');
 
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+const SRC = quelle('server.js');
 
 // Measured against the S-14 parameters (db.js SCRYPT_PARAMS) — an order of
 // magnitude, not a promise about any particular machine.
 const HASH_SEKUNDEN = 0.276;
 
+let kehrbesen = null;
+
 function laden() {
   const start = SRC.indexOf('const LOGIN_MAX_ATTEMPTS');
-  const endMarker = 'function clearLoginAttemptsPerUser(username) {\n  loginAttemptsPerUser.delete(username);\n}';
-  const end = SRC.indexOf(endMarker);
-  assert.ok(start >= 0 && end > start, 'the login throttle block has moved');
+  // Über einen regulären Ausdruck statt indexOf mit fester \n-Kette: die Quelle
+  // hat im Windows-Arbeitsbaum CRLF und im Repo LF, und eine feste Kette findet
+  // den Block dort nie. Der Test meldete dann "verschoben", obwohl nichts
+  // verschoben war — lokal rot, auf CI grün.
+  const endeRe =
+    /function clearLoginAttemptsPerUser\(username\) \{\r?\n {2}loginAttemptsPerUser\.delete\(username\);\r?\n\}/;
+  const ende = SRC.match(endeRe);
+  assert.ok(start >= 0 && ende && ende.index > start, 'the login throttle block has moved');
   const logs = [];
   const api = new Function(
     'log',
     'setInterval',
-    SRC.slice(start, end + endMarker.length) +
+    SRC.slice(start, ende.index + ende[0].length) +
       '\nreturn { takeLoginKdfToken, refundLoginKdfToken, loginKdfTokens, LOGIN_KDF_BURST,' +
       ' LOGIN_KDF_REFILL_MS, LOGIN_KDF_MAX_QUELLEN, LOGIN_DELAY_MAX_PENDING, LOGIN_DELAY_MAX_MS };'
   )(
     (...a) => logs.push(a),
     // The sweeper is wired with .unref() in the real process; the lifted copy
-    // must not leave a live timer behind in the test runner.
-    () => ({ unref: () => {} })
+    // must not leave a live timer behind in the test runner — and the callback
+    // is kept so it can be run on demand rather than waited for.
+    (fn) => {
+      kehrbesen = fn;
+      return { unref: () => {} };
+    }
   );
   return { ...api, logs };
 }
@@ -124,6 +133,30 @@ describe('the budget belongs to one address', () => {
     const proSekunde = 1000 / t.LOGIN_KDF_REFILL_MS;
     const anteil = proSekunde * HASH_SEKUNDEN;
     assert.ok(anteil < 0.1, 'one address may hold ' + anteil.toFixed(3) + ' of the thread — too much');
+  });
+
+  it('actually forgets an address that stopped asking', () => {
+    // ⚠️ The first version read e.tokens straight out of the entry, and that
+    // number is only brought up to date by a call. An address that spent one
+    // token and never came back therefore sat at burst-1 for ever and was never
+    // swept — so this cleaned nothing at all, and the map only shrank through
+    // the LRU eviction that exists as a backstop. Green, silent, and useless.
+    const jetzt = Date.now();
+    for (let i = 0; i < 50; i++) t.takeLoginKdfToken('alt-' + i, jetzt - 3_600_000);
+    assert.equal(t.loginKdfTokens.size, 50);
+    assert.ok(typeof kehrbesen === 'function', 'the sweeper is not registered any more');
+    kehrbesen();
+    assert.equal(t.loginKdfTokens.size, 0, 'an hour-old address must be gone');
+  });
+
+  it('keeps an address that is still spending', () => {
+    const jetzt = Date.now();
+    // Drained just now: it has an empty budget and must not be forgotten, or
+    // forgetting would hand it a fresh one.
+    for (let i = 0; i < t.LOGIN_KDF_BURST; i++) t.takeLoginKdfToken('aktiv', jetzt);
+    kehrbesen();
+    assert.equal(t.loginKdfTokens.has('aktiv'), true, 'a drained address must survive the sweep');
+    assert.equal(t.takeLoginKdfToken('aktiv', jetzt), false, 'and keep its empty budget');
   });
 
   it('keeps the table of addresses bounded', () => {

@@ -1872,7 +1872,6 @@ window.LANG['de'] = {
   'work.receiptMove': '{n} Beutel nach {zone} umgezogen',
   'work.rBatch': 'Charge',
   'work.rBags': 'Beutel',
-  'work.rBagsVal': '{n} von {total} · Flush {flush}',
   'work.rReleased': 'Freigegeben',
   'work.rReleasedYes': 'ja — geht in den Verkauf',
   'work.rReleasedNo': 'nein — bleibt im Lager',
@@ -1895,7 +1894,6 @@ window.LANG['de'] = {
   'work.bDraw': '{qty} × {kg} kg = {need} kg aus dem Ansatz',
   'work.bRest': 'danach bleiben {kg} kg',
   'work.bShort': 'der Ansatz reicht nicht, {kg} kg zu wenig',
-  'work.bNoMix': 'Es gibt keinen offenen Substrat-Ansatz. Setze zuerst einen an.',
   'work.bRecipe': 'Rezept {name}',
   'work.bChanged': ' — von Hand angepasst',
   'work.bFromRecipe': ' — aus dem Rezept',
@@ -1939,5 +1937,15 @@ window.LANG['de'] = {
   'work.mAnother': 'Noch ein Ansatz',
   'work.flushN': 'Flush {n}',
   'work.rBagsVal2': '{n} von {total}',
-  'work.bookFailed': '{bag} konnte nicht gebucht werden: {err}'
+  'work.bookFailed': '{bag} konnte nicht gebucht werden: {err}',
+  'work.flushAuto': 'je Beutel',
+  'work.rReleasedPartial': 'ja — {n} fehlgeschlagen',
+  'work.bMixGone': 'Aus {id} lässt sich nichts mehr ziehen. Bitte einen anderen Ansatz wählen.',
+  'batch.printTitle': 'Etiketten drucken',
+  'batch.printLater': 'Später',
+  'batch.printFor': '{id} — {n} Beutel eingelagert',
+  'work.installWhy': 'Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.',
+  'work.installApple': 'Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".',
+  'work.installDo': 'Aufs Handy legen',
+  'work.installDone': 'Liegt jetzt auf dem Startbildschirm.'
 };
