@@ -453,15 +453,17 @@ work, and it is the first thing Phase 2 does.
   keeps the main navigation and closes on arrival like every other page; the swap is
   behind a `min-width: 769px`, where the sidebar is still Admin's only navigation.
 
-  ➖ **The drawer still repeats the bottom nav.** Measured at 375px: 19 rows, 868px of
-  content in a 655px viewport, so 5 of 14 destinations sit below the fold — and the five
-  the bottom bar already shows permanently (Arbeitsgänge, Dashboard, Chargen, Labor,
-  Kalender) are among them. Hiding those five below 769px would fit the rest on one screen
-  without scrolling. Not done, and deliberately: the only way to identify them in CSS is
-  by id, one group ("Arbeiten") would lose all three of its entries and leave an orphaned
-  heading, and the coupling rots silently the day the bottom nav changes. It is worth
-  doing with a real mechanism — the bottom nav emitting the list it owns — not with five
-  hardcoded selectors.
+  ➖ ✅ **The drawer repeated the bottom nav**, and this is now done with the mechanism
+  the note asked for rather than the five selectors it refused. The mechanism turned out
+  to already exist: the bar's buttons are wired by walking
+  `['bn-work','bn-dash','bn-batch','bn-lab','bn-cal']` and pairing each with
+  `'n-' + bnId.slice(3)`. That list *is* the list the note wanted the bar to emit, and
+  marking the twin from inside that loop cannot drift — adding or removing a bar entry
+  changes both halves in one edit. The orphaned heading is derived too: a group label
+  whose entries are all marked is marked with them, so "Arbeiten" goes without being
+  named. *Measured at 375px with the drawer open: 33 visible rows → 27, content 1062px →
+  810px in an 812px viewport. It fits without scrolling.* An assertion fails if the
+  stylesheet ever hides a drawer row by id, which is the failure this note predicted.
 
   ➖ ✅ **`.sb-group-label` was 10px**, the smallest text in the app and three below the
   floor, on all five drawer headings. Deferred here to "its own token" and then closed by
@@ -742,8 +744,14 @@ should not be claimed as automated.
 1. **Is the Feld/Büro split in §3 right?** Specifically `p-dash` and `p-strains` in Büro,
    and `p-inv` split across both (Bestand ansehen is Feld, Bestandspflege is Büro) — that
    page may need to be cut in two rather than assigned.
-2. **56px or 48px** as the Feld target? 56 is better with gloves and costs roughly one list
-   row per screen. Recommend 56 for Feld, 48 for Büro; it is one token either way.
+2. ~~**56px or 48px** as the Feld target?~~ **Both, and the answer is two sentinels rather
+   than one number.** `--tap-min` is 56px, `--tap-sm-min` is 48px, and the rule for picking
+   is which kind of screen a control lives on. What the work added to the original
+   recommendation: chrome that rides along on *every* screen — the topbar bell, the drawer
+   toggle, the undo toast — takes the 48px one, because 56px of furniture on a phone is
+   paid for by the content underneath it. Having only the Feld floor as a sentinel is what
+   left that chrome at 26–36px through four phases; there was nothing to floor it with
+   that did not also make it huge.
 3. ~~**Calendar on phone** — agenda list (recommended) or keep the month grid with a bigger
    cell minimum?~~ **Settled by arithmetic rather than by taste, and shipped.** A bigger
    cell minimum cannot work: seven columns at the 44px floor need 316px of grid, which
@@ -752,10 +760,15 @@ should not be claimed as automated.
    is 47.9px wide and gives an event 29.9px of text at 10px type: four glyphs and an
    ellipsis. Week view is worse at 40.7px per column. **The constraint is horizontal and
    no minimum height reaches it.** Agenda, per item 5 above.
-4. **Bridge lifetime.** Is "gone by the end of Phase 5" a commitment or an aspiration? It
-   changes whether Phase 3 is one batch or three.
-5. **Phase 0 alone is worth shipping.** It is roughly a day and fixes text size, target
-   size and the missing scan button app-wide. Ship it before the rest is agreed?
+4. ~~**Bridge lifetime.**~~ **Gone.** The ratchet reached 0 and the block was deleted in
+   Phase 5. It did not change whether Phase 3 was one batch or three — Phase 3 became one
+   mechanism for a reason unrelated to the bridge.
+5. ~~**Phase 0 alone is worth shipping.**~~ Moot: Phases 0–5 all shipped.
+
+**Still open, and genuinely a product question rather than an engineering one:** decision
+1 above. Nothing in Phases 0–5 depended on it, because the floors and the measurement
+apply to every page regardless of which half of §3 it belongs to — but §5.2's "one primary
+action" does depend on it, and that work is not done for any page but `p-work`.
 
 ---
 
