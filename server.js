@@ -5039,12 +5039,22 @@ function refundLoginKdfToken(quelle, jetzt = Date.now()) {
 }
 
 // An address that has not asked for a while is not worth remembering.
+//
+// ⚠️ **The count has to be refilled before it is judged.** This read `e.tokens`
+// straight out of the entry, and that number is only ever brought up to date by
+// a call — so an address that spent one token and never came back sat at
+// burst-1 for ever and was never swept. The map then only shrank through the
+// LRU eviction at LOGIN_KDF_MAX_QUELLEN, which exists as a backstop and was
+// doing the whole job. Measured against the real block: 50 entries an hour old,
+// 50 deleted, none.
 setInterval(
   () => {
     const jetzt = Date.now();
     const alt = LOGIN_KDF_BURST * LOGIN_KDF_REFILL_MS;
     for (const [quelle, e] of loginKdfTokens) {
-      if (jetzt - e.stand > alt && e.tokens >= LOGIN_KDF_BURST) loginKdfTokens.delete(quelle);
+      if (jetzt - e.stand <= alt) continue;
+      const voll = Math.min(LOGIN_KDF_BURST, e.tokens + Math.floor((jetzt - e.stand) / LOGIN_KDF_REFILL_MS));
+      if (voll >= LOGIN_KDF_BURST) loginKdfTokens.delete(quelle);
     }
   },
   10 * 60 * 1000
