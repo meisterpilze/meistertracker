@@ -2149,6 +2149,28 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_user ON caldav_app_passwords(user_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_hash ON caldav_app_passwords(hash)');
     }
+  },
+  {
+    version: 74,
+    description: 'Remember that an OAuth client was actually used, so the sweep cannot mistake it',
+    fn(db) {
+      // The sweep of never-used auto-registered clients (S-25) asked "does this
+      // client have any codes or tokens?". That is a proxy, and it breaks:
+      // tokens go away when they expire and when deleteAuthArtifactsNoTxn runs
+      // — which it does on every password change. One colleague changing their
+      // password therefore put every MCP registration on a one-hour fuse.
+      //
+      // A mark that is only ever set is immune to all of that. NULL means the
+      // registration never completed a flow, which is the only thing the sweep
+      // is entitled to act on.
+      db.exec(`ALTER TABLE oauth_clients ADD COLUMN last_used TEXT DEFAULT NULL`);
+      // Existing rows: anything that ever got a code or a token has been used,
+      // whatever has become of those rows since. The rest stay NULL and are
+      // judged on their own merits.
+      db.exec(`UPDATE oauth_clients SET last_used = created
+                WHERE client_id IN (SELECT client_id FROM oauth_tokens)
+                   OR client_id IN (SELECT client_id FROM oauth_codes)`);
+    }
   }
 ];
 
@@ -2982,7 +3004,7 @@ function writeAll(db, incoming, opts) {
           t.dueTime || null,
           t.dueEndTime || null,
           t.description || null,
-          t.caldavUid || null,
+          cleanCaldavUid(t.caldavUid),
           t.caldavSynced || null,
           t.private ? 1 : 0,
           t.recurrence || null,
@@ -3236,8 +3258,11 @@ function backupDb(db, destPath) {
 
 // ── Update CalDAV UID on a task after sync ──
 function updateTaskCaldavUid(db, text, created, uid, synced) {
+  // Same rule as the other two stores: a uid we would refuse to write is not
+  // worth keeping. This one is reached by push-one's private+unassigned branch,
+  // where writeIcsFile never runs and so never had a chance to object.
   db.prepare('UPDATE manual_tasks SET caldav_uid = ?, caldav_synced = ? WHERE text = ? AND created = ?').run(
-    uid,
+    cleanCaldavUid(uid),
     synced,
     text,
     created
@@ -3564,6 +3589,20 @@ function countUsers(db) {
 
 function listUsers(db) {
   return db.prepare('SELECT id, username, role, can_ship, can_release, created FROM users ORDER BY id').all();
+}
+
+/**
+ * The same list with everything a non-admin has no business reading removed.
+ *
+ * What is left is what an assignee picker needs and nothing else. Kept here
+ * rather than spelled out at each caller: GET /api/usernames and the MCP
+ * list_users tool both want it, and two copies of a projection like this is how
+ * one of them quietly stops matching after a column is added. It is an
+ * allowlist for the same reason — a new users column is invisible to it until
+ * somebody decides otherwise.
+ */
+function listUsersPublic(db) {
+  return listUsers(db).map((u) => ({ id: u.id, username: u.username }));
 }
 
 function deleteUser(db, userId) {
@@ -4921,6 +4960,37 @@ function deleteCulture(db, id) {
 }
 
 // -- Tasks --
+// S-23: what a CalDAV uid is allowed to look like — the one definition.
+//
+// It ends up as a file name (`<uid>.ics`) inside the calendar directory, so the
+// separators and NUL have to be out; with those gone a uid cannot address a
+// second path component and traversal is impossible on POSIX and Windows alike.
+// This is the charset the sync-back paths in server.js have always demanded of
+// a uid on the way *out* of a file; it had no counterpart on the way in, which
+// is how a request body's caldavUid could name a path.
+//
+// Kept here rather than in server.js because both the file writer and the two
+// rows that store the value need it, and two copies of a rule like this is how
+// one of them quietly stops matching.
+// 200 and not 120: the read-side regexes have no cap at all, and every
+// difference between the two is a value one of them accepts and the other
+// refuses. 200 is the length this codebase already uses for an id
+// (validateLengths on calendar events, cultures, batches), and `uid + '.ics'`
+// still fits any filesystem's 255-byte name limit — which is the only reason
+// there is a cap here at all.
+const CALDAV_UID_RE = /^[A-Za-z0-9\-_.@]{1,200}$/;
+
+function isValidCaldavUid(uid) {
+  return typeof uid === 'string' && CALDAV_UID_RE.test(uid);
+}
+
+/** A uid we would refuse to write is not worth storing — it becomes null and
+ *  the next sync mints a fresh one, instead of leaving a row that can never
+ *  reach a calendar and never says why. */
+function cleanCaldavUid(uid) {
+  return isValidCaldavUid(uid) ? uid : null;
+}
+
 function insertTask(db, t) {
   const r = db
     .prepare(
@@ -4936,7 +5006,7 @@ function insertTask(db, t) {
       t.dueTime || null,
       t.dueEndTime || null,
       t.description || null,
-      t.caldavUid || null,
+      cleanCaldavUid(t.caldavUid),
       t.caldavSynced || null,
       t.private ? 1 : 0,
       t.recurrence || null,
@@ -4969,7 +5039,14 @@ function updateTaskById(db, id, fields) {
   // updates so we don't spuriously invalidate cached calendar entries.
   const meaningful = entries.some(([k]) => k !== 'caldavSynced' && k !== 'caldavUid');
   const sets = entries.map(([k]) => `${map[k]}=?`).join(',') + (meaningful ? ', sequence=sequence+1' : '');
-  const vals = entries.map(([k, v]) => (k === 'done' || k === 'private' ? (v ? 1 : 0) : v));
+  // The fourth place that stores a caldav uid, and the last one that did not go
+  // through the rule. Same reason as the other three: a uid we would refuse to
+  // write is not worth keeping, and the next sync mints a fresh one.
+  const vals = entries.map(([k, v]) => {
+    if (k === 'done' || k === 'private') return v ? 1 : 0;
+    if (k === 'caldavUid') return cleanCaldavUid(v);
+    return v;
+  });
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
   incrementDataVersion(db);
 }
@@ -5000,16 +5077,69 @@ function readTaskById(db, id) {
 // Admins can always modify. Otherwise, the user must be named in the
 // task's assignee field (comma-separated) OR the task must be
 // unassigned (null/empty assignee means "for everyone").
+/** The assignee column is a comma-separated list. One place that says so. */
+function taskAssignees(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function canUserModifyTask(db, username, taskId, isAdmin) {
   if (isAdmin) return true;
   const r = db.prepare('SELECT assignee FROM manual_tasks WHERE id=?').get(taskId);
   if (!r) return false;
-  if (!r.assignee || !String(r.assignee).trim()) return true;
-  const assignees = String(r.assignee)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const assignees = taskAssignees(r.assignee);
+  if (!assignees.length) return true;
   return assignees.includes(username);
+}
+
+/**
+ * May this user see this task at all?
+ *
+ * The task dialog has a checkbox reading "only visible to the assigned person".
+ * It was honoured in exactly one place — autoPushTaskCaldav skips the shared
+ * calendar for it — and nowhere else. readAll selected every row with no
+ * filter, GET /api/data handed the payload to any authenticated session, and
+ * the client read the flag only in the edit dialog, never in a render path. One
+ * request therefore returned every note somebody had marked private, which for
+ * a task list means sickness, warnings and personnel matters.
+ *
+ * Takes the row rather than an id: the callers already hold whole rows, and a
+ * SELECT per task turns one payload into hundreds of queries.
+ *
+ * ⚠️ **Fails closed when the row does not carry `private`.** A mapper that
+ * forgets the column must not silently come to mean "public" — that is exactly
+ * how the MCP briefing kept handing out what the web payload had started
+ * filtering. Every task mapper in this file carries it; the guard is for the
+ * next one.
+ *
+ * ⚠️ **A private task with no assignee stays visible, and that is deliberate.**
+ * There is no created_by column, so such a row belongs to nobody; hiding it
+ * would lose the note for whoever typed it, with no way to get it back. The
+ * checkbox's own words say nothing about the case where there is no assigned
+ * person. Making that case impossible is a question for the dialog, not for a
+ * read filter that would eat data to answer it.
+ */
+function canUserSeeTask(db, task, username, isAdmin) {
+  if (isAdmin) return true;
+  if (!task || task.private === undefined) return false;
+  if (!task.private) return true;
+  const assignees = taskAssignees(task.assignee);
+  if (!assignees.length) return true;
+  if (assignees.includes(username)) return true;
+  // ⚠️ **The assignee picker offers two namespaces, and only one of them can
+  // log in.** app.js merges `users[].username` with `team_members[].name`, and
+  // a team member is a free-text row with no account and no key to one. A
+  // private task assigned only to such a name would otherwise be visible to
+  // nobody but an admin — including whoever typed it, who cannot get it back
+  // because there is no created_by column. That is the same data loss the
+  // no-assignee case above is written to avoid, so it takes the same answer:
+  // when there is no account to keep it for, it is not kept from anyone.
+  const konten = db
+    .prepare('SELECT COUNT(*) AS n FROM users WHERE username IN (' + assignees.map(() => '?').join(',') + ')')
+    .get(...assignees);
+  return !(konten && konten.n > 0);
 }
 
 function readTaskByCaldavUid(db, caldavUid) {
@@ -7125,6 +7255,13 @@ function getOAuthClient(db, clientId) {
   };
 }
 
+/** Mark a client as having got this far. Only ever set — see migration 74. */
+function touchOAuthClient(db, clientId) {
+  db.prepare("UPDATE oauth_clients SET last_used = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ?").run(
+    clientId
+  );
+}
+
 function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod, resource }) {
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
   try {
@@ -7141,6 +7278,9 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
       throw e;
     }
   }
+  // The client got as far as an authorization code: that is a completed flow
+  // as far as the sweep is concerned, and nothing later can take it back.
+  touchOAuthClient(db, clientId);
 }
 
 function getOAuthCode(db, code) {
@@ -7171,6 +7311,7 @@ function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSec
   db.prepare(
     'INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires, created, refresh_token_ref) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(token, tokenType, clientId, userId, expires, new Date().toISOString(), refreshTokenRef || null);
+  touchOAuthClient(db, clientId);
 }
 
 function getOAuthAccessToken(db, tokenHash) {
@@ -7201,6 +7342,34 @@ function revokeOAuthTokensByRefresh(db, refreshHash) {
 }
 
 function deleteExpiredOAuthData(db) {
+  // S-25: the clients first, and that order is the point.
+  //
+  // POST /oauth/register is unauthenticated by design — MCP clients register
+  // themselves — and every call wrote a row that nothing ever collected. Bounds
+  // on the input make each row small; only this makes the pile stop growing.
+  //
+  // Judged **before** the two deletions below, so a token that expired since the
+  // last run still speaks for its client this round. Written the other way, a
+  // client whose token expired an hour ago was swept in the same call that
+  // removed the token — measured, and it made a real registration look exactly
+  // like one that never completed a flow.
+  //
+  // Each condition earns its place. `client_secret_hash IS NULL` is what
+  // listOAuthClients already calls autoRegistered, so a client an admin created
+  // by hand is never touched. The two NOT IN clauses spare anything that ever
+  // got a code or a token, live or expired. And a day is far longer than
+  // register→authorize→token takes.
+  //
+  // What this does mean: a client that has not been used for long enough that
+  // all its tokens have expired *and* been reaped will eventually be swept, and
+  // has to register again. That is what dynamic registration is for, and the
+  // alternative is keeping every registration ever made for ever.
+  db.prepare(
+    `DELETE FROM oauth_clients
+      WHERE client_secret_hash IS NULL
+        AND last_used IS NULL
+        AND created < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`
+  ).run();
   db.prepare("DELETE FROM oauth_codes WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR used = 1").run();
   db.prepare("DELETE FROM oauth_tokens WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR revoked = 1").run();
 }
@@ -7513,6 +7682,10 @@ function getAllTasks(db) {
       dueTime: r.due_time,
       dueEndTime: r.due_end_time,
       description: r.description,
+      // Carried so a caller can ask canUserSeeTask about the row. It was
+      // missing here while readAll had it, which is precisely how the MCP
+      // briefing came to hand out task text the web payload was filtering.
+      private: r.private === 1,
       recurrence: r.recurrence || null,
       recurrenceUntil: r.recurrence_until || null,
       caldavUid: r.caldav_uid || null,
@@ -9529,5 +9702,9 @@ module.exports = {
   unresolveContaminationReport,
   setContaminationReportScanLogId,
   // R-23
-  isSafeError
+  isSafeError,
+  isValidCaldavUid,
+  listUsersPublic,
+  canUserSeeTask,
+  touchOAuthClient
 };

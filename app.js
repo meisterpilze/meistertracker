@@ -11053,6 +11053,21 @@ function renderLog() {
   const dateFrom = document.getElementById('log-date-from').value;
   const dateTo = document.getElementById('log-date-to').value;
   const body = document.getElementById('log-body');
+  // The ✕ used to be an inline onclick with the row's values pasted into it.
+  // esc() is right for markup but not for that: inside an attribute the parser
+  // turns &#39; back into ' before the JavaScript is compiled, so a value that
+  // merely *looked* escaped ran as code. Reading the values back out of
+  // data-* attributes keeps them data — a string the browser hands over, never
+  // something it compiles. Wired once, because renderLog() replaces the rows
+  // but not the container they sit in.
+  if (body && !body._lgDelWired) {
+    body._lgDelWired = true;
+    body.addEventListener('click', (ev) => {
+      const btn = ev.target.closest && ev.target.closest('.lg-del');
+      if (!btn || !body.contains(btn)) return;
+      deleteLogEntry(btn, btn.dataset.time, btn.dataset.batch, btn.dataset.action, btn.dataset.bag);
+    });
+  }
   let items = [...scanLog];
   // Filters
   if (q) items = items.filter((e) => JSON.stringify(e).toLowerCase().includes(q));
@@ -11086,7 +11101,7 @@ function renderLog() {
     ? items
         .map((e) => {
           const isRecent = now - new Date(e.time).getTime() < h24;
-          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td data-mlabel="${esc(t('settings.user'))}" style="font-size:11px">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs" style="padding:2px 6px;font-size:10px" onclick="deleteLogEntry(this,\'' + esc(e.time) + "','" + esc(e.batch) + "','" + esc(e.action) + "','" + esc(e.bag || '') + '\')" title="' + t('common.delete') + '">✕</button>' : ''}</td></tr>`;
+          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td data-mlabel="${esc(t('settings.user'))}" style="font-size:11px">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs lg-del" style="padding:2px 6px;font-size:10px" data-time="' + esc(e.time) + '" data-batch="' + esc(e.batch || '') + '" data-action="' + esc(e.action) + '" data-bag="' + esc(e.bag || '') + '" title="' + esc(t('common.delete')) + '">✕</button>' : ''}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="9" class="empty">' + t('settings.noScans') + '</td></tr>';
