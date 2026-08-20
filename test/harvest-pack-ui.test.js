@@ -14,10 +14,7 @@
 // decisions are.
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-
-const ROOT = path.join(__dirname, '..');
+const { hebe } = require('./helpers/quelle');
 
 // Named so a failure says which function moved, rather than "unexpected token".
 const TEILE = [
@@ -40,12 +37,7 @@ const TEILE = [
  * would pass while the page lost every tick.
  */
 function laden() {
-  const src = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
-  const code = TEILE.map(([re, was]) => {
-    const m = src.match(re);
-    assert.ok(m, 'could not find ' + was + ' in app.js — has it been renamed?');
-    return m[0];
-  }).join('\n\n');
+  const code = hebe(TEILE);
 
   const log = { html: '', feld: { value: '' }, meldung: { textContent: '' } };
   const stub = `

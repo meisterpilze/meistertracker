@@ -30,11 +30,9 @@
 // What is left is a rate per address, refilling on its own, refunded on success.
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
+const { quelle } = require('./helpers/quelle');
 
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+const SRC = quelle('server.js');
 
 // Measured against the S-14 parameters (db.js SCRYPT_PARAMS) — an order of
 // magnitude, not a promise about any particular machine.
@@ -44,14 +42,19 @@ let kehrbesen = null;
 
 function laden() {
   const start = SRC.indexOf('const LOGIN_MAX_ATTEMPTS');
-  const endMarker = 'function clearLoginAttemptsPerUser(username) {\n  loginAttemptsPerUser.delete(username);\n}';
-  const end = SRC.indexOf(endMarker);
-  assert.ok(start >= 0 && end > start, 'the login throttle block has moved');
+  // Über einen regulären Ausdruck statt indexOf mit fester \n-Kette: die Quelle
+  // hat im Windows-Arbeitsbaum CRLF und im Repo LF, und eine feste Kette findet
+  // den Block dort nie. Der Test meldete dann "verschoben", obwohl nichts
+  // verschoben war — lokal rot, auf CI grün.
+  const endeRe =
+    /function clearLoginAttemptsPerUser\(username\) \{\r?\n {2}loginAttemptsPerUser\.delete\(username\);\r?\n\}/;
+  const ende = SRC.match(endeRe);
+  assert.ok(start >= 0 && ende && ende.index > start, 'the login throttle block has moved');
   const logs = [];
   const api = new Function(
     'log',
     'setInterval',
-    SRC.slice(start, end + endMarker.length) +
+    SRC.slice(start, ende.index + ende[0].length) +
       '\nreturn { takeLoginKdfToken, refundLoginKdfToken, loginKdfTokens, LOGIN_KDF_BURST,' +
       ' LOGIN_KDF_REFILL_MS, LOGIN_KDF_MAX_QUELLEN, LOGIN_DELAY_MAX_PENDING, LOGIN_DELAY_MAX_MS };'
   )(

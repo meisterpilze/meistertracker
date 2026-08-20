@@ -14,24 +14,14 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const { hebe } = require('./helpers/quelle');
 
 const PARTS = [
   [/^function fmtDate\(y, m, d\) \{[\s\S]*?\r?\n\}/m, 'fmtDate()'],
   [/^function calAgendaDays\(startDate, endDate\) \{[\s\S]*?\r?\n\}/m, 'calAgendaDays()']
 ];
 
-function lift() {
-  return PARTS.map(([re, name]) => {
-    const m = SRC.match(re);
-    assert.ok(m, name + ' not found in app.js — this test has to move with it');
-    return m[0];
-  }).join('\n');
-}
+const PARTS_SRC = hebe(PARTS);
 
 // Only what the lifted functions actually touch.
 function build(events, days) {
@@ -39,7 +29,7 @@ function build(events, days) {
     const DAY_NAMES = ${JSON.stringify(days || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'])};
     const calDays = () => DAY_NAMES;
     const collectCalendarEvents = () => ${JSON.stringify(events)};
-    ${lift()}
+    ${PARTS_SRC}
     return { calAgendaDays };
   `)();
 }
