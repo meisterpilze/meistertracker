@@ -25,7 +25,10 @@ const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 function lift(...names) {
   const src = names
     .map((n) => {
-      const re = new RegExp(`^(?:const ${n} = \\[[\\s\\S]*?\\];|function ${n}\\([\\s\\S]*?\\n\\})`, 'm');
+      const re = new RegExp(
+        `^(?:const ${n} = \\[[\\s\\S]*?\\];|const ${n} = \\([\\s\\S]*?\\n\\};|function ${n}\\([\\s\\S]*?\\n\\})`,
+        'm'
+      );
       const m = APP.match(re);
       assert.ok(m, `${n} not found in app.js — this file is testing nothing`);
       return m[0];
@@ -395,6 +398,94 @@ describe('what the palette refuses to open on top of', () => {
     assert.match(handler[0], /e\.stopPropagation\(\);/);
     assert.match(APP, /const gsOpenNow = document\.getElementById\('m-search'\)\?\.classList\.contains\('open'\);/);
     assert.match(APP, /if \(gsOpenNow \|\| \(!scanOpen && !camOpen\)\)/);
+  });
+});
+
+describe('the bag count beside a zone', () => {
+  // gsIndex() used to call getZoneBags() once per zone, and getZoneBags() walks
+  // the whole scan log. A dozen zones and fifty thousand entries, on every
+  // keystroke. gsZoneCounts() does the same bookkeeping for every zone in one
+  // walk — but a subtitle that disagrees with the zone card is worse than a
+  // slow one, so what is checked here is that the two agree, case for case,
+  // rather than that the new one looks reasonable.
+  const build = (log) => {
+    const src = [
+      APP.match(/^const toZone = \([\s\S]*?\n\};/m)[0],
+      APP.match(/^function getZoneBags\([\s\S]*?\n\}/m)[0],
+      APP.match(/^function gsZoneCounts\([\s\S]*?\n\}/m)[0]
+    ].join('\n');
+    return new Function('ZONES', 'RACK_ZONE', 'scanLog', `${src}\nreturn { getZoneBags, gsZoneCounts };`)(
+      ZONES,
+      RACK_ZONE,
+      log
+    );
+  };
+  const ZONES = ['INC', 'FRU', 'SPAWN', 'CONTAM'];
+  const RACK_ZONE = { INC_R1: 'INC', FRU_R2: 'FRU' };
+
+  it('agrees with getZoneBags on a move between racks of one zone', () => {
+    // The case getZoneBags() carries a paragraph about: toZone() maps INC_R1
+    // back to INC, so a naive "leave the old zone" deletes what it just added.
+    const { getZoneBags, gsZoneCounts } = build([
+      { bag: 'B1', action: 'ADD', from: '', to: 'INC' },
+      { bag: 'B1', action: 'MOVE', from: 'INC', to: 'INC_R1' }
+    ]);
+    assert.equal(Object.keys(getZoneBags('INC')).length, 1);
+    assert.equal(gsZoneCounts().INC, 1);
+  });
+
+  it('agrees with getZoneBags on four hundred random scan logs', () => {
+    // Deterministic, so a failure is reproducible rather than a rumour.
+    let seed = 42;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const pick = (a) => a[Math.floor(rnd() * a.length)];
+    const AKT = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST'];
+    const ORTE = ['INC', 'FRU', 'SPAWN', 'CONTAM', 'INC_R1', 'FRU_R2', '', 'NOWHERE', null];
+    for (let versuch = 0; versuch < 400; versuch++) {
+      const log = [];
+      for (let i = 0; i < 60; i++)
+        log.push({
+          bag: rnd() < 0.05 ? null : 'B' + Math.floor(rnd() * 8),
+          batch: 'X-1',
+          action: pick(AKT),
+          from: pick(ORTE),
+          to: pick(ORTE)
+        });
+      const { getZoneBags, gsZoneCounts } = build(log);
+      const counts = gsZoneCounts();
+      for (const z of ZONES)
+        assert.equal(
+          counts[z] || 0,
+          Object.keys(getZoneBags(z)).length,
+          `zone ${z} disagrees on run ${versuch}: ${JSON.stringify(log)}`
+        );
+    }
+  });
+
+  it('is what the index actually uses', () => {
+    assert.match(APP, /const zoneBags = gsZoneCounts\(\);/);
+    const index = APP.match(/function gsIndex\(\) \{[\s\S]*?\n\}/)[0];
+    assert.doesNotMatch(index, /getZoneBags\(/, 'the per-zone walk is back inside the index');
+  });
+});
+
+describe('the index is built once, not once per keystroke', () => {
+  it('remembers what it built', () => {
+    const index = APP.match(/function gsIndex\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(index, /if \(_gsIndex\) return _gsIndex;/);
+    assert.match(index, /_gsIndex = out\.concat\(gsPageIndex\(\)\);/);
+  });
+
+  it('forgets it everywhere the data underneath it is replaced', () => {
+    // The same place and the same reason as _statusByBatch, whose comment says
+    // it: scanLog is replaced wholesale. Plus the two sources the palette
+    // fetches itself, and the way in — so a search never opens on a picture
+    // older than itself.
+    const apply = APP.match(/function applyData\(d\) \{[\s\S]*?\n\}/)[0];
+    assert.match(apply, /gsIndexInvalidate\(\);/, 'a fresh /api/data leaves a stale index');
+    assert.match(APP, /function loadOrders\(\) \{[\s\S]*?gsIndexInvalidate\(\);/);
+    assert.match(APP, /function loadCustomers\(\) \{[\s\S]*?gsIndexInvalidate\(\);/);
+    assert.match(APP, /function gsOpen\(\) \{[\s\S]*?gsIndexInvalidate\(\);/);
   });
 });
 

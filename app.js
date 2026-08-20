@@ -576,6 +576,9 @@ function applyData(d) {
   // so the lazy rebuild on next getStatus() will pick up the new state.
   _statusByBatch = null;
   _hasScanByBatch = null;
+  // Same reason, same wholesale replacement: the search index is built from
+  // these arrays and every one of them is about to be a different array.
+  gsIndexInvalidate();
   mushroomStrains = d.mushroomStrains || [];
   batches = d.batches || [];
   scanLog = d.scanLog || [];
@@ -1328,6 +1331,7 @@ function _refreshOrdersActive() {
 function loadOrders() {
   return apiGet('/api/orders?limit=500').then((d) => {
     _ordersCache = d.items || [];
+    gsIndexInvalidate();
     return _ordersCache;
   });
 }
@@ -1338,6 +1342,7 @@ function loadOrders() {
 function loadCustomers() {
   return apiGet('/api/customers?limit=1000').then((d) => {
     _ohCustomerCache = d.items || [];
+    gsIndexInvalidate();
     return _ohCustomerCache;
   });
 }
@@ -20121,9 +20126,57 @@ function gsPageIndex() {
   return out;
 }
 
+// getZoneBags() for every zone in one walk of scanLog instead of one walk per
+// zone. The subtitle below wants a bag count per zone, and on a farm with a
+// dozen zones and fifty thousand scan entries that single line was most of what
+// the palette cost. The rules are getZoneBags()'s own, kept case for case: a
+// bag's zone is the last ADD or MOVE that placed it, a MOVE with no readable
+// destination takes it out of the count, a REMOVE only removes it from the zone
+// it says it came from, and a HARVEST places nothing — logging a flush does not
+// move anything.
+function gsZoneCounts() {
+  const inZone = {};
+  const put = (z, bag) => (inZone[z] || (inZone[z] = new Set())).add(bag);
+  const drop = (z, bag) => inZone[z] && inZone[z].delete(bag);
+  scanLog.forEach((e) => {
+    if (!e.bag) return;
+    const tz = toZone(e.to);
+    const fz = toZone(e.from);
+    if (e.action === 'ADD') {
+      if (tz) put(tz, e.bag);
+    } else if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      if (tz) put(tz, e.bag);
+      // fz !== tz, for the reason spelled out in getZoneBags(): a move within
+      // one zone (rack to rack, which toZone() maps back to the zone) would
+      // otherwise insert the bag and delete it on the next line.
+      if (fz && fz !== tz) drop(fz, e.bag);
+    } else if (e.action === 'REMOVE') {
+      if (fz) drop(fz, e.bag);
+    }
+  });
+  const out = {};
+  for (const z in inZone) out[z] = inZone[z].size;
+  return out;
+}
+
+// The index, built at most once per open rather than once per keystroke. It
+// walks every batch, culture, Sorte and zone and reads the sidebar, which is
+// work in proportion to the whole farm; doing it again for each character was
+// what made the field feel slow on the phones it is meant for.
+//
+// Invalidated the same way and in the same place as _statusByBatch — applyData()
+// replaces the arrays underneath it — plus on the way in, so a search never
+// opens on a picture older than itself.
+let _gsIndex = null;
+function gsIndexInvalidate() {
+  _gsIndex = null;
+}
+
 function gsIndex() {
+  if (_gsIndex) return _gsIndex;
   const out = [];
   const join = (parts) => parts.filter(Boolean).join(' \u00b7 ');
+  const zoneBags = gsZoneCounts();
   batches.forEach((b) => {
     const st = getStatus(b.batchId);
     const where = Object.keys(st.c || {})
@@ -20155,7 +20208,7 @@ function gsIndex() {
       sub: join([
         z.name && z.name !== z.id ? z.name : '',
         ROLE_LABELS[z.role] ? t(ROLE_LABELS[z.role]) : z.role,
-        tp('dash.bags', Object.keys(getZoneBags(z.id)).length)
+        tp('dash.bags', zoneBags[z.id] || 0)
       ])
     });
   });
@@ -20174,7 +20227,8 @@ function gsIndex() {
       sub: join([(c.channels || '').split(',').filter(Boolean).map(_ohChannelLabel).join(', '), c.orderCount || 0])
     });
   });
-  return out.concat(gsPageIndex());
+  _gsIndex = out.concat(gsPageIndex());
+  return _gsIndex;
 }
 
 // Orders and customers are the two sources that are not already here. Ask on
@@ -20346,6 +20400,7 @@ function gsOpen() {
   if (!bg) return;
   gsReturnFocus = document.activeElement;
   gsSel = 0;
+  gsIndexInvalidate();
   bg.classList.add('open');
   gsWarm();
   const input = document.getElementById('gs-q');
