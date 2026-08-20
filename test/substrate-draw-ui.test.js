@@ -14,11 +14,7 @@
 // DOM. The browser is not under test; the arithmetic on the screen is.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const { hebe } = require('./helpers/quelle');
 
 // Named so a failure says which function moved, rather than "unexpected token".
 const TEILE = [
@@ -27,15 +23,7 @@ const TEILE = [
   [/^function nbSubstrateNeed\(\) \{[\s\S]*?\n\}/m, 'nbSubstrateNeed()']
 ];
 
-function lift() {
-  const out = [];
-  for (const [re, name] of TEILE) {
-    const m = SRC.match(re);
-    assert.ok(m, name + ' not found in app.js — the test needs updating with it');
-    out.push(m[0]);
-  }
-  return out.join('\n');
-}
+const TEILE_SRC = hebe(TEILE);
 
 function stubDom(fields) {
   const els = {};
@@ -64,7 +52,7 @@ function run(fields, sbList, strains) {
         .join(',') +
       ')'
   };
-  const fn = new Function('document', '_sbList', 'mushroomStrains', 't', lift() + '\nreturn nbSubstrateNeed();');
+  const fn = new Function('document', '_sbList', 'mushroomStrains', 't', TEILE_SRC + '\nreturn nbSubstrateNeed();');
   fn(ctx.document, ctx._sbList, ctx.mushroomStrains, ctx.t);
   return dom.els['nb-substrate-info'].innerHTML;
 }
