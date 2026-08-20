@@ -77,6 +77,10 @@
      11px on a desktop and would drop every one of them by a pixel. So it gets
      its own pair, phone at the floor and desktop where it already was. */
   --fs-meta: 13px;
+  /* And the same for 10px, the size id chips and timestamps were written at.
+     Three pairs cover 497 of the 497 inline sizes in this app; the six
+     fractional ones in between are named where they are used. */
+  --fs-micro: 13px;
   /* The floor, as a sentinel rather than a size. 104 rules in this stylesheet
      set a font-size below --fs-xs and serve both devices from that one number:
      `.sec` at 12px, `.sb-group-label` at 10px, `.chip-l` at 9px. Every one of
@@ -170,6 +174,7 @@
     --fs-sm: 13px;
     --fs-base: 15px;
     --fs-meta: 12px;
+    --fs-micro: 10px;
     /* 0, so every max() in the sheet returns the literal beside it unchanged. */
     --fs-min: 0px;
     --tap: auto;
@@ -1483,6 +1488,46 @@ body:has(.modal-bg.open) .cam-fab {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* The size utilities, and why this app has three of them when it otherwise
+   names things after what they are.
+
+   §10 of MOBILE_REDESIGN.md draws the line: colours, widths and margins stay
+   inline, only the font sizes come out. That is not squeamishness — the size
+   is the one inline property that has a token, and it is the only one that was
+   wrong on a phone. So these three are the token layer reaching markup that a
+   stylesheet could not otherwise touch, not the start of a utility system.
+
+   Each is a pair: the floor in a hand, the number that was already there on a
+   desk. --fs-meta 13/12, --fs-xs 13/11, --fs-micro 13/10.
+
+   They are what lets the §6 bridge go. That block matches `[style*=
+   'font-size:11px']` and lifts it with !important, which works and costs an
+   attribute-substring match against every element in the document; a class
+   costs nothing and can be read in the markup.
+
+   The class name is doubled, and that is the load-bearing part. An inline
+   style outranks every normal rule, so moving one onto a plain class quietly
+   hands the element back to whatever component rule it was overriding. That
+   is not hypothetical: the first version of this measured thirteen elements
+   changing size at 1440px — four hints under `.modal p` going 12px to 14px,
+   six buttons under `.btn-sm` going 11px to 12px. Doubling reaches (0,2,0),
+   which outranks the descendant and component rules these replace.
+
+   !important would also have worked and is deliberately not used: the iOS
+   anti-zoom rule below is `input, select, textarea { font-size: 16px
+   !important }` at (0,0,3), and an important utility at (0,1,0) would beat it
+   — handing Safari a 13px field to zoom into on every form control that used
+   to carry an inline size. A doubled class loses to it, which is correct. */
+.fs-meta.fs-meta {
+  font-size: var(--fs-meta);
+}
+.fs-xs.fs-xs {
+  font-size: var(--fs-xs);
+}
+.fs-micro.fs-micro {
+  font-size: var(--fs-micro);
+}
+
 /* A filter that sizes to its own content rather than the form grid. */
 .head-select {
   width: auto;

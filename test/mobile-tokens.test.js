@@ -294,6 +294,52 @@ describe('touch targets', () => {
   });
 });
 
+describe('the size utilities that replace the inline styles', () => {
+  const UTILITIES = ['fs-meta', 'fs-xs', 'fs-micro'];
+
+  it('declares each one doubled, so it outranks what the inline style outranked', () => {
+    // An inline style beats every normal rule. Move one onto a plain class and
+    // the element goes back to whatever component rule it had been overriding
+    // — measured, not feared: the first version of this migration moved
+    // thirteen elements at 1440px, four hints from 12px to 14px under
+    // `.modal p` and six buttons from 11px to 12px under `.btn-sm`.
+    for (const u of UTILITIES) {
+      assert.match(
+        CSS,
+        new RegExp('\\.' + u + '\\.' + u + '\\s*\\{'),
+        `.${u} is declared singly — every element carrying it is one component rule away from changing size`
+      );
+    }
+  });
+
+  it('never gives them !important, which would beat the anti-zoom rule', () => {
+    // (0,1,0) with !important outranks `input, select, textarea { font-size:
+    // 16px !important }` at (0,0,3), and iOS Safari zooms any field under
+    // 16px. A doubled class loses to it, which is the whole point.
+    for (const u of UTILITIES) {
+      const rule = CSS.match(new RegExp('\\.' + u + '\\.' + u + '\\s*\\{[^}]*\\}'));
+      assert.ok(rule, `.${u}.${u} rule not found`);
+      assert.doesNotMatch(rule[0], /!important/, `.${u} carries !important and now outranks the iOS anti-zoom rule`);
+    }
+  });
+
+  it('pairs each one with a token that has both a phone and a desktop value', () => {
+    for (const u of UTILITIES) {
+      const rule = CSS.match(new RegExp('\\.' + u + '\\.' + u + '\\s*\\{[^}]*\\}'));
+      const token = rule[0].match(/font-size:\s*var\((--[a-z0-9-]+)\)/);
+      assert.ok(token, `.${u} does not read its size from a token`);
+      assert.ok(TOKENS.includes(token[1]), `${token[1]} is not a declared size token`);
+    }
+  });
+
+  it('leaves no sub-floor inline size behind in index.html', () => {
+    // app.js still has its own; this one is finished, and finished means the
+    // count stays at nothing rather than drifting back one edit at a time.
+    const left = [...subFloorSizes(HTML, FLOOR)].map((m) => m.text);
+    assert.deepEqual(left, [], `index.html grew ${left.length} inline sub-floor size(s) back`);
+  });
+});
+
 describe('the inline-size bridge', () => {
   // Every distinct sub-floor size the source actually emits, both spellings.
   const declared = new Set();
