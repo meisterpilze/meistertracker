@@ -2003,9 +2003,97 @@
               </div>
             </div>
           </div>
-          <div class="wk-todo-strip" id="wk-todo-strip">
-            <span data-i18n="work.dontKnow">Weißt du nicht, was ansteht?</span>
-            <button class="btn btn-sm" id="wk-goto-today" data-i18n="work.todayOpen">Heute zu tun</button>
+          <!-- What is due, above the seven jobs that do it. This lived on the
+               Dashboard, and the two screens pointed at each other: a strip here read
+               "Weißt du nicht, was ansteht?" and sent you there, and the first thing
+               there was two buttons that came straight back — the same redundancy the
+               speed-dial FAB was deleted for. One screen answers both halves now, and
+               the Dashboard keeps what only it has. -->
+          <!-- Batch tasks + Alerts side by side -->
+          <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
+            <!-- Batch tasks (worker-first — top of page) -->
+            <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
+              <!-- No All/Urgent-only filter: the urgency sections below ARE the
+                   filter, and "urgent only" hid the sections it duplicated. -->
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
+              </div>
+              <div id="dash-batch-tasks"></div>
+              <details
+                class="dash-legend fs-xs"
+                style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
+              >
+                <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
+                  Color guide
+                </summary>
+                <div style="padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span class="pdot med" style="margin-top: 3px"></span
+                    ><span data-i18n="dash.legend.orangeDot"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span class="pdot high" style="margin-top: 3px"></span
+                    ><span data-i18n="dash.legend.redDot"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 4px;
+                        height: 14px;
+                        background: #888;
+                        border-radius: 2px;
+                        margin-top: 1px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.species"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 14px;
+                        height: 10px;
+                        background: var(--c-red-light);
+                        border: 1px solid var(--c-red);
+                        border-radius: 3px;
+                        margin-top: 3px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.overdue"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 14px;
+                        height: 5px;
+                        background: var(--c-red);
+                        border-radius: 2px;
+                        margin-top: 5px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.capacity"></span>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <!-- Alerts (inventory + overdue batches + capacity) -->
+            <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
+              <div style="margin-bottom: 6px">
+                <div class="sec fs-xs" style="margin: 0" data-i18n="dash.alerts">Alerts</div>
+              </div>
+              <div id="dash-alerts"></div>
+            </div>
+
+            <!-- Split batches (bags of the same batch across multiple stages) used
+                 to be its own card here. It is now the LIEGENGEBLIEBEN section of
+                 the Batch tasks card: same data (getSplitBatches), but read as an
+                 instruction alongside the dated work instead of a separate table. -->
           </div>
           <div class="wk-tiles">
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
@@ -2135,160 +2223,10 @@
 
         <!-- ══ DASHBOARD ══ -->
         <div class="page" id="p-dash">
-          <!-- Farm / Overview view toggle -->
-          <div class="dash-view-toggle">
-            <button class="dash-view-btn active" id="dash-view-farm" onclick="setDashMode('farm')">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span data-i18n="dash.modeFarm">Farm</span>
-            </button>
-            <button class="dash-view-btn" id="dash-view-overview" onclick="setDashMode('overview')">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-              <span data-i18n="dash.modeOverview">Overview</span>
-            </button>
-          </div>
-
-          <!-- Farm-only sections (hidden in Overview mode) -->
-          <div id="dash-farm-section">
-            <!-- The two creation flows that start real work keep a one-tap button
-                 here, on the screen where you decide what to do next. The complete
-                 set lives on Arbeitsgänge — the first bottom-nav entry, one tap from
-                 anywhere — which is why the floating + speed-dial that repeated these
-                 same three calls is gone. -->
-            <div style="display: flex; gap: 8px; margin-bottom: 10px">
-              <button
-                id="dash-act-newbatch"
-                class="btn btn-p"
-                style="flex: 1; min-width: 0; padding: 11px 10px; font-weight: 600; font-size: 14px"
-                data-i18n="dash.actionNewBatch"
-              >
-                + New batch
-              </button>
-              <button
-                id="dash-act-labwork"
-                class="btn btn-p"
-                style="flex: 1; min-width: 0; padding: 11px 10px; font-weight: 600; font-size: 14px"
-                data-i18n="dash.actionLabWork"
-              >
-                + Lab work
-              </button>
-            </div>
-
-            <!-- Batch tasks + Alerts side by side -->
-            <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
-              <!-- Batch tasks (worker-first — top of page) -->
-              <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
-                <!-- No All/Urgent-only filter: the urgency sections below ARE the
-                     filter, and "urgent only" hid the sections it duplicated. -->
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                  <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
-                </div>
-                <div id="dash-batch-tasks"></div>
-                <details
-                  class="dash-legend fs-xs"
-                  style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
-                >
-                  <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
-                    Color guide
-                  </summary>
-                  <div style="padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px">
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span class="pdot med" style="margin-top: 3px"></span
-                      ><span data-i18n="dash.legend.orangeDot"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span class="pdot high" style="margin-top: 3px"></span
-                      ><span data-i18n="dash.legend.redDot"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 4px;
-                          height: 14px;
-                          background: #888;
-                          border-radius: 2px;
-                          margin-top: 1px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.species"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 14px;
-                          height: 10px;
-                          background: var(--c-red-light);
-                          border: 1px solid var(--c-red);
-                          border-radius: 3px;
-                          margin-top: 3px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.overdue"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 14px;
-                          height: 5px;
-                          background: var(--c-red);
-                          border-radius: 2px;
-                          margin-top: 5px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.capacity"></span>
-                    </div>
-                  </div>
-                </details>
-              </div>
-
-              <!-- Alerts (inventory + overdue batches + capacity) -->
-              <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
-                <div style="margin-bottom: 6px">
-                  <div class="sec fs-xs" style="margin: 0" data-i18n="dash.alerts">Alerts</div>
-                </div>
-                <div id="dash-alerts"></div>
-              </div>
-
-              <!-- Split batches (bags of the same batch across multiple stages) used
-                   to be its own card here. It is now the LIEGENGEBLIEBEN section of
-                   the Batch tasks card: same data (getSplitBatches), but read as an
-                   instruction alongside the dated work instead of a separate table. -->
-            </div>
-          </div>
-          <!-- end dash-farm-section -->
-
-          <!-- Charts section — visible in Overview mode only -->
-          <div id="dash-charts-section" style="display: none">
+          <!-- The whole page. It used to be one of two modes behind a Farm/Overview
+               toggle; the other mode held the day's work, which now sits on
+               Arbeitsgänge where the jobs it names are started. See USABILITY_PLAN.md. -->
+          <div id="dash-charts-section">
             <!-- Top bar: Period toggle + CSV download -->
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
               <div class="ov-period-toggle" style="margin-bottom: 0">
@@ -2368,7 +2306,10 @@
             </div>
 
             <!-- KPI History (trend charts from daily snapshots) -->
-            <div id="ov-kpi-history" style="display: none">
+            <!-- Shown with the page. It used to be un-hidden by applyDashMode(), which
+                 went with the Farm/Overview toggle; the empty state inside is what
+                 handles "not enough snapshots yet". -->
+            <div id="ov-kpi-history">
               <div style="display: flex; align-items: center; justify-content: space-between">
                 <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
                 <button

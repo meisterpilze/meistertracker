@@ -429,7 +429,6 @@ function safeColor(c, fallback) {
 
 // ─── AUTH ────────────────────────────────────────────────────
 let currentUser = null;
-let dashMode = localStorage.getItem('mp-dash-mode') || 'farm';
 let ovPeriod = localStorage.getItem('mp-ov-period') || 'week';
 async function authFetch(url, opts) {
   const r = await fetch(url, opts);
@@ -1052,14 +1051,16 @@ function go(page, btnId) {
   // Mirror active state onto the mobile bottom nav for the four pages it covers.
   const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
   if (bnBtn) bnBtn.classList.add('active');
-  if (page === 'dash') {
-    renderDashAlerts();
-    renderDashBatchTasks();
-  }
   // The pipeline strip and the "where is everything" list live on the Chargen
   // page now, and lab stock on Labor — each section carries its own overview
   // instead of the dashboard carrying all of them. renderStatus fills both
   // #metrics and #dash-locations, so it belongs with the page that shows them.
+  // The day's work is the top of Arbeitsgänge now, above the seven jobs that do
+  // it — it was the Dashboard's Farm mode, which was two buttons and this row.
+  if (page === 'work') {
+    renderDashAlerts();
+    renderDashBatchTasks();
+  }
   if (page === 'batch') {
     renderStatus();
     renderBatches();
@@ -1091,6 +1092,9 @@ function go(page, btnId) {
     const stab = document.querySelector('#p-settings .stab.active');
     if (stab) stab.click();
   }
+  // The history charts load on first arrival. applyDashMode() used to do this on
+  // the way into Overview mode; the mode is gone and the page is the Overview.
+  if (page === 'dash' && !kpiHistoryData) loadKpiHistory();
   if (page === 'strains') renderStrains();
   // Same rule as Admin above, and for the same reason: the strip handler already
   // knows what its panel needs. Rendering the inbox here instead drew a list the
@@ -2544,7 +2548,6 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
 }
 
 function renderOverviewKPIs() {
-  if (dashMode !== 'overview') return;
   const weekEl = document.getElementById('ov-kpi-week');
   const substratesEl = document.getElementById('ov-kpi-substrates');
   const qualEl = document.getElementById('ov-kpi-quality');
@@ -3117,11 +3120,6 @@ function renderKpiHistory() {
   const emptyEl = document.getElementById('ov-history-empty');
   const chartsEl = document.getElementById('ov-history-charts');
   if (!wrap) return;
-  if (dashMode !== 'overview') {
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = '';
   // P-02: Chart.js may not be loaded yet (idle preload). Defer.
   if (typeof Chart === 'undefined') {
     loadVendorLibs().then(() => renderKpiHistory());
@@ -3714,16 +3712,12 @@ function renderStatus() {
     el.innerHTML = '<div class="empty">' + t('dash.noZones') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview') renderOverviewKPIs();
-    applyDashMode();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview') renderOverviewKPIs();
-    applyDashMode();
     return;
   }
 
@@ -3784,7 +3778,6 @@ function renderStatus() {
   const tdone = batchData.filter((d) => d.status === 'DONE').length;
   renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
   renderOverviewKPIs();
-  applyDashMode();
   updateActionBar();
 }
 
@@ -3860,7 +3853,10 @@ function renderRackSection(zone, racks, filtered) {
   const zoneHasUrgent = filtered.some(
     (d) => d.ov && Object.keys(d.c).some((zid) => zid === zone || racks.includes(zid))
   );
-  const sectionClass = 'location-section' + (dashMode === 'farm' && zoneHasUrgent ? '' : ' collapsed');
+  // Open when there is something to see. This used to read `dashMode === 'farm' &&`
+  // — a toggle on the Dashboard silently deciding how the Chargen page looked, so
+  // switching to Übersicht once left every zone here collapsed with no visible cause.
+  const sectionClass = 'location-section' + (zoneHasUrgent ? '' : ' collapsed');
   return `<div class="${sectionClass}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
@@ -3940,7 +3936,7 @@ function renderFruitingSection(fruitingZones, filtered) {
     })
     .join('');
 
-  const fruitSectionClass = 'location-section' + (dashMode === 'farm' && totalBags > 0 ? '' : ' collapsed');
+  const fruitSectionClass = 'location-section' + (totalBags > 0 ? '' : ' collapsed');
   return `<div class="${fruitSectionClass}" data-zone="fruiting">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
@@ -4152,25 +4148,6 @@ function locSelectAllVisible() {
     });
   });
   renderStatus();
-}
-function setDashMode(mode) {
-  dashMode = mode;
-  localStorage.setItem('mp-dash-mode', mode);
-  applyDashMode();
-  renderStatus();
-}
-function applyDashMode() {
-  const farmBtn = document.getElementById('dash-view-farm');
-  const ovBtn = document.getElementById('dash-view-overview');
-  const charts = document.getElementById('dash-charts-section');
-  const farmSection = document.getElementById('dash-farm-section');
-  if (farmBtn) farmBtn.classList.toggle('active', dashMode === 'farm');
-  if (ovBtn) ovBtn.classList.toggle('active', dashMode === 'overview');
-  if (charts) charts.style.display = dashMode === 'overview' ? '' : 'none';
-  if (farmSection) farmSection.style.display = dashMode === 'farm' ? '' : 'none';
-  const histWrap = document.getElementById('ov-kpi-history');
-  if (histWrap) histWrap.style.display = dashMode === 'overview' ? '' : 'none';
-  if (dashMode === 'overview' && !kpiHistoryData) loadKpiHistory();
 }
 function setOvPeriod(p) {
   ovPeriod = p;
@@ -20741,11 +20718,6 @@ function initEventListeners() {
         break;
     }
   });
-  // The two creation flows keep one-tap buttons here, on the screen where you
-  // decide what to do next. Every other page reaches them through Arbeitsgänge.
-  $('dash-act-newbatch').addEventListener('click', msQuickChargeNew);
-  $('dash-act-labwork').addEventListener('click', msQuickLaborNew);
-  applyDashMode();
   initDashCollapse();
 
   // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
@@ -21832,8 +21804,6 @@ function wkOpenSubstrate() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', fn);
   });
-  const today = document.getElementById('wk-goto-today');
-  if (today) today.addEventListener('click', () => go('dash', 'n-dash'));
   const nav = document.getElementById('n-work');
   if (nav) nav.addEventListener('click', () => go('work', 'n-work'));
   const close = document.getElementById('wkf-close');

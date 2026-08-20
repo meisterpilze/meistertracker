@@ -5517,29 +5517,6 @@ tr:hover td {
   color: var(--c-text-muted);
   margin-top: 3px;
 }
-.wk-todo-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--c-amber-light);
-  border: 1px solid var(--c-amber-border);
-  color: var(--c-amber-dark);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  margin: 12px 0 14px;
-}
-.wk-todo-strip .btn {
-  margin-left: auto;
-  /* (0,2,0) — beats the site-wide `.btn-sm` coarse rule below, so the one
-     button on the landing page gets the full --tap rather than 44. */
-  min-height: var(--tap);
-  border-color: var(--c-amber-dark);
-  color: var(--c-amber-dark);
-}
-
 .wk-tiles {
   display: grid;
   /* Fixed four across, so the launcher reads as four things that make
