@@ -75,7 +75,7 @@ window.LANG['en'] = {
   'pickupLoc.reactivate': 'Reinstate',
   'pickupLoc.confirmRetire': 'Retire "{name}"? New appointments can no longer pick it. Existing ones keep it.',
   // Order hub (Phase 0)
-  'orders.inbox': 'Orders',
+  'orders.inbox': 'Inbox',
   'orders.tomake': 'What to make',
   'orders.mapping': 'Product mapping',
   'orders.customers': 'Customers',

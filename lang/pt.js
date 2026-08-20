@@ -75,7 +75,7 @@ window.LANG['pt'] = {
   'pickupLoc.reactivate': 'Reativar',
   'pickupLoc.confirmRetire':
     'Desativar "{name}"? Deixa de poder ser escolhido em novas marcações. As existentes mantêm-no.',
-  'orders.inbox': 'Encomendas',
+  'orders.inbox': 'Entrada',
   'orders.tomake': 'O que produzir',
   'orders.mapping': 'Associação de produtos',
   'orders.customers': 'Clientes',

@@ -76,7 +76,7 @@ window.LANG['de'] = {
   'pickupLoc.confirmRetire':
     '„{name}" stilllegen? Der Ort ist dann bei neuen Terminen nicht mehr auswählbar. Bestehende Termine behalten ihn.',
   // Order hub (Phase 0)
-  'orders.inbox': 'Bestellungen',
+  'orders.inbox': 'Eingang',
   'orders.tomake': 'Was muss ich machen',
   'orders.mapping': 'Produkt-Zuordnung',
   'orders.customers': 'Kunden',
