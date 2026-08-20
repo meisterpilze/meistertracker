@@ -3828,6 +3828,15 @@ tr:hover td {
     transform 0.2s ease,
     opacity 0.2s ease;
 }
+/* The error skin. Same bar, same place, same size — only the colour and the
+   role change, because a message that moves to a different corner depending on
+   whether it is good news is a message the eye has to hunt for. Dark red rather
+   than the app's --c-red: this bar sits on #14201a in both themes, and a light
+   surface colour on it is unreadable. */
+.undo-bar.is-err {
+  background: #3a1618;
+  color: #ffe1e1;
+}
 .undo-bar.show {
   transform: translate(-50%, 0);
   opacity: 1;

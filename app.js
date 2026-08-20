@@ -2319,11 +2319,11 @@ function confirmBatchAdd() {
     loc = document.getElementById('ba-loc').value,
     batch = batches.find((x) => x.batchId === id);
   if (!id || !batch) {
-    alert(t('batchadd.selectBatch'));
+    toast(t('batchadd.selectBatch'), 'err');
     return;
   }
   if (!loc) {
-    alert(t('batchadd.selectLoc'));
+    toast(t('batchadd.selectLoc'), 'err');
     return;
   }
   const now = new Date().toISOString();
@@ -3433,14 +3433,14 @@ async function takeKpiSnapshot() {
   try {
     const r = await fetch('/api/kpi-snapshots/now', { method: 'POST' });
     if (r.status === 401 || r.status === 403) {
-      alert(t('dash.ov.snapshotAuthErr') || 'Admin login required');
+      toast(t('dash.ov.snapshotAuthErr') || 'Admin login required', 'err');
       return;
     }
     if (!r.ok) throw new Error('Failed');
     await loadKpiHistory();
   } catch (e) {
     console.error('Snapshot failed', e);
-    alert(t('dash.ov.snapshotErr') || 'Snapshot failed');
+    toast(t('dash.ov.snapshotErr') || 'Snapshot failed', 'err');
   }
 }
 
@@ -3508,7 +3508,7 @@ async function exportKpiCSV() {
     const j = await r.json();
     const raw = j.items || [];
     if (!raw.length) {
-      alert(t('dash.ov.historyNoData'));
+      toast(t('dash.ov.historyNoData'), 'err');
       return;
     }
     const period = (document.getElementById('kpi-csv-period') || {}).value || 'weekly';
@@ -4368,7 +4368,7 @@ function printWorkList() {
     'ipt></body></html>';
   const win = window.open('', '_blank');
   if (!win) {
-    alert(t('worklist.popupBlocked'));
+    toast(t('worklist.popupBlocked'), 'err');
     return;
   }
   win.document.write(html);
@@ -4538,22 +4538,60 @@ function showUndoBar(msg, undoCb) {
     hideUndoBar();
     if (undoCb) undoCb();
   };
+  bar.onclick = null;
+  bar.classList.remove('is-err');
+  bar.setAttribute('role', 'status');
+  bar.setAttribute('aria-live', 'polite');
   bar.classList.add('show');
   clearTimeout(_undoTimer);
   _undoTimer = setTimeout(hideUndoBar, 8000);
 }
-function flashUndoBar(msg) {
+// The app's own message line, and the reason it exists twice over. flashUndoBar
+// is the receipt half — the bar with no button on it — and `toast` is the same
+// bar carrying what used to go through alert() 77 times.
+//
+// alert() was the wrong control for that in four ways, and the fourth is why it
+// could not simply be styled: it is not the app. On a phone it renders as
+// `192.168.x.x sagt:` in the OS font, ignoring the theme and the 56px touch
+// floor everything else in this app now guarantees. It also blocks — a gloved
+// thumb has to find one small OK before anything else can happen — and it
+// detaches the message from the field that caused it, so the user dismisses a
+// sentence and then has to work out which of nine inputs it meant. This bar
+// fixes the first three. The fourth, putting the message under its own field,
+// is field-level validation and is not this change.
+//
+// Errors are read out assertively and sit for six seconds rather than two and a
+// half, because a validation message that leaves before the eye reaches it is a
+// message nobody got. A tap dismisses either kind.
+function toast(msg, kind) {
   const bar = document.getElementById('undo-bar');
   if (!bar) return;
+  const err = kind === 'err';
   document.getElementById('undo-msg').textContent = msg;
   document.getElementById('undo-btn').style.display = 'none';
+  bar.classList.toggle('is-err', err);
+  bar.setAttribute('role', err ? 'alert' : 'status');
+  bar.setAttribute('aria-live', err ? 'assertive' : 'polite');
+  // Tap anywhere to dismiss. Only on this path: an undo offer that vanished
+  // under a stray tap would take the undo with it.
+  bar.onclick = hideUndoBar;
   bar.classList.add('show');
   clearTimeout(_undoTimer);
-  _undoTimer = setTimeout(hideUndoBar, 2500);
+  _undoTimer = setTimeout(hideUndoBar, err ? 6000 : 2500);
+}
+function flashUndoBar(msg) {
+  toast(msg);
 }
 function hideUndoBar() {
   const bar = document.getElementById('undo-bar');
-  if (bar) bar.classList.remove('show');
+  if (!bar) return;
+  bar.classList.remove('show');
+  // Dropped on the way out, not on the way in: the bar fades rather than
+  // vanishing, and removing the skin while it is still visible recolours it
+  // mid-fade. The next caller sets its own anyway.
+  setTimeout(() => {
+    if (!bar.classList.contains('show')) bar.classList.remove('is-err');
+  }, 250);
 }
 function _snapshotBeforeMove(batchList, dest, lastByBag) {
   const snap = [];
@@ -5122,7 +5160,7 @@ function saveRhythmEditor() {
   }
   apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
     if (res && res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     weekRhythm = map;
@@ -5509,7 +5547,7 @@ function editRhythmTarget(date, target) {
     }
     apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       const row = rhythmTasks.find((x) => x.date === date);
@@ -5538,7 +5576,7 @@ function logRhythmProgress(date, target, done) {
     }
     apiPost('/api/rhythm-task', { date, doneQty: n }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       // Update in place so the row reflects the new figure without waiting for
@@ -7017,7 +7055,7 @@ function createBatch() {
     if (!mushroomStrains.length) {
       confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
     } else {
-      alert(t('strains.noStrainsHint'));
+      toast(t('strains.noStrainsHint'), 'err');
     }
     return;
   }
@@ -7028,7 +7066,7 @@ function createBatch() {
     days = parseInt(document.getElementById('nb-days').value) || 14;
   const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
-    alert(t('batch.fillQty'));
+    toast(t('batch.fillQty'), 'err');
     return;
   }
   // v67: portioned out of an existing mix. None of the composition and delta
@@ -7040,7 +7078,7 @@ function createBatch() {
     return;
   }
   if (!bagKg) {
-    alert(t('batch.enterWeight'));
+    toast(t('batch.enterWeight'), 'err');
     return;
   }
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
@@ -7064,7 +7102,7 @@ function createBatch() {
   // under-deducted by half.
   const subTotal = hw + wb + coir;
   if ((hw || wb || coir) && Math.abs(subTotal - 100) > 0.01) {
-    alert(t('batch.substrateExceeds', { sum: subTotal }));
+    toast(t('batch.substrateExceeds', { sum: subTotal }), 'err');
     return;
   }
   // Nothing to deduct at all: the substrate block below is skipped and the batch
@@ -7207,7 +7245,7 @@ function createBatch() {
         if (i >= 0) batches.splice(i, 1);
         // Roll back the optimistic stock mutation too — server didn't apply the deltas.
         inventory.stock = stockSnapshot;
-        alert(t('batch.saveFailed') + r.error);
+        toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
         renderStatus();
         return;
@@ -7557,7 +7595,7 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim()
     });
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await loadData();
@@ -7565,7 +7603,7 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
     nbSubstrateNeed();
     // Der Ablauf zeigt statt des Hinweisfensters seine Quittung.
     if (opts && opts.onDone) return opts.onDone(r);
-    alert(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
+    toast(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
   };
   // A mix can come out heavier than the arithmetic said, so this warns rather
   // than blocks — but it has to be said out loud, because the leftover figure is
@@ -7780,7 +7818,7 @@ function deleteSubstrate(subId) {
   confirm2(t('sub.deleteTitle'), t('sub.deleteMsg', { id: subId }), t('sub.delete'), async () => {
     const r = await apiDelete('/api/substrate-batches/' + encodeURIComponent(subId));
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await loadData();
@@ -7802,7 +7840,7 @@ function writeOffSubstrate(subId, leftKg) {
       note: t('sub.writeOffNote')
     });
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await refreshSubstrateBatches();
@@ -7820,14 +7858,14 @@ async function printBatchLabelsInline() {
   const id = res ? res.dataset.batchId : null;
   const b = batches.find((x) => x.batchId === id) || batches[batches.length - 1];
   if (!b) {
-    alert(t('print.selectBatchFirst'));
+    toast(t('print.selectBatchFirst'), 'err');
     return;
   }
   const modeEl = document.getElementById('print-mode');
   const qrEl = document.getElementById('bag-qr');
   const zpl = makeBagZPL(b.bags, b, modeEl ? modeEl.value : 'full', qrEl ? qrEl.checked : true);
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -8562,7 +8600,7 @@ function confirmAddBags() {
   if (!b) return;
   const qty = parseInt(document.getElementById('ab-qty').value) || 0;
   if (qty < 1) {
-    alert(t('addBags.enterQty'));
+    toast(t('addBags.enterQty'), 'err');
     return;
   }
   const confirmBtn = document.getElementById('addbags-confirm-btn');
@@ -8702,7 +8740,7 @@ function confirmHarvest(keepScanning) {
   const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
-    alert(t('harvest.enterWeight'));
+    toast(t('harvest.enterWeight'), 'err');
     return;
   }
   // Only when the field is on screen. Reading it regardless would send whatever
@@ -8713,7 +8751,7 @@ function confirmHarvest(keepScanning) {
   // scan modal has moved on is a message about a bag that is already back on the
   // shelf.
   if (rel > g) {
-    alert(t('harvest.releaseTooHigh'));
+    toast(t('harvest.releaseTooHigh'), 'err');
     return;
   }
   const p = scan.harvestBag;
@@ -10545,7 +10583,7 @@ function renderCameraFlags(flags) {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
         loadCameraTab();
       } catch (e) {
-        alert(t('common.error') + ': ' + (e.message || ''));
+        toast(t('common.error') + ': ' + (e.message || ''), 'err');
       }
     })
   );
@@ -10649,7 +10687,7 @@ async function deleteCamera(id) {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     loadCameraTab();
   } catch (e) {
-    alert(t('common.error') + ': ' + (e.message || ''));
+    toast(t('common.error') + ': ' + (e.message || ''), 'err');
   }
 }
 
@@ -10750,7 +10788,7 @@ function initCameraPxCalib() {
     if (!_cam.pxDistance) return;
     const mm = parseDecimal(mmInput.value);
     if (!Number.isFinite(mm) || mm <= 0) {
-      alert(t('cam.invalidMm'));
+      toast(t('cam.invalidMm'), 'err');
       return;
     }
     const ratio = _cam.pxDistance / mm;
@@ -11467,7 +11505,7 @@ function logDelivery() {
   const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const note = document.getElementById('del-note').value.trim();
   if (kg <= 0) {
-    alert(t('inv.enterQty'));
+    toast(t('inv.enterQty'), 'err');
     return;
   }
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
@@ -11511,7 +11549,7 @@ function logAdjustment() {
     delta = parseDecimal(deltaVal) || 0;
     newStock = Math.max(0, cur + delta);
   } else {
-    alert(t('inv.enterAmount'));
+    toast(t('inv.enterAmount'), 'err');
     return;
   }
   const prevStock = inventory.stock[mat] || 0;
@@ -11701,7 +11739,7 @@ function editSupplier(id) {
       notes: document.getElementById('sup-notes').value.trim()
     };
     if (!s.name) {
-      alert(t('zones.nameRequired'));
+      toast(t('zones.nameRequired'), 'err');
       return;
     }
     if (existing) s.id = existing.id;
@@ -11794,7 +11832,7 @@ function editPickupLocation(id) {
       active: existing ? existing.active !== false : true
     };
     if (!l.name) {
-      alert(t('zones.nameRequired'));
+      toast(t('zones.nameRequired'), 'err');
       return;
     }
     if (existing) l.id = existing.id;
@@ -12163,12 +12201,12 @@ async function reorderZoneWithinRole(sourceId, targetId, before, role) {
   try {
     const res = await apiPost('/api/zones/reorder', { order: fullOrder });
     if (res && res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       await loadData();
     }
   } catch (err) {
     console.error('reorder zones error:', err);
-    alert(t('zones.errorReorder', { err: err.message || 'unknown error' }));
+    toast(t('zones.errorReorder', { err: err.message || 'unknown error' }), 'err');
     await loadData();
   }
 }
@@ -12180,20 +12218,20 @@ async function addZone() {
     .replace(/[^A-Z0-9]/g, '_')
     .replace(/^_+|_+$/g, '');
   if (!id || id.length < 2) {
-    alert(t('zones.errShort'));
+    toast(t('zones.errShort'), 'err');
     return;
   }
   if (nameRaw.length > 50) {
-    alert(t('zones.errLong'));
+    toast(t('zones.errLong'), 'err');
     return;
   }
   if (!/^[A-Z]/.test(id)) {
-    alert(t('zones.errIdStart'));
+    toast(t('zones.errIdStart'), 'err');
     return;
   }
   const dup = zones.find((z) => z.id === id);
   if (dup) {
-    alert(t('zones.errExists') + ' (' + dup.name + ')');
+    toast(t('zones.errExists') + ' (' + dup.name + ')', 'err');
     return;
   }
   const role = document.getElementById('zone-role').value;
@@ -12218,17 +12256,17 @@ async function addZone() {
       ]
     : [];
   if (racks.some((r) => r === id + '_' || r.length <= id.length + 1)) {
-    alert(t('zones.errRackEmpty'));
+    toast(t('zones.errRackEmpty'), 'err');
     return;
   }
   if (racks.length > 50) {
-    alert(t('zones.errTooManyRacks'));
+    toast(t('zones.errTooManyRacks'), 'err');
     return;
   }
   const capVal = document.getElementById('zone-capacity').value.trim();
   const maxCapacity = capVal ? parseInt(capVal, 10) : null;
   if (maxCapacity !== null && (!Number.isFinite(maxCapacity) || maxCapacity < 1)) {
-    alert(t('zones.errCapacity'));
+    toast(t('zones.errCapacity'), 'err');
     return;
   }
   try {
@@ -12244,7 +12282,7 @@ async function addZone() {
       created: now
     });
     if (res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     zones.push({
@@ -12266,7 +12304,7 @@ async function addZone() {
     document.getElementById('zone-capacity').value = '';
   } catch (e) {
     console.error('addZone error:', e);
-    alert(t('zones.errorCreate', { err: e.message || 'unknown error' }));
+    toast(t('zones.errorCreate', { err: e.message || 'unknown error' }), 'err');
   }
 }
 function renameZone(id) {
@@ -12278,7 +12316,7 @@ function renameZone(id) {
     if (newName === z.name) return;
     apiPatch('/api/zones/' + encodeURIComponent(id) + '/name', { name: newName }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       z.name = newName;
@@ -12312,7 +12350,7 @@ function editZoneCapacity(id) {
     if ((z.maxCapacity || null) === cap) return;
     apiPatch('/api/zones/' + encodeURIComponent(id) + '/capacity', { maxCapacity: cap }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       z.maxCapacity = cap;
@@ -12329,7 +12367,7 @@ function removeZone(id) {
   confirm2(t('zones.deleteTitle'), t('zones.deleteMsg', { name: z.name }), t('zones.delete'), async () => {
     const res = await apiDelete('/api/zones/' + encodeURIComponent(id));
     if (res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     zones = zones.filter((x) => x.id !== id);
@@ -12349,12 +12387,12 @@ function addRackToZone(zoneId) {
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
     if (ALL_RACKS.includes(rackId)) {
-      alert(t('zones.errRackExists'));
+      toast(t('zones.errRackExists'), 'err');
       return;
     }
     apiPost('/api/zones/' + encodeURIComponent(zoneId) + '/racks', { id: rackId }).then((res) => {
       if (res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       const zone = zones.find((z) => z.id === zoneId);
@@ -12369,7 +12407,7 @@ function removeRack(rackId) {
   confirm2(t('zones.rackDeleteTitle'), t('zones.rackDeleteMsg', { name: rackId }), t('zones.delete'), () => {
     apiDelete('/api/racks/' + encodeURIComponent(rackId)).then((res) => {
       if (res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       zones.forEach((z) => {
@@ -12425,7 +12463,7 @@ async function executeBulkMoveToRack(zoneId, rackId) {
   const res = await apiPost('/api/scan-log', { entries });
   if (handleZoneMismatch(res, entries)) return; // I-12
   if (res.error) {
-    alert(res.error);
+    toast(res.error, 'err');
     return;
   }
   entries.forEach((e) => scanLog.push(e));
@@ -12599,11 +12637,11 @@ function saveMStrain() {
   const desc = document.getElementById('ms-desc').value.trim();
   const editId = document.getElementById('ms-edit-id').value;
   if (!name || !kuerzel) {
-    alert(t('strains.required'));
+    toast(t('strains.required'), 'err');
     return;
   }
   if (kuerzel.length < 2 || kuerzel.length > 4) {
-    alert(t('strains.kuerzelLength'));
+    toast(t('strains.kuerzelLength'), 'err');
     return;
   }
   const rec = _msReadRecipe();
@@ -12625,7 +12663,7 @@ function saveMStrain() {
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
     if (r && r.error) {
-      alert(t('common.error') + ': ' + r.error);
+      toast(t('common.error') + ': ' + r.error, 'err');
       return;
     }
     if (!editId && r && r.id) {
@@ -12734,7 +12772,7 @@ function deleteMStrain(id) {
   confirm2(t('strains.deleteTitle'), t('strains.deleteMsg', { name: ms.name }), t('strains.delete'), () => {
     apiDelete('/api/mushroom-strains/' + id).then((r) => {
       if (r && r.error) {
-        alert(t('common.error') + ': ' + r.error);
+        toast(t('common.error') + ': ' + r.error, 'err');
         return;
       }
       mushroomStrains = mushroomStrains.filter((x) => x.id !== id);
@@ -12933,7 +12971,7 @@ function msQuickCharge(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
   if (!ms.recBatchType) {
-    alert(t('msq.noRecipe'));
+    toast(t('msq.noRecipe'), 'err');
     return;
   }
   msQuickOpen('charge', ms);
@@ -13217,14 +13255,14 @@ function msqRestoreAfterScan(prefix) {
 function msQuickConfirm() {
   if (!_msQuickCtx) return;
   if (!_msQuickCtx.ms) {
-    alert(t('msq.pickSortePrompt'));
+    toast(t('msq.pickSortePrompt'), 'err');
     return;
   }
   const ms = _msQuickCtx.ms;
   const mode = _msQuickCtx.mode;
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
   if (qty < 1) {
-    alert(t('batch.fillQty'));
+    toast(t('batch.fillQty'), 'err');
     return;
   }
   _msqSaveQty(mode, qty);
@@ -13250,7 +13288,7 @@ function msQuickConfirm() {
       // would reach createGrainBatch as "no lines" and alert against a dialog
       // that is already gone, discarding everything typed.
       if (grainKg <= 0) {
-        alert(t('batch.enterWeight'));
+        toast(t('batch.enterWeight'), 'err');
         return;
       }
       setv('lw-st', ms.id);
@@ -13613,7 +13651,7 @@ function logLabWork() {
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   if (!ms) {
-    alert(t('lab.selectPilzsorte'));
+    toast(t('lab.selectPilzsorte'), 'err');
     return;
   }
   const sp = ms.name,
@@ -13621,7 +13659,7 @@ function logLabWork() {
   const parentId = document.getElementById('lw-parent')?.value || null,
     qty = parseInt(document.getElementById('lw-qty').value) || 1;
   if (type === 'G2G') {
-    alert(t('lab.g2gNote'));
+    toast(t('lab.g2gNote'), 'err');
     return;
   }
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
@@ -13791,7 +13829,7 @@ function createGrainBatch() {
     if (!mushroomStrains.length) {
       confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
     } else {
-      alert(t('strains.noStrainsHint'));
+      toast(t('strains.noStrainsHint'), 'err');
     }
     return;
   }
@@ -13799,7 +13837,7 @@ function createGrainBatch() {
     st = ms.kuerzel;
   const lines = gsReadLines();
   if (!lines.length) {
-    alert(t('batch.fillQty'));
+    toast(t('batch.fillQty'), 'err');
     return;
   }
   const days = parseInt(document.getElementById('gs-days').value) || 14;
@@ -13883,7 +13921,7 @@ function createGrainBatch() {
         if (i >= 0) batches.splice(i, 1);
         // Roll back the optimistic stock mutation — server didn't apply the deltas.
         inventory.stock = stockSnapshot;
-        alert(t('batch.saveFailed') + r.error);
+        toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
         renderStatus();
         return;
@@ -15483,7 +15521,7 @@ function makeBagZPL(bags, batch, detail, qr) {
     .join('\n');
   if (legacyFallbackIds.length) {
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
-    alert(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }));
+    toast(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }), 'err');
   }
   return zpl;
 }
@@ -15506,7 +15544,7 @@ function toggleBagRange() {
 async function printBagLabels() {
   const b = batches.find((x) => x.batchId === document.getElementById('print-batch').value);
   if (!b) {
-    alert(t('print.selectBatchFirst'));
+    toast(t('print.selectBatchFirst'), 'err');
     return;
   }
   let bags = b.bags;
@@ -15518,7 +15556,7 @@ async function printBagLabels() {
       return n >= from && n <= to;
     });
     if (!bags.length) {
-      alert(t('print.noBagsInRange'));
+      toast(t('print.noBagsInRange'), 'err');
       return;
     }
   }
@@ -15529,7 +15567,7 @@ async function printBagLabels() {
     document.getElementById('bag-qr').checked
   );
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -15547,12 +15585,12 @@ async function printBagLabels() {
 async function printLabLabels() {
   const ids = [...selectedLabIds];
   if (!ids.length) {
-    alert(t('print.selectCulture'));
+    toast(t('print.selectCulture'), 'err');
     return;
   }
   const zpl = makeLabZPL(ids, document.getElementById('lab-mode').value, document.getElementById('lab-qr').checked);
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -17309,10 +17347,10 @@ async function toggleUserShip(id, canShip) {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
     }
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
   loadUsersTab();
 }
@@ -17329,10 +17367,10 @@ async function toggleUserRelease(id, canRelease) {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
     }
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
   loadUsersTab();
 }
@@ -17342,11 +17380,11 @@ async function addUser() {
   const p = document.getElementById('new-password').value;
   const role = document.getElementById('new-role').value;
   if (!u || !p) {
-    alert(t('users.required'));
+    toast(t('users.required'), 'err');
     return;
   }
   if (p.length < 8) {
-    alert(t('users.minPw'));
+    toast(t('users.minPw'), 'err');
     return;
   }
   try {
@@ -17357,14 +17395,14 @@ async function addUser() {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
       return;
     }
     document.getElementById('new-username').value = '';
     document.getElementById('new-password').value = '';
     loadUsersTab();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
 }
 
@@ -17374,12 +17412,12 @@ async function deleteUser(id) {
     const r = await authFetch('/api/users/' + id, { method: 'DELETE' });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
       return;
     }
     loadUsersTab();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
 }
 
