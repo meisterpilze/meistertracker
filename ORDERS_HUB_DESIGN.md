@@ -436,7 +436,9 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   a species the lab has never released comes back in `unknownSpecies`, because a misspelt name and
   a sold-out one both read as zero. A **retired** article is the one place a zero is right: it is
   pushed as 0 rather than dropped, or the last number it was ever given would stand in every shop
-  for good. Which releases are live is decided by `activeHarvestReleases()`, on the **lab** day —
+  for good — but only for an article number no live article answers for, including a live one whose
+  stock cannot be worked out, or the zero would fill that silence and delist something still on
+  sale. Which releases are live is decided by `activeHarvestReleases()`, on the **lab** day —
   asking that question in its own words against the UTC day kept expired releases selling until
   02:00. `AutosubtractReservedAmount` is always on — Billbee knows about orders that are not
   shipped yet and a release does not. See `db.billbeeStockLevels()`.
