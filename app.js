@@ -20203,14 +20203,26 @@ function gsRowHtml(rec, i, q) {
   );
 }
 
-// The matched run, marked in the text it was found in. esc() first — every id
-// and subtitle in here has been through a customer name or a channel payload.
+// The matched run, marked in the text it was found in.
+//
+// Find it in the text, escape the three pieces. Escaping first and then
+// measuring was the same operation in the wrong order, and it went wrong in
+// both directions on the strings this actually gets — every id and subtitle in
+// here has been through a customer name or a channel payload. "Meier & Co" is
+// "Meier &amp; Co" once escaped, so a search for "& co" found nothing, and a
+// search for "&" found the ampersand of the entity and cut it in half:
+// `Meier <mark>&</mark>amp; Co`, an entity split by a tag, rendered as a
+// literal "amp;" on the row. Cutting first means no cut can land inside an
+// entity, because there are no entities yet.
 function gsMark(text, q) {
-  const s = esc(String(text == null ? '' : text));
-  if (!q) return s;
-  const at = s.toLowerCase().indexOf(q.toLowerCase());
-  if (at < 0) return s;
-  return s.slice(0, at) + '<mark>' + s.slice(at, at + q.length) + '</mark>' + s.slice(at + q.length);
+  const s = String(text == null ? '' : text);
+  if (!q) return esc(s);
+  const needle = String(q);
+  const at = s.toLowerCase().indexOf(needle.toLowerCase());
+  if (at < 0) return esc(s);
+  return (
+    esc(s.slice(0, at)) + '<mark>' + esc(s.slice(at, at + needle.length)) + '</mark>' + esc(s.slice(at + needle.length))
+  );
 }
 
 function gsRender() {

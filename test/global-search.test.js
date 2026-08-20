@@ -33,13 +33,15 @@ function lift(...names) {
     .join('\n');
   return new Function(`${src}\nreturn { ${names.join(', ')} };`)();
 }
-const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup } = lift(
+const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark } = lift(
   'GS_ORDER',
   'gsRank',
   'gsMatch',
   'gsAutoOpen',
   'gsScanned',
-  'gsLookup'
+  'gsLookup',
+  'esc',
+  'gsMark'
 );
 
 // A stand-in farm. The ids are the shapes this app really generates: genBatchId
@@ -225,6 +227,35 @@ describe('a scanned label is a lookup key, not an id', () => {
       /const found = gsLookup\(gsIndex\(\), document\.getElementById\('gs-q'\)\.value, barcodeRegistry\);/
     );
     assert.match(APP, /gsQ = q;/);
+  });
+});
+
+describe('the run it marks', () => {
+  it('marks the match', () => {
+    assert.equal(gsMark('AUS-190826-02', 'aus'), '<mark>AUS</mark>-190826-02');
+    assert.equal(gsMark('Austernpilz', ''), 'Austernpilz');
+    assert.equal(gsMark('Austernpilz', 'shii'), 'Austernpilz');
+  });
+
+  it('escapes what it did not match', () => {
+    assert.equal(gsMark('<script>', 'x'), '&lt;script&gt;');
+    assert.equal(gsMark(null, 'x'), '');
+  });
+
+  it('finds the match in the text rather than in the escaping of it', () => {
+    // Customer names reach this, and they carry ampersands. Escaping first
+    // turned "Meier & Co" into "Meier &amp; Co" before the search ran, so this
+    // query found nothing.
+    assert.equal(gsMark('Meier & Co', '& co'), 'Meier <mark>&amp; Co</mark>');
+  });
+
+  it('cannot cut an entity in half', () => {
+    // The same order, failing the other way: the ampersand the query found was
+    // the one that opens `&amp;`, and the tag went in between. The row rendered
+    // a literal "amp;" and the highlight was on nothing.
+    const out = gsMark('Meier & Co', '&');
+    assert.equal(out, 'Meier <mark>&amp;</mark> Co');
+    assert.doesNotMatch(out, /&(?!amp;|lt;|gt;|quot;|#39;)/, 'a bare ampersand means an entity was split');
   });
 });
 
