@@ -24,9 +24,16 @@ const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 
-// Every `<tr>…</tr>` template in app.js that carries at least one data-mlabel,
+// Every `<tr…>…</tr>` template in app.js that carries at least one data-mlabel,
 // found by content so that renaming or moving a renderer costs nothing here.
-const ROW_TEMPLATES = [...APP.matchAll(/<tr>((?:(?!<\/tr>).)*)<\/tr>/g)]
+//
+// The opening tag is allowed attributes and the body is allowed newlines. Both
+// were bare when this was written, and both cost coverage the moment they were
+// not: a `<tr>` that gained a data-find hook, a conditional style for a
+// highlighted row, or a template broken over two lines simply stopped being a
+// row template as far as this file was concerned. Three of the eleven were
+// visible under the strict pattern, and the guard below is what said so.
+const ROW_TEMPLATES = [...APP.matchAll(/<tr(?:\s[^>]*)?>([\s\S]*?)<\/tr>/g)]
   .map((m) => m[1])
   .filter((row) => row.includes('data-mlabel'));
 
@@ -36,7 +43,7 @@ const MAY_BE_UNLABELLED = /class="[^"]*(?:-actions|\bempty)\b/;
 
 describe('the cards a table becomes on a phone', () => {
   it('finds the row templates — a silent zero would make this file vacuous', () => {
-    assert.ok(ROW_TEMPLATES.length >= 4, `expected at least 4 labelled row templates, found ${ROW_TEMPLATES.length}`);
+    assert.ok(ROW_TEMPLATES.length >= 10, `expected at least 10 labelled row templates, found ${ROW_TEMPLATES.length}`);
   });
 
   it('labels every data cell, or says why not', () => {
