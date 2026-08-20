@@ -9318,38 +9318,46 @@ function setChannelSyncState(db, channel, s) {
  *
  *     units = floor(released grams of the species ÷ grams this article needs)
  *
- * Three rules keep that from publishing something nobody has:
+ * Four rules keep that from publishing something nobody has:
  *
  *  • **An article without a harvest component is left out entirely**, not pushed
  *    as 0. How many growkits are on the shelf is not something this lab tracks,
  *    and a 0 would delist the article in every shop Billbee feeds.
  *  • **An expired release counts as 0, not as unknown.** That is exactly the case
  *    where the shops have to stop offering.
+ *  • **A retired article is pushed as 0**, the one place a zero is the right
+ *    answer: it was on sale, it no longer is, and dropping it from the push would
+ *    leave the last number it was given standing in every shop for good.
  *  • **A species with no release counts as 0** — but it is reported back in
  *    `unknownSpecies` when the lab has never released that name at all, because
  *    the commonest cause is a spelling that does not match `Name (KÜRZEL)`, and
  *    silently offering nothing looks identical to being sold out.
  *
- * `today` is injectable so a test does not depend on the clock.
+ * ⚠️ **Which releases are live is decided by activeHarvestReleases(), not by a
+ * query of its own.** It was a query of its own once, against `new
+ * Date().toISOString()` — the UTC day — while everything else in this file and
+ * the harvest feed use the *lab* day. Between local midnight and 02:00 the two
+ * calendars disagree, and in that window a release that had expired went on
+ * selling in every shop Billbee feeds. See localDayString at the top of this file.
+ *
+ * `at` is injectable so a test does not depend on the clock.
  */
 function billbeeStockLevels(db, opts = {}) {
-  const today = opts.today || new Date().toISOString().slice(0, 10);
+  const at = opts.at || new Date();
+  const live = activeHarvestReleases(db, at);
+  const grams = (species) => {
+    const r = live.get(species);
+    return r ? Math.max(0, Number(r.grams) || 0) : 0;
+  };
   const mapped = db
     .prepare(
-      `SELECT m.channel_sku AS sku, p.id AS productId, p.name AS name
+      `SELECT m.channel_sku AS sku, p.id AS productId, p.name AS name, p.active AS active
          FROM product_channel_map m
          JOIN products p ON p.id = m.product_id
-        WHERE m.channel = 'billbee' AND m.channel_sku IS NOT NULL AND TRIM(m.channel_sku) <> '' AND p.active = 1
+        WHERE m.channel = 'billbee' AND m.channel_sku IS NOT NULL AND TRIM(m.channel_sku) <> ''
         ORDER BY m.channel_sku`
     )
     .all();
-  // Live releases only. An expired one is deliberately absent here so it reads as
-  // zero grams below.
-  const released = new Map();
-  for (const r of db
-    .prepare(`SELECT species, grams FROM harvest_release WHERE valid_until IS NULL OR valid_until >= ?`)
-    .all(today))
-    released.set(String(r.species), Math.max(0, Number(r.grams) || 0));
   // Every species the lab has ever released, expiry included: the difference
   // between "sold out" and "this name has never been seen here".
   const known = new Set(
@@ -9370,6 +9378,7 @@ function billbeeStockLevels(db, opts = {}) {
   }
 
   const bySku = new Map();
+  const retired = new Map();
   const skipped = [];
   const unknownSpecies = new Set();
   for (const row of mapped) {
@@ -9391,24 +9400,28 @@ function billbeeStockLevels(db, opts = {}) {
         break;
       }
       if (!known.has(species)) unknownSpecies.add(species);
-      const units = Math.floor((released.get(species) || 0) / per);
+      const units = Math.floor(grams(species) / per);
       qty = qty === null ? units : Math.min(qty, units);
     }
     if (!computable) {
       skipped.push({ sku: row.sku, product: row.name, reason: 'component-without-species-or-grams' });
       continue;
     }
+    // Retired articles are collected apart and only used for SKUs no live article
+    // claims. Merging them straight in would let a retired listing's 0 win the
+    // "smallest recipe" rule below and delist an article that is still on sale.
+    const into = row.active ? bySku : retired;
     // Two articles can be mapped to one Billbee SKU (different listings of the
     // same thing). One SKU can only carry one number, and the smaller recipe is
     // the one that must not be oversold.
-    const prev = bySku.get(row.sku);
-    if (!prev || qty < prev.qty) bySku.set(row.sku, { sku: row.sku, product: row.name, qty });
+    const prev = into.get(row.sku);
+    if (!prev || qty < prev.qty) into.set(row.sku, { sku: row.sku, product: row.name, qty });
   }
-  return {
-    levels: [...bySku.values()].map((l) => ({ ...l, reason: 'Meistertracker: Freigabe' })),
-    skipped,
-    unknownSpecies: [...unknownSpecies].sort()
-  };
+  const levels = [...bySku.values()].map((l) => ({ ...l, reason: 'Meistertracker: Freigabe' }));
+  for (const [sku, l] of retired)
+    if (!bySku.has(sku)) levels.push({ ...l, qty: 0, retired: true, reason: 'Meistertracker: ausgelistet' });
+  levels.sort((a, b) => (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0));
+  return { levels, skipped, unknownSpecies: [...unknownSpecies].sort() };
 }
 
 function getOrder(db, id) {

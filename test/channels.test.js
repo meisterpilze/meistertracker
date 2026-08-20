@@ -647,7 +647,9 @@ describe('Billbee: stock out', () => {
 
 describe('Billbee stock levels are derived from releases', () => {
   let d, p;
-  const TODAY = '2026-08-20';
+  // Local noon, so the lab day is 2026-08-20 in every timezone a test machine
+  // might run in.
+  const AT = new Date('2026-08-20T12:00:00');
   before(() => {
     ({ db: d, path: p } = tmpDb());
     const now = new Date().toISOString();
@@ -700,20 +702,20 @@ describe('Billbee stock levels are derived from releases', () => {
   });
 
   it('divides the release by what one article needs, rounding down', () => {
-    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const { levels } = db.billbeeStockLevels(d, { at: AT });
     const by = Object.fromEntries(levels.map((l) => [l.sku, l.qty]));
     assert.equal(by['AUS-250'], 4, '1200 g ÷ 250 g = 4, not 4.8');
     assert.equal(by['AUS-500'], 2);
   });
 
   it('publishes an expired release as nothing left, not as unknown', () => {
-    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const { levels } = db.billbeeStockLevels(d, { at: AT });
     const shi = levels.find((l) => l.sku === 'SHI-250');
     assert.equal(shi.qty, 0, 'the shops have to stop offering it');
   });
 
   it('leaves an article it cannot compute out of the push entirely', () => {
-    const { levels, skipped } = db.billbeeStockLevels(d, { today: TODAY });
+    const { levels, skipped } = db.billbeeStockLevels(d, { at: AT });
     assert.equal(
       levels.find((l) => l.sku === 'KIT-1'),
       undefined,
@@ -741,7 +743,7 @@ describe('Billbee stock levels are derived from releases', () => {
     };
     mk('NO-GRAMS', 'Austernseitling (AUS)', null);
     mk('NO-SPECIES', null, 250);
-    const { levels, skipped, unknownSpecies } = db.billbeeStockLevels(d, { today: TODAY });
+    const { levels, skipped, unknownSpecies } = db.billbeeStockLevels(d, { at: AT });
     for (const sku of ['NO-GRAMS', 'NO-SPECIES']) {
       assert.equal(
         levels.find((l) => l.sku === sku),
@@ -754,7 +756,7 @@ describe('Billbee stock levels are derived from releases', () => {
   });
 
   it('reports a species name the lab has never released', () => {
-    const { unknownSpecies } = db.billbeeStockLevels(d, { today: TODAY });
+    const { unknownSpecies } = db.billbeeStockLevels(d, { at: AT });
     // Sold out and misspelled both read as zero — only this list tells them apart.
     assert.deepEqual(unknownSpecies, ['Igelstachelbart']);
   });
@@ -773,7 +775,7 @@ describe('Billbee stock levels are derived from releases', () => {
     d.prepare(
       "INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created) VALUES('billbee', 'AUS-250', 'alt', ?, ?)"
     ).run(id, now);
-    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const { levels } = db.billbeeStockLevels(d, { at: AT });
     const rows = levels.filter((l) => l.sku === 'AUS-250');
     assert.equal(rows.length, 1);
     assert.equal(rows[0].qty, 2, '2 × 250 g per unit is the recipe that must not be oversold');
@@ -803,5 +805,88 @@ describe('the Billbee card is actually wired', () => {
       assert.notEqual(at, -1, id + ' is referenced');
       assert.ok(app.slice(at, at + 200).includes('addEventListener'), id + ' has a listener');
     }
+  });
+});
+
+describe('Billbee stock levels use the lab day, and say when an article is gone', () => {
+  let d, p;
+  const now = '2026-08-20T10:00:00Z';
+  const prod = (sku, name, active = 1) =>
+    d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES(?, ?, 'fresh', ?, ?)")
+      .run(sku, name, active, now).lastInsertRowid;
+  const comp = (id, species, grams) =>
+    d
+      .prepare(
+        `INSERT INTO product_components(product_id, fulfill_type, species, grams, qty_per_unit)
+         VALUES(?, 'harvest', ?, ?, 1)`
+      )
+      .run(id, species, grams);
+  const map = (sku, id, listing = null) =>
+    d
+      .prepare(
+        'INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created) VALUES(?, ?, ?, ?, ?)'
+      )
+      .run('billbee', sku, listing, id, now);
+
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('lets a release expire on the lab calendar, not the UTC one', () => {
+    // 00:30 local: in Berlin (and every timezone east of Greenwich) the UTC clock
+    // still says yesterday. The release below ran out at the end of yesterday, so
+    // it must be gone — reading the UTC day here kept it on sale for two hours in
+    // every shop Billbee feeds, which is the regression this pins.
+    const at = new Date('2026-08-21T00:30:00');
+    const id = prod('AUS-250', 'Austernpilze 250 g');
+    comp(id, 'Austernseitling (AUS)', 250);
+    map('AUS-250', id);
+    d.prepare('INSERT INTO harvest_release(species, grams, valid_until, updated) VALUES(?, ?, ?, ?)').run(
+      'Austernseitling (AUS)',
+      1200,
+      '2026-08-20',
+      now
+    );
+    const { levels } = db.billbeeStockLevels(d, { at });
+    assert.equal(levels.find((l) => l.sku === 'AUS-250').qty, 0);
+    // Still on sale the afternoon before, so the zero above is the expiry and not
+    // a fixture that never had anything in it.
+    const before5pm = new Date('2026-08-20T17:00:00');
+    assert.equal(db.billbeeStockLevels(d, { at: before5pm }).levels.find((l) => l.sku === 'AUS-250').qty, 4);
+  });
+
+  it('agrees with activeHarvestReleases about what is live', () => {
+    // The coupling itself, so the two cannot drift apart again whatever the rule
+    // becomes: a species the shared helper does not report is worth zero here.
+    const at = new Date('2026-08-21T00:30:00');
+    assert.equal(db.activeHarvestReleases(d, at).has('Austernseitling (AUS)'), false);
+    assert.equal(db.billbeeStockLevels(d, { at }).levels.find((l) => l.sku === 'AUS-250').qty, 0);
+  });
+
+  it('pushes a retired article as 0 instead of dropping it', () => {
+    const at = new Date('2026-08-20T12:00:00');
+    const id = prod('SHI-250', 'Shiitake 250 g', 0);
+    comp(id, 'Austernseitling (AUS)', 250);
+    map('SHI-250', id);
+    const row = db.billbeeStockLevels(d, { at }).levels.find((l) => l.sku === 'SHI-250');
+    // Dropping it would leave the last number it was ever given standing in every
+    // connected shop, for good.
+    assert.equal(row.qty, 0);
+    assert.equal(row.retired, true);
+  });
+
+  it('does not let a retired listing delist a SKU that is still on sale', () => {
+    const at = new Date('2026-08-20T12:00:00');
+    const old = prod('AUS-ALT', 'Austernpilze, alte Fassung', 0);
+    comp(old, 'Austernseitling (AUS)', 250);
+    map('AUS-250', old, 'alt'); // same SKU as the live article above
+    const rows = db.billbeeStockLevels(d, { at }).levels.filter((l) => l.sku === 'AUS-250');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].qty, 4, 'the live article decides; the retired one only fills SKUs nobody claims');
   });
 });
