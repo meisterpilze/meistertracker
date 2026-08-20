@@ -8923,6 +8923,13 @@ function upsertCustomerFromOrder(db, o) {
   // gets fulfilled: upsertOrder keeps the ship_* fields it needs for THIS order.
   const erasedId = isIdentityErased(db, o.channel, handle);
   if (erasedId !== undefined) return erasedId;
+  // Nothing to identify and nothing to call them: no customer. Without this the
+  // insert below would mint a fresh nameless row for every such order, none of
+  // which can ever be matched again — and a channel that deliberately imports no
+  // personal data (Billbee) would fill the customer list with one blank stranger
+  // per order. An order without a customer is fine: customer_id is nullable and
+  // the hub shows a dash.
+  if (!handle && !email && !o.customerName) return null;
   let customerId = null;
   if (handle) {
     const idn = db

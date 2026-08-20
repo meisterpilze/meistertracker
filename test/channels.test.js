@@ -440,15 +440,42 @@ describe('Billbee: orders in', () => {
     // marketplaces can hand out the same one.
     assert.equal(o.channelOrderId, '4711');
     assert.equal(o.status, 'new');
-    assert.equal(o.customerEmail, 'kunde@example.de');
-    assert.equal(o.buyerHandle, 'shopify:99', 'platform-prefixed, the id is not Billbee-scoped');
-    assert.equal(o.shipStreet, 'Hauptstr');
-    assert.equal(o.shipHouse, '5', 'house number split out when Billbee leaves the field empty');
-    assert.equal(o.shipPostal, '91054');
+    assert.equal(o.shipCountry, 'DE');
     assert.equal(o.shipWeightG, 750);
     assert.equal(o.totalAmount, 29.8, 'TotalCost excludes shipping — it is added back, and rounded');
     assert.equal(o.items[0].channelSku, 'AUS-250');
     assert.equal(o.items[0].unitPrice, 12.45, 'position total ÷ quantity');
+    assert.equal(o.raw.ShopName, 'Shopify', 'which shop it came from survives');
+  });
+
+  it('brings no personal data into the lab, raw_json included', () => {
+    // The lab's job with an order is to make what it says. Billbee is the
+    // commercial record and is built to hold the customer; this server is a
+    // machine on a mushroom farm behind a home line. Filtering only the columns
+    // would have moved the address into raw_json rather than left it behind, so
+    // the whole record is searched here, not the fields one by one.
+    const o = channels._normalizeBillbee(order);
+    const asText = JSON.stringify(o);
+    for (const secret of ['Max', 'Mustermann', 'kunde@example.de', '+4915112345678', 'Hauptstr', 'Erlangen', '91054'])
+      assert.equal(asText.includes(secret), false, secret + ' must not reach the lab database');
+    assert.equal(o.customerName, undefined);
+    assert.equal(o.customerEmail, undefined);
+    assert.equal(o.buyerHandle, undefined);
+    assert.equal(o.shipStreet, undefined);
+  });
+
+  it('leaves a Billbee order without a customer record at all', () => {
+    const { db: d, path: p2 } = tmpDb();
+    try {
+      db.upsertOrder(d, channels._normalizeBillbee(order));
+      const row = d.prepare('SELECT customer_id, customer_name FROM orders').get();
+      assert.equal(row.customer_id, null, 'no identity, no name — so no customer');
+      assert.equal(row.customer_name, null);
+      assert.equal(d.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0, 'and no blank stranger per order');
+    } finally {
+      d.close();
+      fs.unlinkSync(p2);
+    }
   });
 
   it('leaves coupon positions out and reads a missing quantity as one', () => {
@@ -481,15 +508,6 @@ describe('Billbee: orders in', () => {
     assert.equal(paid.totalAmount, 24.9, 'PaidAmount is right whichever way the documentation is meant');
     const unpaid = channels._normalizeBillbee({ BillBeeOrderId: 4, TotalCost: 24.9, ShippingCost: 4.9 });
     assert.equal(unpaid.totalAmount, 29.8, 'nothing paid yet — fall back to the documented sum');
-  });
-
-  it('keeps a house number Billbee already split', () => {
-    const o = channels._normalizeBillbee({
-      BillBeeOrderId: 1,
-      ShippingAddress: { Street: 'Pommernstraße', HouseNumber: '12a' }
-    });
-    assert.equal(o.shipStreet, 'Pommernstraße');
-    assert.equal(o.shipHouse, '12a');
   });
 
   it('reads shipped and cancelled from the timestamp as well as the state id', () => {

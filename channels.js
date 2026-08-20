@@ -702,27 +702,40 @@ function _billbeeStatus(o) {
   return 'new';
 }
 
+/**
+ * What a lab is allowed to learn from a Billbee order.
+ *
+ * Billbee's copy is the commercial record: buyer name, e-mail, telephone,
+ * delivery address. A lab needs none of it — its job with an order is to make
+ * what the order says — and this server runs on a farm's own machine behind a
+ * home line, so the safest place for a customer's address is the one that
+ * already has it and is built to hold it.
+ *
+ * So the import keeps the order's identity, its state, its money and its
+ * articles, and drops the person. `raw_json` is filtered too: storing the whole
+ * order there would have moved the address rather than left it.
+ */
+function _billbeeLabRecord(o) {
+  const buyer = o.Buyer || {};
+  return {
+    BillBeeOrderId: o.BillBeeOrderId,
+    OrderNumber: o.OrderNumber || null,
+    // Where it came from, in the order Billbee fills the three: the shop's own
+    // name, the account it arrived on, then the bare platform. All three name a
+    // marketplace, none of them names a person.
+    ShopName: buyer.BillbeeShopName || o.ApiAccountName || buyer.Platform || null,
+    State: o.State != null ? o.State : null,
+    CreatedAt: o.CreatedAt || null,
+    ShippedAt: o.ShippedAt || null,
+    Currency: o.Currency || null,
+    // The link back into Billbee, for the human who wants the rest of the order:
+    // it lives there, one click away, and does not have to live here.
+    WebUrl: o.WebUrl || null
+  };
+}
+
 function _normalizeBillbee(o) {
   const ship = o.ShippingAddress || {};
-  const inv = o.InvoiceAddress || {};
-  const buyer = o.Buyer || {};
-  const cust = o.Customer || {};
-  const name =
-    [ship.FirstName, ship.LastName].filter(Boolean).join(' ') ||
-    ship.Company ||
-    buyer.FullName ||
-    cust.Name ||
-    [inv.FirstName, inv.LastName].filter(Boolean).join(' ') ||
-    null;
-  // Billbee has a house-number field, but only the channels that send one fill it.
-  // Fall back to the shared splitter so all four channels resolve it identically.
-  let street = ship.Street || null;
-  let house = ship.HouseNumber || null;
-  if (street && !house) {
-    const sp = _splitHouse(street);
-    street = sp.street;
-    house = sp.house;
-  }
   const items = (o.OrderItems || [])
     // Coupons and discounts arrive as positions like any other. They are not
     // things to make, and importing them parks a "Gutschein" line in the mapping
@@ -770,28 +783,17 @@ function _normalizeBillbee(o) {
     channelOrderId: o.BillBeeOrderId != null ? String(o.BillBeeOrderId) : null,
     status: _billbeeStatus(o),
     orderDate: o.CreatedAt || null,
-    customerName: name,
-    customerEmail: ship.Email || inv.Email || buyer.Email || cust.Email || null,
-    // Marketplaces mask the buyer's email (eBay does), and then the platform
-    // handle is the only stable dedup key. Prefixed with the platform because the
-    // id is theirs, not Billbee's, and two platforms can hand out the same number.
-    buyerHandle: buyer.Id ? String(buyer.Platform || 'billbee').toLowerCase() + ':' + buyer.Id : null,
+    // No name, no e-mail, no telephone, no address, and no customer record built
+    // from them — see _billbeeLabRecord. The country stays: it identifies nobody
+    // and it answers "how much of this goes abroad".
     shipCountry: ship.CountryISO2 || null,
     totalAmount: total != null && Number.isFinite(total) ? total : null,
     currency: o.Currency || null,
-    shipName: name,
-    shipCompany: ship.Company || null,
-    shipStreet: street,
-    shipHouse: house,
-    shipAddress2: ship.Line2 || ship.NameAddition || null,
-    shipCity: ship.City || null,
-    shipPostal: ship.Zip || null,
-    shipPhone: ship.Phone || null,
     shipWeightG:
       o.ShipWeightKg != null && Number.isFinite(Number(o.ShipWeightKg))
         ? Math.round(Number(o.ShipWeightKg) * 1000)
         : null,
-    raw: o,
+    raw: _billbeeLabRecord(o),
     items
   };
 }
@@ -869,6 +871,7 @@ module.exports = {
   _normalizeEtsy,
   _normalizeEbay,
   _normalizeBillbee,
+  _billbeeLabRecord,
   _billbeeStatus,
   _splitHouse,
   WIX_BASE
